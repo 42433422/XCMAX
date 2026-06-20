@@ -91,9 +91,7 @@ class TestCustomerHintFromPreviewGrid:
         assert result == ""
 
     def test_grid_preview_no_rows(self):
-        result = AIChatApplicationService._customer_hint_from_preview_grid(
-            {"grid_preview": {}}
-        )
+        result = AIChatApplicationService._customer_hint_from_preview_grid({"grid_preview": {}})
         assert result == ""
 
 
@@ -130,9 +128,7 @@ class TestInferExcelColumnRolesWithLLM:
     def test_with_records_llm_failure(self):
         service = _make_service()
         records = [{"产品名称": "X", "单价": 100}]
-        with patch(
-            "app.application.ai_chat_app_service.get_ai_conversation_service"
-        ) as mock_get:
+        with patch("app.application.ai_chat_app_service.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = ""
             mock_get.return_value = mock_svc
@@ -186,9 +182,7 @@ class TestExtractExcelImportRecords:
 
     def test_no_records(self):
         service = _make_service()
-        records, err = service._extract_excel_import_records(
-            {"preview_data": {"sample_rows": []}}
-        )
+        records, err = service._extract_excel_import_records({"preview_data": {"sample_rows": []}})
         assert records == []
         assert err is None
 
@@ -202,7 +196,19 @@ class TestExtractExcelImportRecords:
                 ]
             }
         }
-        with patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "客户", "product_name": "产品名称", "model_number": "型号", "unit_price": "单价"}, 0.9)):
+        with patch.object(
+            service,
+            "_infer_excel_column_roles",
+            return_value=(
+                {
+                    "unit_name": "客户",
+                    "product_name": "产品名称",
+                    "model_number": "型号",
+                    "unit_price": "单价",
+                },
+                0.9,
+            ),
+        ):
             with patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}):
                 with patch.object(service, "_try_structured_reload_records", return_value=None):
                     records, err = service._extract_excel_import_records(
@@ -220,7 +226,19 @@ class TestExtractExcelImportRecords:
                 ]
             }
         }
-        with patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "", "product_name": "产品名称", "model_number": "", "unit_price": "调价前单价"}, 0.9)):
+        with patch.object(
+            service,
+            "_infer_excel_column_roles",
+            return_value=(
+                {
+                    "unit_name": "",
+                    "product_name": "产品名称",
+                    "model_number": "",
+                    "unit_price": "调价前单价",
+                },
+                0.9,
+            ),
+        ):
             with patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}):
                 with patch.object(service, "_try_structured_reload_records", return_value=None):
                     with patch(
@@ -257,12 +275,15 @@ class TestTryHandleDynamicWorkflowExtended:
             "imported": 5,
             "skipped_duplicates": 1,
         }
-        with patch(
-            "app.application.get_unit_products_import_app_service",
-            return_value=mock_import_svc,
-        ), patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
+        with (
+            patch(
+                "app.application.get_unit_products_import_app_service",
+                return_value=mock_import_svc,
+            ),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
         assert result["success"] is True
@@ -275,12 +296,15 @@ class TestTryHandleDynamicWorkflowExtended:
         assert run.intent == "import_unit_products_db"
         assert run.status == "waiting_user"
 
-        with patch(
-            "app.application.get_unit_products_import_app_service",
-            return_value=mock_import_svc,
-        ), patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
+        with (
+            patch(
+                "app.application.get_unit_products_import_app_service",
+                return_value=mock_import_svc,
+            ),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             completed = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert completed["success"] is True
@@ -310,12 +334,15 @@ class TestTryHandleDynamicWorkflowExtended:
             "success": False,
             "message": "导入出错",
         }
-        with patch(
-            "app.application.get_unit_products_import_app_service",
-            return_value=mock_import_svc,
-        ), patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
+        with (
+            patch(
+                "app.application.get_unit_products_import_app_service",
+                return_value=mock_import_svc,
+            ),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
             failed = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
@@ -340,12 +367,15 @@ class TestTryHandleDynamicWorkflowExtended:
             },
             "file_context": {},
         }
-        with patch(
-            "app.application.get_unit_products_import_app_service",
-            side_effect=ImportError("no module"),
-        ), patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
+        with (
+            patch(
+                "app.application.get_unit_products_import_app_service",
+                side_effect=ImportError("no module"),
+            ),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
             failed = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
@@ -363,11 +393,12 @@ class TestTryHandleDynamicWorkflowExtended:
                 "fields": [{"label": "产品名称"}],
             }
         }
-        with patch.object(
-            service, "_extract_excel_import_records", return_value=([], None)
-        ), patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
+        with (
+            patch.object(service, "_extract_excel_import_records", return_value=([], None)),
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入数据库", "pro", ctx, {})
         assert result is not None
@@ -388,7 +419,12 @@ class TestTryHandleDynamicWorkflowExtended:
             }
         }
         records = [
-            {"unit_name": "公司A", "product_name": "产品X", "model_number": "5003A", "unit_price": 100.0},
+            {
+                "unit_name": "公司A",
+                "product_name": "产品X",
+                "model_number": "5003A",
+                "unit_price": 100.0,
+            },
         ]
         mock_products_svc = Mock()
         mock_products_svc.get_products.return_value = {"success": True, "data": []}
@@ -448,7 +484,12 @@ class TestTryHandleDynamicWorkflowExtended:
             }
         }
         records = [
-            {"unit_name": "公司A", "product_name": "产品X", "model_number": "5003A", "unit_price": 100.0},
+            {
+                "unit_name": "公司A",
+                "product_name": "产品X",
+                "model_number": "5003A",
+                "unit_price": 100.0,
+            },
         ]
         mock_products_svc = Mock()
         mock_products_svc.get_products.return_value = {"success": True, "data": []}
@@ -711,7 +752,13 @@ class TestBuildWorkflowThinkingSteps:
         mock_plan.nodes = []
         mock_plan.metadata = {
             "tool_probe_outputs": [
-                {"tool_id": "products", "action": "query", "success": True, "message": "found", "data_preview": "3 items"}
+                {
+                    "tool_id": "products",
+                    "action": "query",
+                    "success": True,
+                    "message": "found",
+                    "data_preview": "3 items",
+                }
             ]
         }
         result = service._build_workflow_thinking_steps(mock_plan, "ok")
@@ -820,17 +867,17 @@ class TestFormatWorkflowRunResponse:
         mock_item.tool_id = "products"
         mock_item.action = "query"
         mock_item.output = {
-            "data": [
-                {"model_number": "5003A", "name": "产品X", "price": 100.0, "unit": "个"}
-            ]
+            "data": [{"model_number": "5003A", "name": "产品X", "price": 100.0, "unit": "个"}]
         }
         mock_item.error = None
         mock_result = Mock()
         mock_result.success = True
         mock_result.node_results = [mock_item]
         mock_result.message = ""
-        with patch("app.utils.ai_helpers.format_money", return_value="100.00"), \
-             patch("app.utils.ai_helpers.safe_float", return_value=100.0):
+        with (
+            patch("app.utils.ai_helpers.format_money", return_value="100.00"),
+            patch("app.utils.ai_helpers.safe_float", return_value=100.0),
+        ):
             result = service._format_workflow_run_response(mock_plan, mock_result, "", "5003A")
         assert result["success"] is True
         assert "autoAction" in result
@@ -858,7 +905,11 @@ class TestExcelAnalysisPayloadPresentGridBranch:
     def test_grid_preview_with_rows(self):
         assert (
             AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [["h1", "h2"], ["d1", "d2"]]}}}}
+                {
+                    "excel_analysis": {
+                        "preview_data": {"grid_preview": {"rows": [["h1", "h2"], ["d1", "d2"]]}}
+                    }
+                }
             )
             is True
         )
@@ -998,7 +1049,11 @@ class TestResolveUnitPriceColumnExtended:
 class TestHandleToolCallExtended:
     def test_no_tool_key(self):
         service = _make_service()
-        response_data = {"success": True, "message": "处理完成", "data": {"text": "", "action": "", "data": {}}}
+        response_data = {
+            "success": True,
+            "message": "处理完成",
+            "data": {"text": "", "action": "", "data": {}},
+        }
         ai_result = {"text": "处理中", "action": "tool_call", "data": {"params": {}}}
         result_data = {"params": {}}
         result = service._handle_tool_call(response_data, ai_result, result_data, None, "")
@@ -1050,8 +1105,6 @@ class TestBuildResponseExtended:
 
     def test_no_action(self):
         service = _make_service()
-        result = service._build_response(
-            {"text": "你好", "action": "", "data": {}}, None
-        )
+        result = service._build_response({"text": "你好", "action": "", "data": {}}, None)
         assert result["success"] is True
         assert result["response"] == "你好"

@@ -1,9 +1,10 @@
 """Tests for app.desktop_automation.drivers."""
+
 from __future__ import annotations
 
 import pytest
 
-from app.desktop_automation.drivers import _BaseDriver, WindowsDriver, MacDriver, MCPDriver
+from app.desktop_automation.drivers import MacDriver, MCPDriver, WindowsDriver, _BaseDriver
 
 
 class TestBaseDriver:

@@ -50,7 +50,6 @@ from app.enterprise.mod_entitlements import (
     sync_entitlements_from_request,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
@@ -703,9 +702,7 @@ async def test_fetch_for_market_user_happy_path(
 async def test_refresh_session_admin_impersonation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def _fake_fetch_user(
-        token: str, target_uid: int
-    ) -> set[str]:
+    async def _fake_fetch_user(token: str, target_uid: int) -> set[str]:
         assert target_uid == 99
         return {"taiyangniao-pro"}
 
@@ -1598,7 +1595,7 @@ def test_list_mods_etag_304() -> None:
     mock_mm.list_all_mods.return_value = []
     import hashlib
 
-    expected_etag = hashlib.sha256("fp-1".encode()).hexdigest()[:32]
+    expected_etag = hashlib.sha256(b"fp-1").hexdigest()[:32]
     with (
         patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
@@ -1610,9 +1607,7 @@ def test_list_mods_etag_304() -> None:
         ),
     ):
         client = TestClient(app)
-        resp = client.get(
-            "/api/mods/", headers={"if-none-match": expected_etag}
-        )
+        resp = client.get("/api/mods/", headers={"if-none-match": expected_etag})
     assert resp.status_code == 304
 
 
@@ -1767,9 +1762,7 @@ def test_employee_pack_config_preview_no_v2(tmp_path: Any) -> None:
     app = _build_mods_app()
     pack_dir = tmp_path / "_employees" / "pack-3"
     pack_dir.mkdir(parents=True)
-    (pack_dir / "manifest.json").write_text(
-        json.dumps({"id": "pack-3"}), encoding="utf-8"
-    )
+    (pack_dir / "manifest.json").write_text(json.dumps({"id": "pack-3"}), encoding="utf-8")
     with patch(
         "app.infrastructure.mods.mod_manager._default_mods_root",
         return_value=str(tmp_path),

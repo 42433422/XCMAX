@@ -23,7 +23,6 @@ from app.services.conversation.context import ConversationContext
 from app.services.conversation.handlers import HandlersMixin
 from app.services.conversation.intent import IntentMixin
 
-
 # ---------------------------------------------------------------------------
 # Test host classes — combine Mixin with manually-injected dependencies
 # ---------------------------------------------------------------------------
@@ -123,22 +122,22 @@ class TestNormalizeAiMode:
 class TestResolveAiMode:
     def test_aimode_preference_offline(self) -> None:
         host = _IntentHost()
-        host.user_preference_service.get_preference.side_effect = (
-            lambda uid, key: "offline" if key == "aiMode" else None
+        host.user_preference_service.get_preference.side_effect = lambda uid, key: (
+            "offline" if key == "aiMode" else None
         )
         assert host._resolve_ai_mode("u1") == "offline"
 
     def test_aimode_preference_online(self) -> None:
         host = _IntentHost()
-        host.user_preference_service.get_preference.side_effect = (
-            lambda uid, key: "online" if key == "aiMode" else None
+        host.user_preference_service.get_preference.side_effect = lambda uid, key: (
+            "online" if key == "aiMode" else None
         )
         assert host._resolve_ai_mode("u1") == "online"
 
     def test_legacy_aimodel_migration_to_offline(self) -> None:
         host = _IntentHost()
-        host.user_preference_service.get_preference.side_effect = (
-            lambda uid, key: None if key == "aiMode" else "offline"
+        host.user_preference_service.get_preference.side_effect = lambda uid, key: (
+            None if key == "aiMode" else "offline"
         )
         result = host._resolve_ai_mode("u1")
         assert result == "offline"
@@ -148,8 +147,8 @@ class TestResolveAiMode:
 
     def test_legacy_aimodel_migration_to_online(self) -> None:
         host = _IntentHost()
-        host.user_preference_service.get_preference.side_effect = (
-            lambda uid, key: None if key == "aiMode" else "deepseek"
+        host.user_preference_service.get_preference.side_effect = lambda uid, key: (
+            None if key == "aiMode" else "deepseek"
         )
         result = host._resolve_ai_mode("u1")
         assert result == "online"
@@ -165,23 +164,19 @@ class TestResolveAiMode:
 
     def test_recoverable_error_falls_back_online(self) -> None:
         host = _IntentHost()
-        host.user_preference_service.get_preference.side_effect = RuntimeError(
-            "db down"
-        )
+        host.user_preference_service.get_preference.side_effect = RuntimeError("db down")
         assert host._resolve_ai_mode("u1") == "online"
 
     def test_value_error_falls_back_online(self) -> None:
         host = _IntentHost()
-        host.user_preference_service.get_preference.side_effect = ValueError(
-            "bad shape"
-        )
+        host.user_preference_service.get_preference.side_effect = ValueError("bad shape")
         assert host._resolve_ai_mode("u1") == "online"
 
     def test_empty_aimode_falls_to_legacy(self) -> None:
         host = _IntentHost()
         # aiMode is empty string (falsy) → fall to legacy aiModel
-        host.user_preference_service.get_preference.side_effect = (
-            lambda uid, key: "" if key == "aiMode" else "local"
+        host.user_preference_service.get_preference.side_effect = lambda uid, key: (
+            "" if key == "aiMode" else "local"
         )
         assert host._resolve_ai_mode("u1") == "offline"
         host.user_preference_service.set_preference.assert_called_once_with(
@@ -214,9 +209,7 @@ class TestEnvSkipIntentLlm:
             ("anything", False),
         ],
     )
-    def test_values(
-        self, value: str, expected: bool, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_values(self, value: str, expected: bool, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_SKIP_INTENT_LLM", value)
         assert IntentMixin._env_skip_intent_llm() is expected
 
@@ -231,40 +224,30 @@ class TestEnvSkipIntentLlm:
 
 
 class TestShouldUseRuleOnlyIntent:
-    def test_env_skip_overrides_context(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_skip_overrides_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_SKIP_INTENT_LLM", "1")
         host = _IntentHost()
         assert host._should_use_rule_only_intent(None) is True
         assert host._should_use_rule_only_intent({"skip_intent_llm": False}) is True
 
-    def test_context_skip_when_env_off(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_context_skip_when_env_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_SKIP_INTENT_LLM", raising=False)
         host = _IntentHost()
         assert host._should_use_rule_only_intent({"skip_intent_llm": True}) is True
         assert host._should_use_rule_only_intent({"skip_intent_llm": 1}) is True
 
-    def test_context_no_skip(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_context_no_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_SKIP_INTENT_LLM", raising=False)
         host = _IntentHost()
         assert host._should_use_rule_only_intent({"skip_intent_llm": False}) is False
         assert host._should_use_rule_only_intent({}) is False
 
-    def test_none_context(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_none_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_SKIP_INTENT_LLM", raising=False)
         host = _IntentHost()
         assert host._should_use_rule_only_intent(None) is False
 
-    def test_non_dict_context(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_non_dict_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_SKIP_INTENT_LLM", raising=False)
         host = _IntentHost()
         assert host._should_use_rule_only_intent("not a dict") is False
@@ -355,9 +338,7 @@ class TestIntentRuleOnlyFast:
 
     def test_intent_hints_none_becomes_empty_list(self) -> None:
         host = _IntentHost()
-        host.intent_service = MagicMock(
-            return_value={"intent_hints": None}
-        )
+        host.intent_service = MagicMock(return_value={"intent_hints": None})
         out = host._intent_rule_only_fast("hi")
         assert out["intent_hints"] == []
 
@@ -391,9 +372,7 @@ class TestNeuroStackEnabled:
         assert host._neuro_stack_enabled() is True
 
     @pytest.mark.parametrize("value", ["0", "false", "off", "no"])
-    def test_disabled(
-        self, value: str, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_disabled(self, value: str, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_NEURO_INTENT", value)
         host = _IntentHost()
         assert host._neuro_stack_enabled() is False
@@ -542,9 +521,7 @@ class TestConvertNeuroIntentBridge:
 
 class TestRecognizeIntent:
     @pytest.mark.asyncio
-    async def test_offline_mode_uses_offline_service(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_offline_mode_uses_offline_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Disable neuro stack to skip reflex path
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "0")
         host = _IntentHost()
@@ -596,9 +573,7 @@ class TestRecognizeIntent:
             "app.neuro_bus.integrations.intent_integration.get_neuro_intent_recognizer",
             return_value=mock_neuro_recognizer,
         ):
-            out = await host._recognize_intent(
-                "生成发货单", source="pro", user_id="u1"
-            )
+            out = await host._recognize_intent("生成发货单", source="pro", user_id="u1")
 
         assert out["primary_intent"] == "shipment_generate"
         assert out["intent_source"] == "neuro_unified"
@@ -628,18 +603,14 @@ class TestRecognizeIntent:
 
         host.unified_recognizer.recognize.return_value = recognizer_result
 
-        out = await host._recognize_intent(
-            "查产品", source="pro", user_id="u1"
-        )
+        out = await host._recognize_intent("查产品", source="pro", user_id="u1")
 
         host.unified_recognizer.recognize.assert_called_once()
         assert out["primary_intent"] == "products"
         assert out["intent_source"] == "unified_recognizer"
 
     @pytest.mark.asyncio
-    async def test_rule_only_fast_path(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_rule_only_fast_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "0")
         monkeypatch.setenv("XCAGI_SKIP_INTENT_LLM", "1")
         host = _IntentHost()
@@ -654,17 +625,13 @@ class TestRecognizeIntent:
         assert out["intent_source"] == "rule_only_fast"
 
     @pytest.mark.asyncio
-    async def test_online_mode_uses_online_service(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_online_mode_uses_online_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "0")
         monkeypatch.delenv("XCAGI_SKIP_INTENT_LLM", raising=False)
         host = _IntentHost()
         host.user_preference_service.get_preference.return_value = "online"
         host.online_intent_service = AsyncMock(
-            recognize=AsyncMock(
-                return_value={"primary_intent": "products", "tool_key": "products"}
-            )
+            recognize=AsyncMock(return_value={"primary_intent": "products", "tool_key": "products"})
         )
 
         out = await host._recognize_intent("产品", source="web", user_id="u1")
@@ -672,9 +639,7 @@ class TestRecognizeIntent:
         assert out["primary_intent"] == "products"
 
     @pytest.mark.asyncio
-    async def test_neuro_reflex_early_hit_non_pro(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_neuro_reflex_early_hit_non_pro(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "1")
         host = _IntentHost()
         host.user_preference_service.get_preference.return_value = "online"
@@ -696,9 +661,7 @@ class TestRecognizeIntent:
         assert out["ai_mode"] == "online"
 
     @pytest.mark.asyncio
-    async def test_pro_source_skips_early_reflex(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_pro_source_skips_early_reflex(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Even with neuro stack on, pro source should NOT take the early
         # reflex path; it goes through the pro-mode branch instead.
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "0")
@@ -724,9 +687,7 @@ class TestRecognizeIntent:
             "app.neuro_bus.integrations.intent_integration.try_neuro_reflex_intent",
             return_value={"primary_intent": "should_not_be_used"},
         ) as mock_reflex:
-            out = await host._recognize_intent(
-                "产品", source="pro", user_id="u1"
-            )
+            out = await host._recognize_intent("产品", source="pro", user_id="u1")
 
         mock_reflex.assert_not_called()
         assert out["primary_intent"] == "products"
@@ -934,9 +895,7 @@ class TestHandleConfirmationIntent:
     async def test_not_confirmation_returns_none(self) -> None:
         svc = _HandlerHost()
         ctx = ConversationContext(user_id="u1")
-        out = await svc._handle_confirmation_intent(
-            "好的", {"is_confirmation": False}, ctx, "u1"
-        )
+        out = await svc._handle_confirmation_intent("好的", {"is_confirmation": False}, ctx, "u1")
         assert out is None
 
     @pytest.mark.asyncio
@@ -944,9 +903,7 @@ class TestHandleConfirmationIntent:
         svc = _HandlerHost()
         svc.confirmation_service.get_pending_intent.return_value = None
         ctx = ConversationContext(user_id="u1")
-        out = await svc._handle_confirmation_intent(
-            "好的", {"is_confirmation": True}, ctx, "u1"
-        )
+        out = await svc._handle_confirmation_intent("好的", {"is_confirmation": True}, ctx, "u1")
         assert out is None
 
     @pytest.mark.asyncio
@@ -961,9 +918,7 @@ class TestHandleConfirmationIntent:
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
 
-        out = await svc._handle_confirmation_intent(
-            "好的", {"is_confirmation": True}, ctx, "u1"
-        )
+        out = await svc._handle_confirmation_intent("好的", {"is_confirmation": True}, ctx, "u1")
 
         assert out is not None
         assert out["action"] == "tool_call"
@@ -989,9 +944,7 @@ class TestHandleConfirmationIntent:
             "slots": {"keyword": "漆"},
         }
 
-        out = await svc._handle_confirmation_intent(
-            "对的", {"is_confirmation": True}, ctx, "u1"
-        )
+        out = await svc._handle_confirmation_intent("对的", {"is_confirmation": True}, ctx, "u1")
 
         assert out is not None
         assert out["data"]["tool_key"] == "products"
@@ -1006,9 +959,7 @@ class TestHandleConfirmationIntent:
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
 
-        out = await svc._handle_confirmation_intent(
-            "好的", {"is_confirmation": True}, ctx, "u1"
-        )
+        out = await svc._handle_confirmation_intent("好的", {"is_confirmation": True}, ctx, "u1")
 
         assert out is None
         # Still clears pending + records feedback
@@ -1026,9 +977,7 @@ class TestHandleConfirmationIntent:
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
 
-        out = await svc._handle_confirmation_intent(
-            "确认", {"is_confirmation": True}, ctx, "u1"
-        )
+        out = await svc._handle_confirmation_intent("确认", {"is_confirmation": True}, ctx, "u1")
 
         assert out is not None
         assert ctx.last_action == "confirmed_customers"
@@ -1060,9 +1009,7 @@ class TestHandleNegationIntent:
             "slots": {"unit_name": "甲"},
         }
 
-        out = await svc._handle_negation_intent(
-            "不要", {"is_negated": True}, ctx, "u1"
-        )
+        out = await svc._handle_negation_intent("不要", {"is_negated": True}, ctx, "u1")
 
         assert out is None
         assert ctx.pending_confirmation is None
@@ -1076,9 +1023,7 @@ class TestHandleNegationIntent:
         ctx = ConversationContext(user_id="u1")
         ctx.current_intent = "products"
 
-        out = await svc._handle_negation_intent(
-            "不要", {"is_negation_intent": True}, ctx, "u1"
-        )
+        out = await svc._handle_negation_intent("不要", {"is_negation_intent": True}, ctx, "u1")
 
         assert out is not None
         assert out["action"] == "negated"
@@ -1120,9 +1065,7 @@ class TestHandleNegationIntent:
         ctx.current_intent = "shipment_generate"
         ctx.last_intent_result = {"slots": {"unit_name": "甲公司"}}
 
-        out = await svc._handle_negation_intent(
-            "不要", {"is_negation_intent": True}, ctx, "u1"
-        )
+        out = await svc._handle_negation_intent("不要", {"is_negation_intent": True}, ctx, "u1")
 
         assert out is not None
         assert svc.feedback[0]["slots"] == {"unit_name": "甲公司"}
@@ -1133,9 +1076,7 @@ class TestHandleNegationIntent:
         ctx = ConversationContext(user_id="u1")
         # current_intent None, last_intent_result None
 
-        out = await svc._handle_negation_intent(
-            "不要", {"is_negation_intent": True}, ctx, "u1"
-        )
+        out = await svc._handle_negation_intent("不要", {"is_negation_intent": True}, ctx, "u1")
 
         assert out is not None
         assert svc.feedback[0]["recognized_intent"] == ""
@@ -1153,9 +1094,7 @@ class TestHandlePendingIntent:
         svc = _HandlerHost()
         svc.confirmation_service.get_pending_intent.return_value = None
         ctx = ConversationContext(user_id="u1")
-        out = await svc._handle_pending_intent(
-            "hello", {"primary_intent": "x"}, ctx, "u1"
-        )
+        out = await svc._handle_pending_intent("hello", {"primary_intent": "x"}, ctx, "u1")
         assert out is None
 
     @pytest.mark.asyncio
@@ -1165,9 +1104,7 @@ class TestHandlePendingIntent:
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
 
-        out = await svc._handle_pending_intent(
-            "你好", {"is_greeting": True}, ctx, "u1"
-        )
+        out = await svc._handle_pending_intent("你好", {"is_greeting": True}, ctx, "u1")
 
         assert out is None
         svc.confirmation_service.clear_pending_intent.assert_called_once_with("u1")
@@ -1179,9 +1116,7 @@ class TestHandlePendingIntent:
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
 
-        out = await svc._handle_pending_intent(
-            "再见", {"is_goodbye": True}, ctx, "u1"
-        )
+        out = await svc._handle_pending_intent("再见", {"is_goodbye": True}, ctx, "u1")
 
         assert out is None
         svc.confirmation_service.clear_pending_intent.assert_called_once_with("u1")
@@ -1193,9 +1128,7 @@ class TestHandlePendingIntent:
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
 
-        out = await svc._handle_pending_intent(
-            "帮助", {"is_help": True}, ctx, "u1"
-        )
+        out = await svc._handle_pending_intent("帮助", {"is_help": True}, ctx, "u1")
 
         assert out is None
         svc.confirmation_service.clear_pending_intent.assert_called_once_with("u1")
@@ -1282,9 +1215,7 @@ class TestHandlePendingIntent:
         }
         ctx = ConversationContext(user_id="u1")
 
-        out = await svc._handle_pending_intent(
-            "查漆", {"primary_intent": "products"}, ctx, "u1"
-        )
+        out = await svc._handle_pending_intent("查漆", {"primary_intent": "products"}, ctx, "u1")
 
         assert out is not None
         assert out["action"] == "tool_call"
@@ -1368,9 +1299,7 @@ class TestBuildPendingResponses:
             "missing_slots": ["product_name"],
             "question": "请告诉我产品名称",
         }
-        out = svc._build_pending_incomplete_response(
-            pending, merged_slots, check_result, "u1"
-        )
+        out = svc._build_pending_incomplete_response(pending, merged_slots, check_result, "u1")
         assert out["action"] == "slot_fill"
         assert out["text"] == "请告诉我产品名称"
         assert out["data"]["missing_slots"] == ["product_name"]
@@ -1406,9 +1335,7 @@ class TestFillPendingSlots:
 
         assert out["action"] == "tool_call"
         svc.intent_service.assert_called_once_with("给甲公司")
-        svc.confirmation_service.merge_slots.assert_called_once_with(
-            "u1", {"unit_name": "甲"}
-        )
+        svc.confirmation_service.merge_slots.assert_called_once_with("u1", {"unit_name": "甲"})
 
     @pytest.mark.asyncio
     async def test_incomplete_path(self) -> None:

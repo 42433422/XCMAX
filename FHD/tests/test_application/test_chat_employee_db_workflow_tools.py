@@ -722,9 +722,7 @@ def test_agentic_loop_uses_action_name_and_disables_write_retry():
             max_retries=2,
             agentic_loop=True,
             tool_registry={
-                "business_db": {
-                    "actions": {"write": {"risk": "medium", "idempotent": False}}
-                }
+                "business_db": {"actions": {"write": {"risk": "medium", "idempotent": False}}}
             },
         )
 
@@ -1111,7 +1109,9 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run():
             "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
             return_value=repo,
         ),
-        patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_dispatch,
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_dispatch,
     ):
         service = AIChatApplicationService()
         service.workflow_planner.plan = Mock(return_value=plan)

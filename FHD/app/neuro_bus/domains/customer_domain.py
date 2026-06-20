@@ -86,4 +86,3 @@ def get_customer_domain() -> CustomerNeuroDomain:
         _customer_domain = CustomerNeuroDomain()
         get_domain_registry().register(_customer_domain)
     return _customer_domain
-

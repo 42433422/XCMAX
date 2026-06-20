@@ -305,11 +305,13 @@ class TestComputeMetricsEdgeCases:
         """compute_metrics should handle multi-class predictions."""
         import numpy as np
 
-        predictions = np.array([
-            [0.8, 0.1, 0.1],
-            [0.1, 0.8, 0.1],
-            [0.1, 0.1, 0.8],
-        ])
+        predictions = np.array(
+            [
+                [0.8, 0.1, 0.1],
+                [0.1, 0.8, 0.1],
+                [0.1, 0.1, 0.8],
+            ]
+        )
         labels = np.array([0, 1, 2])
         metrics = compute_metrics((predictions, labels))
         assert metrics["accuracy"] == 1.0
@@ -347,8 +349,7 @@ class TestTrainIntentModel:
     def test_train_intent_model_full_flow(self, tmp_path):
         """Full flow with mocked transformers Trainer."""
         data = [
-            {"text": f"text_{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]}
-            for i in range(30)
+            {"text": f"text_{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]} for i in range(30)
         ]
         data_path = str(tmp_path / "train.json")
         with open(data_path, "w", encoding="utf-8") as f:
@@ -367,21 +368,15 @@ class TestTrainIntentModel:
 
         mock_trainer_instance.save_model.side_effect = _save_model
 
-        with patch(
-            "app.services.intent_trainer.AutoTokenizer"
-        ) as MockTokenizer, patch(
-            "app.services.intent_trainer.AutoModelForSequenceClassification"
-        ) as MockModel, patch(
-            "app.services.intent_trainer.AutoConfig"
-        ) as MockConfig, patch(
-            "app.services.intent_trainer.Trainer"
-        ) as MockTrainer, patch(
-            "app.services.intent_trainer.DataCollatorWithPadding"
-        ) as MockCollator, patch(
-            "app.services.intent_trainer.EarlyStoppingCallback"
-        ), patch(
-            "app.services.intent_trainer.TrainingArguments"
-        ) as MockTrainingArgs:
+        with (
+            patch("app.services.intent_trainer.AutoTokenizer") as MockTokenizer,
+            patch("app.services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch("app.services.intent_trainer.AutoConfig") as MockConfig,
+            patch("app.services.intent_trainer.Trainer") as MockTrainer,
+            patch("app.services.intent_trainer.DataCollatorWithPadding") as MockCollator,
+            patch("app.services.intent_trainer.EarlyStoppingCallback"),
+            patch("app.services.intent_trainer.TrainingArguments") as MockTrainingArgs,
+        ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockConfig.from_pretrained.return_value = MagicMock()
             MockModel.from_pretrained.return_value = mock_model
@@ -405,8 +400,7 @@ class TestTrainIntentModel:
     def test_train_intent_model_saves_labels_json(self, tmp_path):
         """train_intent_model should save intent_labels.json."""
         data = [
-            {"text": f"text_{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]}
-            for i in range(30)
+            {"text": f"text_{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]} for i in range(30)
         ]
         data_path = str(tmp_path / "train.json")
         with open(data_path, "w", encoding="utf-8") as f:
@@ -425,20 +419,14 @@ class TestTrainIntentModel:
 
         mock_trainer_instance.save_model.side_effect = _save_model
 
-        with patch(
-            "app.services.intent_trainer.AutoTokenizer"
-        ) as MockTokenizer, patch(
-            "app.services.intent_trainer.AutoModelForSequenceClassification"
-        ) as MockModel, patch(
-            "app.services.intent_trainer.AutoConfig"
-        ) as MockConfig, patch(
-            "app.services.intent_trainer.Trainer"
-        ) as MockTrainer, patch(
-            "app.services.intent_trainer.DataCollatorWithPadding"
-        ), patch(
-            "app.services.intent_trainer.EarlyStoppingCallback"
-        ), patch(
-            "app.services.intent_trainer.TrainingArguments"
+        with (
+            patch("app.services.intent_trainer.AutoTokenizer") as MockTokenizer,
+            patch("app.services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch("app.services.intent_trainer.AutoConfig") as MockConfig,
+            patch("app.services.intent_trainer.Trainer") as MockTrainer,
+            patch("app.services.intent_trainer.DataCollatorWithPadding"),
+            patch("app.services.intent_trainer.EarlyStoppingCallback"),
+            patch("app.services.intent_trainer.TrainingArguments"),
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockConfig.from_pretrained.return_value = MagicMock()
@@ -462,8 +450,7 @@ class TestTrainIntentModel:
     def test_train_no_early_stopping(self, tmp_path):
         """When early_stopping_patience=0, no callback should be added."""
         data = [
-            {"text": f"text_{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]}
-            for i in range(30)
+            {"text": f"text_{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]} for i in range(30)
         ]
         data_path = str(tmp_path / "train.json")
         with open(data_path, "w", encoding="utf-8") as f:
@@ -482,18 +469,13 @@ class TestTrainIntentModel:
 
         mock_trainer_instance.save_model.side_effect = _save_model
 
-        with patch(
-            "app.services.intent_trainer.AutoTokenizer"
-        ) as MockTokenizer, patch(
-            "app.services.intent_trainer.AutoModelForSequenceClassification"
-        ) as MockModel, patch(
-            "app.services.intent_trainer.AutoConfig"
-        ) as MockConfig, patch(
-            "app.services.intent_trainer.Trainer"
-        ) as MockTrainer, patch(
-            "app.services.intent_trainer.DataCollatorWithPadding"
-        ), patch(
-            "app.services.intent_trainer.TrainingArguments"
+        with (
+            patch("app.services.intent_trainer.AutoTokenizer") as MockTokenizer,
+            patch("app.services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch("app.services.intent_trainer.AutoConfig") as MockConfig,
+            patch("app.services.intent_trainer.Trainer") as MockTrainer,
+            patch("app.services.intent_trainer.DataCollatorWithPadding"),
+            patch("app.services.intent_trainer.TrainingArguments"),
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockConfig.from_pretrained.return_value = MagicMock()
@@ -532,14 +514,11 @@ class TestExportToOnnx:
         mock_tokenizer = MagicMock()
         mock_model = MagicMock()
 
-        with patch(
-            "app.services.intent_trainer.AutoTokenizer"
-        ) as MockTokenizer, patch(
-            "app.services.intent_trainer.AutoModelForSequenceClassification"
-        ) as MockModel, patch(
-            "app.services.intent_trainer.torch.onnx.export"
-        ) as mock_export, patch.dict(
-            "sys.modules", {"onnxruntime": MagicMock()}
+        with (
+            patch("app.services.intent_trainer.AutoTokenizer") as MockTokenizer,
+            patch("app.services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch("app.services.intent_trainer.torch.onnx.export") as mock_export,
+            patch.dict("sys.modules", {"onnxruntime": MagicMock()}),
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             mock_tokenizer.return_value = {
@@ -568,17 +547,23 @@ class TestMain:
         data_path = str(tmp_path / "train.json")
         with open(data_path, "w", encoding="utf-8") as f:
             json.dump(
-                [{"text": f"t{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]} for i in range(30)],
+                [
+                    {"text": f"t{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]}
+                    for i in range(30)
+                ],
                 f,
             )
 
-        with patch(
-            "sys.argv",
-            ["intent_trainer", "--data", data_path, "--epochs", "1"],
-        ), patch(
-            "app.services.intent_trainer.train_intent_model",
-            return_value=Path("/fake/output/final"),
-        ) as mock_train:
+        with (
+            patch(
+                "sys.argv",
+                ["intent_trainer", "--data", data_path, "--epochs", "1"],
+            ),
+            patch(
+                "app.services.intent_trainer.train_intent_model",
+                return_value=Path("/fake/output/final"),
+            ) as mock_train,
+        ):
             main()
             mock_train.assert_called_once_with(
                 data_path=data_path,
@@ -595,19 +580,24 @@ class TestMain:
         data_path = str(tmp_path / "train.json")
         with open(data_path, "w", encoding="utf-8") as f:
             json.dump(
-                [{"text": f"t{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]} for i in range(30)],
+                [
+                    {"text": f"t{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]}
+                    for i in range(30)
+                ],
                 f,
             )
 
-        with patch(
-            "sys.argv",
-            ["intent_trainer", "--data", data_path, "--export_onnx"],
-        ), patch(
-            "app.services.intent_trainer.train_intent_model",
-            return_value=Path("/fake/output/final"),
-        ), patch(
-            "app.services.intent_trainer.export_to_onnx"
-        ) as mock_export:
+        with (
+            patch(
+                "sys.argv",
+                ["intent_trainer", "--data", data_path, "--export_onnx"],
+            ),
+            patch(
+                "app.services.intent_trainer.train_intent_model",
+                return_value=Path("/fake/output/final"),
+            ),
+            patch("app.services.intent_trainer.export_to_onnx") as mock_export,
+        ):
             main()
             mock_export.assert_called_once_with(
                 str(Path("/fake/output/final")),
@@ -620,33 +610,39 @@ class TestMain:
         data_path = str(tmp_path / "train.json")
         with open(data_path, "w", encoding="utf-8") as f:
             json.dump(
-                [{"text": f"t{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]} for i in range(30)],
+                [
+                    {"text": f"t{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]}
+                    for i in range(30)
+                ],
                 f,
             )
 
-        with patch(
-            "sys.argv",
-            [
-                "intent_trainer",
-                "--data",
-                data_path,
-                "--model",
-                "hfl/chinese-roberta-wwm-ext",
-                "--output",
-                "/custom/output",
-                "--epochs",
-                "5",
-                "--batch_size",
-                "32",
-                "--lr",
-                "3e-5",
-                "--max_length",
-                "128",
-            ],
-        ), patch(
-            "app.services.intent_trainer.train_intent_model",
-            return_value=Path("/custom/output/final"),
-        ) as mock_train:
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "intent_trainer",
+                    "--data",
+                    data_path,
+                    "--model",
+                    "hfl/chinese-roberta-wwm-ext",
+                    "--output",
+                    "/custom/output",
+                    "--epochs",
+                    "5",
+                    "--batch_size",
+                    "32",
+                    "--lr",
+                    "3e-5",
+                    "--max_length",
+                    "128",
+                ],
+            ),
+            patch(
+                "app.services.intent_trainer.train_intent_model",
+                return_value=Path("/custom/output/final"),
+            ) as mock_train,
+        ):
             main()
             mock_train.assert_called_once_with(
                 data_path=data_path,

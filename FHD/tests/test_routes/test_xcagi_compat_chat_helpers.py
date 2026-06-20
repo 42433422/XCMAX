@@ -10,7 +10,6 @@ import pytest
 
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
 
-
 # ---------------------------------------------------------------------------
 # XcagiCompatChatBody
 # ---------------------------------------------------------------------------
@@ -237,8 +236,10 @@ class TestEnsureChatDbReadAuthorized:
     def test_wrong_token(self):
         request = MagicMock()
         request.headers = {"x-forwarded-for": "1.2.3.4", "user-agent": "test"}
-        with patch.object(ch, "effective_db_read_token", return_value="secret"), \
-             patch.object(ch, "_chat_db_read_grace_seconds_left", return_value=0):
+        with (
+            patch.object(ch, "effective_db_read_token", return_value="secret"),
+            patch.object(ch, "_chat_db_read_grace_seconds_left", return_value=0),
+        ):
             ok, req = ch._ensure_chat_db_read_authorized(
                 request, message="查询数据库", provided_token="wrong"
             )
@@ -259,24 +260,28 @@ class TestXcagiChatHttpExc:
 
     def test_authentication_error(self):
         from openai import AuthenticationError
+
         exc = AuthenticationError(message="bad key", response=MagicMock(), body=None)
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 401
 
     def test_rate_limit_error(self):
         from openai import RateLimitError
+
         exc = RateLimitError(message="limited", response=MagicMock(), body=None)
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 429
 
     def test_api_connection_error(self):
         from openai import APIConnectionError
+
         exc = APIConnectionError(message="no connection", request=MagicMock())
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 503
 
     def test_api_error(self):
         from openai import APIError
+
         exc = APIError(message="api error", request=MagicMock(), body=None)
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 502
@@ -314,34 +319,60 @@ class TestXcagiChatHttpExc:
 
 class TestXcagiCompatReplyPayload:
     def test_string_reply(self):
-        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch(
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
+            return_value=None,
+            create=True,
+        ):
             result = ch._xcagi_compat_reply_payload("hello")
             assert result["success"] is True
             assert result["response"] == "hello"
 
     def test_dict_reply(self):
-        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
-            result = ch._xcagi_compat_reply_payload({"response": "world", "thinking_steps": "step1"})
+        with patch(
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
+            return_value=None,
+            create=True,
+        ):
+            result = ch._xcagi_compat_reply_payload(
+                {"response": "world", "thinking_steps": "step1"}
+            )
             assert result["response"] == "world"
             assert result["data"]["thinking_steps"] == "step1"
 
     def test_dict_reply_text_key(self):
-        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch(
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
+            return_value=None,
+            create=True,
+        ):
             result = ch._xcagi_compat_reply_payload({"text": "msg"})
             assert result["response"] == "msg"
 
     def test_with_runtime_context(self):
-        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch(
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
+            return_value=None,
+            create=True,
+        ):
             result = ch._xcagi_compat_reply_payload("hello", runtime_context_update={"k": "v"})
             assert result["data"]["runtime_context"] == {"k": "v"}
 
     def test_with_kitten_attachments(self):
-        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch(
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
+            return_value=None,
+            create=True,
+        ):
             result = ch._xcagi_compat_reply_payload("hello", kitten_attachments={"chart": "data"})
             assert result["data"]["chart"] == "data"
 
     def test_kitten_attachments_none_skipped(self):
-        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch(
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
+            return_value=None,
+            create=True,
+        ):
             result = ch._xcagi_compat_reply_payload("hello", kitten_attachments={"chart": None})
             assert "chart" not in result["data"]
 

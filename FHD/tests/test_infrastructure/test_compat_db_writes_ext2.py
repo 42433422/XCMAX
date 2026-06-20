@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.persistence.compat_db.writes."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -26,7 +27,6 @@ from app.infrastructure.persistence.compat_db.writes import (
     products_pg_update_row,
 )
 
-
 # ── _products_delete_by_unit_pg ───────────────────────────────
 
 
@@ -40,7 +40,9 @@ class TestProductsDeleteByUnitPg:
         eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_columns.return_value = [{"name": "id"}, {"name": "name"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._customer_pg_products_has_unit",
                 return_value=False,
@@ -58,7 +60,9 @@ class TestProductsDeleteByUnitPg:
 
         mock_insp = MagicMock()
         mock_insp.get_columns.return_value = [{"name": "id"}, {"name": "unit"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._customer_pg_products_has_unit",
                 return_value=True,
@@ -82,7 +86,9 @@ class TestPurchaseUnitsDeleteByNormUnitPg:
         eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             assert _purchase_units_delete_by_norm_unit_pg(eng, "kg") == 0
 
     def test_no_unit_name_column_returns_zero(self):
@@ -90,7 +96,9 @@ class TestPurchaseUnitsDeleteByNormUnitPg:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["purchase_units"]
         mock_insp.get_columns.return_value = [{"name": "id"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             assert _purchase_units_delete_by_norm_unit_pg(eng, "kg") == 0
 
 
@@ -141,7 +149,9 @@ class TestPurchaseUnitsDeleteByIdPg:
         eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = []
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             assert _purchase_units_delete_by_id_pg(eng, 1) == 0
 
     def test_no_id_column_returns_zero(self):
@@ -149,7 +159,9 @@ class TestPurchaseUnitsDeleteByIdPg:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["purchase_units"]
         mock_insp.get_columns.return_value = [{"name": "unit_name"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             assert _purchase_units_delete_by_id_pg(eng, 1) == 0
 
 
@@ -226,7 +238,9 @@ class TestProductsUnitReplacePg:
         eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_columns.return_value = [{"name": "id"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._customer_pg_products_has_unit",
                 return_value=False,
@@ -242,12 +256,16 @@ class TestProductsUnitReplacePg:
 
         mock_insp = MagicMock()
         mock_insp.get_columns.return_value = [{"name": "id"}, {"name": "unit"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._customer_pg_products_has_unit",
                 return_value=True,
             ):
-                with patch("app.infrastructure.persistence.compat_db.writes.append_mod_scope_where"):
+                with patch(
+                    "app.infrastructure.persistence.compat_db.writes.append_mod_scope_where"
+                ):
                     _products_unit_replace_pg(eng, "old_unit", "new_unit")
                     mock_conn.execute.assert_called_once()
                     mock_conn.commit.assert_called_once()
@@ -454,39 +472,39 @@ class TestCustomerDeleteUnified:
 
 class TestProductsPgUpdateRow:
     def test_missing_required_columns_raises_503(self):
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine"
-        ):
+        with patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine"):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
                 return_value={"id"},
             ):
                 with pytest.raises(HTTPException) as exc_info:
                     products_pg_update_row(
-                        1, {"name": "x"}, parse_price=lambda x: x,
-                        parse_quantity=lambda x: x, parse_is_active=lambda x: x,
+                        1,
+                        {"name": "x"},
+                        parse_price=lambda x: x,
+                        parse_quantity=lambda x: x,
+                        parse_is_active=lambda x: x,
                     )
                 assert exc_info.value.status_code == 503
 
     def test_empty_name_raises_400(self):
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine"
-        ):
+        with patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine"):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
                 return_value={"id", "model_number", "name"},
             ):
                 with pytest.raises(HTTPException) as exc_info:
                     products_pg_update_row(
-                        1, {"name": ""}, parse_price=lambda x: x,
-                        parse_quantity=lambda x: x, parse_is_active=lambda x: x,
+                        1,
+                        {"name": ""},
+                        parse_price=lambda x: x,
+                        parse_quantity=lambda x: x,
+                        parse_is_active=lambda x: x,
                     )
                 assert exc_info.value.status_code == 400
 
     def test_no_updatable_columns_raises_400(self):
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine"
-        ):
+        with patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine"):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
                 return_value={"id", "model_number", "name"},
@@ -507,8 +525,11 @@ class TestProductsPgUpdateRow:
                         return_value=eng,
                     ):
                         products_pg_update_row(
-                            1, {"name": "test"}, parse_price=lambda x: x,
-                            parse_quantity=lambda x: x, parse_is_active=lambda x: None,
+                            1,
+                            {"name": "test"},
+                            parse_price=lambda x: x,
+                            parse_quantity=lambda x: x,
+                            parse_is_active=lambda x: None,
                         )
 
     def test_product_not_found_raises_404(self):
@@ -520,10 +541,25 @@ class TestProductsPgUpdateRow:
         eng.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         eng.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng
+        ):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
-                return_value={"id", "model_number", "name", "price", "quantity", "unit", "specification", "description", "category", "brand", "is_active", "updated_at"},
+                return_value={
+                    "id",
+                    "model_number",
+                    "name",
+                    "price",
+                    "quantity",
+                    "unit",
+                    "specification",
+                    "description",
+                    "category",
+                    "brand",
+                    "is_active",
+                    "updated_at",
+                },
             ):
                 with patch(
                     "app.infrastructure.persistence.compat_db.writes.products_update_or_delete_mod_and",
@@ -531,8 +567,11 @@ class TestProductsPgUpdateRow:
                 ):
                     with pytest.raises(HTTPException) as exc_info:
                         products_pg_update_row(
-                            999, {"name": "test"}, parse_price=lambda x: x,
-                            parse_quantity=lambda x: x, parse_is_active=lambda x: True,
+                            999,
+                            {"name": "test"},
+                            parse_price=lambda x: x,
+                            parse_quantity=lambda x: x,
+                            parse_is_active=lambda x: True,
                         )
                     assert exc_info.value.status_code == 404
 
@@ -557,8 +596,10 @@ class TestProductsPgInsertRow:
                 ):
                     with pytest.raises(HTTPException) as exc_info:
                         products_pg_insert_row(
-                            {"name": "x"}, parse_price=lambda x: x,
-                            parse_quantity=lambda x: x, parse_is_active=lambda x: x,
+                            {"name": "x"},
+                            parse_price=lambda x: x,
+                            parse_quantity=lambda x: x,
+                            parse_is_active=lambda x: x,
                         )
                     assert exc_info.value.status_code == 503
 
@@ -578,8 +619,10 @@ class TestProductsPgInsertRow:
                 ):
                     with pytest.raises(HTTPException) as exc_info:
                         products_pg_insert_row(
-                            {"name": ""}, parse_price=lambda x: x,
-                            parse_quantity=lambda x: x, parse_is_active=lambda x: x,
+                            {"name": ""},
+                            parse_price=lambda x: x,
+                            parse_quantity=lambda x: x,
+                            parse_is_active=lambda x: x,
                         )
                     assert exc_info.value.status_code == 400
 
@@ -597,7 +640,9 @@ class TestProductsPgDeleteRow:
         eng.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         eng.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng
+        ):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
                 return_value={"id"},
@@ -624,7 +669,9 @@ class TestProductsPgBatchDeleteRows:
         eng.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         eng.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng
+        ):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
                 return_value={"id"},
@@ -650,7 +697,9 @@ class TestProductsPgBatchDeleteRows:
         eng.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         eng.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng
+        ):
             with patch(
                 "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
                 return_value={"id"},

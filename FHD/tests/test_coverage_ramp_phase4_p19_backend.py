@@ -138,7 +138,9 @@ def test_update_not_found(svc) -> None:
 def test_update_success_no_rename(svc) -> None:
     s = _session([_fluent(first=_unit())])
     with _bind(svc, s):
-        out = svc.update(1, {"contact_person": "新人", "contact_phone": "111", "contact_address": "上海"})
+        out = svc.update(
+            1, {"contact_person": "新人", "contact_phone": "111", "contact_address": "上海"}
+        )
     assert out["success"] is True
 
 
@@ -239,7 +241,10 @@ def test_batch_delete_blocked(svc) -> None:
 
 def test_batch_delete_success(svc) -> None:
     s = _session([_fluent(all_=[_unit(), _unit(id=2, unit_name="第二")])])
-    with _bind(svc, s), patch.object(svc, "_check_shipment_associations", return_value={"has_associations": False}):
+    with (
+        _bind(svc, s),
+        patch.object(svc, "_check_shipment_associations", return_value={"has_associations": False}),
+    ):
         out = svc.batch_delete([1, 2], force=False)
     assert out["success"] is True
     assert out["deleted_count"] == 2

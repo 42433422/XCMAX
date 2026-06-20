@@ -26,7 +26,6 @@ from app.utils.cache_manager import (
     with_cache,
 )
 
-
 # ---------------------------------------------------------------------------
 # _read_env_int
 # ---------------------------------------------------------------------------
@@ -429,11 +428,13 @@ class TestModuleLevelFunctions:
         # Reset singletons
         CacheManager._instance = None
         import app.utils.cache_manager as m
+
         m._cache_manager = None
 
     def teardown_method(self):
         CacheManager._instance = None
         import app.utils.cache_manager as m
+
         m._cache_manager = None
 
     def test_get_cache_manager(self):

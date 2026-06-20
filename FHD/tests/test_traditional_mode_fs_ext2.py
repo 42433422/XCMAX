@@ -425,9 +425,7 @@ class TestBuildSnapshot:
         assert snap == {}
 
     def test_build_snapshot_oserror_walk(self, temp_root, monkeypatch) -> None:
-        monkeypatch.setattr(
-            os, "walk", lambda *a, **k: (_ for _ in ()).throw(OSError("walk fail"))
-        )
+        monkeypatch.setattr(os, "walk", lambda *a, **k: (_ for _ in ()).throw(OSError("walk fail")))
         snap = tmf._build_snapshot()
         assert snap == {}
 
@@ -508,9 +506,7 @@ class TestEnsureWatchdog:
 
 
 class TestWatchdogLoop:
-    def test_watchdog_loop_recoverable_error(
-        self, temp_root, monkeypatch
-    ) -> None:
+    def test_watchdog_loop_recoverable_error(self, temp_root, monkeypatch) -> None:
         monkeypatch.setattr(tmf, "_watchdog_running", True)
         # Force _build_snapshot to raise
         monkeypatch.setattr(

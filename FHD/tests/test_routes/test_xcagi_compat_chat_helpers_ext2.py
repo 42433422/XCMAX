@@ -17,7 +17,6 @@ import pytest
 
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
 
-
 # ---------------------------------------------------------------------------
 # _xcagi_chat_http_exc — extended
 # ---------------------------------------------------------------------------
@@ -137,15 +136,11 @@ class TestXcagiCompatReplyPayloadExtended:
         assert result["response"] == "from text"
 
     def test_dict_reply_with_thinking_steps(self):
-        result = ch._xcagi_compat_reply_payload(
-            {"response": "ans", "thinking_steps": "step1"}
-        )
+        result = ch._xcagi_compat_reply_payload({"response": "ans", "thinking_steps": "step1"})
         assert result["data"]["thinking_steps"] == "step1"
 
     def test_with_runtime_context_update(self):
-        result = ch._xcagi_compat_reply_payload(
-            "reply", runtime_context_update={"key": "value"}
-        )
+        result = ch._xcagi_compat_reply_payload("reply", runtime_context_update={"key": "value"})
         assert result["data"]["runtime_context"] == {"key": "value"}
 
     def test_with_kitten_attachments(self):
@@ -221,9 +216,7 @@ class TestExtractExcelPathsFromMessageExtended:
         assert "file.xlsx" in result[0]
 
     def test_multiple_paths(self):
-        result = ch._extract_excel_paths_from_message(
-            "files a.xlsx and b.xls end"
-        )
+        result = ch._extract_excel_paths_from_message("files a.xlsx and b.xls end")
         assert len(result) == 2
 
     def test_xlsm_extension(self):
@@ -236,9 +229,7 @@ class TestExtractExcelPathsFromMessageExtended:
         assert "/" in result[0]
 
     def test_deduplication(self):
-        result = ch._extract_excel_paths_from_message(
-            "a.xlsx and a.xlsx end"
-        )
+        result = ch._extract_excel_paths_from_message("a.xlsx and a.xlsx end")
         assert len(result) == 1
 
     def test_empty_message(self):
@@ -307,9 +298,7 @@ class TestMergeRuntimeContextWithMessagePathsExtended:
         assert ctx == {}
 
     def test_message_paths_only(self):
-        ctx, paths = ch._merge_runtime_context_with_message_paths(
-            None, "file.xlsx end"
-        )
+        ctx, paths = ch._merge_runtime_context_with_message_paths(None, "file.xlsx end")
         assert len(paths) == 1
         assert "excel_file_path" in ctx
         assert "excel_file_paths" in ctx
@@ -378,9 +367,7 @@ class TestEnsureVectorIndexIfNeededExtended:
         assert "Excel 路径" in result
 
     def test_vector_request_with_file_path_success(self):
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolver:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolver:
             mock_executor = Mock(return_value='{"status": "ok"}')
             mock_resolver.return_value = mock_executor
             result = ch._ensure_vector_index_if_needed(
@@ -389,9 +376,7 @@ class TestEnsureVectorIndexIfNeededExtended:
         assert result is None
 
     def test_vector_request_with_error_response(self):
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolver:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolver:
             mock_executor = Mock(return_value='{"error": "failed", "message": "no sheet"}')
             mock_resolver.return_value = mock_executor
             result = ch._ensure_vector_index_if_needed(
@@ -523,35 +508,25 @@ class TestThinkingStepsFromPlannerStreamTextExtended:
         assert ch._thinking_steps_from_planner_stream_text("普通文本") is None
 
     def test_tool_call_marker(self):
-        result = ch._thinking_steps_from_planner_stream_text(
-            "前缀[正在调用工具:查询]后缀"
-        )
+        result = ch._thinking_steps_from_planner_stream_text("前缀[正在调用工具:查询]后缀")
         assert result is not None
         assert "[正在调用工具:查询]" in result
 
     def test_tool_returned_marker(self):
-        result = ch._thinking_steps_from_planner_stream_text(
-            "[工具已返回结果]"
-        )
+        result = ch._thinking_steps_from_planner_stream_text("[工具已返回结果]")
         assert result is not None
         assert "[工具已返回结果]" in result
 
     def test_tool_failed_marker(self):
-        result = ch._thinking_steps_from_planner_stream_text(
-            "[工具未成功:超时]"
-        )
+        result = ch._thinking_steps_from_planner_stream_text("[工具未成功:超时]")
         assert result is not None
 
     def test_authorization_marker(self):
-        result = ch._thinking_steps_from_planner_stream_text(
-            "[需要授权:DB_READ_TOKEN]"
-        )
+        result = ch._thinking_steps_from_planner_stream_text("[需要授权:DB_READ_TOKEN]")
         assert result is not None
 
     def test_token_required_marker(self):
-        result = ch._thinking_steps_from_planner_stream_text(
-            "[请提供令牌:write_token]"
-        )
+        result = ch._thinking_steps_from_planner_stream_text("[请提供令牌:write_token]")
         assert result is not None
 
     def test_multiple_markers_deduplicated(self):
@@ -578,7 +553,7 @@ class TestSseEventLineExtended:
 
     def test_unicode(self):
         result = ch._sse_event_line({"type": "token", "text": "你好"})
-        assert "你好".encode("utf-8") in result
+        assert "你好".encode() in result
 
 
 # ---------------------------------------------------------------------------

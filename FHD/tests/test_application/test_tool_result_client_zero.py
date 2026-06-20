@@ -1,4 +1,5 @@
 """Tests for app.application.tools.tool_result_client."""
+
 from __future__ import annotations
 
 import pytest

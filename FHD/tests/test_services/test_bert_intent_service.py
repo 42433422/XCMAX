@@ -1,4 +1,5 @@
 """Tests for app.services.bert_intent_service — BERT intent classification service."""
+
 from __future__ import annotations
 
 import json
@@ -17,7 +18,6 @@ from app.services.bert_intent_service import (
     get_bert_intent_service,
     reset_bert_intent_service,
 )
-
 
 # ---------------------------------------------------------------------------
 # Label constants

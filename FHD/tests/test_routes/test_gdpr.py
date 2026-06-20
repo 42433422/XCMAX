@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.gdpr — coverage ramp."""
+
 from __future__ import annotations
 
 import sys
@@ -255,6 +256,7 @@ class TestGdprRectifyRequest:
 # ---------------------------------------------------------------------------
 # Route integration tests (using dependency_overrides)
 # ---------------------------------------------------------------------------
+
 
 def _make_app() -> TestClient:
     from fastapi.responses import JSONResponse

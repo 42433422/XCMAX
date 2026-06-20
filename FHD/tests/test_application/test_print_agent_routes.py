@@ -145,15 +145,19 @@ def test_workflow_label_dispatch_route_executes_through_agent_orchestrator(
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
 
-    with patch(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-        return_value=repo,
-    ), patch(
-        "app.application.print_app_service.get_print_application_service",
-        return_value=print_app,
-    ), patch(
-        "app.application.get_product_app_service",
-        return_value=product_service,
+    with (
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch(
+            "app.application.print_app_service.get_print_application_service",
+            return_value=print_app,
+        ),
+        patch(
+            "app.application.get_product_app_service",
+            return_value=product_service,
+        ),
     ):
         response = client.post(
             "/api/print/workflow/label-print/dispatch",

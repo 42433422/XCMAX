@@ -85,4 +85,3 @@ def get_order_domain() -> OrderNeuroDomain:
         _order_domain = OrderNeuroDomain()
         get_domain_registry().register(_order_domain)
     return _order_domain
-

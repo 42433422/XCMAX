@@ -1,4 +1,5 @@
 """Tests for app.services.tax_invoice_provider."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

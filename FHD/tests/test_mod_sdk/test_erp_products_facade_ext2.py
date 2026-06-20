@@ -144,9 +144,7 @@ class TestIsErpProductsViaServiceEnabled:
     def test_disabled_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_DISABLE_ERP_PRODUCTS_VIA_SERVICE", raising=False)
         monkeypatch.delenv("XCAGI_ERP_PRODUCTS_VIA_SERVICE", raising=False)
-        with patch(
-            "app.mod_sdk.erp_products_facade._read_manifest", return_value={}
-        ):
+        with patch("app.mod_sdk.erp_products_facade._read_manifest", return_value={}):
             assert pf.is_erp_products_via_service_enabled() is False
 
     def test_manifest_config_not_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -246,9 +244,7 @@ class TestProductsList:
         def verify(req):
             called["verified"] = True
 
-        monkeypatch.setattr(
-            "app.infrastructure.auth.db_token.verify_db_read_token_header", verify
-        )
+        monkeypatch.setattr("app.infrastructure.auth.db_token.verify_db_read_token_header", verify)
         req = MagicMock(spec=Request)
         pf.products_list(req)
         assert called["verified"] is True
@@ -532,9 +528,7 @@ class TestProductsBatchDelete:
                 pf.products_batch_delete(req, {"ids": [1, 2]})
         assert exc_info.value.status_code == 500
 
-    def test_with_write_gate(
-        self, fake_service, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_with_write_gate(self, fake_service, monkeypatch: pytest.MonkeyPatch) -> None:
         gate_response = {"success": False, "message": "blocked"}
         monkeypatch.setattr(pf, "_write_gate", lambda request: gate_response)
         req = MagicMock(spec=Request)
@@ -607,9 +601,7 @@ class TestProductsBatch:
 
 
 class TestWriteGate:
-    def test_write_gate_with_request(
-        self, fake_service, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_write_gate_with_request(self, fake_service, monkeypatch: pytest.MonkeyPatch) -> None:
         # Override the autouse _patch_service fixture's _write_gate patch
         called = {"raise": False}
 
@@ -641,9 +633,7 @@ class TestWriteGate:
         assert called["raise"] is True
         assert result == {"blocked": True}
 
-    def test_write_gate_none_request(
-        self, fake_service, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_write_gate_none_request(self, fake_service, monkeypatch: pytest.MonkeyPatch) -> None:
         def fake_block():
             return None
 

@@ -223,22 +223,21 @@ def test_memory_v2_candidate_requires_confirmation_before_preference_use(
     assert svc.list_memories("u1", status="pending")[0]["memory_id"] == candidate["memory_id"]
 
 
-def test_memory_v2_confirm_preference_syncs_legacy_preference(
-    fresh_service, tmp_memory_dir
-):
+def test_memory_v2_confirm_preference_syncs_legacy_preference(fresh_service, tmp_memory_dir):
     svc = UserMemoryService(storage_type="json")
-    candidate = svc.propose_memory_candidate(
-        "u1", "preference", "favorite_customer", "ACME"
-    )["candidate"]
+    candidate = svc.propose_memory_candidate("u1", "preference", "favorite_customer", "ACME")[
+        "candidate"
+    ]
 
     confirmed = svc.confirm_memory_candidate("u1", candidate["memory_id"])
 
     assert confirmed["success"] is True
     assert confirmed["memory"]["status"] == "active"
     assert svc.get_preference("u1", "favorite_customer") == "ACME"
-    assert svc.list_memories("u1", status="active", memory_type="preference")[0][
-        "memory_id"
-    ] == candidate["memory_id"]
+    assert (
+        svc.list_memories("u1", status="active", memory_type="preference")[0]["memory_id"]
+        == candidate["memory_id"]
+    )
 
 
 def test_memory_v2_duplicate_candidate_is_idempotent(fresh_service, tmp_memory_dir):
@@ -255,9 +254,9 @@ def test_memory_v2_duplicate_candidate_is_idempotent(fresh_service, tmp_memory_d
 
 def test_memory_v2_correct_and_delete_keep_auditable_record(fresh_service, tmp_memory_dir):
     svc = UserMemoryService(storage_type="json")
-    candidate = svc.propose_memory_candidate(
-        "u1", "preference", "default_template", "TPL-OLD"
-    )["candidate"]
+    candidate = svc.propose_memory_candidate("u1", "preference", "default_template", "TPL-OLD")[
+        "candidate"
+    ]
     svc.confirm_memory_candidate("u1", candidate["memory_id"])
 
     corrected = svc.correct_memory(
@@ -301,12 +300,12 @@ def test_memory_v2_summary_counts_status_and_type(fresh_service, tmp_memory_dir)
 
 def test_memory_v2_prompt_uses_only_active_records(fresh_service, tmp_memory_dir):
     svc = UserMemoryService(storage_type="json")
-    active = svc.propose_memory_candidate(
-        "u1", "preference", "favorite_customer", "ACME"
-    )["candidate"]
-    pending = svc.propose_memory_candidate(
-        "u1", "entity", "customer_alias:pending", "PENDING LTD"
-    )["candidate"]
+    active = svc.propose_memory_candidate("u1", "preference", "favorite_customer", "ACME")[
+        "candidate"
+    ]
+    pending = svc.propose_memory_candidate("u1", "entity", "customer_alias:pending", "PENDING LTD")[
+        "candidate"
+    ]
     svc.confirm_memory_candidate("u1", active["memory_id"])
 
     prompt = svc.format_memory_v2_for_prompt("u1")

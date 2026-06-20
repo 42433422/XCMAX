@@ -187,11 +187,13 @@ class TestComputeMetrics:
     def test_multiclass(self):
         import numpy as np
 
-        logits = np.array([
-            [0.8, 0.1, 0.1],
-            [0.1, 0.8, 0.1],
-            [0.1, 0.1, 0.8],
-        ])
+        logits = np.array(
+            [
+                [0.8, 0.1, 0.1],
+                [0.1, 0.8, 0.1],
+                [0.1, 0.1, 0.8],
+            ]
+        )
         labels = np.array([0, 1, 2])
         result = compute_metrics((logits, labels))
         assert result["accuracy"] == 1.0
@@ -238,7 +240,6 @@ class TestTrainIntentModel:
     def test_train_with_mock(
         self, mock_load, mock_tokenizer, mock_config, mock_model, mock_trainer, tmp_path
     ):
-        import os
 
         mock_load.return_value = [IntentExample(text=f"t{i}", label="greet") for i in range(20)]
         mock_tokenizer.return_value = MagicMock()

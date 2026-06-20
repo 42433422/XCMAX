@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.mods.package — MOD packaging, signing, verification."""
+
 from __future__ import annotations
 
 import json
@@ -17,10 +18,10 @@ from app.infrastructure.mods.package import (
     compute_file_hash,
 )
 
-
 # ---------------------------------------------------------------------------
 # compute_file_hash
 # ---------------------------------------------------------------------------
+
 
 class TestComputeFileHash:
     """compute_file_hash() — 计算文件哈希"""
@@ -77,6 +78,7 @@ class TestComputeFileHash:
 # compute_directory_hash
 # ---------------------------------------------------------------------------
 
+
 class TestComputeDirectoryHash:
     """compute_directory_hash() — 计算目录哈希"""
 
@@ -125,6 +127,7 @@ class TestComputeDirectoryHash:
 # ModPackage — __init__
 # ---------------------------------------------------------------------------
 
+
 class TestModPackageInit:
     """ModPackage.__init__() — 初始化验证"""
 
@@ -153,9 +156,7 @@ class TestModPackageInit:
 
     def test_missing_id_raises(self, tmp_path):
         """manifest.json 缺少 id 字段时抛出 ModPackageError"""
-        (tmp_path / "manifest.json").write_text(
-            json.dumps({"version": "1.0.0"}), encoding="utf-8"
-        )
+        (tmp_path / "manifest.json").write_text(json.dumps({"version": "1.0.0"}), encoding="utf-8")
         with pytest.raises(ModPackageError, match="缺少必填字段 'id'"):
             ModPackage(str(tmp_path))
 
@@ -169,9 +170,7 @@ class TestModPackageInit:
 
     def test_default_version(self, tmp_path):
         """version 缺失时默认 1.0.0"""
-        (tmp_path / "manifest.json").write_text(
-            json.dumps({"id": "test-mod"}), encoding="utf-8"
-        )
+        (tmp_path / "manifest.json").write_text(json.dumps({"id": "test-mod"}), encoding="utf-8")
         pkg = ModPackage(str(tmp_path))
         assert pkg.version == "1.0.0"
 
@@ -179,6 +178,7 @@ class TestModPackageInit:
 # ---------------------------------------------------------------------------
 # ModPackage — create_package
 # ---------------------------------------------------------------------------
+
 
 class TestCreatePackage:
     """ModPackage.create_package() — 创建 MOD ZIP 包"""
@@ -188,9 +188,7 @@ class TestCreatePackage:
         mod_dir = tmp_path / "mymod"
         mod_dir.mkdir()
         manifest = {"id": "my-mod", "version": "2.0.0", "name": "My MOD"}
-        (mod_dir / "manifest.json").write_text(
-            json.dumps(manifest), encoding="utf-8"
-        )
+        (mod_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         (mod_dir / "main.py").write_text("print('hello')", encoding="utf-8")
         (mod_dir / "README.md").write_text("# My MOD", encoding="utf-8")
         return mod_dir
@@ -282,6 +280,7 @@ class TestCreatePackage:
 # ModPackage — _should_exclude
 # ---------------------------------------------------------------------------
 
+
 class TestShouldExclude:
     """ModPackage._should_exclude() — 文件排除逻辑"""
 
@@ -304,9 +303,7 @@ class TestShouldExclude:
     def test_directory_component_match(self, tmp_path):
         """目录组件匹配"""
         pkg = self._make_pkg(tmp_path)
-        assert pkg._should_exclude(
-            os.path.join("__pycache__", "main.pyc"), {"__pycache__"}
-        ) is True
+        assert pkg._should_exclude(os.path.join("__pycache__", "main.pyc"), {"__pycache__"}) is True
 
     def test_no_match(self, tmp_path):
         """无匹配"""
@@ -317,6 +314,7 @@ class TestShouldExclude:
 # ---------------------------------------------------------------------------
 # ModPackage — _generate_signature
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateSignature:
     """ModPackage._generate_signature() — 签名生成"""
@@ -373,6 +371,7 @@ class TestGenerateSignature:
 # ---------------------------------------------------------------------------
 # ModPackage — extract_package
 # ---------------------------------------------------------------------------
+
 
 class TestExtractPackage:
     """ModPackage.extract_package() — 解压 MOD 包"""
@@ -459,9 +458,7 @@ class TestExtractPackage:
         mod_dir = tmp_path / "src_mod"
         mod_dir.mkdir()
         manifest = {"id": "sub-mod", "version": "1.0.0"}
-        (mod_dir / "manifest.json").write_text(
-            json.dumps(manifest), encoding="utf-8"
-        )
+        (mod_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         (mod_dir / "code.py").write_text("pass", encoding="utf-8")
 
         pkg = ModPackage(str(mod_dir))
@@ -489,6 +486,7 @@ class TestExtractPackage:
 # ModPackage — _verify_package_signature
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyPackageSignature:
     """ModPackage._verify_package_signature() — 签名验证"""
 
@@ -497,9 +495,7 @@ class TestVerifyPackageSignature:
         mod_dir = tmp_path / "src_mod"
         mod_dir.mkdir()
         manifest = {"id": "sig-test", "version": "1.0.0"}
-        (mod_dir / "manifest.json").write_text(
-            json.dumps(manifest), encoding="utf-8"
-        )
+        (mod_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         (mod_dir / "code.py").write_text("pass", encoding="utf-8")
 
         pkg = ModPackage(str(mod_dir))
@@ -548,20 +544,23 @@ class TestVerifyPackageSignature:
 # ModPackage — get_package_info
 # ---------------------------------------------------------------------------
 
+
 class TestGetPackageInfo:
     """ModPackage.get_package_info() — 获取 MOD 包信息"""
 
     def test_basic_info(self, tmp_path):
         """基本信息"""
         (tmp_path / "manifest.json").write_text(
-            json.dumps({
-                "id": "info-mod",
-                "version": "3.0.0",
-                "name": "Info MOD",
-                "author": "Test Author",
-                "description": "A test MOD",
-                "dependencies": {"core": ">=1.0"},
-            }),
+            json.dumps(
+                {
+                    "id": "info-mod",
+                    "version": "3.0.0",
+                    "name": "Info MOD",
+                    "author": "Test Author",
+                    "description": "A test MOD",
+                    "dependencies": {"core": ">=1.0"},
+                }
+            ),
             encoding="utf-8",
         )
         pkg = ModPackage(str(tmp_path))
@@ -577,9 +576,7 @@ class TestGetPackageInfo:
 
     def test_minimal_manifest(self, tmp_path):
         """最小 manifest"""
-        (tmp_path / "manifest.json").write_text(
-            json.dumps({"id": "minimal-mod"}), encoding="utf-8"
-        )
+        (tmp_path / "manifest.json").write_text(json.dumps({"id": "minimal-mod"}), encoding="utf-8")
         pkg = ModPackage(str(tmp_path))
         info = pkg.get_package_info()
 
@@ -593,6 +590,7 @@ class TestGetPackageInfo:
 # ---------------------------------------------------------------------------
 # ModPackageError / ModSignatureError
 # ---------------------------------------------------------------------------
+
 
 class TestExceptions:
     """异常类"""

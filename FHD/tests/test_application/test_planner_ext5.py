@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _execute_price_list_tool — error branches
 # ---------------------------------------------------------------------------
@@ -33,12 +32,15 @@ class TestExecutePriceListToolErrors:
     def test_import_error(self):
         from app.application.workflow.planner import _execute_price_list_tool
 
-        with patch.dict(
-            "sys.modules", {"app.application.tools": None}
-        ):
+        with patch.dict("sys.modules", {"app.application.tools": None}):
             result = _execute_price_list_tool({"customer_name": "ACME"})
         assert result["success"] is False
-        assert result["error_code"] in ("service_unavailable", "invalid_parameters", "export_failed", "file_io_error")
+        assert result["error_code"] in (
+            "service_unavailable",
+            "invalid_parameters",
+            "export_failed",
+            "file_io_error",
+        )
 
     def test_value_error(self):
         from app.application.workflow.planner import _execute_price_list_tool
@@ -92,8 +94,9 @@ class TestExecuteShipmentGenerateTool:
     def test_with_unit_and_products(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
 
-        with patch("app.bootstrap.get_shipment_app_service") as mock_ss, patch(
-            "app.application.facades.tools_facade._parse_order_text"
+        with (
+            patch("app.bootstrap.get_shipment_app_service") as mock_ss,
+            patch("app.application.facades.tools_facade._parse_order_text"),
         ):
             mock_svc = MagicMock()
             mock_svc.generate_shipment_document.return_value = {"success": True}
@@ -133,9 +136,10 @@ class TestExecuteShipmentGenerateTool:
     def test_os_error(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
 
-        with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse, patch(
-            "app.bootstrap.get_shipment_app_service"
-        ) as mock_ss:
+        with (
+            patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
+            patch("app.bootstrap.get_shipment_app_service") as mock_ss,
+        ):
             mock_parse.return_value = {
                 "success": True,
                 "unit_name": "ACME",
@@ -151,9 +155,10 @@ class TestExecuteShipmentGenerateTool:
     def test_runtime_error(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
 
-        with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse, patch(
-            "app.bootstrap.get_shipment_app_service"
-        ) as mock_ss:
+        with (
+            patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
+            patch("app.bootstrap.get_shipment_app_service") as mock_ss,
+        ):
             mock_parse.return_value = {
                 "success": True,
                 "unit_name": "ACME",

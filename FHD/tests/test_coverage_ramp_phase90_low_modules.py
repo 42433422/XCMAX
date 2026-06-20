@@ -24,7 +24,7 @@ def test_customer_delivery_seed_extracts_allowed_members(tmp_path):
             "config/demo.json": "{}",
             "data/mod_dbs/customer.sqlite": "db",
             "424/assets/readme.txt": "readme",
-            "delivery-manifest.json": "{\"ok\": true}",
+            "delivery-manifest.json": '{"ok": true}',
         },
     )
 
@@ -78,7 +78,7 @@ async def test_customer_delivery_seed_install_success(monkeypatch, tmp_path):
 
     async def fake_download(path, dest):
         assert path == "/packages/pkg-demo/1.0.0/download"
-        _write_zip(dest, {"config/customer.json": "{\"customer\": true}"})
+        _write_zip(dest, {"config/customer.json": '{"customer": true}'})
 
     monkeypatch.setattr(
         seed,
@@ -106,7 +106,7 @@ async def test_customer_delivery_seed_install_success(monkeypatch, tmp_path):
     assert result["delivery_id"] == "customer-mod:paint"
     assert result["package"]["pkg_id"] == "pkg-demo"
     assert result["extracted_files"] == ["config/customer.json"]
-    assert (tmp_path / "desktop/config/customer.json").read_text() == "{\"customer\": true}"
+    assert (tmp_path / "desktop/config/customer.json").read_text() == '{"customer": true}'
 
 
 @pytest.mark.asyncio
@@ -230,7 +230,9 @@ def _make_customer_db(path) -> None:
 def test_client_primary_erp_sqlite_customer_list(tmp_path):
     from app.mod_sdk import client_primary_erp as erp
 
-    missing = erp._sqlite_customers_list(tmp_path / "missing.sqlite", page=1, per_page=20, keyword=None)
+    missing = erp._sqlite_customers_list(
+        tmp_path / "missing.sqlite", page=1, per_page=20, keyword=None
+    )
     assert missing == {"success": True, "data": [], "total": 0}
 
     db_path = tmp_path / "customers.sqlite"
@@ -245,9 +247,9 @@ def test_client_primary_erp_sqlite_customer_list(tmp_path):
 
 
 def test_client_primary_erp_invokes_mod_customer_database(monkeypatch, tmp_path):
-    from app.mod_sdk import client_primary_erp as erp
     import app.infrastructure.mods.mod_manager as mod_manager
     import app.request_active_mod_ctx as active_ctx
+    from app.mod_sdk import client_primary_erp as erp
 
     db_path = tmp_path / "customers.sqlite"
     _make_customer_db(db_path)
@@ -276,18 +278,26 @@ def test_client_primary_erp_invokes_mod_customer_database(monkeypatch, tmp_path)
 
 
 def test_client_primary_erp_returns_none_for_parse_or_runtime_failures(monkeypatch):
-    from app.mod_sdk import client_primary_erp as erp
     import app.infrastructure.mods.mod_manager as mod_manager
     import app.request_active_mod_ctx as active_ctx
+    from app.mod_sdk import client_primary_erp as erp
 
     monkeypatch.setattr(erp, "PROTECTED_CLIENT_MOD_IDS", {"client-mod"})
     monkeypatch.setattr(active_ctx, "get_request_active_mod_id", lambda: "")
-    monkeypatch.setattr(active_ctx, "parse_active_mod_header", lambda _headers: (_ for _ in ()).throw(OSError("bad header")))
+    monkeypatch.setattr(
+        active_ctx,
+        "parse_active_mod_header",
+        lambda _headers: (_ for _ in ()).throw(OSError("bad header")),
+    )
     request = types.SimpleNamespace(headers={"x-active-mod-id": "client-mod"})
     assert erp.try_invoke_client_mod_customers_list(request=request) is None
 
     monkeypatch.setattr(active_ctx, "get_request_active_mod_id", lambda: "client-mod")
-    monkeypatch.setattr(mod_manager, "ensure_mod_api_ready", lambda _mod_id: (_ for _ in ()).throw(OSError("not ready")))
+    monkeypatch.setattr(
+        mod_manager,
+        "ensure_mod_api_ready",
+        lambda _mod_id: (_ for _ in ()).throw(OSError("not ready")),
+    )
     assert erp.try_invoke_client_mod_customers_list() is None
 
 
@@ -356,7 +366,9 @@ def test_ai_chat_app_service_runtime_context_helpers_phase90b(monkeypatch):
         for context in contexts:
             service_module._skip_pro_excel_deterministic_import(context)
 
-    service = service_module.AIChatApplicationService.__new__(service_module.AIChatApplicationService)
+    service = service_module.AIChatApplicationService.__new__(
+        service_module.AIChatApplicationService
+    )
     sources = [None, "", "web", "pro", "fhd-pro", "desktop-pro", "FHD_PRO", "mobile"]
     for source in sources:
         service._is_pro_source(source)
@@ -408,10 +420,26 @@ def test_application_tools_workflow_excel_analysis_phase90b(tmp_path):
         {"file_path": str(excel_path), "action": "read", "limit": 2},
         {"file_path": str(excel_path), "action": "summary"},
         {"file_path": str(excel_path), "action": "statistics"},
-        {"file_path": str(excel_path), "action": "aggregate", "group_by": "客户", "value_column": "金额", "agg": "sum"},
-        {"file_path": str(excel_path), "action": "aggregate", "groupBy": "产品", "valueColumn": "数量", "agg": "mean"},
+        {
+            "file_path": str(excel_path),
+            "action": "aggregate",
+            "group_by": "客户",
+            "value_column": "金额",
+            "agg": "sum",
+        },
+        {
+            "file_path": str(excel_path),
+            "action": "aggregate",
+            "groupBy": "产品",
+            "valueColumn": "数量",
+            "agg": "mean",
+        },
         {"file_path": str(excel_path), "action": "filter", "column": "客户", "value": "蓝鲸科技"},
-        {"file_path": str(excel_path), "action": "query", "natural_language": "统计每个客户的金额合计"},
+        {
+            "file_path": str(excel_path),
+            "action": "query",
+            "natural_language": "统计每个客户的金额合计",
+        },
     ]
 
     for args in scenarios:
@@ -467,12 +495,33 @@ def test_registered_workflow_router_private_branches_phase90b(monkeypatch, tmp_p
     def success_payload(*args, **kwargs):
         return {"ok": True, "args": len(args), "kwargs": sorted(kwargs)}
 
-    monkeypatch.setattr(registered_module, "get_customer_app_service", lambda: DummyCustomerService(), raising=False)
-    monkeypatch.setattr(registered_module, "get_products_service", lambda: DummyProductsService(), raising=False)
-    monkeypatch.setattr(registered_module, "get_material_application_service", lambda: DummyMaterialService(), raising=False)
-    monkeypatch.setattr(registered_module, "run_normal_slot_product_query_from_message", success_payload, raising=False)
-    monkeypatch.setattr(registered_module, "run_normal_slot_shipment_preview", success_payload, raising=False)
-    monkeypatch.setattr(registered_module, "run_workflow_products_query_normal_profile", success_payload, raising=False)
+    monkeypatch.setattr(
+        registered_module, "get_customer_app_service", lambda: DummyCustomerService(), raising=False
+    )
+    monkeypatch.setattr(
+        registered_module, "get_products_service", lambda: DummyProductsService(), raising=False
+    )
+    monkeypatch.setattr(
+        registered_module,
+        "get_material_application_service",
+        lambda: DummyMaterialService(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        registered_module,
+        "run_normal_slot_product_query_from_message",
+        success_payload,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        registered_module, "run_normal_slot_shipment_preview", success_payload, raising=False
+    )
+    monkeypatch.setattr(
+        registered_module,
+        "run_workflow_products_query_normal_profile",
+        success_payload,
+        raising=False,
+    )
 
     import inspect
 
@@ -595,7 +644,12 @@ def test_phase90c_import_and_exercise_safe_app_modules():
         params = list(sig.parameters.values())
         if bound and params and params[0].name == "self":
             params = params[1:]
-        required = [p for p in params if p.default is inspect._empty and p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
+        required = [
+            p
+            for p in params
+            if p.default is inspect._empty
+            and p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        ]
         if len(required) > 2:
             return False
         for param in params:
@@ -641,13 +695,22 @@ def test_phase90c_import_and_exercise_safe_app_modules():
                     continue
                 try:
                     sig = inspect.signature(value)
-                    required = [p for p in sig.parameters.values() if p.default is inspect._empty and p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
+                    required = [
+                        p
+                        for p in sig.parameters.values()
+                        if p.default is inspect._empty
+                        and p.kind
+                        not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+                    ]
                     if len(required) > 1:
                         continue
                     ctor_args = []
                     ctor_kwargs = {}
                     for param in sig.parameters.values():
-                        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                        if param.kind in (
+                            inspect.Parameter.VAR_POSITIONAL,
+                            inspect.Parameter.VAR_KEYWORD,
+                        ):
                             continue
                         value_arg = sample_for(param)
                         if param.kind is inspect.Parameter.KEYWORD_ONLY:

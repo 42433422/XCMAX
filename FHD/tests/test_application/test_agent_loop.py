@@ -1,9 +1,11 @@
 """Tests for app.application.employee_runtime.agent_loop."""
+
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock, PropertyMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
 
 from app.application.employee_runtime.agent_loop import (
     _format_tool_calls,
@@ -216,7 +218,10 @@ class TestRunEmployeeAgentLoop:
         assert result["ok"] is True
         assert any(t.get("blocked") for t in result["tool_calls"])
 
-    @patch("app.application.tools.workflow.execute_workflow_tool", side_effect=RuntimeError("tool failed"))
+    @patch(
+        "app.application.tools.workflow.execute_workflow_tool",
+        side_effect=RuntimeError("tool failed"),
+    )
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")

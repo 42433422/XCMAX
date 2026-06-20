@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.openapi_route_compat."""
+
 from __future__ import annotations
 
 from typing import Any

@@ -1,4 +1,5 @@
 """Deep tests for ``app.mod_sdk.erp_products_facade`` covering remaining uncovered branches."""
+
 from __future__ import annotations
 
 import sys
@@ -574,9 +575,7 @@ class TestProductsBatchDeleteDeep:
             "app.infrastructure.persistence.compat_db.base._product_parse_id",
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
-            result = pf.products_batch_delete(
-                req, {"ids": [1, "invalid", 2, "also_invalid"]}
-            )
+            result = pf.products_batch_delete(req, {"ids": [1, "invalid", 2, "also_invalid"]})
         assert result["success"] is True
         assert "invalid" in result["skipped"]
         assert "also_invalid" in result["skipped"]
@@ -622,9 +621,7 @@ class TestProductsBatchDeep:
         assert result["success"] is False
 
     def test_dict_items_mapped(self, fake_service) -> None:
-        result = pf.products_batch(
-            {"products": [{"name": "P1"}, {"name": "P2"}]}
-        )
+        result = pf.products_batch({"products": [{"name": "P1"}, {"name": "P2"}]})
         assert result["success"] is True
         # Verify _map_create_body was called for each dict
         call_args = fake_service.batch_add_products.call_args[0][0]

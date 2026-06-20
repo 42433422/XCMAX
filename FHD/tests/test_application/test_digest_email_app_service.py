@@ -1,23 +1,25 @@
 """Tests for app.application.digest_email_app_service."""
+
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 
 from app.application.digest_email_app_service import (
     _digest_timeout,
-    trigger_digest_now_with_authorization,
-    trigger_digest_now_local,
-    list_daily_digests_local,
-    get_daily_digest_local,
-    get_daily_digest_artifacts_local,
-    list_action_items_local,
     action_items_stats_local,
-    set_action_item_status_local,
-    start_vibe_prep_local,
-    start_line_execute_local,
-    get_workbench_session_local,
     allow_local_digest,
+    get_daily_digest_artifacts_local,
+    get_daily_digest_local,
+    get_workbench_session_local,
+    list_action_items_local,
+    list_daily_digests_local,
+    set_action_item_status_local,
+    start_line_execute_local,
+    start_vibe_prep_local,
+    trigger_digest_now_local,
+    trigger_digest_now_with_authorization,
 )
 
 

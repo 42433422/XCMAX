@@ -31,7 +31,6 @@ from app.services.skills.label_template_generator.label_template_generator impor
     get_label_template_generator_skill,
 )
 
-
 # ---------------------------------------------------------------------------
 # _pair_fields_by_grid — additional edge cases
 # ---------------------------------------------------------------------------
@@ -43,14 +42,46 @@ class TestPairFieldsByGridEdgeCases:
     def test_multiple_rows(self):
         """Blocks in different rows should be grouped separately."""
         blocks = [
-            {"text": "品名", "y_center": 25, "center": (25, 25), "left": 10, "top": 15,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "运动鞋", "y_center": 25, "center": (75, 25), "left": 60, "top": 15,
-             "width": 40, "height": 20, "conf": 0.85},
-            {"text": "颜色", "y_center": 75, "center": (25, 75), "left": 10, "top": 65,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "白色", "y_center": 75, "center": (75, 75), "left": 60, "top": 65,
-             "width": 40, "height": 20, "conf": 0.85},
+            {
+                "text": "品名",
+                "y_center": 25,
+                "center": (25, 25),
+                "left": 10,
+                "top": 15,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "运动鞋",
+                "y_center": 25,
+                "center": (75, 25),
+                "left": 60,
+                "top": 15,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+            },
+            {
+                "text": "颜色",
+                "y_center": 75,
+                "center": (25, 75),
+                "left": 10,
+                "top": 65,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "白色",
+                "y_center": 75,
+                "center": (75, 75),
+                "left": 60,
+                "top": 65,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 50, 100], [0, 50, 100])
         assert len(result) >= 2
@@ -58,10 +89,26 @@ class TestPairFieldsByGridEdgeCases:
     def test_block_in_merged_not_start_col_skipped(self):
         """Block in merged cell but not at start_col should be skipped."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "extra", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.8},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "extra",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.8,
+            },
         ]
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], merged)
@@ -71,10 +118,26 @@ class TestPairFieldsByGridEdgeCases:
     def test_next_block_in_merged_not_paired(self):
         """When next block is in merged cell, current block should not be paired with it."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "merged_val", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.8},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "merged_val",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.8,
+            },
         ]
         merged = [{"row": 0, "start_col": 1, "end_col": 2}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 33, 66, 100], merged)
@@ -85,10 +148,26 @@ class TestPairFieldsByGridEdgeCases:
     def test_non_adjacent_columns_not_paired(self):
         """Blocks in non-adjacent columns should not be paired."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (15, 50), "left": 5, "top": 40,
-             "width": 20, "height": 20, "conf": 0.9},
-            {"text": "运动鞋", "y_center": 50, "center": (85, 50), "left": 75, "top": 40,
-             "width": 20, "height": 20, "conf": 0.85},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (15, 50),
+                "left": 5,
+                "top": 40,
+                "width": 20,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "运动鞋",
+                "y_center": 50,
+                "center": (85, 50),
+                "left": 75,
+                "top": 40,
+                "width": 20,
+                "height": 20,
+                "conf": 0.85,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 25, 50, 75, 100])
         assert len(result) >= 1
@@ -98,8 +177,16 @@ class TestPairFieldsByGridEdgeCases:
     def test_empty_merged_horizontal(self):
         """Empty merged_horizontal list should work the same as None."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 100], [])
         assert len(result) == 1
@@ -107,8 +194,16 @@ class TestPairFieldsByGridEdgeCases:
     def test_merged_cell_with_two_cols(self):
         """Merged cell spanning 2 columns should have merge_cols=2."""
         blocks = [
-            {"text": "长标签", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 140, "height": 20, "conf": 0.9},
+            {
+                "text": "长标签",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 140,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], merged)
@@ -128,8 +223,22 @@ class TestIdentifyFieldsEdgeCases:
     def test_multiple_blocks_mixed(self):
         """Mix of colon-separated and no-colon fields."""
         blocks = [
-            {"text": "品名：运动鞋", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.95},
-            {"text": "产品编号 6808AA", "left": 10, "top": 60, "width": 100, "height": 30, "conf": 0.9},
+            {
+                "text": "品名：运动鞋",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.95,
+            },
+            {
+                "text": "产品编号 6808AA",
+                "left": 10,
+                "top": 60,
+                "width": 100,
+                "height": 30,
+                "conf": 0.9,
+            },
             {"text": "随机文本", "left": 10, "top": 100, "width": 100, "height": 30, "conf": 0.8},
         ]
         fields = _identify_fields(blocks)
@@ -169,7 +278,14 @@ class TestIdentifyFieldsEdgeCases:
     def test_no_colon_known_label_type_field(self):
         """No-colon known label should have correct type classification."""
         blocks = [
-            {"text": "产品名称 PE漆", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+            {
+                "text": "产品名称 PE漆",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.9,
+            }
         ]
         fields = _identify_fields(blocks)
         assert len(fields) == 1
@@ -203,7 +319,12 @@ class TestGenerateCodeWithFields:
         img.save(img_path)
 
         fields = [
-            {"label": "品名", "value": "运动鞋", "field_key": "product_name", "type": "fixed_label"},
+            {
+                "label": "品名",
+                "value": "运动鞋",
+                "field_key": "product_name",
+                "type": "fixed_label",
+            },
             {"label": "颜色", "value": "白色", "field_key": "color", "type": "fixed_label"},
             {"label": "自定义", "value": "值", "field_key": "custom", "type": "dynamic"},
         ]
@@ -369,7 +490,12 @@ class TestGenerateTemplateCodeEdgeCases:
         ocr_result = {
             "success": True,
             "fields": [
-                {"label": "品名", "value": "运动鞋", "field_key": "product_name", "type": "fixed_label"},
+                {
+                    "label": "品名",
+                    "value": "运动鞋",
+                    "field_key": "product_name",
+                    "type": "fixed_label",
+                },
                 {"label": "颜色", "value": "白色", "field_key": "color", "type": "fixed_label"},
             ],
         }
@@ -399,7 +525,12 @@ class TestLabelTemplateGeneratorSkillEdgeCases:
         mock_ocr_result = {
             "success": True,
             "fields": [
-                {"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"},
+                {
+                    "label": "品名",
+                    "value": "鞋",
+                    "field_key": "product_name",
+                    "type": "fixed_label",
+                },
             ],
         }
         with patch(
@@ -420,23 +551,27 @@ class TestLabelTemplateGeneratorSkillEdgeCases:
         img.save(img_path)
 
         skill = LabelTemplateGeneratorSkill()
-        with patch(
-            "app.services.skills.label_template_generator.label_template_generator.analyze_image",
-            return_value={
-                "success": True,
-                "file": "verbose.png",
-                "format": "PNG",
-                "mode": "RGB",
-                "size": {"width": 400, "height": 300},
-                "colors": {"background": "#ffffff", "border": "#000000", "text": "#000000"},
-                "sections": [],
-            },
-        ) as mock_analyze, patch(
-            "app.services.skills.label_template_generator.label_template_generator.generate_template_code",
-            return_value="# code",
-        ), patch(
-            "app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr",
-            return_value={"success": False},
+        with (
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.analyze_image",
+                return_value={
+                    "success": True,
+                    "file": "verbose.png",
+                    "format": "PNG",
+                    "mode": "RGB",
+                    "size": {"width": 400, "height": 300},
+                    "colors": {"background": "#ffffff", "border": "#000000", "text": "#000000"},
+                    "sections": [],
+                },
+            ) as mock_analyze,
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.generate_template_code",
+                return_value="# code",
+            ),
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr",
+                return_value={"success": False},
+            ),
         ):
             result = skill.execute(img_path, enable_ocr=False, verbose=True)
             mock_analyze.assert_called_once_with(img_path, verbose=True)
@@ -557,7 +692,11 @@ class TestExtractFieldsByPatternEdgeCases:
         """All fallback fields should indicate OCR is needed."""
         result = _extract_fields_by_pattern("/any/path.png")
         for field in result:
-            assert "OCR" in field["value"] or "ocr" in field["value"].lower() or "需要" in field["value"]
+            assert (
+                "OCR" in field["value"]
+                or "ocr" in field["value"].lower()
+                or "需要" in field["value"]
+            )
 
     def test_returns_seven_fields(self):
         """Should return exactly 7 fallback fields."""

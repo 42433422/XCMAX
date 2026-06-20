@@ -7,8 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.conversation.context import ConversationContext, ContextMixin
-
+from app.services.conversation.context import ContextMixin, ConversationContext
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -241,9 +240,21 @@ class TestGetOrCreateContextAsync:
         ) as mock_ws:
             # The import inside the method will try to import from app.infrastructure.web_search
             # We need to patch at the module level
-            with patch.dict("sys.modules", {"app.infrastructure.web_search": MagicMock(
-                kitten_web_search=AsyncMock(return_value={"success": True, "hits": [{"title": "t"}], "provider": "p", "query": "q"})
-            )}):
+            with patch.dict(
+                "sys.modules",
+                {
+                    "app.infrastructure.web_search": MagicMock(
+                        kitten_web_search=AsyncMock(
+                            return_value={
+                                "success": True,
+                                "hits": [{"title": "t"}],
+                                "provider": "p",
+                                "query": "q",
+                            }
+                        )
+                    )
+                },
+            ):
                 ctx = await host._get_or_create_context_async("u1", ctx_input, "search query")
                 assert isinstance(ctx, ConversationContext)
 
@@ -296,17 +307,27 @@ class TestEnrichContextWithKittenBusinessSnapshot:
 
     def test_with_kitten_include_business_db_success(self, host):
         ctx = {"kitten_analyzer": True, "kitten_include_business_db": True}
-        with patch.dict("sys.modules", {"app.services.kitten_business_snapshot": MagicMock(
-            build_kitten_business_snapshot=MagicMock(return_value={"stats": {"orders": 10}})
-        )}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.services.kitten_business_snapshot": MagicMock(
+                    build_kitten_business_snapshot=MagicMock(return_value={"stats": {"orders": 10}})
+                )
+            },
+        ):
             result = host._enrich_context_with_kitten_business_snapshot(ctx)
             assert result["kitten_business_snapshot"] == {"stats": {"orders": 10}}
 
     def test_with_kitten_include_business_db_failure(self, host):
         ctx = {"kitten_analyzer": True, "kitten_include_business_db": True}
-        with patch.dict("sys.modules", {"app.services.kitten_business_snapshot": MagicMock(
-            build_kitten_business_snapshot=MagicMock(side_effect=RuntimeError("db down"))
-        )}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.services.kitten_business_snapshot": MagicMock(
+                    build_kitten_business_snapshot=MagicMock(side_effect=RuntimeError("db down"))
+                )
+            },
+        ):
             result = host._enrich_context_with_kitten_business_snapshot(ctx)
             assert result["kitten_business_snapshot"]["success"] is False
             assert "db down" in result["kitten_business_snapshot"]["text"]
@@ -338,11 +359,21 @@ class TestEnrichKittenWebSearchIfNeeded:
     @pytest.mark.asyncio
     async def test_search_success(self, host):
         ctx = {"kitten_analyzer": True, "kitten_web_search": True}
-        with patch.dict("sys.modules", {"app.infrastructure.web_search": MagicMock(
-            kitten_web_search=AsyncMock(return_value={
-                "success": True, "hits": [{"title": "result"}], "provider": "p", "query": "q"
-            })
-        )}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.infrastructure.web_search": MagicMock(
+                    kitten_web_search=AsyncMock(
+                        return_value={
+                            "success": True,
+                            "hits": [{"title": "result"}],
+                            "provider": "p",
+                            "query": "q",
+                        }
+                    )
+                )
+            },
+        ):
             result = await host._enrich_kitten_web_search_if_needed(ctx, "search", "u1")
             assert result["web_search_results"] == [{"title": "result"}]
             assert "web_search_error" not in result
@@ -351,11 +382,21 @@ class TestEnrichKittenWebSearchIfNeeded:
     @pytest.mark.asyncio
     async def test_search_failure(self, host):
         ctx = {"kitten_analyzer": True, "kitten_web_search": True}
-        with patch.dict("sys.modules", {"app.infrastructure.web_search": MagicMock(
-            kitten_web_search=AsyncMock(return_value={
-                "success": False, "message": "timeout", "provider": None, "query": "q"
-            })
-        )}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.infrastructure.web_search": MagicMock(
+                    kitten_web_search=AsyncMock(
+                        return_value={
+                            "success": False,
+                            "message": "timeout",
+                            "provider": None,
+                            "query": "q",
+                        }
+                    )
+                )
+            },
+        ):
             result = await host._enrich_kitten_web_search_if_needed(ctx, "search", "u1")
             assert result["web_search_results"] == []
             assert "web_search_error" in result
@@ -363,9 +404,14 @@ class TestEnrichKittenWebSearchIfNeeded:
     @pytest.mark.asyncio
     async def test_search_exception(self, host):
         ctx = {"kitten_analyzer": True, "kitten_web_search": True}
-        with patch.dict("sys.modules", {"app.infrastructure.web_search": MagicMock(
-            kitten_web_search=AsyncMock(side_effect=ConnectionError("network"))
-        )}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.infrastructure.web_search": MagicMock(
+                    kitten_web_search=AsyncMock(side_effect=ConnectionError("network"))
+                )
+            },
+        ):
             result = await host._enrich_kitten_web_search_if_needed(ctx, "search", "u1")
             assert result["web_search_results"] == []
             assert "network" in result.get("web_search_error", "")
@@ -402,13 +448,17 @@ class TestApplyRequestContext:
 
     def test_kitten_analyzer_has_dataset_false_removes_dataset(self, host):
         ctx = host.create_context("u1")
-        host._apply_request_context(ctx, {"kitten_analyzer": True, "has_dataset": False, "kitten_dataset": {"rows": 5}})
+        host._apply_request_context(
+            ctx, {"kitten_analyzer": True, "has_dataset": False, "kitten_dataset": {"rows": 5}}
+        )
         rc = ctx.metadata["request_context"]
         assert "kitten_dataset" not in rc
 
     def test_kitten_dataset_present_and_truthy(self, host):
         ctx = host.create_context("u1")
-        host._apply_request_context(ctx, {"kitten_analyzer": True, "has_dataset": True, "kitten_dataset": {"rows": 5}})
+        host._apply_request_context(
+            ctx, {"kitten_analyzer": True, "has_dataset": True, "kitten_dataset": {"rows": 5}}
+        )
         rc = ctx.metadata["request_context"]
         assert rc["kitten_dataset"] == {"rows": 5}
 
@@ -421,12 +471,15 @@ class TestApplyRequestContext:
     def test_kitten_no_web_search_cleans_web_keys(self, host):
         ctx = host.create_context("u1")
         # First set web search results
-        host._apply_request_context(ctx, {
-            "kitten_analyzer": True,
-            "kitten_web_search": True,
-            "web_search_results": [{"t": "r"}],
-            "web_search_meta": {"provider": "p"},
-        })
+        host._apply_request_context(
+            ctx,
+            {
+                "kitten_analyzer": True,
+                "kitten_web_search": True,
+                "web_search_results": [{"t": "r"}],
+                "web_search_meta": {"provider": "p"},
+            },
+        )
         # Then apply without web search
         host._apply_request_context(ctx, {"kitten_analyzer": True, "kitten_web_search": False})
         rc = ctx.metadata["request_context"]
@@ -437,65 +490,86 @@ class TestApplyRequestContext:
     def test_web_search_error_truncated(self, host):
         ctx = host.create_context("u1")
         long_err = "x" * 600
-        host._apply_request_context(ctx, {
-            "kitten_analyzer": True,
-            "kitten_web_search": True,
-            "web_search_error": long_err,
-        })
+        host._apply_request_context(
+            ctx,
+            {
+                "kitten_analyzer": True,
+                "kitten_web_search": True,
+                "web_search_error": long_err,
+            },
+        )
         rc = ctx.metadata["request_context"]
         assert len(rc["web_search_error"]) <= 500
 
     def test_web_search_error_cleared_on_no_error(self, host):
         ctx = host.create_context("u1")
-        host._apply_request_context(ctx, {
-            "kitten_analyzer": True,
-            "kitten_web_search": True,
-            "web_search_error": "some error",
-        })
-        host._apply_request_context(ctx, {
-            "kitten_analyzer": True,
-            "kitten_web_search": True,
-        })
+        host._apply_request_context(
+            ctx,
+            {
+                "kitten_analyzer": True,
+                "kitten_web_search": True,
+                "web_search_error": "some error",
+            },
+        )
+        host._apply_request_context(
+            ctx,
+            {
+                "kitten_analyzer": True,
+                "kitten_web_search": True,
+            },
+        )
         rc = ctx.metadata["request_context"]
         assert "web_search_error" not in rc
 
     def test_web_search_meta_dict(self, host):
         ctx = host.create_context("u1")
-        host._apply_request_context(ctx, {
-            "kitten_analyzer": True,
-            "kitten_web_search": True,
-            "web_search_meta": {"provider": "p", "query": "q"},
-        })
+        host._apply_request_context(
+            ctx,
+            {
+                "kitten_analyzer": True,
+                "kitten_web_search": True,
+                "web_search_meta": {"provider": "p", "query": "q"},
+            },
+        )
         rc = ctx.metadata["request_context"]
         assert rc["web_search_meta"]["provider"] == "p"
 
     def test_web_search_meta_non_dict_removed(self, host):
         ctx = host.create_context("u1")
-        host._apply_request_context(ctx, {
-            "kitten_analyzer": True,
-            "kitten_web_search": True,
-            "web_search_meta": "not a dict",
-        })
+        host._apply_request_context(
+            ctx,
+            {
+                "kitten_analyzer": True,
+                "kitten_web_search": True,
+                "web_search_meta": "not a dict",
+            },
+        )
         rc = ctx.metadata["request_context"]
         assert "web_search_meta" not in rc
 
     def test_kitten_business_snapshot_with_include(self, host):
         ctx = host.create_context("u1")
-        host._apply_request_context(ctx, {
-            "kitten_analyzer": True,
-            "kitten_include_business_db": True,
-            "kitten_business_snapshot": {"stats": {"orders": 5}},
-        })
+        host._apply_request_context(
+            ctx,
+            {
+                "kitten_analyzer": True,
+                "kitten_include_business_db": True,
+                "kitten_business_snapshot": {"stats": {"orders": 5}},
+            },
+        )
         rc = ctx.metadata["request_context"]
         assert rc["kitten_business_snapshot"] == {"stats": {"orders": 5}}
 
     def test_kitten_business_snapshot_without_include_removed(self, host):
         ctx = host.create_context("u1")
-        host._apply_request_context(ctx, {
-            "kitten_analyzer": True,
-            "kitten_include_business_db": False,
-            "kitten_business_snapshot": {"stats": {}},
-        })
+        host._apply_request_context(
+            ctx,
+            {
+                "kitten_analyzer": True,
+                "kitten_include_business_db": False,
+                "kitten_business_snapshot": {"stats": {}},
+            },
+        )
         rc = ctx.metadata["request_context"]
         assert "kitten_business_snapshot" not in rc
 

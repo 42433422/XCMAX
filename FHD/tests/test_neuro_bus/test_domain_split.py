@@ -1,4 +1,5 @@
 """领域拆分后导入兼容性测试。"""
+
 import importlib
 
 import pytest
@@ -7,8 +8,13 @@ import pytest
 @pytest.mark.parametrize(
     "domain_name",
     [
-        "payment", "order", "customer", "ai_service",
-        "intent", "safety", "wechat",
+        "payment",
+        "order",
+        "customer",
+        "ai_service",
+        "intent",
+        "safety",
+        "wechat",
     ],
 )
 def test_domain_imports_handlers(domain_name):

@@ -14,7 +14,6 @@ from app.infrastructure.persistence.user_memory_vector_store import (
     SQLiteUserMemoryVectorStore,
 )
 
-
 # ---------------------------------------------------------------------------
 # SQLiteUserMemoryVectorStore
 # ---------------------------------------------------------------------------
@@ -75,9 +74,7 @@ class TestSQLiteUserMemoryVectorStore:
 
     def test_upsert_chunks_updates_existing(self, store):
         store.create_or_update_index("idx-1", "user-1")
-        chunks = [
-            {"chunk_id": "c1", "content": "v1", "embedding": [1.0, 0.0], "metadata": {}}
-        ]
+        chunks = [{"chunk_id": "c1", "content": "v1", "embedding": [1.0, 0.0], "metadata": {}}]
         store.upsert_chunks("idx-1", chunks)
         chunks[0]["content"] = "v2"
         store.upsert_chunks("idx-1", chunks)
@@ -112,9 +109,17 @@ class TestSQLiteUserMemoryVectorStore:
     def test_query_top_k_limit(self, store):
         store.create_or_update_index("idx-1", "user-1")
         for i in range(5):
-            store.upsert_chunks("idx-1", [
-                {"chunk_id": f"c{i}", "content": f"text{i}", "embedding": [float(i), 0.0], "metadata": {}}
-            ])
+            store.upsert_chunks(
+                "idx-1",
+                [
+                    {
+                        "chunk_id": f"c{i}",
+                        "content": f"text{i}",
+                        "embedding": [float(i), 0.0],
+                        "metadata": {},
+                    }
+                ],
+            )
         results = store.query("idx-1", [0.0, 0.0], top_k=2)
         assert len(results) == 2
 
@@ -135,10 +140,13 @@ class TestSQLiteUserMemoryVectorStore:
 
     def test_chunk_count_updated(self, store):
         store.create_or_update_index("idx-1", "user-1")
-        store.upsert_chunks("idx-1", [
-            {"chunk_id": "c1", "content": "a", "embedding": [1.0], "metadata": {}},
-            {"chunk_id": "c2", "content": "b", "embedding": [2.0], "metadata": {}},
-        ])
+        store.upsert_chunks(
+            "idx-1",
+            [
+                {"chunk_id": "c1", "content": "a", "embedding": [1.0], "metadata": {}},
+                {"chunk_id": "c2", "content": "b", "embedding": [2.0], "metadata": {}},
+            ],
+        )
         indexes = store.list_indexes()
         assert indexes[0]["chunk_count"] == 2
 
@@ -150,23 +158,27 @@ class TestSQLiteUserMemoryVectorStore:
 
 class TestModuleFunctions:
     def test_get_user_memory_sqlite_vector_store(self):
+        # Reset singleton
+        import app.infrastructure.persistence.user_memory_vector_store as mod
         from app.infrastructure.persistence.user_memory_vector_store import (
             get_user_memory_sqlite_vector_store,
         )
-        # Reset singleton
-        import app.infrastructure.persistence.user_memory_vector_store as mod
+
         mod._user_memory_sqlite_vector_store_instance = None
-        with patch("app.infrastructure.persistence.user_memory_vector_store._default_user_memory_vector_db_path",
-                   return_value=os.path.join(tempfile.mkdtemp(), "test.db")):
+        with patch(
+            "app.infrastructure.persistence.user_memory_vector_store._default_user_memory_vector_db_path",
+            return_value=os.path.join(tempfile.mkdtemp(), "test.db"),
+        ):
             store = get_user_memory_sqlite_vector_store()
             assert store is not None
         mod._user_memory_sqlite_vector_store_instance = None
 
     def test_get_user_memory_pg_vector_store_raises_without_url(self):
+        import app.infrastructure.persistence.user_memory_vector_store as mod
         from app.infrastructure.persistence.user_memory_vector_store import (
             get_user_memory_pg_vector_store,
         )
-        import app.infrastructure.persistence.user_memory_vector_store as mod
+
         mod._user_memory_pg_vector_store_instance = None
         with patch.dict(os.environ, {"VECTOR_DB_URL": "", "DATABASE_URL": ""}, clear=False):
             with pytest.raises(ValueError, match="缺少"):
@@ -176,6 +188,7 @@ class TestModuleFunctions:
         from app.infrastructure.persistence.user_memory_vector_store import (
             _default_user_memory_vector_db_path,
         )
+
         with patch.dict(os.environ, {"USER_MEMORY_VECTOR_DB_PATH": "/tmp/test_vec.db"}):
             path = _default_user_memory_vector_db_path()
             assert path == "/tmp/test_vec.db"
@@ -184,6 +197,7 @@ class TestModuleFunctions:
         from app.infrastructure.persistence.user_memory_vector_store import (
             _default_user_memory_vector_db_path,
         )
+
         with patch.dict(os.environ, {"USER_MEMORY_VECTOR_DB_PATH": ""}, clear=False):
             path = _default_user_memory_vector_db_path()
             assert "user_memory_vectors.db" in path

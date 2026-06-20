@@ -421,9 +421,7 @@ def test_qclaw_control_and_test_route_attach_agent_runs():
             return_value=repo,
         ),
     ):
-        wechat = local_client.post(
-            "/api/ai/qclaw/wechat-gateway", json={"enabled": True}
-        ).json()
+        wechat = local_client.post("/api/ai/qclaw/wechat-gateway", json={"enabled": True}).json()
         config = local_client.post(
             "/api/ai/qclaw/openclaw/config",
             json={"base_url": "http://qclaw-openclaw.test:28789"},

@@ -61,8 +61,9 @@ class TestSyncPullAiChanges:
         ]
         mock_db = _build_db_mock(mock_ai_rows)
 
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.db.session.get_db", return_value=mock_db
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_sync_pull(body=body, user=user)
 
@@ -86,8 +87,9 @@ class TestSyncPullAiChanges:
 
         mock_db = _build_db_mock([])
 
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.db.session.get_db", return_value=mock_db
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_sync_pull(body=body, user=user)
 

@@ -1,4 +1,5 @@
 """Deep tests for ``app.application.admin_deploy_push`` covering remaining uncovered branches."""
+
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +31,6 @@ from app.application.admin_deploy_push import (
     get_deploy_job,
     start_deploy_push,
 )
-
 
 # ── _local_git_sha deep ──────────────────────────────────────────────────────
 
@@ -202,19 +202,18 @@ class TestProbeEnterpriseRuntimeDeep:
 
 class TestCheckDeployUpdatesDeep:
     def test_staging_channel_replaces_url(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest", return_value=None
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url", return_value=None
-        ) as mock_fetch, patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={"reachable": False, "deploy_sha256": ""},
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch("app.application.admin_deploy_push._read_local_manifest", return_value=None),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url", return_value=None
+            ) as mock_fetch,
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={"reachable": False, "deploy_sha256": ""},
+            ),
         ):
             result = check_deploy_updates(channel="staging")
         # Verify the manifest URL was modified for staging
@@ -223,96 +222,96 @@ class TestCheckDeployUpdatesDeep:
         assert "/stable/" not in called_url
 
     def test_stable_channel_uses_default_url(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest", return_value=None
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url", return_value=None
-        ) as mock_fetch, patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={"reachable": False, "deploy_sha256": ""},
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch("app.application.admin_deploy_push._read_local_manifest", return_value=None),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url", return_value=None
+            ) as mock_fetch,
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={"reachable": False, "deploy_sha256": ""},
+            ),
         ):
             result = check_deploy_updates(channel="stable")
         called_url = mock_fetch.call_args[0][0]
         assert "/stable/" in called_url
 
     def test_hub_sha_empty_with_local_sha_triggers_push(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest", return_value=None
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url",
-            return_value={"git_sha": "", "sha256": ""},
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={"reachable": False, "deploy_sha256": ""},
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch("app.application.admin_deploy_push._read_local_manifest", return_value=None),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url",
+                return_value={"git_sha": "", "sha256": ""},
+            ),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={"reachable": False, "deploy_sha256": ""},
+            ),
         ):
             result = check_deploy_updates()
         assert result["flags"]["needs_push"] is True
 
     def test_enterprise_pending_with_hub_tar_sha(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest",
-            return_value={"git_sha": "abc123def456"},
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url",
-            return_value={
-                "git_sha": "abc123def456",
-                "sha256": "newsha256",
-                "version": "10.0.0",
-                "built_at": "2026-01-01T00:00:00Z",
-            },
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={
-                "reachable": True,
-                "deploy_sha256": "oldsha256",
-                "version": "10.0.0",
-            },
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch(
+                "app.application.admin_deploy_push._read_local_manifest",
+                return_value={"git_sha": "abc123def456"},
+            ),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url",
+                return_value={
+                    "git_sha": "abc123def456",
+                    "sha256": "newsha256",
+                    "version": "10.0.0",
+                    "built_at": "2026-01-01T00:00:00Z",
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={
+                    "reachable": True,
+                    "deploy_sha256": "oldsha256",
+                    "version": "10.0.0",
+                },
+            ),
         ):
             result = check_deploy_updates()
         assert result["flags"]["enterprise_pending"] is True
         assert result["update_hub"]["built_at"] == "2026-01-01T00:00:00Z"
 
     def test_up_to_date_with_matching_shas(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest",
-            return_value={"git_sha": "abc123def456"},
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url",
-            return_value={
-                "git_sha": "abc123def456",
-                "sha256": "sha256abc",
-                "version": "10.0.0",
-            },
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={
-                "reachable": True,
-                "deploy_sha256": "sha256abc",
-            },
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch(
+                "app.application.admin_deploy_push._read_local_manifest",
+                return_value={"git_sha": "abc123def456"},
+            ),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url",
+                return_value={
+                    "git_sha": "abc123def456",
+                    "sha256": "sha256abc",
+                    "version": "10.0.0",
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={
+                    "reachable": True,
+                    "deploy_sha256": "sha256abc",
+                },
+            ),
         ):
             result = check_deploy_updates()
         assert result["flags"]["up_to_date"] is True
@@ -342,9 +341,7 @@ class TestRunShellStepDeep:
 
         mock_proc.wait = wait
 
-        with patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)
-        ):
+        with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
             await _run_shell_step(job, step, ["echo", "many"], cwd=Path("/tmp"))
         assert step.status == "done"
         # tail[-1] should be the last line
@@ -367,9 +364,7 @@ class TestRunShellStepDeep:
 
         mock_proc.wait = wait
 
-        with patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)
-        ):
+        with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
             await _run_shell_step(job, step, ["true"], cwd=Path("/tmp"))
         assert step.status == "done"
         assert step.detail == "exit 0"
@@ -441,9 +436,7 @@ class TestRunShellStepDeep:
         mock_proc.wait = wait
 
         assert step.finished_at is None
-        with patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)
-        ):
+        with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
             await _run_shell_step(job, step, ["echo"], cwd=Path("/tmp"))
         assert step.finished_at is not None
 
@@ -452,9 +445,7 @@ class TestRunShellStepDeep:
 
 
 class TestExecuteDeployJobDeep:
-    async def test_execute_with_frontend_steps(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_execute_with_frontend_steps(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that frontend_build and frontend_push steps are executed."""
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
@@ -479,26 +470,26 @@ class TestExecuteDeployJobDeep:
             step.started_at = time.time()
             step.finished_at = time.time()
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "abc123"},
-                "update_hub": {"git_sha": "abc123"},
-            },
-        ), patch(
-            "app.application.admin_deploy_push._run_shell_step",
-            new=AsyncMock(side_effect=fake_run_step),
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "abc123"},
+                    "update_hub": {"git_sha": "abc123"},
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._run_shell_step",
+                new=AsyncMock(side_effect=fake_run_step),
+            ),
         ):
             await _execute_deploy_job(job)
         assert job.status == "done"
         assert "frontend_build" in executed_steps
         assert "frontend_push" in executed_steps
 
-    async def test_execute_verify_step_success(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_execute_verify_step_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test verify step when hub_sha matches local_sha."""
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
@@ -515,15 +506,17 @@ class TestExecuteDeployJobDeep:
             steps=_build_steps(opts),
         )
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "matchingsha1"},
-                "update_hub": {"git_sha": "matchingsha1"},
-            },
-        ), patch("asyncio.sleep", new=AsyncMock()):
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "matchingsha1"},
+                    "update_hub": {"git_sha": "matchingsha1"},
+                },
+            ),
+            patch("asyncio.sleep", new=AsyncMock()),
+        ):
             await _execute_deploy_job(job)
         assert job.status == "done"
         # Find the verify step
@@ -549,22 +542,22 @@ class TestExecuteDeployJobDeep:
             steps=_build_steps(opts),
         )
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": ""},
-                "update_hub": {"git_sha": "different"},
-            },
-        ), patch("asyncio.sleep", new=AsyncMock()):
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": ""},
+                    "update_hub": {"git_sha": "different"},
+                },
+            ),
+            patch("asyncio.sleep", new=AsyncMock()),
+        ):
             await _execute_deploy_job(job)
         # Empty local_sha → not error (condition: hub_sha == local_sha or not local_sha)
         assert job.status == "done"
 
-    async def test_execute_sets_ssh_key_env(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_execute_sets_ssh_key_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that ssh_key option is set in deploy env."""
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
@@ -591,17 +584,19 @@ class TestExecuteDeployJobDeep:
             step.started_at = time.time()
             step.finished_at = time.time()
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "abc123"},
-                "update_hub": {"git_sha": "abc123"},
-            },
-        ), patch(
-            "app.application.admin_deploy_push._run_shell_step",
-            new=AsyncMock(side_effect=fake_run_step),
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "abc123"},
+                    "update_hub": {"git_sha": "abc123"},
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._run_shell_step",
+                new=AsyncMock(side_effect=fake_run_step),
+            ),
         ):
             await _execute_deploy_job(job)
         assert job.status == "done"
@@ -627,15 +622,17 @@ class TestExecuteDeployJobDeep:
             steps=_build_steps(opts),
         )
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "abc123"},
-                "update_hub": {"git_sha": "abc123"},
-            },
-        ), patch("asyncio.sleep", new=AsyncMock()):
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "abc123"},
+                    "update_hub": {"git_sha": "abc123"},
+                },
+            ),
+            patch("asyncio.sleep", new=AsyncMock()),
+        ):
             await _execute_deploy_job(job)
         assert adp._ACTIVE_JOB is None
 
@@ -658,12 +655,14 @@ class TestExecuteDeployJobDeep:
             steps=_build_steps(opts),
         )
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            side_effect=RuntimeError("check failed"),
-        ), patch("asyncio.sleep", new=AsyncMock()):
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                side_effect=RuntimeError("check failed"),
+            ),
+            patch("asyncio.sleep", new=AsyncMock()),
+        ):
             await _execute_deploy_job(job)
         assert job.status == "error"
         assert adp._ACTIVE_JOB is None
@@ -699,17 +698,19 @@ class TestExecuteDeployJobDeep:
             step.status = "done"
             step.finished_at = time.time()
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "abc123"},
-                "update_hub": {"git_sha": "abc123"},
-            },
-        ), patch(
-            "app.application.admin_deploy_push._run_shell_step",
-            new=AsyncMock(side_effect=fake_run_step),
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "abc123"},
+                    "update_hub": {"git_sha": "abc123"},
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._run_shell_step",
+                new=AsyncMock(side_effect=fake_run_step),
+            ),
         ):
             await _execute_deploy_job(job)
         assert job.status == "error"
@@ -743,11 +744,9 @@ class TestStartDeployPushDeep:
         with patch("asyncio.create_task", new=Mock()):
             job = await start_deploy_push({"channel": "staging"})
         assert adp._JOBS[job.job_id] is job
-        assert adp._ACTIVE_JOB == job.job_id
+        assert job.job_id == adp._ACTIVE_JOB
 
-    async def test_start_push_with_ssh_key_from_env(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_start_push_with_ssh_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
         monkeypatch.setenv("FHD_PUSH_SSH_KEY", "env_ssh_key")
@@ -819,15 +818,11 @@ class TestDeployJobToDictDeep:
 
 class TestHubRemoteDirDeep:
     def test_custom_dir_with_whitespace(self) -> None:
-        with patch.dict(
-            os.environ, {"FHD_PUSH_REMOTE_DIR": "  /custom/path  "}, clear=False
-        ):
+        with patch.dict(os.environ, {"FHD_PUSH_REMOTE_DIR": "  /custom/path  "}, clear=False):
             result = _hub_remote_dir("stable")
         assert result == "/custom/path"
 
     def test_empty_custom_dir_falls_back(self) -> None:
-        with patch.dict(
-            os.environ, {"FHD_PUSH_REMOTE_DIR": "   "}, clear=False
-        ):
+        with patch.dict(os.environ, {"FHD_PUSH_REMOTE_DIR": "   "}, clear=False):
             result = _hub_remote_dir("stable")
         assert result == "/var/www/update/releases/stable/server"

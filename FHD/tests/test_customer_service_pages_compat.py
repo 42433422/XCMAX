@@ -26,15 +26,11 @@ def test_customer_service_mod_init_accepts_manager_call():
     skip_if_bridge_mod_absent("xcagi-customer-service-bridge")
     from app.mod_sdk.mods_bus import import_mod_backend_py
 
-    module = import_mod_backend_py(
-        str(MOD_DIR), "xcagi-customer-service-bridge", "blueprints"
-    )
-    init_fn = getattr(module, "mod_init")
+    module = import_mod_backend_py(str(MOD_DIR), "xcagi-customer-service-bridge", "blueprints")
+    init_fn = module.mod_init
     sig = inspect.signature(init_fn)
     params = list(sig.parameters.values())
-    optional = not params or all(
-        p.default is not inspect.Parameter.empty for p in params
-    )
+    optional = not params or all(p.default is not inspect.Parameter.empty for p in params)
     assert optional, "mod_init must be callable with zero args from ModManager"
     init_fn()
     init_fn(mod_id="xcagi-customer-service-bridge")

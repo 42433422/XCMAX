@@ -27,7 +27,10 @@ try_deterministic_chat_reply = _mod.try_deterministic_chat_reply
 def test_product_count_fast_path(message: str) -> None:
     mock_db = MagicMock()
     mock_db.query.return_value.count.return_value = 42
-    with patch("app.db.session.get_db", return_value=MagicMock(__enter__=lambda self: mock_db, __exit__=lambda self, *a: False)):
+    with patch(
+        "app.db.session.get_db",
+        return_value=MagicMock(__enter__=lambda self: mock_db, __exit__=lambda self, *a: False),
+    ):
         out = try_deterministic_chat_reply(message)
     assert out is not None
     assert out["response"].strip().isdigit()

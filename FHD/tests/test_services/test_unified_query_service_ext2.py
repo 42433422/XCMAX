@@ -6,6 +6,7 @@ get_first / exists / count / delete) and module-level helpers
 ``find_product`` / ``check_purchase_unit_exists`` / ``delete_purchase_unit``)
 by mocking the ``get_db`` context manager.
 """
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -127,17 +128,13 @@ class TestGetDistinctValues:
     def test_desc_order(self):
         db = _FakeDb(items=[("a",)])
         with patch.object(uqs_mod, "get_db", lambda: _fake_get_db(db)):
-            out = UnifiedQueryService.get_distinct_values(
-                MagicMock(), "name", order_by="desc"
-            )
+            out = UnifiedQueryService.get_distinct_values(MagicMock(), "name", order_by="desc")
         assert out == ["a"]
 
     def test_with_limit(self):
         db = _FakeDb(items=[("a",), ("b",)])
         with patch.object(uqs_mod, "get_db", lambda: _fake_get_db(db)):
-            out = UnifiedQueryService.get_distinct_values(
-                MagicMock(), "name", limit=1
-            )
+            out = UnifiedQueryService.get_distinct_values(MagicMock(), "name", limit=1)
         assert out == ["a"]  # mock doesn't enforce limit but returns items
 
     def test_filters_none_rows(self):
@@ -162,9 +159,7 @@ class TestGetAll:
     def test_with_filter_kwargs(self):
         db = _FakeDb(items=[MagicMock(id=1)])
         with patch.object(uqs_mod, "get_db", lambda: _fake_get_db(db)):
-            out = UnifiedQueryService.get_all(
-                MagicMock(), filter_kwargs={"name": "a"}
-            )
+            out = UnifiedQueryService.get_all(MagicMock(), filter_kwargs={"name": "a"})
         assert len(out) == 1
 
     def test_with_order_by_asc(self):
@@ -195,9 +190,7 @@ class TestGetAll:
 
         db = _FakeDb(items=[MagicMock()])
         with patch.object(uqs_mod, "get_db", lambda: _fake_get_db(db)):
-            out = UnifiedQueryService.get_all(
-                NoField(), order_by=[("missing", "asc")]
-            )
+            out = UnifiedQueryService.get_all(NoField(), order_by=[("missing", "asc")])
         assert len(out) == 1
 
     def test_offset_and_limit(self):
@@ -344,9 +337,7 @@ class TestGetPurchaseUnits:
         assert out[1]["address"] == ""
 
     def test_no_keyword(self):
-        u = MagicMock(
-            id=1, unit_name="u", contact_person=None, contact_phone=None, address=None
-        )
+        u = MagicMock(id=1, unit_name="u", contact_person=None, contact_phone=None, address=None)
         db = _FakeDb(items=[u])
         with patch.object(uqs_mod, "get_db", lambda: _fake_get_db(db)):
             out = get_purchase_units(None)

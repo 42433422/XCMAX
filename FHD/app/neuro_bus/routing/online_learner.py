@@ -56,9 +56,7 @@ class OnlineLearner:
         self.lr = lr
         self.update_threshold = update_threshold
         # 滑动窗口：每条样本 = (features, action, reward, sla_hit, success)
-        self._window: deque[tuple[list[float], int, float, bool, bool]] = deque(
-            maxlen=window_size
-        )
+        self._window: deque[tuple[list[float], int, float, bool, bool]] = deque(maxlen=window_size)
         self._explore_count = 0
         self._total_count = 0
 
@@ -246,9 +244,7 @@ class OnlineLearner:
             sla_hits = 0
             successes = 0
 
-        explore_rate = (
-            self._explore_count / self._total_count if self._total_count > 0 else 0.0
-        )
+        explore_rate = self._explore_count / self._total_count if self._total_count > 0 else 0.0
 
         return {
             "window_size": len(samples),

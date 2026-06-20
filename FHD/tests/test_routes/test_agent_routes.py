@@ -98,7 +98,9 @@ def test_continue_waiting_agent_run() -> None:
         patches[1],
         patches[2],
         patches[3],
-        patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_execute,
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_execute,
     ):
         create_response = client.post(
             "/api/agent/runs",

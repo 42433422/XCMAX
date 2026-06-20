@@ -66,31 +66,38 @@ class TestReadExcelDataframeEngineSelection:
 class TestExcelCellAsCleanStr:
     def test_string_value(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
+
         assert _excel_cell_as_clean_str("hello") == "hello"
 
     def test_none_value(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
+
         assert _excel_cell_as_clean_str(None) == ""
 
     def test_nan_value(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
+
         assert _excel_cell_as_clean_str(float("nan")) == ""
 
     def test_integer_value(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
+
         assert _excel_cell_as_clean_str(42) == "42"
 
     def test_float_value(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
+
         result = _excel_cell_as_clean_str(3.14)
         assert "3.14" in result
 
     def test_whitespace_stripped(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
+
         assert _excel_cell_as_clean_str("  hello  ") == "hello"
 
     def test_bool_returns_empty(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
+
         assert _excel_cell_as_clean_str(True) == ""
 
 
@@ -100,34 +107,42 @@ class TestExcelCellAsCleanStr:
 class TestExcelCellAsFloat:
     def test_float_value(self):
         from app.application.tools.workflow import _excel_cell_as_float
+
         assert _excel_cell_as_float(3.14) == 3.14
 
     def test_int_value(self):
         from app.application.tools.workflow import _excel_cell_as_float
+
         assert _excel_cell_as_float(42) == 42.0
 
     def test_string_number(self):
         from app.application.tools.workflow import _excel_cell_as_float
+
         assert _excel_cell_as_float("3.14") == 3.14
 
     def test_invalid_string(self):
         from app.application.tools.workflow import _excel_cell_as_float
+
         assert _excel_cell_as_float("not a number") == 0.0
 
     def test_none_value(self):
         from app.application.tools.workflow import _excel_cell_as_float
+
         assert _excel_cell_as_float(None) == 0.0
 
     def test_nan_value(self):
         from app.application.tools.workflow import _excel_cell_as_float
+
         assert _excel_cell_as_float(float("nan")) == 0.0
 
     def test_empty_string(self):
         from app.application.tools.workflow import _excel_cell_as_float
+
         assert _excel_cell_as_float("") == 0.0
 
     def test_custom_default(self):
         from app.application.tools.workflow import _excel_cell_as_float
+
         assert _excel_cell_as_float(None, default=-1.0) == -1.0
 
 
@@ -137,26 +152,32 @@ class TestExcelCellAsFloat:
 class TestLooksLikeContractOrFooterLine:
     def test_clause_line(self):
         from app.application.tools.workflow import _looks_like_contract_or_footer_line
+
         assert _looks_like_contract_or_footer_line("含税价格不含运费") is True
 
     def test_numbered_clause(self):
         from app.application.tools.workflow import _looks_like_contract_or_footer_line
+
         assert _looks_like_contract_or_footer_line("1、以上价格含税含运费") is True
 
     def test_normal_data_line(self):
         from app.application.tools.workflow import _looks_like_contract_or_footer_line
+
         assert _looks_like_contract_or_footer_line("涂料A") is False
 
     def test_short_line(self):
         from app.application.tools.workflow import _looks_like_contract_or_footer_line
+
         assert _looks_like_contract_or_footer_line("短") is False
 
     def test_empty_string(self):
         from app.application.tools.workflow import _looks_like_contract_or_footer_line
+
         assert _looks_like_contract_or_footer_line("") is False
 
     def test_none_value(self):
         from app.application.tools.workflow import _looks_like_contract_or_footer_line
+
         assert _looks_like_contract_or_footer_line(None) is False
 
 
@@ -166,23 +187,27 @@ class TestLooksLikeContractOrFooterLine:
 class TestInferProductFieldMapping:
     def test_with_standard_headers(self):
         from app.application.tools.workflow import _infer_product_field_mapping
+
         headers = ["产品名称", "型号", "单价", "数量", "客户"]
         result = _infer_product_field_mapping(headers)
         assert isinstance(result, dict)
 
     def test_with_empty_headers(self):
         from app.application.tools.workflow import _infer_product_field_mapping
+
         result = _infer_product_field_mapping([])
         assert isinstance(result, dict)
 
     def test_with_non_standard_headers(self):
         from app.application.tools.workflow import _infer_product_field_mapping
+
         headers = ["名称", "编号", "价格", "数量"]
         result = _infer_product_field_mapping(headers)
         assert isinstance(result, dict)
 
     def test_with_price_column_hint(self):
         from app.application.tools.workflow import _infer_product_field_mapping
+
         headers = ["产品名称", "单价", "调价前单价"]
         result = _infer_product_field_mapping(headers, price_column_hint="调价前单价")
         assert isinstance(result, dict)
@@ -214,9 +239,14 @@ class TestExecuteWorkflowToolAdditionalHandlers:
             mock_svc = Mock()
             mock_svc.ingest_excel.return_value = {"success": True, "index_id": "idx1"}
             mock_get.return_value = mock_svc
-            with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path("/test.xlsx")):
+            with patch(
+                "app.application.tools.workflow.resolve_safe_excel_path",
+                return_value=Path("/test.xlsx"),
+            ):
                 with patch.object(Path, "exists", return_value=True):
-                    result = execute_workflow_tool("excel_vector_index", {"file_path": "/test.xlsx"})
+                    result = execute_workflow_tool(
+                        "excel_vector_index", {"file_path": "/test.xlsx"}
+                    )
         parsed = json.loads(result)
         assert parsed["success"] is True
 
@@ -229,13 +259,18 @@ class TestExecuteWorkflowToolAdditionalHandlers:
         xlsx_path = str(tmp_path / "join.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
-            result = execute_workflow_tool("excel_join_compare", {
-                "file_path_a": xlsx_path,
-                "file_path_b": xlsx_path,
-                "action": "diff",
-                "key_columns": ["key"],
-            })
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            result = execute_workflow_tool(
+                "excel_join_compare",
+                {
+                    "file_path_a": xlsx_path,
+                    "file_path_b": xlsx_path,
+                    "action": "diff",
+                    "key_columns": ["key"],
+                },
+            )
         parsed = json.loads(result)
         assert "action" in parsed
         assert parsed["action"] == "diff"
@@ -249,21 +284,29 @@ class TestExecuteWorkflowToolAdditionalHandlers:
         xlsx_path = str(tmp_path / "join.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
-            result = execute_workflow_tool("excel_join_compare", {
-                "file_path_a": xlsx_path,
-                "file_path_b": xlsx_path,
-                "action": "diff",
-            })
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            result = execute_workflow_tool(
+                "excel_join_compare",
+                {
+                    "file_path_a": xlsx_path,
+                    "file_path_b": xlsx_path,
+                    "action": "diff",
+                },
+            )
         parsed = json.loads(result)
         assert "action" in parsed
 
     def test_excel_join_compare_unknown_action(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        result = execute_workflow_tool("excel_join_compare", {
-            "action": "unknown_action",
-        })
+        result = execute_workflow_tool(
+            "excel_join_compare",
+            {
+                "action": "unknown_action",
+            },
+        )
         parsed = json.loads(result)
         assert parsed["success"] is False
 
@@ -276,12 +319,20 @@ class TestExecuteWorkflowToolAdditionalHandlers:
         xlsx_path = str(tmp_path / "prophet.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)), \
-             patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
-            result = execute_workflow_tool("excel_prophet", {
-                "file_path": xlsx_path,
-                "value_column": "value",
-            })
+        with (
+            patch(
+                "app.application.tools.workflow.resolve_safe_excel_path",
+                return_value=Path(xlsx_path),
+            ),
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+        ):
+            result = execute_workflow_tool(
+                "excel_prophet",
+                {
+                    "file_path": xlsx_path,
+                    "value_column": "value",
+                },
+            )
         parsed = json.loads(result)
         assert "action" in parsed
         assert parsed["action"] == "forecast"
@@ -290,9 +341,12 @@ class TestExecuteWorkflowToolAdditionalHandlers:
     def test_excel_prophet_no_file(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        result = execute_workflow_tool("excel_prophet", {
-            "value_column": "value",
-        })
+        result = execute_workflow_tool(
+            "excel_prophet",
+            {
+                "value_column": "value",
+            },
+        )
         parsed = json.loads(result)
         assert "action" in parsed
         assert parsed["action"] == "forecast"
@@ -306,7 +360,9 @@ class TestExecuteWorkflowToolAdditionalHandlers:
         xlsx_path = str(tmp_path / "schema.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
             result = execute_workflow_tool("excel_schema_understand", {"file_path": xlsx_path})
         parsed = json.loads(result)
         # Returns snapshot with column info, not a "success" key
@@ -315,12 +371,28 @@ class TestExecuteWorkflowToolAdditionalHandlers:
     def test_generate_office_document(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        with patch("app.services.kitten_ai_document.generate.generate_office_file", return_value=(b"content", "test.docx")), \
-             patch("app.services.kitten_ai_document.pickup.store_document_pickup", return_value="pickup_tok"), \
-             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False), \
-             patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool", return_value=(None, None)), \
-             patch("app.application.employee_pack_runner.try_execute_employee_planner_tool", return_value=None):
-            result = execute_workflow_tool("generate_office_document", {"user_request": "test doc", "output_format": "docx"})
+        with (
+            patch(
+                "app.services.kitten_ai_document.generate.generate_office_file",
+                return_value=(b"content", "test.docx"),
+            ),
+            patch(
+                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                return_value="pickup_tok",
+            ),
+            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+            ),
+            patch(
+                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                return_value=None,
+            ),
+        ):
+            result = execute_workflow_tool(
+                "generate_office_document", {"user_request": "test doc", "output_format": "docx"}
+            )
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["artifacts"][0]["artifact_type"] == "office_document"
@@ -346,7 +418,11 @@ class TestImportProductsPreviewOrExecute:
 
         df = pd.DataFrame({"产品名称": ["涂料A"], "型号": ["5003A"], "单价": [100]})
         result = _import_products_preview_or_execute(
-            df, ["产品名称", "型号", "单价"], "公司A", False, 1,
+            df,
+            ["产品名称", "型号", "单价"],
+            "公司A",
+            False,
+            1,
         )
         # Function returns JSON string
         parsed = json.loads(result)

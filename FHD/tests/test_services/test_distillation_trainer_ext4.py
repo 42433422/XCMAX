@@ -66,13 +66,13 @@ class TestDistillationTrainerPrepareData:
         labels = [i % 10 for i in range(110)]
 
         trainer = DistillationTrainer(device="cpu")
-        with patch(
-            "app.services.distillation_trainer.BertTokenizer.from_pretrained"
-        ) as mock_tok, patch(
-            "app.services.distillation_trainer.BertForSequenceClassification.from_pretrained"
-        ) as mock_model_cls, patch(
-            "app.services.distillation_trainer.DataLoader"
-        ) as mock_dl:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer.from_pretrained") as mock_tok,
+            patch(
+                "app.services.distillation_trainer.BertForSequenceClassification.from_pretrained"
+            ) as mock_model_cls,
+            patch("app.services.distillation_trainer.DataLoader") as mock_dl,
+        ):
             mock_tok.return_value = MagicMock()
             mock_model = MagicMock()
             mock_model_cls.return_value = mock_model
@@ -94,15 +94,14 @@ class TestDistillationTrainerPrepareData:
         labels = [i % 3 for i in range(20)]  # only 3 unique labels
 
         trainer = DistillationTrainer(device="cpu")
-        with patch(
-            "app.services.distillation_trainer.BertTokenizer.from_pretrained"
-        ) as mock_tok, patch(
-            "app.services.distillation_trainer.BertForSequenceClassification.from_pretrained"
-        ) as mock_model_cls, patch(
-            "app.services.distillation_trainer.DataLoader"
-        ) as mock_dl, patch(
-            "app.services.distillation_trainer.train_test_split"
-        ) as mock_split:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer.from_pretrained") as mock_tok,
+            patch(
+                "app.services.distillation_trainer.BertForSequenceClassification.from_pretrained"
+            ) as mock_model_cls,
+            patch("app.services.distillation_trainer.DataLoader") as mock_dl,
+            patch("app.services.distillation_trainer.train_test_split") as mock_split,
+        ):
             mock_split.return_value = (
                 texts[:16],
                 texts[16:],
@@ -267,31 +266,24 @@ class TestDistillationTrainerTrainFullFlow:
         mock_eval_output.logits = torch.tensor([[0.9, 0.1], [0.1, 0.9]])
 
         trainer.model.side_effect = [mock_train_output, mock_eval_output]
-        trainer.model.parameters.return_value = iter(
-            [torch.zeros(2, 2, requires_grad=True)]
-        )
+        trainer.model.parameters.return_value = iter([torch.zeros(2, 2, requires_grad=True)])
 
-        with patch(
-            "app.services.distillation_trainer.AdamW"
-        ) as mock_adamw, patch(
-            "app.services.distillation_trainer.get_linear_schedule_with_warmup"
-        ) as mock_scheduler, patch.object(
-            trainer, "prepare_data"
-        ) as mock_prepare, patch.object(
-            trainer, "save_checkpoint"
-        ) as mock_save, patch(
-            "app.services.distillation_trainer.accuracy_score", return_value=1.0
-        ), patch(
-            "app.services.distillation_trainer.classification_report", return_value="report"
+        with (
+            patch("app.services.distillation_trainer.AdamW") as mock_adamw,
+            patch(
+                "app.services.distillation_trainer.get_linear_schedule_with_warmup"
+            ) as mock_scheduler,
+            patch.object(trainer, "prepare_data") as mock_prepare,
+            patch.object(trainer, "save_checkpoint") as mock_save,
+            patch("app.services.distillation_trainer.accuracy_score", return_value=1.0),
+            patch("app.services.distillation_trainer.classification_report", return_value="report"),
         ):
             mock_prepare.return_value = None
             # Re-set the loaders since prepare_data is mocked
             trainer.train_loader = [batch]
             trainer.val_loader = [batch]
             trainer.model.side_effect = [mock_train_output, mock_eval_output]
-            trainer.model.parameters.return_value = iter(
-                [torch.zeros(2, 2, requires_grad=True)]
-            )
+            trainer.model.parameters.return_value = iter([torch.zeros(2, 2, requires_grad=True)])
 
             trainer.train(str(jsonl_file), output_dir=str(output_dir))
 
@@ -366,15 +358,19 @@ class TestMainCLIWithOutput:
 
         output_dir = str(tmp_path / "custom_output")
 
-        with patch("sys.argv", [
-            "distillation_trainer",
-            "--data", str(jsonl_file),
-            "--output", output_dir,
-            "--epochs", "1",
-        ]):
-            with patch(
-                "app.services.distillation_trainer.DistillationTrainer"
-            ) as mock_trainer_cls:
+        with patch(
+            "sys.argv",
+            [
+                "distillation_trainer",
+                "--data",
+                str(jsonl_file),
+                "--output",
+                output_dir,
+                "--epochs",
+                "1",
+            ],
+        ):
+            with patch("app.services.distillation_trainer.DistillationTrainer") as mock_trainer_cls:
                 mock_trainer = MagicMock()
                 mock_trainer_cls.return_value = mock_trainer
 
@@ -392,18 +388,25 @@ class TestMainCLIWithOutput:
             encoding="utf-8",
         )
 
-        with patch("sys.argv", [
-            "distillation_trainer",
-            "--data", str(jsonl_file),
-            "--model", "custom-model",
-            "--epochs", "5",
-            "--batch_size", "32",
-            "--lr", "0.001",
-            "--max_length", "128",
-        ]):
-            with patch(
-                "app.services.distillation_trainer.DistillationTrainer"
-            ) as mock_trainer_cls:
+        with patch(
+            "sys.argv",
+            [
+                "distillation_trainer",
+                "--data",
+                str(jsonl_file),
+                "--model",
+                "custom-model",
+                "--epochs",
+                "5",
+                "--batch_size",
+                "32",
+                "--lr",
+                "0.001",
+                "--max_length",
+                "128",
+            ],
+        ):
+            with patch("app.services.distillation_trainer.DistillationTrainer") as mock_trainer_cls:
                 mock_trainer = MagicMock()
                 mock_trainer_cls.return_value = mock_trainer
 

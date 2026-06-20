@@ -225,7 +225,9 @@ def test_approval_get_approval_users(mock_get_db: MagicMock) -> None:
     mock_get_db.return_value = cm
     q = MagicMock()
     q.filter.return_value = q
-    q.all.return_value = [SimpleNamespace(id=1, username="u", name="U", email=None, department=None)]
+    q.all.return_value = [
+        SimpleNamespace(id=1, username="u", name="U", email=None, department=None)
+    ]
     mock_db.query.return_value = q
     out = approval_ws.get_approval_users()
     assert out["success"] is True

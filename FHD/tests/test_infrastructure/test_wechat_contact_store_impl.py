@@ -1,20 +1,22 @@
 """测试 wechat_contact_store_impl 模块的微信联系人存储。"""
+
 import json
 import os
-import pytest
-from unittest.mock import MagicMock, patch
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.infrastructure.persistence.wechat_contact_store_impl import (
     SQLAlchemyWechatContactStore,
-    resolve_decrypt_contact_db_path,
     _read_rows_from_contact_db,
+    resolve_decrypt_contact_db_path,
 )
-
 
 # ---------------------------------------------------------------------------
 # resolve_decrypt_contact_db_path
 # ---------------------------------------------------------------------------
+
 
 class TestResolveDecryptContactDbPath:
     @patch("app.utils.path_utils.get_base_dir", return_value="/tmp/nonexistent_base")
@@ -24,8 +26,13 @@ class TestResolveDecryptContactDbPath:
         mock_p.is_available.return_value = False
         mock_p.get_decrypted_db_path.return_value = None
         mock_plugin.return_value = mock_p
-        with patch("app.infrastructure.persistence.wechat_contact_store_impl.os.path.isfile", return_value=False), \
-             patch.dict("os.environ", {}, clear=False):
+        with (
+            patch(
+                "app.infrastructure.persistence.wechat_contact_store_impl.os.path.isfile",
+                return_value=False,
+            ),
+            patch.dict("os.environ", {}, clear=False),
+        ):
             os.environ.pop("WECHAT_CONTACT_DB_PATH", None)
             result = resolve_decrypt_contact_db_path()
             assert result is None
@@ -36,7 +43,10 @@ class TestResolveDecryptContactDbPath:
         mock_p.is_available.return_value = True
         mock_p.get_decrypted_db_path.return_value = "/path/to/contact.db"
         mock_plugin.return_value = mock_p
-        with patch("app.infrastructure.persistence.wechat_contact_store_impl.os.path.isfile", return_value=True):
+        with patch(
+            "app.infrastructure.persistence.wechat_contact_store_impl.os.path.isfile",
+            return_value=True,
+        ):
             result = resolve_decrypt_contact_db_path()
             assert result == "/path/to/contact.db"
 
@@ -53,6 +63,7 @@ class TestResolveDecryptContactDbPath:
             # We need isfile to return True only for the env path
             def isfile_side_effect(p):
                 return p == "/env/contact.db"
+
             with patch("os.path.isfile", side_effect=isfile_side_effect):
                 result = resolve_decrypt_contact_db_path()
                 assert result == "/env/contact.db"
@@ -61,6 +72,7 @@ class TestResolveDecryptContactDbPath:
 # ---------------------------------------------------------------------------
 # _read_rows_from_contact_db
 # ---------------------------------------------------------------------------
+
 
 class TestReadRowsFromContactDb:
     @patch("app.infrastructure.persistence.wechat_contact_store_impl.sqlite_conn")
@@ -106,6 +118,7 @@ class TestReadRowsFromContactDb:
 # SQLAlchemyWechatContactStore
 # ---------------------------------------------------------------------------
 
+
 class TestSqlAlchemyWechatContactStore:
     @pytest.fixture
     def store(self):
@@ -131,9 +144,7 @@ class TestSqlAlchemyWechatContactStore:
         mock_db.__exit__ = MagicMock(return_value=False)
         mock_get_db.return_value = mock_db
 
-        result = store.add_contact(
-            contact_name="测试", contact_type="invalid_type"
-        )
+        result = store.add_contact(contact_name="测试", contact_type="invalid_type")
         assert result["success"] is True
 
     @patch("app.infrastructure.persistence.wechat_contact_store_impl.get_db")
@@ -164,9 +175,7 @@ class TestSqlAlchemyWechatContactStore:
         mock_db.__exit__ = MagicMock(return_value=False)
         mock_get_db.return_value = mock_db
 
-        result = store.add_contact(
-            contact_name="更新名", wechat_id="wx123", is_starred=True
-        )
+        result = store.add_contact(contact_name="更新名", wechat_id="wx123", is_starred=True)
         assert result["success"] is True
         assert "星标" in result["message"]
 

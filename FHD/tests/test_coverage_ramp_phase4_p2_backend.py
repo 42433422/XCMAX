@@ -56,7 +56,9 @@ def _chat_svc() -> AIChatApplicationService:
 
     mock_ai.chat = _chat
     with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai),
+        patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
         patch("app.application.ai_chat_app_service.WorkflowEngine"),
@@ -283,7 +285,9 @@ def test_format_workflow_run_response_products_hit() -> None:
         message="ok",
         node_results=[node_result],
     )
-    out = svc._format_workflow_run_response(plan, run_result, thinking_steps="思考", user_message="查5003")
+    out = svc._format_workflow_run_response(
+        plan, run_result, thinking_steps="思考", user_message="查5003"
+    )
     assert out["success"] is True
     assert "autoAction" in out
     assert out["autoAction"]["type"] == "show_products_float"

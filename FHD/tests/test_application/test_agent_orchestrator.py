@@ -95,7 +95,9 @@ def test_agent_orchestrator_waits_for_user_on_medium_risk_step():
         patches[1],
         patches[2],
         patches[3],
-        patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_execute,
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_execute,
     ):
         run = AgentOrchestrator(repository=repo).start_run(
             user_id="u1",
@@ -122,7 +124,9 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
         patches[1],
         patches[2],
         patches[3],
-        patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_execute,
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_execute,
     ):
         orchestrator = AgentOrchestrator(repository=repo)
         waiting = orchestrator.start_run(
@@ -177,7 +181,9 @@ def test_agent_orchestrator_blocks_approved_step_when_budget_exceeded():
         ],
     )
 
-    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_execute:
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool"
+    ) as mock_execute:
         orchestrator = AgentOrchestrator(repository=repo)
         waiting = orchestrator.start_run_from_plan(
             user_id="u1",
@@ -237,7 +243,9 @@ def test_agent_orchestrator_blocks_tool_execution_when_wallet_insufficient(monke
         ],
     )
 
-    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_execute:
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool"
+    ) as mock_execute:
         orchestrator = AgentOrchestrator(repository=repo)
         waiting = orchestrator.start_run_from_plan(
             user_id="u1",
@@ -606,9 +614,10 @@ def test_agent_orchestrator_continues_multistep_run_after_second_step_repair():
     def fake_execute(tool_id: str, action: str, params: dict):
         if params["entity"] == "products":
             return {"success": True, "data": [{"model_number": "5003"}]}
-        assert params["_runtime_context"]["node_outputs"]["read_products"]["data"][0][
-            "model_number"
-        ] == "5003"
+        assert (
+            params["_runtime_context"]["node_outputs"]["read_products"]["data"][0]["model_number"]
+            == "5003"
+        )
         return {"success": True, "data": [{"material_name": "PVC"}]}
 
     with patch(
@@ -753,7 +762,10 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
     )
 
     with (
-        patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="pro_default"),
+        patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="pro_default",
+        ),
         patch(
             "app.services.kitten_ai_document.generate.generate_office_file",
             return_value=(b"content", "contract.docx"),
@@ -763,8 +775,14 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
             return_value="doc-token",
         ),
         patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
-        patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool", return_value=(None, None)),
-        patch("app.application.employee_pack_runner.try_execute_employee_planner_tool", return_value=None),
+        patch(
+            "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+            return_value=(None, None),
+        ),
+        patch(
+            "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+            return_value=None,
+        ),
     ):
         orchestrator = AgentOrchestrator(repository=repo)
         waiting = orchestrator.start_run_from_plan(

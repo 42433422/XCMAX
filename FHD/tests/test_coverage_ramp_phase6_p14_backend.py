@@ -44,6 +44,8 @@ from app.fastapi_routes.mobile_api import (
     _parse_web_auth_login_response,
     _user_public_dict,
     _web_login_error_message,
+)
+from app.fastapi_routes.mobile_api import (
     router as mobile_router,
 )
 from app.infrastructure.mods.mod_manager import (
@@ -64,7 +66,6 @@ from app.services.conversation.manager import (
     get_ai_conversation_service,
     init_ai_conversation_service,
 )
-
 
 # ===========================================================================
 # 1. app/fastapi_routes/domains/wechat/compat_routes.py
@@ -94,9 +95,7 @@ class TestWechatStarredContactModel:
     """Cover WechatStarredContact model alias / default branches."""
 
     def test_basic_creation_returns_defaults(self) -> None:
-        c = wechat_compat.WechatStarredContact(
-            type="contact", nickname="张三", wxid="wx1"
-        )
+        c = wechat_compat.WechatStarredContact(type="contact", nickname="张三", wxid="wx1")
         assert c.type == "contact"
         assert c.nickname == "张三"
         assert c.wxid == "wx1"
@@ -104,9 +103,7 @@ class TestWechatStarredContactModel:
         assert c.remark == ""
 
     def test_alias_contact_type_and_remark(self) -> None:
-        c = wechat_compat.WechatStarredContact(
-            contactType="group", 备注="备注名", 微信号="wx2"
-        )
+        c = wechat_compat.WechatStarredContact(contactType="group", 备注="备注名", 微信号="wx2")
         assert c.type == "group"
         assert c.nickname == "备注名"
         assert c.wxid == "wx2"
@@ -685,23 +682,17 @@ class TestWechatStarredAdd:
         assert exc_info.value.status_code == 400
 
     def test_add_alias_wechat_id(self) -> None:
-        result = wechat_compat.wechat_starred_add(
-            {"wechat_id": "wx_alias", "nickname": "A"}
-        )
+        result = wechat_compat.wechat_starred_add({"wechat_id": "wx_alias", "nickname": "A"})
         assert result["success"] is True
         assert result["data"]["wxid"] == "wx_alias"
 
     def test_add_alias_contact_name(self) -> None:
-        result = wechat_compat.wechat_starred_add(
-            {"wxid": "wx1", "contact_name": "FromAlias"}
-        )
+        result = wechat_compat.wechat_starred_add({"wxid": "wx1", "contact_name": "FromAlias"})
         assert result["success"] is True
         assert result["data"]["nickname"] == "FromAlias"
 
     def test_add_alias_contact_type(self) -> None:
-        result = wechat_compat.wechat_starred_add(
-            {"wxid": "wx1", "contact_type": "group"}
-        )
+        result = wechat_compat.wechat_starred_add({"wxid": "wx1", "contact_type": "group"})
         assert result["success"] is True
         assert result["data"]["type"] == "group"
 
@@ -727,9 +718,7 @@ class TestWechatContactsCreateCompat:
         assert result["data"]["id"] == 1
 
     def test_create_with_wxid_alias(self) -> None:
-        result = wechat_compat.wechat_contacts_create_compat(
-            {"wxid": "wx1", "nickname": "Alice"}
-        )
+        result = wechat_compat.wechat_contacts_create_compat({"wxid": "wx1", "nickname": "Alice"})
         assert result["success"] is True
 
     def test_create_missing_wechat_id_raises_400(self) -> None:
@@ -750,9 +739,7 @@ class TestWechatContactsCreateCompat:
         assert wechat_compat._STARRED_CONTACTS_DB["wx1"]["type"] == "group"
 
     def test_create_with_type_alias(self) -> None:
-        result = wechat_compat.wechat_contacts_create_compat(
-            {"wechat_id": "wx1", "type": "group"}
-        )
+        result = wechat_compat.wechat_contacts_create_compat({"wechat_id": "wx1", "type": "group"})
         assert result["success"] is True
         assert wechat_compat._STARRED_CONTACTS_DB["wx1"]["type"] == "group"
 
@@ -762,9 +749,7 @@ class TestWechatContactsCreateCompat:
         assert wechat_compat._STARRED_CONTACTS_DB["wx1"]["type"] == "contact"
 
     def test_create_with_remark(self) -> None:
-        result = wechat_compat.wechat_contacts_create_compat(
-            {"wechat_id": "wx1", "remark": "Boss"}
-        )
+        result = wechat_compat.wechat_contacts_create_compat({"wechat_id": "wx1", "remark": "Boss"})
         assert result["success"] is True
         assert wechat_compat._STARRED_CONTACTS_DB["wx1"]["remark"] == "Boss"
 
@@ -896,9 +881,7 @@ class TestWechatContactsRefreshContactCacheCompat:
 class TestWechatWorkModeFeedErrorPaths:
     """Cover wechat_work_mode_feed error branches (config missing, key not found, etc.)."""
 
-    def test_no_decrypt_path_returns_not_configured(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_decrypt_path_returns_not_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("WECHAT_DECRYPT_PATH", "/nonexistent/wechat-decrypt")
         result = wechat_compat.wechat_work_mode_feed(per_contact=5)
         assert result["items"] == []
@@ -1013,9 +996,7 @@ class TestAddToHistory:
         assert ctx.conversation_history[0]["content"] == "first"
         assert ctx.conversation_history[1]["content"] == "second"
 
-    def test_add_to_history_truncates_at_20(
-        self, conversation_service: _ConversationHost
-    ) -> None:
+    def test_add_to_history_truncates_at_20(self, conversation_service: _ConversationHost) -> None:
         for i in range(25):
             conversation_service.add_to_history("u1", "user", f"msg{i}")
         ctx = conversation_service.contexts["u1"]
@@ -1088,9 +1069,7 @@ class TestAddIntentFeedback:
         call_kwargs = conversation_service.user_memory.add_feedback.call_args.kwargs
         assert call_kwargs["corrected_intent"] == "order"
 
-    def test_add_intent_feedback_with_slots(
-        self, conversation_service: _ConversationHost
-    ) -> None:
+    def test_add_intent_feedback_with_slots(self, conversation_service: _ConversationHost) -> None:
         conversation_service.add_intent_feedback(
             user_id="u1",
             message="hello",
@@ -1177,9 +1156,7 @@ class TestRecordUserAction:
             user_id="u1", intent="greeting", slots={}, message="hello"
         )
 
-    def test_record_user_action_empty_slots(
-        self, conversation_service: _ConversationHost
-    ) -> None:
+    def test_record_user_action_empty_slots(self, conversation_service: _ConversationHost) -> None:
         conversation_service.record_user_action(
             user_id="u1", intent="greeting", slots={}, message="hello"
         )
@@ -1193,12 +1170,8 @@ class TestApplyMemoryPreferences:
     def test_apply_memory_preferences_returns_modified_slots(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.apply_preference_to_slots.return_value = {
-            "k": "modified"
-        }
-        result = conversation_service.apply_memory_preferences(
-            "u1", "greeting", {"k": "v"}
-        )
+        conversation_service.user_memory.apply_preference_to_slots.return_value = {"k": "modified"}
+        result = conversation_service.apply_memory_preferences("u1", "greeting", {"k": "v"})
         assert result == {"k": "modified"}
 
     def test_apply_memory_preferences_swallows_error_returns_original(
@@ -1225,9 +1198,7 @@ class TestGetMemorySimilarAction:
     def test_get_memory_similar_action_returns_result(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.get_similar_pattern.return_value = {
-            "intent": "greeting"
-        }
+        conversation_service.user_memory.get_similar_pattern.return_value = {"intent": "greeting"}
         result = conversation_service.get_memory_similar_action("u1", "greeting", {"k": "v"})
         assert result == {"intent": "greeting"}
 
@@ -1252,9 +1223,7 @@ class TestGetHabitSuggestions:
     def test_get_habit_suggestions_returns_list(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.get_habit_suggestions.return_value = [
-            {"actions": []}
-        ]
+        conversation_service.user_memory.get_habit_suggestions.return_value = [{"actions": []}]
         result = conversation_service.get_habit_suggestions("u1")
         assert len(result) == 1
 
@@ -1268,9 +1237,7 @@ class TestGetHabitSuggestions:
     def test_get_habit_suggestions_swallows_error_returns_empty(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.get_habit_suggestions.side_effect = RuntimeError(
-            "db"
-        )
+        conversation_service.user_memory.get_habit_suggestions.side_effect = RuntimeError("db")
         result = conversation_service.get_habit_suggestions("u1")
         assert result == []
 
@@ -1344,16 +1311,12 @@ class TestGetContextForRecognition:
 class TestCheckHabitSuggestion:
     """Cover AIConversationService._check_habit_suggestion branches."""
 
-    def test_no_habits_returns_none(
-        self, conversation_service: _ConversationHost
-    ) -> None:
+    def test_no_habits_returns_none(self, conversation_service: _ConversationHost) -> None:
         conversation_service.user_memory.get_habit_suggestions.return_value = []
         result = conversation_service._check_habit_suggestion("u1", "greeting", {})
         assert result is None
 
-    def test_low_confidence_habit_skipped(
-        self, conversation_service: _ConversationHost
-    ) -> None:
+    def test_low_confidence_habit_skipped(self, conversation_service: _ConversationHost) -> None:
         conversation_service.user_memory.get_habit_suggestions.return_value = [
             {"confidence": 0.5, "actions": [{"intent": "greeting", "description": "x"}]}
         ]
@@ -1373,9 +1336,7 @@ class TestCheckHabitSuggestion:
         assert result is not None
         assert "create order" in result
 
-    def test_no_matching_intent_returns_none(
-        self, conversation_service: _ConversationHost
-    ) -> None:
+    def test_no_matching_intent_returns_none(self, conversation_service: _ConversationHost) -> None:
         conversation_service.user_memory.get_habit_suggestions.return_value = [
             {
                 "confidence": 0.9,
@@ -1388,18 +1349,12 @@ class TestCheckHabitSuggestion:
     def test_habit_missing_actions_returns_none(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.get_habit_suggestions.return_value = [
-            {"confidence": 0.9}
-        ]
+        conversation_service.user_memory.get_habit_suggestions.return_value = [{"confidence": 0.9}]
         result = conversation_service._check_habit_suggestion("u1", "greeting", {})
         assert result is None
 
-    def test_habit_error_returns_none(
-        self, conversation_service: _ConversationHost
-    ) -> None:
-        conversation_service.user_memory.get_habit_suggestions.side_effect = RuntimeError(
-            "db"
-        )
+    def test_habit_error_returns_none(self, conversation_service: _ConversationHost) -> None:
+        conversation_service.user_memory.get_habit_suggestions.side_effect = RuntimeError("db")
         result = conversation_service._check_habit_suggestion("u1", "greeting", {})
         assert result is None
 
@@ -1462,9 +1417,7 @@ class TestChatErrorPath:
             assert "boom" in result["text"]
 
     @pytest.mark.asyncio
-    async def test_chat_handles_value_error(
-        self, conversation_service: _ConversationHost
-    ) -> None:
+    async def test_chat_handles_value_error(self, conversation_service: _ConversationHost) -> None:
         with patch.object(
             conversation_service,
             "_get_or_create_context_async",
@@ -1496,9 +1449,7 @@ class TestMobileLoginRequest:
     """Cover MobileLoginRequest model."""
 
     def test_valid_request(self) -> None:
-        req = MobileLoginRequest(
-            username="alice", password="secret", account_kind="enterprise"
-        )
+        req = MobileLoginRequest(username="alice", password="secret", account_kind="enterprise")
         assert req.username == "alice"
         assert req.password == "secret"
         assert req.account_kind == "enterprise"
@@ -1633,9 +1584,7 @@ class TestUserPublicDict:
             is_active=True,
             wx_avatar_url=None,
         )
-        with patch(
-            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar.png"
-        ):
+        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar.png"):
             result = _user_public_dict(user)
         assert result["id"] == 1
         assert result["username"] == "alice"
@@ -1654,9 +1603,7 @@ class TestUserPublicDict:
             role="user",
             is_active=False,
         )
-        with patch(
-            "app.utils.user_avatar_storage.public_avatar_url", return_value=None
-        ):
+        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value=None):
             result = _user_public_dict(user)
         assert result["id"] == 2
         assert result["is_active"] is False
@@ -1767,9 +1714,7 @@ class TestMobileAuthLogin:
                 status_code=401,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "wrong"},
@@ -1796,9 +1741,7 @@ class TestMobileAuthLogin:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "secret"},
@@ -1825,9 +1768,7 @@ class TestMobileAuthLogin:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "secret"},
@@ -1848,9 +1789,7 @@ class TestMobileAuthLogin:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "secret"},
@@ -1880,9 +1819,7 @@ class TestMobileAuthLogin:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "secret"},
@@ -2096,9 +2033,7 @@ class TestGetMobileUser:
                 return False
 
         monkeypatch.setattr("app.db.session.get_db", lambda: FakeDb())
-        result = await get_mobile_user(
-            request, authorization=f"Bearer {tokens['access_token']}"
-        )
+        result = await get_mobile_user(request, authorization=f"Bearer {tokens['access_token']}")
         assert result is fake_user
 
     @pytest.mark.asyncio
@@ -2145,9 +2080,7 @@ class TestGetMobileUser:
                 return False
 
         monkeypatch.setattr("app.db.session.get_db", lambda: FakeDb())
-        result = await get_mobile_user(
-            request, authorization=f"Bearer {tokens['access_token']}"
-        )
+        result = await get_mobile_user(request, authorization=f"Bearer {tokens['access_token']}")
         assert result is None
 
     @pytest.mark.asyncio
@@ -2184,9 +2117,7 @@ class TestGetMobileUser:
                 return False
 
         monkeypatch.setattr("app.db.session.get_db", lambda: FakeDb())
-        result = await get_mobile_user(
-            request, authorization=f"Bearer {tokens['access_token']}"
-        )
+        result = await get_mobile_user(request, authorization=f"Bearer {tokens['access_token']}")
         assert result is None
 
 
@@ -2292,17 +2223,13 @@ class TestDefaultModsRoot:
         result = _default_mods_root()
         assert result == mods_dir
 
-    def test_env_var_set_but_not_dir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_var_set_but_not_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_MODS_ROOT", str(tmp_path / "nonexistent"))
         monkeypatch.delenv("XCAGI_MODS_DIR", raising=False)
         result = _default_mods_root()
         assert isinstance(result, str)
 
-    def test_env_mods_dir_var(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_mods_dir_var(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         mods_dir = str(tmp_path / "mods_dir")
         os.makedirs(mods_dir)
         monkeypatch.delenv("XCAGI_MODS_ROOT", raising=False)
@@ -2343,9 +2270,7 @@ class TestAllModsRoots:
         result = _all_mods_roots(mods_dir)
         assert result.count(mods_dir) <= 1
 
-    def test_env_var_adds_extra_root(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_var_adds_extra_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         primary = str(tmp_path / "primary_mods")
         os.makedirs(primary)
         env_mods = str(tmp_path / "env_mods")
@@ -2502,7 +2427,9 @@ class TestRegisterModHooks:
             _register_mod_hooks("m1", metadata)
         assert any("no mod_path" in r.message for r in caplog.records)
 
-    def test_invalid_hook_spec_skipped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    def test_invalid_hook_spec_skipped(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         from app.infrastructure.mods.manifest import ModMetadata
 
         metadata = ModMetadata(
@@ -2516,7 +2443,9 @@ class TestRegisterModHooks:
             _register_mod_hooks("m1", metadata)
         assert any("Invalid hook handler spec" in r.message for r in caplog.records)
 
-    def test_backend_prefix_stripped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    def test_backend_prefix_stripped(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         from app.infrastructure.mods.manifest import ModMetadata
 
         metadata = ModMetadata(
@@ -2804,9 +2733,7 @@ class TestModManagerLoadMod:
         def fake_assert(mod_id):
             raise PermissionError("not allowed for SKU")
 
-        monkeypatch.setattr(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku", fake_assert
-        )
+        monkeypatch.setattr("app.mod_sdk.product_skus.assert_mod_allowed_for_sku", fake_assert)
         result = mm.load_mod("blocked_mod")
         assert result is False
         assert len(mm._recent_load_failures) == 1
@@ -2841,9 +2768,10 @@ class TestModManagerUnloadMod:
         mm = ModManager(mods_root=str(tmp_path))
         mm._loaded_mods.append("m1")
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as fake_reg, patch(
-            "app.infrastructure.mods.comms.get_mod_comms"
-        ) as fake_comms:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as fake_reg,
+            patch("app.infrastructure.mods.comms.get_mod_comms") as fake_comms,
+        ):
             registry = MagicMock()
             instance = MagicMock()
             instance.cleanup.side_effect = RuntimeError("cleanup failed")
@@ -2858,9 +2786,10 @@ class TestModManagerUnloadMod:
         mm = ModManager(mods_root=str(tmp_path))
         mm._loaded_mods.append("m1")
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as fake_reg, patch(
-            "app.infrastructure.mods.comms.get_mod_comms"
-        ) as fake_comms:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as fake_reg,
+            patch("app.infrastructure.mods.comms.get_mod_comms") as fake_comms,
+        ):
             registry = MagicMock()
             registry.get_mod_instance.return_value = None
             fake_reg.return_value = registry
@@ -2906,8 +2835,9 @@ class TestModManagerEnsureModsLoaded:
 
     def test_no_discovered_mods_returns_early(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "list_loaded_mods", return_value=[]), patch.object(
-            mm, "scan_mods", return_value=[]
+        with (
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", return_value=[]),
         ):
             mm.ensure_mods_loaded(MagicMock())
 
@@ -2915,16 +2845,18 @@ class TestModManagerEnsureModsLoaded:
         mm = ModManager(mods_root=str(tmp_path))
         mm._last_ensure_at = 999999999.0  # far future
         mm._ensure_attempts = 1
-        with patch.object(mm, "list_loaded_mods", return_value=[]), patch.object(
-            mm, "scan_mods", return_value=[MagicMock()]
+        with (
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", return_value=[MagicMock()]),
         ):
             mm.ensure_mods_loaded(MagicMock())
 
     def test_max_attempts_reached(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
         mm._ensure_attempts = 20
-        with patch.object(mm, "list_loaded_mods", return_value=[]), patch.object(
-            mm, "scan_mods", return_value=[MagicMock()]
+        with (
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", return_value=[MagicMock()]),
         ):
             mm.ensure_mods_loaded(MagicMock())
 
@@ -2988,9 +2920,7 @@ class TestRegisterEmployeePackRoutes:
 
         emp_root = tmp_path / "_employees" / "pack1"
         emp_root.mkdir(parents=True)
-        (emp_root / "manifest.json").write_text(
-            json.dumps({"id": "pack1", "artifact": "mod"})
-        )
+        (emp_root / "manifest.json").write_text(json.dumps({"id": "pack1", "artifact": "mod"}))
         mm = ModManager(mods_root=str(tmp_path))
         assert register_employee_pack_routes(MagicMock(), mm, "pack1") is False
 
@@ -3016,9 +2946,7 @@ class TestLoadEmployeePackRoutes:
         # Should not raise
         load_employee_pack_routes(MagicMock(), mm)
 
-    def test_mods_disabled_returns(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_mods_disabled_returns(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from app.infrastructure.mods.mod_manager import load_employee_pack_routes
 
         monkeypatch.setenv("XCAGI_DISABLE_MODS", "1")
@@ -3034,9 +2962,7 @@ class TestEnsureModApiReady:
 
         assert ensure_mod_api_ready("") is False
 
-    def test_mods_disabled_returns_false(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_mods_disabled_returns_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from app.infrastructure.mods.mod_manager import ensure_mod_api_ready
 
         monkeypatch.setenv("XCAGI_DISABLE_MODS", "1")
@@ -3060,8 +2986,9 @@ class TestMountOnDiskPrimaryClientMods:
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
 
         mm = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.enterprise.account_mod_binding.SUNBIRD_CLIENT_MOD_ID", "sunbird"
-        ), patch.object(mm, "resolve_mod_directory", return_value=None):
+        with (
+            patch("app.enterprise.account_mod_binding.SUNBIRD_CLIENT_MOD_ID", "sunbird"),
+            patch.object(mm, "resolve_mod_directory", return_value=None),
+        ):
             result = mount_on_disk_primary_client_mods(mm)
         assert result == []

@@ -1,9 +1,10 @@
 """Tests for app.fastapi_routes._shared."""
+
 from __future__ import annotations
 
 import pytest
 
-from app.fastapi_routes._shared import sql_ident, validate_order_clause, _ALLOWED_SQL_COLUMNS
+from app.fastapi_routes._shared import _ALLOWED_SQL_COLUMNS, sql_ident, validate_order_clause
 
 
 class TestSqlIdent:

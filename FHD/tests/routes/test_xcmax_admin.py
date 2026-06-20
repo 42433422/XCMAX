@@ -834,7 +834,11 @@ class TestAdminEndImpersonate:
             ),
             patch(
                 "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True, "market_user_id": 1},
+                return_value={
+                    "account_kind": "admin",
+                    "market_is_admin": True,
+                    "market_user_id": 1,
+                },
             ),
             patch(
                 "app.application.session_account_meta.clear_impersonation",

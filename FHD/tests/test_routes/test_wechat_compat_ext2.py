@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # WechatStarredContact model
 # ---------------------------------------------------------------------------
@@ -202,7 +201,7 @@ class TestWechatCompatRoutes:
     @pytest.fixture
     def client(self):
         from fastapi import FastAPI
-        from fastapi.testclient import TestClient
+
         from app.fastapi_routes.domains.wechat.compat_routes import router
 
         app = FastAPI()

@@ -32,7 +32,6 @@ from app.application.customer_app_service import (
     reset_customers_engine,
 )
 
-
 # ---------------------------------------------------------------------------
 # get_customers_session — additional
 # ---------------------------------------------------------------------------
@@ -52,20 +51,26 @@ class TestGetCustomersSessionAdditional:
     def test_resolve_customers_session_import_error_fallback(self):
         """Test that ImportError falls back to SessionLocal."""
         mock_session_local = MagicMock()
-        with patch(
-            "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-            side_effect=ImportError("module not found"),
-        ), patch("app.db.SessionLocal", return_value=mock_session_local):
+        with (
+            patch(
+                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+                side_effect=ImportError("module not found"),
+            ),
+            patch("app.db.SessionLocal", return_value=mock_session_local),
+        ):
             result = get_customers_session()
         assert result is mock_session_local
 
     def test_resolve_customers_session_runtime_error_fallback(self):
         """Test that RuntimeError falls back to SessionLocal."""
         mock_session_local = MagicMock()
-        with patch(
-            "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-            side_effect=RuntimeError("runtime error"),
-        ), patch("app.db.SessionLocal", return_value=mock_session_local):
+        with (
+            patch(
+                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+                side_effect=RuntimeError("runtime error"),
+            ),
+            patch("app.db.SessionLocal", return_value=mock_session_local),
+        ):
             result = get_customers_session()
         assert result is mock_session_local
 
@@ -579,14 +584,17 @@ class TestDeleteAdditional:
         unit.unit_name = "TestCo"
         mock_query.first.return_value = unit
         mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session), patch.object(
-            svc,
-            "_check_shipment_associations",
-            return_value={
-                "has_associations": True,
-                "shipment_count": 3,
-                "sample_records": [{"id": 1}],
-            },
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc,
+                "_check_shipment_associations",
+                return_value={
+                    "has_associations": True,
+                    "shipment_count": 3,
+                    "sample_records": [{"id": 1}],
+                },
+            ),
         ):
             result = svc.delete(1, force=False)
         assert result["success"] is False
@@ -604,14 +612,17 @@ class TestDeleteAdditional:
         unit.unit_name = "TestCo"
         mock_query.first.return_value = unit
         mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session), patch.object(
-            svc,
-            "_check_shipment_associations",
-            return_value={
-                "has_associations": True,
-                "shipment_count": 3,
-                "sample_records": [],
-            },
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc,
+                "_check_shipment_associations",
+                return_value={
+                    "has_associations": True,
+                    "shipment_count": 3,
+                    "sample_records": [],
+                },
+            ),
         ):
             result = svc.delete(1, force=True)
         assert result["success"] is True
@@ -629,10 +640,13 @@ class TestDeleteAdditional:
         unit.unit_name = "TestCo"
         mock_query.first.return_value = unit
         mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session), patch.object(
-            svc,
-            "_check_shipment_associations",
-            return_value={"has_associations": False, "shipment_count": 0, "sample_records": []},
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc,
+                "_check_shipment_associations",
+                return_value={"has_associations": False, "shipment_count": 0, "sample_records": []},
+            ),
         ):
             result = svc.delete(1)
         assert result["success"] is True
@@ -672,13 +686,16 @@ class TestBatchDeleteAdditional:
         unit2.unit_name = "Co2"
         mock_query.all.return_value = [unit1, unit2]
         mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session), patch.object(
-            svc,
-            "_check_shipment_associations",
-            side_effect=[
-                {"has_associations": True, "shipment_count": 2, "sample_records": []},
-                {"has_associations": False, "shipment_count": 0, "sample_records": []},
-            ],
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc,
+                "_check_shipment_associations",
+                side_effect=[
+                    {"has_associations": True, "shipment_count": 2, "sample_records": []},
+                    {"has_associations": False, "shipment_count": 0, "sample_records": []},
+                ],
+            ),
         ):
             result = svc.batch_delete([1, 2], force=False)
         assert result["success"] is False
@@ -715,10 +732,13 @@ class TestBatchDeleteAdditional:
         unit.unit_name = "Co1"
         mock_query.all.return_value = [unit]
         mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session), patch.object(
-            svc,
-            "_check_shipment_associations",
-            return_value={"has_associations": False, "shipment_count": 0, "sample_records": []},
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc,
+                "_check_shipment_associations",
+                return_value={"has_associations": False, "shipment_count": 0, "sample_records": []},
+            ),
         ):
             result = svc.batch_delete([1], force=False)
         assert result["success"] is True
@@ -745,9 +765,7 @@ class TestImportDataAdditional:
         mock_session.add.side_effect = add_side_effect
         mock_session.query.return_value = mock_query
         with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.import_data(
-                [{"customer_name": "TestCo", "contact_address": "Addr"}]
-            )
+            result = svc.import_data([{"customer_name": "TestCo", "contact_address": "Addr"}])
         assert result["success"] is True
         assert result["imported"] == 1
 
@@ -1024,8 +1042,9 @@ class TestExportToExcelAdditional:
         mock_query.filter.return_value = mock_query
         mock_query.order_by.return_value.all.return_value = []
         mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session), patch(
-            "app.utils.path_utils.get_data_dir", return_value=str(tmp_path)
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
         ):
             result = svc.export_to_excel(keyword="Test")
         assert result["success"] is True
@@ -1046,11 +1065,11 @@ class TestExportToExcelAdditional:
         mock_query.filter.return_value = mock_query
         mock_query.order_by.return_value.all.return_value = []
         mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session), patch(
-            "app.utils.path_utils.get_data_dir", return_value=str(tmp_path)
-        ), patch(
-            "app.application.get_template_app_service"
-        ) as mock_get_templates:
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.application.get_template_app_service") as mock_get_templates,
+        ):
             mock_template_svc = MagicMock()
             mock_template_svc.get_templates.return_value = {"templates": []}
             mock_get_templates.return_value = mock_template_svc
@@ -1071,11 +1090,11 @@ class TestExportToExcelAdditional:
 
         wb = Workbook()
         wb.save(str(template_file))
-        with patch.object(svc, "_get_session", return_value=mock_session), patch(
-            "app.utils.path_utils.get_data_dir", return_value=str(tmp_path)
-        ), patch(
-            "app.application.get_template_app_service"
-        ) as mock_get_templates:
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.application.get_template_app_service") as mock_get_templates,
+        ):
             mock_template_svc = MagicMock()
             mock_template_svc.get_templates.return_value = {
                 "templates": [{"id": "1", "path": str(template_file)}]
@@ -1092,11 +1111,13 @@ class TestExportToExcelAdditional:
         mock_query.filter.return_value = mock_query
         mock_query.order_by.return_value.all.return_value = []
         mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session), patch(
-            "app.utils.path_utils.get_data_dir", return_value=str(tmp_path)
-        ), patch(
-            "app.application.get_template_app_service",
-            side_effect=RuntimeError("template error"),
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch(
+                "app.application.get_template_app_service",
+                side_effect=RuntimeError("template error"),
+            ),
         ):
             result = svc.export_to_excel(template_id="1")
         # Should still succeed (template error is caught)

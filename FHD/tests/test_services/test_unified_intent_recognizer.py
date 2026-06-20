@@ -1,17 +1,19 @@
 """测试 unified_intent_recognizer 模块的统一意图识别。"""
-import pytest
+
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.services.unified_intent_recognizer import (
-    RecognizerType,
     RecognizerResult,
+    RecognizerType,
     UnifiedIntentRecognizer,
 )
-
 
 # ---------------------------------------------------------------------------
 # RecognizerType
 # ---------------------------------------------------------------------------
+
 
 class TestRecognizerType:
     def test_all_types(self):
@@ -26,6 +28,7 @@ class TestRecognizerType:
 # ---------------------------------------------------------------------------
 # RecognizerResult
 # ---------------------------------------------------------------------------
+
 
 class TestRecognizerResult:
     def test_create_result(self):
@@ -57,6 +60,7 @@ class TestRecognizerResult:
 # _merge_results
 # ---------------------------------------------------------------------------
 
+
 class TestMergeResults:
     @pytest.fixture
     def recognizer(self):
@@ -84,7 +88,11 @@ class TestMergeResults:
 
     def test_rule_result_with_tool_key_wins(self, recognizer):
         results = {
-            "rule": {"primary_intent": "create", "tool_key": "shipment_generate", "is_negated": False},
+            "rule": {
+                "primary_intent": "create",
+                "tool_key": "shipment_generate",
+                "is_negated": False,
+            },
             "distilled": {"primary_intent": "other", "confidence": 0.9},
         }
         result = recognizer._merge_results(results, "生成发货单")
@@ -92,7 +100,11 @@ class TestMergeResults:
 
     def test_rule_result_negated_skipped(self, recognizer):
         results = {
-            "rule": {"primary_intent": "create", "tool_key": "shipment_generate", "is_negated": True},
+            "rule": {
+                "primary_intent": "create",
+                "tool_key": "shipment_generate",
+                "is_negated": True,
+            },
         }
         result = recognizer._merge_results(results, "不要生成")
         assert result["primary_intent"] == "create"
@@ -142,6 +154,7 @@ class TestMergeResults:
 # ---------------------------------------------------------------------------
 # _recognize_from_context
 # ---------------------------------------------------------------------------
+
 
 class TestRecognizeFromContext:
     @pytest.fixture
@@ -199,6 +212,7 @@ class TestRecognizeFromContext:
 # _recognize_rule / _recognize_distilled / _recognize_bert
 # ---------------------------------------------------------------------------
 
+
 class TestRecognizeHelpers:
     @pytest.fixture
     def recognizer(self):
@@ -214,7 +228,9 @@ class TestRecognizeHelpers:
             r._rule_engine = MagicMock()
             return r
 
-    @patch("app.services.intent_service.recognize_intents", return_value={"primary_intent": "create"})
+    @patch(
+        "app.services.intent_service.recognize_intents", return_value={"primary_intent": "create"}
+    )
     def test_rule_recognize(self, mock_recognize, recognizer):
         result = recognizer._recognize_rule("生成发货单")
         assert result is not None

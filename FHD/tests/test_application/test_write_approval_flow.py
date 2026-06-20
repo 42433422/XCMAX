@@ -97,9 +97,7 @@ class TestWriteFileTool:
     def test_creates_parent_dirs(self, tmp_path):
         ctx = {"workspace_root": str(tmp_path)}
         result = asyncio.run(
-            tool_write_file(
-                {"path": "sub/dir/test.txt", "content": "nested", "confirm": True}, ctx
-            )
+            tool_write_file({"path": "sub/dir/test.txt", "content": "nested", "confirm": True}, ctx)
         )
         assert result["ok"], result.get("error", "")
         assert (tmp_path / "sub" / "dir" / "test.txt").read_text() == "nested"
@@ -111,9 +109,7 @@ class TestPatchFileTool:
     def test_without_confirm_rejected(self, tmp_path):
         (tmp_path / "target.py").write_text("x = 1\n")
         ctx = {"workspace_root": str(tmp_path)}
-        result = asyncio.run(
-            tool_patch_file({"path": "target.py", "patch": "fake patch"}, ctx)
-        )
+        result = asyncio.run(tool_patch_file({"path": "target.py", "patch": "fake patch"}, ctx))
         assert not result["ok"]
         assert "confirm" in result["error"]
 
@@ -134,9 +130,7 @@ class TestPatchFileTool:
         (tmp_path / "target.py").write_text("x = 1\n")
         ctx = {"workspace_root": str(tmp_path)}
         result = asyncio.run(
-            tool_patch_file(
-                {"path": "../escape.py", "patch": "fake", "confirm": True}, ctx
-            )
+            tool_patch_file({"path": "../escape.py", "patch": "fake", "confirm": True}, ctx)
         )
         assert not result["ok"]
         assert "越出" in result["error"]
@@ -149,9 +143,7 @@ class TestWriteGateEnforcement:
         async def fake_gate(eid, tool, params, ctx):
             return {"ok": False, "reason": "scope 不允许"}
 
-        monkeypatch.setattr(
-            "app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate
-        )
+        monkeypatch.setattr("app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate)
         payload = {
             "handler": "specialized",
             "tool": "write_file",
@@ -166,9 +158,7 @@ class TestWriteGateEnforcement:
         async def fake_gate(eid, tool, params, ctx):
             return {"ok": True}
 
-        monkeypatch.setattr(
-            "app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate
-        )
+        monkeypatch.setattr("app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate)
         payload = {
             "handler": "specialized",
             "tool": "write_file",
@@ -183,9 +173,7 @@ class TestWriteGateEnforcement:
         async def fake_gate(eid, tool, params, ctx):
             return {"ok": False, "reason": "forbidden_globs 命中"}
 
-        monkeypatch.setattr(
-            "app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate
-        )
+        monkeypatch.setattr("app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate)
         payload = {
             "handler": "specialized",
             "tool": "patch_file",
@@ -202,9 +190,7 @@ class TestWriteGateEnforcement:
             gate_called.append(tool)
             return {"ok": True}
 
-        monkeypatch.setattr(
-            "app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate
-        )
+        monkeypatch.setattr("app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate)
         payload = {"handler": "specialized", "tool": "git_status", "params": {}}
         asyncio.run(handle_specialized("site-content-editor", payload, {}))
         assert gate_called == []
@@ -218,9 +204,7 @@ class TestWriteGateEnforcement:
                 "approval_request_ids": ["req-123"],
             }
 
-        monkeypatch.setattr(
-            "app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate
-        )
+        monkeypatch.setattr("app.mod_sdk.employee_specialized_tools._check_write_gate", fake_gate)
         payload = {
             "handler": "specialized",
             "tool": "write_file",

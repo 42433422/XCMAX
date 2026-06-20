@@ -1,7 +1,9 @@
 """Tests for app.infrastructure.documents.simple_contract_generator."""
+
 from __future__ import annotations
 
 import os
+
 import pytest
 
 from app.infrastructure.documents.simple_contract_generator import SimpleSalesContractGenerator
@@ -83,10 +85,24 @@ class TestSimpleSalesContractGenerator:
     def test_generate_multiple_products(self, tmp_path):
         gen = SimpleSalesContractGenerator(output_dir=str(tmp_path))
         products = [
-            {"model_number": "A", "name": "P1", "spec": "1KG", "unit": "箱",
-             "quantity": "10", "unit_price": "10", "amount": "100"},
-            {"model_number": "B", "name": "P2", "spec": "2KG", "unit": "箱",
-             "quantity": "5", "unit_price": "20", "amount": "100"},
+            {
+                "model_number": "A",
+                "name": "P1",
+                "spec": "1KG",
+                "unit": "箱",
+                "quantity": "10",
+                "unit_price": "10",
+                "amount": "100",
+            },
+            {
+                "model_number": "B",
+                "name": "P2",
+                "spec": "2KG",
+                "unit": "箱",
+                "quantity": "5",
+                "unit_price": "20",
+                "amount": "100",
+            },
         ]
         result = gen.generate(customer_name="测试客户", products=products)
         assert result["success"] is True

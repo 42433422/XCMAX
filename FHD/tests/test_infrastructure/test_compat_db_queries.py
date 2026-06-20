@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.persistence.compat_db.queries."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -139,7 +140,14 @@ class TestMergedPurchaseUnitEntries:
             patch(
                 "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
                 return_value=[
-                    {"id": 1, "unit_name": "CoA", "is_active": 1, "contact_person": "", "contact_phone": "", "address": ""},
+                    {
+                        "id": 1,
+                        "unit_name": "CoA",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
                 ],
             ),
             patch(
@@ -159,7 +167,14 @@ class TestMergedPurchaseUnitEntries:
             patch(
                 "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
                 return_value=[
-                    {"id": 1, "unit_name": "CoA", "is_active": 1, "contact_person": "", "contact_phone": "", "address": ""},
+                    {
+                        "id": 1,
+                        "unit_name": "CoA",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
                 ],
             ),
             patch(
@@ -219,7 +234,14 @@ class TestCustomerRowsFromMergedUnitEntries:
         with patch(
             "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
             return_value=[
-                {"id": 1, "unit_name": "CoA", "contact_person": "Z", "contact_phone": "1", "address": "A", "is_active": 1},
+                {
+                    "id": 1,
+                    "unit_name": "CoA",
+                    "contact_person": "Z",
+                    "contact_phone": "1",
+                    "address": "A",
+                    "is_active": 1,
+                },
             ],
         ):
             result = _customer_rows_from_merged_unit_entries()
@@ -230,9 +252,30 @@ class TestCustomerRowsFromMergedUnitEntries:
         with patch(
             "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
             return_value=[
-                {"id": 1, "unit_name": "", "contact_person": "", "contact_phone": "", "address": "", "is_active": 1},
-                {"id": 2, "unit_name": "  ", "contact_person": "", "contact_phone": "", "address": "", "is_active": 1},
-                {"id": 3, "unit_name": "CoA", "contact_person": "", "contact_phone": "", "address": "", "is_active": 1},
+                {
+                    "id": 1,
+                    "unit_name": "",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 1,
+                },
+                {
+                    "id": 2,
+                    "unit_name": "  ",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 1,
+                },
+                {
+                    "id": 3,
+                    "unit_name": "CoA",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 1,
+                },
             ],
         ):
             result = _customer_rows_from_merged_unit_entries()

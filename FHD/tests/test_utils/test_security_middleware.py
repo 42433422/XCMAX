@@ -18,10 +18,10 @@ from app.utils.security_middleware import (
     sanitize_input,
 )
 
-
 # ---------------------------------------------------------------------------
 # SECURITY_HEADERS constant
 # ---------------------------------------------------------------------------
+
 
 class TestSecurityHeaders:
     def test_contains_required_headers(self):
@@ -42,6 +42,7 @@ class TestSecurityHeaders:
 # ---------------------------------------------------------------------------
 # _apply_security_headers
 # ---------------------------------------------------------------------------
+
 
 class TestApplySecurityHeaders:
     def test_adds_headers_to_response(self):
@@ -68,6 +69,7 @@ class TestApplySecurityHeaders:
 # ---------------------------------------------------------------------------
 # sanitize_input
 # ---------------------------------------------------------------------------
+
 
 class TestSanitizeInput:
     def test_normal_string(self):
@@ -107,6 +109,7 @@ class TestSanitizeInput:
 # PermissionMatrix
 # ---------------------------------------------------------------------------
 
+
 class TestPermissionMatrix:
     def setup_method(self):
         # Clear the class-level dict before each test
@@ -140,85 +143,112 @@ class TestPermissionMatrix:
 
     def test_check_allowed_no_rule(self):
         result = PermissionMatrix.check(
-            "/api/unknown", "GET",
-            user_roles=set(), user_permissions=set(),
+            "/api/unknown",
+            "GET",
+            user_roles=set(),
+            user_permissions=set(),
         )
         assert result["allowed"] is True
         assert "未注册" in result["reason"]
 
     def test_check_needs_auth_no_roles(self):
         PermissionMatrix.register(
-            "/api/protected", "GET",
-            auth=True, permissions=["secret.view"],
+            "/api/protected",
+            "GET",
+            auth=True,
+            permissions=["secret.view"],
         )
         result = PermissionMatrix.check(
-            "/api/protected", "GET",
-            user_roles=set(), user_permissions=set(),
+            "/api/protected",
+            "GET",
+            user_roles=set(),
+            user_permissions=set(),
         )
         assert result["allowed"] is False
         assert "认证" in result["reason"]
 
     def test_check_missing_role(self):
         PermissionMatrix.register(
-            "/api/admin", "POST",
-            roles=["admin"], auth=True,
+            "/api/admin",
+            "POST",
+            roles=["admin"],
+            auth=True,
         )
         result = PermissionMatrix.check(
-            "/api/admin", "POST",
-            user_roles={"user"}, user_permissions=set(),
+            "/api/admin",
+            "POST",
+            user_roles={"user"},
+            user_permissions=set(),
         )
         assert result["allowed"] is False
         assert "角色" in result["reason"]
 
     def test_check_missing_permission(self):
         PermissionMatrix.register(
-            "/api/resource", "PUT",
-            permissions=["resource.edit"], auth=True,
+            "/api/resource",
+            "PUT",
+            permissions=["resource.edit"],
+            auth=True,
         )
         result = PermissionMatrix.check(
-            "/api/resource", "PUT",
-            user_roles={"user"}, user_permissions={"resource.view"},
+            "/api/resource",
+            "PUT",
+            user_roles={"user"},
+            user_permissions={"resource.view"},
         )
         assert result["allowed"] is False
         assert "权限" in result["reason"]
 
     def test_check_allowed_with_role(self):
         PermissionMatrix.register(
-            "/api/admin", "GET",
-            roles=["admin"], auth=True,
+            "/api/admin",
+            "GET",
+            roles=["admin"],
+            auth=True,
         )
         result = PermissionMatrix.check(
-            "/api/admin", "GET",
-            user_roles={"admin"}, user_permissions=set(),
+            "/api/admin",
+            "GET",
+            user_roles={"admin"},
+            user_permissions=set(),
         )
         assert result["allowed"] is True
 
     def test_check_allowed_with_permission(self):
         PermissionMatrix.register(
-            "/api/resource", "GET",
-            permissions=["resource.view"], auth=True,
+            "/api/resource",
+            "GET",
+            permissions=["resource.view"],
+            auth=True,
         )
         result = PermissionMatrix.check(
-            "/api/resource", "GET",
-            user_roles={"user"}, user_permissions={"resource.view"},
+            "/api/resource",
+            "GET",
+            user_roles={"user"},
+            user_permissions={"resource.view"},
         )
         assert result["allowed"] is True
 
     def test_check_no_auth_required(self):
         PermissionMatrix.register(
-            "/api/public", "GET",
+            "/api/public",
+            "GET",
             auth=False,
         )
         result = PermissionMatrix.check(
-            "/api/public", "GET",
-            user_roles=set(), user_permissions=set(),
+            "/api/public",
+            "GET",
+            user_roles=set(),
+            user_permissions=set(),
         )
         assert result["allowed"] is True
 
     def test_method_case_insensitive(self):
         PermissionMatrix.register(
-            "/api/test", "post",
-            permissions=["test.create"], auth=True,
+            "/api/test",
+            "post",
+            permissions=["test.create"],
+            auth=True,
         )
         key = "POST:/api/test"
         assert key in PermissionMatrix._rules
@@ -227,6 +257,7 @@ class TestPermissionMatrix:
 # ---------------------------------------------------------------------------
 # register_default_permissions
 # ---------------------------------------------------------------------------
+
 
 class TestRegisterDefaultPermissions:
     def setup_method(self):
@@ -245,10 +276,7 @@ class TestRegisterDefaultPermissions:
 
     def test_ai_chat_no_auth(self):
         register_default_permissions()
-        ai_rules = [
-            r for r in PermissionMatrix._rules.values()
-            if r["endpoint"] == "/api/ai/chat"
-        ]
+        ai_rules = [r for r in PermissionMatrix._rules.values() if r["endpoint"] == "/api/ai/chat"]
         assert len(ai_rules) == 1
         assert ai_rules[0]["auth"] is True  # auth is True by default
         assert ai_rules[0]["permissions"] == [] or ai_rules[0]["permissions"] is None
@@ -257,6 +285,7 @@ class TestRegisterDefaultPermissions:
 # ---------------------------------------------------------------------------
 # api_security decorator
 # ---------------------------------------------------------------------------
+
 
 class TestApiSecurity:
     @patch("app.utils.security_middleware.get_current_http_request")
@@ -378,6 +407,7 @@ class TestApiSecurity:
 # require_permissions shortcut
 # ---------------------------------------------------------------------------
 
+
 class TestRequirePermissions:
     def test_creates_api_security_with_permissions(self):
         decorator = require_permissions("product.view", "product.edit")
@@ -387,6 +417,7 @@ class TestRequirePermissions:
 # ---------------------------------------------------------------------------
 # public_api shortcut
 # ---------------------------------------------------------------------------
+
 
 class TestPublicApi:
     def test_creates_api_security_no_auth(self):
@@ -401,6 +432,7 @@ class TestPublicApi:
 # ---------------------------------------------------------------------------
 # admin_only shortcut
 # ---------------------------------------------------------------------------
+
 
 class TestAdminOnly:
     def test_creates_api_security_with_admin_role(self):

@@ -30,7 +30,9 @@ def test_get_api_key_explicit() -> None:
     assert r._get_api_key() == "explicit"
 
 
-def test_get_api_key_from_env(rec: DeepSeekIntentRecognizer, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_api_key_from_env(
+    rec: DeepSeekIntentRecognizer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "env-key")
     assert rec._get_api_key() == "env-key"
 
@@ -133,9 +135,7 @@ def test_normalize_slots_unit_name_from_message(rec: DeepSeekIntentRecognizer) -
 
 
 def test_normalize_slots_contact_and_other(rec: DeepSeekIntentRecognizer) -> None:
-    out = rec._normalize_slots(
-        {"contact_person": "向总", "keyword": "9803", "empty": ""}, "msg"
-    )
+    out = rec._normalize_slots({"contact_person": "向总", "keyword": "9803", "empty": ""}, "msg")
     assert out["contact_person"] == "向总"
     assert out["keyword"] == "9803"
     assert "empty" not in out

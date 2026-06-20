@@ -22,7 +22,6 @@ from app.infrastructure.mods.mod_manager import (
     is_mods_disabled,
 )
 
-
 # ========================= _repo_layout_mods_candidates ==================
 
 
@@ -138,7 +137,9 @@ class TestModsScanFingerprint:
         mods_dir = tmp_path / "mods"
         mod_dir = mods_dir / "test-mod"
         mod_dir.mkdir(parents=True)
-        (mod_dir / "manifest.json").write_text('{"id": "test-mod", "name": "Test", "version": "1.0"}')
+        (mod_dir / "manifest.json").write_text(
+            '{"id": "test-mod", "name": "Test", "version": "1.0"}'
+        )
         mm = ModManager(mods_root=str(mods_dir))
         fp = mm._mods_scan_fingerprint()
         assert "test-mod" in fp
@@ -289,7 +290,9 @@ class TestLoadMod:
         mm = ModManager(mods_root=str(tmp_path))
         mock_registry = Mock()
         mock_registry.get_mod_metadata.return_value = Mock()
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             result = mm.load_mod("already-loaded")
         assert result is True
 
@@ -297,7 +300,9 @@ class TestLoadMod:
         mm = ModManager(mods_root=str(tmp_path))
         mock_registry = Mock()
         mock_registry.get_mod_metadata.return_value = Mock()
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             result = mm.load_mod("sync-mod")
         assert "sync-mod" in mm._loaded_mods
 
@@ -305,7 +310,9 @@ class TestLoadMod:
         mm = ModManager(mods_root=str(tmp_path))
         mock_registry = Mock()
         mock_registry.get_mod_metadata.return_value = None
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             with patch.object(mm, "resolve_mod_directory", return_value=None):
                 result = mm.load_mod("missing-mod")
         assert result is False
@@ -318,7 +325,9 @@ class TestLoadMod:
         mm = ModManager(mods_root=str(mods_dir))
         mock_registry = Mock()
         mock_registry.get_mod_metadata.return_value = None
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             with patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]):
                 with patch.object(mm, "resolve_mod_directory", return_value=str(mod_dir)):
                     result = mm.load_mod("bad-mod")
@@ -329,13 +338,17 @@ class TestLoadMod:
         mod_dir = mods_dir / "bundle-mod"
         mod_dir.mkdir(parents=True)
         (mod_dir / "manifest.json").write_text(
-            json.dumps({"id": "bundle-mod", "name": "Bundle", "version": "1.0", "artifact": "bundle"})
+            json.dumps(
+                {"id": "bundle-mod", "name": "Bundle", "version": "1.0", "artifact": "bundle"}
+            )
         )
         mm = ModManager(mods_root=str(mods_dir))
         mock_registry = Mock()
         mock_registry.get_mod_metadata.return_value = None
         mock_registry.register_mod.return_value = True
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             with patch.object(mm, "resolve_mod_directory", return_value=str(mod_dir)):
                 result = mm.load_mod("bundle-mod")
         assert result is True
@@ -345,19 +358,23 @@ class TestLoadMod:
         mod_dir = mods_dir / "dep-mod"
         mod_dir.mkdir(parents=True)
         (mod_dir / "manifest.json").write_text(
-            json.dumps({
-                "id": "dep-mod",
-                "name": "Dep Mod",
-                "version": "1.0",
-                "dependencies": ["nonexistent-mod"],
-            })
+            json.dumps(
+                {
+                    "id": "dep-mod",
+                    "name": "Dep Mod",
+                    "version": "1.0",
+                    "dependencies": ["nonexistent-mod"],
+                }
+            )
         )
         mm = ModManager(mods_root=str(mods_dir))
         mock_registry = Mock()
         mock_registry.get_mod_metadata.return_value = None
         mock_registry.list_mod_ids.return_value = []
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+            ),
             patch("app.infrastructure.mods.mod_manager.validate_dependencies", return_value=False),
             patch.object(mm, "resolve_mod_directory", return_value=str(mod_dir)),
         ):
@@ -371,12 +388,14 @@ class TestLoadMod:
         backend_dir.mkdir(parents=True)
         (backend_dir / "init.py").write_text("def setup(): pass\n")
         (mod_dir / "manifest.json").write_text(
-            json.dumps({
-                "id": "backend-mod",
-                "name": "Backend Mod",
-                "version": "1.0",
-                "backend": {"entry": "init", "init": "setup"},
-            })
+            json.dumps(
+                {
+                    "id": "backend-mod",
+                    "name": "Backend Mod",
+                    "version": "1.0",
+                    "backend": {"entry": "init", "init": "setup"},
+                }
+            )
         )
         mm = ModManager(mods_root=str(mods_dir))
         mock_registry = Mock()
@@ -384,7 +403,9 @@ class TestLoadMod:
         mock_registry.list_mod_ids.return_value = []
         mock_registry.register_mod.return_value = True
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+            ),
             patch("app.infrastructure.mods.mod_manager.validate_dependencies", return_value=True),
             patch("app.infrastructure.mods.mod_manager.import_mod_backend_py") as mock_import,
             patch.object(mm, "resolve_mod_directory", return_value=str(mod_dir)),
@@ -405,7 +426,9 @@ class TestUnloadMod:
         mm._loaded_mods.append("test-mod")
         mock_registry = Mock()
         mock_registry.get_mod_instance.return_value = None
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             with patch("app.infrastructure.mods.comms.get_mod_comms", side_effect=ImportError):
                 result = mm.unload_mod("test-mod")
         assert result is True
@@ -418,7 +441,9 @@ class TestUnloadMod:
         mock_instance.cleanup = Mock()
         mock_registry = Mock()
         mock_registry.get_mod_instance.return_value = mock_instance
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             with patch("app.infrastructure.mods.comms.get_mod_comms", side_effect=ImportError):
                 result = mm.unload_mod("cleanup-mod")
         assert result is True
@@ -434,7 +459,9 @@ class TestUninstallMod:
         mock_registry = Mock()
         mock_registry.get_mod_metadata.return_value = None
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+            ),
             patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_er,
         ):
             mock_er_instance = Mock()
@@ -456,7 +483,9 @@ class TestUninstallMod:
         mock_metadata = Mock()
         mock_registry.get_mod_metadata.return_value = mock_metadata
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+            ),
             patch.object(mm, "unload_mod", return_value=True),
         ):
             result, msg = mm.uninstall_mod("uninstall-mod", remove_files=True)
@@ -550,7 +579,10 @@ class TestListAllMods:
         )
         mm = ModManager(mods_root=str(mods_dir))
         with (
-            patch("app.infrastructure.mods.employee_registry.get_employee_registry", side_effect=ImportError),
+            patch(
+                "app.infrastructure.mods.employee_registry.get_employee_registry",
+                side_effect=ImportError,
+            ),
             patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]),
         ):
             result = mm.list_all_mods()
@@ -572,16 +604,21 @@ class TestGetRoutes:
         mod_dir = mods_dir / "route-mod"
         mod_dir.mkdir(parents=True)
         (mod_dir / "manifest.json").write_text(
-            json.dumps({
-                "id": "route-mod",
-                "name": "Route Mod",
-                "version": "1.0",
-                "frontend": {"routes": "routes"},
-            })
+            json.dumps(
+                {
+                    "id": "route-mod",
+                    "name": "Route Mod",
+                    "version": "1.0",
+                    "frontend": {"routes": "routes"},
+                }
+            )
         )
         mm = ModManager(mods_root=str(mods_dir))
         with (
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", side_effect=ImportError),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                side_effect=ImportError,
+            ),
             patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]),
         ):
             result = mm.get_routes()
@@ -598,7 +635,10 @@ class TestLoadAllMods:
         mods_dir.mkdir()
         mm = ModManager(mods_root=str(mods_dir))
         with (
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", side_effect=ImportError),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                side_effect=ImportError,
+            ),
             patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]),
         ):
             result = mm.load_all_mods()
@@ -613,7 +653,10 @@ class TestLoadAllMods:
         )
         mm = ModManager(mods_root=str(mods_dir))
         with (
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", side_effect=ImportError),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                side_effect=ImportError,
+            ),
             patch.object(mm, "load_mod", return_value=True),
             patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]),
         ):
@@ -646,10 +689,12 @@ class TestScanModsFromBuildIndex:
         )
         index_path = tmp_path / "mods-index.json"
         index_path.write_text(
-            json.dumps({
-                "fingerprint": "fp1",
-                "mods": [{"mod_path": str(mod_dir)}],
-            })
+            json.dumps(
+                {
+                    "fingerprint": "fp1",
+                    "mods": [{"mod_path": str(mod_dir)}],
+                }
+            )
         )
         mm = ModManager(mods_root=str(tmp_path))
         result = mm._scan_mods_from_build_index("fp1")

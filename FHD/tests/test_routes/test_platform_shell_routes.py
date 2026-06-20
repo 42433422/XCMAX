@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.platform_shell_routes — platform shell API routes."""
+
 from __future__ import annotations
 
 import os
@@ -23,6 +24,7 @@ def _make_app() -> FastAPI:
 # platform_shell_capabilities
 # ---------------------------------------------------------------------------
 
+
 class TestPlatformShellCapabilities:
     def test_returns_success(self):
         client = TestClient(_make_app())
@@ -38,12 +40,15 @@ class TestPlatformShellCapabilities:
 
     def test_mod_manager_failure_graceful(self):
         client = TestClient(_make_app())
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("no mods"),
-        ), patch(
-            "app.mod_sdk.platform_shell.build_platform_shell_payload",
-            return_value={"edition": "standard"},
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                side_effect=RuntimeError("no mods"),
+            ),
+            patch(
+                "app.mod_sdk.platform_shell.build_platform_shell_payload",
+                return_value={"edition": "standard"},
+            ),
         ):
             resp = client.get("/api/platform-shell/capabilities")
         assert resp.status_code == 200
@@ -52,6 +57,7 @@ class TestPlatformShellCapabilities:
 # ---------------------------------------------------------------------------
 # decoupling_progress
 # ---------------------------------------------------------------------------
+
 
 class TestDecouplingProgress:
     def test_returns_success(self):
@@ -70,6 +76,7 @@ class TestDecouplingProgress:
 # deliverable_status
 # ---------------------------------------------------------------------------
 
+
 class TestDeliverableStatus:
     def test_returns_success(self):
         client = TestClient(_make_app())
@@ -87,9 +94,11 @@ class TestDeliverableStatus:
 # industry_baseline
 # ---------------------------------------------------------------------------
 
+
 class TestIndustryBaseline:
     def test_returns_success(self):
         client = TestClient(_make_app())
+
         async def mock_build(request, industry_id):
             return {"industry": industry_id}
 
@@ -107,9 +116,11 @@ class TestIndustryBaseline:
 # onboarding_industries
 # ---------------------------------------------------------------------------
 
+
 class TestOnboardingIndustries:
     def test_returns_success(self):
         client = TestClient(_make_app())
+
         async def mock_build(request):
             return {"industries": ["制造业", "零售"]}
 
@@ -126,6 +137,7 @@ class TestOnboardingIndustries:
 # ---------------------------------------------------------------------------
 # employee_planner_status / employee_tools
 # ---------------------------------------------------------------------------
+
 
 class TestEmployeePlannerStatus:
     def test_returns_success(self):
@@ -153,6 +165,7 @@ class TestEmployeeTools:
 # workspace_root
 # ---------------------------------------------------------------------------
 
+
 class TestWorkspaceRoot:
     def test_returns_workspace_root(self):
         client = TestClient(_make_app())
@@ -166,6 +179,7 @@ class TestWorkspaceRoot:
 # ---------------------------------------------------------------------------
 # office_sample_cleanup
 # ---------------------------------------------------------------------------
+
 
 class TestOfficeSampleCleanup:
     def test_cleanup_empty_body(self):

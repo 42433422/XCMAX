@@ -17,7 +17,6 @@ from app.utils.performance_monitor import (
     performance_timer,
 )
 
-
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -125,7 +124,9 @@ class TestRecordMemory:
         monitor = PerformanceMonitor()
         with patch("psutil.Process") as mock_process_cls:
             mock_process = MagicMock()
-            mock_process.memory_info.return_value = MagicMock(rss=100 * 1024 * 1024, vms=200 * 1024 * 1024)
+            mock_process.memory_info.return_value = MagicMock(
+                rss=100 * 1024 * 1024, vms=200 * 1024 * 1024
+            )
             mock_process.memory_percent.return_value = 5.0
             mock_process_cls.return_value = mock_process
             snapshot = monitor.record_memory()

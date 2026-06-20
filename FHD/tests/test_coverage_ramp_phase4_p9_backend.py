@@ -19,7 +19,6 @@ from app.utils.template_export_utils import (
 )
 from app.utils.upload_helpers import save_upload_bytes, save_upload_file
 
-
 # ---------------------------------------------------------------------------
 # small helpers
 # ---------------------------------------------------------------------------
@@ -112,9 +111,7 @@ def test_fill_synthetic_header_fallback(tmp_path: Path) -> None:
 def test_fill_append_missing_columns(tmp_path: Path) -> None:
     # template only has 型号/名称/数量; 规格 should be appended
     tpl = _make_template(tmp_path)
-    wb = fill_workbook_from_template(
-        tpl, _RECORDS, _ALIAS, append_missing_field_columns=True
-    )
+    wb = fill_workbook_from_template(tpl, _RECORDS, _ALIAS, append_missing_field_columns=True)
     ws = wb.active
     header_vals = {ws.cell(1, c).value for c in range(1, ws.max_column + 1)}
     assert "规格" in header_vals
@@ -122,9 +119,7 @@ def test_fill_append_missing_columns(tmp_path: Path) -> None:
 
 def test_fill_clear_rows_above_header(tmp_path: Path) -> None:
     tpl = _make_template(tmp_path, with_preamble=True)
-    wb = fill_workbook_from_template(
-        tpl, _RECORDS, _ALIAS, clear_rows_above_header=True
-    )
+    wb = fill_workbook_from_template(tpl, _RECORDS, _ALIAS, clear_rows_above_header=True)
     ws = wb.active
     # header moved up to row 1 after preamble removal
     assert ws.cell(1, 1).value == "型号"

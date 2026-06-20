@@ -55,7 +55,9 @@ class TestResolveWsUserId:
         ws = MagicMock()
         ws.query_params = {}
         ws.cookies = {}
-        with patch("app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False):
+        with patch(
+            "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False
+        ):
             result = _resolve_ws_user_id(ws)
             assert result is None
 
@@ -65,7 +67,9 @@ class TestResolveWsUserId:
         ws = MagicMock()
         ws.query_params = {"user_id": "123"}
         ws.cookies = {}
-        with patch("app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=True):
+        with patch(
+            "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=True
+        ):
             result = _resolve_ws_user_id(ws)
             assert result == 123
 
@@ -75,7 +79,9 @@ class TestResolveWsUserId:
         ws = MagicMock()
         ws.query_params = {"user_id": "abc"}
         ws.cookies = {}
-        with patch("app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=True):
+        with patch(
+            "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=True
+        ):
             result = _resolve_ws_user_id(ws)
             assert result is None
 
@@ -87,8 +93,12 @@ class TestResolveWsUserId:
         ws.cookies = {"session_id": "valid-sid"}
         mock_user = MagicMock()
         mock_user.id = 5
-        with patch("app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False), \
-             patch("app.services.get_session_service") as mock_get_ss:
+        with (
+            patch(
+                "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False
+            ),
+            patch("app.services.get_session_service") as mock_get_ss,
+        ):
             mock_ss = MagicMock()
             mock_ss.validate_session.return_value = mock_user
             mock_get_ss.return_value = mock_ss
@@ -101,8 +111,12 @@ class TestResolveWsUserId:
         ws = MagicMock()
         ws.query_params = {}
         ws.cookies = {"session_id": "bad-sid"}
-        with patch("app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False), \
-             patch("app.services.get_session_service") as mock_get_ss:
+        with (
+            patch(
+                "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False
+            ),
+            patch("app.services.get_session_service") as mock_get_ss,
+        ):
             mock_ss = MagicMock()
             mock_ss.validate_session.return_value = None
             mock_get_ss.return_value = mock_ss
@@ -130,8 +144,10 @@ class TestNotifyOfflineImMembers:
     async def test_with_offline_members(self):
         from app.fastapi_routes.im_routes import _notify_offline_im_members
 
-        with patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub, \
-             patch("app.services.mobile_push.notify_user") as mock_notify:
+        with (
+            patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub,
+            patch("app.services.mobile_push.notify_user") as mock_notify,
+        ):
             mock_hub.connected_user_ids.return_value = [1, 3]
             await _notify_offline_im_members([1, 2, 3], 1, "hello")
             # User 2 is offline (not in connected list and not sender), should be notified
@@ -141,8 +157,10 @@ class TestNotifyOfflineImMembers:
     async def test_notify_error_handled(self):
         from app.fastapi_routes.im_routes import _notify_offline_im_members
 
-        with patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub, \
-             patch("app.services.mobile_push.notify_user", side_effect=RuntimeError("push fail")):
+        with (
+            patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub,
+            patch("app.services.mobile_push.notify_user", side_effect=RuntimeError("push fail")),
+        ):
             mock_hub.connected_user_ids.return_value = [1]
             # Should not raise
             await _notify_offline_im_members([1, 2], 1, "hello")
@@ -151,8 +169,10 @@ class TestNotifyOfflineImMembers:
     async def test_empty_body_uses_default(self):
         from app.fastapi_routes.im_routes import _notify_offline_im_members
 
-        with patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub, \
-             patch("app.services.mobile_push.notify_user") as mock_notify:
+        with (
+            patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub,
+            patch("app.services.mobile_push.notify_user") as mock_notify,
+        ):
             mock_hub.connected_user_ids.return_value = [1]
             await _notify_offline_im_members([1, 2], 1, "")
             # Should use "新消息" as default

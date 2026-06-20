@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.domain.neuro.processors.subconscious import (
-    SubconsciousProcessor,
     BatchBuffer,
     LoggingHandler,
     MetricsHandler,
-    subconscious_log,
+    SubconsciousProcessor,
     get_subconscious_processor,
+    subconscious_log,
 )
 
 
 def _make_event(event_type: str = "test_event", payload: dict | None = None):
-    from app.neuro_bus.events.base import NeuroEvent, EventMetadata, EventPriority
+    from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
 
     meta = EventMetadata(event_id=f"evt-{event_type}", source="test", trace_id="c1")
     return NeuroEvent(
@@ -86,7 +86,9 @@ class TestSubconsciousProcessorStartStop:
             proc = SubconsciousProcessor(enable_batching=True)
             await proc.start()
             batch_handler = AsyncMock()
-            proc.register_handler("test", AsyncMock(), supports_batching=True, batch_handler=batch_handler)
+            proc.register_handler(
+                "test", AsyncMock(), supports_batching=True, batch_handler=batch_handler
+            )
             proc._batches["test"].events.append(_make_event())
             await proc.stop()
             assert proc._running is False
@@ -105,7 +107,9 @@ class TestSubconsciousProcessorRegisterHandler:
             proc = SubconsciousProcessor(enable_batching=True)
             handler = MagicMock()
             batch_handler = MagicMock()
-            proc.register_handler("test_event", handler, supports_batching=True, batch_handler=batch_handler)
+            proc.register_handler(
+                "test_event", handler, supports_batching=True, batch_handler=batch_handler
+            )
             assert "test_event" in proc._batch_handlers
             assert "test_event" in proc._batches
 
@@ -165,7 +169,9 @@ class TestSubconsciousProcessorProcess:
         with patch("app.domain.neuro.processors.subconscious.get_neuro_bus"):
             proc = SubconsciousProcessor(enable_batching=True, batch_size=2)
             batch_handler = AsyncMock()
-            proc.register_handler("test_event", AsyncMock(), supports_batching=True, batch_handler=batch_handler)
+            proc.register_handler(
+                "test_event", AsyncMock(), supports_batching=True, batch_handler=batch_handler
+            )
             result = await proc.process(_make_event("test_event"))
             assert result is True
             assert proc._batched_count == 1
@@ -175,7 +181,9 @@ class TestSubconsciousProcessorProcess:
         with patch("app.domain.neuro.processors.subconscious.get_neuro_bus"):
             proc = SubconsciousProcessor(enable_batching=True, batch_size=1)
             batch_handler = AsyncMock()
-            proc.register_handler("test_event", AsyncMock(), supports_batching=True, batch_handler=batch_handler)
+            proc.register_handler(
+                "test_event", AsyncMock(), supports_batching=True, batch_handler=batch_handler
+            )
             await proc.process(_make_event("test_event"))
             batch_handler.assert_called_once()
 
@@ -250,6 +258,7 @@ class TestSubconsciousLog:
 class TestGetSubconsciousProcessor:
     def test_returns_instance(self):
         import app.domain.neuro.processors.subconscious as mod
+
         mod._subconscious = None
         with patch("app.domain.neuro.processors.subconscious.get_neuro_bus"):
             proc = get_subconscious_processor()

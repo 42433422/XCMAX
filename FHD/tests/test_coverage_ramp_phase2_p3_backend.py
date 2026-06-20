@@ -19,7 +19,6 @@ from app.infrastructure.llm import client as llm_client
 from app.infrastructure.mods.manifest import _check_xcagi_version, _compare_versions
 from app.services.deepseek_intent_service import cn_to_number, get_deepseek_api_key
 
-
 # ---------------------------------------------------------------------------
 # price_list_export
 # ---------------------------------------------------------------------------
@@ -45,9 +44,7 @@ def test_build_sales_contract_template_preview(mock_resolve: MagicMock) -> None:
 
 
 def test_product_row_cell_values_en_keys() -> None:
-    vals = _product_row_cell_values(
-        {"model": "M2", "name": "漆", "spec": "1L", "price": 88}
-    )
+    vals = _product_row_cell_values({"model": "M2", "name": "漆", "spec": "1L", "price": 88})
     assert "M2" in vals or "漆" in vals
 
 

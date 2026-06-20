@@ -1,13 +1,15 @@
 """Tests for app.mod_sdk.lan_pages_compat."""
+
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 from app.mod_sdk.lan_pages_compat import (
-    list_lan_pages_registry,
-    MOD_PAGE_PREFIX,
     HOST_PAGES,
+    MOD_PAGE_PREFIX,
+    list_lan_pages_registry,
 )
 
 

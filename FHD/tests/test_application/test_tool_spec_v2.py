@@ -135,7 +135,11 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
     shipment_order_print_spec = specs[("shipment_orders", "print")]
     assert shipment_order_print_spec.risk == "high"
     assert shipment_order_print_spec.permission == "tool.shipment_orders.print"
-    assert shipment_order_print_spec.output_schema["required"] == ["success", "file_path", "updated"]
+    assert shipment_order_print_spec.output_schema["required"] == [
+        "success",
+        "file_path",
+        "updated",
+    ]
 
     shipment_order_clear_spec = specs[("shipment_orders", "clear_shipment")]
     assert shipment_order_clear_spec.risk == "high"
@@ -282,8 +286,16 @@ def test_build_tool_specs_v2_exposes_excel_vector_contract() -> None:
     assert template_spec.idempotent is True
     assert template_spec.required_params == ["file_path"]
     assert template_spec.input_schema["required"] == ["file_path"]
-    assert template_spec.output_schema["required"] == ["success", "file_path", "fields", "sample_rows"]
-    assert template_spec.test_fixtures[0]["output"]["artifacts"][0]["artifact_type"] == "template_analysis"
+    assert template_spec.output_schema["required"] == [
+        "success",
+        "file_path",
+        "fields",
+        "sample_rows",
+    ]
+    assert (
+        template_spec.test_fixtures[0]["output"]["artifacts"][0]["artifact_type"]
+        == "template_analysis"
+    )
 
     analyzer_spec = specs[("excel_analyzer", "analyze")]
     assert analyzer_spec.risk == "low"

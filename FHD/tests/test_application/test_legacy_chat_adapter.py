@@ -1,4 +1,5 @@
 """Tests for app.legacy.chat.legacy_chat_adapter."""
+
 from __future__ import annotations
 
 import json
@@ -139,14 +140,16 @@ class TestResolveChatModelForClient:
 # ---------------------------------------------------------------------------
 class TestToolStreamCallLabel:
     def test_generate_office_docx(self):
-        assert _tool_stream_call_label(
-            "generate_office_document", '{"output_format":"docx"}'
-        ) == "生成 Word 文档（.docx）"
+        assert (
+            _tool_stream_call_label("generate_office_document", '{"output_format":"docx"}')
+            == "生成 Word 文档（.docx）"
+        )
 
     def test_generate_office_xlsx(self):
-        assert _tool_stream_call_label(
-            "generate_office_document", '{"output_format":"xlsx"}'
-        ) == "生成 Excel 工作簿（.xlsx）"
+        assert (
+            _tool_stream_call_label("generate_office_document", '{"output_format":"xlsx"}')
+            == "生成 Excel 工作簿（.xlsx）"
+        )
 
     def test_generate_office_unknown_format(self):
         result = _tool_stream_call_label("generate_office_document", '{"output_format":"pdf"}')
@@ -169,16 +172,12 @@ class TestSlowToolWaitMessage:
         assert "导入数据库" in msg
 
     def test_generate_office_docx(self):
-        msg = _slow_tool_wait_message(
-            "generate_office_document", '{"output_format":"docx"}'
-        )
+        msg = _slow_tool_wait_message("generate_office_document", '{"output_format":"docx"}')
         assert msg is not None
         assert "Word" in msg
 
     def test_generate_office_xlsx(self):
-        msg = _slow_tool_wait_message(
-            "generate_office_document", '{"output_format":"xlsx"}'
-        )
+        msg = _slow_tool_wait_message("generate_office_document", '{"output_format":"xlsx"}')
         assert msg is not None
         assert "Excel" in msg
 
@@ -392,9 +391,7 @@ class TestAppendToolMessages:
             "app.legacy.chat.legacy_chat_adapter.enrich_excel_tool_arguments",
             return_value={"query": "enriched"},
         ) as mock_enrich:
-            append_tool_messages(
-                messages, tcs, workspace_root="/tmp", execute_tool=execute_tool
-            )
+            append_tool_messages(messages, tcs, workspace_root="/tmp", execute_tool=execute_tool)
             mock_enrich.assert_called_once()
 
     def test_reset_clears_last_tool_records(self):
@@ -512,7 +509,7 @@ class TestChat:
         mock_client = MagicMock()
         mock_msg = MagicMock()
         mock_msg.content = ""
-        tc = _Tc("tc1", "import_excel_to_database", '{}')
+        tc = _Tc("tc1", "import_excel_to_database", "{}")
         mock_msg.tool_calls = [tc]
         mock_choice = MagicMock()
         mock_choice.message = mock_msg
@@ -602,7 +599,11 @@ class TestChatStreamText:
                 return_value=execute_tool,
             ),
         ):
-            parts = list(chat_stream_text("analyze", client=mock_client, model="test-model", max_iterations=1))
+            parts = list(
+                chat_stream_text(
+                    "analyze", client=mock_client, model="test-model", max_iterations=1
+                )
+            )
         text_parts = [p for p in parts if isinstance(p, str)]
         assert any("调用工具" in p for p in text_parts)
 
@@ -617,7 +618,7 @@ class TestChatStreamText:
         delta.tool_calls[0].id = "tc1"
         fn = MagicMock()
         fn.name = "import_excel_to_database"
-        fn.arguments = '{}'
+        fn.arguments = "{}"
         delta.tool_calls[0].function = fn
         chunk.choices[0].delta = delta
         chunk.choices[0].finish_reason = "tool_calls"
@@ -665,9 +666,7 @@ class TestChatStreamSseEvents:
             "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
             return_value=[],
         ):
-            events = list(
-                chat_stream_sse_events("hi", client=mock_client, model="test-model")
-            )
+            events = list(chat_stream_sse_events("hi", client=mock_client, model="test-model"))
         types = [e["type"] for e in events]
         assert "token" in types
         assert "done" in types
@@ -683,7 +682,7 @@ class TestChatStreamSseEvents:
         delta.tool_calls[0].id = "tc1"
         fn = MagicMock()
         fn.name = "import_excel_to_database"
-        fn.arguments = '{}'
+        fn.arguments = "{}"
         delta.tool_calls[0].function = fn
         chunk.choices[0].delta = delta
         chunk.choices[0].finish_reason = "tool_calls"
@@ -705,8 +704,6 @@ class TestChatStreamSseEvents:
                 return_value=execute_tool,
             ),
         ):
-            events = list(
-                chat_stream_sse_events("import", client=mock_client, model="test-model")
-            )
+            events = list(chat_stream_sse_events("import", client=mock_client, model="test-model"))
         types = [e["type"] for e in events]
         assert "requires_token" in types

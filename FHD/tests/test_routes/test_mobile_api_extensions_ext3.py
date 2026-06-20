@@ -130,9 +130,7 @@ class TestPostCsMessage:
     @pytest.mark.asyncio
     async def test_authorized_empty_body(self, ext_mod):
         mock_request = MagicMock()
-        result = await ext_mod.post_cs_message(
-            request=mock_request, body={}, user=_mock_user()
-        )
+        result = await ext_mod.post_cs_message(request=mock_request, body={}, user=_mock_user())
         # 空消息体应返回 400
         assert result.status_code == 400
 
@@ -201,9 +199,7 @@ class TestGetCsMessages:
     @pytest.mark.asyncio
     async def test_authorized_with_none_since(self, ext_mod):
         mock_request = MagicMock()
-        result = await ext_mod.get_cs_messages(
-            request=mock_request, since=None, user=_mock_user()
-        )
+        result = await ext_mod.get_cs_messages(request=mock_request, since=None, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
 
 
@@ -300,9 +296,7 @@ class TestMobileShipmentsAdditional:
         mock_db.__exit__ = MagicMock(return_value=False)
 
         with patch("app.db.session.get_db", return_value=mock_db):
-            result = await ext_mod.mobile_shipments(
-                page=1, per_page=20, user=_mock_user()
-            )
+            result = await ext_mod.mobile_shipments(page=1, per_page=20, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
 
     @pytest.mark.asyncio
@@ -316,9 +310,7 @@ class TestMobileShipmentsAdditional:
         mock_db.__exit__ = MagicMock(return_value=False)
 
         with patch("app.db.session.get_db", return_value=mock_db):
-            result = await ext_mod.mobile_shipments(
-                page=2, per_page=10, user=_mock_user()
-            )
+            result = await ext_mod.mobile_shipments(page=2, per_page=10, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
 
 
@@ -387,8 +379,9 @@ class TestMobileDeviceRegisterAdditional:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
 
-        with patch.object(ext_mod, "_ensure_mobile_device_table"), patch(
-            "app.db.session.get_db", return_value=mock_db
+        with (
+            patch.object(ext_mod, "_ensure_mobile_device_table"),
+            patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -396,9 +389,7 @@ class TestMobileDeviceRegisterAdditional:
     @pytest.mark.asyncio
     async def test_empty_product_sku_defaults_to_personal(self, ext_mod):
         """When product_sku is empty, defaults to 'personal'."""
-        body = ext_mod.DeviceRegisterBody(
-            fcm_token="a" * 10, push_token="push_tok", product_sku=""
-        )
+        body = ext_mod.DeviceRegisterBody(fcm_token="a" * 10, push_token="push_tok", product_sku="")
         mock_db = MagicMock()
         mock_q = MagicMock()
         mock_q.filter.return_value.first.return_value = None
@@ -406,8 +397,9 @@ class TestMobileDeviceRegisterAdditional:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
 
-        with patch.object(ext_mod, "_ensure_mobile_device_table"), patch(
-            "app.db.session.get_db", return_value=mock_db
+        with (
+            patch.object(ext_mod, "_ensure_mobile_device_table"),
+            patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -425,8 +417,9 @@ class TestMobileDeviceRegisterAdditional:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
 
-        with patch.object(ext_mod, "_ensure_mobile_device_table"), patch(
-            "app.db.session.get_db", return_value=mock_db
+        with (
+            patch.object(ext_mod, "_ensure_mobile_device_table"),
+            patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -434,9 +427,7 @@ class TestMobileDeviceRegisterAdditional:
     @pytest.mark.asyncio
     async def test_push_token_from_fcm_when_push_empty(self, ext_mod):
         """When push_token is empty, token comes from fcm_token."""
-        body = ext_mod.DeviceRegisterBody(
-            fcm_token="a" * 10, push_token=""
-        )
+        body = ext_mod.DeviceRegisterBody(fcm_token="a" * 10, push_token="")
         mock_db = MagicMock()
         mock_q = MagicMock()
         mock_q.filter.return_value.first.return_value = None
@@ -444,8 +435,9 @@ class TestMobileDeviceRegisterAdditional:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
 
-        with patch.object(ext_mod, "_ensure_mobile_device_table"), patch(
-            "app.db.session.get_db", return_value=mock_db
+        with (
+            patch.object(ext_mod, "_ensure_mobile_device_table"),
+            patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -453,9 +445,7 @@ class TestMobileDeviceRegisterAdditional:
     @pytest.mark.asyncio
     async def test_update_existing_row_with_empty_product_sku(self, ext_mod):
         """Update existing row with empty product_sku defaults to 'personal'."""
-        body = ext_mod.DeviceRegisterBody(
-            fcm_token="a" * 10, push_token="push_tok", product_sku=""
-        )
+        body = ext_mod.DeviceRegisterBody(fcm_token="a" * 10, push_token="push_tok", product_sku="")
         mock_db = MagicMock()
         mock_row = MagicMock()
         mock_q = MagicMock()
@@ -464,9 +454,11 @@ class TestMobileDeviceRegisterAdditional:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
 
-        with patch.object(ext_mod, "_ensure_mobile_device_table"), patch(
-            "app.db.session.get_db", return_value=mock_db
-        ), patch("app.utils.time.utc_now_naive", return_value="2026-06-17"):
+        with (
+            patch.object(ext_mod, "_ensure_mobile_device_table"),
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.utils.time.utc_now_naive", return_value="2026-06-17"),
+        ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
 
@@ -540,11 +532,12 @@ class TestMobilePairingIssueAdditional:
     async def test_issue_with_default_host(self, ext_mod):
         """Test pairing issue with default host (127.0.0.1) — should call _guess_lan_ipv4."""
         body = ext_mod.PairingIssueBody()
-        with patch.object(
-            ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"
-        ), patch(
-            "app.security.mobile_pairing.issue_pairing_nonce",
-            return_value={"nonce": "n", "host": "10.0.0.5", "port": 5112},
+        with (
+            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"),
+            patch(
+                "app.security.mobile_pairing.issue_pairing_nonce",
+                return_value={"nonce": "n", "host": "10.0.0.5", "port": 5112},
+            ),
         ):
             result = await ext_mod.mobile_pairing_issue(body, _mock_pairing_request())
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -552,11 +545,12 @@ class TestMobilePairingIssueAdditional:
     @pytest.mark.asyncio
     async def test_issue_with_localhost_host(self, ext_mod):
         body = ext_mod.PairingIssueBody(host="localhost", port=8080)
-        with patch.object(
-            ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"
-        ), patch(
-            "app.security.mobile_pairing.issue_pairing_nonce",
-            return_value={"nonce": "n", "host": "10.0.0.5", "port": 8080},
+        with (
+            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"),
+            patch(
+                "app.security.mobile_pairing.issue_pairing_nonce",
+                return_value={"nonce": "n", "host": "10.0.0.5", "port": 8080},
+            ),
         ):
             result = await ext_mod.mobile_pairing_issue(
                 body,
@@ -595,9 +589,12 @@ class TestMobileSyncPushAdditional:
         body = ext_mod.SyncPushBody(
             items=[ext_mod.SyncPushItem(entity_type="customer", entity_id="1")]
         )
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            return_value={"applied": 1},
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                return_value={"applied": 1},
+            ),
         ):
             result = await ext_mod.mobile_sync_push(body=body, user=user)
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -610,14 +607,14 @@ class TestMobileSyncPushAdditional:
     async def test_more_than_50_items_truncated(self, ext_mod):
         """Test that more than 50 items are truncated to first 50."""
         mock_sync_db = MagicMock()
-        items = [
-            ext_mod.SyncPushItem(entity_type="customer", entity_id=str(i))
-            for i in range(60)
-        ]
+        items = [ext_mod.SyncPushItem(entity_type="customer", entity_id=str(i)) for i in range(60)]
         body = ext_mod.SyncPushBody(items=items)
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            return_value={"applied": 50},
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                return_value={"applied": 50},
+            ),
         ):
             result = await ext_mod.mobile_sync_push(body=body, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -629,10 +626,13 @@ class TestMobileSyncPushAdditional:
         """Test apply_inbox with limit=0+50=50 when no items written."""
         mock_sync_db = MagicMock()
         body = ext_mod.SyncPushBody(items=[])
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            return_value={"applied": 0},
-        ) as mock_apply:
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                return_value={"applied": 0},
+            ) as mock_apply,
+        ):
             result = await ext_mod.mobile_sync_push(body=body, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
         mock_apply.assert_called_once_with(limit=50)
@@ -654,9 +654,7 @@ class TestMobileAuthQrConfirmAdditional2:
             "app.security.auth_qr_login.get_auth_qr",
             return_value={"status": "pending"},
         ):
-            body = ext_mod.AuthQrConfirmBody(
-                qr_id="a" * 8, username="", password="pass"
-            )
+            body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="", password="pass")
             result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
         # No username (bearer path not taken), should fail
         assert result.status_code == 400
@@ -667,27 +665,24 @@ class TestMobileAuthQrConfirmAdditional2:
         mock_request = MagicMock()
         mock_request.headers = {"Authorization": "Bearer some_token"}
 
-        with patch(
-            "app.security.auth_qr_login.get_auth_qr",
-            return_value={"status": "pending"},
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ), patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(
-                return_value=({"success": True, "session_id": "sid123"}, None)
+        with (
+            patch(
+                "app.security.auth_qr_login.get_auth_qr",
+                return_value={"status": "pending"},
             ),
-        ), patch(
-            "app.security.auth_qr_login.confirm_auth_qr",
-            return_value=True,
-        ), patch(
-            "app.security.mobile_jwt.user_id_from_mobile_bearer"
-        ) as mock_bearer:
-            body = ext_mod.AuthQrConfirmBody(
-                qr_id="a" * 8, username="alice", password="pass"
-            )
+            patch("app.application.auth_app_service.get_auth_app_service"),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=({"success": True, "session_id": "sid123"}, None)),
+            ),
+            patch(
+                "app.security.auth_qr_login.confirm_auth_qr",
+                return_value=True,
+            ),
+            patch("app.security.mobile_jwt.user_id_from_mobile_bearer") as mock_bearer,
+        ):
+            body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="alice", password="pass")
             result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
         # bearer lookup should NOT be called since username is provided
         mock_bearer.assert_not_called()
@@ -708,16 +703,18 @@ class TestMobileAuthQrConfirmAdditional2:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
 
-        with patch(
-            "app.security.auth_qr_login.get_auth_qr",
-            return_value={"status": "pending"},
-        ), patch(
-            "app.security.mobile_jwt.user_id_from_mobile_bearer",
-            return_value=42,
-        ), patch("app.db.session.get_db", return_value=mock_db):
-            body = ext_mod.AuthQrConfirmBody(
-                qr_id="a" * 8, username="", password=""
-            )
+        with (
+            patch(
+                "app.security.auth_qr_login.get_auth_qr",
+                return_value={"status": "pending"},
+            ),
+            patch(
+                "app.security.mobile_jwt.user_id_from_mobile_bearer",
+                return_value=42,
+            ),
+            patch("app.db.session.get_db", return_value=mock_db),
+        ):
+            body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="", password="")
             result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
         # Username found via bearer but no password → 400
         assert result.status_code == 400
@@ -728,23 +725,23 @@ class TestMobileAuthQrConfirmAdditional2:
         err_resp = MagicMock()
         err_resp.body = b"\xff\xfe invalid utf-8"
 
-        with patch(
-            "app.security.auth_qr_login.get_auth_qr",
-            return_value={"status": "pending"},
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ), patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(return_value=(None, err_resp)),
-        ), patch(
-            "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-            (RuntimeError, ValueError, UnicodeDecodeError),
+        with (
+            patch(
+                "app.security.auth_qr_login.get_auth_qr",
+                return_value={"status": "pending"},
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service"),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=(None, err_resp)),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
+                (RuntimeError, ValueError, UnicodeDecodeError),
+            ),
         ):
-            body = ext_mod.AuthQrConfirmBody(
-                qr_id="a" * 8, username="alice", password="pass"
-            )
+            body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="alice", password="pass")
             mock_request = MagicMock()
             mock_request.headers = {}
             result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
@@ -756,23 +753,23 @@ class TestMobileAuthQrConfirmAdditional2:
         err_resp = MagicMock()
         err_resp.body = b"not json"
 
-        with patch(
-            "app.security.auth_qr_login.get_auth_qr",
-            return_value={"status": "pending"},
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ), patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(return_value=(None, err_resp)),
-        ), patch(
-            "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-            (RuntimeError, ValueError, UnicodeDecodeError),
+        with (
+            patch(
+                "app.security.auth_qr_login.get_auth_qr",
+                return_value={"status": "pending"},
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service"),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=(None, err_resp)),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
+                (RuntimeError, ValueError, UnicodeDecodeError),
+            ),
         ):
-            body = ext_mod.AuthQrConfirmBody(
-                qr_id="a" * 8, username="alice", password="pass"
-            )
+            body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="alice", password="pass")
             mock_request = MagicMock()
             mock_request.headers = {}
             result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
@@ -781,22 +778,22 @@ class TestMobileAuthQrConfirmAdditional2:
     @pytest.mark.asyncio
     async def test_qr_id_with_whitespace_stripped(self, ext_mod):
         """Test that qr_id is stripped on confirm."""
-        with patch(
-            "app.security.auth_qr_login.get_auth_qr",
-            return_value={"status": "pending"},
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ), patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(
-                return_value=({"success": True, "session_id": "sid123"}, None)
+        with (
+            patch(
+                "app.security.auth_qr_login.get_auth_qr",
+                return_value={"status": "pending"},
             ),
-        ), patch(
-            "app.security.auth_qr_login.confirm_auth_qr",
-            return_value=True,
-        ) as mock_confirm:
+            patch("app.application.auth_app_service.get_auth_app_service"),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=({"success": True, "session_id": "sid123"}, None)),
+            ),
+            patch(
+                "app.security.auth_qr_login.confirm_auth_qr",
+                return_value=True,
+            ) as mock_confirm,
+        ):
             body = ext_mod.AuthQrConfirmBody(
                 qr_id="  " + "a" * 8 + "  ", username="alice", password="pass"
             )
@@ -818,15 +815,17 @@ class TestMobileAuthOidcExchangeAdditional2:
     @pytest.mark.asyncio
     async def test_authenticate_returns_no_message(self, ext_mod):
         """Test path where authenticate_oidc_user fails with no message."""
-        with patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(True, "rt"),
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-            new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with (
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(True, "rt"),
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+        ):
             mock_service = MagicMock()
             mock_service.authenticate_oidc_user.return_value = {
                 "success": False,
@@ -839,27 +838,30 @@ class TestMobileAuthOidcExchangeAdditional2:
     @pytest.mark.asyncio
     async def test_session_id_none(self, ext_mod):
         """Test success path where session_id is None."""
-        with patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(True, "rt"),
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-            new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get, patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.application.enterprise_login_flow.finalize_enterprise_login",
-            new=AsyncMock(
-                return_value={
-                    "user": {"id": 1, "username": "alice"},
-                    "account_kind": "personal",
-                }
+        with (
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(True, "rt"),
             ),
-        ), patch(
-            "app.security.mobile_jwt.issue_mobile_tokens",
-            return_value={"access_token": "tok", "refresh_token": "rtok"},
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                new=AsyncMock(
+                    return_value={
+                        "user": {"id": 1, "username": "alice"},
+                        "account_kind": "personal",
+                    }
+                ),
+            ),
+            patch(
+                "app.security.mobile_jwt.issue_mobile_tokens",
+                return_value={"access_token": "tok", "refresh_token": "rtok"},
+            ),
         ):
             mock_service = MagicMock()
             mock_service.authenticate_oidc_user.return_value = {
@@ -875,28 +877,31 @@ class TestMobileAuthOidcExchangeAdditional2:
     @pytest.mark.asyncio
     async def test_enterprise_sku(self, ext_mod):
         """Test with enterprise SKU."""
-        with patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(True, "rt"),
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-            new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get, patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"
-        ), patch(
-            "app.application.enterprise_login_flow.finalize_enterprise_login",
-            new=AsyncMock(
-                return_value={
-                    "user": {"id": 1, "username": "alice"},
-                    "account_kind": "enterprise",
-                    "session_id": "sid123",
-                }
+        with (
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(True, "rt"),
             ),
-        ), patch(
-            "app.security.mobile_jwt.issue_mobile_tokens",
-            return_value={"access_token": "tok", "refresh_token": "rtok"},
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                new=AsyncMock(
+                    return_value={
+                        "user": {"id": 1, "username": "alice"},
+                        "account_kind": "enterprise",
+                        "session_id": "sid123",
+                    }
+                ),
+            ),
+            patch(
+                "app.security.mobile_jwt.issue_mobile_tokens",
+                return_value={"access_token": "tok", "refresh_token": "rtok"},
+            ),
         ):
             mock_service = MagicMock()
             mock_service.authenticate_oidc_user.return_value = {
@@ -912,15 +917,17 @@ class TestMobileAuthOidcExchangeAdditional2:
     @pytest.mark.asyncio
     async def test_authenticate_returns_success_false_with_empty_user(self, ext_mod):
         """Test path where authenticate_oidc_user returns success=False with empty user."""
-        with patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(True, "rt"),
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-            new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with (
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(True, "rt"),
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+        ):
             mock_service = MagicMock()
             mock_service.authenticate_oidc_user.return_value = {
                 "success": False,
@@ -941,20 +948,20 @@ class TestMobileAuthOidcExchangeAdditional2:
 class TestMobileModItemsAdditional2:
     def test_none_return_from_list_all_mods(self, ext_mod):
         """Test when list_all_mods returns None."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm, \
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = None
             items = ext_mod._mobile_mod_items()
         assert items == []
 
     def test_mixed_dict_and_object_mods(self, ext_mod):
         """Test mix of dict and object mods."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm, \
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             obj_mod = MagicMock()
             obj_mod.id = "obj-1"
             obj_mod.name = "Object Mod"
@@ -971,10 +978,10 @@ class TestMobileModItemsAdditional2:
 
     def test_dict_mod_with_only_title(self, ext_mod):
         """Test dict mod that only has title (no id, mod_id, or name)."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm, \
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"title": "Title Only Mod"},
             ]
@@ -984,10 +991,10 @@ class TestMobileModItemsAdditional2:
 
     def test_dict_mod_with_id_and_title(self, ext_mod):
         """Test dict mod with id and title (no name)."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm, \
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "mod-1", "title": "Title Mod"},
             ]
@@ -998,10 +1005,10 @@ class TestMobileModItemsAdditional2:
 
     def test_object_mod_with_all_none_attrs(self, ext_mod):
         """Test object mod where all attributes are None."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm, \
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mod = MagicMock()
             mod.id = None
             mod.name = None
@@ -1014,10 +1021,10 @@ class TestMobileModItemsAdditional2:
 
     def test_dict_mod_with_empty_string_id(self, ext_mod):
         """Test dict mod with empty string id and empty mod_id."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm, \
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "", "mod_id": "", "name": "No ID"},
             ]
@@ -1026,10 +1033,10 @@ class TestMobileModItemsAdditional2:
 
     def test_dict_mod_with_whitespace_id(self, ext_mod):
         """Test dict mod with whitespace-only id."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm, \
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "   ", "name": "Whitespace ID"},
             ]
@@ -1107,24 +1114,30 @@ class TestPairingIssueHostAdditional:
 class TestEnsureMobileDeviceTableAdditional:
     def test_import_error_logged(self, ext_mod):
         """Test that import errors are caught and logged."""
-        with patch(
-            "app.db.session.get_db",
-            side_effect=ImportError("module not found"),
-        ), patch(
-            "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-            (RuntimeError, ImportError),
+        with (
+            patch(
+                "app.db.session.get_db",
+                side_effect=ImportError("module not found"),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
+                (RuntimeError, ImportError),
+            ),
         ):
             # Should not raise
             ext_mod._ensure_mobile_device_table()
 
     def test_value_error_logged(self, ext_mod):
         """Test that ValueError is caught."""
-        with patch(
-            "app.db.session.get_db",
-            side_effect=ValueError("bad value"),
-        ), patch(
-            "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-            (RuntimeError, ValueError),
+        with (
+            patch(
+                "app.db.session.get_db",
+                side_effect=ValueError("bad value"),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
+                (RuntimeError, ValueError),
+            ),
         ):
             ext_mod._ensure_mobile_device_table()
 
@@ -1141,13 +1154,15 @@ class TestEnsureMobileDeviceTableAdditional:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.db.session.get_db", return_value=mock_db), \
-             patch("sqlalchemy.inspect", return_value=mock_insp), \
-             patch(
-                 "app.db.models.mobile_device.MobileDeviceToken",
-                 mock_table,
-                 create=True,
-             ):
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("sqlalchemy.inspect", return_value=mock_insp),
+            patch(
+                "app.db.models.mobile_device.MobileDeviceToken",
+                mock_table,
+                create=True,
+            ),
+        ):
             ext_mod._ensure_mobile_device_table()
         mock_table.__table__.create.assert_called_once_with(mock_bind, checkfirst=True)
 
@@ -1169,9 +1184,11 @@ class TestMobileSyncStatusAdditional:
         mock_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.db.xcmax_sync._ensure_schema"
-        ), patch("app.db.xcmax_sync._get_conn", return_value=mock_ctx):
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch("app.db.xcmax_sync._ensure_schema"),
+            patch("app.db.xcmax_sync._get_conn", return_value=mock_ctx),
+        ):
             result = await ext_mod.mobile_sync_status(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
         if hasattr(result, "body"):
@@ -1192,9 +1209,11 @@ class TestMobileSyncStatusAdditional:
         mock_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.db.xcmax_sync._ensure_schema"
-        ), patch("app.db.xcmax_sync._get_conn", return_value=mock_ctx):
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch("app.db.xcmax_sync._ensure_schema"),
+            patch("app.db.xcmax_sync._get_conn", return_value=mock_ctx),
+        ):
             result = await ext_mod.mobile_sync_status(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
 
@@ -1216,12 +1235,16 @@ class TestMobileSyncPullAdditional:
         ]
         mock_sync_db.get_status.return_value = {"local_cursor": 10}
 
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.fastapi_routes.mobile_api_extensions._approval_items",
-            return_value=[],
-        ), patch(
-            "app.fastapi_routes.mobile_api_extensions._shipment_items",
-            return_value=[],
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._approval_items",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._shipment_items",
+                return_value=[],
+            ),
         ):
             body = ext_mod.SyncPullBody(since_cursor=5)
             result = await ext_mod.mobile_sync_pull(body=body, user=_mock_user())
@@ -1243,12 +1266,16 @@ class TestMobileSyncPullAdditional:
         mock_sync_db.get_changes.return_value = []
         mock_sync_db.get_status.return_value = {"local_cursor": 0}
 
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.fastapi_routes.mobile_api_extensions._approval_items",
-            return_value=[],
-        ), patch(
-            "app.fastapi_routes.mobile_api_extensions._shipment_items",
-            return_value=[],
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._approval_items",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._shipment_items",
+                return_value=[],
+            ),
         ):
             body = ext_mod.SyncPullBody(since_cursor=0)
             result = await ext_mod.mobile_sync_pull(body=body, user=_mock_user())
@@ -1266,12 +1293,16 @@ class TestMobileSyncPullAdditional:
         ]
         mock_sync_db.get_status.return_value = {"local_cursor": 5}
 
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db), patch(
-            "app.fastapi_routes.mobile_api_extensions._approval_items",
-            return_value=[{"id": 1, "title": "A"}],
-        ), patch(
-            "app.fastapi_routes.mobile_api_extensions._shipment_items",
-            return_value=[{"id": 1, "order_number": "O1"}],
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._approval_items",
+                return_value=[{"id": 1, "title": "A"}],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._shipment_items",
+                return_value=[{"id": 1, "order_number": "O1"}],
+            ),
         ):
             body = ext_mod.SyncPullBody(since_cursor=0)
             result = await ext_mod.mobile_sync_pull(body=body, user=_mock_user())
@@ -1301,8 +1332,9 @@ class TestMobileSyncConflictsAdditional:
         mock_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.db.xcmax_sync._ensure_schema"), patch(
-            "app.db.xcmax_sync._get_conn", return_value=mock_ctx
+        with (
+            patch("app.db.xcmax_sync._ensure_schema"),
+            patch("app.db.xcmax_sync._get_conn", return_value=mock_ctx),
         ):
             result = await ext_mod.mobile_sync_conflicts(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -1321,7 +1353,13 @@ class TestMobileSyncConflictsAdditional:
         rows = []
         for i in range(3):
             row = MagicMock()
-            row.keys.return_value = ["id", "entity_type", "entity_id", "conflict_note", "received_at"]
+            row.keys.return_value = [
+                "id",
+                "entity_type",
+                "entity_id",
+                "conflict_note",
+                "received_at",
+            ]
             row.__getitem__ = MagicMock(
                 side_effect=lambda k: {
                     "id": i,
@@ -1337,8 +1375,9 @@ class TestMobileSyncConflictsAdditional:
         mock_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.db.xcmax_sync._ensure_schema"), patch(
-            "app.db.xcmax_sync._get_conn", return_value=mock_ctx
+        with (
+            patch("app.db.xcmax_sync._ensure_schema"),
+            patch("app.db.xcmax_sync._get_conn", return_value=mock_ctx),
         ):
             result = await ext_mod.mobile_sync_conflicts(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
@@ -1447,9 +1486,7 @@ class TestMobileCustomersAdditional:
         mock_db.__exit__ = MagicMock(return_value=False)
 
         with patch("app.db.session.get_db", return_value=mock_db):
-            result = await ext_mod.mobile_customers(
-                page=1, per_page=20, user=_mock_user()
-            )
+            result = await ext_mod.mobile_customers(page=1, per_page=20, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
 
     @pytest.mark.asyncio
@@ -1468,9 +1505,7 @@ class TestMobileCustomersAdditional:
         mock_db.__exit__ = MagicMock(return_value=False)
 
         with patch("app.db.session.get_db", return_value=mock_db):
-            result = await ext_mod.mobile_customers(
-                page=3, per_page=10, user=_mock_user()
-            )
+            result = await ext_mod.mobile_customers(page=3, per_page=10, user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
         # Verify offset is (3-1)*10 = 20
         mock_q.offset.assert_called_once_with(20)
@@ -1648,12 +1683,14 @@ class TestMobileHomeAdditional:
         """Test home with no mods installed."""
         mock_sync_db = MagicMock()
         mock_sync_db.get_status.return_value = {"healthy": True}
-        with patch.object(
-            ext_mod, "_mobile_mod_items", return_value=[]
-        ), patch(
-            "app.mod_sdk.platform_shell.build_platform_shell_payload",
-            return_value={"shell": "empty"},
-        ), patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db):
+        with (
+            patch.object(ext_mod, "_mobile_mod_items", return_value=[]),
+            patch(
+                "app.mod_sdk.platform_shell.build_platform_shell_payload",
+                return_value={"shell": "empty"},
+            ),
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+        ):
             result = await ext_mod.mobile_home(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
         if hasattr(result, "body"):
@@ -1671,12 +1708,14 @@ class TestMobileHomeAdditional:
         mock_sync_db = MagicMock()
         mock_sync_db.get_status.return_value = {"healthy": True, "local_cursor": 5}
         mods = [{"id": f"mod-{i}", "name": f"Mod {i}"} for i in range(5)]
-        with patch.object(
-            ext_mod, "_mobile_mod_items", return_value=mods
-        ), patch(
-            "app.mod_sdk.platform_shell.build_platform_shell_payload",
-            return_value={"shell": "data"},
-        ), patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db):
+        with (
+            patch.object(ext_mod, "_mobile_mod_items", return_value=mods),
+            patch(
+                "app.mod_sdk.platform_shell.build_platform_shell_payload",
+                return_value={"shell": "data"},
+            ),
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
+        ):
             result = await ext_mod.mobile_home(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
 
@@ -1690,12 +1729,13 @@ class TestMobilePlatformShellAdditional:
     @pytest.mark.asyncio
     async def test_platform_shell_with_empty_mods(self, ext_mod):
         """Test platform shell with no mods."""
-        with patch.object(
-            ext_mod, "_mobile_mod_items", return_value=[]
-        ), patch(
-            "app.mod_sdk.platform_shell.build_platform_shell_payload",
-            return_value={"shell": "empty"},
-        ) as mock_build:
+        with (
+            patch.object(ext_mod, "_mobile_mod_items", return_value=[]),
+            patch(
+                "app.mod_sdk.platform_shell.build_platform_shell_payload",
+                return_value={"shell": "empty"},
+            ) as mock_build,
+        ):
             result = await ext_mod.mobile_platform_shell(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
         mock_build.assert_called_once_with([])
@@ -1704,12 +1744,13 @@ class TestMobilePlatformShellAdditional:
     async def test_platform_shell_with_mods(self, ext_mod):
         """Test platform shell with mods."""
         mods = [{"id": "mod-1", "name": "Mod 1"}, {"id": "mod-2", "name": "Mod 2"}]
-        with patch.object(
-            ext_mod, "_mobile_mod_items", return_value=mods
-        ), patch(
-            "app.mod_sdk.platform_shell.build_platform_shell_payload",
-            return_value={"shell": "data"},
-        ) as mock_build:
+        with (
+            patch.object(ext_mod, "_mobile_mod_items", return_value=mods),
+            patch(
+                "app.mod_sdk.platform_shell.build_platform_shell_payload",
+                return_value={"shell": "data"},
+            ) as mock_build,
+        ):
             result = await ext_mod.mobile_platform_shell(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
         mock_build.assert_called_once_with(["mod-1", "mod-2"])

@@ -111,28 +111,35 @@ def test_product_compat_mutation_routes_execute_through_agent_orchestrator(
     excel_imports.__dict__["_parse_price"] = lambda value: 0.0
 
     try:
-        with patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ), patch(
-            "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-            return_value=False,
-        ), patch(
-            "app.fastapi_routes.domains.product.compat_routes._products_write_raise"
-        ), patch(
-            "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.product.compat_routes.products_pg_insert_row",
-            return_value=11,
-        ) as insert_row, patch(
-            "app.fastapi_routes.domains.product.compat_routes.products_pg_update_row",
-        ) as update_row, patch(
-            "app.fastapi_routes.domains.product.compat_routes.products_pg_delete_row",
-        ) as delete_row, patch(
-            "app.fastapi_routes.domains.product.compat_routes.products_pg_batch_delete_rows",
-            return_value=(2, []),
-        ) as batch_delete_rows:
+        with (
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
+            patch(
+                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
+                return_value=False,
+            ),
+            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch(
+                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.product.compat_routes.products_pg_insert_row",
+                return_value=11,
+            ) as insert_row,
+            patch(
+                "app.fastapi_routes.domains.product.compat_routes.products_pg_update_row",
+            ) as update_row,
+            patch(
+                "app.fastapi_routes.domains.product.compat_routes.products_pg_delete_row",
+            ) as delete_row,
+            patch(
+                "app.fastapi_routes.domains.product.compat_routes.products_pg_batch_delete_rows",
+                return_value=(2, []),
+            ) as batch_delete_rows,
+        ):
             add_product = client.post(
                 "/products/add",
                 json={"product_name": "5003", "unit": "个"},

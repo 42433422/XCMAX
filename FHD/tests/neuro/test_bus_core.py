@@ -20,8 +20,8 @@ from app.neuro_bus.bus import (
 )
 from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _make_event(
     event_type: str = "test.event",
@@ -38,6 +38,7 @@ def _make_event(
 
 
 # ── _neuro_env_flag ──────────────────────────────────────────────────────────
+
 
 class TestNeuroEnvFlag:
     def test_truthy_values(self, monkeypatch):
@@ -126,6 +127,7 @@ class TestNeuroReliabilityWanted:
 
 # ── HandlerSubscription ──────────────────────────────────────────────────────
 
+
 class TestHandlerSubscription:
     def test_should_handle_no_filter(self):
         handler = lambda e: None
@@ -168,6 +170,7 @@ class TestHandlerSubscription:
 
 
 # ── PriorityEventQueue ───────────────────────────────────────────────────────
+
 
 class TestPriorityEventQueue:
     def test_put_and_get(self):
@@ -232,6 +235,7 @@ class TestPriorityEventQueue:
 
 
 # ── NeuroBus ─────────────────────────────────────────────────────────────────
+
 
 class TestNeuroBusSubscribe:
     def test_subscribe_and_handler_count(self):
@@ -368,12 +372,14 @@ class TestNeuroBusStats:
 class TestNeuroBusSingletons:
     def test_get_neuro_bus_creates(self, monkeypatch):
         import app.neuro_bus.bus as bus_mod
+
         monkeypatch.setattr(bus_mod, "_neuro_bus", None)
         bus = bus_mod.get_neuro_bus()
         assert isinstance(bus, NeuroBus)
 
     def test_set_neuro_bus(self, monkeypatch):
         import app.neuro_bus.bus as bus_mod
+
         custom = NeuroBus()
         bus_mod.set_neuro_bus(custom)
         assert bus_mod.get_neuro_bus() is custom
@@ -406,7 +412,9 @@ class TestNeuroBusFilterFn:
         bus._rel_dedup = None
         received = []
         filter_fn = lambda e: e.payload.get("allowed") is True
-        bus.subscribe("test.event", handler=lambda e: received.append(e), filter_fn=filter_fn, is_async=False)
+        bus.subscribe(
+            "test.event", handler=lambda e: received.append(e), filter_fn=filter_fn, is_async=False
+        )
         await bus.start()
         try:
             bus.publish(_make_event("test.event", payload={"allowed": False, "id": 1}))

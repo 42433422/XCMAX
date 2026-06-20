@@ -3,6 +3,7 @@
 
 启用：XCAGI_NEURO_BUS_REDIS_TRANSPORT=streams
 """
+
 from __future__ import annotations
 
 import json

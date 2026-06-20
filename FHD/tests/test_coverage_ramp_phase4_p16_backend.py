@@ -11,7 +11,6 @@ import pytest
 
 from app.services import xcmax_sync_service as svc
 
-
 # ---------------------------------------------------------------------------
 # pure helpers
 # ---------------------------------------------------------------------------
@@ -96,10 +95,17 @@ def test_push_outbox_empty() -> None:
 def test_push_outbox_sends_item() -> None:
     fake_db = MagicMock()
     fake_db.get_pending_outbox.return_value = [
-        {"id": 1, "entity_type": "attendance", "entity_id": "9", "operation": "insert", "payload": {}}
+        {
+            "id": 1,
+            "entity_type": "attendance",
+            "entity_id": "9",
+            "operation": "insert",
+            "payload": {},
+        }
     ]
-    with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db), patch(
-        "urllib.request.urlopen", return_value=_FakeResp(b"ok")
+    with (
+        patch("app.db.xcmax_sync.SyncDb", return_value=fake_db),
+        patch("urllib.request.urlopen", return_value=_FakeResp(b"ok")),
     ):
         out = svc.push_outbox(remote_host="h", remote_port=1)
     assert out["sent"] == 1
@@ -109,11 +115,18 @@ def test_push_outbox_sends_item() -> None:
 def test_push_outbox_http_error() -> None:
     fake_db = MagicMock()
     fake_db.get_pending_outbox.return_value = [
-        {"id": 2, "entity_type": "attendance", "entity_id": "9", "operation": "insert", "payload": {}}
+        {
+            "id": 2,
+            "entity_type": "attendance",
+            "entity_id": "9",
+            "operation": "insert",
+            "payload": {},
+        }
     ]
     err = urllib.error.HTTPError("u", 500, "Server Error", {}, None)  # type: ignore[arg-type]
-    with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db), patch(
-        "urllib.request.urlopen", side_effect=err
+    with (
+        patch("app.db.xcmax_sync.SyncDb", return_value=fake_db),
+        patch("urllib.request.urlopen", side_effect=err),
     ):
         out = svc.push_outbox(remote_host="h", remote_port=1)
     assert out["failed"] == 1
@@ -123,10 +136,17 @@ def test_push_outbox_http_error() -> None:
 def test_push_outbox_recoverable_error() -> None:
     fake_db = MagicMock()
     fake_db.get_pending_outbox.return_value = [
-        {"id": 3, "entity_type": "attendance", "entity_id": "9", "operation": "insert", "payload": {}}
+        {
+            "id": 3,
+            "entity_type": "attendance",
+            "entity_id": "9",
+            "operation": "insert",
+            "payload": {},
+        }
     ]
-    with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db), patch(
-        "urllib.request.urlopen", side_effect=OSError("netdown")
+    with (
+        patch("app.db.xcmax_sync.SyncDb", return_value=fake_db),
+        patch("urllib.request.urlopen", side_effect=OSError("netdown")),
     ):
         out = svc.push_outbox(remote_host="h", remote_port=1)
     assert out["failed"] == 1
@@ -141,8 +161,9 @@ def test_pull_from_remote_with_changes() -> None:
     fake_db = MagicMock()
     fake_db.get_status.return_value = {"remote_cursor": 0}
     body = json.dumps({"data": [{"id": 5, "entity_type": "x"}]}).encode("utf-8")
-    with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db), patch(
-        "urllib.request.urlopen", return_value=_FakeResp(body)
+    with (
+        patch("app.db.xcmax_sync.SyncDb", return_value=fake_db),
+        patch("urllib.request.urlopen", return_value=_FakeResp(body)),
     ):
         out = svc.pull_from_remote(remote_host="h", remote_port=1)
     assert out["pulled"] == 1
@@ -154,8 +175,9 @@ def test_pull_from_remote_empty() -> None:
     fake_db = MagicMock()
     fake_db.get_status.return_value = {"remote_cursor": 3}
     body = json.dumps({"data": []}).encode("utf-8")
-    with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db), patch(
-        "urllib.request.urlopen", return_value=_FakeResp(body)
+    with (
+        patch("app.db.xcmax_sync.SyncDb", return_value=fake_db),
+        patch("urllib.request.urlopen", return_value=_FakeResp(body)),
     ):
         out = svc.pull_from_remote(remote_host="h", remote_port=1, since_cursor=3)
     assert out["pulled"] == 0
@@ -164,8 +186,9 @@ def test_pull_from_remote_empty() -> None:
 def test_pull_from_remote_error() -> None:
     fake_db = MagicMock()
     fake_db.get_status.return_value = {"remote_cursor": 0}
-    with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db), patch(
-        "urllib.request.urlopen", side_effect=OSError("boom")
+    with (
+        patch("app.db.xcmax_sync.SyncDb", return_value=fake_db),
+        patch("urllib.request.urlopen", side_effect=OSError("boom")),
     ):
         out = svc.pull_from_remote(remote_host="h", remote_port=1)
     assert out["pulled"] == 0
@@ -254,8 +277,9 @@ def test_apply_inbox_read_failure(monkeypatch) -> None:
 
     monkeypatch.setattr(xs, "_resolve_db_path", lambda: "/nonexistent/dir/x.db")
     fake_db = MagicMock()
-    with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db), patch(
-        "sqlite3.connect", side_effect=OSError("cannot open")
+    with (
+        patch("app.db.xcmax_sync.SyncDb", return_value=fake_db),
+        patch("sqlite3.connect", side_effect=OSError("cannot open")),
     ):
         out = svc.apply_inbox()
     assert out == {"applied": 0, "errors": 1}

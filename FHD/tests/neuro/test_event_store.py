@@ -12,15 +12,15 @@ from app.neuro_bus.event_store import (
     EventStoreMode,
     Snapshot,
     StoredEvent,
-    get_event_store,
     get_event_stats,
+    get_event_store,
     replay_events,
     store_event,
 )
 
 
 def _make_event(event_type: str = "test_event", payload: dict | None = None, source: str = "test"):
-    from app.neuro_bus.events.base import NeuroEvent, EventMetadata, EventPriority
+    from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
 
     meta = EventMetadata(
         event_id=f"evt-{event_type}",
@@ -289,12 +289,14 @@ class TestGlobalFunctions:
         with patch.object(EventStore, "append", return_value="evt-123") as mock_append:
             # Reset global instance
             import app.neuro_bus.event_store as es_mod
+
             es_mod._event_store_instance = EventStore()
             sid = store_event(_make_event())
             assert sid.startswith("evt-")
 
     def test_replay_events(self):
         import app.neuro_bus.event_store as es_mod
+
         es_mod._event_store_instance = EventStore()
         es_mod._event_store_instance.append(_make_event())
         count = replay_events()
@@ -302,6 +304,7 @@ class TestGlobalFunctions:
 
     def test_get_event_stats(self):
         import app.neuro_bus.event_store as es_mod
+
         es_mod._event_store_instance = EventStore()
         stats = get_event_stats()
         assert "total_events" in stats

@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.documents.price_list_export."""
+
 from __future__ import annotations
 
 import os
@@ -104,7 +105,12 @@ class TestDetectHeaderRowCount:
         row0 = MagicMock()
         row0.cells = [MagicMock(text="产品信息")]
         row1 = MagicMock()
-        row1.cells = [MagicMock(text="型号"), MagicMock(text="名称"), MagicMock(text="规格"), MagicMock(text="单价")]
+        row1.cells = [
+            MagicMock(text="型号"),
+            MagicMock(text="名称"),
+            MagicMock(text="规格"),
+            MagicMock(text="单价"),
+        ]
         table.rows = [row0, row1]
         assert _detect_header_row_count(table) == 2
 
@@ -121,14 +127,25 @@ class TestDetectHeaderRowCount:
 # ---------------------------------------------------------------------------
 class TestParseHeaderSerialAndColumnMap:
     def test_with_serial_column(self):
-        cells = [MagicMock(text="序号"), MagicMock(text="型号"), MagicMock(text="名称"), MagicMock(text="规格"), MagicMock(text="单价")]
+        cells = [
+            MagicMock(text="序号"),
+            MagicMock(text="型号"),
+            MagicMock(text="名称"),
+            MagicMock(text="规格"),
+            MagicMock(text="单价"),
+        ]
         with_serial, col_map = _parse_header_serial_and_column_map(cells)
         assert with_serial is True
         assert "model" in col_map
         assert "price" in col_map
 
     def test_without_serial_column(self):
-        cells = [MagicMock(text="型号"), MagicMock(text="名称"), MagicMock(text="规格"), MagicMock(text="单价")]
+        cells = [
+            MagicMock(text="型号"),
+            MagicMock(text="名称"),
+            MagicMock(text="规格"),
+            MagicMock(text="单价"),
+        ]
         with_serial, col_map = _parse_header_serial_and_column_map(cells)
         assert with_serial is False
         assert col_map["model"] == 0
@@ -140,7 +157,13 @@ class TestParseHeaderSerialAndColumnMap:
         assert "model" in col_map
 
     def test_fallback_with_serial_and_5_columns(self):
-        cells = [MagicMock(text="#"), MagicMock(text=""), MagicMock(text=""), MagicMock(text=""), MagicMock(text="")]
+        cells = [
+            MagicMock(text="#"),
+            MagicMock(text=""),
+            MagicMock(text=""),
+            MagicMock(text=""),
+            MagicMock(text=""),
+        ]
         with_serial, col_map = _parse_header_serial_and_column_map(cells)
         assert with_serial is True
         assert col_map["model"] == 1
@@ -217,12 +240,15 @@ class TestResolvePriceListDocxTemplate:
 # ---------------------------------------------------------------------------
 class TestBuildSalesContractTemplatePreviewJson:
     def test_returns_preview(self):
-        with patch(
-            "app.infrastructure.documents.price_list_export.resolve_template_path_with_meta",
-            return_value=(Path("/tmp/contract.docx"), "contract.docx"),
-        ), patch(
-            "app.infrastructure.documents.price_list_export.read_excel_sales_contract_preview",
-            return_value={"success": True, "headers": []},
+        with (
+            patch(
+                "app.infrastructure.documents.price_list_export.resolve_template_path_with_meta",
+                return_value=(Path("/tmp/contract.docx"), "contract.docx"),
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export.read_excel_sales_contract_preview",
+                return_value={"success": True, "headers": []},
+            ),
         ):
             result = build_sales_contract_template_preview_json()
         assert "template_hint" in result

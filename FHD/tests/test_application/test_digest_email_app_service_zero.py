@@ -1,4 +1,5 @@
 """Tests for app.application.digest_email_app_service."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -56,7 +57,11 @@ class TestTriggerDigestNowWithAuthorization:
     """Tests for trigger_digest_now_with_authorization."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.digest_email_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_calls_modstore_post_with_auth(self, mock_post: AsyncMock) -> None:
         result = await trigger_digest_now_with_authorization("Bearer token123")
         assert result["success"] is True
@@ -69,7 +74,11 @@ class TestTriggerDigestNowLocal:
     """Tests for trigger_digest_now_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.digest_email_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_calls_modstore_post(self, mock_post: AsyncMock) -> None:
         result = await trigger_digest_now_local()
         assert result["success"] is True
@@ -79,13 +88,21 @@ class TestListDailyDigestsLocal:
     """Tests for list_daily_digests_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": []})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": []},
+    )
     async def test_default_pagination(self, mock_get: AsyncMock) -> None:
         result = await list_daily_digests_local()
         assert "data" in result
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": []})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": []},
+    )
     async def test_custom_pagination(self, mock_get: AsyncMock) -> None:
         result = await list_daily_digests_local(limit=50, offset=10)
         call_kwargs = mock_get.call_args
@@ -93,7 +110,11 @@ class TestListDailyDigestsLocal:
         assert "offset=10" in call_kwargs[1]["query"]
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": []})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": []},
+    )
     async def test_limit_capped_at_100(self, mock_get: AsyncMock) -> None:
         result = await list_daily_digests_local(limit=200)
         call_kwargs = mock_get.call_args
@@ -104,7 +125,11 @@ class TestGetDailyDigestLocal:
     """Tests for get_daily_digest_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": {"id": 1}})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": {"id": 1}},
+    )
     async def test_calls_with_record_id(self, mock_get: AsyncMock) -> None:
         result = await get_daily_digest_local(42)
         call_args = mock_get.call_args
@@ -115,7 +140,11 @@ class TestGetDailyDigestArtifactsLocal:
     """Tests for get_daily_digest_artifacts_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": []})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": []},
+    )
     async def test_calls_with_artifacts_path(self, mock_get: AsyncMock) -> None:
         result = await get_daily_digest_artifacts_local(5)
         call_args = mock_get.call_args
@@ -126,21 +155,33 @@ class TestListActionItemsLocal:
     """Tests for list_action_items_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": []})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": []},
+    )
     async def test_no_filters(self, mock_get: AsyncMock) -> None:
         result = await list_action_items_local()
         call_kwargs = mock_get.call_args
         assert call_kwargs[1]["query"] == ""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": []})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": []},
+    )
     async def test_with_kind_filter(self, mock_get: AsyncMock) -> None:
         result = await list_action_items_local(kind="urgent")
         call_kwargs = mock_get.call_args
         assert "kind=urgent" in call_kwargs[1]["query"]
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": []})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": []},
+    )
     async def test_with_both_filters(self, mock_get: AsyncMock) -> None:
         result = await list_action_items_local(kind="urgent", day="2026-01-01")
         call_kwargs = mock_get.call_args
@@ -152,7 +193,11 @@ class TestSetActionItemStatusLocal:
     """Tests for set_action_item_status_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.digest_email_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_calls_with_item_id_and_status(self, mock_post: AsyncMock) -> None:
         result = await set_action_item_status_local(10, "done")
         call_args = mock_post.call_args
@@ -164,14 +209,22 @@ class TestStartVibePrepLocal:
     """Tests for start_vibe_prep_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.digest_email_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_calls_with_record_id(self, mock_post: AsyncMock) -> None:
         result = await start_vibe_prep_local(3)
         call_args = mock_post.call_args
         assert "/3/vibe-prep/sessions" in call_args[0][0]
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.digest_email_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_calls_with_custom_body(self, mock_post: AsyncMock) -> None:
         result = await start_vibe_prep_local(3, body={"key": "val"})
         call_kwargs = mock_post.call_args
@@ -182,7 +235,11 @@ class TestStartLineExecuteLocal:
     """Tests for start_line_execute_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.digest_email_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_calls_with_record_id(self, mock_post: AsyncMock) -> None:
         result = await start_line_execute_local(7)
         call_args = mock_post.call_args
@@ -193,7 +250,11 @@ class TestGetWorkbenchSessionLocal:
     """Tests for get_workbench_session_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": {}})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": {}},
+    )
     async def test_valid_session_id(self, mock_get: AsyncMock) -> None:
         result = await get_workbench_session_local("sess123")
         call_args = mock_get.call_args
@@ -210,7 +271,11 @@ class TestGetWorkbenchSessionLocal:
             await get_workbench_session_local(None)
 
     @pytest.mark.asyncio
-    @patch("app.application.digest_email_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": {}})
+    @patch(
+        "app.application.digest_email_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": {}},
+    )
     async def test_sanitizes_session_id(self, mock_get: AsyncMock) -> None:
         result = await get_workbench_session_local("sess!@#123")
         call_args = mock_get.call_args

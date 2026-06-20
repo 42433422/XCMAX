@@ -1165,9 +1165,9 @@ def _registered_router_print(
                     product_name = str(
                         product.get("name") or product.get("product_name") or model_number
                     )
-                    specification = str(
-                        product.get("specification") or product.get("spec") or ""
-                    ) or None
+                    specification = (
+                        str(product.get("specification") or product.get("spec") or "") or None
+                    )
                     unit = str(product.get("unit") or "个")
         except RECOVERABLE_ERRORS as lookup_err:
             logger.warning("print.workflow_label_dispatch: 产品查找失败: %s", lookup_err)
@@ -1216,9 +1216,7 @@ def _registered_router_print(
         if not isinstance(printers, list):
             printers = []
         available_names = {
-            (printer.get("name") or "").strip()
-            for printer in printers
-            if isinstance(printer, dict)
+            (printer.get("name") or "").strip() for printer in printers if isinstance(printer, dict)
         }
 
         def is_valid(name: Any) -> bool:

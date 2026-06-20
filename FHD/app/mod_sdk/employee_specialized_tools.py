@@ -47,6 +47,7 @@ _DEFAULT_TIMEOUT = 120
 # 工具结果构造
 # ---------------------------------------------------------------------------
 
+
 def _ok(summary: str, **extra: Any) -> dict[str, Any]:
     out: dict[str, Any] = {"ok": True, "summary": summary[:4000]}
     out.update(extra)
@@ -62,6 +63,7 @@ def _err(error: str, **extra: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # subprocess 执行器
 # ---------------------------------------------------------------------------
+
 
 async def _run_cmd(
     args: list[str],
@@ -105,7 +107,10 @@ async def _run_python_script(script: str | Path, *extra_args: str, **kw: Any) ->
 # httpx 内部 API 调用
 # ---------------------------------------------------------------------------
 
-async def _api_call(method: str, path: str, *, api_base: str | None = None, **kw: Any) -> dict[str, Any]:
+
+async def _api_call(
+    method: str, path: str, *, api_base: str | None = None, **kw: Any
+) -> dict[str, Any]:
     if httpx is None:
         return {"ok": False, "error": "httpx 未安装"}
     base = (api_base or _DEFAULT_API_BASE).rstrip("/")
@@ -125,6 +130,7 @@ async def _api_call(method: str, path: str, *, api_base: str | None = None, **kw
 # ---------------------------------------------------------------------------
 # 质量工具（quality）
 # ---------------------------------------------------------------------------
+
 
 async def tool_run_pytest(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """运行 pytest 测试套件。"""
@@ -156,7 +162,13 @@ async def tool_run_ruff_check(params: dict[str, Any], ctx: dict[str, Any]) -> di
     if isinstance(targets, str):
         targets = targets.split()
     r = await _run_cmd([_PYTHON, "-m", "ruff", "check", *[str(t) for t in targets]], cwd=_FHD_ROOT)
-    return _ok(f"ruff check exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    return _ok(
+        f"ruff check exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_run_ruff_format(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -164,8 +176,16 @@ async def tool_run_ruff_format(params: dict[str, Any], ctx: dict[str, Any]) -> d
     targets = params.get("targets") or ["app/", "tests/"]
     if isinstance(targets, str):
         targets = targets.split()
-    r = await _run_cmd([_PYTHON, "-m", "ruff", "format", "--check", *[str(t) for t in targets]], cwd=_FHD_ROOT)
-    return _ok(f"ruff format exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-4000:], stderr=r["stderr"][-2000:], passed=r["ok"])
+    r = await _run_cmd(
+        [_PYTHON, "-m", "ruff", "format", "--check", *[str(t) for t in targets]], cwd=_FHD_ROOT
+    )
+    return _ok(
+        f"ruff format exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-4000:],
+        stderr=r["stderr"][-2000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_run_mypy(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -173,55 +193,112 @@ async def tool_run_mypy(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str
     targets = params.get("targets") or ["app/"]
     if isinstance(targets, str):
         targets = targets.split()
-    r = await _run_cmd([_PYTHON, "-m", "mypy", *[str(t) for t in targets]], cwd=_FHD_ROOT, timeout=300)
-    return _ok(f"mypy exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-8000:], stderr=r["stderr"][-4000:], passed=r["ok"])
+    r = await _run_cmd(
+        [_PYTHON, "-m", "mypy", *[str(t) for t in targets]], cwd=_FHD_ROOT, timeout=300
+    )
+    return _ok(
+        f"mypy exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-8000:],
+        stderr=r["stderr"][-4000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_check_coverage(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """检查覆盖率棘轮（只升不降）。"""
     r = await _run_python_script(_SCRIPTS / "dev" / "coverage_ratchet.py", "--check", cwd=_FHD_ROOT)
-    return _ok(f"coverage ratchet exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-4000:], stderr=r["stderr"][-2000:], passed=r["ok"])
+    return _ok(
+        f"coverage ratchet exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-4000:],
+        stderr=r["stderr"][-2000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_count_type_debt(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """统计类型债务。"""
     r = await _run_python_script(_SCRIPTS / "dev" / "count_type_debt.py", cwd=_FHD_ROOT)
-    return _ok(f"type debt exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-4000:], stderr=r["stderr"][-2000:], passed=r["ok"])
+    return _ok(
+        f"type debt exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-4000:],
+        stderr=r["stderr"][-2000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_count_raw_sql(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """统计 SQL 债务。"""
     r = await _run_python_script(_SCRIPTS / "dev" / "count_raw_sql.py", cwd=_FHD_ROOT)
-    return _ok(f"raw sql exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-4000:], stderr=r["stderr"][-2000:], passed=r["ok"])
+    return _ok(
+        f"raw sql exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-4000:],
+        stderr=r["stderr"][-2000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_run_arch_fitness(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """运行架构适配度检查。"""
     r = await _run_python_script(_FHD_ROOT / "scripts" / "arch_fitness.py", cwd=_FHD_ROOT)
-    return _ok(f"arch fitness exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    return _ok(
+        f"arch fitness exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
-async def tool_verify_version_anchors(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+async def tool_verify_version_anchors(
+    params: dict[str, Any], ctx: dict[str, Any]
+) -> dict[str, Any]:
     """校验版本锚点。"""
     r = await _run_python_script(_SCRIPTS / "dev" / "verify_version_anchors.py", cwd=_FHD_ROOT)
-    return _ok(f"version anchors exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-4000:], stderr=r["stderr"][-2000:], passed=r["ok"])
+    return _ok(
+        f"version anchors exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-4000:],
+        stderr=r["stderr"][-2000:],
+        passed=r["ok"],
+    )
 
 
-async def tool_verify_employee_contract(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+async def tool_verify_employee_contract(
+    params: dict[str, Any], ctx: dict[str, Any]
+) -> dict[str, Any]:
     """验证员工契约。"""
     r = await _run_python_script(_SCRIPTS / "dev" / "verify_employee_contract.py", cwd=_FHD_ROOT)
-    return _ok(f"employee contract exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    return _ok(
+        f"employee contract exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_mutation_kill_report(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """变异测试杀死率报告。"""
-    r = await _run_python_script(_SCRIPTS / "dev" / "mutation_kill_report.py", cwd=_FHD_ROOT, timeout=600)
-    return _ok(f"mutation kill exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    r = await _run_python_script(
+        _SCRIPTS / "dev" / "mutation_kill_report.py", cwd=_FHD_ROOT, timeout=600
+    )
+    return _ok(
+        f"mutation kill exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
 # ---------------------------------------------------------------------------
 # Git 工具
 # ---------------------------------------------------------------------------
+
 
 async def tool_git_status(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """git status --porcelain。"""
@@ -258,13 +335,20 @@ async def tool_git_branch(params: dict[str, Any], ctx: dict[str, Any]) -> dict[s
 # 部署工具（deploy）
 # ---------------------------------------------------------------------------
 
+
 async def tool_pack_release(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """打包发布 tarball（需 confirm）。"""
     if not params.get("confirm"):
         return _err("pack_release 需 confirm=true 确认", requires_confirm=True)
     script = _FHD_ROOT / "scripts" / "deploy" / "fhd-pack-release.sh"
     r = await _run_cmd(["bash", str(script)], cwd=_FHD_ROOT, timeout=600)
-    return _ok(f"pack exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    return _ok(
+        f"pack exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_list_deploy_scripts(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -283,12 +367,19 @@ async def tool_trigger_gh_workflow(params: dict[str, Any], ctx: dict[str, Any]) 
         return _err("缺少 workflow 参数")
     ref = str(params.get("ref") or "main")
     r = await _run_cmd(["gh", "workflow", "run", workflow, "--ref", ref], cwd=_FHD_ROOT)
-    return _ok(f"gh workflow run exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"], stderr=r["stderr"], passed=r["ok"])
+    return _ok(
+        f"gh workflow run exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"],
+        stderr=r["stderr"],
+        passed=r["ok"],
+    )
 
 
 # ---------------------------------------------------------------------------
 # 基础设施工具（infra）
 # ---------------------------------------------------------------------------
+
 
 async def tool_nginx_test(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """nginx -t 语法检查。"""
@@ -296,7 +387,13 @@ async def tool_nginx_test(params: dict[str, Any], ctx: dict[str, Any]) -> dict[s
     if not nginx:
         return _ok("nginx 未安装（跳过）", skipped=True, syntax_valid=None)
     r = await _run_cmd([nginx, "-t"])
-    return _ok(f"nginx -t exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"], stderr=r["stderr"], syntax_valid=r["ok"])
+    return _ok(
+        f"nginx -t exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"],
+        stderr=r["stderr"],
+        syntax_valid=r["ok"],
+    )
 
 
 async def tool_api_health(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -348,6 +445,7 @@ async def tool_performance_status(params: dict[str, Any], ctx: dict[str, Any]) -
 # Mod / 员工包工具（mod）
 # ---------------------------------------------------------------------------
 
+
 async def tool_list_mods(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """列出已加载 mods。"""
     api_base = params.get("api_base") or ctx.get("api_base") or _DEFAULT_API_BASE
@@ -368,16 +466,20 @@ async def tool_list_employee_packs(params: dict[str, Any], ctx: dict[str, Any]) 
             data = json.loads(mf.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        packs.append({
-            "id": data.get("id") or name,
-            "label": data.get("name") or data.get("employee_label") or name,
-            "artifact": data.get("artifact"),
-            "area": (data.get("employee_config_v2") or {}).get("area"),
-        })
+        packs.append(
+            {
+                "id": data.get("id") or name,
+                "label": data.get("name") or data.get("employee_label") or name,
+                "artifact": data.get("artifact"),
+                "area": (data.get("employee_config_v2") or {}).get("area"),
+            }
+        )
     return _ok(f"{len(packs)} 个员工包", packs=packs)
 
 
-async def tool_validate_employee_pack(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+async def tool_validate_employee_pack(
+    params: dict[str, Any], ctx: dict[str, Any]
+) -> dict[str, Any]:
     """验证员工包 manifest 完整性。"""
     pack_id = str(params.get("pack_id") or "").strip()
     if not pack_id:
@@ -402,7 +504,12 @@ async def tool_validate_employee_pack(params: dict[str, Any], ctx: dict[str, Any
         agent = cog.get("agent") or {}
         if not agent.get("system_prompt"):
             issues.append("缺少 system_prompt")
-    return _ok(f"验证 {pack_id}: {'通过' if not issues else '有问题'}", valid=not issues, issues=issues, manifest=data)
+    return _ok(
+        f"验证 {pack_id}: {'通过' if not issues else '有问题'}",
+        valid=not issues,
+        issues=issues,
+        manifest=data,
+    )
 
 
 async def tool_duty_graph_health(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -415,6 +522,7 @@ async def tool_duty_graph_health(params: dict[str, Any], ctx: dict[str, Any]) ->
 # ---------------------------------------------------------------------------
 # 文档工具（doc）
 # ---------------------------------------------------------------------------
+
 
 async def tool_list_docs(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """列出项目文档。"""
@@ -443,7 +551,9 @@ async def tool_read_file(params: dict[str, Any], ctx: dict[str, Any]) -> dict[st
         content = target.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         return _err(f"读取失败: {exc}")
-    return _ok(f"{len(content)} 字符", content=content[:50000], path=rel, truncated=len(content) > 50000)
+    return _ok(
+        f"{len(content)} 字符", content=content[:50000], path=rel, truncated=len(content) > 50000
+    )
 
 
 async def tool_list_scripts(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -463,6 +573,7 @@ async def tool_list_scripts(params: dict[str, Any], ctx: dict[str, Any]) -> dict
 # ---------------------------------------------------------------------------
 # 平台工具（platform）
 # ---------------------------------------------------------------------------
+
 
 async def tool_list_employees(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """列出全部编制员工（duty_roster.json）。"""
@@ -510,7 +621,9 @@ async def tool_list_action_items(params: dict[str, Any], ctx: dict[str, Any]) ->
     return _ok(f"action-items status={r.get('status')}", **r)
 
 
-async def tool_employee_autonomy_dashboard(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+async def tool_employee_autonomy_dashboard(
+    params: dict[str, Any], ctx: dict[str, Any]
+) -> dict[str, Any]:
     """查询员工自治仪表盘。"""
     api_base = params.get("api_base") or ctx.get("api_base") or _DEFAULT_API_BASE
     r = await _api_call("GET", "/api/admin/employee-autonomy/dashboard", api_base=api_base)
@@ -521,7 +634,10 @@ async def tool_employee_autonomy_dashboard(params: dict[str, Any], ctx: dict[str
 # Craft 工具（制作车间）
 # ---------------------------------------------------------------------------
 
-async def tool_list_workbench_sessions(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+
+async def tool_list_workbench_sessions(
+    params: dict[str, Any], ctx: dict[str, Any]
+) -> dict[str, Any]:
     """列出 workbench 会话。"""
     ws_root = Path(ctx.get("workspace_root") or _FHD_ROOT)
     sessions_dir = ws_root / "workbench" / "sessions"
@@ -543,12 +659,19 @@ async def tool_sandbox_python(params: dict[str, Any], ctx: dict[str, Any]) -> di
         if forbidden in code and not params.get("confirm"):
             return _err(f"检测到受限操作 {forbidden!r}，需 confirm=true", requires_confirm=True)
     r = await _run_cmd([_PYTHON, "-c", code], cwd=_FHD_ROOT, timeout=30, env={"XCAGI_SANDBOX": "1"})
-    return _ok(f"sandbox exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-4000:], stderr=r["stderr"][-2000:], passed=r["ok"])
+    return _ok(
+        f"sandbox exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-4000:],
+        stderr=r["stderr"][-2000:],
+        passed=r["ok"],
+    )
 
 
 # ---------------------------------------------------------------------------
 # 支付/对账工具（payment）
 # ---------------------------------------------------------------------------
+
 
 async def tool_check_transactions(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """查询交易记录（只读，调内部 API）。"""
@@ -569,6 +692,7 @@ async def tool_list_invoices(params: dict[str, Any], ctx: dict[str, Any]) -> dic
 # 生态工具（ecosystem）
 # ---------------------------------------------------------------------------
 
+
 async def tool_list_enterprise_mods(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """查询企业可分配 mods。"""
     api_base = params.get("api_base") or ctx.get("api_base") or _DEFAULT_API_BASE
@@ -587,6 +711,7 @@ async def tool_list_users(params: dict[str, Any], ctx: dict[str, Any]) -> dict[s
 # 前端工具（frontend）
 # ---------------------------------------------------------------------------
 
+
 async def tool_frontend_lint(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """前端 ESLint 检查。"""
     fe_dir = _FHD_ROOT / "frontend"
@@ -596,7 +721,13 @@ async def tool_frontend_lint(params: dict[str, Any], ctx: dict[str, Any]) -> dic
     if not npm:
         return _ok("npm 未安装（跳过）", skipped=True)
     r = await _run_cmd([npm, "run", "lint"], cwd=fe_dir, timeout=300)
-    return _ok(f"eslint exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    return _ok(
+        f"eslint exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_frontend_typecheck(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -608,7 +739,13 @@ async def tool_frontend_typecheck(params: dict[str, Any], ctx: dict[str, Any]) -
     if not npm:
         return _ok("npm 未安装（跳过）", skipped=True)
     r = await _run_cmd([npm, "run", "type-check"], cwd=fe_dir, timeout=300)
-    return _ok(f"type-check exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    return _ok(
+        f"type-check exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
 async def tool_frontend_test(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -620,12 +757,19 @@ async def tool_frontend_test(params: dict[str, Any], ctx: dict[str, Any]) -> dic
     if not npm:
         return _ok("npm 未安装（跳过）", skipped=True)
     r = await _run_cmd([npm, "run", "test"], cwd=fe_dir, timeout=300)
-    return _ok(f"vitest exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    return _ok(
+        f"vitest exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
 # ---------------------------------------------------------------------------
 # 移动端工具（mobile）
 # ---------------------------------------------------------------------------
+
 
 async def tool_android_gradle_build(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """Android Gradle 构建检查（需 confirm）。"""
@@ -636,7 +780,13 @@ async def tool_android_gradle_build(params: dict[str, Any], ctx: dict[str, Any])
     if not gradlew.is_file():
         return _err("mobile-android/gradlew 不存在")
     r = await _run_cmd(["bash", str(gradlew), "tasks", "--all"], cwd=android_dir, timeout=600)
-    return _ok(f"gradle exit={r['returncode']}", returncode=r["returncode"], stdout=r["stdout"][-6000:], stderr=r["stderr"][-3000:], passed=r["ok"])
+    return _ok(
+        f"gradle exit={r['returncode']}",
+        returncode=r["returncode"],
+        stdout=r["stdout"][-6000:],
+        stderr=r["stderr"][-3000:],
+        passed=r["ok"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -652,6 +802,7 @@ def _code_write_tools() -> frozenset[str]:
     if _CODE_WRITE_TOOLS_LAZY is None:
         try:
             from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS
+
             _CODE_WRITE_TOOLS_LAZY = CODE_WRITE_TOOLS
         except ImportError:
             _CODE_WRITE_TOOLS_LAZY = frozenset({"patch_file", "write_file"})
@@ -786,7 +937,10 @@ _PROVIDER_PROFILES: list[dict[str, Any]] = [
         "model_env": "OPENAI_MODEL",
         "default_model": "MiniMax-M3",
         "ping_model": "MiniMax-M3",
-        "billing_endpoints": ["/dashboard/billing/credit_grants", "/dashboard/billing/subscription"],
+        "billing_endpoints": [
+            "/dashboard/billing/credit_grants",
+            "/dashboard/billing/subscription",
+        ],
         "detect": lambda env: "b.ai" in env.get("OPENAI_BASE_URL", ""),
     },
     {
@@ -897,13 +1051,23 @@ _PROVIDER_PROFILES: list[dict[str, Any]] = [
 ]
 
 # 从 profiles 派生环境变量清单
-_LLM_ENV_KEYS: tuple[str, ...] = tuple(dict.fromkeys(
-    [k for p in _PROVIDER_PROFILES for k in p["env_keys"]]
-    + [p["base_url_env"] for p in _PROVIDER_PROFILES if p.get("base_url_env")]
-    + [p["model_env"] for p in _PROVIDER_PROFILES if p.get("model_env")]
-    + ["XCAGI_LLM_PROVIDER", "LLM_PROVIDER", "LLM_MODE", "FHD_LLM_MODE",
-       "XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "XCAGI_EMPLOYEE_LLM_MODEL"]
-))
+_LLM_ENV_KEYS: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        [k for p in _PROVIDER_PROFILES for k in p["env_keys"]]
+        + [p["base_url_env"] for p in _PROVIDER_PROFILES if p.get("base_url_env")]
+        + [p["model_env"] for p in _PROVIDER_PROFILES if p.get("model_env")]
+        + [
+            "XCAGI_LLM_PROVIDER",
+            "LLM_PROVIDER",
+            "LLM_MODE",
+            "FHD_LLM_MODE",
+            "XCAUTO_API_KEY",
+            "XCAUTO_PAT",
+            "XIUCI_API_KEY",
+            "XCAGI_EMPLOYEE_LLM_MODEL",
+        ]
+    )
+)
 # 需要脱敏的 key（含 secret / API_KEY / PAT）
 _LLM_SECRET_KEYS: frozenset[str] = frozenset(
     k for k in _LLM_ENV_KEYS if "API_KEY" in k or "PAT" in k or "SECRET" in k
@@ -1004,12 +1168,16 @@ async def tool_read_llm_env_config(params: dict[str, Any], ctx: dict[str, Any]) 
         env_file=str(env_path),
         env_config=llm_cfg,
         runtime_config=runtime_cfg,
-        configured_provider=env_map.get("XCAGI_LLM_PROVIDER") or os.environ.get("XCAGI_LLM_PROVIDER") or "(未配置)",
+        configured_provider=env_map.get("XCAGI_LLM_PROVIDER")
+        or os.environ.get("XCAGI_LLM_PROVIDER")
+        or "(未配置)",
         supported_providers=[p["name"] for p in _PROVIDER_PROFILES],
     )
 
 
-async def tool_list_configured_providers(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+async def tool_list_configured_providers(
+    params: dict[str, Any], ctx: dict[str, Any]
+) -> dict[str, Any]:
     """列出当前已配置的 LLM provider 及其状态（支持 10 家）。
 
     从 os.environ 实时读取，遍历所有 provider profile，标注 key 是否存在。
@@ -1057,7 +1225,9 @@ async def tool_test_llm_key_health(params: dict[str, Any], ctx: dict[str, Any]) 
     env = dict(os.environ)
     results: list[dict[str, Any]] = []
 
-    async def _ping(name: str, base_url: str, api_key: str, model: str, no_auth: bool = False) -> dict[str, Any]:
+    async def _ping(
+        name: str, base_url: str, api_key: str, model: str, no_auth: bool = False
+    ) -> dict[str, Any]:
         url = f"{base_url.rstrip('/')}/chat/completions"
         headers = {"Content-Type": "application/json"}
         if not no_auth and api_key:
@@ -1068,7 +1238,11 @@ async def tool_test_llm_key_health(params: dict[str, Any], ctx: dict[str, Any]) 
                 resp = await client.post(
                     url,
                     headers=headers,
-                    json={"model": model, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1},
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "max_tokens": 1,
+                    },
                 )
                 elapsed = round((asyncio.get_event_loop().time() - t0) * 1000, 1)
                 body: Any
@@ -1086,7 +1260,14 @@ async def tool_test_llm_key_health(params: dict[str, Any], ctx: dict[str, Any]) 
                 }
         except Exception as exc:  # noqa: BLE001  健康检查边界：网络异常转结构化结果
             elapsed = round((asyncio.get_event_loop().time() - t0) * 1000, 1)
-            return {"provider": name, "ok": False, "status": 0, "latency_ms": elapsed, "model": model, "error": repr(exc)[:300]}
+            return {
+                "provider": name,
+                "ok": False,
+                "status": 0,
+                "latency_ms": elapsed,
+                "model": model,
+                "error": repr(exc)[:300],
+            }
 
     for profile in _PROVIDER_PROFILES:
         name = profile["name"]
@@ -1137,13 +1318,15 @@ async def tool_query_provider_usage(params: dict[str, Any], ctx: dict[str, Any])
                 continue
             endpoints = profile.get("billing_endpoints") or []
             if not endpoints:
-                all_findings.append({
-                    "provider": name,
-                    "endpoint": "(无)",
-                    "status": 0,
-                    "ok": False,
-                    "error": f"{name} 无标准 billing API",
-                })
+                all_findings.append(
+                    {
+                        "provider": name,
+                        "endpoint": "(无)",
+                        "status": 0,
+                        "ok": False,
+                        "error": f"{name} 无标准 billing API",
+                    }
+                )
                 continue
             base_url = _provider_base_url(profile, env)
             headers = {}
@@ -1170,13 +1353,15 @@ async def tool_query_provider_usage(params: dict[str, Any], ctx: dict[str, Any])
                     if resp.is_success:
                         supported += 1
                 except Exception as exc:  # noqa: BLE001
-                    all_findings.append({
-                        "provider": name,
-                        "endpoint": ep,
-                        "status": 0,
-                        "ok": False,
-                        "error": repr(exc)[:200],
-                    })
+                    all_findings.append(
+                        {
+                            "provider": name,
+                            "endpoint": ep,
+                            "status": 0,
+                            "ok": False,
+                            "error": repr(exc)[:200],
+                        }
+                    )
     return _ok(
         f"探测 {checked} 个 provider 的 billing endpoint，{supported} 个可用",
         findings=all_findings,
@@ -1189,39 +1374,193 @@ async def tool_query_provider_usage(params: dict[str, Any], ctx: dict[str, Any])
 # 内置模型价格表（2026 市场参考价，每 1M tokens，美元）— 覆盖 10 家 provider
 _MODEL_PRICES: list[dict[str, Any]] = [
     # DeepSeek
-    {"model": "DeepSeek-V3", "provider": "DeepSeek", "input_per_1m": 0.27, "output_per_1m": 1.10, "context": "64K", "note": "国产最便宜之一"},
-    {"model": "DeepSeek-R1", "provider": "DeepSeek", "input_per_1m": 0.55, "output_per_1m": 2.19, "context": "64K", "note": "推理模型"},
+    {
+        "model": "DeepSeek-V3",
+        "provider": "DeepSeek",
+        "input_per_1m": 0.27,
+        "output_per_1m": 1.10,
+        "context": "64K",
+        "note": "国产最便宜之一",
+    },
+    {
+        "model": "DeepSeek-R1",
+        "provider": "DeepSeek",
+        "input_per_1m": 0.55,
+        "output_per_1m": 2.19,
+        "context": "64K",
+        "note": "推理模型",
+    },
     # MiniMax（b.ai）
-    {"model": "MiniMax-M3", "provider": "b.ai", "input_per_1m": 0.40, "output_per_1m": 1.50, "context": "1M", "note": "当前在用"},
-    {"model": "MiniMax-Text-01", "provider": "MiniMax", "input_per_1m": 0.20, "output_per_1m": 0.80, "context": "1M", "note": "便宜"},
+    {
+        "model": "MiniMax-M3",
+        "provider": "b.ai",
+        "input_per_1m": 0.40,
+        "output_per_1m": 1.50,
+        "context": "1M",
+        "note": "当前在用",
+    },
+    {
+        "model": "MiniMax-Text-01",
+        "provider": "MiniMax",
+        "input_per_1m": 0.20,
+        "output_per_1m": 0.80,
+        "context": "1M",
+        "note": "便宜",
+    },
     # OpenAI
-    {"model": "gpt-4o", "provider": "OpenAI", "input_per_1m": 2.50, "output_per_1m": 10.00, "context": "128K", "note": "贵"},
-    {"model": "gpt-4o-mini", "provider": "OpenAI", "input_per_1m": 0.15, "output_per_1m": 0.60, "context": "128K", "note": "性价比高"},
+    {
+        "model": "gpt-4o",
+        "provider": "OpenAI",
+        "input_per_1m": 2.50,
+        "output_per_1m": 10.00,
+        "context": "128K",
+        "note": "贵",
+    },
+    {
+        "model": "gpt-4o-mini",
+        "provider": "OpenAI",
+        "input_per_1m": 0.15,
+        "output_per_1m": 0.60,
+        "context": "128K",
+        "note": "性价比高",
+    },
     # Anthropic
-    {"model": "claude-3.5-sonnet", "provider": "Anthropic", "input_per_1m": 3.00, "output_per_1m": 15.00, "context": "200K", "note": "最贵"},
+    {
+        "model": "claude-3.5-sonnet",
+        "provider": "Anthropic",
+        "input_per_1m": 3.00,
+        "output_per_1m": 15.00,
+        "context": "200K",
+        "note": "最贵",
+    },
     # 通义千问
-    {"model": "qwen-max", "provider": "qwen", "input_per_1m": 1.40, "output_per_1m": 5.60, "context": "32K", "note": ""},
-    {"model": "qwen-plus", "provider": "qwen", "input_per_1m": 0.14, "output_per_1m": 0.56, "context": "128K", "note": "便宜"},
-    {"model": "qwen-turbo", "provider": "qwen", "input_per_1m": 0.05, "output_per_1m": 0.20, "context": "1M", "note": "最便宜之一"},
+    {
+        "model": "qwen-max",
+        "provider": "qwen",
+        "input_per_1m": 1.40,
+        "output_per_1m": 5.60,
+        "context": "32K",
+        "note": "",
+    },
+    {
+        "model": "qwen-plus",
+        "provider": "qwen",
+        "input_per_1m": 0.14,
+        "output_per_1m": 0.56,
+        "context": "128K",
+        "note": "便宜",
+    },
+    {
+        "model": "qwen-turbo",
+        "provider": "qwen",
+        "input_per_1m": 0.05,
+        "output_per_1m": 0.20,
+        "context": "1M",
+        "note": "最便宜之一",
+    },
     # 智谱
-    {"model": "glm-4-plus", "provider": "zhipu", "input_per_1m": 0.70, "output_per_1m": 0.70, "context": "128K", "note": ""},
-    {"model": "glm-4-flash", "provider": "zhipu", "input_per_1m": 0.0, "output_per_1m": 0.0, "context": "128K", "note": "免费！"},
+    {
+        "model": "glm-4-plus",
+        "provider": "zhipu",
+        "input_per_1m": 0.70,
+        "output_per_1m": 0.70,
+        "context": "128K",
+        "note": "",
+    },
+    {
+        "model": "glm-4-flash",
+        "provider": "zhipu",
+        "input_per_1m": 0.0,
+        "output_per_1m": 0.0,
+        "context": "128K",
+        "note": "免费！",
+    },
     # Kimi
-    {"model": "moonshot-v1-8k", "provider": "moonshot", "input_per_1m": 1.68, "output_per_1m": 1.68, "context": "8K", "note": ""},
-    {"model": "moonshot-v1-32k", "provider": "moonshot", "input_per_1m": 3.36, "output_per_1m": 3.36, "context": "32K", "note": ""},
+    {
+        "model": "moonshot-v1-8k",
+        "provider": "moonshot",
+        "input_per_1m": 1.68,
+        "output_per_1m": 1.68,
+        "context": "8K",
+        "note": "",
+    },
+    {
+        "model": "moonshot-v1-32k",
+        "provider": "moonshot",
+        "input_per_1m": 3.36,
+        "output_per_1m": 3.36,
+        "context": "32K",
+        "note": "",
+    },
     # 硅基流动（聚合，价格按 DeepSeek-V3 估算）
-    {"model": "deepseek-ai/DeepSeek-V3", "provider": "siliconflow", "input_per_1m": 0.27, "output_per_1m": 1.10, "context": "64K", "note": "聚合代理"},
-    {"model": "Qwen/Qwen2.5-7B-Instruct", "provider": "siliconflow", "input_per_1m": 0.0, "output_per_1m": 0.0, "context": "32K", "note": "免费！"},
+    {
+        "model": "deepseek-ai/DeepSeek-V3",
+        "provider": "siliconflow",
+        "input_per_1m": 0.27,
+        "output_per_1m": 1.10,
+        "context": "64K",
+        "note": "聚合代理",
+    },
+    {
+        "model": "Qwen/Qwen2.5-7B-Instruct",
+        "provider": "siliconflow",
+        "input_per_1m": 0.0,
+        "output_per_1m": 0.0,
+        "context": "32K",
+        "note": "免费！",
+    },
     # OpenRouter（聚合，价格按 OpenAI 估算）
-    {"model": "openai/gpt-4o-mini", "provider": "openrouter", "input_per_1m": 0.15, "output_per_1m": 0.60, "context": "128K", "note": "聚合代理"},
+    {
+        "model": "openai/gpt-4o-mini",
+        "provider": "openrouter",
+        "input_per_1m": 0.15,
+        "output_per_1m": 0.60,
+        "context": "128K",
+        "note": "聚合代理",
+    },
     # 火山引擎（豆包）
-    {"model": "doubao-pro-32k", "provider": "volcengine", "input_per_1m": 0.11, "output_per_1m": 0.28, "context": "32K", "note": "便宜"},
-    {"model": "doubao-lite-4k", "provider": "volcengine", "input_per_1m": 0.003, "output_per_1m": 0.007, "context": "4K", "note": "极便宜"},
+    {
+        "model": "doubao-pro-32k",
+        "provider": "volcengine",
+        "input_per_1m": 0.11,
+        "output_per_1m": 0.28,
+        "context": "32K",
+        "note": "便宜",
+    },
+    {
+        "model": "doubao-lite-4k",
+        "provider": "volcengine",
+        "input_per_1m": 0.003,
+        "output_per_1m": 0.007,
+        "context": "4K",
+        "note": "极便宜",
+    },
     # Ollama（本地，免费）
-    {"model": "llama3.2", "provider": "ollama", "input_per_1m": 0.0, "output_per_1m": 0.0, "context": "128K", "note": "本地免费！"},
-    {"model": "qwen2.5:7b", "provider": "ollama", "input_per_1m": 0.0, "output_per_1m": 0.0, "context": "32K", "note": "本地免费！"},
+    {
+        "model": "llama3.2",
+        "provider": "ollama",
+        "input_per_1m": 0.0,
+        "output_per_1m": 0.0,
+        "context": "128K",
+        "note": "本地免费！",
+    },
+    {
+        "model": "qwen2.5:7b",
+        "provider": "ollama",
+        "input_per_1m": 0.0,
+        "output_per_1m": 0.0,
+        "context": "32K",
+        "note": "本地免费！",
+    },
     # 小米 MiMo (Token Plan 订阅制, 订阅期内无限调用, 此处价格按订阅摊销估算)
-    {"model": "mimo-v2.5-pro", "provider": "mimo", "input_per_1m": 0.0, "output_per_1m": 0.0, "context": "128K", "note": "Token Plan 订阅期内免费"},
+    {
+        "model": "mimo-v2.5-pro",
+        "provider": "mimo",
+        "input_per_1m": 0.0,
+        "output_per_1m": 0.0,
+        "context": "128K",
+        "note": "Token Plan 订阅期内免费",
+    },
 ]
 
 
@@ -1237,7 +1576,11 @@ async def tool_compare_model_prices(params: dict[str, Any], ctx: dict[str, Any])
         prices = [p for p in prices if provider_filter in str(p["provider"]).lower()]
     sort_key = "input_per_1m" if sort_by == "input" else "output_per_1m"
     prices.sort(key=lambda x: float(x.get(sort_key, 999)))
-    free_models = [p["model"] for p in prices if float(p.get("input_per_1m", 0)) == 0 and float(p.get("output_per_1m", 0)) == 0]
+    free_models = [
+        p["model"]
+        for p in prices
+        if float(p.get("input_per_1m", 0)) == 0 and float(p.get("output_per_1m", 0)) == 0
+    ]
     cheapest = prices[0] if prices else None
     return _ok(
         f"对比 {len(prices)} 个模型（按 {sort_key} 升序），{len(free_models)} 个免费",
@@ -1250,7 +1593,9 @@ async def tool_compare_model_prices(params: dict[str, Any], ctx: dict[str, Any])
     )
 
 
-async def tool_query_local_token_usage(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+async def tool_query_local_token_usage(
+    params: dict[str, Any], ctx: dict[str, Any]
+) -> dict[str, Any]:
     """查询本地 token 用量账本（真实数据，非 LLM 编造）。
 
     读取 FHD 的 model_usage_ledger.json，返回 token 用量统计。
@@ -1277,7 +1622,9 @@ async def tool_query_local_token_usage(params: dict[str, Any], ctx: dict[str, An
     group_by = str(params.get("group_by") or "model").strip().lower()
 
     ledger_path = model_usage_ledger_path()
-    entries = list_model_usage_entries(limit=max(limit, 500) if limit > 0 else 500, run_id=run_id, user_id=user_id)
+    entries = list_model_usage_entries(
+        limit=max(limit, 500) if limit > 0 else 500, run_id=run_id, user_id=user_id
+    )
 
     # 只统计 model_call 类型（tool_call 的 token 是 0）
     model_entries = [e for e in entries if str(e.get("entry_type") or "model_call") == "model_call"]
@@ -1295,7 +1642,16 @@ async def tool_query_local_token_usage(params: dict[str, Any], ctx: dict[str, An
         if not group_key:
             continue
         key = str(e.get(group_key) or "unknown")
-        g = groups.setdefault(key, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_units": 0, "calls": 0})
+        g = groups.setdefault(
+            key,
+            {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_units": 0,
+                "calls": 0,
+            },
+        )
         g["prompt_tokens"] += int(e.get("prompt_tokens") or 0)
         g["completion_tokens"] += int(e.get("completion_tokens") or 0)
         g["total_tokens"] += int(e.get("total_tokens") or 0)
@@ -1306,17 +1662,19 @@ async def tool_query_local_token_usage(params: dict[str, Any], ctx: dict[str, An
     details = []
     if limit > 0:
         for e in model_entries[:limit]:
-            details.append({
-                "created_at": e.get("created_at", ""),
-                "provider": e.get("provider", ""),
-                "model": e.get("model", ""),
-                "prompt_tokens": int(e.get("prompt_tokens") or 0),
-                "completion_tokens": int(e.get("completion_tokens") or 0),
-                "total_tokens": int(e.get("total_tokens") or 0),
-                "cost_units": int(e.get("cost_units") or 0),
-                "run_id": e.get("run_id", ""),
-                "user_id": e.get("user_id", ""),
-            })
+            details.append(
+                {
+                    "created_at": e.get("created_at", ""),
+                    "provider": e.get("provider", ""),
+                    "model": e.get("model", ""),
+                    "prompt_tokens": int(e.get("prompt_tokens") or 0),
+                    "completion_tokens": int(e.get("completion_tokens") or 0),
+                    "total_tokens": int(e.get("total_tokens") or 0),
+                    "cost_units": int(e.get("cost_units") or 0),
+                    "run_id": e.get("run_id", ""),
+                    "user_id": e.get("user_id", ""),
+                }
+            )
 
     # 账本是否存在
     ledger_exists = ledger_path.is_file()
@@ -1373,7 +1731,9 @@ async def tool_query_cursor_usage(params: dict[str, Any], ctx: dict[str, Any]) -
     }
 
     # --- 数据源 1：cursor-usage CLI（精确 token + 费用）---
-    cli_bin = shutil.which("cursor-usage") or str(Path.home() / "Library" / "Python" / "3.9" / "bin" / "cursor-usage")
+    cli_bin = shutil.which("cursor-usage") or str(
+        Path.home() / "Library" / "Python" / "3.9" / "bin" / "cursor-usage"
+    )
     if Path(cli_bin).is_file():
         result_data["sources"].append("cursor-usage-cli")
         try:
@@ -1403,24 +1763,29 @@ async def tool_query_cursor_usage(params: dict[str, Any], ctx: dict[str, Any]) -
                     total_cache_read += cr
                     total_cache_write += cw
                     total_cents += cents
-                    by_model.append({
-                        "model": agg.get("modelIntent", "unknown"),
-                        "input_tokens": inp,
-                        "output_tokens": out,
-                        "cache_read_tokens": cr,
-                        "cache_write_tokens": cw,
-                        "total_tokens": inp + out + cr + cw,
-                        "cost_cents": round(cents, 2),
-                        "cost_usd": round(cents / 100, 4),
-                        "tier": agg.get("tier"),
-                    })
+                    by_model.append(
+                        {
+                            "model": agg.get("modelIntent", "unknown"),
+                            "input_tokens": inp,
+                            "output_tokens": out,
+                            "cache_read_tokens": cr,
+                            "cache_write_tokens": cw,
+                            "total_tokens": inp + out + cr + cw,
+                            "cost_cents": round(cents, 2),
+                            "cost_usd": round(cents / 100, 4),
+                            "tier": agg.get("tier"),
+                        }
+                    )
                 by_model.sort(key=lambda x: x["cost_cents"], reverse=True)
                 result_data["cli_usage"] = {
                     "total_input_tokens": total_input,
                     "total_output_tokens": total_output,
                     "total_cache_read_tokens": total_cache_read,
                     "total_cache_write_tokens": total_cache_write,
-                    "total_tokens": total_input + total_output + total_cache_read + total_cache_write,
+                    "total_tokens": total_input
+                    + total_output
+                    + total_cache_read
+                    + total_cache_write,
                     "total_cost_cents": round(total_cents, 2),
                     "total_cost_usd": round(total_cents / 100, 2),
                     "by_model": by_model,
@@ -1454,7 +1819,9 @@ async def tool_query_cursor_usage(params: dict[str, Any], ctx: dict[str, Any]) -
                             }
                             for e in events
                         ]
-                        result_data["cli_usage"]["total_events"] = len(list(csv.DictReader(io.StringIO(csv_proc.stdout))))
+                        result_data["cli_usage"]["total_events"] = len(
+                            list(csv.DictReader(io.StringIO(csv_proc.stdout)))
+                        )
         except Exception as exc:  # noqa: BLE001
             result_data["cli_usage"] = {"error": str(exc)}
 
@@ -1462,8 +1829,18 @@ async def tool_query_cursor_usage(params: dict[str, Any], ctx: dict[str, Any]) -
     api_token = ""
     try:
         proc = subprocess.run(
-            ["security", "find-generic-password", "-s", "cursor-access-token", "-a", "cursor-user", "-w"],
-            capture_output=True, text=True, timeout=5,
+            [
+                "security",
+                "find-generic-password",
+                "-s",
+                "cursor-access-token",
+                "-a",
+                "cursor-user",
+                "-w",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if proc.returncode == 0:
             api_token = proc.stdout.strip()
@@ -1517,7 +1894,9 @@ async def tool_query_cursor_usage(params: dict[str, Any], ctx: dict[str, Any]) -
                 cur.execute(
                     "SELECT model, COUNT(*) as count FROM ai_code_hashes GROUP BY model ORDER BY count DESC",
                 )
-            model_counts = [{"model": r["model"] or "(unknown)", "count": r["count"]} for r in cur.fetchall()]
+            model_counts = [
+                {"model": r["model"] or "(unknown)", "count": r["count"]} for r in cur.fetchall()
+            ]
 
             cur.execute("SELECT COUNT(*) FROM ai_code_hashes")
             total_hashes = cur.fetchone()[0]
@@ -1562,7 +1941,9 @@ async def tool_query_cursor_usage(params: dict[str, Any], ctx: dict[str, Any]) -
         "total_ai_generations": total_gen,
         "has_cli": bool(cli and "error" not in cli),
         "has_api_token": bool(api_token),
-        "has_local_db": bool(result_data.get("local_db") and "error" not in result_data.get("local_db", {})),
+        "has_local_db": bool(
+            result_data.get("local_db") and "error" not in result_data.get("local_db", {})
+        ),
         "note": "cursor-usage CLI 提供精确 token 和费用（来自 Dashboard API）。本地 DB 提供 AI 生成次数和代码比例。",
     }
 
@@ -1668,18 +2049,20 @@ async def tool_query_codex_usage(params: dict[str, Any], ctx: dict[str, Any]) ->
                     total_reasoning += reasoning
                     total_tokens += tot
 
-                    sessions_list.append({
-                        "file": Path(fpath).name,
-                        "model": session_model,
-                        "cwd": session_cwd,
-                        "timestamp": session_ts,
-                        "input_tokens": inp,
-                        "cached_input_tokens": cached,
-                        "output_tokens": out,
-                        "reasoning_output_tokens": reasoning,
-                        "total_tokens": tot,
-                        "rate_limit_used_percent": rate_limit_used,
-                    })
+                    sessions_list.append(
+                        {
+                            "file": Path(fpath).name,
+                            "model": session_model,
+                            "cwd": session_cwd,
+                            "timestamp": session_ts,
+                            "input_tokens": inp,
+                            "cached_input_tokens": cached,
+                            "output_tokens": out,
+                            "reasoning_output_tokens": reasoning,
+                            "total_tokens": tot,
+                            "rate_limit_used_percent": rate_limit_used,
+                        }
+                    )
 
             sessions_list.sort(key=lambda x: x["timestamp"], reverse=True)
             result_data["sessions"] = {
@@ -1713,21 +2096,28 @@ async def tool_query_codex_usage(params: dict[str, Any], ctx: dict[str, Any]) ->
                 tokens = r["tokens_used"] or 0
                 total_goal_tokens += tokens
                 total_goal_time += r["time_used_seconds"] or 0
-                goals_list.append({
-                    "thread_id": r["thread_id"],
-                    "objective": (r["objective"] or "")[:80],
-                    "status": r["status"],
-                    "token_budget": r["token_budget"],
-                    "tokens_used": tokens,
-                    "time_used_seconds": r["time_used_seconds"] or 0,
-                    "created_at": datetime.fromtimestamp((r["created_at_ms"] or 0) / 1000).strftime("%Y-%m-%d %H:%M"),
-                })
+                goals_list.append(
+                    {
+                        "thread_id": r["thread_id"],
+                        "objective": (r["objective"] or "")[:80],
+                        "status": r["status"],
+                        "token_budget": r["token_budget"],
+                        "tokens_used": tokens,
+                        "time_used_seconds": r["time_used_seconds"] or 0,
+                        "created_at": datetime.fromtimestamp(
+                            (r["created_at_ms"] or 0) / 1000
+                        ).strftime("%Y-%m-%d %H:%M"),
+                    }
+                )
             conn.close()
             result_data["goals_db"] = {
                 "total_threads": len(goals_list),
                 "total_tokens_used": total_goal_tokens,
                 "total_time_seconds": total_goal_time,
-                "by_status": {s: sum(1 for g in goals_list if g["status"] == s) for s in {g["status"] for g in goals_list}},
+                "by_status": {
+                    s: sum(1 for g in goals_list if g["status"] == s)
+                    for s in {g["status"] for g in goals_list}
+                },
                 "threads": goals_list,
             }
         except Exception as exc:  # noqa: BLE001
@@ -1846,7 +2236,9 @@ async def tool_query_trae_usage(params: dict[str, Any], ctx: dict[str, Any]) -> 
                         pass
 
             # 当前选择的模型
-            cur.execute("SELECT key, value FROM ItemTable WHERE key LIKE '%sessionRelation:globalModelMap%'")
+            cur.execute(
+                "SELECT key, value FROM ItemTable WHERE key LIKE '%sessionRelation:globalModelMap%'"
+            )
             current_models = {}
             for _k, v in cur.fetchall():
                 try:
@@ -1865,7 +2257,9 @@ async def tool_query_trae_usage(params: dict[str, Any], ctx: dict[str, Any]) -> 
                     pass
 
             # 用户 ID
-            cur.execute("SELECT key FROM ItemTable WHERE key LIKE '%_ai-chat:sessionRelation%' LIMIT 1")
+            cur.execute(
+                "SELECT key FROM ItemTable WHERE key LIKE '%_ai-chat:sessionRelation%' LIMIT 1"
+            )
             user_id = ""
             row = cur.fetchone()
             if row and "_" in row[0]:
@@ -1901,7 +2295,11 @@ async def tool_query_trae_usage(params: dict[str, Any], ctx: dict[str, Any]) -> 
         "chat_turns": local.get("accumulated_chat_turns", 0),
         "current_models": local.get("current_models", {}),
         "user_id": local.get("user_id", ""),
-        "api_accessible": bool(result_data.get("api_usage") and isinstance(result_data.get("api_usage"), dict) and "status_code" not in result_data.get("api_usage", {})),
+        "api_accessible": bool(
+            result_data.get("api_usage")
+            and isinstance(result_data.get("api_usage"), dict)
+            and "status_code" not in result_data.get("api_usage", {})
+        ),
         "note": "Trae token 用量 API 被 403 拦截。本地能提取聊天轮次和模型列表，精确 token 用量需去 Trae 设置页查看。",
     }
 
@@ -2003,43 +2401,148 @@ EMPLOYEE_TOOLS: dict[str, list[str]] = {
     "market-frontend-dev": ["frontend_lint", "frontend_typecheck", "frontend_test", "git_diff"],
     "workbench-ux-stylist": ["frontend_lint", "frontend_test", "read_file", "list_docs"],
     # --- platform-core ---
-    "user-customer-service-officer": ["list_employees", "employee_status", "list_action_items", "list_users"],
+    "user-customer-service-officer": [
+        "list_employees",
+        "employee_status",
+        "list_action_items",
+        "list_users",
+    ],
     "intake-dispatcher": ["list_employees", "list_workbench_sessions", "list_action_items"],
-    "fhd-core-maintainer": ["run_pytest", "run_ruff_check", "run_mypy", "check_coverage", "count_type_debt", "count_raw_sql", "verify_version_anchors", "git_diff", "patch_file", "write_file"],
-    "vibe-coding-maintainer": ["run_pytest", "run_ruff_check", "git_status", "git_diff", "read_file"],
-    "mods-and-eskill-curator": ["list_mods", "list_employee_packs", "validate_employee_pack", "mod_loading_status"],
-    "change-request-auditor": ["git_diff", "git_log", "run_ruff_check", "run_mypy", "verify_employee_contract"],
-    "daily-orchestrator": ["list_employees", "employee_status", "duty_graph_health", "list_action_items", "employee_autonomy_dashboard"],
+    "fhd-core-maintainer": [
+        "run_pytest",
+        "run_ruff_check",
+        "run_mypy",
+        "check_coverage",
+        "count_type_debt",
+        "count_raw_sql",
+        "verify_version_anchors",
+        "git_diff",
+        "patch_file",
+        "write_file",
+    ],
+    "vibe-coding-maintainer": [
+        "run_pytest",
+        "run_ruff_check",
+        "git_status",
+        "git_diff",
+        "read_file",
+    ],
+    "mods-and-eskill-curator": [
+        "list_mods",
+        "list_employee_packs",
+        "validate_employee_pack",
+        "mod_loading_status",
+    ],
+    "change-request-auditor": [
+        "git_diff",
+        "git_log",
+        "run_ruff_check",
+        "run_mypy",
+        "verify_employee_contract",
+    ],
+    "daily-orchestrator": [
+        "list_employees",
+        "employee_status",
+        "duty_graph_health",
+        "list_action_items",
+        "employee_autonomy_dashboard",
+    ],
     "task-router-officer": ["list_employees", "employee_status", "list_action_items"],
     "enterprise-adoption-officer": ["list_users", "list_enterprise_mods", "list_mods"],
     "delivery-receipt-officer": ["git_log", "git_status", "list_action_items", "api_health"],
-    "mobile-android-release-officer": ["android_gradle_build", "git_status", "git_log", "list_scripts"],
+    "mobile-android-release-officer": [
+        "android_gradle_build",
+        "git_status",
+        "git_log",
+        "list_scripts",
+    ],
     "mobile-ios-release-officer": ["git_status", "git_log", "list_scripts", "read_file"],
     # --- modstore-backend ---
-    "modstore-backend-api": ["api_health", "run_pytest", "run_ruff_check", "git_diff", "performance_status"],
-    "employee-pack-curator": ["list_employee_packs", "validate_employee_pack", "list_mods", "verify_employee_contract"],
-    "java-payment-bridge-officer": ["api_health", "check_transactions", "list_invoices", "read_file"],
-    "payment-billing-reconciler": ["check_transactions", "list_invoices", "list_users", "read_file"],
+    "modstore-backend-api": [
+        "api_health",
+        "run_pytest",
+        "run_ruff_check",
+        "git_diff",
+        "performance_status",
+    ],
+    "employee-pack-curator": [
+        "list_employee_packs",
+        "validate_employee_pack",
+        "list_mods",
+        "verify_employee_contract",
+    ],
+    "java-payment-bridge-officer": [
+        "api_health",
+        "check_transactions",
+        "list_invoices",
+        "read_file",
+    ],
+    "payment-billing-reconciler": [
+        "check_transactions",
+        "list_invoices",
+        "list_users",
+        "read_file",
+    ],
     # --- server-and-ops ---
     "nginx-config-engineer": ["nginx_test", "api_health", "read_file", "git_diff"],
     "push-update-context-officer": ["list_deploy_scripts", "git_log", "api_health", "read_file"],
-    "deploy-release-officer": ["pack_release", "list_deploy_scripts", "trigger_gh_workflow", "git_status", "git_log", "api_health"],
+    "deploy-release-officer": [
+        "pack_release",
+        "list_deploy_scripts",
+        "trigger_gh_workflow",
+        "git_status",
+        "git_log",
+        "api_health",
+    ],
     "security-secrets-guard": ["git_diff", "read_file", "list_scripts", "git_status"],
     "log-monitor-incident": ["tail_logs", "api_health", "performance_status", "disk_usage"],
     "retention-officer": ["disk_usage", "tail_logs", "list_scripts", "git_status"],
     "dbops-engineer": ["api_health", "performance_status", "read_file", "tail_logs"],
     "legacy-archive-curator": ["disk_usage", "list_scripts", "git_status", "read_file"],
-    "llm-ops-engineer": ["read_llm_env_config", "list_configured_providers", "test_llm_key_health", "query_provider_usage", "compare_model_prices", "query_local_token_usage", "query_cursor_usage", "query_codex_usage", "query_trae_usage"],
+    "llm-ops-engineer": [
+        "read_llm_env_config",
+        "list_configured_providers",
+        "test_llm_key_health",
+        "query_provider_usage",
+        "compare_model_prices",
+        "query_local_token_usage",
+        "query_cursor_usage",
+        "query_codex_usage",
+        "query_trae_usage",
+    ],
     # --- quality-and-docs ---
-    "test-qa-runner": ["run_pytest", "run_ruff_check", "run_ruff_format", "run_mypy", "check_coverage", "run_arch_fitness", "frontend_test"],
+    "test-qa-runner": [
+        "run_pytest",
+        "run_ruff_check",
+        "run_ruff_format",
+        "run_mypy",
+        "check_coverage",
+        "run_arch_fitness",
+        "frontend_test",
+    ],
     "doc-knowledge-curator": ["list_docs", "read_file", "verify_version_anchors", "git_status"],
-    "employee-interview-assistant": ["list_employees", "list_employee_packs", "validate_employee_pack", "employee_status"],
-    "employee-pack-quality-interviewer": ["validate_employee_pack", "list_employee_packs", "verify_employee_contract", "list_mods"],
+    "employee-interview-assistant": [
+        "list_employees",
+        "list_employee_packs",
+        "validate_employee_pack",
+        "employee_status",
+    ],
+    "employee-pack-quality-interviewer": [
+        "validate_employee_pack",
+        "list_employee_packs",
+        "verify_employee_contract",
+        "list_mods",
+    ],
     # --- craft-workshop ---
     "intent-analyst": ["list_workbench_sessions", "list_employees", "list_action_items"],
     "employee-planner": ["list_employees", "list_workbench_sessions", "read_file", "list_docs"],
     "artifact-generator": ["sandbox_python", "read_file", "list_scripts", "git_diff"],
-    "quality-validator": ["run_ruff_check", "run_mypy", "run_arch_fitness", "verify_employee_contract"],
+    "quality-validator": [
+        "run_ruff_check",
+        "run_mypy",
+        "run_arch_fitness",
+        "verify_employee_contract",
+    ],
     "miniapp-builder": ["frontend_lint", "frontend_typecheck", "list_scripts", "read_file"],
     "script-binder": ["read_file", "list_scripts", "sandbox_python", "git_diff"],
     "workflow-automator": ["list_scripts", "read_file", "api_health", "list_action_items"],
@@ -2047,14 +2550,49 @@ EMPLOYEE_TOOLS: dict[str, list[str]] = {
     "sandbox-tester": ["sandbox_python", "run_pytest", "frontend_test", "read_file"],
     "code-validator": ["run_ruff_check", "run_ruff_format", "run_mypy", "run_arch_fitness"],
     "self-checker": ["run_pytest", "run_ruff_check", "verify_version_anchors", "check_coverage"],
-    "host-checker": ["api_health", "disk_usage", "nginx_test", "mod_loading_status", "performance_status"],
-    "hex-quality-assessor": ["run_pytest", "run_ruff_check", "run_mypy", "check_coverage", "count_type_debt", "count_raw_sql", "run_arch_fitness", "mutation_kill_report"],
+    "host-checker": [
+        "api_health",
+        "disk_usage",
+        "nginx_test",
+        "mod_loading_status",
+        "performance_status",
+    ],
+    "hex-quality-assessor": [
+        "run_pytest",
+        "run_ruff_check",
+        "run_mypy",
+        "check_coverage",
+        "count_type_debt",
+        "count_raw_sql",
+        "run_arch_fitness",
+        "mutation_kill_report",
+    ],
     # --- partner-ecosystem ---
-    "ecosystem-partner-onboard-officer": ["list_users", "list_enterprise_mods", "list_mods", "list_action_items"],
-    "ecosystem-joint-catalog-officer": ["list_mods", "list_enterprise_mods", "list_employee_packs", "validate_employee_pack"],
+    "ecosystem-partner-onboard-officer": [
+        "list_users",
+        "list_enterprise_mods",
+        "list_mods",
+        "list_action_items",
+    ],
+    "ecosystem-joint-catalog-officer": [
+        "list_mods",
+        "list_enterprise_mods",
+        "list_employee_packs",
+        "validate_employee_pack",
+    ],
     "ecosystem-delivery-reporter": ["git_log", "list_action_items", "api_health", "list_employees"],
-    "ecosystem-investor-portal-officer": ["list_users", "list_invoices", "check_transactions", "api_health"],
-    "ecosystem-revenue-share-reconciler": ["check_transactions", "list_invoices", "list_users", "read_file"],
+    "ecosystem-investor-portal-officer": [
+        "list_users",
+        "list_invoices",
+        "check_transactions",
+        "api_health",
+    ],
+    "ecosystem-revenue-share-reconciler": [
+        "check_transactions",
+        "list_invoices",
+        "list_users",
+        "read_file",
+    ],
 }
 
 
@@ -2072,7 +2610,10 @@ def list_all_tool_names() -> list[str]:
 # 专属工具调度入口（executor 拦截 specialized handler 时调用）
 # ---------------------------------------------------------------------------
 
-async def handle_specialized(employee_id: str, payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+
+async def handle_specialized(
+    employee_id: str, payload: dict[str, Any], ctx: dict[str, Any]
+) -> dict[str, Any]:
     """专属工具调度入口。
 
     payload 形如：

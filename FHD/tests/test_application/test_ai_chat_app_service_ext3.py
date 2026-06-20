@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from app.application.ai_chat_app_service import (
-    AIChatApplicationService,
     _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,
+    AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
 
@@ -37,14 +37,23 @@ class TestSkipProExcelDeterministicImportExtended:
         assert _skip_pro_excel_deterministic_import("not a dict") is False
 
     def test_excel_import_use_deterministic_shortcut_true(self):
-        assert _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True}) is False
+        assert (
+            _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True})
+            is False
+        )
 
     def test_excel_import_use_deterministic_shortcut_false(self):
         # When the value is False (not True), `is True` check fails, so it falls through to default False
-        assert _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": False}) is False
+        assert (
+            _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": False})
+            is False
+        )
 
     def test_excel_import_skip_deterministic_shortcut_true(self):
-        assert _skip_pro_excel_deterministic_import({"excel_import_skip_deterministic_shortcut": True}) is True
+        assert (
+            _skip_pro_excel_deterministic_import({"excel_import_skip_deterministic_shortcut": True})
+            is True
+        )
 
     def test_excel_import_ai_decides_true(self):
         assert _skip_pro_excel_deterministic_import({"excel_import_ai_decides": True}) is True
@@ -68,7 +77,10 @@ class TestSkipProExcelDeterministicImportExtended:
     def test_empty_context_defaults_to_false(self):
         with patch.dict("os.environ", {}, clear=True):
             # Remove env vars that might be set
-            env = {"XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT": "", "XCAGI_EXCEL_IMPORT_AI_DECIDES": ""}
+            env = {
+                "XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT": "",
+                "XCAGI_EXCEL_IMPORT_AI_DECIDES": "",
+            }
             with patch.dict("os.environ", env, clear=False):
                 assert _skip_pro_excel_deterministic_import({}) is False
 
@@ -152,8 +164,27 @@ class TestMergeToolRuntimeContextExtended:
 
 class TestExcelCellLooksLikeProductMeasureUnit:
     def test_common_units(self):
-        for unit in ("件", "个", "只", "箱", "盒", "包", "袋", "瓶", "桶", "罐", "套", "组", "台", "条", "张", "支"):
-            assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit(unit) is True
+        for unit in (
+            "件",
+            "个",
+            "只",
+            "箱",
+            "盒",
+            "包",
+            "袋",
+            "瓶",
+            "桶",
+            "罐",
+            "套",
+            "组",
+            "台",
+            "条",
+            "张",
+            "支",
+        ):
+            assert (
+                AIChatApplicationService._excel_cell_looks_like_product_measure_unit(unit) is True
+            )
 
     def test_pcs(self):
         assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit("pcs") is True
@@ -168,7 +199,10 @@ class TestExcelCellLooksLikeProductMeasureUnit:
         assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit("5pcs") is True
 
     def test_customer_name_not_unit(self):
-        assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit("某某有限公司") is False
+        assert (
+            AIChatApplicationService._excel_cell_looks_like_product_measure_unit("某某有限公司")
+            is False
+        )
 
     def test_empty_string(self):
         assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit("") is False
@@ -177,7 +211,9 @@ class TestExcelCellLooksLikeProductMeasureUnit:
         assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit(None) is False
 
     def test_product_name(self):
-        assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit("涂料A型") is False
+        assert (
+            AIChatApplicationService._excel_cell_looks_like_product_measure_unit("涂料A型") is False
+        )
 
 
 # ========================= _sanitize_import_scalar - extended ==============
@@ -216,9 +252,11 @@ class TestSanitizeImportScalarExtended:
 
     def test_nan_like_object(self):
         """Object whose float() is NaN."""
+
         class NanLike:
             def __float__(self):
                 return float("nan")
+
         assert AIChatApplicationService._sanitize_import_scalar(NanLike()) is None
 
     def test_normal_float(self):
@@ -297,16 +335,28 @@ class TestRowValuesLookLikeTableHeadersExtended:
         assert AIChatApplicationService._row_values_look_like_table_headers(["产品名称"]) is False
 
     def test_two_header_hints(self):
-        assert AIChatApplicationService._row_values_look_like_table_headers(["产品名称", "单价"]) is True
+        assert (
+            AIChatApplicationService._row_values_look_like_table_headers(["产品名称", "单价"])
+            is True
+        )
 
     def test_no_header_hints(self):
-        assert AIChatApplicationService._row_values_look_like_table_headers(["hello", "world"]) is False
+        assert (
+            AIChatApplicationService._row_values_look_like_table_headers(["hello", "world"])
+            is False
+        )
 
     def test_one_header_hint(self):
-        assert AIChatApplicationService._row_values_look_like_table_headers(["产品名称", "hello"]) is False
+        assert (
+            AIChatApplicationService._row_values_look_like_table_headers(["产品名称", "hello"])
+            is False
+        )
 
     def test_mixed_empty_and_header(self):
-        assert AIChatApplicationService._row_values_look_like_table_headers(["", "产品名称", "单价"]) is True
+        assert (
+            AIChatApplicationService._row_values_look_like_table_headers(["", "产品名称", "单价"])
+            is True
+        )
 
     def test_none_values(self):
         assert AIChatApplicationService._row_values_look_like_table_headers([None, None]) is False
@@ -526,9 +576,7 @@ class TestPriceColumnBucketsExtended:
         assert len(before) == 0
 
     def test_generic_price_columns(self):
-        before, after, generic = AIChatApplicationService._price_column_buckets(
-            ["单价", "数量"]
-        )
+        before, after, generic = AIChatApplicationService._price_column_buckets(["单价", "数量"])
         assert "单价" in generic
         assert len(before) == 0
         assert len(after) == 0
@@ -569,7 +617,9 @@ class TestMergeUserIntentForPriceResolutionExtended:
         assert result == ""
 
     def test_simple_message(self):
-        result = AIChatApplicationService._merge_user_intent_for_price_resolution("导入调价前", None)
+        result = AIChatApplicationService._merge_user_intent_for_price_resolution(
+            "导入调价前", None
+        )
         assert "导入调价前" in result
 
     def test_with_recent_messages(self):
@@ -638,32 +688,50 @@ class TestExcelAnalysisPayloadPresentExtended:
         assert AIChatApplicationService._excel_analysis_payload_present("not a dict") is False
 
     def test_empty_excel_analysis(self):
-        assert AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": {}}) is False
+        assert (
+            AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": {}})
+            is False
+        )
 
     def test_with_summary(self):
-        assert AIChatApplicationService._excel_analysis_payload_present(
-            {"excel_analysis": {"summary": "test"}}
-        ) is True
+        assert (
+            AIChatApplicationService._excel_analysis_payload_present(
+                {"excel_analysis": {"summary": "test"}}
+            )
+            is True
+        )
 
     def test_with_fields(self):
-        assert AIChatApplicationService._excel_analysis_payload_present(
-            {"excel_analysis": {"fields": [{"label": "x"}]}}
-        ) is True
+        assert (
+            AIChatApplicationService._excel_analysis_payload_present(
+                {"excel_analysis": {"fields": [{"label": "x"}]}}
+            )
+            is True
+        )
 
     def test_with_sample_rows(self):
-        assert AIChatApplicationService._excel_analysis_payload_present(
-            {"excel_analysis": {"preview_data": {"sample_rows": [{"a": 1}]}}}
-        ) is True
+        assert (
+            AIChatApplicationService._excel_analysis_payload_present(
+                {"excel_analysis": {"preview_data": {"sample_rows": [{"a": 1}]}}}
+            )
+            is True
+        )
 
     def test_with_empty_sample_rows(self):
-        assert AIChatApplicationService._excel_analysis_payload_present(
-            {"excel_analysis": {"preview_data": {"sample_rows": []}}}
-        ) is False
+        assert (
+            AIChatApplicationService._excel_analysis_payload_present(
+                {"excel_analysis": {"preview_data": {"sample_rows": []}}}
+            )
+            is False
+        )
 
     def test_with_grid_preview_sufficient_rows(self):
-        assert AIChatApplicationService._excel_analysis_payload_present(
-            {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [["h1"], ["d1"]]}}}}
-        ) is True
+        assert (
+            AIChatApplicationService._excel_analysis_payload_present(
+                {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [["h1"], ["d1"]]}}}}
+            )
+            is True
+        )
 
 
 # ========================= _looks_like_short_excel_import_command =========
@@ -683,7 +751,9 @@ class TestLooksLikeShortExcelImportCommandExtended:
         assert AIChatApplicationService._looks_like_short_excel_import_command("A" * 41) is False
 
     def test_containing_keyword(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("请导入数据库") is True
+        assert (
+            AIChatApplicationService._looks_like_short_excel_import_command("请导入数据库") is True
+        )
 
     def test_empty(self):
         assert AIChatApplicationService._looks_like_short_excel_import_command("") is False
@@ -856,7 +926,19 @@ class TestExtractExcelImportRecordsDeep:
         }
         with (
             patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "客户", "product_name": "产品名称", "model_number": "", "unit_price": "单价"}, 0.9)),
+            patch.object(
+                service,
+                "_infer_excel_column_roles",
+                return_value=(
+                    {
+                        "unit_name": "客户",
+                        "product_name": "产品名称",
+                        "model_number": "",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
+            ),
             patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
             patch.object(service, "_default_purchase_unit_for_import", return_value="公司A"),
         ):
@@ -878,7 +960,19 @@ class TestExtractExcelImportRecordsDeep:
         }
         with (
             patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "客户", "product_name": "产品名称", "model_number": "", "unit_price": "单价"}, 0.9)),
+            patch.object(
+                service,
+                "_infer_excel_column_roles",
+                return_value=(
+                    {
+                        "unit_name": "客户",
+                        "product_name": "产品名称",
+                        "model_number": "",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
+            ),
             patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
             patch.object(service, "_default_purchase_unit_for_import", return_value="公司A"),
         ):
@@ -899,7 +993,19 @@ class TestExtractExcelImportRecordsDeep:
         }
         with (
             patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "单位", "product_name": "产品名称", "model_number": "", "unit_price": "单价"}, 0.9)),
+            patch.object(
+                service,
+                "_infer_excel_column_roles",
+                return_value=(
+                    {
+                        "unit_name": "单位",
+                        "product_name": "产品名称",
+                        "model_number": "",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
+            ),
             patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
             patch.object(service, "_default_purchase_unit_for_import", return_value="默认公司"),
         ):
@@ -919,7 +1025,19 @@ class TestExtractExcelImportRecordsDeep:
         }
         with (
             patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "名称", "product_name": "名称", "model_number": "", "unit_price": "单价"}, 0.9)),
+            patch.object(
+                service,
+                "_infer_excel_column_roles",
+                return_value=(
+                    {
+                        "unit_name": "名称",
+                        "product_name": "名称",
+                        "model_number": "",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
+            ),
             patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
             patch.object(service, "_default_purchase_unit_for_import", return_value=""),
         ):
@@ -937,7 +1055,19 @@ class TestExtractExcelImportRecordsDeep:
         }
         with (
             patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "客户", "product_name": "产品名称", "model_number": "", "unit_price": "单价"}, 0.9)),
+            patch.object(
+                service,
+                "_infer_excel_column_roles",
+                return_value=(
+                    {
+                        "unit_name": "客户",
+                        "product_name": "产品名称",
+                        "model_number": "",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
+            ),
             patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
             patch.object(service, "_default_purchase_unit_for_import", return_value="公司A"),
         ):
@@ -958,7 +1088,19 @@ class TestExtractExcelImportRecordsDeep:
         }
         with (
             patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "客户", "product_name": "产品名称", "model_number": "型号", "unit_price": "单价"}, 0.9)),
+            patch.object(
+                service,
+                "_infer_excel_column_roles",
+                return_value=(
+                    {
+                        "unit_name": "客户",
+                        "product_name": "产品名称",
+                        "model_number": "型号",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
+            ),
             patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
             patch.object(service, "_default_purchase_unit_for_import", return_value="公司A"),
         ):
@@ -977,7 +1119,19 @@ class TestExtractExcelImportRecordsDeep:
         }
         with (
             patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "客户", "product_name": "产品名称", "model_number": "型号", "unit_price": "单价"}, 0.9)),
+            patch.object(
+                service,
+                "_infer_excel_column_roles",
+                return_value=(
+                    {
+                        "unit_name": "客户",
+                        "product_name": "产品名称",
+                        "model_number": "型号",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
+            ),
             patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
             patch.object(service, "_default_purchase_unit_for_import", return_value=""),
         ):
@@ -997,7 +1151,19 @@ class TestExtractExcelImportRecordsDeep:
         }
         with (
             patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(service, "_infer_excel_column_roles", return_value=({"unit_name": "客户", "product_name": "产品名称", "model_number": "", "unit_price": "单价"}, 0.9)),
+            patch.object(
+                service,
+                "_infer_excel_column_roles",
+                return_value=(
+                    {
+                        "unit_name": "客户",
+                        "product_name": "产品名称",
+                        "model_number": "",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
+            ),
             patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
             patch.object(service, "_default_purchase_unit_for_import", return_value="默认公司"),
         ):
@@ -1104,7 +1270,9 @@ class TestProcessChatDeepErrors:
         ):
             result = service.process_chat("u1", "hello")
         assert result["success"] is False
-        assert "暂时不可用" in result.get("message", "") or "暂时不可用" in result.get("response", "")
+        assert "暂时不可用" in result.get("message", "") or "暂时不可用" in result.get(
+            "response", ""
+        )
 
     def test_empty_message_returns_error(self):
         service = _make_service()
@@ -1126,7 +1294,9 @@ class TestProcessChatDeepErrors:
             patch("app.services.get_conversation_service"),
         ):
             result = service.process_chat(
-                "u1", "查询", source=None,
+                "u1",
+                "查询",
+                source=None,
                 file_context={"file_path": "/test.xlsx", "sheet_name": "Sheet1"},
             )
         assert result["success"] is True
@@ -1146,9 +1316,14 @@ class TestPersistChatTurnDeep:
         mock_conv = Mock()
         with patch("app.services.get_conversation_service", return_value=mock_conv):
             service._persist_chat_turn(
-                "u1", "hello",
+                "u1",
+                "hello",
                 {"session_id": "sess1"},
-                {"success": True, "response": "world", "data": {"text": "world", "action": "reply", "data": {}}},
+                {
+                    "success": True,
+                    "response": "world",
+                    "data": {"text": "world", "action": "reply", "data": {}},
+                },
             )
         assert mock_conv.save_message.call_count == 2
 
@@ -1157,7 +1332,8 @@ class TestPersistChatTurnDeep:
         mock_conv = Mock()
         with patch("app.services.get_conversation_service", return_value=mock_conv):
             service._persist_chat_turn(
-                "u1", "hello",
+                "u1",
+                "hello",
                 {"conversation_id": "conv1"},
                 {"success": True, "response": "world", "data": {}},
             )
@@ -1168,12 +1344,17 @@ class TestPersistChatTurnDeep:
         mock_conv = Mock()
         with patch("app.services.get_conversation_service", return_value=mock_conv):
             service._persist_chat_turn(
-                "u1", "hello",
+                "u1",
+                "hello",
                 {"session_id": "sess1"},
                 {
                     "success": True,
                     "response": "done",
-                    "data": {"text": "done", "action": "tool_call", "data": {"tool_key": "products"}},
+                    "data": {
+                        "text": "done",
+                        "action": "tool_call",
+                        "data": {"tool_key": "products"},
+                    },
                     "toolCall": {"tool_id": "products"},
                 },
             )
@@ -1206,7 +1387,9 @@ class TestInjectExcelVectorContextDeep:
         mock_svc = Mock()
         mock_svc.query.return_value = {"success": True, "hits": []}
         with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
-            result = service._inject_excel_vector_context("hello", {"excel_index_id": "idx1", "excel_top_k": 10})
+            result = service._inject_excel_vector_context(
+                "hello", {"excel_index_id": "idx1", "excel_top_k": 10}
+            )
         mock_svc.query.assert_called_once_with(index_id="idx1", query_text="hello", top_k=10)
 
     def test_invalid_top_k_defaults_to_5(self):
@@ -1214,7 +1397,9 @@ class TestInjectExcelVectorContextDeep:
         mock_svc = Mock()
         mock_svc.query.return_value = {"success": True, "hits": []}
         with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
-            result = service._inject_excel_vector_context("hello", {"excel_index_id": "idx1", "excel_top_k": "abc"})
+            result = service._inject_excel_vector_context(
+                "hello", {"excel_index_id": "idx1", "excel_top_k": "abc"}
+            )
         mock_svc.query.assert_called_once_with(index_id="idx1", query_text="hello", top_k=5)
 
     def test_vector_index_id_alias(self):
@@ -1222,5 +1407,7 @@ class TestInjectExcelVectorContextDeep:
         mock_svc = Mock()
         mock_svc.query.return_value = {"success": True, "hits": []}
         with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
-            result = service._inject_excel_vector_context("hello", {"excel_vector_index_id": "vidx1"})
+            result = service._inject_excel_vector_context(
+                "hello", {"excel_vector_index_id": "vidx1"}
+            )
         mock_svc.query.assert_called_once()

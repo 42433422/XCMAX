@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 FHD_ROOT = Path(__file__).resolve().parents[2]
 LEGACY_IMPORT_RE = re.compile(
     r"\bfrom\s+app\.routes\.(?:tools|ai_chat|template_grid_core|document_templates_compat|state)\b"

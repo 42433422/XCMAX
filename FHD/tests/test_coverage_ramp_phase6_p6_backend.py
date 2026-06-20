@@ -29,7 +29,6 @@ from app.fastapi_routes.private_db_read_assistant_compat import (
     build_private_db_assistant_router,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -176,9 +175,7 @@ def test_decrypt_status_no_env_returns_empty(monkeypatch: pytest.MonkeyPatch) ->
     assert body["contact_db_exists"] is False
 
 
-def test_decrypt_status_with_env_path_existing(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_decrypt_status_with_env_path_existing(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     db_file = tmp_path / "contact.db"
     db_file.write_bytes(b"SQLite format 3\x00")
     monkeypatch.setenv("WECHAT_CONTACT_DB_PATH", str(db_file))
@@ -190,9 +187,7 @@ def test_decrypt_status_with_env_path_existing(
     assert body["contact_db_path"] == str(db_file)
 
 
-def test_decrypt_status_fallback_to_decrypt_path(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_decrypt_status_fallback_to_decrypt_path(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("WECHAT_CONTACT_DB_PATH", raising=False)
     base = tmp_path / "decrypt"
     contact_dir = base / "decrypted" / "contact"
@@ -805,9 +800,7 @@ def test_map_context_messages_no_text_keys() -> None:
 
 def test_private_db_status_returns_decrypt_info() -> None:
     client = _private_db_client()
-    with patch(
-        "app.services.wechat_decrypt_autoconfig.get_wechat_decrypt_status"
-    ) as mock_status:
+    with patch("app.services.wechat_decrypt_autoconfig.get_wechat_decrypt_status") as mock_status:
         mock_status.return_value = {"contact_db_exists": True, "configured": True}
         resp = client.get(f"/api/mod/{MOD_ID}/status")
     assert resp.status_code == 200
@@ -992,9 +985,7 @@ def test_private_db_refresh_source_all_delegates_to_facade() -> None:
 
 def test_private_db_refresh_source_messages_success() -> None:
     client = _private_db_client()
-    with patch(
-        "app.services.wechat_group_customer_bridge.sync_group_messages"
-    ) as mock_sync:
+    with patch("app.services.wechat_group_customer_bridge.sync_group_messages") as mock_sync:
         mock_sync.return_value = {"success": True, "synced": 3}
         resp = client.post(
             f"/api/mod/{MOD_ID}/sources/refresh",
@@ -1008,9 +999,7 @@ def test_private_db_refresh_source_messages_success() -> None:
 
 def test_private_db_refresh_source_messages_failure_returns_500() -> None:
     client = _private_db_client()
-    with patch(
-        "app.services.wechat_group_customer_bridge.sync_group_messages"
-    ) as mock_sync:
+    with patch("app.services.wechat_group_customer_bridge.sync_group_messages") as mock_sync:
         mock_sync.return_value = {"success": False, "message": "no db"}
         resp = client.post(
             f"/api/mod/{MOD_ID}/sources/refresh",
@@ -1023,9 +1012,7 @@ def test_private_db_refresh_source_messages_failure_returns_500() -> None:
 
 def test_private_db_refresh_source_messages_recoverable_error_returns_500() -> None:
     client = _private_db_client()
-    with patch(
-        "app.services.wechat_group_customer_bridge.sync_group_messages"
-    ) as mock_sync:
+    with patch("app.services.wechat_group_customer_bridge.sync_group_messages") as mock_sync:
         mock_sync.side_effect = RuntimeError("db broken")
         resp = client.post(
             f"/api/mod/{MOD_ID}/sources/refresh",
@@ -1137,9 +1124,7 @@ def test_private_db_search_contacts_success() -> None:
     assert body["data"][0]["display_name"] == "Alice"
     assert body["data"][0]["source_user_id"] == "wx1"
     assert body["data"][1]["display_name"] == "wx2"
-    mock_service.get_contacts.assert_called_once_with(
-        keyword="ali", starred_only=False, limit=80
-    )
+    mock_service.get_contacts.assert_called_once_with(keyword="ali", starred_only=False, limit=80)
 
 
 def test_private_db_search_contacts_recoverable_error_returns_500() -> None:
@@ -1302,12 +1287,10 @@ def test_private_db_send_message_with_none_values() -> None:
 
 def test_register_private_db_read_assistant_routes_attaches_router() -> None:
     app = FastAPI()
-    register = (
-        __import__(
-            "app.fastapi_routes.private_db_read_assistant_compat",
-            fromlist=["register_private_db_read_assistant_routes"],
-        ).register_private_db_read_assistant_routes
-    )
+    register = __import__(
+        "app.fastapi_routes.private_db_read_assistant_compat",
+        fromlist=["register_private_db_read_assistant_routes"],
+    ).register_private_db_read_assistant_routes
     register(app)
     # 路由应已挂载
     paths = [r.path for r in app.routes]

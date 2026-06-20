@@ -89,4 +89,3 @@ def get_wechat_domain() -> WechatNeuroDomain:
         _wechat_domain = WechatNeuroDomain()
         get_domain_registry().register(_wechat_domain)
     return _wechat_domain
-

@@ -1,10 +1,12 @@
 """Tests for app.services.tax_invoice_provider."""
+
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from app.services.tax_invoice_provider import issue_crm_invoice_for_pipeline, _now_iso
+import pytest
+
+from app.services.tax_invoice_provider import _now_iso, issue_crm_invoice_for_pipeline
 
 
 class TestNowIso:

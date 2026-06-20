@@ -15,7 +15,6 @@ from app.application.ai_chat_app_service import (
     get_ai_chat_app_service,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -35,7 +34,9 @@ def chat_svc() -> AIChatApplicationService:
 
     mock_ai.chat = _chat
     with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai),
+        patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
         patch("app.application.ai_chat_app_service.WorkflowEngine"),
@@ -54,7 +55,10 @@ def chat_svc() -> AIChatApplicationService:
 def test_skip_pro_excel_env_disable_shortcut(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT", "yes")
     assert _skip_pro_excel_deterministic_import({}) is True
-    assert _skip_pro_excel_deterministic_import({"excel_import_skip_deterministic_shortcut": True}) is True
+    assert (
+        _skip_pro_excel_deterministic_import({"excel_import_skip_deterministic_shortcut": True})
+        is True
+    )
 
 
 def test_get_ai_chat_app_service_singleton() -> None:
@@ -80,7 +84,10 @@ def test_build_fallback_greeting_vs_default() -> None:
 def test_is_number_text_and_headers() -> None:
     assert AIChatApplicationService._is_number_text("12.5") is True
     assert AIChatApplicationService._is_number_text("abc") is False
-    assert AIChatApplicationService._row_values_look_like_table_headers(["产品名称", "规格", "单价"]) is True
+    assert (
+        AIChatApplicationService._row_values_look_like_table_headers(["产品名称", "规格", "单价"])
+        is True
+    )
     assert AIChatApplicationService._row_values_look_like_table_headers(["a"]) is False
 
 
@@ -101,13 +108,24 @@ def test_guess_default_purchase_unit_from_filename() -> None:
 
 def test_excel_analysis_payload_present_variants() -> None:
     assert AIChatApplicationService._excel_analysis_payload_present(None) is False
-    assert AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": {"summary": "x"}}) is True
-    assert AIChatApplicationService._excel_analysis_payload_present(
-        {"excel_analysis": {"preview_data": {"sample_rows": [{"a": 1}]}}}
-    ) is True
-    assert AIChatApplicationService._excel_analysis_payload_present(
-        {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [[1], [2]]}}}}
-    ) is True
+    assert (
+        AIChatApplicationService._excel_analysis_payload_present(
+            {"excel_analysis": {"summary": "x"}}
+        )
+        is True
+    )
+    assert (
+        AIChatApplicationService._excel_analysis_payload_present(
+            {"excel_analysis": {"preview_data": {"sample_rows": [{"a": 1}]}}}
+        )
+        is True
+    )
+    assert (
+        AIChatApplicationService._excel_analysis_payload_present(
+            {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [[1], [2]]}}}}
+        )
+        is True
+    )
 
 
 def test_looks_like_short_excel_import_command() -> None:
@@ -265,7 +283,9 @@ def test_process_chat_with_file_context_enriches_excel(chat_svc: AIChatApplicati
 
 
 @patch("app.services.get_conversation_service")
-def test_persist_chat_turn_with_session(mock_conv: MagicMock, chat_svc: AIChatApplicationService) -> None:
+def test_persist_chat_turn_with_session(
+    mock_conv: MagicMock, chat_svc: AIChatApplicationService
+) -> None:
     mock_conv.return_value.save_message = MagicMock()
     chat_svc._persist_chat_turn(
         "u1",
@@ -281,7 +301,9 @@ def test_persist_chat_turn_with_session(mock_conv: MagicMock, chat_svc: AIChatAp
 
 
 @patch("app.application.get_excel_vector_search_app_service")
-def test_inject_excel_vector_context(mock_get: MagicMock, chat_svc: AIChatApplicationService) -> None:
+def test_inject_excel_vector_context(
+    mock_get: MagicMock, chat_svc: AIChatApplicationService
+) -> None:
     mock_get.return_value.query.return_value = {
         "success": True,
         "hits": [{"text": "row1"}],
@@ -368,7 +390,9 @@ def test_dynamic_workflow_unit_products_import(
 def test_execute_pro_mode_shipment_generate(chat_svc: AIChatApplicationService) -> None:
     ai_result = {"text": "生成发货单", "data": {}}
     response_data = {"success": True, "data": {}}
-    with patch("app.application.facades.tools_facade._parse_order_text", return_value={"success": False}):
+    with patch(
+        "app.application.facades.tools_facade._parse_order_text", return_value={"success": False}
+    ):
         out = chat_svc._execute_pro_mode_tools(
             response_data,
             "shipment_generate",
@@ -441,7 +465,9 @@ def test_handle_tool_call_normal_mode_shipments(chat_svc: AIChatApplicationServi
         "action": "tool_call",
         "data": {"tool_key": "shipments", "params": {}, "slots": {}},
     }
-    with patch.object(chat_svc, "_execute_shipments_query", return_value={"success": True, "response": "1条"}):
+    with patch.object(
+        chat_svc, "_execute_shipments_query", return_value={"success": True, "response": "1条"}
+    ):
         out = chat_svc._build_response(ai_result, None, "")
     assert out["success"] is True
 
@@ -537,8 +563,6 @@ def test_dynamic_workflow_normal_shipment_preview(
         "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
         return_value={"success": True, "response": "预览发货单"},
     ):
-        out = chat_svc._try_handle_dynamic_workflow(
-            "u", "甲公司2桶5003规格25", "pro", {}, {}
-        )
+        out = chat_svc._try_handle_dynamic_workflow("u", "甲公司2桶5003规格25", "pro", {}, {})
     assert out is not None
     assert out["success"] is True

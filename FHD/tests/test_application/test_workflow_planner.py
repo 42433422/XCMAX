@@ -182,7 +182,9 @@ class TestLLMWorkflowPlanner:
 
     def test_plan_injects_active_memory_v2_into_context_and_metadata(self):
         planner = self._make_planner()
-        memory_summary = "【MemoryV2】已确认记忆:\n1. type=preference; key=favorite_customer; value=\"ACME\""
+        memory_summary = (
+            '【MemoryV2】已确认记忆:\n1. type=preference; key=favorite_customer; value="ACME"'
+        )
         captured_context = {}
 
         def fake_react(plan_id, user_id, message, tool_registry, context):

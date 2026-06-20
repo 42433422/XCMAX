@@ -20,7 +20,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # is_mods_disabled
 # ---------------------------------------------------------------------------
@@ -309,13 +308,16 @@ class TestScanMods:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mgr = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-            return_value=[],
-        ), patch.dict(
-            "os.environ",
-            {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-            clear=False,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=[],
+            ),
+            patch.dict(
+                "os.environ",
+                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
+                clear=False,
+            ),
         ):
             result = mgr.scan_mods(use_cache=False)
             assert isinstance(result, list)
@@ -330,13 +332,16 @@ class TestScanMods:
             json.dumps({"id": "test_mod", "name": "Test Mod", "version": "1.0"})
         )
         mgr = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-            return_value=[],
-        ), patch.dict(
-            "os.environ",
-            {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-            clear=False,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=[],
+            ),
+            patch.dict(
+                "os.environ",
+                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
+                clear=False,
+            ),
         ):
             result = mgr.scan_mods(use_cache=False)
             assert len(result) == 1
@@ -351,13 +356,16 @@ class TestScanMods:
             json.dumps({"id": "_internal", "name": "Internal", "version": "1.0"})
         )
         mgr = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-            return_value=[],
-        ), patch.dict(
-            "os.environ",
-            {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-            clear=False,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=[],
+            ),
+            patch.dict(
+                "os.environ",
+                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
+                clear=False,
+            ),
         ):
             result = mgr.scan_mods(use_cache=False)
             assert len(result) == 0
@@ -366,13 +374,16 @@ class TestScanMods:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mgr = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-            return_value=[],
-        ), patch.dict(
-            "os.environ",
-            {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-            clear=False,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=[],
+            ),
+            patch.dict(
+                "os.environ",
+                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
+                clear=False,
+            ),
         ):
             # First scan populates cache
             result1 = mgr.scan_mods()
@@ -384,13 +395,16 @@ class TestScanMods:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mgr = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-            return_value=[],
-        ), patch.dict(
-            "os.environ",
-            {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-            clear=False,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=[],
+            ),
+            patch.dict(
+                "os.environ",
+                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
+                clear=False,
+            ),
         ):
             mgr.scan_mods()
             assert mgr._scan_cache_fp != "" or len(mgr._scan_cache_mods) == 0
@@ -453,9 +467,7 @@ class TestUnloadMod:
         with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg:
             mock_reg.return_value.get_mod_instance.return_value = None
             mock_reg.return_value.unregister_mod.return_value = None
-            with patch(
-                "app.infrastructure.mods.comms.get_mod_comms", side_effect=ImportError
-            ):
+            with patch("app.infrastructure.mods.comms.get_mod_comms", side_effect=ImportError):
                 result = mgr.unload_mod("test_mod")
                 assert result is True
                 assert "test_mod" not in mgr._loaded_mods
@@ -470,9 +482,7 @@ class TestUnloadMod:
         with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg:
             mock_reg.return_value.get_mod_instance.return_value = mock_instance
             mock_reg.return_value.unregister_mod.return_value = None
-            with patch(
-                "app.infrastructure.mods.comms.get_mod_comms", side_effect=ImportError
-            ):
+            with patch("app.infrastructure.mods.comms.get_mod_comms", side_effect=ImportError):
                 result = mgr.unload_mod("cleanup_mod")
                 assert result is True
                 mock_instance.cleanup.assert_called_once()
@@ -594,12 +604,14 @@ class TestGetRoutes:
         mod_dir = tmp_path / "route_mod"
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text(
-            json.dumps({
-                "id": "route_mod",
-                "name": "Route Mod",
-                "version": "1.0",
-                "frontend": {"routes": "routes"},
-            })
+            json.dumps(
+                {
+                    "id": "route_mod",
+                    "name": "Route Mod",
+                    "version": "1.0",
+                    "frontend": {"routes": "routes"},
+                }
+            )
         )
         mgr = ModManager(mods_root=str(tmp_path))
         with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False):
@@ -669,8 +681,10 @@ class TestEnsureModsLoaded:
         mgr = ModManager(mods_root=str(tmp_path))
         mgr._ensure_attempts = 20  # Already at max
         mock_app = MagicMock()
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg,
+        ):
             mock_reg.return_value.list_mods.return_value = []
             mgr.ensure_mods_loaded(mock_app)
             # Should not attempt further
@@ -741,16 +755,20 @@ class TestLoadAllMods:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mgr = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-            return_value=[],
-        ), patch.dict(
-            "os.environ",
-            {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-            clear=False,
-        ), patch(
-            "app.infrastructure.mods.mod_manager.is_mods_disabled",
-            return_value=False,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=[],
+            ),
+            patch.dict(
+                "os.environ",
+                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
+                clear=False,
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager.is_mods_disabled",
+                return_value=False,
+            ),
         ):
             result = mgr.load_all_mods()
             assert isinstance(result, list)
@@ -765,16 +783,20 @@ class TestLoadAllMods:
             json.dumps({"id": "loadable_mod", "name": "Loadable", "version": "1.0"})
         )
         mgr = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-            return_value=[],
-        ), patch.dict(
-            "os.environ",
-            {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-            clear=False,
-        ), patch(
-            "app.infrastructure.mods.mod_manager.is_mods_disabled",
-            return_value=False,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=[],
+            ),
+            patch.dict(
+                "os.environ",
+                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
+                clear=False,
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager.is_mods_disabled",
+                return_value=False,
+            ),
         ):
             result = mgr.load_all_mods()
             assert isinstance(result, list)

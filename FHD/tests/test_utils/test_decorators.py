@@ -67,7 +67,9 @@ class TestCircuitBreakerDecorator:
     def test_fallback_when_open(self, monkeypatch):
         monkeypatch.setattr("app.utils.decorators.time.time", lambda: 1000.0)
 
-        @circuit_breaker(failure_threshold=1, recovery_timeout=9999, fallback_func=lambda: {"down": True})
+        @circuit_breaker(
+            failure_threshold=1, recovery_timeout=9999, fallback_func=lambda: {"down": True}
+        )
         def fail():
             raise OSError("net")
 

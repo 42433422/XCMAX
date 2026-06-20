@@ -29,7 +29,9 @@ def _chat_svc() -> AIChatApplicationService:
 
     mock_ai.chat = _chat
     with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai),
+        patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
         patch("app.application.ai_chat_app_service.WorkflowEngine"),
@@ -57,9 +59,7 @@ def test_execute_customers_intent_add_create(mock_exec: MagicMock) -> None:
     svc = _chat_svc()
     mock_exec.return_value = {"success": True, "created": True}
     base = {"success": True, "data": {"data": {}}}
-    out = svc._execute_customers_intent(
-        base, {"unit_name": "甲公司"}, {}, "添加单位甲公司"
-    )
+    out = svc._execute_customers_intent(base, {"unit_name": "甲公司"}, {}, "添加单位甲公司")
     assert "甲公司" in out["response"]
 
 
@@ -68,9 +68,7 @@ def test_execute_customers_intent_query(mock_exec: MagicMock) -> None:
     svc = _chat_svc()
     mock_exec.return_value = {"success": True, "data": [{"unit_name": "甲"}]}
     base = {"success": True, "data": {"data": {}}}
-    out = svc._execute_customers_intent(
-        base, {"keyword": "甲"}, {}, "查询客户列表"
-    )
+    out = svc._execute_customers_intent(base, {"keyword": "甲"}, {}, "查询客户列表")
     assert out["success"] is True
 
 

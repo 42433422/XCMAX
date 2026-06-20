@@ -1,4 +1,5 @@
 """Tests for app.application.enterprise_deploy_pull — coverage ramp."""
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,6 @@ from app.application.enterprise_deploy_pull import (
     get_pull_job,
     start_enterprise_pull,
 )
-
 
 # ========================= _read_deployed_sha256 ==============================
 
@@ -52,7 +52,9 @@ class TestReadDeployedSha256:
 
 class TestReadLocalManifestFile:
     def test_no_file(self, tmp_path):
-        with patch("app.application.enterprise_deploy_pull.MANIFEST_PATH", str(tmp_path / "missing.json")):
+        with patch(
+            "app.application.enterprise_deploy_pull.MANIFEST_PATH", str(tmp_path / "missing.json")
+        ):
             result = _read_local_manifest_file()
             assert result is None
 

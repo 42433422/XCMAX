@@ -48,12 +48,15 @@ class TestMarketAdminProxyAdditional:
     @pytest.mark.asyncio
     async def test_no_authorization_returns_401(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.market_account._authorization_from_request",
-            return_value=None,
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request",
+                return_value=None,
+            ),
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
         assert isinstance(result, JSONResponse)
@@ -62,24 +65,29 @@ class TestMarketAdminProxyAdditional:
     @pytest.mark.asyncio
     async def test_proxy_error_payload(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.market_account._authorization_from_request",
-            return_value="Bearer tok",
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            new=AsyncMock(
-                return_value={
-                    "__proxy_error__": True,
-                    "status_code": 502,
-                    "payload": {"error": "upstream fail"},
-                }
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
+                return_value=None,
             ),
-        ), patch(
-            "app.fastapi_routes.market_account._error_message",
-            return_value="upstream error",
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request",
+                return_value="Bearer tok",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new=AsyncMock(
+                    return_value={
+                        "__proxy_error__": True,
+                        "status_code": 502,
+                        "payload": {"error": "upstream fail"},
+                    }
+                ),
+            ),
+            patch(
+                "app.fastapi_routes.market_account._error_message",
+                return_value="upstream error",
+            ),
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
         assert isinstance(result, JSONResponse)
@@ -89,15 +97,19 @@ class TestMarketAdminProxyAdditional:
     async def test_proxy_returns_jsonresponse(self):
         req = MagicMock(spec=Request)
         json_resp = JSONResponse({"success": False}, status_code=400)
-        with patch(
-            "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.market_account._authorization_from_request",
-            return_value="Bearer tok",
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            new=AsyncMock(return_value=json_resp),
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request",
+                return_value="Bearer tok",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new=AsyncMock(return_value=json_resp),
+            ),
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
         assert result is json_resp
@@ -105,15 +117,19 @@ class TestMarketAdminProxyAdditional:
     @pytest.mark.asyncio
     async def test_proxy_returns_dict_payload(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.market_account._authorization_from_request",
-            return_value="Bearer tok",
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request",
+                return_value="Bearer tok",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
+            ),
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
         assert isinstance(result, dict)
@@ -137,15 +153,19 @@ class TestMarketAdminProxyAdditional:
     async def test_require_admin_session_false_skips_gate(self):
         """When require_admin_session=False, gate is not checked."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=JSONResponse({"success": False}, status_code=401),
-        ), patch(
-            "app.fastapi_routes.market_account._authorization_from_request",
-            return_value="Bearer tok",
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            new=AsyncMock(return_value={"success": True}),
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
+                return_value=JSONResponse({"success": False}, status_code=401),
+            ),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request",
+                return_value="Bearer tok",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new=AsyncMock(return_value={"success": True}),
+            ),
         ):
             result = await admin_routes._market_admin_proxy(
                 req, "GET", "/api/test", require_admin_session=False
@@ -162,12 +182,15 @@ class TestDigestLocalOrProxyLocalPaths:
     @pytest.mark.asyncio
     async def test_local_daily_digests_list(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.list_daily_digests_local",
-            new=AsyncMock(return_value={"success": True, "data": []}),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.list_daily_digests_local",
+                new=AsyncMock(return_value={"success": True, "data": []}),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests?limit=10&offset=5"
@@ -178,12 +201,15 @@ class TestDigestLocalOrProxyLocalPaths:
     @pytest.mark.asyncio
     async def test_local_daily_digests_single(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.get_daily_digest_local",
-            new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.get_daily_digest_local",
+                new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests/123"
@@ -193,12 +219,15 @@ class TestDigestLocalOrProxyLocalPaths:
     @pytest.mark.asyncio
     async def test_local_daily_digests_artifacts(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.get_daily_digest_artifacts_local",
-            new=AsyncMock(return_value={"success": True, "data": []}),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.get_daily_digest_artifacts_local",
+                new=AsyncMock(return_value={"success": True, "data": []}),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests/123/artifacts"
@@ -208,12 +237,15 @@ class TestDigestLocalOrProxyLocalPaths:
     @pytest.mark.asyncio
     async def test_local_action_items_stats(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.action_items_stats_local",
-            new=AsyncMock(return_value={"success": True, "data": {}}),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.action_items_stats_local",
+                new=AsyncMock(return_value={"success": True, "data": {}}),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/admin/action-items/stats?kind=patch&day=2026-06-17"
@@ -223,12 +255,15 @@ class TestDigestLocalOrProxyLocalPaths:
     @pytest.mark.asyncio
     async def test_local_action_items_list(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.list_action_items_local",
-            new=AsyncMock(return_value={"success": True, "data": []}),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.list_action_items_local",
+                new=AsyncMock(return_value={"success": True, "data": []}),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/admin/action-items?kind=patch&day=2026-06-17"
@@ -238,15 +273,19 @@ class TestDigestLocalOrProxyLocalPaths:
     @pytest.mark.asyncio
     async def test_local_read_failure(self):
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.list_daily_digests_local",
-            new=AsyncMock(side_effect=RuntimeError("local fail")),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.list_daily_digests_local",
+                new=AsyncMock(side_effect=RuntimeError("local fail")),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests?limit=10"
@@ -258,12 +297,15 @@ class TestDigestLocalOrProxyLocalPaths:
     async def test_non_get_method_skips_local(self):
         """Non-GET methods should skip local path and go to proxy."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True, "proxied": True}),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(return_value={"success": True, "proxied": True}),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "POST", "/api/agent/butler/daily-digests"
@@ -275,16 +317,17 @@ class TestDigestLocalOrProxyLocalPaths:
     async def test_unknown_path_falls_through_to_proxy(self):
         """Unknown path in local mode falls through to proxy."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True, "proxied": True}),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(return_value={"success": True, "proxied": True}),
+            ),
         ):
-            result = await admin_routes._digest_local_or_proxy(
-                req, "GET", "/api/unknown/path"
-            )
+            result = await admin_routes._digest_local_or_proxy(req, "GET", "/api/unknown/path")
         assert isinstance(result, dict)
         assert result.get("proxied") is True
 
@@ -377,22 +420,24 @@ class TestAdminRouteHandlers:
 
     @pytest.mark.asyncio
     async def test_admin_bind_user_mod(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True}),
-        ), patch(
-            "app.application.session_account_meta.audit_admin_action"
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(return_value={"success": True}),
+            ),
+            patch("app.application.session_account_meta.audit_admin_action"),
         ):
             response = client.post("/api/xcmax/admin/market/users/1/mods/test_mod")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_admin_unbind_user_mod(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True}),
-        ), patch(
-            "app.application.session_account_meta.audit_admin_action"
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(return_value={"success": True}),
+            ),
+            patch("app.application.session_account_meta.audit_admin_action"),
         ):
             response = client.delete("/api/xcmax/admin/market/users/1/mods/test_mod")
         assert response.status_code == 200
@@ -403,9 +448,7 @@ class TestAdminRouteHandlers:
             "app.fastapi_routes.xcmax_admin._market_admin_proxy",
             new=AsyncMock(return_value={"success": True}),
         ):
-            response = client.put(
-                "/api/xcmax/admin/market/users/1/admin?is_admin=true"
-            )
+            response = client.put("/api/xcmax/admin/market/users/1/admin?is_admin=true")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -414,9 +457,7 @@ class TestAdminRouteHandlers:
             "app.fastapi_routes.xcmax_admin._market_admin_proxy",
             new=AsyncMock(return_value={"success": True}),
         ):
-            response = client.put(
-                "/api/xcmax/admin/market/users/1/enterprise?is_enterprise=false"
-            )
+            response = client.put("/api/xcmax/admin/market/users/1/enterprise?is_enterprise=false")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -425,59 +466,66 @@ class TestAdminRouteHandlers:
             "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
             return_value=None,
         ):
-            response = client.get(
-                "/api/xcmax/admin/market/users/1/wechat-customers"
-            )
+            response = client.get("/api/xcmax/admin/market/users/1/wechat-customers")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_admin_list_user_wechat_customers_with_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.get_bindings_for_user",
-            return_value=[{"id": 1}],
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.get_bindings_for_user",
+                return_value=[{"id": 1}],
+            ),
         ):
-            response = client.get(
-                "/api/xcmax/admin/market/users/1/wechat-customers"
-            )
+            response = client.get("/api/xcmax/admin/market/users/1/wechat-customers")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_admin_list_user_wechat_customers_error(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.get_bindings_for_user",
-            side_effect=RuntimeError("fail"),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.get_bindings_for_user",
+                side_effect=RuntimeError("fail"),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
-            response = client.get(
-                "/api/xcmax/admin/market/users/1/wechat-customers"
-            )
+            response = client.get("/api/xcmax/admin/market/users/1/wechat-customers")
         assert response.status_code == 500
 
     @pytest.mark.asyncio
     async def test_admin_save_user_wechat_customers(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.save_bindings_for_user",
-            return_value={"success": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.save_bindings_for_user",
+                return_value={"success": True},
+            ),
         ):
             response = client.put(
                 "/api/xcmax/admin/market/users/1/wechat-customers",
@@ -487,16 +535,20 @@ class TestAdminRouteHandlers:
 
     @pytest.mark.asyncio
     async def test_admin_save_user_wechat_customers_invalid_ids(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.save_bindings_for_user",
-            return_value={"success": True},
-        ) as mock_save:
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.save_bindings_for_user",
+                return_value={"success": True},
+            ) as mock_save,
+        ):
             response = client.put(
                 "/api/xcmax/admin/market/users/1/wechat-customers",
                 json={"contact_ids": "not a list"},
@@ -509,18 +561,23 @@ class TestAdminRouteHandlers:
 
     @pytest.mark.asyncio
     async def test_admin_save_user_wechat_customers_error(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.save_bindings_for_user",
-            side_effect=RuntimeError("fail"),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.save_bindings_for_user",
+                side_effect=RuntimeError("fail"),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
             response = client.put(
                 "/api/xcmax/admin/market/users/1/wechat-customers",
@@ -537,27 +594,30 @@ class TestAdminRouteHandlers:
 class TestImpersonateRoutesAdditional:
     @pytest.mark.asyncio
     async def test_impersonate_success(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.application.session_account_meta.persist_session_account_meta"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value="Bearer tok"),
-        ), patch(
-            "app.enterprise.mod_entitlements.refresh_session_entitlements_from_market",
-            new=AsyncMock(return_value=["mod1"]),
-        ), patch(
-            "app.enterprise.mod_entitlements.persist_entitlements_to_session_row"
-        ), patch(
-            "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
-            new=AsyncMock(),
-        ), patch(
-            "app.application.session_account_meta.audit_admin_action"
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch("app.application.session_account_meta.persist_session_account_meta"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value="Bearer tok"),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.refresh_session_entitlements_from_market",
+                new=AsyncMock(return_value=["mod1"]),
+            ),
+            patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
+            patch(
+                "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
+                new=AsyncMock(),
+            ),
+            patch("app.application.session_account_meta.audit_admin_action"),
         ):
             response = client.post(
                 "/api/xcmax/admin/impersonate",
@@ -567,19 +627,21 @@ class TestImpersonateRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_impersonate_no_token(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.application.session_account_meta.persist_session_account_meta"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value=None),
-        ), patch(
-            "app.application.session_account_meta.audit_admin_action"
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch("app.application.session_account_meta.persist_session_account_meta"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("app.application.session_account_meta.audit_admin_action"),
         ):
             response = client.post(
                 "/api/xcmax/admin/impersonate",
@@ -589,46 +651,51 @@ class TestImpersonateRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_end_impersonate_success(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.application.session_account_meta.clear_impersonation"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value="Bearer tok"),
-        ), patch(
-            "app.enterprise.mod_entitlements.refresh_session_entitlements_from_market",
-            new=AsyncMock(return_value=["mod1"]),
-        ), patch(
-            "app.enterprise.mod_entitlements.persist_entitlements_to_session_row"
-        ), patch(
-            "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
-            new=AsyncMock(),
-        ), patch(
-            "app.application.session_account_meta.audit_admin_action"
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch("app.application.session_account_meta.clear_impersonation"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value="Bearer tok"),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.refresh_session_entitlements_from_market",
+                new=AsyncMock(return_value=["mod1"]),
+            ),
+            patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
+            patch(
+                "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
+                new=AsyncMock(),
+            ),
+            patch("app.application.session_account_meta.audit_admin_action"),
         ):
             response = client.post("/api/xcmax/admin/impersonate/end")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_end_impersonate_no_token(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.application.session_account_meta.clear_impersonation"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value=None),
-        ), patch(
-            "app.application.session_account_meta.audit_admin_action"
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch("app.application.session_account_meta.clear_impersonation"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("app.application.session_account_meta.audit_admin_action"),
         ):
             response = client.post("/api/xcmax/admin/impersonate/end")
         assert response.status_code == 200
@@ -651,12 +718,15 @@ class TestImpersonateRoutesAdditional:
 class TestGetDigestIdentity:
     @pytest.mark.asyncio
     async def test_404_fallback(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://api.example.com",
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value=JSONResponse({"detail": "not found"}, status_code=404)),
+        with (
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://api.example.com",
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(return_value=JSONResponse({"detail": "not found"}, status_code=404)),
+            ),
         ):
             response = client.get("/api/xcmax/admin/digest-identity")
         assert response.status_code == 200
@@ -667,13 +737,16 @@ class TestGetDigestIdentity:
 
     @pytest.mark.asyncio
     async def test_dict_passthrough(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://api.example.com",
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(
-                return_value={"success": True, "data": {"code": "abc", "valid": True}}
+        with (
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://api.example.com",
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(
+                    return_value={"success": True, "data": {"code": "abc", "valid": True}}
+                ),
             ),
         ):
             response = client.get("/api/xcmax/admin/digest-identity")
@@ -684,12 +757,17 @@ class TestGetDigestIdentity:
 
     @pytest.mark.asyncio
     async def test_other_response_passthrough(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://api.example.com",
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value=JSONResponse({"detail": "server error"}, status_code=500)),
+        with (
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://api.example.com",
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(
+                    return_value=JSONResponse({"detail": "server error"}, status_code=500)
+                ),
+            ),
         ):
             response = client.get("/api/xcmax/admin/digest-identity")
         # Non-404 JSONResponse should be returned as-is
@@ -704,34 +782,40 @@ class TestGetDigestIdentity:
 class TestOpsRoutesAdditional:
     @pytest.mark.asyncio
     async def test_ops_duty_health_dict(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._remote_duty_health",
-            new=AsyncMock(return_value={"healthy": True, "staffing": {}}),
-        ), patch(
-            "app.application.ops_closure_status.build_ops_closure_status",
-            return_value={
-                "remote_health": {"healthy": True},
-                "staffing": {"filled": 5},
-                "planned_employee_ids": ["e1"],
-                "registered_employee_ids": ["e1"],
-                "planned_local_installed_count": 1,
-                "extra_local_employee_pack_ids": [],
-            },
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._remote_duty_health",
+                new=AsyncMock(return_value={"healthy": True, "staffing": {}}),
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={
+                    "remote_health": {"healthy": True},
+                    "staffing": {"filled": 5},
+                    "planned_employee_ids": ["e1"],
+                    "registered_employee_ids": ["e1"],
+                    "planned_local_installed_count": 1,
+                    "extra_local_employee_pack_ids": [],
+                },
+            ),
         ):
             response = client.get("/api/xcmax/ops/duty-health")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_ops_duty_health_non_dict(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._remote_duty_health",
-            new=AsyncMock(return_value="not a dict"),
-        ), patch(
-            "app.application.ops_closure_status.build_ops_closure_status",
-            return_value={
-                "remote_health": {"healthy": False},
-                "staffing": {"filled": 0},
-            },
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._remote_duty_health",
+                new=AsyncMock(return_value="not a dict"),
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={
+                    "remote_health": {"healthy": False},
+                    "staffing": {"filled": 0},
+                },
+            ),
         ):
             response = client.get("/api/xcmax/ops/duty-health")
         assert response.status_code == 200
@@ -800,18 +884,23 @@ class TestOpsRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_ops_closure_status_with_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._remote_duty_health",
-            new=AsyncMock(return_value={"healthy": True}),
-        ), patch(
-            "app.application.ops_closure_status.build_ops_closure_status",
-            return_value={"staffing": {"filled": 5}},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._remote_duty_health",
+                new=AsyncMock(return_value={"healthy": True}),
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={"staffing": {"filled": 5}},
+            ),
         ):
             response = client.get("/api/xcmax/ops/closure-status")
         assert response.status_code == 200
@@ -854,12 +943,15 @@ class TestOpsRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_ops_staffing_install_local_missing_id(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
         ):
             response = client.post(
                 "/api/xcmax/ops/staffing/install-local",
@@ -869,15 +961,19 @@ class TestOpsRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_ops_staffing_install_local_success(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            new=AsyncMock(return_value={"success": True, "message": "ok"}),
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.mod_store_routes._install_from_catalog",
+                new=AsyncMock(return_value={"success": True, "message": "ok"}),
+            ),
         ):
             response = client.post(
                 "/api/xcmax/ops/staffing/install-local",
@@ -889,15 +985,19 @@ class TestOpsRoutesAdditional:
     async def test_ops_staffing_install_local_pydantic_model(self, client: TestClient):
         mock_model = MagicMock()
         mock_model.model_dump.return_value = {"success": True, "data": {"id": "e1"}}
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            new=AsyncMock(return_value=mock_model),
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.mod_store_routes._install_from_catalog",
+                new=AsyncMock(return_value=mock_model),
+            ),
         ):
             response = client.post(
                 "/api/xcmax/ops/staffing/install-local",
@@ -907,18 +1007,23 @@ class TestOpsRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_ops_staffing_install_local_error(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            new=AsyncMock(side_effect=RuntimeError("install fail")),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.mod_store_routes._install_from_catalog",
+                new=AsyncMock(side_effect=RuntimeError("install fail")),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
             response = client.post(
                 "/api/xcmax/ops/staffing/install-local",
@@ -937,117 +1042,146 @@ class TestOpsRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_ops_staffing_close_gap_no_missing(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._remote_duty_health",
-            new=AsyncMock(return_value={"healthy": True}),
-        ), patch(
-            "app.application.ops_closure_status.build_ops_closure_status",
-            return_value={
-                "missing_remote_employees": [],
-                "missing_local_employee_packs": [],
-            },
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._remote_duty_health",
+                new=AsyncMock(return_value={"healthy": True}),
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={
+                    "missing_remote_employees": [],
+                    "missing_local_employee_packs": [],
+                },
+            ),
         ):
             response = client.post("/api/xcmax/ops/staffing/close-gap", json={})
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_ops_staffing_close_gap_with_onboard(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._remote_duty_health",
-            new=AsyncMock(return_value={"healthy": True}),
-        ), patch(
-            "app.application.ops_closure_status.build_ops_closure_status",
-            return_value={
-                "missing_remote_employees": ["e1"],
-                "missing_local_employee_packs": [],
-            },
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True}),
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._remote_duty_health",
+                new=AsyncMock(return_value={"healthy": True}),
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={
+                    "missing_remote_employees": ["e1"],
+                    "missing_local_employee_packs": [],
+                },
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(return_value={"success": True}),
+            ),
         ):
             response = client.post("/api/xcmax/ops/staffing/close-gap", json={})
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_ops_staffing_close_gap_with_install(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._remote_duty_health",
-            new=AsyncMock(return_value={"healthy": True}),
-        ), patch(
-            "app.application.ops_closure_status.build_ops_closure_status",
-            return_value={
-                "missing_remote_employees": [],
-                "missing_local_employee_packs": ["e1"],
-            },
-        ), patch(
-            "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            new=AsyncMock(return_value={"success": True, "message": "ok"}),
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._remote_duty_health",
+                new=AsyncMock(return_value={"healthy": True}),
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={
+                    "missing_remote_employees": [],
+                    "missing_local_employee_packs": ["e1"],
+                },
+            ),
+            patch(
+                "app.fastapi_routes.mod_store_routes._install_from_catalog",
+                new=AsyncMock(return_value={"success": True, "message": "ok"}),
+            ),
         ):
             response = client.post("/api/xcmax/ops/staffing/close-gap", json={})
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_ops_staffing_close_gap_install_error(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._remote_duty_health",
-            new=AsyncMock(return_value={"healthy": True}),
-        ), patch(
-            "app.application.ops_closure_status.build_ops_closure_status",
-            return_value={
-                "missing_remote_employees": [],
-                "missing_local_employee_packs": ["e1"],
-            },
-        ), patch(
-            "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            new=AsyncMock(side_effect=RuntimeError("install fail")),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._remote_duty_health",
+                new=AsyncMock(return_value={"healthy": True}),
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={
+                    "missing_remote_employees": [],
+                    "missing_local_employee_packs": ["e1"],
+                },
+            ),
+            patch(
+                "app.fastapi_routes.mod_store_routes._install_from_catalog",
+                new=AsyncMock(side_effect=RuntimeError("install fail")),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
             response = client.post("/api/xcmax/ops/staffing/close-gap", json={})
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_ops_staffing_close_gap_skip_onboard(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._remote_duty_health",
-            new=AsyncMock(return_value={"healthy": True}),
-        ), patch(
-            "app.application.ops_closure_status.build_ops_closure_status",
-            return_value={
-                "missing_remote_employees": ["e1"],
-                "missing_local_employee_packs": [],
-            },
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._remote_duty_health",
+                new=AsyncMock(return_value={"healthy": True}),
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={
+                    "missing_remote_employees": ["e1"],
+                    "missing_local_employee_packs": [],
+                },
+            ),
         ):
             response = client.post(
                 "/api/xcmax/ops/staffing/close-gap",
@@ -1095,9 +1229,7 @@ class TestDailyDigestRoutes:
             "app.fastapi_routes.xcmax_admin._digest_local_or_proxy",
             new=AsyncMock(return_value={"success": True, "data": []}),
         ):
-            response = client.get(
-                "/api/xcmax/admin/action-items?kind=patch&day=2026-06-17"
-            )
+            response = client.get("/api/xcmax/admin/action-items?kind=patch&day=2026-06-17")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -1115,9 +1247,7 @@ class TestDailyDigestRoutes:
             "app.fastapi_routes.xcmax_admin._digest_local_or_proxy",
             new=AsyncMock(return_value={"success": True, "data": {}}),
         ):
-            response = client.get(
-                "/api/xcmax/admin/action-items/stats?kind=patch&day=2026-06-17"
-            )
+            response = client.get("/api/xcmax/admin/action-items/stats?kind=patch&day=2026-06-17")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -1159,9 +1289,7 @@ class TestDailyDigestRoutes:
             "app.fastapi_routes.xcmax_admin._market_admin_proxy",
             new=AsyncMock(return_value={"success": True}),
         ):
-            response = client.get(
-                "/api/xcmax/admin/digest-vibe-prep/sessions/abc123"
-            )
+            response = client.get("/api/xcmax/admin/digest-vibe-prep/sessions/abc123")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -1187,9 +1315,7 @@ class TestDailyDigestRoutes:
             "app.fastapi_routes.xcmax_admin._market_admin_proxy",
             new=AsyncMock(return_value={"success": True}),
         ):
-            response = client.get(
-                "/api/xcmax/admin/all-hands-report/sessions/abc123"
-            )
+            response = client.get("/api/xcmax/admin/all-hands-report/sessions/abc123")
         assert response.status_code == 200
 
 
@@ -1239,12 +1365,15 @@ class TestXcmaxMarketProxyImpl:
         req = MagicMock(spec=Request)
         req.method = "POST"
         req.json = AsyncMock(side_effect=ValueError("invalid json"))
-        with patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True}),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (ValueError,),
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(return_value={"success": True}),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (ValueError,),
+            ),
         ):
             result = await admin_routes._xcmax_market_proxy_impl(req, "test/path")
         assert isinstance(result, dict)
@@ -1326,12 +1455,15 @@ class TestSyncSseGenerator:
         req = MagicMock(spec=Request)
         req.is_disconnected = AsyncMock(return_value=False)
 
-        with patch(
-            "app.db.xcmax_sync.SyncDb",
-            side_effect=RuntimeError("db error"),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch(
+                "app.db.xcmax_sync.SyncDb",
+                side_effect=RuntimeError("db error"),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
             gen = admin_routes._sync_sse_generator(req, since_cursor=0)
             first = await gen.__anext__()
@@ -1353,16 +1485,17 @@ class TestSyncReceiveAdditional:
     async def test_sync_receive_apply_error(self):
         mock_db = MagicMock()
         mock_db.enqueue_inbox.return_value = 1
-        with patch(
-            "app.db.xcmax_sync.SyncDb", return_value=mock_db
-        ), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            side_effect=RuntimeError("apply fail"),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
-        ), patch(
-            "app.mod_sdk.audit.write_audit_event"
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                side_effect=RuntimeError("apply fail"),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
+            patch("app.mod_sdk.audit.write_audit_event"),
         ):
             result = await admin_routes.sync_receive({"entity_type": "product"})
         assert result["success"] is True
@@ -1373,29 +1506,35 @@ class TestSyncReceiveAdditional:
     async def test_sync_receive_audit_error(self):
         mock_db = MagicMock()
         mock_db.enqueue_inbox.return_value = 1
-        with patch(
-            "app.db.xcmax_sync.SyncDb", return_value=mock_db
-        ), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            return_value={"applied": 1},
-        ), patch(
-            "app.mod_sdk.audit.write_audit_event",
-            side_effect=RuntimeError("audit fail"),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                return_value={"applied": 1},
+            ),
+            patch(
+                "app.mod_sdk.audit.write_audit_event",
+                side_effect=RuntimeError("audit fail"),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
             result = await admin_routes.sync_receive({"entity_type": "product"})
         assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_sync_receive_db_error(self):
-        with patch(
-            "app.db.xcmax_sync.SyncDb",
-            side_effect=RuntimeError("db init fail"),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch(
+                "app.db.xcmax_sync.SyncDb",
+                side_effect=RuntimeError("db init fail"),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
             result = await admin_routes.sync_receive({"entity_type": "product"})
         assert isinstance(result, JSONResponse)
@@ -1412,14 +1551,16 @@ class TestResolveConflictAdditional:
     async def test_resolve_conflict_apply_with_applier(self, client: TestClient):
         mock_db = MagicMock()
         mock_applier = MagicMock()
-        with patch(
-            "app.db.xcmax_sync.SyncDb", return_value=mock_db
-        ), patch(
-            "app.services.admin_sync_service.fetch_inbox_row",
-            return_value={"entity_type": "product", "payload": "{}"},
-        ), patch(
-            "app.application.xcmax_sync_app.entity_appliers",
-            return_value={"product": mock_applier},
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.services.admin_sync_service.fetch_inbox_row",
+                return_value={"entity_type": "product", "payload": "{}"},
+            ),
+            patch(
+                "app.application.xcmax_sync_app.entity_appliers",
+                return_value={"product": mock_applier},
+            ),
         ):
             response = client.post(
                 "/api/xcmax/sync/conflicts/1/resolve",
@@ -1431,14 +1572,16 @@ class TestResolveConflictAdditional:
     @pytest.mark.asyncio
     async def test_resolve_conflict_apply_no_row(self, client: TestClient):
         mock_db = MagicMock()
-        with patch(
-            "app.db.xcmax_sync.SyncDb", return_value=mock_db
-        ), patch(
-            "app.services.admin_sync_service.fetch_inbox_row",
-            return_value=None,
-        ), patch(
-            "app.application.xcmax_sync_app.entity_appliers",
-            return_value={},
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.services.admin_sync_service.fetch_inbox_row",
+                return_value=None,
+            ),
+            patch(
+                "app.application.xcmax_sync_app.entity_appliers",
+                return_value={},
+            ),
         ):
             response = client.post(
                 "/api/xcmax/sync/conflicts/1/resolve",
@@ -1449,14 +1592,16 @@ class TestResolveConflictAdditional:
     @pytest.mark.asyncio
     async def test_resolve_conflict_apply_no_applier(self, client: TestClient):
         mock_db = MagicMock()
-        with patch(
-            "app.db.xcmax_sync.SyncDb", return_value=mock_db
-        ), patch(
-            "app.services.admin_sync_service.fetch_inbox_row",
-            return_value={"entity_type": "unknown", "payload": "{}"},
-        ), patch(
-            "app.application.xcmax_sync_app.entity_appliers",
-            return_value={},  # No applier for "unknown"
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.services.admin_sync_service.fetch_inbox_row",
+                return_value={"entity_type": "unknown", "payload": "{}"},
+            ),
+            patch(
+                "app.application.xcmax_sync_app.entity_appliers",
+                return_value={},  # No applier for "unknown"
+            ),
         ):
             response = client.post(
                 "/api/xcmax/sync/conflicts/1/resolve",
@@ -1466,12 +1611,15 @@ class TestResolveConflictAdditional:
 
     @pytest.mark.asyncio
     async def test_resolve_conflict_error(self, client: TestClient):
-        with patch(
-            "app.db.xcmax_sync.SyncDb",
-            side_effect=RuntimeError("db fail"),
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-            (RuntimeError,),
+        with (
+            patch(
+                "app.db.xcmax_sync.SyncDb",
+                side_effect=RuntimeError("db fail"),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+                (RuntimeError,),
+            ),
         ):
             response = client.post(
                 "/api/xcmax/sync/conflicts/1/resolve",
@@ -1483,11 +1631,12 @@ class TestResolveConflictAdditional:
     async def test_resolve_conflict_default_action(self, client: TestClient):
         """Default action should be 'skip'."""
         mock_db = MagicMock()
-        with patch(
-            "app.db.xcmax_sync.SyncDb", return_value=mock_db
-        ), patch(
-            "app.services.admin_sync_service.mark_inbox_skipped",
-        ) as mock_skip:
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.services.admin_sync_service.mark_inbox_skipped",
+            ) as mock_skip,
+        ):
             response = client.post(
                 "/api/xcmax/sync/conflicts/1/resolve",
                 json={},  # No action specified

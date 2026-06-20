@@ -33,7 +33,12 @@ def test_build_local_duty_graph_health_shape() -> None:
                 "enabled": True,
                 "running": False,
                 "last_error": "",
-                "jobs": [{"employee_id": "daily-orchestrator", "next_run_time": "2026-06-19T08:15:00+08:00"}],
+                "jobs": [
+                    {
+                        "employee_id": "daily-orchestrator",
+                        "next_run_time": "2026-06-19T08:15:00+08:00",
+                    }
+                ],
             },
         ),
     ):
@@ -105,7 +110,9 @@ class TestLocalDutyGraphRoutes:
             ),
             patch(
                 "app.application.employee_runtime.scheduler.get_employee_cron_jobs",
-                return_value=[{"job_id": "daily-orchestrator", "employee_id": "daily-orchestrator"}],
+                return_value=[
+                    {"job_id": "daily-orchestrator", "employee_id": "daily-orchestrator"}
+                ],
             ),
         ):
             resp = client.get("/api/xcmax/local/employee-cron/jobs")
@@ -120,7 +127,11 @@ class TestLocalDutyGraphRoutes:
             ),
             patch(
                 "app.application.employee_runtime.scheduler.run_employee_cron_job",
-                return_value={"success": True, "job": {"job_id": "daily-orchestrator"}, "result": {"success": True}},
+                return_value={
+                    "success": True,
+                    "job": {"job_id": "daily-orchestrator"},
+                    "result": {"success": True},
+                },
             ) as run_job,
         ):
             resp = client.post(

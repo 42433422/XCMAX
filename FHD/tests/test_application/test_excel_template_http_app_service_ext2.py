@@ -6,6 +6,7 @@ Covers ``_decompose_from_grid``, ``_decompose_template_xls_pandas``,
 ``upload_excel`` (async), and DB-backed ``get_template`` / ``update_template``
 / ``delete_template``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +20,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.application import excel_template_http_app_service as svc
-
 
 # ── _json_safe_cell_value ────────────────────────────────────────────────────
 
@@ -277,7 +277,9 @@ class TestDecomposeTemplate:
     def test_xlsx_unreadable(self, tmp_path):
         f = tmp_path / "bad.xlsx"
         f.write_text("not an xlsx")
-        with patch.object(svc, "_decompose_template_openpyxl", side_effect=OSError("BadZipFile: bad zip")):
+        with patch.object(
+            svc, "_decompose_template_openpyxl", side_effect=OSError("BadZipFile: bad zip")
+        ):
             out, status = svc._decompose_template(str(f))
         assert status == 200
         assert out["success"] is False
@@ -379,9 +381,7 @@ class TestGetTemplateFile:
     def test_returns_file_response(self, tmp_path):
         f = tmp_path / "tpl.xlsx"
         f.write_text("content")
-        templates = [
-            {"id": "t1", "exists": True, "path": str(f), "filename": "tpl.xlsx"}
-        ]
+        templates = [{"id": "t1", "exists": True, "path": str(f), "filename": "tpl.xlsx"}]
         with patch.object(svc, "_get_template_list", return_value=templates):
             resp = svc.get_template_file("t1")
         assert resp.status_code == 200
@@ -788,9 +788,7 @@ class TestDecomposeTemplateHttp:
         # Create a real file so os.path.exists passes, then _decompose_template raises
         f = tmp_path / "x.xlsx"
         f.write_text("content")
-        with patch.object(
-            svc, "_decompose_template", side_effect=RuntimeError("boom")
-        ):
+        with patch.object(svc, "_decompose_template", side_effect=RuntimeError("boom")):
             resp = svc.decompose_template({"file_path": str(f)})
         assert resp.status_code == 500
 

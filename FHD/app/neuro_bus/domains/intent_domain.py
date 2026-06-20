@@ -186,4 +186,3 @@ def get_intent_domain() -> IntentNeuroDomain:
         _intent_domain = IntentNeuroDomain()
         get_domain_registry().register(_intent_domain)
     return _intent_domain
-

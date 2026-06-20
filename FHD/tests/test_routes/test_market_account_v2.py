@@ -10,7 +10,6 @@ import pytest
 
 from app.fastapi_routes import market_account as ma
 
-
 # ========================= _market_base_url ===================================
 
 
@@ -460,7 +459,13 @@ class TestSessionMarketToken:
 
 class TestDemoMarketLoginPayload:
     def test_basic(self):
-        shim = {"token": "demo_tok", "refresh_token": "demo_rt", "is_enterprise": True, "is_market_admin": False, "raw": {}}
+        shim = {
+            "token": "demo_tok",
+            "refresh_token": "demo_rt",
+            "is_enterprise": True,
+            "is_market_admin": False,
+            "raw": {},
+        }
         result = ma._demo_market_login_payload(shim, market_base_url="http://localhost:8765")
         assert result["success"] is True
         assert result["token"] == "demo_tok"
@@ -468,7 +473,13 @@ class TestDemoMarketLoginPayload:
         assert isinstance(result["raw"]["user"], dict)
 
     def test_user_from_raw(self):
-        shim = {"token": "t", "refresh_token": "", "is_enterprise": False, "is_market_admin": True, "raw": {"user": {"id": 5, "username": "test"}}}
+        shim = {
+            "token": "t",
+            "refresh_token": "",
+            "is_enterprise": False,
+            "is_market_admin": True,
+            "raw": {"user": {"id": 5, "username": "test"}},
+        }
         result = ma._demo_market_login_payload(shim, market_base_url="http://localhost:8765")
         assert result["raw"]["user"]["id"] == 5
 
@@ -537,7 +548,11 @@ class TestSendMarketResetPasswordCode:
     @pytest.mark.asyncio
     async def test_valid_email_proxy_error(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
-        error_payload = {"__proxy_error__": True, "status_code": 502, "payload": {"detail": "unavailable"}}
+        error_payload = {
+            "__proxy_error__": True,
+            "status_code": 502,
+            "payload": {"detail": "unavailable"},
+        }
         with patch.object(ma, "_proxy_json", return_value=error_payload):
             result = await ma.send_market_reset_password_code("test@example.com")
             assert result["success"] is False
@@ -579,7 +594,11 @@ class TestResetMarketPasswordWithCode:
     @pytest.mark.asyncio
     async def test_proxy_error(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
-        error_payload = {"__proxy_error__": True, "status_code": 400, "payload": {"detail": "bad code"}}
+        error_payload = {
+            "__proxy_error__": True,
+            "status_code": 400,
+            "payload": {"detail": "bad code"},
+        }
         with patch.object(ma, "_proxy_json", return_value=error_payload):
             result = await ma.reset_market_password_with_code("a@b.com", "123456", "newpassword")
             assert result["success"] is False
@@ -592,7 +611,9 @@ class TestRegisterMarketUser:
     @pytest.mark.asyncio
     async def test_success(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
-        with patch.object(ma, "_proxy_json", return_value={"data": {"access_token": "tok", "refresh_token": "rt"}}):
+        with patch.object(
+            ma, "_proxy_json", return_value={"data": {"access_token": "tok", "refresh_token": "rt"}}
+        ):
             result = await ma.register_market_user("user1", "pass123", "a@b.com")
             assert result["success"] is True
             assert result["token"] == "tok"
@@ -600,7 +621,11 @@ class TestRegisterMarketUser:
     @pytest.mark.asyncio
     async def test_proxy_error(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
-        error_payload = {"__proxy_error__": True, "status_code": 409, "payload": {"detail": "用户名已存在"}}
+        error_payload = {
+            "__proxy_error__": True,
+            "status_code": 409,
+            "payload": {"detail": "用户名已存在"},
+        }
         with patch.object(ma, "_proxy_json", return_value=error_payload):
             result = await ma.register_market_user("user1", "pass123", "a@b.com")
             assert result["success"] is False
@@ -608,7 +633,11 @@ class TestRegisterMarketUser:
     @pytest.mark.asyncio
     async def test_verification_required_fallback(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
-        error_payload = {"__proxy_error__": True, "status_code": 400, "payload": {"detail": "需要验证码"}}
+        error_payload = {
+            "__proxy_error__": True,
+            "status_code": 400,
+            "payload": {"detail": "需要验证码"},
+        }
         open_reg_payload = {"data": {"access_token": "open_tok", "refresh_token": "open_rt"}}
         call_count = 0
 

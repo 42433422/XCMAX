@@ -5,6 +5,7 @@ Covers ``ChatTurn`` (fingerprint + semantic fingerprint), ``ChatContext``
 is_duplicate / cache_response / get_history_summary / cleanup_old_history /
 get_all_users_count), and ``ChatContextContainer``.
 """
+
 from __future__ import annotations
 
 import time
@@ -18,7 +19,6 @@ from app.domain.services.conversation.context.chat_context import (
     ChatTurn,
     get_chat_context,
 )
-
 
 # ── ChatTurn ─────────────────────────────────────────────────────────────────
 
@@ -56,31 +56,19 @@ class TestChatTurn:
         assert len(fp) == 16
 
     def test_semantic_fingerprint_with_slots(self):
-        turn1 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "1", "b": "2"}, None
-        )
-        turn2 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"b": "2", "a": "1"}, None
-        )
+        turn1 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "1", "b": "2"}, None)
+        turn2 = ChatTurn("u", "msg", "intent1", "tool1", {"b": "2", "a": "1"}, None)
         # Same slots in different order → same fingerprint
         assert turn1.make_semantic_fingerprint() == turn2.make_semantic_fingerprint()
 
     def test_semantic_fingerprint_skips_empty_slots(self):
-        turn1 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "1", "b": ""}, None
-        )
-        turn2 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "1"}, None
-        )
+        turn1 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "1", "b": ""}, None)
+        turn2 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "1"}, None)
         assert turn1.make_semantic_fingerprint() == turn2.make_semantic_fingerprint()
 
     def test_semantic_fingerprint_skips_none_slots(self):
-        turn1 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "1", "b": None}, None
-        )
-        turn2 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "1"}, None
-        )
+        turn1 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "1", "b": None}, None)
+        turn2 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "1"}, None)
         assert turn1.make_semantic_fingerprint() == turn2.make_semantic_fingerprint()
 
     def test_semantic_fingerprint_different_intent(self):
@@ -224,9 +212,7 @@ class TestIsDuplicate:
         ctx = ChatContext()
         turn = ChatTurn("u1", "msg", "intent1", "tool1", {}, "response1")
         ctx.add_turn("u1", turn)
-        is_dup, cached, exact = ctx.is_duplicate(
-            "u1", "msg", intent="intent2", tool_key="tool1"
-        )
+        is_dup, cached, exact = ctx.is_duplicate("u1", "msg", intent="intent2", tool_key="tool1")
         assert is_dup is False
 
     def test_no_intent_no_semantic_check(self):

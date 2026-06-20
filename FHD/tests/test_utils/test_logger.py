@@ -17,7 +17,6 @@ from app.utils.logger import (
     setup_structured_logging,
 )
 
-
 # ---------------------------------------------------------------------------
 # StructuredLogFormatter
 # ---------------------------------------------------------------------------
@@ -50,8 +49,13 @@ class TestStructuredLogFormatter:
     def test_format_with_request_id(self):
         formatter = StructuredLogFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="msg", args=None, exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="msg",
+            args=None,
+            exc_info=None,
         )
         record.request_id = "req-123"
         output = formatter.format(record)
@@ -61,8 +65,13 @@ class TestStructuredLogFormatter:
     def test_format_with_user_id(self):
         formatter = StructuredLogFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="msg", args=None, exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="msg",
+            args=None,
+            exc_info=None,
         )
         record.user_id = "user-456"
         output = formatter.format(record)
@@ -72,8 +81,13 @@ class TestStructuredLogFormatter:
     def test_format_with_duration(self):
         formatter = StructuredLogFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="msg", args=None, exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="msg",
+            args=None,
+            exc_info=None,
         )
         record.duration = 123.45
         output = formatter.format(record)
@@ -83,8 +97,13 @@ class TestStructuredLogFormatter:
     def test_format_with_extra_data(self):
         formatter = StructuredLogFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="msg", args=None, exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="msg",
+            args=None,
+            exc_info=None,
         )
         record.extra_data = {"key1": "value1", "key2": 42}
         output = formatter.format(record)
@@ -95,8 +114,13 @@ class TestStructuredLogFormatter:
     def test_format_with_error_code(self):
         formatter = StructuredLogFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.ERROR, pathname="", lineno=0,
-            msg="error", args=None, exc_info=None,
+            name="test",
+            level=logging.ERROR,
+            pathname="",
+            lineno=0,
+            msg="error",
+            args=None,
+            exc_info=None,
         )
         record.error_code = "E001"
         output = formatter.format(record)
@@ -106,8 +130,13 @@ class TestStructuredLogFormatter:
     def test_format_with_stack_id(self):
         formatter = StructuredLogFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="msg", args=None, exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="msg",
+            args=None,
+            exc_info=None,
         )
         record.stack_id = "stack-789"
         output = formatter.format(record)
@@ -120,11 +149,17 @@ class TestStructuredLogFormatter:
             raise ValueError("test error")
         except ValueError:
             import sys
+
             exc_info = sys.exc_info()
 
         record = logging.LogRecord(
-            name="test", level=logging.ERROR, pathname="", lineno=0,
-            msg="error occurred", args=None, exc_info=exc_info,
+            name="test",
+            level=logging.ERROR,
+            pathname="",
+            lineno=0,
+            msg="error occurred",
+            args=None,
+            exc_info=exc_info,
         )
         output = formatter.format(record)
         data = json.loads(output)

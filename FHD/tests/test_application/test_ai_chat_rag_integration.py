@@ -1,4 +1,5 @@
 """Tests for app.application.ai_chat_rag_integration — with RAG module mocked."""
+
 from __future__ import annotations
 
 import sys
@@ -36,6 +37,7 @@ class TestGetRagService:
     @patch("app.application.ai_chat_rag_integration.is_rag_enabled", return_value=False)
     def test_rag_disabled_returns_none(self, mock_enabled):
         import app.application.ai_chat_rag_integration as mod
+
         mod._rag_service = None
         result = get_rag_service()
         assert result is None
@@ -45,6 +47,7 @@ class TestGetRagService:
     @patch("app.application.ai_chat_rag_integration.RagService", side_effect=RuntimeError("no rag"))
     def test_rag_init_failure_returns_none(self, mock_rag, mock_embedder, mock_enabled):
         import app.application.ai_chat_rag_integration as mod
+
         mod._rag_service = None
         result = get_rag_service()
         assert result is None

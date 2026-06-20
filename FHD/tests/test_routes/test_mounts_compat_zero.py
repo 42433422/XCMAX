@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.mounts.compat."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

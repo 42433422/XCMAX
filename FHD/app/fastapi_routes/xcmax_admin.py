@@ -1776,8 +1776,7 @@ def _collect_codex_usage() -> dict[str, Any]:
     if not os.path.isdir(archived):
         return {"available": False, "reason": f"目录不存在: {archived}"}
     jsonl_files = sorted(
-        f for f in (os.path.join(archived, x) for x in os.listdir(archived))
-        if f.endswith(".jsonl")
+        f for f in (os.path.join(archived, x) for x in os.listdir(archived)) if f.endswith(".jsonl")
     )
     total_input = total_cached = total_output = total_reasoning = total_total = 0
     by_model: dict[str, dict[str, Any]] = {}
@@ -1794,7 +1793,9 @@ def _collect_codex_usage() -> dict[str, Any]:
                         continue
                     if evt.get("type") == "session_meta":
                         payload = evt.get("payload") or {}
-                        session_model = payload.get("model") or payload.get("model_provider") or "unknown"
+                        session_model = (
+                            payload.get("model") or payload.get("model_provider") or "unknown"
+                        )
                     if (
                         evt.get("type") == "event_msg"
                         and (evt.get("payload") or {}).get("type") == "token_count"
@@ -1813,7 +1814,14 @@ def _collect_codex_usage() -> dict[str, Any]:
                         total_total += t
                         slot = by_model.setdefault(
                             session_model,
-                            {"input": 0, "cached": 0, "output": 0, "reasoning": 0, "total": 0, "count": 0},
+                            {
+                                "input": 0,
+                                "cached": 0,
+                                "output": 0,
+                                "reasoning": 0,
+                                "total": 0,
+                                "count": 0,
+                            },
                         )
                         slot["input"] += i
                         slot["cached"] += c
@@ -1872,9 +1880,7 @@ def _collect_trae_usage() -> dict[str, Any]:
                 current_models = json.loads(row[0])
             except RECOVERABLE_ERRORS:
                 current_models = None
-        cur.execute(
-            "SELECT value FROM ItemTable WHERE key LIKE '%model_list_map%' LIMIT 1"
-        )
+        cur.execute("SELECT value FROM ItemTable WHERE key LIKE '%model_list_map%' LIMIT 1")
         row = cur.fetchone()
         if row:
             try:
@@ -1978,12 +1984,8 @@ def _build_token_usage_summary() -> dict[str, Any]:
     for key, src in sources.items():
         src["estimated_cost_usd"] = round(_estimate_cost_usd(key, src), 2)
     grand_total = sum(_to_int(s.get("total_tokens")) for s in sources.values())
-    grand_prompt = sum(
-        _to_int(s.get("prompt_tokens")) for s in sources.values()
-    )
-    grand_completion = sum(
-        _to_int(s.get("completion_tokens")) for s in sources.values()
-    )
+    grand_prompt = sum(_to_int(s.get("prompt_tokens")) for s in sources.values())
+    grand_completion = sum(_to_int(s.get("completion_tokens")) for s in sources.values())
     grand_cost = round(sum(s.get("estimated_cost_usd", 0.0) for s in sources.values()), 2)
     return {
         "success": True,

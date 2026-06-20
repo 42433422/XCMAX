@@ -114,7 +114,9 @@ def _products_compat_via_service_enabled() -> bool:
         return False
 
 
-def _products_compat_preflight(request: Request, action: str, payload: dict[str, Any]) -> dict | None:
+def _products_compat_preflight(
+    request: Request, action: str, payload: dict[str, Any]
+) -> dict | None:
     if _products_compat_via_service_enabled():
         return None
     _products_write_raise(request)
@@ -245,7 +247,9 @@ def _execute_products_compat_action(action: str, params: dict[str, Any]) -> dict
             return {"success": False, "message": "ids 须为非空数组", "status_code": 400}
         try:
             deleted, skipped = products_pg_batch_delete_rows(ids)
-            skipped_items = skipped if isinstance(skipped, list) else ([] if not skipped else [skipped])
+            skipped_items = (
+                skipped if isinstance(skipped, list) else ([] if not skipped else [skipped])
+            )
             return {
                 "success": True,
                 "message": f"已删除 {deleted} 条",
