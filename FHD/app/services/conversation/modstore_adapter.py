@@ -221,42 +221,13 @@ class ModstorePlatformAdapter:
             except RECOVERABLE_ERRORS:
                 request_auth = ""
 
-        # 移动端携带的是 FHD 签发的 Mobile JWT，MODstore 不认识，必须改从
-        # FHD session 中取真正的 market token（与 /api/mobile/v1/wallet/balance
-        # 的认证模式一致）。桌面端浏览器携带的是 market token 或 session cookie，
-        # 可以直接透传。
-        request_auth_token = _strip_bearer_prefix(request_auth)
-        mobile_session_id = ""
-        is_mobile_jwt = False
-        if request_auth_token:
-            try:
-                from app.security.mobile_jwt import verify_mobile_jwt
+        auth_token = (
+            kwargs.get("auth_token")
+            or os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
+            or _strip_bearer_prefix(request_auth)
+        )
 
-                mobile_payload = verify_mobile_jwt(request_auth_token)
-                if mobile_payload:
-                    is_mobile_jwt = True
-                    mobile_session_id = str(mobile_payload.get("session_id") or "")
-            except RECOVERABLE_ERRORS:
-                pass
-
-        # Token 优先级（高 → 低）：
-        #   1. kwargs 显式传入的 auth_token
-        #   2. 请求头中的 market token（非 Mobile JWT，桌面端/移动端均可）
-        #   3. FHD Session 表中绑定的 market token（Mobile JWT 场景）
-        #   4. latest_session_market_token fallback（桌面端非 Mobile JWT 兜底）
-        #   5. MODSTORE_AUTH_TOKEN 环境变量（最后兜底，仅当以上都无）
-        # 注意：环境变量必须作为最后兜底，否则会覆盖移动端用户自己的 market token，
-        # 导致用过期/无效的环境变量 token 调用 MODstore → 401。
-        token_source = "none"
-        auth_token = kwargs.get("auth_token") or ""
-        if auth_token:
-            token_source = "kwargs"
-        # 非 Mobile JWT 的请求头 token（桌面端 market token / 移动端 market token）直接透传
-        if not auth_token and not is_mobile_jwt and request_auth_token:
-            auth_token = request_auth_token
-            token_source = "request"
-
-        if not auth_token and (session_id or request or is_mobile_jwt):
+        if not auth_token and (session_id or request):
             try:
                 from app.fastapi_routes.market_account import (
                     latest_session_market_token,
@@ -264,17 +235,14 @@ class ModstorePlatformAdapter:
                     session_market_token,
                 )
 
-                effective_session_id = (
-                    session_id
-                    or mobile_session_id
-                    or (session_id_from_request(request) if request else "")
+                effective_session_id = session_id or (
+                    session_id_from_request(request) if request else ""
                 )
 
                 if effective_session_id:
                     token_from_session = session_market_token(effective_session_id)
                     if token_from_session:
                         auth_token = token_from_session
-                        token_source = "session"
                         logger.debug(
                             "从FHD Session [%s...] 获取到平台Token (长度: %s)",
                             effective_session_id[:8],
@@ -287,32 +255,15 @@ class ModstorePlatformAdapter:
                         )
                 else:
                     logger.warning("无法获取有效的Session ID")
-                # 安全约束：移动端 JWT 场景下禁止 fallback 到 latest_session_market_token()，
-                # 否则会取到其他用户持久化的 market token，导致越权调用 LLM 并计费到他人账户。
-                # 桌面端（非 mobile JWT）保留 fallback，因其 session 过期兜底场景需要。
                 if not auth_token:
-                    if is_mobile_jwt:
-                        logger.warning(
-                            "移动端 JWT Session [%s...] 未绑定市场账号，拒绝 fallback 到他人 token",
-                            (effective_session_id or "")[:8],
-                        )
-                    else:
-                        latest_token = latest_session_market_token()
-                        if latest_token:
-                            auth_token = latest_token
-                            token_source = "latest_session"
-                            logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
+                    latest_token = latest_session_market_token()
+                    if latest_token:
+                        auth_token = latest_token
+                        logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
             except ImportError as e:
                 logger.error("无法导入market_account模块: %s", e)
             except RECOVERABLE_ERRORS as e:
                 logger.error("从Session获取Token失败: %s", e, exc_info=True)
-
-        # 环境变量作为最后兜底（桌面端无请求头 token 且 session 表无绑定场景）
-        if not auth_token:
-            env_token = os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
-            if env_token:
-                auth_token = env_token
-                token_source = "env"
 
         instance = cls(
             platform_url=platform_url,
@@ -320,7 +271,9 @@ class ModstorePlatformAdapter:
             **{k: v for k, v in kwargs.items() if k not in ("platform_url", "auth_token")},
         )
 
-        instance._source = token_source
+        instance._source = (
+            "session" if auth_token and not os.environ.get("MODSTORE_AUTH_TOKEN") else "env"
+        )
 
         return instance
 

@@ -268,12 +268,65 @@
             <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
               <i class="fa fa-bookmark"></i>
             </span>
-            <span class="settings-row__label">记忆库 v2</span>
-            <span class="settings-row__meta">{{ memoryV2FoldMeta }}</span>
+            <span class="settings-row__label">拟人persy系统</span>
+            <span class="settings-row__meta">{{ persyFoldMeta }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
 
           <div class="settings-card__body settings-card__body--compact">
+            <div class="persy-profile">
+              <div v-if="persyLoading" class="persy-profile__state muted">人设加载中…</div>
+              <div v-else-if="persyProfile" class="persy-profile__body">
+                <div class="persy-profile__head">
+                  <span class="persy-profile__identity">{{ persyProfile.identity_composite || persyProfile.identity_primary }}</span>
+                  <span class="persy-profile__type">{{ persyProfile.mbti_type }}</span>
+                  <span class="persy-profile__meta">互动 {{ persyProfile.interaction_count }} 轮</span>
+                </div>
+                <div class="persy-profile__axes">
+                  <div class="persy-axis">
+                    <span class="persy-axis__label">亲切度</span>
+                    <div class="persy-axis__bar">
+                      <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.warmth}%` }"></div>
+                    </div>
+                    <span class="persy-axis__score">{{ persyProfile.four_axes.warmth }}</span>
+                  </div>
+                  <div class="persy-axis">
+                    <span class="persy-axis__label">详细度</span>
+                    <div class="persy-axis__bar">
+                      <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.verbosity}%` }"></div>
+                    </div>
+                    <span class="persy-axis__score">{{ persyProfile.four_axes.verbosity }}</span>
+                  </div>
+                  <div class="persy-axis">
+                    <span class="persy-axis__label">主动度</span>
+                    <div class="persy-axis__bar">
+                      <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.proactiveness}%` }"></div>
+                    </div>
+                    <span class="persy-axis__score">{{ persyProfile.four_axes.proactiveness }}</span>
+                  </div>
+                  <div class="persy-axis">
+                    <span class="persy-axis__label">结构度</span>
+                    <div class="persy-axis__bar">
+                      <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.structuredness}%` }"></div>
+                    </div>
+                    <span class="persy-axis__score">{{ persyProfile.four_axes.structuredness }}</span>
+                  </div>
+                </div>
+                <div class="persy-profile__footer">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-secondary"
+                    :disabled="persyInferring"
+                    @click="runPersyInfer"
+                  >
+                    {{ persyInferring ? '推断中…' : '触发推断' }}
+                  </button>
+                  <span v-if="persyLastReason" class="persy-profile__reason">{{ persyLastReason }}</span>
+                </div>
+              </div>
+              <div v-else class="persy-profile__state muted">暂无人设数据</div>
+            </div>
+
             <div class="memory-v2-toolbar">
               <select
                 v-model="memoryV2StatusFilter"
@@ -813,6 +866,7 @@ import { buildFullApiUrl } from '@/api/core';
 import { systemApi, type Industry as ApiIndustry } from '../api/system';
 import { intentPackagesApi, type IntentPackage as ApiIntentPackage } from '../api/intentPackages';
 import { memoryV2Api, type MemoryV2Record, type MemoryV2Status, type MemoryV2Summary, type MemoryV2Type } from '@/api/memoryV2';
+import { butlerProfileApi, type ButlerProfileView } from '@/api/butlerProfile';
 import { useIndustryStore } from '../stores/industry';
 import {
   SIDEBAR_THEME_OPTIONS,
@@ -940,6 +994,55 @@ const memoryV2Edit = reactive({
   key: '',
   value: '',
 });
+
+// ========== 拟人 Persy 系统 ==========
+const persyProfile = ref<ButlerProfileView | null>(null);
+const persyLoading = ref(false);
+const persyInferring = ref(false);
+const persyLastReason = ref('');
+
+const persyUserId = computed(() => {
+  const raw = localUser.value?.id || '1';
+  const num = Number(raw);
+  return Number.isFinite(num) && num > 0 ? num : 1;
+});
+
+const persyFoldMeta = computed(() => {
+  if (!persyProfile.value) return '待确认 0 · 已确认 0';
+  const identity = persyProfile.value.identity_composite || persyProfile.value.identity_primary || '未初始化';
+  const interactions = persyProfile.value.interaction_count || 0;
+  return `${identity} · 互动 ${interactions}`;
+});
+
+async function loadPersyProfile() {
+  persyLoading.value = true;
+  try {
+    const result = await butlerProfileApi.get(persyUserId.value);
+    if (result.success === false) throw new Error(result.message || '人设加载失败');
+    persyProfile.value = result.profile || null;
+  } catch (e: unknown) {
+    persyProfile.value = null;
+  } finally {
+    persyLoading.value = false;
+  }
+}
+
+async function runPersyInfer() {
+  persyInferring.value = true;
+  persyLastReason.value = '';
+  try {
+    const result = await butlerProfileApi.infer({ userId: persyUserId.value });
+    if (result.success === false) throw new Error(result.message || '推断失败');
+    if (result.profile) persyProfile.value = result.profile;
+    if (result.inference?.reasons?.length) {
+      persyLastReason.value = result.inference.reasons[result.inference.reasons.length - 1];
+    }
+  } catch (e: unknown) {
+    persyLastReason.value = e instanceof Error ? e.message : '推断失败';
+  } finally {
+    persyInferring.value = false;
+  }
+}
 
 const memoryV2UserId = computed(() => {
   const raw = localUser.value?.username || localUser.value?.id || 'default';
@@ -2058,15 +2161,23 @@ onMounted(async () => {
   await loadIntentPackages();
   loadPreferences();
   void loadMemoryV2();
+  void loadPersyProfile();
   loadDistillationVersions();
 });
 
 onActivated(() => {
-  void loadLocalUser().then(() => loadMemoryV2());
+  void loadLocalUser().then(() => {
+    loadMemoryV2();
+    loadPersyProfile();
+  });
 });
 
 watch(memoryV2UserId, () => {
   void loadMemoryV2();
+});
+
+watch(persyUserId, () => {
+  void loadPersyProfile();
 });
 
 watch(
@@ -2814,6 +2925,112 @@ select.settings-item__control,
 .settings-meta-line {
   margin: 10px 0 0;
   font-size: 12px;
+}
+
+/* ========== 拟人 Persy 系统 ========== */
+.persy-profile {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.persy-profile__state {
+  padding: 8px 0;
+  text-align: center;
+}
+
+.persy-profile__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.persy-profile__identity {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.persy-profile__type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.persy-profile__meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.persy-profile__axes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.persy-axis {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.persy-axis__label {
+  width: 56px;
+  font-size: 12px;
+  color: #4b5563;
+  flex-shrink: 0;
+}
+
+.persy-axis__bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.persy-axis__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #60a5fa, #3b82f6);
+  transition: width 0.3s ease;
+}
+
+.persy-axis__score {
+  width: 28px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+  flex-shrink: 0;
+}
+
+.persy-profile__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.persy-profile__reason {
+  font-size: 12px;
+  color: #6b7280;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .memory-v2-toolbar,

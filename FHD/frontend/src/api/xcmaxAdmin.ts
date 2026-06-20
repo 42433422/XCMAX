@@ -69,6 +69,18 @@ export const xcmaxAdminApi = {
       `/api/xcmax/admin/market/users/${userId}/enterprise?is_enterprise=${isEnterprise}`,
     );
   },
+  getUserProfiles() {
+    return api.get('/api/xcmax/admin/users/profiles');
+  },
+  setUserProfile(
+    userId: number,
+    payload: { username: string; tier?: string; industry_id?: string },
+  ) {
+    return api.put(`/api/xcmax/admin/users/${userId}/profile`, payload);
+  },
+  listWallets(limit = 500, offset = 0) {
+    return api.get('/api/xcmax/admin/market/wallets', { limit, offset });
+  },
   startImpersonate(marketUserId: number, username: string) {
     return api.post('/api/xcmax/admin/impersonate', {
       market_user_id: marketUserId,

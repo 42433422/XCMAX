@@ -1,1 +1,0 @@
-import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as t,t as a,a2 as o}from"./index-CinG43sm.js";const _=t({__name:"WechatContactsView",setup(c){return(i,n)=>(a(),o(e,{"mod-id":"xcagi-erp-domain-bridge",view:"WechatContactsView",title:"ERP 业务页"}))}});export{_ as default};

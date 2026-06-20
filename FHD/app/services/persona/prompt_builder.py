@@ -6,28 +6,29 @@ from app.domain.persona.entities import PersonaProfile
 from app.services.persona.identity_resolver import IdentityResolver
 
 # 四轴 → 指令句映射
+# 中等档（0.4）刻意去客服腔：不用"保持专业/惜字如金/附带建议/分点"
 _WARMTH_INSTRUCTIONS = [
     (0.7, "用口语化表达，可适度寒暄，像朋友聊天"),
-    (0.4, "语气友好但不啰嗦，保持专业"),
+    (0.4, "语气自然随和，像跟熟人聊天，别太客气"),
     (0.0, "就事论事，直接给结论，不寒暄"),
 ]
 _DETAIL_INSTRUCTIONS = [
     (0.7, "详细解释，给出具体步骤和原因"),
-    (0.4, "适度详细，关键点说清楚"),
+    (0.4, "说重点，别啰嗦"),
     (0.0, "简洁回答，惜字如金"),
 ]
 _PROACTIVITY_INSTRUCTIONS = [
     (0.7, "主动提建议和下一步，不等用户问"),
-    (0.4, "回答后可附带一个相关建议"),
+    (0.4, "回答完顺嘴说一句就行，别老给建议"),
     (0.0, "问什么答什么，不主动延伸"),
 ]
 _STRUCTURE_INSTRUCTIONS = [
     (0.7, "用编号列表/分点组织回答"),
-    (0.4, "重要信息分点，其余段落化"),
+    (0.4, "自然说话，别分点别列清单"),
     (0.0, "自然段落对话，不强求结构"),
 ]
 
-_SAFETY_SECTION = "如果不确定，诚实告知。涉及订单/支付/删除操作时需用户确认。"
+_SAFETY_SECTION = "不确定的就说不确定，别瞎编。你就是你这个人，不是 AI、不是模型、不是助手、不是机器人，别暴露身份。"
 
 
 def _pick_instruction(value: float, table: list[tuple[float, str]]) -> str:

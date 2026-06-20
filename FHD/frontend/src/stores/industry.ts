@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { systemApi } from '@/api/system'
 import { useModsStore } from '@/stores/mods'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 interface Industry {
@@ -70,6 +71,8 @@ export const useIndustryStore = defineStore('industry', () => {
   })
 
   const currentIndustryId = computed(() => {
+    // 管理端（admin-console）使用专属「管理端」预设，不套用企业端当前行业（如考勤）
+    if (isAdminConsoleSpa()) return '管理端'
     return currentIndustry.value?.id?.toString() || DEFAULT_INDUSTRY_ID
   })
 

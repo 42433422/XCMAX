@@ -14,11 +14,46 @@ from __future__ import annotations
 
 import argparse
 import os
+import socket
 import sys
 from pathlib import Path
 
 _XCAGI_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _XCAGI_DIR.parent
+
+# 运行时端口文件：前端 Vite 读取此文件确定代理目标，实现前后端端口联动
+_RUNTIME_PORT_FILE = _REPO_ROOT / ".runtime" / "api.port"
+# 自动寻找端口的范围（macOS AirPlay 常占用 5000）
+_PORT_PROBE_RANGE = range(5000, 5021)
+
+
+def _is_port_free(host: str, port: int) -> bool:
+    """检测 host:port 是否可绑定（未被占用）。"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind((host, port))
+        return True
+    except OSError:
+        return False
+
+
+def _find_free_port(host: str, preferred: int) -> int:
+    """从 preferred 开始在 _PORT_PROBE_RANGE 内找可用端口；都占用则返回 preferred。"""
+    candidates = [preferred] + [p for p in _PORT_PROBE_RANGE if p != preferred]
+    for p in candidates:
+        if _is_port_free(host, p):
+            return p
+    return preferred
+
+
+def _persist_runtime_port(port: int) -> None:
+    """将实际监听端口写入 .runtime/api.port，供前端 Vite 读取联动。"""
+    try:
+        _RUNTIME_PORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _RUNTIME_PORT_FILE.write_text(str(port), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _load_dotenv_if_present(env_path: Path) -> None:
@@ -182,6 +217,21 @@ def main(argv: list[str] | None = None) -> None:
         or os.environ.get("FASTAPI_PORT")
         or "5000"
     )
+    # 桌面模式：端口由 Electron 主进程指定，不做避让——避让会导致 Electron 健康检查
+    # 轮询原端口而后端实际监听其他端口，引发白屏超时。端口被占时直接报错退出，
+    # 由 Electron 捕获退出码并引导用户。
+    if not args.desktop:
+        # 自动寻找可用端口：macOS AirPlay 等常占用 5000，被占用时在 5000-5020 内自动避让
+        probe_host = "127.0.0.1" if host in ("0.0.0.0", "") else host
+        free_port = _find_free_port(probe_host, port)
+        if free_port != port:
+            print(
+                f"[run_fastapi] 端口 {port} 被占用，自动切换到 {free_port}",
+                file=sys.stderr,
+            )
+            port = free_port
+    # 持久化实际端口，供前端 Vite 读取联动
+    _persist_runtime_port(port)
     reload = _resolve_reload(args.desktop or os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {"1", "true", "yes", "on"})
 
     import uvicorn

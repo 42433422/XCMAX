@@ -467,4 +467,128 @@ def compat_tool_categories_list() -> dict:
     return get_tool_categories_payload()
 
 
+# ========== Butler Profile（拟人 Persy 系统）==========
+
+
+def _butler_profile_service():
+    from app.db import SessionLocal
+    from app.services.butler_profile_service import ButlerProfileService
+
+    db = SessionLocal()
+    return ButlerProfileService(db)
+
+
+def _resolve_user_id_int(request: Request, body: dict | None = None) -> int:
+    """从请求头或 body 解析用户 ID（整数）。默认 1。"""
+    raw = (
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or (body or {}).get("user_id")
+        or (body or {}).get("userId")
+        or "1"
+    )
+    try:
+        return int(str(raw).strip() or "1")
+    except (TypeError, ValueError):
+        return 1
+
+
+@router.get("/butler/profile")
+@router.get("/butler/profile/", include_in_schema=False)
+def butler_profile_get(
+    request: Request,
+    user_id: str = Query(default="1"),
+) -> dict:
+    """读取当前用户的 butler profile（身份 + 四轴，不含 MBTI 原始分数）。"""
+    try:
+        uid = _resolve_user_id_int(request, {"user_id": user_id})
+        svc = _butler_profile_service()
+        view = svc.get_profile_view(uid)
+        return {"success": True, "profile": view}
+    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.warning("读取 butler profile 失败: %s", exc)
+        return JSONResponse(
+            {"success": False, "message": f"读取 profile 失败: {exc}"},
+            status_code=500,
+        )
+
+
+@router.post("/butler/profile/infer")
+@router.post("/butler/profile/infer/", include_in_schema=False)
+def butler_profile_infer(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+    """手动触发 MBTI 推断。
+
+    Body 可选字段：
+    - conversations: 最近对话历史 [{"user_message": str, "assistant_message": str, "interrupted": bool, "corrected": bool}]
+    - mod_hints: MOD 所有权提示 ["考勤", "发货", ...]
+    """
+    from app.application.butler_profile_inference import (
+        ButlerProfileInference,
+        apply_inference,
+    )
+
+    try:
+        user_id = _resolve_user_id_int(request, body)
+        svc = _butler_profile_service()
+        profile = svc.get_or_create_profile(user_id)
+        current = profile.to_internal_dict()
+
+        conversations = body.get("conversations") or []
+        mod_hints = body.get("mod_hints") or []
+
+        engine = ButlerProfileInference()
+        result = engine.infer(current, conversations, mod_hints=mod_hints)
+        apply_inference(svc, user_id, result, current)
+
+        updated = svc.get_profile_view(user_id)
+        return {
+            "success": True,
+            "profile": updated,
+            "inference": {
+                "mbti_type": result.new_mbti_type,
+                "identity_changed": result.identity_changed,
+                "confidence": result.confidence,
+                "reasons": result.reasons,
+            },
+        }
+    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.warning("butler profile 推断失败: %s", exc)
+        return JSONResponse(
+            {"success": False, "message": f"推断失败: {exc}"},
+            status_code=500,
+        )
+
+
+@router.post("/butler/profile/interaction")
+@router.post("/butler/profile/interaction/", include_in_schema=False)
+def butler_profile_record_interaction(
+    request: Request, body: dict = Body(default_factory=dict)
+) -> dict:
+    """记录一次对话互动（写路径，供前端对话完成后调用）。
+
+    Body:
+    - user_message: str
+    - assistant_message: str
+    - interrupted: bool (可选)
+    - corrected: bool (可选)
+    """
+    try:
+        user_id = _resolve_user_id_int(request, body)
+        svc = _butler_profile_service()
+        svc.record_interaction(
+            user_id,
+            user_message=str(body.get("user_message") or ""),
+            assistant_message=str(body.get("assistant_message") or ""),
+            interrupted=bool(body.get("interrupted") or False),
+            corrected=bool(body.get("corrected") or False),
+        )
+        return {"success": True}
+    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.warning("记录 butler 互动失败: %s", exc)
+        return JSONResponse(
+            {"success": False, "message": f"记录互动失败: {exc}"},
+            status_code=500,
+        )
+
+
 # /api/market/llm-catalog 仅由 app.fastapi_routes.market_account 提供（见 register_all_routes 中优先挂载）。

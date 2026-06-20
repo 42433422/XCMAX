@@ -46,6 +46,21 @@ export const systemApi = {
   getEmployeeRegistryRules(): Promise<ApiResponse<unknown>> {
     return api.get<ApiResponse<unknown>>('/api/system/employee-registry-rules');
   },
+
+  /** 编制矩阵 SSOT 派生（areas/departments/labels/descriptions/all_planned_ids） */
+  getDutyRoster(): Promise<ApiResponse<DutyRosterData>> {
+    return api.get<ApiResponse<DutyRosterData>>('/api/system/duty-roster');
+  },
 };
+
+/** 后端 /api/system/duty-roster 返回的 SSOT 派生数据。 */
+export interface DutyRosterData {
+  areas: Record<string, { label: string; ids: string[] }>;
+  departments: Record<string, unknown>;
+  employee_labels: Record<string, string>;
+  employee_descriptions: Record<string, string>;
+  all_planned_ids: string[];
+  schema_version: number;
+}
 
 export default systemApi;

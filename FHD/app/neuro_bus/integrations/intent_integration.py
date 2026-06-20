@@ -111,32 +111,136 @@ class NeuroIntentRecognizer:
         context: Any | None = None,
         context_data: dict[str, Any] | None = None,
     ) -> NeuroIntentResult:
+        """识别意图，用 MLP 元认知路由决定走 Reflex/Subconscious/Conscious。
+
+        MLP 未启用或 shadow 模式时回退到规则路由（reflex confidence >= 0.8）。
+        路由决策和结果写入 routing_decisions.jsonl，供 online_learner 学习。
+        """
+        from app.neuro_bus.routing.cognitive_router import get_cognitive_router
+
         start_time = time.perf_counter()
         reflex_result = self._reflex.process(text)
 
-        if reflex_result.triggered and reflex_result.confidence >= 0.8:
-            latency_ms = (time.perf_counter() - start_time) * 1000
-            try:
-                get_intent_domain().emit_reflex_triggered(
-                    reflex_type=reflex_result.reflex_type.value,
-                    latency_ms=latency_ms,
-                    user_id=user_id,
+        # 元认知路由：MLP 决定走哪一级处理器
+        cognitive_router = get_cognitive_router()
+        cognitive_decision, trace_id = cognitive_router.route(
+            text,
+            extra={
+                "intent_confidence": reflex_result.confidence if reflex_result.triggered else 0.0,
+            },
+        )
+
+        result: NeuroIntentResult
+        used_processor: ProcessorType
+
+        if cognitive_decision is not None:
+            # MLP 决策生效
+            used_processor = cognitive_decision.processor_type
+            if cognitive_decision.processor_type == ProcessorType.REFLEX:
+                if reflex_result.triggered:
+                    result = self._build_reflex_result(reflex_result, start_time, user_id)
+                else:
+                    # MLP 说 reflex 但没命中 → 降级到 conscious
+                    result = self._build_conscious_result(
+                        text,
+                        user_id,
+                        context,
+                        context_data,
+                        start_time,
+                        ProcessorType.CONSCIOUS,
+                    )
+                    used_processor = ProcessorType.CONSCIOUS
+            elif cognitive_decision.processor_type == ProcessorType.SUBCONSCIOUS:
+                # Phase 1: subconscious 仍走 unified_recognizer（Phase 3 加 ML 推理）
+                # 但标记 processor_type 为 SUBCONSCIOUS 供学习
+                result = self._build_conscious_result(
+                    text,
+                    user_id,
+                    context,
+                    context_data,
+                    start_time,
+                    ProcessorType.SUBCONSCIOUS,
                 )
-            except RECOVERABLE_ERRORS:
-                logger.debug("emit_reflex_triggered skipped", exc_info=True)
+            else:  # CONSCIOUS
+                result = self._build_conscious_result(
+                    text,
+                    user_id,
+                    context,
+                    context_data,
+                    start_time,
+                    ProcessorType.CONSCIOUS,
+                )
+        else:
+            # 回退到原逻辑（MLP 未启用或 shadow 模式）
+            if reflex_result.triggered and reflex_result.confidence >= 0.8:
+                used_processor = ProcessorType.REFLEX
+                result = self._build_reflex_result(reflex_result, start_time, user_id)
+            else:
+                used_processor = ProcessorType.CONSCIOUS
+                result = self._build_conscious_result(
+                    text,
+                    user_id,
+                    context,
+                    context_data,
+                    start_time,
+                    ProcessorType.CONSCIOUS,
+                )
 
-            return NeuroIntentResult(
-                intent=reflex_result.reflex_type.value,
-                confidence=reflex_result.confidence,
-                source="reflex",
-                processor_type=ProcessorType.REFLEX,
+        # 记录路由结果（反馈闭环，供 online_learner 学习）
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        sla_hit = cognitive_router.is_sla_hit(used_processor, latency_ms)
+        success = result.intent != "unknown" and result.confidence > 0.5
+        cognitive_router.record_outcome(
+            trace_id=trace_id,
+            processor_type=used_processor,
+            features=None,
+            latency_ms=latency_ms,
+            sla_hit=sla_hit,
+            success=success,
+            confidence=result.confidence,
+        )
+
+        return result
+
+    def _build_reflex_result(
+        self,
+        reflex_result: ReflexResult,
+        start_time: float,
+        user_id: str,
+    ) -> NeuroIntentResult:
+        """构建 Reflex 命中结果并 emit 事件。"""
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        try:
+            get_intent_domain().emit_reflex_triggered(
+                reflex_type=reflex_result.reflex_type.value,
                 latency_ms=latency_ms,
-                entities={"response": reflex_result.response},
-                reflex_used=True,
-                ai_enhanced=False,
-                recognizer_result=None,
+                user_id=user_id,
             )
+        except RECOVERABLE_ERRORS:
+            logger.debug("emit_reflex_triggered skipped", exc_info=True)
 
+        return NeuroIntentResult(
+            intent=reflex_result.reflex_type.value,
+            confidence=reflex_result.confidence,
+            source="reflex",
+            processor_type=ProcessorType.REFLEX,
+            latency_ms=latency_ms,
+            entities={"response": reflex_result.response},
+            reflex_used=True,
+            ai_enhanced=False,
+            recognizer_result=None,
+        )
+
+    def _build_conscious_result(
+        self,
+        text: str,
+        user_id: str,
+        context: Any | None,
+        context_data: dict[str, Any] | None,
+        start_time: float,
+        processor_type: ProcessorType = ProcessorType.CONSCIOUS,
+    ) -> NeuroIntentResult:
+        """走 unified_recognizer 构建 Conscious/Subconscious 结果并 emit 事件。"""
         from app.services.unified_intent_recognizer import RecognizerResult
 
         base_result = self._base.recognize(text, context=context, context_data=context_data)
@@ -149,7 +253,7 @@ class NeuroIntentRecognizer:
                     confidence=float(base_result.confidence),
                     entities=dict(base_result.slots or {}),
                     raw_text=text,
-                    processor_used=ProcessorType.CONSCIOUS.value,
+                    processor_used=processor_type.value,
                     latency_ms=latency_ms,
                 )
             except RECOVERABLE_ERRORS:
@@ -159,7 +263,7 @@ class NeuroIntentRecognizer:
                 intent=str(base_result.primary_intent or "unknown"),
                 confidence=float(base_result.confidence),
                 source="unified",
-                processor_type=ProcessorType.CONSCIOUS,
+                processor_type=processor_type,
                 latency_ms=latency_ms,
                 entities={},
                 reflex_used=False,
@@ -175,7 +279,7 @@ class NeuroIntentRecognizer:
                 confidence=float(br.get("confidence", 0.0)),
                 entities=dict(br.get("entities") or {}),
                 raw_text=text,
-                processor_used=ProcessorType.CONSCIOUS.value,
+                processor_used=processor_type.value,
                 latency_ms=latency_ms,
             )
         except RECOVERABLE_ERRORS:
@@ -185,7 +289,7 @@ class NeuroIntentRecognizer:
             intent=str(br.get("intent", "unknown")),
             confidence=float(br.get("confidence", 0.0)),
             source=str(br.get("source", "unified")),
-            processor_type=ProcessorType.CONSCIOUS,
+            processor_type=processor_type,
             latency_ms=latency_ms,
             entities=dict(br.get("entities") or {}),
             reflex_used=False,

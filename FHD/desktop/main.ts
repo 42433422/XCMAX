@@ -13,6 +13,7 @@ import {
 import { ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import net from 'node:net'
 import { networkInterfaces } from 'node:os'
 import path from 'node:path'
 import { checkForUpdates, configureUpdater, installUpdate } from './updater'
@@ -33,6 +34,31 @@ function resolveDefaultDesktopPort(): number {
 
 const DEFAULT_PORT = resolveDefaultDesktopPort()
 
+/** 检测 127.0.0.1:port 是否可绑定（未被占用）。桌面模式不做端口避让，启动前必须预检。 */
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise(resolve => {
+    const tester = net.createServer()
+    tester.once('error', () => resolve(false))
+    tester.once('listening', () => {
+      tester.close(() => resolve(true))
+    })
+    tester.listen(port, '127.0.0.1')
+  })
+}
+
+/** 端口被占时给用户的引导文案。 */
+function portOccupiedHint(port: number): string {
+  const airplayHint =
+    process.platform === 'darwin' && port === 5000
+      ? '\n\nmacOS「隔空播放接收器」常占用 5000，请在系统设置 → 通用 → 隔空播放接收器 中关闭，或设置环境变量 XCAGI_DESKTOP_PORT=17500 后重启。'
+      : ''
+  return (
+    `端口 ${port} 已被占用，XCAGI 后端无法启动。\n\n` +
+    `请关闭占用该端口的程序后重试，或设置环境变量 XCAGI_DESKTOP_PORT 指定其他端口后重启 XCAGI。` +
+    airplayHint
+  )
+}
+
 type ProductSku = 'personal' | 'enterprise'
 
 const SKU_RUNTIME_EDITION: Record<ProductSku, string> = {
@@ -44,6 +70,17 @@ const SKU_UPDATE_URL: Record<ProductSku, string> = {
   personal: 'https://update.xcagi.com/releases/stable/personal/',
   enterprise: 'https://update.xcagi.com/releases/stable/enterprise/'
 }
+
+/**
+ * Ed25519 公钥（PEM），用于校验 update 元数据（latest.yml / latest-mac.yml）的二次签名。
+ * 对应私钥存 GitHub Secrets: XCAGI_UPDATE_ED25519_PRIVATE_KEY（CI 签名用）。
+ * 签名脚本: FHD/scripts/dev/sign_update_metadata.py
+ */
+const ED25519_PUBLIC_KEY_PEM = [
+  '-----BEGIN PUBLIC KEY-----',
+  'MCowBQYDK2VwAyEAQTSb+dYGOM3dwJkMcrTysZz1uUaUB9oCIFga2k+iHBc=',
+  '-----END PUBLIC KEY-----'
+].join('\n')
 
 /** 企业版与网页 :5001 一致：完整侧栏，不强制 ?shell=1 */
 function desktopInitialUrl(): string {
@@ -84,7 +121,11 @@ function readPackagedProductSku(): ProductSku | null {
 function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
+    // dev 模式未指定 SKU：默认 generic，与前端 generic 构建产物一致。
+    // 显式注入 XCAGI_PRODUCT_SKU=generic 覆盖 XCAGI/.env 中可能的 enterprise 设置，
+    // 避免前后端 SKU 不一致导致路由守卫误触发 admin 跳转。
     return {
+      XCAGI_PRODUCT_SKU: 'generic',
       XCAGI_GENERIC_EDITION: '1',
       XCAGI_PLATFORM_SHELL: '1',
       XCAGI_DEFAULT_EDITION: 'generic'
@@ -345,7 +386,7 @@ async function waitForBackendStatus(port: number, timeoutMs = 15_000): Promise<b
   return false
 }
 
-function startBackend(): void {
+async function startBackend(): Promise<void> {
   if (backendProcess) {
     return
   }
@@ -359,6 +400,16 @@ function startBackend(): void {
       `请确认安装包包含 resources/backend/${process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'}。`
     writeBackendLog(`[error] ${detail}\n`)
     void dialog.showErrorBox(APP_NAME, detail)
+    return
+  }
+
+  // 桌面模式不做端口避让：启动前预检 DEFAULT_PORT，被占则直接引导用户，避免后端
+  // 启动后立即退出再触发无意义的自动重启。
+  const portFree = await isPortAvailable(DEFAULT_PORT)
+  if (!portFree) {
+    const hint = portOccupiedHint(DEFAULT_PORT)
+    writeBackendLog(`[error] port ${DEFAULT_PORT} occupied, abort backend spawn\n`)
+    void dialog.showErrorBox(APP_NAME, hint)
     return
   }
 
@@ -394,14 +445,23 @@ function startBackend(): void {
     }
   })
   backendProcess.on('exit', code => {
-    writeBackendLog(`[exit] backend process exited code=${code}\n`)
+    const uptimeMs = Date.now() - (startupMarks.backendSpawnMs ?? Date.now())
+    writeBackendLog(`[exit] backend process exited code=${code} uptime=${uptimeMs}ms\n`)
     backendProcess = null
     if (app.isQuitting) {
       return
     }
+    // 快速退出（< 5 秒）：通常是端口占用或配置错误，不自动重启以免浪费用户时间
+    if (uptimeMs < 5000) {
+      void dialog.showErrorBox(
+        APP_NAME,
+        `后端服务启动后立即退出（code=${code}）。\n\n请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。`
+      )
+      return
+    }
     restartCount += 1
     if (restartCount <= 3) {
-      setTimeout(startBackend, 1500)
+      setTimeout(() => void startBackend(), 1500)
       return
     }
     void dialog.showErrorBox(APP_NAME, `后端服务已退出（code=${code}），请重启 XCAGI。`)
@@ -514,7 +574,7 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     .executeJavaScript(
       classes.map(c => `document.documentElement.classList.add('${c}');`).join('')
     )
-    .catch(() => {})
+    .catch(() => { })
 }
 
 function stopBackend(): void {
@@ -713,6 +773,10 @@ if (!gotLock) {
     if (sku && !process.env.XCAGI_UPDATE_URL) {
       process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
     }
+    // 嵌入 Ed25519 公钥，启用 update 元数据二次签名校验
+    if (!process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY) {
+      process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = ED25519_PUBLIC_KEY_PEM
+    }
     function getLanIPv4(): string {
       const nets = networkInterfaces()
       for (const name of Object.keys(nets)) {
@@ -777,7 +841,12 @@ if (!gotLock) {
 
     createMenu()
     createTray()
-    startBackend()
+    await startBackend()
+    if (!backendProcess) {
+      // 端口被占或后端可执行文件缺失，startBackend 已弹错误框，直接退出
+      app.quit()
+      return
+    }
     try {
       await createWindow()
     } catch (error) {

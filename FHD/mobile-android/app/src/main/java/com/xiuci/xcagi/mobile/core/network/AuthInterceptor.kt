@@ -47,6 +47,13 @@ internal object AuthHeaderPolicy {
             else -> market
         }
     }
+
+    fun shouldAttachSelectedBearer(
+        isPublicAuthWriteRequest: Boolean,
+        callerAuthorization: String,
+        selectedBearer: String,
+    ): Boolean =
+        !isPublicAuthWriteRequest && callerAuthorization.isBlank() && selectedBearer.isNotBlank()
 }
 
 @Singleton
@@ -92,7 +99,12 @@ class AuthInterceptor @Inject constructor(
                 builder.header("X-CSRF-Token", csrf)
             }
         }
-        if (!isPublicAuthWriteRequest(request.url) && bearer.isNotBlank()) {
+        val callerAuthorization = request.header("Authorization").orEmpty().trim()
+        if (AuthHeaderPolicy.shouldAttachSelectedBearer(
+                isPublicAuthWriteRequest = isPublicAuthWriteRequest(request.url),
+                callerAuthorization = callerAuthorization,
+                selectedBearer = bearer,
+            )) {
             builder.header("Authorization", "Bearer $bearer")
         }
         return chain.proceed(builder.build())

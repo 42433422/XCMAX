@@ -486,11 +486,12 @@ class ApiMixin(NeuroEventPublisherMixin):
         context_prompt = self._build_context_prompt(context)
 
         if getattr(self, "persona_service", None):
+            _req_ctx = (context.metadata or {}).get("request_context") or {}
             system_prompt, _persona_params = await self.persona_service.build_prompt_from_message(
                 user_id=context.user_id,
                 message=message,
                 history=context.conversation_history or [],
-                industry=getattr(context, "industry", "通用"),
+                industry=_req_ctx.get("industry", "通用"),
                 context_prompt=context_prompt,
             )
         else:

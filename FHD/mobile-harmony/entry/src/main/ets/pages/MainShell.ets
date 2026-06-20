@@ -24,6 +24,7 @@ export struct MainShell {
   onLogout: () => void = () => {};
   onOpenSettings: () => void = () => {};
   onOpenDutyRoster: () => void = () => {};
+  onOpenOverlay: (name: string) => void = () => {};
 
   build() {
     this.MainShell();
@@ -51,7 +52,8 @@ export struct MainShell {
         ProfilePage({
           onRefreshHome: () => this.onRefreshHome(),
           onLogout: () => this.onLogout(),
-          onOpenSettings: () => this.onOpenSettings()
+          onOpenSettings: () => this.onOpenSettings(),
+          onOpenOverlay: (name: string) => this.onOpenOverlay(name)
         });
       }
 

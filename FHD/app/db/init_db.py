@@ -1278,6 +1278,64 @@ def ensure_users_tenant_id_column(
         logger.warning("users.tenant_id 兼容补列失败: %s", exc)
 
 
+def ensure_user_profile_columns(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """补齐 ``users.tier`` / ``users.industry_id``，管理端用户等级与行业编辑依赖。"""
+    from sqlalchemy import inspect, text
+
+    real_engine: Engine | None = None
+    url = (database_url or "").strip()
+    if url:
+        try:
+            from app.db import _create_engine_for_url
+
+            real_engine = _create_engine_for_url(url)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("无法创建引擎以补齐 users.tier/industry_id: %s", exc)
+    if real_engine is None and engine is not None:
+        real_engine = engine
+    if real_engine is None:
+        try:
+            from app.db import _get_engine as _get_real_engine
+
+            real_engine = _get_real_engine()
+        except RECOVERABLE_ERRORS:
+            return
+
+    additions = [
+        ("tier", "VARCHAR(32)", "'personal'"),
+        ("industry_id", "VARCHAR(32)", "'通用'"),
+    ]
+    try:
+        insp = inspect(real_engine)
+        tables = set(insp.get_table_names() or [])
+        if "users" not in tables:
+            return
+        cols = {c["name"] for c in insp.get_columns("users")}
+        dialect = real_engine.dialect.name
+        with real_engine.begin() as conn:
+            for name, col_type, default_sql in additions:
+                if name in cols:
+                    continue
+                logger.info("users 缺少 %s 列，正在补齐 …", name)
+                if dialect == "postgresql":
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {name} {col_type} DEFAULT {default_sql}"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text(f"ALTER TABLE users ADD COLUMN {name} {col_type} DEFAULT {default_sql}")
+                    )
+        logger.info("users.tier/industry_id 已补齐")
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("users.tier/industry_id 兼容补列失败: %s", exc)
+
+
 def init_im_tables(engine: Engine) -> None:
     """在主库上创建企业内部 IM V0 表（im_conversations / members / messages）。"""
     from app.db.base import Base

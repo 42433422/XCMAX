@@ -11,7 +11,8 @@ export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },
 ]
 
-export const ADMIN_SIDEBAR_PINNED_TOP_KEYS = ADMIN_OPERATOR_MENU_ITEMS.map((m) => m.key)
+/** 管理端侧栏顶置顺序：智能对话首位 + 运维顶栏三项 */
+export const ADMIN_SIDEBAR_PINNED_TOP_KEYS = ['chat', ...ADMIN_OPERATOR_MENU_ITEMS.map((m) => m.key)]
 
 /**
  * 管理端专用宿主菜单（不进企业端 CORE_MENU_ITEMS_TRAILING）。

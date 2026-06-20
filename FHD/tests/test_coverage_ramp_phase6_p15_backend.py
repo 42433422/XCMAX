@@ -3779,9 +3779,12 @@ class TestCCHttpGetJson:
             mock_client.__aenter__.return_value = mock_client
             mock_client.get.side_effect = httpx.RequestError("network")
             mock_client_cls.return_value = mock_client
-            with pytest.raises(HTTPException) as exc_info:
-                await cc._http_get_json("https://x.com/api")
-            assert exc_info.value.status_code == 502
+            with patch("app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock):
+                with pytest.raises(HTTPException) as exc_info:
+                    await cc._http_get_json("https://x.com/api")
+                assert exc_info.value.status_code == 502
+            # 远端网络错误应触发重试（3 次尝试）
+            assert mock_client.get.call_count == 3
 
     @pytest.mark.asyncio
     async def test_http_get_json_4xx_raises_502(self) -> None:
@@ -3809,9 +3812,49 @@ class TestCCHttpGetJson:
         mock_client.get.return_value = mock_resp
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(HTTPException) as exc_info:
-                await cc._http_get_json("https://x.com/api")
-            assert exc_info.value.status_code == 502
+            with patch("app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock):
+                with pytest.raises(HTTPException) as exc_info:
+                    await cc._http_get_json("https://x.com/api")
+                assert exc_info.value.status_code == 502
+            # 远端 5xx 应触发重试（3 次尝试）
+            assert mock_client.get.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_http_get_json_5xx_retries_then_succeeds(self) -> None:
+        """远端间歇性 500 后重试成功：第一次 500，第二次 200。"""
+        err_resp = MagicMock()
+        err_resp.status_code = 500
+        err_resp.text = "Internal Server Error"
+        ok_resp = MagicMock()
+        ok_resp.status_code = 200
+        ok_resp.json.return_value = {"items": [], "total": 0}
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.side_effect = [err_resp, ok_resp]
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            with patch("app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock):
+                result = await cc._http_get_json("https://x.com/api")
+                assert result == {"items": [], "total": 0}
+            assert mock_client.get.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_http_get_json_request_error_retries_then_succeeds(self) -> None:
+        """远端间歇性网络错误后重试成功：第一次 RequestError，第二次 200。"""
+        ok_resp = MagicMock()
+        ok_resp.status_code = 200
+        ok_resp.json.return_value = {"ok": True}
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.side_effect = [httpx.RequestError("transient"), ok_resp]
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            with patch("app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock):
+                result = await cc._http_get_json("https://x.com/api")
+                assert result == {"ok": True}
+            assert mock_client.get.call_count == 2
 
     @pytest.mark.asyncio
     async def test_http_get_json_invalid_json_raises_502(self) -> None:

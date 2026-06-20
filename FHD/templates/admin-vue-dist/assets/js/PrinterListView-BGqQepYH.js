@@ -1,1 +1,0 @@
-import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as t,t as i,a2 as r}from"./index-CinG43sm.js";const c=t({__name:"PrinterListView",setup(a){return(o,n)=>(i(),r(e,{"mod-id":"xcagi-erp-domain-bridge",view:"PrinterListView",title:"ERP 业务页"}))}});export{c as default};

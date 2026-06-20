@@ -18,6 +18,7 @@ _DOMAIN_IDENTITY_NAME_MAP: dict[str, str] = {
     "payment": "财务管家",
     "inventory": "库存管家",
     "general": "业务管家",
+    "admin": "运维助手",
 }
 
 
@@ -37,7 +38,7 @@ class IdentityResolver:
         """根据关系深度生成身份描述。"""
         domain_label = identity.business_domain
         if rapport.is_stranger():
-            return f"专业地服务用户，熟悉{domain_label}业务"
+            return f"干{domain_label}这行的，平时帮人处理点事"
         if rapport.is_loyal():
             return f"用户最忠诚的伙伴，最懂他的{domain_label}需求，像老朋友一样可靠"
         return f"用户熟悉的{identity.name}，了解他的{domain_label}习惯和偏好"

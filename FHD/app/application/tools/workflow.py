@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 from app.infrastructure.auth.db_token import configured_db_write_token  # noqa: F401
 from app.infrastructure.excel.schema_service import ExcelSchemaUnderstandingService
+from app.infrastructure.excel.text_to_pandas import _safe_exec_pandas
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _workflow_tool_registry_cache: list[dict[str, Any]] | None = None
@@ -81,11 +82,9 @@ def run_natural_language_pandas(
         code = converter.translate(natural_language, df)
         if code and code.strip():
             generated_code = code
-            local_ns: dict = {"df": df.copy()}
-            exec(code, {"pd": pd, "__builtins__": {}}, local_ns)  # noqa: S102
-            out = local_ns.get("result", local_ns.get("df"))
-            if isinstance(out, pd.DataFrame):
-                result_df = out
+            result_df = _safe_exec_pandas(code, df)
+    except ValueError as e:
+        error_msg = str(e)
     except RECOVERABLE_ERRORS as e:
         error_msg = str(e)
 

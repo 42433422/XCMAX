@@ -164,7 +164,7 @@ export struct ImMessengerPage {
         .borderRadius(12)
         .border({ width: 1, color: '#E5E7EB' })
         .padding({ left: 14, right: 14 })
-        .inputType(InputType.Number)
+        .type(InputType.Number)
         .onChange((value: string) => {
           const digits: string = value.replace(/[^0-9]/g, '').substring(0, 10);
           this.peerIdText = digits;

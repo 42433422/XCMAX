@@ -43,7 +43,7 @@ import math
 import re
 import subprocess
 import sys
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -230,7 +230,7 @@ def _git_short_sha() -> str | None:
 def append_history(be: dict | None, fe: dict | None, note: str = "") -> None:
     rec = {
         "date": date.today().isoformat(),
-        "ts": datetime.now(UTC).isoformat(),
+        "ts": datetime.now(timezone.utc).isoformat(),
         "backend_lines": be["line_pct"] if be else None,
         "backend_branches": be["branch_pct"] if be else None,
         "backend_statements": be["num_statements"] if be else None,

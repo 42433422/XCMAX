@@ -110,6 +110,17 @@ export const INDUSTRY_MENU_LABELS: Record<string, Record<string, string>> = {
     customers: '收发方管理',
     print: '运单打印',
   },
+  管理端: {
+    chat: '运维对话',
+    im: '信息',
+    'ai-ecosystem': '智能生态',
+    'mod-store': '能力库',
+    'employee-workflow': '编制工作台',
+    'workflow-visualization': '流程可视化',
+    'duty-roster-graph': '员工图谱',
+    'data-sources': '运维数据源',
+    tools: '运维工具',
+  },
 }
 
 // 与 industryPresets.menuLabels 对齐，避免仅改一处导致菜单文案不一致

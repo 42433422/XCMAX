@@ -58,6 +58,9 @@ coverage/
 .tox/
 .vector_index/
 
+# 运行时端口文件（run_fastapi.py 自动写入，前端 Vite 读取联动）
+.runtime/
+
 # ============================================================================
 # Database files (runtime data - keep code references to schemas)
 # ============================================================================

@@ -20,6 +20,16 @@ _INDUSTRY_IDENTITY_MAP: dict[str, tuple[str, str]] = {
     "服务业": ("客户管家", "customer"),
     "贸易业": ("发货管家", "shipment"),
     "科技业": ("项目管家", "project"),
+    "企业管理": ("运维助手", "admin"),
+    # 细分行业（admin-console 行业筛选 select 的选项）
+    "涂料": ("生产管家", "production"),
+    "考勤": ("考勤管家", "attendance"),
+    "批发": ("发货管家", "shipment"),
+    "电商": ("门店管家", "retail"),
+    "餐饮": ("客户管家", "customer"),
+    "物流": ("运单管家", "shipment"),
+    "通用": ("业务管家", "general"),
+    "管理端": ("运维助手", "admin"),
 }
 
 

@@ -72,7 +72,7 @@ export const CORE_MENU_ITEMS_TRAILING: CoreMenuCatalogItem[] = []
 
 export const ADMIN_MENU_ITEM: CoreMenuCatalogItem = {
   key: 'admin-entitlements',
-  name: '用户 Mod 管理',
+  name: '用户管理',
   iconClass: 'fa-shield',
 }
 

@@ -1,1 +1,0 @@
-import{m as o}from"./modViews-D-FdYst1.js";import"./index-CinG43sm.js";const e="xcagi-lan-license-bridge",t=`/mod/${e}`,a=[{path:`${t}/lan-gate`,name:"mod-lan-gate",component:o(e,"LanGateView.vue"),meta:{title:"局域网授权",mod:e,publicAccess:!0,hideChrome:!0}}],c=[];export{c as modMenu,a as modRoutes};

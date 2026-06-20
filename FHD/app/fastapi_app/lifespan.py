@@ -18,6 +18,7 @@ from app.db.init_db import (
     ensure_sessions_enterprise_entitlement_columns,
     ensure_sessions_market_access_token_column,
     ensure_sessions_market_refresh_token_column,
+    ensure_user_profile_columns,
     init_approval_tables,
     init_distillation_tables,
     init_extract_logs_tables,
@@ -176,6 +177,7 @@ def _initialize_databases_sync(app: FastAPI):
         ensure_sessions_market_refresh_token_column(engine, database_url=cfg_db_url or None)
         ensure_sessions_enterprise_entitlement_columns(engine, database_url=cfg_db_url or None)
         ensure_sessions_account_meta_columns(engine, database_url=cfg_db_url or None)
+        ensure_user_profile_columns(engine, database_url=cfg_db_url or None)
         try:
             from app.db.init_db import ensure_users_tenant_id_column
 
@@ -253,6 +255,20 @@ async def _init_neuro_ddd_async(app: FastAPI):
             logger.info("✅ HealthMonitor 监控循环已启动")
         except RECOVERABLE_ERRORS as hm_err:
             logger.warning("⚠️ HealthMonitor 启动失败: %s", hm_err)
+
+        # 注册认知层 / 潜意识层 / 进化层 handler（Phase 2-4 接线）
+        try:
+            from app.domain.neuro.register_cognition_handlers import register_cognition_handlers
+
+            cognition_result = register_cognition_handlers()
+            app.state.neuro_cognition = cognition_result
+            if cognition_result.get("enabled"):
+                logger.info(
+                    "✅ 认知层 handler 已注册（%d 个）",
+                    cognition_result.get("handler_count", 0),
+                )
+        except RECOVERABLE_ERRORS as cog_err:
+            logger.warning("⚠️ 认知层 handler 注册失败: %s", cog_err)
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 神经总线初始化失败: %s", e)
 

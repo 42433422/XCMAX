@@ -1,0 +1,1 @@
+import{b as i,o as s,w as n,f as e}from"./index-C1axxMiF.js";function a(){const o=i();async function r(){o.clientModsUiOff||(await o.initialize(!0),await e(o.modsForWorkflowUi))}return s(r),n(()=>o.modsForWorkflowUi,t=>{o.clientModsUiOff||e(t)},{deep:!0}),{syncRegistry:r}}export{a as u};

@@ -447,12 +447,12 @@ class TestDeadLetterQueue:
         dlq.on_replay(lambda e: replayed.append(e))
         event = _make_event()
         eid = dlq.enqueue(event, DeadLetterReason.TIMEOUT, "timeout", 1)
-        assert dlq.replay(eid) is True
+        assert dlq.replay(eid) == (True, "")
         assert len(replayed) == 1
 
     def test_replay_not_found(self):
         dlq = DeadLetterQueue()
-        assert dlq.replay("nonexistent") is False
+        assert dlq.replay("nonexistent") == (False, "entry_not_found")
 
     def test_replay_all(self):
         dlq = DeadLetterQueue()

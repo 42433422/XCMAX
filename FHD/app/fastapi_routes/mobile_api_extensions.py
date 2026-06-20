@@ -1253,6 +1253,99 @@ async def mobile_home(user=Depends(get_mobile_user)):
     )
 
 
+# ── 侧栏菜单对齐（探索 Tab 配对后动态显示桌面端工具） ──
+
+_CORE_NAV_ITEMS: list[dict[str, str]] = [
+    {"key": "chat", "name": "智能对话", "icon": "fa-comments-o", "path": "/chat"},
+    {"key": "im", "name": "信息", "icon": "fa-envelope-o", "path": "/im"},
+    {"key": "ai-ecosystem", "name": "智能生态", "icon": "fa-sitemap", "path": "/ai-ecosystem"},
+    {"key": "employee-workflow", "name": "员工工作台", "icon": "fa-users", "path": "/employee-workflow"},
+    {"key": "products", "name": "业务对象", "icon": "fa-cubes", "path": "/products"},
+    {"key": "customers", "name": "组织管理", "icon": "fa-users", "path": "/customers"},
+    {"key": "orders", "name": "业务单据", "icon": "fa-file-text-o", "path": "/orders"},
+    {"key": "shipment-records", "name": "业务记录", "icon": "fa-industry", "path": "/shipment-records"},
+    {"key": "materials", "name": "资源库", "icon": "fa-archive", "path": "/materials"},
+    {"key": "data-sources", "name": "数据来源", "icon": "fa-database", "path": "/data-sources"},
+    {"key": "print", "name": "模板与打印", "icon": "fa-print", "path": "/print"},
+    {"key": "settings", "name": "系统设置", "icon": "fa-cog", "path": "/settings"},
+]
+
+_ADMIN_NAV_ITEM = {"key": "admin-entitlements", "name": "用户管理", "icon": "fa-shield", "path": "/admin-entitlements"}
+
+# 角色 → 可见核心 key 白名单（None 表示全部可见）
+_ROLE_VISIBLE_KEYS: dict[str, set[str] | None] = {
+    "admin": None,  # 全部
+    "enterprise": {
+        "chat", "im", "ai-ecosystem", "employee-workflow",
+        "products", "customers", "orders", "shipment-records",
+        "materials", "data-sources", "print", "settings",
+    },
+    "personal": {"chat", "im", "ai-ecosystem", "settings"},
+}
+
+
+@extension_router.get("/nav-menu")
+async def mobile_nav_menu(user=Depends(get_mobile_user)):
+    """返回当前用户可见的侧栏菜单项（核心菜单 + Mod 菜单）。
+
+    供手机端"探索"Tab 配对后动态渲染工具列表，与桌面端侧栏对齐。
+    """
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+
+    # 判断角色
+    user_role = str(getattr(user, "role", "") or "").strip().lower()
+    is_admin = user_role in {"admin", "super_admin", "owner"}
+    account_kind = "admin" if is_admin else "enterprise"
+
+    # 也可以从 session 获取 account_kind，这里简化用 role 判断
+    visible_keys = _ROLE_VISIBLE_KEYS.get(account_kind)
+
+    # 核心菜单
+    items: list[dict[str, Any]] = []
+    for item in _CORE_NAV_ITEMS:
+        if visible_keys is not None and item["key"] not in visible_keys:
+            continue
+        items.append({**item, "source": "core"})
+
+    # 管理员追加用户管理
+    if is_admin:
+        items.append({**_ADMIN_NAV_ITEM, "source": "core"})
+
+    # Mod 菜单
+    try:
+        mod_items = _mobile_mod_items()
+        for mod in mod_items:
+            mod_id = str(mod.get("id") or "").strip()
+            mod_name = str(mod.get("name") or mod_id).strip()
+            frontend_menu = mod.get("frontend_menu") or mod.get("menu") or []
+            if not isinstance(frontend_menu, list):
+                continue
+            for menu_entry in frontend_menu:
+                if not isinstance(menu_entry, dict):
+                    continue
+                menu_id = str(menu_entry.get("id") or menu_entry.get("key") or "").strip()
+                if not menu_id:
+                    continue
+                menu_label = str(menu_entry.get("label") or menu_entry.get("name") or mod_name).strip()
+                menu_path = str(menu_entry.get("path") or menu_entry.get("url") or f"/mod/{mod_id}").strip()
+                menu_icon = str(menu_entry.get("icon") or menu_entry.get("iconClass") or "fa-cube").strip()
+                items.append({
+                    "key": f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id,
+                    "name": menu_label,
+                    "icon": menu_icon,
+                    "path": menu_path,
+                    "source": "mod",
+                    "mod_id": mod_id,
+                })
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("nav-menu mod items failed: %s", exc)
+
+    return format_mobile_response(data={"items": items, "account_kind": account_kind})
+
+
 # ── 同步 ──
 
 

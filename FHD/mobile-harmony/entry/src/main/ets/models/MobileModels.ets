@@ -210,8 +210,9 @@ export interface DutyRosterData {
   totalOnDuty: number;
 }
 
+// CI SSOT BEGIN
 /**
- * 编制区域常量表（与前端 yuangonDutyRoster.ts YUANGON_AREAS 对齐）。
+ * 编制区域常量表（CI SSOT 生成，与前端 yuangonDutyRoster.ts YUANGON_AREAS 对齐）。
  * 后端 admin/home 返回的 duty 员工按 yuangon_area 归入这些区域。
  */
 export const YUANGON_AREAS: DutyAreaInfo[] = [
@@ -223,16 +224,7 @@ export const YUANGON_AREAS: DutyAreaInfo[] = [
   {
     id: 'server-and-ops',
     label: '服务器与运维',
-    ids: [
-      'nginx-config-engineer',
-      'push-update-context-officer',
-      'deploy-release-officer',
-      'security-secrets-guard',
-      'log-monitor-incident',
-      'retention-officer',
-      'dbops-engineer',
-      'legacy-archive-curator'
-    ]
+    ids: ['nginx-config-engineer', 'push-update-context-officer', 'deploy-release-officer', 'security-secrets-guard', 'log-monitor-incident', 'retention-officer', 'dbops-engineer', 'llm-ops-engineer', 'legacy-archive-curator']
   },
   {
     id: 'modstore-backend',
@@ -247,20 +239,7 @@ export const YUANGON_AREAS: DutyAreaInfo[] = [
   {
     id: 'platform-core',
     label: '平台核心',
-    ids: [
-      'fhd-core-maintainer',
-      'vibe-coding-maintainer',
-      'mods-and-eskill-curator',
-      'change-request-auditor',
-      'daily-orchestrator',
-      'intake-dispatcher',
-      'task-router-officer',
-      'user-customer-service-officer',
-      'enterprise-adoption-officer',
-      'delivery-receipt-officer',
-      'mobile-android-release-officer',
-      'mobile-ios-release-officer'
-    ]
+    ids: ['fhd-core-maintainer', 'vibe-coding-maintainer', 'mods-and-eskill-curator', 'change-request-auditor', 'daily-orchestrator', 'intake-dispatcher', 'task-router-officer', 'user-customer-service-officer', 'enterprise-adoption-officer', 'delivery-receipt-officer', 'mobile-android-release-officer', 'mobile-ios-release-officer', 'mobile-harmony-release-officer']
   },
   {
     id: 'quality-and-docs',
@@ -270,34 +249,15 @@ export const YUANGON_AREAS: DutyAreaInfo[] = [
   {
     id: 'craft-workshop',
     label: '制作车间',
-    ids: [
-      'intent-analyst',
-      'employee-planner',
-      'artifact-generator',
-      'quality-validator',
-      'miniapp-builder',
-      'script-binder',
-      'workflow-automator',
-      'pack-registrar',
-      'sandbox-tester',
-      'code-validator',
-      'self-checker',
-      'host-checker',
-      'hex-quality-assessor'
-    ]
+    ids: ['intent-analyst', 'employee-planner', 'artifact-generator', 'quality-validator', 'miniapp-builder', 'script-binder', 'workflow-automator', 'pack-registrar', 'sandbox-tester', 'code-validator', 'self-checker', 'host-checker', 'hex-quality-assessor']
   },
   {
     id: 'partner-ecosystem',
     label: '生态伙伴 O-B',
-    ids: [
-      'ecosystem-partner-onboard-officer',
-      'ecosystem-joint-catalog-officer',
-      'ecosystem-delivery-reporter',
-      'ecosystem-investor-portal-officer',
-      'ecosystem-revenue-share-reconciler'
-    ]
-  }
+    ids: ['ecosystem-partner-onboard-officer', 'ecosystem-joint-catalog-officer', 'ecosystem-delivery-reporter', 'ecosystem-investor-portal-officer', 'ecosystem-revenue-share-reconciler']
+  },
 ];
+// CI SSOT END
 
 // ════════════════════════════════════════════════════════════════
 // 审批流（Approval）— 对标 Android ApprovalScreens.kt

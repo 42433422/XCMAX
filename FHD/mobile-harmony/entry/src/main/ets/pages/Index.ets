@@ -2,9 +2,24 @@ import { MobileApiClient } from '../api/MobileApiClient';
 import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, DutyRosterData, ModInfo, UserDto } from '../models/MobileModels';
 import { buildConversations, buildDutyRoster, buildEmployees, findEmployee } from '../state/AppDataBuilder';
 import { NotificationManager } from '../state/NotificationManager';
+import { AboutPage } from './AboutPage';
+import { AiCirclePage } from './AiCirclePage';
+import { ApprovalPage } from './ApprovalPage';
+import { BridgePage } from './BridgePage';
+import { CsChatPage } from './CsChatPage';
 import { DutyRosterPage } from './DutyRosterPage';
+import { EnterprisePage } from './EnterprisePage';
+import { EnterpriseModulePage } from './EnterpriseModulePage';
+import { ImMessengerPage } from './ImMessengerPage';
+import { LegalConsentPage } from './LegalConsentPage';
 import { LoginPage } from './LoginPage';
+import { LongTailPage } from './LongTailPage';
 import { MainShell } from './MainShell';
+import { MarketListPage } from './MarketListPage';
+import { ModWebViewPage } from './ModWebViewPage';
+import { NotificationListPage } from './NotificationListPage';
+import { OcrPage } from './OcrPage';
+import { ScanQrPage } from './ScanQrPage';
 import { SettingsPage } from './SettingsPage';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:5000/';
@@ -49,6 +64,7 @@ struct Index {
   @Provide themeMode: string = 'system';
   @Provide showSettings: boolean = false;
   @State showDutyRoster: boolean = false;
+  @State activeOverlay: string = '';
 
   build() {
     Column() {
@@ -61,7 +77,8 @@ struct Index {
             onRefreshHome: () => this.refreshHome(),
             onLogout: () => this.logout(),
             onOpenSettings: () => this.openSettings(),
-            onOpenDutyRoster: () => this.openDutyRoster()
+            onOpenDutyRoster: () => this.openDutyRoster(),
+            onOpenOverlay: (name: string) => this.openOverlay(name)
           });
           if (this.showSettings) {
             SettingsPage({
@@ -77,6 +94,9 @@ struct Index {
               onBack: () => this.closeDutyRoster(),
               onStartEmployeeChat: (key: string) => this.startEmployeeChatFromDuty(key)
             });
+          }
+          if (this.activeOverlay.length > 0) {
+            this.OverlayLayer();
           }
         }
         .width('100%')
@@ -253,6 +273,63 @@ struct Index {
   private startEmployeeChatFromDuty(employeeKey: string): void {
     this.showDutyRoster = false;
     this.startEmployeeChat(employeeKey);
+  }
+
+  // ── 全部功能 overlay（审批/通知/客服/IM/企业/AI圈子/扫码/OCR/市场/服务桥/长尾/关于） ──
+  private openOverlay(name: string): void {
+    this.activeOverlay = name;
+  }
+  private closeOverlay(): void {
+    this.activeOverlay = '';
+  }
+
+  @Builder
+  OverlayLayer() {
+    if (this.activeOverlay === 'approval') {
+      ApprovalPage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'notifications') {
+      NotificationListPage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'cs') {
+      CsChatPage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'im') {
+      ImMessengerPage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'enterprise') {
+      EnterprisePage({
+        onBack: () => this.closeOverlay(),
+        onOpenModule: (moduleId: string) => {
+          this.activeOverlay = 'enterprise_module:' + moduleId;
+        }
+      });
+    } else if (this.activeOverlay.startsWith('enterprise_module:')) {
+      EnterpriseModulePage({
+        moduleId: this.activeOverlay.substring('enterprise_module:'.length),
+        moduleTitle: '企业模块',
+        onBack: () => { this.activeOverlay = 'enterprise'; },
+        onOpenFeature: (featureId: string) => {}
+      });
+    } else if (this.activeOverlay === 'aicircle') {
+      AiCirclePage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'scan') {
+      ScanQrPage({ onBack: () => this.closeOverlay(), onScanResult: (result: string) => this.closeOverlay() });
+    } else if (this.activeOverlay === 'ocr') {
+      OcrPage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'market') {
+      MarketListPage({ onBack: () => this.closeOverlay(), onOpenMod: (modId: string) => {
+        this.activeOverlay = 'modweb:' + modId;
+      }});
+    } else if (this.activeOverlay.startsWith('modweb:')) {
+      ModWebViewPage({
+        modId: this.activeOverlay.substring('modweb:'.length),
+        modTitle: 'MOD',
+        onBack: () => { this.activeOverlay = 'market'; }
+      });
+    } else if (this.activeOverlay === 'bridge') {
+      BridgePage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'longtail') {
+      LongTailPage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'about') {
+      AboutPage({ onBack: () => this.closeOverlay(), onCheckUpdate: () => {} });
+    }
   }
   private setBiometricEnabled(enabled: boolean): void {
     this.biometricEnabled = enabled;

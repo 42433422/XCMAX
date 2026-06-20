@@ -21,15 +21,16 @@ import com.xiuci.xcagi.mobile.core.network.PairingQrCodec
 import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.core.network.WalletBalanceDto
+import com.xiuci.xcagi.mobile.core.network.NavMenuItem
 import com.xiuci.xcagi.mobile.core.observability.XcagiAnalytics
 import com.xiuci.xcagi.mobile.core.push.PushRegistrar
+import com.xiuci.xcagi.mobile.core.im.ImRepository
 import com.xiuci.xcagi.mobile.core.repository.XcagiRepository
 import com.xiuci.xcagi.mobile.core.sync.MobileSyncRepository
 import com.xiuci.xcagi.mobile.core.work.MobileSyncWorker
 import com.xiuci.xcagi.mobile.model.ConversationItem
 import com.xiuci.xcagi.mobile.model.ConversationType
 import com.xiuci.xcagi.mobile.model.CsInfoDto
-import com.xiuci.xcagi.mobile.model.CsMessageItemDto
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -56,6 +57,17 @@ data class UpdatePrompt(
         val versionName: String,
         val downloadUrl: String,
 )
+
+internal fun cachedConversationTimestamp(
+        conversationId: String,
+        timestamps: Map<String, Long>,
+): Long = timestamps[conversationId]?.takeIf { it > 0L } ?: 0L
+
+/** 从预览 Map 中取会话最新消息预览；无预览时返回空字符串（由调用方回退到介绍词）。 */
+internal fun cachedConversationPreview(
+        conversationId: String,
+        previews: Map<String, String>,
+): String = previews[conversationId]?.trim().orEmpty()
 
 @HiltViewModel
 class AppViewModel
@@ -235,6 +247,10 @@ constructor(
     private val _homeHub = MutableStateFlow(HomeHubState())
     val homeHub: StateFlow<HomeHubState> = _homeHub.asStateFlow()
 
+    /** 侧栏菜单（探索 Tab 配对后与桌面端侧栏对齐） */
+    private val _navMenu = MutableStateFlow<List<NavMenuItem>>(emptyList())
+    val navMenu: StateFlow<List<NavMenuItem>> = _navMenu.asStateFlow()
+
     private val _walletBalance = MutableStateFlow<WalletBalanceDto?>(null)
     val walletBalance: StateFlow<WalletBalanceDto?> = _walletBalance.asStateFlow()
 
@@ -250,18 +266,25 @@ constructor(
 
     // 微信风格：conversations 从本地 DB Flow 派生，网络请求只写入 DB，不直接操作 UI 状态
     val conversations: StateFlow<List<ConversationItem>> =
-            combine(repo.observeCachedModInfos(), sessionStore.accountKindFlow) { mods, kind ->
+            combine(
+                    repo.observeCachedModInfos(),
+                    sessionStore.accountKindFlow,
+                    repo.observeConversationListTimestamps(),
+                    repo.observeConversationListPreviews(),
+            ) { mods, kind, timestamps, previews ->
                 val adminMode = isAdminAccountKind(kind)
                 val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
                 val fixedItems = fixedConversationItems(
                         showCodex = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
+                        timestamps = timestamps,
+                        previews = previews,
                 )
                 val badgeText = if (adminMode) "管理端" else "已安装"
                 val badgeColor =
                         if (adminMode) androidx.compose.ui.graphics.Color(0xFFED7B2F)
                         else androidx.compose.ui.graphics.Color(0xFF3370FF)
-                val employees = employeeConversationItems(mods, badgeText, badgeColor)
+                val employees = employeeConversationItems(mods, badgeText, badgeColor, timestamps, previews)
                 fixedItems + employees
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -584,6 +607,19 @@ constructor(
                 }
             }
 
+    /** 拉取侧栏菜单（探索 Tab 配对后与桌面端侧栏对齐）。失败时保留旧值。 */
+    fun loadNavMenu() =
+            viewModelScope.launch {
+                try {
+                    val res = repo.fetchNavMenu().getOrNull()
+                    if (res != null) {
+                        _navMenu.value = res.items
+                    }
+                } catch (_: Exception) {
+                    // 静默失败，保留旧值
+                }
+            }
+
     /** 拉取钱包余额（移动端"我"页面展示）。失败时保留旧值，不弹错误。成功后写入缓存。 */
     fun loadWalletBalance() =
             viewModelScope.launch {
@@ -683,6 +719,7 @@ constructor(
             sessionStore.setLastSyncAt(Instant.now().toString())
         }
         loadHomeHub()
+        loadNavMenu()
         refreshApprovalCount()
         loadWalletBalance()
         registerPushWithHint()
@@ -693,6 +730,8 @@ constructor(
             mods: List<ModInfo>,
             badgeText: String,
             badgeColor: androidx.compose.ui.graphics.Color,
+            timestamps: Map<String, Long>,
+            previews: Map<String, String>,
     ): List<ConversationItem> =
             mods.flatMap { mod ->
                 mod.workflow_employees.mapNotNull { employee ->
@@ -705,13 +744,16 @@ constructor(
                         val source = mod.name.ifBlank { mod.id }.trim().takeIf { it.isNotBlank() }
                         val avatarUrl = employee.market_avatar?.takeIf { it.isNotBlank() }
                             ?: mod.avatar_url?.takeIf { it.isNotBlank() }
+                        val conversationId = "employee:${mod.id}:$employeeId"
+                        // 微信风格：有最新消息预览时显示预览，否则显示介绍词
+                        val subtitle = cachedConversationPreview(conversationId, previews)
+                            .ifBlank { employee.contactSubtitle(source) }
                         ConversationItem(
-                                id = "employee:${mod.id}:$employeeId",
+                                id = conversationId,
                                 type = ConversationType.AI_TASK,
                                 title = title,
-                                subtitle =
-                                        employee.contactSubtitle(source),
-                                timestamp = System.currentTimeMillis(),
+                                subtitle = subtitle,
+                                timestamp = cachedConversationTimestamp(conversationId, timestamps),
                                 avatarUrl = avatarUrl,
                         )
                     }
@@ -741,6 +783,8 @@ constructor(
     private fun fixedConversationItems(
             showCodex: Boolean,
             showCustomerService: Boolean,
+            timestamps: Map<String, Long>,
+            previews: Map<String, String>,
     ): List<ConversationItem> {
         val items = mutableListOf<ConversationItem>()
 
@@ -750,8 +794,9 @@ constructor(
                 id = PinnedIds.ASSISTANT,
                 type = ConversationType.PINNED_ASSISTANT,
                 title = "小C助理",
-                subtitle = "有什么可以帮您？",
-                timestamp = System.currentTimeMillis(),
+                subtitle = cachedConversationPreview(PinnedIds.ASSISTANT, previews)
+                    .ifBlank { "有什么可以帮您？" },
+                timestamp = cachedConversationTimestamp(PinnedIds.ASSISTANT, timestamps),
                 isPinned = true,
             )
         )
@@ -762,8 +807,9 @@ constructor(
                             id = PinnedIds.CODEX,
                             type = ConversationType.PINNED_CODEX,
                             title = "超级员工-Codex",
-                            subtitle = "全设备协同",
-                            timestamp = System.currentTimeMillis(),
+                            subtitle = cachedConversationPreview(PinnedIds.CODEX, previews)
+                                .ifBlank { "全设备协同" },
+                            timestamp = cachedConversationTimestamp(PinnedIds.CODEX, timestamps),
                             isOnline = true,
                             isPinned = true,
                     )
@@ -777,8 +823,9 @@ constructor(
                     id = PinnedIds.CS,
                     type = ConversationType.PINNED_CS,
                     title = "专属客服",
-                    subtitle = "您好，我是您的专属客服",
-                    timestamp = System.currentTimeMillis() - 3600_000,
+                    subtitle = cachedConversationPreview(PinnedIds.CS, previews)
+                        .ifBlank { "您好，我是您的专属客服" },
+                    timestamp = cachedConversationTimestamp(PinnedIds.CS, timestamps),
                     isOnline = true,
                     isPinned = true,
                 )
@@ -1121,15 +1168,29 @@ constructor(
                 }
             }
 
-    private fun csItemsToChat(items: List<CsMessageItemDto>): List<Pair<String, String>> =
-            items.mapNotNull { msg ->
-                val body = msg.body.trim()
-                if (body.isBlank()) {
-                    null
-                } else {
-                    (if (msg.sender == "user") "user" else "assistant") to body
-                }
-            }
+    private fun latestCsMessageTimestamp(): Long? =
+            csRepository.messages.value
+                    .mapNotNull { ImRepository.parseTimestampMs(it.timestamp) }
+                    .maxOrNull()
+
+    /** 客服会话最新一条消息（用于列表副标题预览）。 */
+    private fun latestCsMessagePreview(): String? {
+        val msgs = csRepository.messages.value
+        if (msgs.isEmpty()) return null
+        val latest = msgs.maxByOrNull { ImRepository.parseTimestampMs(it.timestamp) ?: 0L }
+            ?: return null
+        val body = latest.body.trim()
+        if (body.isBlank()) return null
+        // sender="user" 是自己发的，加 "我:" 前缀；sender="cs" 是客服回复，直接显示
+        return if (latest.sender.trim().lowercase() == "user") "我: $body" else body
+    }
+
+    /** 将客服最新消息预览写入 DB，驱动会话列表副标题更新（微信风格）。 */
+    private suspend fun persistCsConversationPreview() {
+        val ts = latestCsMessageTimestamp() ?: return
+        val preview = latestCsMessagePreview().orEmpty()
+        repo.markConversationActivity(PinnedIds.CS, ts, preview)
+    }
 
     fun loadChatCache(conversationId: String? = null) =
             viewModelScope.launch {
@@ -1144,18 +1205,6 @@ constructor(
                 }
                 val sessionId = conversationId ?: "default"
                 _chatMessages.value = repo.loadCachedChat(sessionId)
-            }
-
-    fun loadAssistantCustomerServiceHistory() =
-            viewModelScope.launch {
-                csRepository.loadCsInfo()
-                csRepository
-                        .loadMessages()
-                        .onSuccess { _chatMessages.value = csItemsToChat(csRepository.messages.value) }
-                        .onFailure {
-                            snack(it.message ?: "小C助理历史加载失败", true)
-                            _chatMessages.value = emptyList()
-                        }
             }
 
     fun clearChat() {
@@ -1254,40 +1303,6 @@ constructor(
 	                                },
                         )
                     }
-                }
-    }
-
-    fun sendAssistantCustomerServiceMessage(text: String) {
-        chatJob?.cancel()
-        _chatAction.value = null
-        _chatMessages.value = _chatMessages.value + ("user" to text)
-        _streaming.value = true
-        chatJob =
-                viewModelScope.launch {
-                    csRepository
-                            .sendMessage(text)
-                            .onSuccess { response ->
-                                val reply =
-                                        response.reply.ifBlank {
-                                            csRepository.messages.value
-                                                    .lastOrNull { it.sender != "user" }
-                                                    ?.body
-                                                    .orEmpty()
-                                        }
-                                if (reply.isNotBlank()) {
-                                    _chatMessages.value =
-                                            _chatMessages.value + ("assistant" to reply)
-                                } else {
-                                    _chatMessages.value = csItemsToChat(csRepository.messages.value)
-                                }
-                            }
-                            .onFailure {
-                                val message = it.message ?: "小C助理暂时无法连接企业智能客服"
-                                _chatMessages.value =
-                                        _chatMessages.value + ("assistant" to "处理失败：$message")
-                                snack(message, true)
-                            }
-                    _streaming.value = false
                 }
     }
 
@@ -1461,6 +1476,13 @@ constructor(
 
     suspend fun modUrl(modId: String) = repo.modWebUrl(modId)
 
+    /** 构建桌面端页面完整 URL（探索 Tab 桌面工具入口用）。 */
+    fun desktopPageUrl(path: String): String {
+        val base = repo.fhdBaseUrl()
+        val cleanPath = if (path.startsWith("/")) path else "/$path"
+        return "${base.trimEnd('/')}$cleanPath?shell=1"
+    }
+
     suspend fun modOpensInCloudWorkbench() = repo.modOpensInCloudWorkbench()
 
     fun requestModOpen(modId: String, onCloud: () -> Unit, onNative: () -> Unit) =
@@ -1531,13 +1553,20 @@ constructor(
     suspend fun loadCsInfo() = csRepository.loadCsInfo()
 
     /** 发送客服消息 */
-    suspend fun sendCsMessage(body: String) =
-            csRepository.sendMessage(body).onFailure {
+    suspend fun sendCsMessage(body: String) {
+        repo.markConversationActivity(PinnedIds.CS)
+        csRepository.sendMessage(body)
+            .onSuccess { persistCsConversationPreview() }
+            .onFailure {
                 snack(it.message ?: "客服消息发送失败", true)
             }
+    }
 
     /** 加载客服历史消息 */
-    suspend fun loadCsMessages(since: String? = null) = csRepository.loadMessages(since)
+    suspend fun loadCsMessages(since: String? = null): Result<Unit> =
+            csRepository.loadMessages(since).onSuccess {
+                persistCsConversationPreview()
+            }
 
     /** 停止客服流式响应 */
     fun stopCsStream() = csRepository.stopStream()

@@ -1,1 +1,0 @@
-import{a as r}from"./index-CinG43sm.js";const o={syncGroups(e={}){return r.post("/api/wechat/groups/sync",e)},getContactContext(e,t={}){return r.get(`/api/wechat/contacts/${e}/context`,{refresh:t.refresh??!1})},loadStarredGroupFeed(e,t,a={}){return r.get("/api/wechat/starred-messages",{type:"group",market_user_id:e,limit:t,sync:a.sync??!1})}};export{o as wechatGroupBridgeApi};

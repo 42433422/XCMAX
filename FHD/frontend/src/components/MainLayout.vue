@@ -289,7 +289,7 @@ const viewTitlesBase = {
   'chat-debug': '对话调试',
   'enterprise-customer-service': '外部客服',
   'internal-customer-service': '内部客服',
-  'admin-entitlements': '用户 Mod 管理',
+  'admin-entitlements': '用户管理',
   'xcmax-admin': '服务器后台总览',
   'automation-policy': '自动化方针',
   'duty-time-architecture': '同时完成时间架构',

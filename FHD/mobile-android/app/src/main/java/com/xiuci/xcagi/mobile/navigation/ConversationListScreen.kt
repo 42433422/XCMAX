@@ -144,7 +144,6 @@ fun ConversationListScreen(
                         onClearSearch = { searchQuery = "" },
                         selectedFilter = selectedFilter,
                         unreadTotal = unreadTotal,
-                        employeeCount = employeeCount,
                         onFilterChange = { selectedFilter = it },
                         onOpenEmployees = onOpenEmployees,
                         onOpenContacts = onOpenContacts,
@@ -242,7 +241,6 @@ private fun MessageHomeHeader(
         onClearSearch: () -> Unit,
         selectedFilter: ConversationFilter,
         unreadTotal: Int,
-        employeeCount: Int,
         onFilterChange: (ConversationFilter) -> Unit,
         onOpenEmployees: () -> Unit,
         onOpenContacts: () -> Unit,
@@ -292,7 +290,6 @@ private fun MessageHomeHeader(
             Spacer(Modifier.height(Spacing.md))
 
             QuickActionRow(
-                    employeeCount = employeeCount,
                     onOpenEmployees = onOpenEmployees,
                     onOpenContacts = onOpenContacts,
                     onOpenDiscover = onOpenDiscover,
@@ -388,7 +385,6 @@ internal fun SearchBarField(
 
 @Composable
 private fun QuickActionRow(
-        employeeCount: Int,
         onOpenEmployees: () -> Unit,
         onOpenContacts: () -> Unit,
         onOpenDiscover: () -> Unit,
@@ -400,7 +396,6 @@ private fun QuickActionRow(
     ) {
         QuickAction(
                 label = "AI员工",
-                badge = employeeCount.takeIf { it > 0 }?.toString(),
                 glyph = QuickGlyph.PARTNER,
                 color = XcagiTheme.extra.brandBlue,
                 onClick = onOpenEmployees,
@@ -445,7 +440,6 @@ private fun QuickAction(
         color: Color,
         onClick: () -> Unit,
         modifier: Modifier = Modifier,
-        badge: String? = null,
 ) {
     Surface(
             modifier = modifier.padding(horizontal = 2.dp),
@@ -465,21 +459,6 @@ private fun QuickAction(
                         contentAlignment = Alignment.Center,
                 ) {
                     QuickGlyphIcon(glyph = glyph, color = color, modifier = Modifier.size(21.dp))
-                }
-                badge?.let {
-                    Surface(
-                            shape = CircleShape,
-                            color = XcagiTheme.extra.danger,
-                            modifier = Modifier.offset(x = 8.dp, y = (-4).dp),
-                    ) {
-                        Text(
-                                it,
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                        )
-                    }
                 }
             }
             Spacer(Modifier.height(5.dp))

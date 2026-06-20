@@ -27,6 +27,8 @@ class SseChatClient @Inject constructor(
         userId: Int,
         useCloud: Boolean = false,
         recentMessages: List<Map<String, String>> = emptyList(),
+        industry: String? = null,
+        refreshBearer: (suspend () -> String)? = null,
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -39,23 +41,32 @@ class SseChatClient @Inject constructor(
             "mode" to "professional",
         )
         if (userId > 0) bodyMap["user_id"] = userId.toString()
-        // 上下文：最近6条对话（与桌面端 useChatRequest.ts 一致）
+        // 上下文：最近6条对话 + 行业（与桌面端 useChatRequest.ts 一致）
+        val contextMap = mutableMapOf<String, Any>()
         if (recentMessages.isNotEmpty()) {
-            bodyMap["context"] = mapOf("recent_messages" to recentMessages)
+            contextMap["recent_messages"] = recentMessages
+        }
+        if (!industry.isNullOrBlank()) {
+            contextMap["industry"] = industry
+        }
+        if (contextMap.isNotEmpty()) {
+            bodyMap["context"] = contextMap
         }
         val bodyJson = gson.toJson(bodyMap)
-        val reqBuilder = Request.Builder()
-            .url(url)
-            .post(bodyJson.toRequestBody("application/json".toMediaType()))
-            .header("Accept", "text/event-stream")
-            .header("X-XCAGI-Client", "android")
-        if (bearer.isNotBlank()) {
-            reqBuilder.header("Authorization", bearer)
+        fun buildRequest(currentBearer: String): Request {
+            val reqBuilder = Request.Builder()
+                .url(url)
+                .post(bodyJson.toRequestBody("application/json".toMediaType()))
+                .header("Accept", "text/event-stream")
+                .header("X-XCAGI-Client", "android")
+            if (currentBearer.isNotBlank()) {
+                reqBuilder.header("Authorization", currentBearer)
+            }
+            if (userId > 0) {
+                reqBuilder.header("X-User-ID", userId.toString())
+            }
+            return reqBuilder.build()
         }
-        if (userId > 0) {
-            reqBuilder.header("X-User-ID", userId.toString())
-        }
-        val req = reqBuilder.build()
 
         // 重试机制：后端 LLM 上游存在间歇性 SSL 握手超时（_ssl.c:999），
         // 桌面端有重试因此能恢复，移动端原本单次失败即放弃。
@@ -63,13 +74,20 @@ class SseChatClient @Inject constructor(
         // 一旦开始接收 SSE token 流则不再重试（避免重复输出）。
         val maxAttempts = 3
         var lastError: String? = null
+        var currentBearer = bearer
         for (attempt in 1..maxAttempts) {
             // 用于标记是否已开始流式接收；若已开始则失败不可重试。
             var streamingStarted = false
             try {
+                val req = buildRequest(currentBearer)
                 okHttp.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) {
                         lastError = if (useCloud) "远程对话 HTTP ${resp.code}" else "HTTP ${resp.code}"
+                        if (resp.code in setOf(401, 403) && refreshBearer != null && attempt < maxAttempts) {
+                            refreshBearer().takeIf { it.isNotBlank() }?.let { currentBearer = it }
+                            delay(300L)
+                            return@use
+                        }
                         // 5xx 错误可能是后端 LLM 上游瞬时故障，可重试；4xx 不重试。
                         if (resp.code in 500..599 && attempt < maxAttempts) {
                             delay(800L * attempt)

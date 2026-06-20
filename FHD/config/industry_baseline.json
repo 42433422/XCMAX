@@ -85,14 +85,6 @@
       ],
       "optional_host_mod_ids": ["xcagi-customer-service-bridge"]
     },
-    "烤禽": {
-      "summary": "烤禽冷链：侧栏基础线装齐后，配送类 Mod 可按需安装。",
-      "host_mod_ids": [
-        "xcagi-erp-domain-bridge",
-        "xcagi-planner-excel-tools"
-      ],
-      "optional_host_mod_ids": []
-    },
     "餐饮": {
       "summary": "餐饮门店：侧栏基础线装齐后，食材订货 Mod 可按需安装。",
       "host_mod_ids": [

@@ -335,7 +335,7 @@ allRoutes.push(
     path: '/admin/entitlements',
     name: 'admin-entitlements',
     component: () => import('../views/AdminEntitlementsView.vue'),
-    meta: { title: '用户 Mod 管理', requiresAdminAccount: true },
+    meta: { title: '用户管理', requiresAdminAccount: true },
   },
   {
     path: '/desktop-runtime',
