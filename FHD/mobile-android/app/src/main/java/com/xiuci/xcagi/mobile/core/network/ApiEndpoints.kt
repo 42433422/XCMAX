@@ -47,6 +47,11 @@ object ApiEndpoints {
     const val ADMIN_HOME = "$BASE/admin/home"
     const val NAV_MENU = "$BASE/nav-menu"
 
+    // AI 交流圈
+    const val CIRCLE_POSTS = "$BASE/circle/posts"
+    const val CIRCLE_LIKE = "$BASE/circle/posts/{postId}/like"
+    const val CIRCLE_COMMENTS = "$BASE/circle/posts/{postId}/comments"
+
     // 同步
     const val SYNC_STATUS = "$BASE/sync/status"
     const val SYNC_PULL = "$BASE/sync/pull"

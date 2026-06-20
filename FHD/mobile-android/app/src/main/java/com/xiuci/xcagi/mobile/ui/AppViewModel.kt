@@ -13,6 +13,7 @@ import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.cs.CsRepository
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
 import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
+import com.xiuci.xcagi.mobile.core.model.AiCirclePost
 import com.xiuci.xcagi.mobile.core.model.ApprovalDetail
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.ModInfo
@@ -253,6 +254,12 @@ constructor(
 
     private val _walletBalance = MutableStateFlow<WalletBalanceDto?>(null)
     val walletBalance: StateFlow<WalletBalanceDto?> = _walletBalance.asStateFlow()
+
+    private val _aiCirclePosts = MutableStateFlow<List<AiCirclePost>>(emptyList())
+    val aiCirclePosts: StateFlow<List<AiCirclePost>> = _aiCirclePosts.asStateFlow()
+
+    private val _aiCircleLoading = MutableStateFlow(false)
+    val aiCircleLoading: StateFlow<Boolean> = _aiCircleLoading.asStateFlow()
 
     private val _approvalPendingCount = MutableStateFlow(0)
     val approvalPendingCount: StateFlow<Int> = _approvalPendingCount.asStateFlow()
@@ -1453,6 +1460,46 @@ constructor(
                                 }
                             }
                         }
+            }
+
+    fun loadAiCirclePosts(showError: Boolean = false) =
+            viewModelScope.launch {
+                _aiCircleLoading.value = true
+                repo.loadAiCirclePosts()
+                        .onSuccess { _aiCirclePosts.value = it }
+                        .onFailure {
+                            if (showError || _aiCirclePosts.value.isEmpty()) {
+                                snack(productErrorMessage(it.message, "交流圈加载失败"), true)
+                            }
+                        }
+                _aiCircleLoading.value = false
+            }
+
+    fun createAiCirclePost(body: String, onSuccess: () -> Unit = {}) =
+            viewModelScope.launch {
+                repo.createAiCirclePost(body)
+                        .onSuccess {
+                            onSuccess()
+                            loadAiCirclePosts()
+                        }
+                        .onFailure { snack(productErrorMessage(it.message, "发布失败"), true) }
+            }
+
+    fun toggleAiCircleLike(postId: Int) =
+            viewModelScope.launch {
+                repo.toggleAiCircleLike(postId)
+                        .onSuccess { loadAiCirclePosts() }
+                        .onFailure { snack(productErrorMessage(it.message, "点赞失败"), true) }
+            }
+
+    fun addAiCircleComment(postId: Int, body: String, onSuccess: () -> Unit = {}) =
+            viewModelScope.launch {
+                repo.addAiCircleComment(postId, body)
+                        .onSuccess {
+                            onSuccess()
+                            loadAiCirclePosts()
+                        }
+                        .onFailure { snack(productErrorMessage(it.message, "评论失败"), true) }
             }
 
     fun loadMarket() = loadEnterpriseList { repo.marketCatalog() }
