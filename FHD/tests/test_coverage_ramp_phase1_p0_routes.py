@@ -12,8 +12,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # mobile_api 末尾才挂载 extension_router，须先 import mobile_api 打破循环依赖
+import app.fastapi_routes.mobile_api as mobile_api_mod  # noqa: E402
 import app.fastapi_routes.mobile_api_extensions as mobile_ext  # noqa: E402
-from app.fastapi_routes import mobile_api as mobile_api_mod
 from app.fastapi_routes import rbac as rbac_routes
 from app.fastapi_routes.domains.static import routes as static_routes
 from app.infrastructure.auth import tenant_context
