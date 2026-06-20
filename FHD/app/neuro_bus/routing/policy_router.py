@@ -92,7 +92,7 @@ def decide_processor_with_policy(
     if mode not in {"1", "true", "yes", "on", "shadow", "canary", "full"}:
         # 环境变量也没启用
         raw_env = (os.environ.get("XCAGI_ROUTING_POLICY_ENABLED") or "").strip().lower()
-        if raw_env not in {"1", "true", "yes", "on", "shadow"}:
+        if raw_env not in {"1", "true", "yes", "on", "shadow", "canary", "full"}:
             return None
         mode = raw_env
     shadow_mode = mode == "shadow"

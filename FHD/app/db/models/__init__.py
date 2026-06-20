@@ -1,4 +1,6 @@
 from app.db.models.agent import AgentRunRecord
+from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
+from app.db.models.butler_profile import ButlerUserProfile
 from app.db.models.ai import (
     AIConversation,
     AIConversationSession,
@@ -53,6 +55,9 @@ from app.infrastructure.persona.models import PersonaEventLogModel, PersonaProfi
 __all__ = [
     "PurchaseUnit",
     "AgentRunRecord",
+    "AiCirclePost",
+    "AiCircleReaction",
+    "AiCircleComment",
     "Product",
     "ShipmentRecord",
     "Customer",

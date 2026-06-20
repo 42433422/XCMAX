@@ -579,6 +579,19 @@ async def admin_list_assignable_mods(request: Request):
     return await _market_admin_proxy(request, "GET", "/api/admin/enterprise/assignable-mods")
 
 
+@router.get("/admin/market/wallets", response_model=None)
+async def admin_list_wallets(request: Request):
+    """代理远端 ``/api/admin/wallets``，返回所有用户钱包余额。
+
+    远端返回 ``{items: [{id, user_id, balance, updated_at}], total}``。
+    """
+    limit = request.query_params.get("limit", "500")
+    offset = request.query_params.get("offset", "0")
+    return await _market_admin_proxy(
+        request, "GET", f"/api/admin/wallets?limit={limit}&offset={offset}"
+    )
+
+
 @router.get("/admin/market/users/{user_id}/mods", response_model=None)
 async def admin_list_user_mods(request: Request, user_id: int):
     return await _market_admin_proxy(request, "GET", f"/api/admin/users/{user_id}/mods")
@@ -626,6 +639,77 @@ async def admin_set_user_enterprise(
         "PUT",
         f"/api/admin/users/{user_id}/enterprise?is_enterprise={'true' if is_enterprise else 'false'}",
     )
+
+
+_VALID_TIERS = {"personal", "enterprise", "admin"}
+
+
+@router.put("/admin/users/{user_id}/profile", response_model=None)
+async def admin_set_user_profile(
+    request: Request,
+    user_id: int,
+    payload: dict = Body(...),
+):
+    """设置用户等级与行业（本地 User 表持久化）。
+
+    body: {username: str, tier?: str, industry_id?: str}
+    用 username 匹配本地 User 表；不存在则 upsert 最小记录。
+    """
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    username = str(payload.get("username") or "").strip()
+    tier = str(payload.get("tier") or "").strip()
+    industry_id = str(payload.get("industry_id") or "").strip()
+    if not username:
+        return JSONResponse({"success": False, "message": "username 必填"}, status_code=422)
+    if tier and tier not in _VALID_TIERS:
+        return JSONResponse(
+            {"success": False, "message": f"tier 必须是 {sorted(_VALID_TIERS)} 之一"},
+            status_code=422,
+        )
+    try:
+        from app.db.models.user import User
+        from app.db.session import get_db
+
+        with get_db() as db:
+            user = db.query(User).filter(User.username == username).first()
+            if user is None:
+                user = User(username=username, password="", role="user")
+                db.add(user)
+                db.flush()
+            if tier:
+                user.tier = tier
+            if industry_id:
+                user.industry_id = industry_id
+            db.commit()
+            result = {"username": username, "tier": user.tier, "industry_id": user.industry_id}
+        return {"success": True, "data": result}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("设置用户 profile 失败: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.get("/admin/users/profiles", response_model=None)
+async def admin_list_user_profiles(request: Request):
+    """返回本地所有用户的 tier/industry_id 映射（按 username 索引）。
+
+    前端拿到远端用户列表后，调此端点合并本地 profile。
+    """
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    try:
+        from app.db.models.user import User
+        from app.db.session import get_db
+
+        with get_db() as db:
+            rows = db.query(User.username, User.tier, User.industry_id).all()
+        data = {r[0]: {"tier": r[1], "industry_id": r[2]} for r in rows}
+        return {"success": True, "data": data}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("读取用户 profile 列表失败: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
 @router.get("/admin/wechat/groups", response_model=None)

@@ -343,17 +343,71 @@ class AIConversationService(
 _ai_conversation_service: AIConversationService | None = None
 
 
+class _InMemoryPersonaRepository:
+    """内存版 persona 仓储：无 DB/Redis 环境下的 fallback。
+
+    画像不持久化，进程内缓存；冷启动时 PersonaService 会创建默认画像。
+    L1 规则推断 + prompt 生成仍正常工作，仅 L2/L3 缓存和跨会话画像不保留。
+    """
+
+    def __init__(self):
+        self._store: dict[str, Any] = {}
+        self._events: dict[str, list[dict]] = {}
+
+    async def find_by_user_id(self, user_id: str):
+        return self._store.get(user_id)
+
+    async def save(self, profile):
+        self._store[profile.user_id] = profile
+        return profile
+
+    async def delete(self, user_id: str) -> bool:
+        return self._store.pop(user_id, None) is not None
+
+    async def append_event(self, user_id: str, event_type: str, event_data: dict) -> None:
+        self._events.setdefault(user_id, []).append({"type": event_type, "data": event_data})
+
+    async def list_recent_events(self, user_id: str, limit: int = 20) -> list[dict]:
+        return self._events.get(user_id, [])[-limit:]
+
+
+def _create_persona_service():
+    """创建 PersonaService 实例（内存 repo，无需 DB/Redis）。"""
+    from app.services.persona.axes_fuser import AxesFuser
+    from app.services.persona.identity_resolver import IdentityResolver
+    from app.services.persona.param_mapper import PersonaParamMapper
+    from app.services.persona.persona_service import PersonaService
+    from app.services.persona.prompt_builder import PersonaPromptBuilder
+    from app.services.persona.rapport_calculator import RapportCalculator
+    from app.services.persona.rule_inferencer import RuleInferencer
+
+    identity_resolver = IdentityResolver()
+    return PersonaService(
+        repo=_InMemoryPersonaRepository(),
+        rule_inferencer=RuleInferencer(),
+        embedding_inferencer=None,
+        llm_inferencer=None,
+        axes_fuser=AxesFuser(),
+        rapport_calculator=RapportCalculator(),
+        identity_resolver=identity_resolver,
+        prompt_builder=PersonaPromptBuilder(identity_resolver),
+        param_mapper=PersonaParamMapper(),
+    )
+
+
 def get_ai_conversation_service() -> AIConversationService:
     global _ai_conversation_service
     if _ai_conversation_service is None:
         _ai_conversation_service = AIConversationService()
+        _ai_conversation_service.persona_service = _create_persona_service()
     return _ai_conversation_service
 
 
 def init_ai_conversation_service() -> AIConversationService:
     global _ai_conversation_service
     _ai_conversation_service = AIConversationService()
-    logger.info("AI 对话服务已初始化")
+    _ai_conversation_service.persona_service = _create_persona_service()
+    logger.info("AI 对话服务已初始化（已注入 PersonaService）")
     return _ai_conversation_service
 
 

@@ -40,6 +40,10 @@ class User(Base):
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     tenant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
 
+    # 用户等级与行业（管理端可编辑，复用 industryPresets 行业 id）
+    tier: Mapped[str] = mapped_column(String(32), default="personal", nullable=False, comment="用户等级: personal|enterprise|admin")
+    industry_id: Mapped[str] = mapped_column(String(32), default="通用", nullable=False, comment="行业 id，引用 industryPresets")
+
     created_user: Mapped[Optional[User]] = relationship(
         "User", remote_side=[id], backref="created_users", foreign_keys=[created_by]
     )

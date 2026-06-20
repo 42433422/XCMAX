@@ -92,6 +92,7 @@ import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.work.LanProbeWorker
 import com.xiuci.xcagi.mobile.feature.legal.LegalConsentScreen
 import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
+import com.xiuci.xcagi.mobile.feature.web.DesktopToolWebView
 import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
@@ -404,10 +405,16 @@ fun XcagiNavHost(
                         popExitTransition = { WeFadeTransition.exit() },
                 ) {
                     DiscoverScreen(
+                        vm = vm,
                         onScan = { nav.navigate(Routes.SCAN_QR) },
                         onOcr = { nav.navigate(Routes.OCR) },
                         onAiCircle = { nav.navigate(Routes.AI_CIRCLE) },
                         onNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
+                        onNavigate = { route -> nav.navigate(route) },
+                        onOpenWebView = { path, title ->
+                            val url = vm.desktopPageUrl(path)
+                            nav.navigate(Routes.webView(url, title))
+                        },
                     )
                 }
                 composable(
@@ -455,7 +462,6 @@ fun XcagiNavHost(
                 ) {
                     ChatScreen(
                             vm,
-                            useCustomerServiceBackend = false,
                             onBack = { nav.popBackStack() },
                             onOpenProfile = {
                                 nav.navigate(
@@ -681,6 +687,28 @@ fun XcagiNavHost(
                     }
                     if (url.isNotBlank()) {
                         ModWebViewScreen(url, bearer, access, refresh, fhdAccess)
+                    }
+                }
+                composable(
+                        Routes.WEB_VIEW,
+                        arguments = listOf(
+                                navArgument("url") { type = NavType.StringType },
+                                navArgument("title") { type = NavType.StringType },
+                        )
+                ) { e ->
+                    val url = e.arguments?.getString("url") ?: ""
+                    val title = e.arguments?.getString("title") ?: "桌面工具"
+                    var bearer by remember { mutableStateOf("") }
+                    val access by vm.marketAccess.collectAsState()
+                    val refresh by vm.marketRefresh.collectAsState()
+                    val fhdAccess by vm.fhdAccess.collectAsState()
+                    LaunchedEffect(url) {
+                        bearer = vm.bearerToken()
+                    }
+                    if (url.isNotBlank()) {
+                        DesktopToolWebView(url, title, bearer, access, refresh, fhdAccess) {
+                            nav.popBackStack()
+                        }
                     }
                 }
                 composable(Routes.LONGTAIL) { LongTailScreen(vm) }

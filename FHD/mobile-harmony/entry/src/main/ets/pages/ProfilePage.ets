@@ -14,6 +14,7 @@ export struct ProfilePage {
   onRefreshHome: () => void = () => {};
   onLogout: () => void = () => {};
   onOpenSettings: () => void = () => {};
+  onOpenOverlay: (name: string) => void = () => {};
 
   build() {
     this.ProfileArea();
@@ -70,6 +71,34 @@ export struct ProfilePage {
           this.InfoRow('已安装模块', `${this.mods.length}`);
           this.InfoRow('AI 员工', `${this.employees.length}`);
           this.InfoRow('会话入口', `${this.conversations.length}`);
+        }
+        .width('100%')
+        .padding(18)
+        .backgroundColor('#FFFFFF')
+        .borderRadius(16)
+        .border({ width: 1, color: '#E5E7EB' });
+
+        // ── 全部功能入口网格（对标安卓 ProfileScreen 功能区） ──
+        Column({ space: 12 }) {
+          Text('全部功能')
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#111827');
+          Flex({ wrap: FlexWrap.Wrap }) {
+            this.FeatureCell('审', '#1D4ED8', '审批', 'approval');
+            this.FeatureCell('告', '#0369A1', '通知', 'notifications');
+            this.FeatureCell('客', '#047857', '客服', 'cs');
+            this.FeatureCell('IM', '#7C3AED', '消息', 'im');
+            this.FeatureCell('企', '#BE185D', '企业模块', 'enterprise');
+            this.FeatureCell('圈', '#B45309', 'AI圈子', 'aicircle');
+            this.FeatureCell('扫', '#166534', '扫一扫', 'scan');
+            this.FeatureCell('字', '#C2410C', '文字识别', 'ocr');
+            this.FeatureCell('店', '#4338CA', '应用市场', 'market');
+            this.FeatureCell('桥', '#6B7280', '服务桥', 'bridge');
+            this.FeatureCell('尾', '#92400E', '长尾分析', 'longtail');
+            this.FeatureCell('于', '#374151', '关于', 'about');
+          }
+          .width('100%');
         }
         .width('100%')
         .padding(18)
@@ -151,5 +180,27 @@ export struct ProfilePage {
         .layoutWeight(1);
     }
     .width('100%');
+  }
+
+  @Builder
+  FeatureCell(icon: string, color: string, label: string, overlay: string) {
+    Column({ space: 8 }) {
+      Text(icon)
+        .width(44)
+        .height(44)
+        .borderRadius(12)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#FFFFFF')
+        .textAlign(TextAlign.Center)
+        .backgroundColor(color);
+      Text(label)
+        .fontSize(13)
+        .fontColor('#374151');
+    }
+    .width('32%')
+    .padding({ top: 12, bottom: 12 })
+    .alignItems(HorizontalAlign.Center)
+    .onClick(() => this.onOpenOverlay(overlay));
   }
 }

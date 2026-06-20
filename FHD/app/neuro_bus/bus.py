@@ -260,6 +260,17 @@ class NeuroBus:
         self._rel_lifeline = None
         self._rel_tracer = None
         self._rel_sla_log = _neuro_env_flag("XCAGI_NEURO_BUS_SLA_LOG")
+        self._rel_sla_controller = None
+        if self._rel_sla_log:
+            from app.neuro_bus.sla_controller import SLAController
+
+            self._rel_sla_controller = SLAController()
+        self._rel_retry = _neuro_reliability_wanted("XCAGI_NEURO_BUS_RETRY", staging_default=False)
+        self._rel_retry_handler = None
+        if self._rel_retry:
+            from app.neuro_bus.retry_handler import get_retry_handler
+
+            self._rel_retry_handler = get_retry_handler()
         self._trace_by_event_id: dict[str, str] = {}
         if _neuro_reliability_wanted("XCAGI_NEURO_BUS_DEDUP", staging_default=True):
             from app.neuro_bus.deduplicator import EventDeduplicator
@@ -411,6 +422,8 @@ class NeuroBus:
         """分发事件到处理器"""
         handlers_called = 0
         any_failed = False
+        if self._rel_sla_controller is not None:
+            self._rel_sla_controller.start_monitoring(event)
 
         # 1. 特定类型处理器
         event_type = event.event_type
@@ -454,6 +467,8 @@ class NeuroBus:
                 self._rel_dedup.mark_processed(event)
 
         eid = event.metadata.event_id
+        if self._rel_sla_controller is not None:
+            self._rel_sla_controller.finish_monitoring(eid)
         sid = self._trace_by_event_id.pop(eid, None)
         if sid and self._rel_tracer is not None:
             from app.neuro_bus.tracer import SpanStatus
@@ -465,14 +480,30 @@ class NeuroBus:
         if self._rel_circuit is not None and not self._rel_circuit.can_execute():
             logger.warning("NeuroBus circuit open; skipping handler for %s", event.event_type)
             return False
-        t0 = time.perf_counter()
-        try:
+
+        async def _invoke() -> None:
             if subscription.is_async:
                 await subscription.handler(event)
             else:
                 await asyncio.get_running_loop().run_in_executor(
                     self._executor, subscription.handler, event
                 )
+
+        retry_count = 0
+        try:
+            if self._rel_retry_handler is not None:
+                domain = event.metadata.domain or "default"
+                retry_handler = self._rel_retry_handler.get_handler(domain)
+                try:
+                    await retry_handler.execute(
+                        _invoke,
+                        operation_name=getattr(subscription.handler, "__name__", "handler"),
+                    )
+                except RECOVERABLE_ERRORS:
+                    retry_count = retry_handler._config.max_retries  # noqa: SLF001
+                    raise
+            else:
+                await _invoke()
             subscription.record_call(success=True)
             if self._rel_circuit is not None:
                 self._rel_circuit.record_success()
@@ -488,24 +519,12 @@ class NeuroBus:
                     self._dlq_integration.handle_failure(
                         event,
                         e,
-                        retry_count=0,
+                        retry_count=retry_count,
                         handler_name=getattr(subscription.handler, "__name__", None),
                     )
                 except RECOVERABLE_ERRORS as dlq_exc:
                     logger.exception("NeuroBus DLQ enqueue failed: %s", dlq_exc)
             return False
-        finally:
-            if self._rel_sla_log:
-                from app.neuro_bus.sla_controller import SLAConfig
-
-                elapsed_ms = (time.perf_counter() - t0) * 1000
-                if elapsed_ms > SLAConfig.CONSCIOUS.warning_threshold_ms:
-                    logger.warning(
-                        "NeuroBus handler SLA slow: event=%s handler=%s %.1fms",
-                        event.event_type,
-                        getattr(subscription.handler, "__name__", "handler"),
-                        elapsed_ms,
-                    )
         return True
 
     def _preflight_publish(self, event: NeuroEvent) -> bool:
@@ -725,6 +744,8 @@ class NeuroBus:
             "lifeline": self._rel_lifeline is not None,
             "tracer": self._rel_tracer is not None,
             "sla_log": self._rel_sla_log,
+            "sla_controller": self._rel_sla_controller is not None,
+            "retry": self._rel_retry_handler is not None,
             "dlq_auto": self._dlq_integration is not None,
             "redis_pubsub": self._redis_bridge is not None,
             "trace_sample_rate": (

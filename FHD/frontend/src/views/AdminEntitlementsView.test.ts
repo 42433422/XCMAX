@@ -12,6 +12,8 @@ const mockBindUserMod = vi.fn().mockResolvedValue({ success: true })
 const mockUnbindUserMod = vi.fn().mockResolvedValue({ success: true })
 const mockSetUserEnterprise = vi.fn().mockResolvedValue({ success: true })
 const mockStartImpersonate = vi.fn().mockResolvedValue({ bridge_token: 'test-token', enterprise_launch_path: '/chat' })
+const mockGetUserProfiles = vi.fn().mockResolvedValue({ data: {} })
+const mockSetUserProfile = vi.fn().mockResolvedValue({ success: true })
 
 vi.mock('@/api/xcmaxAdmin', () => ({
   xcmaxAdminApi: {
@@ -22,6 +24,8 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     unbindUserMod: (uid: number, mid: string) => mockUnbindUserMod(uid, mid),
     setUserEnterprise: (uid: number, val: boolean) => mockSetUserEnterprise(uid, val),
     startImpersonate: (uid: number, name: string) => mockStartImpersonate(uid, name),
+    getUserProfiles: () => mockGetUserProfiles(),
+    setUserProfile: (uid: number, payload: unknown) => mockSetUserProfile(uid, payload),
   },
 }))
 
@@ -71,13 +75,13 @@ describe('AdminEntitlementsView', () => {
   it('renders page title', async () => {
     const wrapper = mountComponent()
     await flushPromises()
-    expect(wrapper.find('h2').text()).toContain('用户 Mod 管理')
+    expect(wrapper.find('h2').text()).toContain('用户管理')
   })
 
   it('shows empty user list when no users', async () => {
     const wrapper = mountComponent()
     await flushPromises()
-    expect(wrapper.find('.admin-user-list__empty').text()).toContain('暂无用户')
+    expect(wrapper.find('.admin-user-grid__empty').text()).toContain('没有匹配的用户')
   })
 
   it('renders user list when users are loaded', async () => {
@@ -90,7 +94,7 @@ describe('AdminEntitlementsView', () => {
     })
     const wrapper = mountComponent()
     await flushPromises()
-    const rows = wrapper.findAll('.admin-user-row')
+    const rows = wrapper.findAll('.admin-user-card')
     expect(rows.length).toBe(3)
   })
 
@@ -104,10 +108,10 @@ describe('AdminEntitlementsView', () => {
     })
     const wrapper = mountComponent()
     await flushPromises()
-    const rows = wrapper.findAll('.admin-user-row')
+    const rows = wrapper.findAll('.admin-user-card')
     expect(rows[0].text()).toContain('管理员')
     expect(rows[1].text()).toContain('企业')
-    expect(rows[2].text()).toContain('普通')
+    expect(rows[2].text()).toContain('个人')
   })
 
   it('shows mod count for each user', async () => {
@@ -118,26 +122,26 @@ describe('AdminEntitlementsView', () => {
     })
     const wrapper = mountComponent()
     await flushPromises()
-    expect(wrapper.find('.admin-user-row').text()).toContain('2 Mod')
+    expect(wrapper.find('.admin-user-card').text()).toContain('2 个')
   })
 
-  it('selects a user when clicking user row', async () => {
+  it('selects a user when clicking user card', async () => {
     mockListUsers.mockResolvedValue({
       users: [{ id: 1, username: 'testuser', email: 'test@test.com', mod_ids: [] }],
     })
     mockListUserMods.mockResolvedValue({ mod_ids: [] })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-user-detail').exists()).toBe(true)
     expect(wrapper.find('h3').text()).toContain('testuser')
   })
 
-  it('shows "请选择左侧用户" when no user is selected', async () => {
+  it('does not show detail panel when no user is selected', async () => {
     const wrapper = mountComponent()
     await flushPromises()
-    expect(wrapper.find('.admin-user-detail--empty').text()).toContain('请选择左侧用户')
+    expect(wrapper.find('.admin-user-detail').exists()).toBe(false)
   })
 
   it('shows load error when API fails', async () => {
@@ -159,7 +163,7 @@ describe('AdminEntitlementsView', () => {
     const searchInput = wrapper.find('.admin-user-search')
     await searchInput.setValue('alice')
     await flushPromises()
-    const rows = wrapper.findAll('.admin-user-row')
+    const rows = wrapper.findAll('.admin-user-card')
     expect(rows.length).toBe(1)
     expect(rows[0].text()).toContain('alice')
   })
@@ -176,7 +180,7 @@ describe('AdminEntitlementsView', () => {
     const searchInput = wrapper.find('.admin-user-search')
     await searchInput.setValue('bob@test')
     await flushPromises()
-    const rows = wrapper.findAll('.admin-user-row')
+    const rows = wrapper.findAll('.admin-user-card')
     expect(rows.length).toBe(1)
   })
 
@@ -187,7 +191,7 @@ describe('AdminEntitlementsView', () => {
     mockListUserMods.mockResolvedValue({ mod_ids: [] })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     const checkbox = wrapper.find('.admin-flag input[type="checkbox"]')
     expect(checkbox.exists()).toBe(true)
@@ -200,7 +204,7 @@ describe('AdminEntitlementsView', () => {
     mockListUserMods.mockResolvedValue({ mod_ids: [] })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-user-detail__actions button').text()).toContain('进入代管')
   })
@@ -212,7 +216,7 @@ describe('AdminEntitlementsView', () => {
     mockListUserMods.mockResolvedValue({ mod_ids: [] })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-mod-panel p.muted').text()).toContain('尚未绑定客户 Mod')
   })
@@ -225,7 +229,7 @@ describe('AdminEntitlementsView', () => {
     mockListAssignableMods.mockResolvedValue({ mods: [{ id: 'mod1', name: 'Test Mod' }] })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-mod-chip').exists()).toBe(true)
     expect(wrapper.find('.admin-mod-chip').text()).toContain('Test Mod')
@@ -239,7 +243,7 @@ describe('AdminEntitlementsView', () => {
     mockListAssignableMods.mockResolvedValue({ mods: [{ id: 'mod1', name: 'Test Mod' }] })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-mod-install').text()).toContain('未安装')
   })
@@ -264,7 +268,7 @@ describe('AdminEntitlementsView', () => {
     })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-mod-install.is-installed').text()).toContain('已安装')
   })
@@ -302,7 +306,7 @@ describe('AdminEntitlementsView', () => {
     })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-entitlement-chain').text()).toContain('账号 → Mod → AI 员工 → 设备执行')
     expect(wrapper.find('.admin-entitlement-chain').text()).toContain('员工 A')
@@ -317,7 +321,7 @@ describe('AdminEntitlementsView', () => {
     mockListAssignableMods.mockResolvedValue({ mods: [{ id: 'mod2', name: 'Another Mod' }] })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-mod-select').exists()).toBe(true)
     expect(wrapper.find('.admin-mod-assign button').text()).toContain('绑定')
@@ -359,7 +363,7 @@ describe('AdminEntitlementsView', () => {
     mockListAssignableMods.mockResolvedValue({ mods: [{ id: 'mod1', name: 'Test Mod' }] })
     const wrapper = mountComponent()
     await flushPromises()
-    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     const removeBtn = wrapper.find('.admin-mod-chip__remove')
     expect(removeBtn.exists()).toBe(true)
@@ -398,5 +402,52 @@ describe('AdminEntitlementsView', () => {
     // Resolve the pending request
     resolveCatalog!({ ok: true, json: () => Promise.resolve({ data: { installed: [], available: [] } }) })
     await flushPromises()
+  })
+
+  it('filters users by tier', async () => {
+    mockListUsers.mockResolvedValue({
+      users: [
+        { id: 1, username: 'admin', is_admin: true, mod_ids: [] },
+        { id: 2, username: 'ent', is_enterprise: true, mod_ids: [] },
+        { id: 3, username: 'norm', mod_ids: [] },
+      ],
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    const tierSelect = wrapper.find('.admin-user-filter-select')
+    await tierSelect.setValue('admin')
+    await flushPromises()
+    const rows = wrapper.findAll('.admin-user-card')
+    expect(rows.length).toBe(1)
+    expect(rows[0].text()).toContain('admin')
+  })
+
+  it('shows tier stats in filter options', async () => {
+    mockListUsers.mockResolvedValue({
+      users: [
+        { id: 1, username: 'admin', is_admin: true, mod_ids: [] },
+        { id: 2, username: 'ent', is_enterprise: true, mod_ids: [] },
+        { id: 3, username: 'norm', mod_ids: [] },
+      ],
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    const tierSelect = wrapper.find('.admin-user-filter-select')
+    const optionsText = tierSelect.html()
+    expect(optionsText).toContain('管理员（1）')
+    expect(optionsText).toContain('企业（1）')
+    expect(optionsText).toContain('个人（1）')
+  })
+
+  it('shows total count in toolbar', async () => {
+    mockListUsers.mockResolvedValue({
+      users: [
+        { id: 1, username: 'a', mod_ids: [] },
+        { id: 2, username: 'b', mod_ids: [] },
+      ],
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    expect(wrapper.find('.admin-user-toolbar__count').text()).toContain('2 / 2 人')
   })
 })

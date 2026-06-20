@@ -633,3 +633,24 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+
+  # SSOT drift gate (advisory in MVP; does not block pipeline)
+  ssot-drift-gate:
+    name: SSOT Drift Gate (advisory)
+    needs: guard-temp-scripts
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: SSOT drift gate
+        working-directory: FHD
+        run: python scripts/dev/ssot_cli.py gate

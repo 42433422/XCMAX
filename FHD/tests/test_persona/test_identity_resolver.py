@@ -21,7 +21,7 @@ class TestIdentityResolver:
             name="考勤管家", brief="", business_domain="attendance", industry="服务业"
         )
         brief = resolver.resolve_brief(identity, RapportScore(score=0.2))
-        assert "专业" in brief
+        assert "attendance" in brief
 
     def test_resolve_brief_familiar_returns_familiar_brief(self, resolver):
         identity = PersonaIdentity(

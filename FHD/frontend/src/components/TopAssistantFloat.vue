@@ -70,30 +70,6 @@
           type="button"
           class="assistant-tab"
           role="tab"
-          data-tutorial-id="tab-one-click"
-          :aria-selected="activeTab === 'oneClick'"
-          :tabindex="activeTab === 'oneClick' ? 0 : -1"
-          :class="{ active: activeTab === 'oneClick' }"
-          @click="activeTab = 'oneClick'"
-        >
-          一键托管
-        </button>
-        <button
-          type="button"
-          class="assistant-tab"
-          role="tab"
-          data-tutorial-id="tab-lobster"
-          :aria-selected="activeTab === 'lobster'"
-          :tabindex="activeTab === 'lobster' ? 0 : -1"
-          :class="{ active: activeTab === 'lobster' }"
-          @click="activeTab = 'lobster'"
-        >
-          龙虾托管
-        </button>
-        <button
-          type="button"
-          class="assistant-tab"
-          role="tab"
           data-tutorial-id="tab-starterPack"
           :aria-selected="activeTab === 'starterPack'"
           :tabindex="activeTab === 'starterPack' ? 0 : -1"
@@ -122,38 +98,6 @@
           <div v-for="item in pushFeed" :key="item.id" class="push-item">
             <div class="push-item-title">{{ item.title }}</div>
             <div class="push-item-desc">{{ item.description }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div v-else-if="activeTab === 'oneClick' || activeTab === 'lobster'" class="assistant-body assistant-body-recommend">
-        <div class="workflow-employee-section">
-          <div class="workflow-employee-section-head">
-            <div class="workflow-employee-heading">工作流员工选择</div>
-            <router-link
-              v-if="showWorkflowPanoramaNav"
-              :to="workflowVisualizationLocation"
-              class="workflow-employee-visual-link"
-              :title="workflowPanoramaLinkTitle"
-            >流程可视化</router-link>
-          </div>
-          <div class="workflow-employee-list" role="group" aria-label="工作流 AI 员工">
-            <button
-              v-for="emp in workflowEmployeeDefs"
-              :key="emp.id"
-              type="button"
-              class="workflow-employee-row"
-              :aria-pressed="workflowEmployeesEnabled[emp.id] ? 'true' : 'false'"
-              @click="toggleWorkflowEmployee(emp.id)"
-            >
-              <span class="workflow-employee-label">{{ emp.label }}</span>
-              <div
-                class="toggle-switch workflow-employee-toggle"
-                :class="{ active: workflowEmployeesEnabled[emp.id] }"
-              >
-                <div class="toggle-slider"></div>
-              </div>
-            </button>
           </div>
         </div>
       </div>
@@ -352,12 +296,10 @@ const activeTab = ref('push');
 const floatToggleRef = ref(null);
 const assistantPanelRef = ref(null);
 
-const FLOAT_TAB_ORDER = ['push', 'assistant', 'oneClick', 'lobster', 'starterPack', 'tutorial'];
+const FLOAT_TAB_ORDER = ['push', 'assistant', 'starterPack', 'tutorial'];
 const FLOAT_TAB_DATA_ID = {
   push: 'tab-push',
   assistant: 'tab-assistant',
-  oneClick: 'tab-one-click',
-  lobster: 'tab-lobster',
   starterPack: 'tab-starterPack',
   tutorial: 'tab-tutorial',
 };
@@ -613,13 +555,6 @@ const recordOperation = (type, detail = {}) => {
     ...operationHistory.value
   ].slice(0, MAX_OPERATION_LOG);
 };
-
-const recommendIntroText = computed(() => {
-  if (activeTab.value === 'lobster') {
-    return '龙虾托管：通过下方开关选择要参与托管流程的 AI 员工，设置会保存在本机。';
-  }
-  return '一键托管：通过下方开关选择要启用的 AI 员工。';
-});
 
 const toggleWorkflowEmployee = (id) => {
   workflowAiEmployeesStore.toggle(id);

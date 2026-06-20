@@ -377,7 +377,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
         { industry_id: '涂料', name: '涂料包', scenario: '涂料化工批发。', product_name: '涂料专业版' },
       ],
       preview_packages: [
-        { industry_id: '烤禽', name: '烤禽包', scenario: '烤禽冷链配送。', product_name: '烤禽专业版' },
+        { industry_id: '餐饮', name: '餐饮包', scenario: '餐饮门店。', product_name: '餐饮专业版' },
       ],
       open_industry_ids: ['涂料'],
       selected_industry_id: '涂料',
@@ -393,7 +393,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     // 预览区也渲染
     const previewChips = wrapper.findAll('.industry-pick--preview .industry-chip--locked')
     expect(previewChips.length).toBe(1)
-    expect(previewChips[0].text()).toContain('烤禽包')
+    expect(previewChips[0].text()).toContain('餐饮包')
   })
 
   it('industry 步骤：openIndustryLeadNames 多个时显示"N 套行业方向"', async () => {
@@ -1501,7 +1501,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
           { industry_id: '涂料', name: '涂料', scenario: '', product_name: '' },
         ],
         preview_packages: [
-          { industry_id: '烤禽', name: '烤禽', scenario: '', product_name: '' },
+          { industry_id: '餐饮', name: '餐饮', scenario: '', product_name: '' },
         ],
         open_industry_ids: ['涂料'],
       },

@@ -11,12 +11,12 @@
       type="button"
       :aria-expanded="isOpen ? 'true' : 'false'"
       aria-controls="floating-chat-panel"
-      aria-label="打开智能对话悬浮窗"
-      title="智能对话"
+      aria-label="打开小C助理悬浮窗"
+      title="小C助理"
       @pointerdown="onDragStart"
       @click="toggleOpen"
     >
-      <span class="floating-chat-toggle-label">智能对话</span>
+      <span class="floating-chat-toggle-label">小C助理</span>
     </button>
 
     <div

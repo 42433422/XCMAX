@@ -46,9 +46,9 @@ vi.mock('@/api/products', () => {
     success: true,
     data: String(keyword).trim()
       ? [
-          { id: 1, model_number: 'M-1', name: '产品A', product_name: '产品A', price: 10, unit: '件' },
-          { id: 2, model_number: 'M-2', name: '产品B', product_name: '产品B', price: 20, unit: '套' },
-        ]
+        { id: 1, model_number: 'M-1', name: '产品A', product_name: '产品A', price: 10, unit: '件' },
+        { id: 2, model_number: 'M-2', name: '产品B', product_name: '产品B', price: 20, unit: '套' },
+      ]
       : [],
     total: String(keyword).trim() ? 2 : 0,
   }))
@@ -259,29 +259,6 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(wrapper.find('.assistant-grid-actions').exists()).toBe(true)
   })
 
-  it('切换到一键托管标签显示工作流员工列表', async () => {
-    const { wrapper } = await mountComponent()
-    await wrapper.find('.assistant-float-toggle').trigger('click')
-    await flushPromises()
-    const tabs = wrapper.findAll('.assistant-tab')
-    const oneClickTab = tabs.find((t) => t.text().includes('一键托管'))
-    await oneClickTab!.trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.workflow-employee-section').exists()).toBe(true)
-    expect(wrapper.findAll('.workflow-employee-row').length).toBeGreaterThan(0)
-  })
-
-  it('切换到龙虾托管标签显示推荐文案', async () => {
-    const { wrapper } = await mountComponent()
-    await wrapper.find('.assistant-float-toggle').trigger('click')
-    await flushPromises()
-    const tabs = wrapper.findAll('.assistant-tab')
-    const lobsterTab = tabs.find((t) => t.text().includes('龙虾托管'))
-    await lobsterTab!.trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.workflow-employee-section').exists()).toBe(true)
-  })
-
   it('切换到新手对话包标签显示预设', async () => {
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
@@ -409,11 +386,11 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('查询返回空结果显示未找到提示', async () => {
     const productsApi = (await import('@/api/products')).default
-    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      success: true,
-      data: [],
-      total: 0,
-    })
+      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        success: true,
+        data: [],
+        total: 0,
+      })
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -430,9 +407,9 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   it('查询失败显示错误信息', async () => {
     const { ApiError } = await import('@/api')
     const productsApi = (await import('@/api/products')).default
-    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new ApiError('服务器错误', 500),
-    )
+      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new ApiError('服务器错误', 500),
+      )
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -448,10 +425,10 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('查询返回 success:false 显示失败提示', async () => {
     const productsApi = (await import('@/api/products')).default
-    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      success: false,
-      message: '查询异常',
-    })
+      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        success: false,
+        message: '查询异常',
+      })
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -467,7 +444,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('查询时网络异常显示网络异常提示', async () => {
     const productsApi = (await import('@/api/products')).default
-    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('网络异常'))
+      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('网络异常'))
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -516,7 +493,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('保存产品行失败仍重置 savingProductId', async () => {
     const productsApi = (await import('@/api/products')).default
-    ;(productsApi.updateProduct as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('保存失败'))
+      ; (productsApi.updateProduct as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('保存失败'))
     // 捕获未处理的 rejection（saveProductRow 不 catch，由 finally 重置状态）
     const rejectionHandler = vi.fn()
     process.on('unhandledRejection', rejectionHandler)
@@ -540,37 +517,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   })
 
   // ===== 5. 工作流员工切换 =====
-
-  it('点击工作流员工切换开关', async () => {
-    const { wrapper } = await mountComponent()
-    await wrapper.find('.assistant-float-toggle').trigger('click')
-    await flushPromises()
-    const tabs = wrapper.findAll('.assistant-tab')
-    await tabs.find((t) => t.text().includes('一键托管'))!.trigger('click')
-    await flushPromises()
-    const empRow = wrapper.find('.workflow-employee-row')
-    expect(empRow.exists()).toBe(true)
-    await empRow.trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.workflow-employee-toggle.active').exists()).toBe(true)
-  })
-
-  it('切换 wechat_msg 员工且开启自动刷新时触发轮询', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const { wrapper } = await mountComponent()
-    await wrapper.find('.assistant-float-toggle').trigger('click')
-    await flushPromises()
-    const tabs = wrapper.findAll('.assistant-tab')
-    await tabs.find((t) => t.text().includes('一键托管'))!.trigger('click')
-    await flushPromises()
-    const empRows = wrapper.findAll('.workflow-employee-row')
-    const wechatRow = empRows.find((r) => r.text().includes('微信消息员工'))
-    expect(wechatRow).toBeTruthy()
-    await wechatRow!.trigger('click')
-    await flushPromises()
-    // 不报错即可
-    expect(wrapper.exists()).toBe(true)
-  })
+  // 一键托管/龙虾托管 tab 已移除（改为 AI 自动 + 事件驱动），工作流员工开关测试同步移除
 
   // ===== 6. 新手对话包 =====
 
@@ -1083,28 +1030,18 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   })
 
   // ===== 18. recommendIntroText 计算属性 =====
-
-  it('龙虾托管标签显示龙虾托管文案', async () => {
-    const { wrapper } = await mountComponent()
-    await wrapper.find('.assistant-float-toggle').trigger('click')
-    await flushPromises()
-    const tabs = wrapper.findAll('.assistant-tab')
-    await tabs.find((t) => t.text().includes('龙虾托管'))!.trigger('click')
-    await flushPromises()
-    // 工作流员工区域存在即可（recommendIntroText 不在模板中直接显示，但计算属性已执行）
-    expect(wrapper.find('.workflow-employee-section').exists()).toBe(true)
-  })
+  // recommendIntroText 已随一键托管/龙虾托管 tab 一并移除
 
   // ===== 19. productEmptyMessage 各分支 =====
 
   it('查询成功后修改关键词显示关键词已变更提示', async () => {
     const productsApi = (await import('@/api/products')).default
-    // 先让搜索返回空结果，使 productRows.length === 0
-    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      success: true,
-      data: [],
-      total: 0,
-    })
+      // 先让搜索返回空结果，使 productRows.length === 0
+      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        success: true,
+        data: [],
+        total: 0,
+      })
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -1217,7 +1154,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   it('pollStarredFeed 触发微信 AI 管道并执行发货预览', async () => {
     localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
     const { shouldTryWechatShipmentPreview } = await import('@/utils/wechatShipmentDetect')
-    ;(shouldTryWechatShipmentPreview as ReturnType<typeof vi.fn>).mockReturnValue(true)
+      ; (shouldTryWechatShipmentPreview as ReturnType<typeof vi.fn>).mockReturnValue(true)
     // 第一次 fetch: 建立基线
     vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
       success: true,
@@ -1244,7 +1181,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   it('pollStarredFeed 触发标签打印信号', async () => {
     localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
     const { isLabelPrintRelatedWechatIntent } = await import('@/utils/wechatIntent')
-    ;(isLabelPrintRelatedWechatIntent as ReturnType<typeof vi.fn>).mockReturnValue(true)
+      ; (isLabelPrintRelatedWechatIntent as ReturnType<typeof vi.fn>).mockReturnValue(true)
     // 第一次 fetch: 建立基线
     vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
       success: true,
@@ -1270,7 +1207,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   it('pollStarredFeed 触发收货确认信号', async () => {
     localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
     const { isReceiptConfirmRelatedWechatIntent } = await import('@/utils/wechatIntent')
-    ;(isReceiptConfirmRelatedWechatIntent as ReturnType<typeof vi.fn>).mockReturnValue(true)
+      ; (isReceiptConfirmRelatedWechatIntent as ReturnType<typeof vi.fn>).mockReturnValue(true)
     // 第一次 fetch: 建立基线
     vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
       success: true,

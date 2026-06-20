@@ -313,6 +313,66 @@ async def get_employee_registry_rules():
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.get("/duty-roster")
+async def get_duty_roster():
+    """编制矩阵 SSOT 派生（替代前端硬编码 yuangonDutyRoster.ts）。
+
+    单一真相源：FHD/config/duty_roster.json + mods/_employees/*/manifest.json
+    运行时派生：areas / departments / employee_labels / employee_descriptions / all_planned_ids
+    """
+    try:
+        from app.mod_sdk.duty_roster import (
+            all_planned_duty_employee_ids,
+            load_duty_roster_document,
+        )
+        from app.mod_sdk.host_profile import resolve_fhd_config_dir
+
+        doc = load_duty_roster_document()
+        areas = doc.get("areas") or {}
+        departments = doc.get("departments") or {}
+
+        # 从 mods/_employees/*/manifest.json 派生员工中文名与说明
+        employee_labels: dict[str, str] = {}
+        employee_descriptions: dict[str, str] = {}
+        cfg_dir = resolve_fhd_config_dir()
+        if cfg_dir is not None:
+            employees_dir = cfg_dir.parent / "mods" / "_employees"
+            if employees_dir.is_dir():
+                for manifest_path in employees_dir.glob("*/manifest.json"):
+                    try:
+                        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                        if not isinstance(data, dict):
+                            continue
+                        emp_id = str(data.get("id") or "").strip()
+                        if not emp_id:
+                            continue
+                        name = str(data.get("name") or "").strip()
+                        desc = str(data.get("description") or "").strip()
+                        if name:
+                            employee_labels[emp_id] = name
+                        if desc:
+                            employee_descriptions[emp_id] = desc
+                    except RECOVERABLE_ERRORS:
+                        continue
+
+        all_planned_ids = sorted(all_planned_duty_employee_ids())
+
+        return {
+            "success": True,
+            "data": {
+                "areas": areas,
+                "departments": departments,
+                "employee_labels": employee_labels,
+                "employee_descriptions": employee_descriptions,
+                "all_planned_ids": all_planned_ids,
+                "schema_version": doc.get("schema_version", 1),
+            },
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.error("Failed to get duty roster: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @router.get("/industry/{industry_id}")
 async def get_industry_detail(industry_id: str):
     """Get specific industry profile"""

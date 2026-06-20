@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-qgy01mZ2.js";import{a1 as a,t as o,a2 as i}from"./index-C1axxMiF.js";const d=a({__name:"TraditionalModeView",setup(t){return(r,n)=>(o(),i(e,{"mod-id":"xcagi-erp-domain-bridge",view:"TraditionalModeView",title:"ERP 业务页"}))}});export{d as default};

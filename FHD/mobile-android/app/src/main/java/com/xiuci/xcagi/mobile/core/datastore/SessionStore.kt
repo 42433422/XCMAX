@@ -63,6 +63,7 @@ constructor(
     val fhdHostFlow: Flow<String> = context.dataStore.data.map { it[fhdHost] ?: "" }
     val userIdFlow: Flow<Int> = context.dataStore.data.map { it[userIdKey] ?: 0 }
     val fhdAccessFlow: Flow<String> = context.dataStore.data.map { it[fhdAccess] ?: "" }
+    val fhdRefreshFlow: Flow<String> = context.dataStore.data.map { it[fhdRefresh] ?: "" }
     val serverModeFlow: Flow<String> = context.dataStore.data.map { it[serverMode] ?: "cloud" }
     val accountKindFlow: Flow<String> = context.dataStore.data.map { it[accountKind] ?: "" }
     val marketTokenFlow: Flow<String> = context.dataStore.data.map { it[marketToken] ?: "" }
@@ -162,6 +163,15 @@ constructor(
             if (userId > 0) it[userIdKey] = userId
         }
     }
+
+    suspend fun setFhdTokens(access: String, refresh: String = "") {
+        context.dataStore.edit {
+            it[fhdAccess] = access.trim()
+            if (refresh.isNotBlank()) it[fhdRefresh] = refresh.trim()
+        }
+    }
+
+    suspend fun fhdRefreshToken(): String = fhdRefreshFlow.first()
 
     val fcmTokenFlow: Flow<String> = context.dataStore.data.map { it[fcmTokenKey] ?: "" }
 

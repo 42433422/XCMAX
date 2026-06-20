@@ -24,6 +24,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import require_admin
+from modstore_server.catalog_quality import resolve_employee_pack_dir
+from modstore_server.catalog_store import norm_pkg_id
 from modstore_server.employee_executor import list_employees as list_employees_exec
 from modstore_server.employee_runtime import (
     employee_pack_runtime_issues,
@@ -472,10 +474,10 @@ def get_employee_execution_capability(
     sf = get_session_factory()
     with sf() as session:
         rows = list_employees_exec()
-        index = {str(r.get("id") or "").strip(): r for r in rows if str(r.get("id") or "").strip()}
-        row = index.get(eid)
+        index = {norm_pkg_id(r.get("id")): r for r in rows if norm_pkg_id(r.get("id"))}
+        row = index.get(norm_pkg_id(eid))
         if not row:
-            raise HTTPException(404, "员工不存在")
+            raise HTTPException(404, "员工未部署（执行库未注册）")
         provider_map = _build_provider_status_map(session, int(admin_user.id))
         manifest_cache: Dict[str, Optional[Dict[str, Any]]] = {}
         return _analyze_employee_capability(
@@ -503,7 +505,8 @@ def post_employee_execution_capabilities(
     sf = get_session_factory()
     with sf() as session:
         rows = list_employees_exec()
-        index = {str(r.get("id") or "").strip(): r for r in rows if str(r.get("id") or "").strip()}
+        # 索引 key 用 norm_pkg_id 规范化，与 /duty-graph/health 的 registered 判断一致
+        index = {norm_pkg_id(r.get("id")): r for r in rows if norm_pkg_id(r.get("id"))}
         if not employee_ids:
             employee_ids = sorted(index.keys())
         provider_map = _build_provider_status_map(session, int(admin_user.id))
@@ -511,7 +514,7 @@ def post_employee_execution_capabilities(
         manifest_cache: Dict[str, Optional[Dict[str, Any]]] = {}
         items: List[Dict[str, Any]] = []
         for eid in employee_ids:
-            row = index.get(eid)
+            row = index.get(norm_pkg_id(eid))
             if not row:
                 items.append(
                     {
@@ -520,7 +523,7 @@ def post_employee_execution_capabilities(
                         "source": "unknown",
                         "deployed": False,
                         "executable": False,
-                        "reasons": ["员工不存在"],
+                        "reasons": ["员工未部署（执行库未注册）"],
                         "handlers": [],
                         "declared_dependencies": [],
                         "llm": {
@@ -563,7 +566,7 @@ def get_duty_graph_no_key_employees(
     sf = get_session_factory()
     with sf() as session:
         rows = list_employees_exec()
-        index = {str(r.get("id") or "").strip(): r for r in rows if str(r.get("id") or "").strip()}
+        index = {norm_pkg_id(r.get("id")): r for r in rows if norm_pkg_id(r.get("id"))}
         provider_map = _build_provider_status_map(session, int(admin_user.id))
         fernet_ok = fernet_configured()
         any_provider_ok = any(
@@ -643,10 +646,10 @@ def execute_duty_graph_programmatic(
     with sf() as session:
         rows = list_employees_exec()
         employee_index = {
-            str(r.get("id") or "").strip(): r for r in rows if str(r.get("id") or "").strip()
+            norm_pkg_id(r.get("id")): r for r in rows if norm_pkg_id(r.get("id"))
         }
-        if target not in employee_index:
-            return {"ok": False, "error": "目标员工不存在"}
+        if norm_pkg_id(target) not in employee_index:
+            return {"ok": False, "error": "目标员工未部署（执行库未注册）"}
 
         provider_map = _build_provider_status_map(session, int(created_by_user_id))
         fernet_ok = fernet_configured()
@@ -973,17 +976,23 @@ def duty_graph_health(
         sf = get_session_factory()
         with sf() as session:
             registered = {
-                str(r[0])
+                norm_pkg_id(r[0])
                 for r in session.query(CatalogItem.pkg_id)
                 .filter(CatalogItem.artifact == "employee_pack")
                 .all()
                 if r[0]
             }
         planned = set(all_planned_employee_ids())
+        # 本机 mods/_employees 未安装的编制员工包（前端用来过滤 isDeployedDutyRosterRow）
+        missing_local: List[str] = []
+        for pid in planned:
+            if not resolve_employee_pack_dir(pid):
+                missing_local.append(pid)
         out["staffing"] = {
             "planned_count": len(planned),
             "registered_count": len(planned & registered),
             "missing_employees": sorted(planned - registered),
+            "missing_local_employee_packs": sorted(missing_local),
             "extra_employees": sorted(registered - planned),
             "areas": [
                 {

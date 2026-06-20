@@ -19,6 +19,7 @@ import { useExcelAnalysis } from './useExcelAnalysis'
 import { isStartPrintMessage, detectRuntimeModeCommand } from '../utils/textParser'
 import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
 import productsApi from '../api/products'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { fetchShipmentRecordsForUnit, summarizeShipmentRecordsForAudit } from '@/utils/shipmentMgmtPostPrint'
 import { isCoreWorkflowModInstalled } from '@/constants/coreWorkflowMod'
@@ -129,7 +130,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const latestAssistantPush = ref<{ title: string; description: string } | null>(null)
   const proRuntimeTask = ref<{ title: string; statusText: string; statusClass: string; description: string } | null>(null)
   const chatMessagesRef = ref<HTMLElement | null>(null)
-  let persistTaskPanelStateForSession: (targetSessionId?: string) => void = () => {}
+  let persistTaskPanelStateForSession: (targetSessionId?: string) => void = () => { }
 
   const {
     taskList,
@@ -174,7 +175,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   const executeRemoteChatRoundRef: {
     fn: (msgs: string[], opts?: { fromWriteUnlock?: boolean }) => Promise<void>
-  } = { fn: async () => {} }
+  } = { fn: async () => { } }
 
   const dbGate = useChatDbTokenGate({
     sessionId,
@@ -682,8 +683,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
 
     nextTask.customOrderNumber = ''
-    hydrateTaskOrderNumber(nextTask).catch(() => {})
-    enrichShipmentPreviewProducts(nextTask).catch(() => {})
+    hydrateTaskOrderNumber(nextTask).catch(() => { })
+    enrichShipmentPreviewProducts(nextTask).catch(() => { })
   }
 
   function emitAssistantPush(payload: unknown = {}) {
@@ -1064,12 +1065,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const primaryText = remoteMessages[0] || ''
 
     /** 未开专业版界面且未勾选「专业意图体验」时：查产品类话术不必等 /ai/chat 或连通性探测，直接走产品列表接口 */
+    /** 管理端（admin-console）无产品库业务，不走产品快路径，避免「查询…」话术被误判为产品检索 */
     const kwFast =
       remoteMessages.length === 1 &&
-      !resolveEffectiveProModeState() &&
-      !proIntentExperienceEnabled?.value &&
-      !resolveExcelAnalysisContextForRequest() &&
-      multimodalPendingCount.value === 0
+        !isAdminConsoleSpa() &&
+        !resolveEffectiveProModeState() &&
+        !proIntentExperienceEnabled?.value &&
+        !resolveExcelAnalysisContextForRequest() &&
+        multimodalPendingCount.value === 0
         ? extractLikelyProductQueryKeyword(primaryText)
         : null
 
@@ -1193,7 +1196,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         })
         const res = await chatApi.sendChatStream(
           { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
-            Record<string, unknown>,
+          Record<string, unknown>,
           { signal: controller.signal },
         )
         if (!res.ok) {

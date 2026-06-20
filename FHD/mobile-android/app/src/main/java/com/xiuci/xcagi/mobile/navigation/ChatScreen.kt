@@ -161,7 +161,6 @@ fun ChatScreen(
     vm: AppViewModel,
     conversationId: String? = null,
     conversationTitle: String = "小C助理",
-    useCustomerServiceBackend: Boolean = false,
     onBack: (() -> Unit)? = null,
     onOpenMod: (String) -> Unit = {},
     onOpenOcr: () -> Unit = {},
@@ -235,11 +234,7 @@ fun ChatScreen(
     val aiAvatarFallback = chatAvatarFallback(conversationId, employeeProfile != null)
 
     LaunchedEffect(Unit) {
-        if (useCustomerServiceBackend) {
-            vm.loadAssistantCustomerServiceHistory()
-        } else {
-            vm.loadChatCache(conversationId)
-        }
+        vm.loadChatCache(conversationId)
         if (suggestions.isEmpty()) vm.loadHomeHub()
     }
 
@@ -255,11 +250,7 @@ fun ChatScreen(
         val text = input.trim()
         if (text.isBlank() && !streaming) return
         if (streaming) { vm.stopChat(); return }
-        if (useCustomerServiceBackend) {
-            vm.sendAssistantCustomerServiceMessage(text)
-        } else {
-            vm.sendChat(text, conversationId)
-        }
+        vm.sendChat(text, conversationId)
         input = ""
     }
 
@@ -308,7 +299,16 @@ fun ChatScreen(
                 title = resolvedTitle,
                 onBack = onBack,
                 onVideoCall = { vm.snack("视频通话功能即将上线") },
-                onMore = { showMoreSheet = true },
+                onMore = {
+                    val ref = employeeRef
+                    if (ref != null) {
+                        onOpenEmployeeProfile(ref.modId, ref.employeeId)
+                    } else if (onOpenProfile != null) {
+                        onOpenProfile.invoke()
+                    } else {
+                        showMoreSheet = true
+                    }
+                },
             )
         },
         bottomBar = {

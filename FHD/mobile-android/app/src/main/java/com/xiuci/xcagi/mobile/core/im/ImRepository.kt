@@ -164,7 +164,10 @@ class ImRepository @Inject constructor(
                     val raw = value.trim()
                     if (raw.isEmpty()) null
                     else {
-                        runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
+                        raw.toLongOrNull()?.let { numeric ->
+                            if (numeric in 1..9_999_999_999L) numeric * 1000L else numeric
+                        }
+                            ?: runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
                             ?: runCatching {
                                 LocalDateTime.parse(raw.take(19), DateTimeFormatter.ISO_LOCAL_DATE_TIME)
                                     .atZone(ZoneId.systemDefault())

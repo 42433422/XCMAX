@@ -45,6 +45,7 @@ object ApiEndpoints {
     // 首页
     const val HOME = "$BASE/home"
     const val ADMIN_HOME = "$BASE/admin/home"
+    const val NAV_MENU = "$BASE/nav-menu"
 
     // 同步
     const val SYNC_STATUS = "$BASE/sync/status"

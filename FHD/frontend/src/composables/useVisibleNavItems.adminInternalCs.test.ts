@@ -7,7 +7,7 @@ describe('admin internal customer service sidebar', () => {
       [{ key: 'chat', name: '智能对话', iconClass: 'fa-comments' }],
       [],
       [
-        { key: 'admin-entitlements', name: '用户 Mod 管理', iconClass: 'fa-shield' },
+        { key: 'admin-entitlements', name: '用户管理', iconClass: 'fa-shield' },
         {
           key: 'mod-internal-customer-service',
           name: '内部客服',

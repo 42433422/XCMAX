@@ -1,1 +1,0 @@
-import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as a,t,a2 as i}from"./index-CinG43sm.js";const c=a({__name:"MaterialsView",setup(r){return(o,s)=>(t(),i(e,{"mod-id":"xcagi-erp-domain-bridge",view:"MaterialsView",title:"ERP 业务页"}))}});export{c as default};

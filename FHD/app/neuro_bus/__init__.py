@@ -1,20 +1,21 @@
 """
 NeuroBus - 神经总线系统
 
-提供事件驱动的神经架构支持，包含8大可靠性机制：
+提供事件驱动的神经架构支持，包含7大可靠性机制（总线级）：
 - 去重器（Deduplicator）
 - 链路追踪器（Tracer）
 - 动态限流器（Rate Limiter）
 - 熔断保护器（Circuit Breaker）
-- SLA 超时控制
-- 错误反馈与重试
-- 沙盒预演（Sandbox）
+- SLA 超时控制（SLAController，三级分层 Reflex/Subconscious/Conscious）
+- 错误反馈与重试（RetryHandler，指数退避 + 抖动）
 - 保命通道（Lifeline）
 
 Level 4 新增可靠性机制：
 - 死信队列（Dead Letter Queue）
 - 事件存储与重播（Event Store & Replay）
 - 健康监控与告警（Health Monitor）
+
+注：沙盒预演（Sandbox）为业务代码按需调用的独立模块，非总线级机制。
 """
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus

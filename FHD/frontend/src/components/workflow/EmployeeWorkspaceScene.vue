@@ -19,7 +19,7 @@ import {
 } from '@/constants/yuangongAssets'
 import DutyRosterWorkflowLoopView from '@/components/workflow/DutyRosterWorkflowLoopView.vue'
 import SelfEvolutionLoopRuntimePanel from '@/components/workflow/SelfEvolutionLoopRuntimePanel.vue'
-import { ALL_PLANNED_YUANGON_PKG_IDS } from '@/domain/yuangonDutyRoster'
+import { useDutyRoster } from '@/composables/useDutyRoster'
 import { workflowRegistryEntryBelongsToStack } from '@/utils/workflowEmployeeScope'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
@@ -33,6 +33,8 @@ const ENTRY_BG_WORKFLOW_SVG = YUANGONG_ENTRY_WORKFLOW_SVG
 const router = useRouter()
 const route = useRoute()
 const isAdminConsole = isAdminConsoleSpa()
+// SSOT 派生：运行时从后端 /api/system/duty-roster 获取编制矩阵
+const { allPlannedIds: ALL_PLANNED_YUANGON_PKG_IDS, employeeLabels: YUANGON_PKG_ROLE_LABELS, ensureLoaded: ensureDutyRosterLoaded } = useDutyRoster()
 const wfEmp = useWorkflowAiEmployeesStore()
 useWorkflowEmployeeRegistrySync()
 const { desks, statusLine, ariaLabel, isBusy } = useWorkflowEmployeeDesks()
@@ -46,7 +48,21 @@ const DUTY_ROSTER_VIEW_TOKENS = new Set(['department', 'dept', '六部门', 'hub
 /** 企业 Mod 栈内 AI 员工工位（排除平台编制 employee_pack 等游离项） */
 const workspaceDesks = computed(() => {
   const stack = enterpriseStack.value
-  return desks.value.filter((d) => workflowRegistryEntryBelongsToStack(d, stack))
+  const filtered = desks.value.filter((d) => {
+    // 管理端只显示平台编制员工（ALL_PLANNED_YUANGON_PKG_IDS，SSOT 派生），隔离企业 Mod 栈员工（如 attendance_ai 等）
+    if (isAdminConsole && !ALL_PLANNED_YUANGON_PKG_IDS.value.has(d.empId)) return false
+    return workflowRegistryEntryBelongsToStack(d, stack)
+  })
+  // 管理端：工作流注册表无平台编制员工时，从 SSOT 54 岗构建占位工位，确保编制员工可见
+  if (isAdminConsole && filtered.length === 0) {
+    return [...ALL_PLANNED_YUANGON_PKG_IDS.value].map((id) => ({
+      empId: id,
+      panelTitle: `工作流 · ${YUANGON_PKG_ROLE_LABELS.value[id] ?? id}`,
+      shortName: YUANGON_PKG_ROLE_LABELS.value[id] ?? id,
+      enabled: false,
+    }))
+  }
+  return filtered
 })
 
 const selectedEmpId = ref<string | null>(null)
@@ -123,8 +139,8 @@ function onEntryBgError() {
 }
 
 const totalCount = computed(() => workspaceDesks.value.length)
-const rosterCount = ALL_PLANNED_YUANGON_PKG_IDS.size
-const visualizedEmployeeCount = computed(() => Math.max(totalCount.value, rosterCount))
+const rosterCount = computed(() => ALL_PLANNED_YUANGON_PKG_IDS.value.size)
+const visualizedEmployeeCount = computed(() => Math.max(totalCount.value, rosterCount.value))
 const enabledCount = computed(() => workspaceDesks.value.filter((d) => d.enabled).length)
 const busyCount = computed(() => workspaceDesks.value.filter((d) => isBusy(d)).length)
 const idleEnabledCount = computed(() => Math.max(0, enabledCount.value - busyCount.value))
@@ -154,7 +170,7 @@ const entryKicker = computed(() =>
 )
 const entryLead = computed(() =>
   isAdminConsole
-    ? '进入管理端六部门流程可视化，查看 52 岗 AI 员工在编制图谱、流程派发和执行回写中的状态。'
+    ? `进入管理端六部门流程可视化，查看 ${rosterCount.value} 岗 AI 员工在编制图谱、流程派发和执行回写中的状态。`
     : '进入企业端四部门节点图，查看企业 Mod 栈下工具、执行、服务、管理工位与任务快照。'
 )
 const entryCtaText = computed(() =>
@@ -169,6 +185,8 @@ const workspaceStatSub = computed(() => {
 })
 
 onMounted(() => {
+  // SSOT 派生：触发后端 /api/system/duty-roster 加载（失败时 composable 自动回退到构建时硬编码常量）
+  void ensureDutyRosterLoaded()
   void resolveEnterpriseModStack().then((stack) => {
     enterpriseStack.value = stack
   })
@@ -208,7 +226,7 @@ function collectLoopEmployeeIds(value: unknown, out: Set<string>) {
   if (typeof value === 'string') {
     const matches = value.match(/\b[a-z][a-z0-9]+(?:-[a-z0-9]+)+\b/g) || []
     for (const id of matches) {
-      if (ALL_PLANNED_YUANGON_PKG_IDS.has(id)) out.add(id)
+      if (ALL_PLANNED_YUANGON_PKG_IDS.value.has(id)) out.add(id)
     }
     return
   }
@@ -219,7 +237,7 @@ function collectLoopEmployeeIds(value: unknown, out: Set<string>) {
   if (typeof value !== 'object') return
   const row = value as Record<string, unknown>
   const direct = loopString(row.employee_id || row.employeeId || row.emp_id || row.empId || row.actor || row.assignee)
-  if (direct && ALL_PLANNED_YUANGON_PKG_IDS.has(direct)) out.add(direct)
+  if (direct && ALL_PLANNED_YUANGON_PKG_IDS.value.has(direct)) out.add(direct)
   for (const child of Object.values(row)) collectLoopEmployeeIds(child, out)
 }
 
@@ -228,7 +246,7 @@ const loopParticipantIds = computed(() => {
   const payload = loopRuntime.value || {}
   for (const item of loopArray(loopRecord(payload).participants)) {
     const id = loopString(loopRecord(item).employee_id || loopRecord(item).id)
-    if (id && ALL_PLANNED_YUANGON_PKG_IDS.has(id)) ids.add(id)
+    if (id && ALL_PLANNED_YUANGON_PKG_IDS.value.has(id)) ids.add(id)
   }
   collectLoopEmployeeIds(loopRecord(payload).evidence, ids)
   collectLoopEmployeeIds(loopRecord(payload).memory, ids)
@@ -306,7 +324,7 @@ const dutyRosterGovernanceLocation = computed<RouteLocationRaw>(() => {
 const loopOutOfRosterParticipantIds = computed(() => {
   const backendIds = loopArray(loopRosterAlignment.value.out_of_roster_ids).map((id) => loopString(id)).filter(Boolean)
   if (backendIds.length || loopRosterAlignment.value.out_of_roster_count != null) return backendIds
-  return loopRawParticipantIds.value.filter((id) => !ALL_PLANNED_YUANGON_PKG_IDS.has(id))
+  return loopRawParticipantIds.value.filter((id) => !ALL_PLANNED_YUANGON_PKG_IDS.value.has(id))
 })
 const loopOutOfRosterCount = computed(() =>
   loopNumber(loopRosterAlignment.value.out_of_roster_count) ?? loopOutOfRosterParticipantIds.value.length,
@@ -1218,7 +1236,7 @@ const loopRoleGroups = computed(() => {
   for (const item of loopArray(loopRecord(payload).participants)) {
     const row = loopRecord(item)
     const id = loopString(row.employee_id || row.id)
-    if (!id || !ALL_PLANNED_YUANGON_PKG_IDS.has(id)) continue
+    if (!id || !ALL_PLANNED_YUANGON_PKG_IDS.value.has(id)) continue
     meta[loopRoleGroupKey(row)].workers.push(loopParticipantDisplay(id))
     seen.add(id)
   }
@@ -1772,9 +1790,13 @@ const selectedDeskLoopState = computed(() =>
       <div class="ews-layout">
         <div class="ews-grid" role="list" aria-label="工位卡片列表">
           <div v-if="!workspaceDesks.length" class="ews-empty" role="listitem">
-            <p class="ews-empty-title">企业 Mod 工位待同步</p>
+            <p class="ews-empty-title">
+              {{ isAdminConsole ? '平台编制工位待同步' : '企业 Mod 工位待同步' }}
+            </p>
             <p class="ews-empty-desc">
-              编制员工已经由图谱对齐为 52 岗；这里等待副窗托管或企业 Mod 员工注册后显示实时工位卡片。
+              编制员工已经由图谱对齐为 {{ rosterCount }} 岗；这里等待副窗托管或{{
+                isAdminConsole ? '平台编制员工' : '企业 Mod 员工'
+              }}注册后显示实时工位卡片。
             </p>
             <router-link :to="{ name: 'workflow-visualization' }" class="ews-empty-link">
               查看流程可视化

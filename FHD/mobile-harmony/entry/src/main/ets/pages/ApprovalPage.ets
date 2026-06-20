@@ -221,7 +221,7 @@ export struct ApprovalPage {
     }
     .width('100%')
     .padding({ top: 10, bottom: 10 })
-    .border(showDivider ? { width: { bottom: 1 }, color: '#F3F4F6' } : { width: 0 });
+    .border({ width: { bottom: showDivider ? 1 : 0 }, color: '#F3F4F6' });
   }
 
   @Builder

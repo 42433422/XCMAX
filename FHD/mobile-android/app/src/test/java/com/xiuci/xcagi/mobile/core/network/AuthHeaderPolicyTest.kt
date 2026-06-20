@@ -66,4 +66,22 @@ class AuthHeaderPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun explicitChatAuthorizationIsNotOverwrittenByInterceptor() {
+        assertFalse(
+            AuthHeaderPolicy.shouldAttachSelectedBearer(
+                isPublicAuthWriteRequest = false,
+                callerAuthorization = "Bearer refreshed-market-token",
+                selectedBearer = "fhd-token",
+            ),
+        )
+        assertTrue(
+            AuthHeaderPolicy.shouldAttachSelectedBearer(
+                isPublicAuthWriteRequest = false,
+                callerAuthorization = "",
+                selectedBearer = "fhd-token",
+            ),
+        )
+    }
 }

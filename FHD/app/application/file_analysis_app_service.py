@@ -116,8 +116,11 @@ class FileAnalysisService:
                 table_columns = {}
                 for t in focus_tables:
                     try:
-                        cols = cur.execute(f"PRAGMA table_info('{t}')").fetchall()
+                        quoted = quote_sqlite_identifier(t)
+                        cols = cur.execute(f"PRAGMA table_info({quoted})").fetchall()
                         table_columns[t] = [c[1] for c in cols if c and len(c) >= 2]
+                    except ValueError:
+                        table_columns[t] = []
                     except RECOVERABLE_ERRORS:
                         table_columns[t] = []
 

@@ -1,5 +1,7 @@
 package com.xiuci.xcagi.mobile.navigation
 
+import android.net.Uri
+
 object Routes {
     const val LEGAL = "legal"
     const val SPLASH = "splash"
@@ -61,4 +63,8 @@ object Routes {
     const val MOD_STORE = "mod_store"
     /** 通知与公告 */
     const val NOTIFICATIONS = "notifications"
+
+    /** 通用 WebView（探索 Tab 桌面工具入口，打开桌面端页面） */
+    const val WEB_VIEW = "web_view?url={url}&title={title}"
+    fun webView(url: String, title: String): String = "web_view?url=${Uri.encode(url)}&title=${Uri.encode(title)}"
 }

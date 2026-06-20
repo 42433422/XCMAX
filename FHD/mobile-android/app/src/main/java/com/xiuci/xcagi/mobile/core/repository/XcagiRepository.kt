@@ -4,6 +4,7 @@ import android.os.Build
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
 import com.xiuci.xcagi.mobile.core.db.ApprovalCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ChatCacheEntity
+import com.xiuci.xcagi.mobile.core.db.ConversationListStateEntity
 import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.db.ModInfoCacheEntity
@@ -38,6 +39,7 @@ import com.xiuci.xcagi.mobile.core.network.LanScanner
 import com.xiuci.xcagi.mobile.core.network.ModstoreApi
 import com.xiuci.xcagi.mobile.core.network.MobileLoginRequest
 import com.xiuci.xcagi.mobile.core.network.MobilePhoneLoginRequest
+import com.xiuci.xcagi.mobile.core.network.MobileRefreshRequest
 import com.xiuci.xcagi.mobile.core.network.PairingExchangeBody
 import com.xiuci.xcagi.mobile.core.network.RelayConfirmBody
 import com.xiuci.xcagi.mobile.core.network.RelayConfirmCodeBody
@@ -45,6 +47,7 @@ import com.xiuci.xcagi.mobile.core.network.RelayTaskCreateBody
 import com.xiuci.xcagi.mobile.core.network.RegisterRequest
 import com.xiuci.xcagi.mobile.core.network.RejectBody
 import com.xiuci.xcagi.mobile.core.network.WalletBalanceDto
+import com.xiuci.xcagi.mobile.core.network.NavMenuData
 import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.network.ServerMode
@@ -174,8 +177,40 @@ class XcagiRepository @Inject constructor(
      * 因此移动端 chat 请求必须优先携带 market token，让后端走透传路径，
      * 仅在 market token 缺失时才 fallback 到 FHD JWT（后端会尝试 session 查找）。
      */
-    private suspend fun authHeaderForChat(): String {
-        val market = sessionStore.marketAccessToken()
+    private suspend fun authHeaderForChat(): String = refreshChatBearer()
+
+    private suspend fun refreshFhdAccessToken(): Boolean {
+        val refresh = sessionStore.fhdRefreshToken()
+        if (refresh.isBlank()) return false
+        return try {
+            syncRouterFromStore()
+            val response = fhd().mobileRefresh(MobileRefreshRequest(refresh))
+            val access = response.data?.access_token?.trim().orEmpty()
+            if (!response.success || access.isBlank()) {
+                false
+            } else {
+                sessionStore.setFhdTokens(
+                    access = access,
+                    refresh = response.data?.refresh_token.orEmpty(),
+                )
+                true
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private suspend fun refreshChatBearer(): String {
+        val handoff = syncMarketSessionHandoff()
+        var market = sessionStore.marketAccessToken()
+        if (handoff.isSuccess && market.isNotBlank()) return "Bearer $market"
+
+        if (refreshFhdAccessToken()) {
+            val refreshedHandoff = syncMarketSessionHandoff()
+            market = sessionStore.marketAccessToken()
+            if (refreshedHandoff.isSuccess && market.isNotBlank()) return "Bearer $market"
+        }
+
         if (market.isNotBlank()) return "Bearer $market"
         val fhd = sessionStore.fhdAccessFlow.first()
         return if (fhd.isNotBlank()) "Bearer $fhd" else ""
@@ -986,7 +1021,7 @@ class XcagiRepository @Inject constructor(
         onError: (String) -> Unit,
     ) {
         syncRouterFromStore()
-        db.chatDao().insert(ChatCacheEntity(session_id = sessionId, role = "user", text = message))
+        cacheChatMessage(sessionId = sessionId, role = "user", text = message)
         val acc = StringBuilder()
 
         if (conversationId == PinnedIds.CODEX) {
@@ -1001,7 +1036,7 @@ class XcagiRepository @Inject constructor(
             )
             val finalText = acc.toString()
             if (finalText.isNotBlank()) {
-                db.chatDao().insert(ChatCacheEntity(session_id = sessionId, role = "assistant", text = finalText))
+                cacheChatMessage(sessionId = sessionId, role = "assistant", text = finalText)
             }
             return
         }
@@ -1033,12 +1068,14 @@ class XcagiRepository @Inject constructor(
                     "content" to row.text.take(500),
                 )
             }
+        // industry 由后端根据 session account_kind 自动派生（单一真相源），手机端不传
         sseChat.streamChat(
             message,
             authHeaderForChat(),
             userId(),
             useCloud = useCloud,
             recentMessages = recentMessages,
+            refreshBearer = { refreshChatBearer() },
             onToken = { t ->
                 acc.append(t)
                 onToken(t)
@@ -1051,7 +1088,7 @@ class XcagiRepository @Inject constructor(
         )
         val finalText = acc.toString()
         if (finalText.isNotBlank()) {
-            db.chatDao().insert(ChatCacheEntity(session_id = sessionId, role = "assistant", text = finalText))
+            cacheChatMessage(sessionId = sessionId, role = "assistant", text = finalText)
         }
     }
 
@@ -1152,7 +1189,28 @@ class XcagiRepository @Inject constructor(
             if (!response.success) {
                 Result.failure(Exception(response.message.ifBlank { "加载超级员工会话失败" }))
             } else {
-                Result.success(codexMessagesToPairs(response.data?.get("messages")))
+                val rawMessages = response.data?.get("messages")
+                val rows = codexMessageRows(rawMessages)
+                rows
+                    .mapNotNull { row ->
+                        ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"])
+                    }
+                    .maxOrNull()
+                    ?.let { latestTs ->
+                        // 提取最新一条消息作为列表预览（与 timestamp 对齐）
+                        val latestRow = rows.maxByOrNull { row ->
+                            ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"]) ?: 0L
+                        }
+                        val preview = latestRow?.let { row ->
+                            val role = row["role"]?.toString()?.trim()?.lowercase().orEmpty()
+                            val body = row["body"]?.toString()?.trim().orEmpty()
+                            if (body.isNotBlank() && role in setOf("user", "assistant") && !isCodexSchedulerNotice(row)) {
+                                formatMessagePreview(role, body)
+                            } else ""
+                        }.orEmpty()
+                        markConversationActivity(PinnedIds.CODEX, latestTs, preview)
+                    }
+                Result.success(codexMessagesToPairs(rawMessages))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -1401,6 +1459,73 @@ class XcagiRepository @Inject constructor(
 
     fun observeCachedChat(sessionId: String = "default"): Flow<List<Pair<String, String>>> =
         db.chatDao().observeBySession(sessionId).map { rows -> rows.map { it.role to it.text } }
+
+    fun observeConversationListTimestamps(): Flow<Map<String, Long>> =
+        db.conversationListStateDao().observeAll().map { rows ->
+            rows.associate { it.conversation_id to it.last_message_at }
+        }
+
+    /** 会话最新消息预览（微信风格副标题）。key=conversationId，value=预览文本。 */
+    fun observeConversationListPreviews(): Flow<Map<String, String>> =
+        db.conversationListStateDao().observeAll().map { rows ->
+            rows.mapNotNull { row ->
+                val preview = row.lastMessagePreview.trim()
+                if (preview.isBlank()) null else row.conversation_id to preview
+            }.toMap()
+        }
+
+    suspend fun markConversationActivity(
+        conversationId: String,
+        timestamp: Long = System.currentTimeMillis(),
+        preview: String = "",
+    ) {
+        if (conversationId.isBlank() || timestamp <= 0L) return
+        val dao = db.conversationListStateDao()
+        val normalizedPreview = preview.trim()
+        dao.insertIfAbsent(
+            ConversationListStateEntity(
+                conversation_id = conversationId,
+                last_message_at = timestamp,
+                lastMessagePreview = normalizedPreview,
+            )
+        )
+        // 有预览时强制写入（即使时间戳不更新，也要刷新副标题）；无预览时仅在新时间戳时更新
+        if (normalizedPreview.isNotBlank()) {
+            dao.upsertPreview(conversationId, timestamp, normalizedPreview)
+        } else {
+            dao.updateIfNewer(conversationId, timestamp, "")
+        }
+    }
+
+    private suspend fun cacheChatMessage(
+        sessionId: String,
+        role: String,
+        text: String,
+        timestamp: Long = System.currentTimeMillis(),
+    ) {
+        db.chatDao().insert(
+            ChatCacheEntity(
+                session_id = sessionId,
+                role = role,
+                text = text,
+                ts = timestamp,
+            )
+        )
+        val conversationId = if (sessionId == "default") PinnedIds.ASSISTANT else sessionId
+        // 微信风格预览：自己发的消息加 "我:" 前缀，AI 回复直接显示内容
+        val preview = formatMessagePreview(role, text)
+        markConversationActivity(conversationId, timestamp, preview)
+    }
+
+    /** 生成会话列表副标题预览：user 消息加 "我:" 前缀，assistant 消息直接显示，多行折叠为单行。 */
+    private fun formatMessagePreview(role: String, text: String): String {
+        val normalized = text.trim().replace("\n", " ").replace("\r", " ")
+        if (normalized.isBlank()) return ""
+        return when (role.trim().lowercase()) {
+            "user" -> "我: $normalized"
+            else -> normalized
+        }
+    }
 
     private fun parseBridgeRequestRows(raw: Any?): List<Map<String, Any?>> {
         val payload = when (val data = raw) {
@@ -1664,6 +1789,17 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
+    /** 拉取侧栏菜单（探索 Tab 配对后与桌面端侧栏对齐）。 */
+    suspend fun fetchNavMenu(): Result<NavMenuData> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().mobileNavMenu()
+        if (!res.success) Result.failure(Exception(res.message ?: "菜单加载失败"))
+        else Result.success(res.data ?: NavMenuData())
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     /** 拉取市场钱包余额与会员信息（移动端"我"页面展示）。 */
     suspend fun fetchWalletBalance(): Result<WalletBalanceDto> = try {
         syncRouterFromStore()
@@ -1724,6 +1860,9 @@ class XcagiRepository @Inject constructor(
     } catch (e: Exception) {
         Result.failure(e)
     }
+
+    /** 当前 FHD base URL（供 AppViewModel 构建桌面端页面 URL）。 */
+    fun fhdBaseUrl(): String = serverRouter.fhdBaseUrl()
 
     suspend fun modWebUrl(modId: String): String {
         val online = sessionStore.fhdHostFlow.first().isNotBlank() && checkHealth()

@@ -4,7 +4,6 @@
     "通用",
     "涂料",
     "考勤",
-    "烤禽",
     "批发",
     "电商",
     "餐饮",
@@ -156,59 +155,6 @@
         "model_label": "工号",
         "shipment_order": "考勤单",
         "records": "考勤记录"
-      }
-    },
-    "烤禽": {
-      "id": "烤禽",
-      "name": "烤禽/熟食",
-      "scenario": "烤禽冷链配送。",
-      "welcomeIntro": "你好，烤禽助手。",
-      "welcomeBullets": [
-        "查货品",
-        "配送单"
-      ],
-      "quickButtons": [
-        {
-          "text": "查一下今日烤鸡批发价",
-          "label": "查货品"
-        },
-        {
-          "text": "有哪些门店客户",
-          "label": "客户列表"
-        },
-        {
-          "text": "今天的配送单",
-          "label": "配送单"
-        },
-        {
-          "text": "哪些货品库存偏低",
-          "label": "库存预警"
-        },
-        {
-          "text": "打印货品标签",
-          "label": "打印标签"
-        },
-        {
-          "text": "测试预览",
-          "label": "测试预览"
-        }
-      ],
-      "placeholderNormal": "查货品",
-      "placeholderPro": "汇总配送",
-      "menuLabels": {
-        "materials": "原料/半成品",
-        "products": "货品管理",
-        "materials-list": "原料清单",
-        "orders": "配送/出货单",
-        "shipment-records": "出货记录",
-        "customers": "门店/客户",
-        "print": "货品标签"
-      },
-      "uiLabels": {
-        "entity": "货品",
-        "model_label": "货号",
-        "shipment_order": "配送单",
-        "records": "出货记录"
       }
     },
     "批发": {

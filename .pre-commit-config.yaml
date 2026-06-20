@@ -46,6 +46,14 @@ repos:
         stages: [pre-commit]
         # pre-commit 框架的退出码语义：非零即视为失败
         # 我们的 --check 模式在发现未脱敏文件时已正确返回 1
+      - id: ssot-registry-sanity
+        name: SSOT registry sanity (list domains)
+        # 仅当 ssot.yaml 或 ssot_cli/插件变化时才触发，验证注册表可解析
+        files: '^FHD/config/ssot\.yaml$|^FHD/scripts/dev/ssot_cli\.py$|^FHD/scripts/dev/ssot_plugins/.*\.py$'
+        entry: python3 FHD/scripts/dev/ssot_cli.py list
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
 
   # ----- FHD Python 格式化 / lint：Ruff 是唯一工具（import sort 由 Ruff I 规则处理） -----
   - repo: https://github.com/astral-sh/ruff-pre-commit

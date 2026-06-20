@@ -46,6 +46,41 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _derive_industry_from_session(request: Request) -> str:
+    """单一真相源 + 自动派生：从 session account_kind + User.industry_id 派生 industry。
+
+    1. admin 账号 → "企业管理"（运维助手身份）
+    2. 普通账号 → User.industry_id（涂料/考勤/批发/电商/餐饮/物流等）
+    3. 兜底 → "通用"（业务管家身份）
+
+    前端/手机端无需传 industry，后端自动判断。
+    """
+    try:
+        from app.application.session_account_meta import load_session_account_meta
+        from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+        sid = _session_id_from_request(request)
+        if not sid:
+            return "通用"
+        meta = load_session_account_meta(sid) or {}
+        # 1. admin 账号 → 企业管理
+        if meta.get("account_kind") == "admin":
+            return "企业管理"
+        # 2. 普通账号 → User.industry_id
+        local_user_id = meta.get("local_user_id")
+        if local_user_id:
+            from app.db.models.user import User
+            from app.db.session import get_db
+
+            with get_db() as db:
+                row = db.query(User.industry_id).filter(User.id == local_user_id).first()
+                if row and row[0]:
+                    return str(row[0]).strip()
+    except Exception:
+        logger.debug("derive_industry_from_session failed", exc_info=True)
+    return "通用"
+
+
 def _attach_compat_chat_trace(
     payload: dict[str, Any],
     body: XcagiCompatChatBody | XcagiCompatChatBatchBody,
@@ -508,6 +543,35 @@ async def execute_compat_chat_batch(
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
+    # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
+    if not body.system_prompt and body.message:
+        try:
+            from app.services.conversation.manager import get_ai_conversation_service
+
+            svc = get_ai_conversation_service()
+            persona_svc = getattr(svc, "persona_service", None)
+            logger.info("persona_inject check: has_persona=%s msg=%s", persona_svc is not None, body.message[:50])
+            if persona_svc is not None:
+                user_id = body.user_id or "default-user"
+                ctx = body.context or {}
+                # 单一真相源 + 自动派生：优先用前端传的 industry；
+                # 没传则从 session account_kind 派生（admin → 企业管理，其他 → 通用）
+                industry = ctx.get("industry") if isinstance(ctx, dict) else None
+                if not industry:
+                    industry = _derive_industry_from_session(request)
+                logger.info("persona_inject ctx=%s industry=%s", ctx, industry)
+                prompt, _params = await persona_svc.build_prompt_from_message(
+                    user_id=user_id,
+                    message=body.message,
+                    history=[],
+                    industry=industry,
+                    context_prompt="",
+                )
+                body.system_prompt = prompt
+                logger.info("persona_inject OK: prompt_len=%d", len(prompt))
+        except Exception as e:
+            logger.warning("persona_inject FAIL: %s", e, exc_info=True)
+
     tier = ai_tier or resolve_ai_tier(request)
     async for chunk in _xcagi_planner_stream_bytes_async(request, body, ai_tier=tier):
         yield chunk

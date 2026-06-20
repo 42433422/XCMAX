@@ -1,1 +1,0 @@
-import{_ as o}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as i,a2 as a,t as e}from"./index-CinG43sm.js";const c=i({__name:"WorkflowVisualizationView",setup(t){return(r,n)=>(e(),a(o,{"mod-id":"xcagi-workflow-visualization-bridge",view:"WorkflowVisualizationView",title:"流程可视化"}))}});export{c as default};

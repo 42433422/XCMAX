@@ -22,6 +22,13 @@ data class ChatCacheEntity(
     val ts: Long = System.currentTimeMillis(),
 )
 
+@Entity(tableName = "conversation_list_state")
+data class ConversationListStateEntity(
+    @PrimaryKey val conversation_id: String,
+    val last_message_at: Long,
+    @ColumnInfo(name = "last_message_preview") val lastMessagePreview: String = "",
+)
+
 @Entity(tableName = "approval_cache")
 data class ApprovalCacheEntity(
     @PrimaryKey val requestId: Int,
@@ -50,6 +57,35 @@ interface ChatCacheDao {
 
     @Query("DELETE FROM chat_cache WHERE session_id = :sessionId")
     suspend fun clearSession(sessionId: String)
+}
+
+@Dao
+interface ConversationListStateDao {
+    @Query("SELECT * FROM conversation_list_state")
+    fun observeAll(): Flow<List<ConversationListStateEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(row: ConversationListStateEntity): Long
+
+    @Query(
+        """
+        UPDATE conversation_list_state
+        SET last_message_at = :timestamp,
+            last_message_preview = :preview
+        WHERE conversation_id = :conversationId AND last_message_at < :timestamp
+        """
+    )
+    suspend fun updateIfNewer(conversationId: String, timestamp: Long, preview: String)
+
+    @Query(
+        """
+        UPDATE conversation_list_state
+        SET last_message_preview = :preview,
+            last_message_at = :timestamp
+        WHERE conversation_id = :conversationId AND last_message_at <= :timestamp
+        """
+    )
+    suspend fun upsertPreview(conversationId: String, timestamp: Long, preview: String)
 }
 
 @Entity(tableName = "shipment_cache")
@@ -177,8 +213,9 @@ interface ModInfoCacheDao {
         ImMessageCacheEntity::class,
         ImReadStateEntity::class,
         ModInfoCacheEntity::class,
+        ConversationListStateEntity::class,
     ],
-    version = 6,
+    version = 8,
     exportSchema = false,
 )
 abstract class XcagiDatabase : RoomDatabase() {
@@ -188,6 +225,7 @@ abstract class XcagiDatabase : RoomDatabase() {
     abstract fun imMessageDao(): ImMessageCacheDao
     abstract fun imReadStateDao(): ImReadStateDao
     abstract fun modInfoCacheDao(): ModInfoCacheDao
+    abstract fun conversationListStateDao(): ConversationListStateDao
 
     companion object {
         val MIGRATION_3_4 = object : Migration(3, 4) {
@@ -222,6 +260,37 @@ abstract class XcagiDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL(
                     "ALTER TABLE mod_info_cache ADD COLUMN employeesJson TEXT NOT NULL DEFAULT '[]'"
+                )
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS conversation_list_state (
+                        conversation_id TEXT NOT NULL PRIMARY KEY,
+                        last_message_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT OR REPLACE INTO conversation_list_state(conversation_id, last_message_at)
+                    SELECT
+                        CASE WHEN session_id = 'default' THEN 'pinned:assistant' ELSE session_id END,
+                        MAX(ts)
+                    FROM chat_cache
+                    GROUP BY session_id
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE conversation_list_state ADD COLUMN last_message_preview TEXT NOT NULL DEFAULT ''"
                 )
             }
         }

@@ -599,7 +599,6 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
-import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import { useResizablePane } from '@/composables/useResizablePane'
@@ -2160,4 +2159,3 @@ onBeforeUnmount(() => {
   }
 }
 </style>
-

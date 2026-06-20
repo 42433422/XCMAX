@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import {
-  ALL_PLANNED_YUANGON_PKG_IDS,
   DEPARTMENT_COLORS,
   DEPARTMENT_ORDER,
   SIX_LINE_DEPARTMENTS,
-  YUANGON_PKG_DESCRIPTIONS,
-  YUANGON_PKG_ROLE_LABELS,
 } from '@/domain/yuangonDutyRoster'
+import { useDutyRoster } from '@/composables/useDutyRoster'
 import { useDutyRosterLoopStatus } from '@/composables/useDutyRosterLoopStatus'
 
 type EmployeeFlowPlacement = {
@@ -27,8 +25,15 @@ const props = withDefaults(defineProps<{
 })
 
 const router = useRouter()
+// SSOT 派生：运行时从后端 /api/system/duty-roster 获取编制矩阵
+const { allPlannedIds, employeeLabels, employeeDescriptions, ensureLoaded } = useDutyRoster()
 const { status, loading, ready, healthLabel, detailLine, refresh } = useDutyRosterLoopStatus({
   autoRefreshMs: 30000,
+})
+
+onMounted(() => {
+  // 触发 SSOT 派生数据加载（失败时 composable 自动回退到构建时硬编码常量）
+  ensureLoaded()
 })
 
 function routeTarget(name: string, path: string): RouteLocationRaw {
@@ -118,7 +123,7 @@ const employeeCards = computed(() => {
     }
   }
 
-  for (const employeeId of ALL_PLANNED_YUANGON_PKG_IDS) {
+  for (const employeeId of allPlannedIds.value) {
     if (!assignments.has(employeeId)) {
       assignments.set(employeeId, [])
       orderedIds.push(employeeId)
@@ -139,8 +144,8 @@ const employeeCards = computed(() => {
     return {
       id: employeeId,
       index: index + 1,
-      name: YUANGON_PKG_ROLE_LABELS[employeeId] || employeeId,
-      description: YUANGON_PKG_DESCRIPTIONS[employeeId] || '等待补充员工职责说明。',
+      name: employeeLabels.value[employeeId] || employeeId,
+      description: employeeDescriptions.value[employeeId] || '等待补充员工职责说明。',
       primaryDeptLabel: primary?.deptLabel || '未分配部门',
       primarySubzoneLabel: primary?.subzoneLabel || '未分配流程节点',
       color: primary?.color || '#2563eb',

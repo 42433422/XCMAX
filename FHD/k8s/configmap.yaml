@@ -7,7 +7,7 @@ data:
   flask_env: "production"
   log_level: "INFO"
   FHD_ENV: "production"
-  # NeuroBus 生产可靠性全开（与 README 8 机制 / GET /api/neurobus/health 一致）
+  # NeuroBus 生产可靠性全开（与 README 7 大机制 / GET /api/neurobus/health 一致）
   XCAGI_NEURO_BUS_DEDUP: "1"
   XCAGI_NEURO_BUS_CIRCUIT: "1"
   XCAGI_NEURO_BUS_RATE_LIMIT: "1"
@@ -16,6 +16,7 @@ data:
   XCAGI_NEURO_BUS_LIFELINE: "1"
   XCAGI_NEURO_BUS_DLQ_AUTO: "1"
   XCAGI_NEURO_BUS_SLA_LOG: "1"
+  XCAGI_NEURO_BUS_RETRY: "1"
   # SLA 采集
   XCAGI_NEURO_BUS_SLA_COLLECT: "1"
   # NN 路由策略：影子模式（记录 NN 决策但不实际路由，回退规则路由）

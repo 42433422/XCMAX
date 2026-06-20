@@ -19,6 +19,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]  # XCMAX/
 FHD_ROOT = REPO_ROOT / "FHD"
 SSOT_INDEX = FHD_ROOT / "docs" / "SSOT_INDEX.md"
 SCAN_DIRS = [FHD_ROOT / "docs", REPO_ROOT / "docs"]
+# 设计/规划文档（brainstorming spec、implementation plan）含 YAML 示例中的 "ssot:" 字段，
+# 非权威 SSOT 声明，跳过扫描避免假阳性。
+IGNORE_DIRS = {REPO_ROOT / "docs" / "superpowers"}
 
 CLAIM_PATTERN = re.compile(r"(唯一真相源|SSOT|单一事实来源)", re.IGNORECASE)
 # Markdown link in table cell: [text](path)
@@ -201,7 +204,7 @@ def scan_claims(scan_dirs: list[Path], retired_files: Optional[set] = None) -> l
     seen_files: set[Path] = set()
     ssot_index_resolved = SSOT_INDEX.resolve()
 
-    for scan_dir in scan_dirs:
+    for scan_dir in SCAN_DIRS:
         if not scan_dir.exists():
             continue
         for md_file in scan_dir.rglob("*.md"):
@@ -209,6 +212,10 @@ def scan_claims(scan_dirs: list[Path], retired_files: Optional[set] = None) -> l
             if resolved in seen_files:
                 continue
             seen_files.add(resolved)
+
+            # Skip files under ignored dirs (design/plan artifacts)
+            if any(resolved.is_relative_to(d) for d in IGNORE_DIRS if d.exists()):
+                continue
 
             # Skip SSOT_INDEX.md itself (it's the registry, not a claim)
             if resolved == ssot_index_resolved:

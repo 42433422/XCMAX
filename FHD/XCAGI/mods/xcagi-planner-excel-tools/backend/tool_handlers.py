@@ -30,7 +30,7 @@ def _parse_args(args: dict[str, Any] | str) -> dict[str, Any]:
         try:
             parsed = json.loads(args or "{}")
             return parsed if isinstance(parsed, dict) else {}
-        except Exception:  # noqa: BLE001 - native tool boundary must not crash planner
+        except Exception:
             return {}
     return {}
 
@@ -99,7 +99,7 @@ def _handle_excel_schema_understand(args: dict[str, Any], workspace_root: str | 
         if isinstance(out, dict):
             _tag_source(out)
         return json.dumps(out, ensure_ascii=False)
-    except Exception as e:  # noqa: BLE001 - native tool boundary returns JSON errors
+    except Exception as e:
         return json.dumps(
             _tag_source(
                 {
@@ -206,7 +206,7 @@ def _handle_excel_join_compare(args: dict[str, Any], workspace_root: str | None)
             _tag_source({"success": False, "error": f"unknown action: {action}"}),
             ensure_ascii=False,
         )
-    except Exception as e:  # noqa: BLE001 - native tool boundary returns JSON errors
+    except Exception as e:
         return json.dumps(_tag_source({"success": False, "error": str(e)}), ensure_ascii=False)
 
 
@@ -226,13 +226,7 @@ def _handle_import_excel_to_database(
 
 
 def _handle_generate_office_document(args: dict[str, Any]) -> str:
-    req = str(
-        args.get("user_request")
-        or args.get("prompt")
-        or args.get("request")
-        or args.get("message")
-        or ""
-    ).strip()
+    req = str(args.get("user_request") or args.get("prompt") or "").strip()
     fmt = str(args.get("output_format") or "docx").lower().strip()
     if fmt not in ("docx", "xlsx"):
         fmt = "docx"
@@ -291,7 +285,7 @@ def _handle_generate_office_document(args: dict[str, Any]) -> str:
             ),
             ensure_ascii=False,
         )
-    except Exception as e:  # noqa: BLE001 - native tool boundary returns JSON errors
+    except Exception as e:
         return json.dumps(_tag_source({"success": False, "error": str(e)}), ensure_ascii=False)
 
 

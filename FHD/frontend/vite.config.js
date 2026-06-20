@@ -4,8 +4,9 @@ import { buildDevProxy } from './vite/devProxy.js'
 import { createBuildOptions } from './vite/build.js'
 import { createVitePlugins } from './vite/plugins.js'
 import { createStaticCopyPlugin, modViewsDir } from './vite/staticCopy.js'
+import { resolveApiBase } from './vite/resolveApiBase.js'
 
-const API_BASE = process.env.VITE_API_BASE || 'http://127.0.0.1:5000'
+const API_BASE = resolveApiBase(process.env.VITE_API_BASE)
 const devHmrHost = (process.env.VITE_DEV_HMR_HOST || '').trim()
 
 export default defineConfig(({ mode }) => {
@@ -16,7 +17,7 @@ export default defineConfig(({ mode }) => {
   const isDev = mode === 'development'
   const xcmaxPublicApiPrefix = String(env.VITE_XCMAX_PUBLIC_API_PREFIX || '').trim()
 
-  let devPort = 5001
+  let devPort = 42423
   const rawDevPort = String(env.VITE_DEV_PORT || '').trim()
   if (rawDevPort) {
     const p = Number.parseInt(rawDevPort, 10)
@@ -26,12 +27,12 @@ export default defineConfig(({ mode }) => {
   const hmrHost = devHmrHost || '127.0.0.1'
   const hmr = isDev
     ? {
-        overlay: false,
-        host: hmrHost,
-        port: devPort,
-        clientPort: devPort,
-        protocol: 'ws',
-      }
+      overlay: false,
+      host: hmrHost,
+      port: devPort,
+      clientPort: devPort,
+      protocol: 'ws',
+    }
     : { overlay: false }
 
   const productSku = String(env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
@@ -42,8 +43,8 @@ export default defineConfig(({ mode }) => {
       : productSku === 'enterprise'
         ? 'enterprise'
         : mode === 'generic'
-        ? 'generic'
-        : 'full'
+          ? 'generic'
+          : 'full'
   const constantsDir = path.resolve(__dirname, './src/constants')
 
   return {

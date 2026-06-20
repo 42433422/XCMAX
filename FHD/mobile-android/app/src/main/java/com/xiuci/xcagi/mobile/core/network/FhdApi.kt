@@ -98,6 +98,26 @@ data class WalletBalanceDto(
     val message: String? = null,
 )
 
+/**
+ * 侧栏菜单项（与桌面端侧栏对齐）。
+ */
+data class NavMenuItem(
+    val key: String = "",
+    val name: String = "",
+    val icon: String = "",
+    val path: String = "",
+    val source: String = "core",
+    val mod_id: String? = null,
+)
+
+/**
+ * 侧栏菜单响应（探索 Tab 配对后动态渲染工具列表）。
+ */
+data class NavMenuData(
+    val items: List<NavMenuItem> = emptyList(),
+    val account_kind: String = "enterprise",
+)
+
 interface FhdApi {
     @GET("api/health")
     suspend fun health(): Map<String, Any?>
@@ -201,6 +221,9 @@ interface FhdApi {
 
     @GET(ApiEndpoints.HOME)
     suspend fun mobileHome(): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.NAV_MENU)
+    suspend fun mobileNavMenu(): MobileEnvelope<NavMenuData>
 
     @GET(ApiEndpoints.ADMIN_HOME)
     suspend fun mobileAdminHome(): MobileEnvelope<AdminMobileHomeData>

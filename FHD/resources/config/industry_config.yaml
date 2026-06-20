@@ -44,20 +44,6 @@ industries:
       receipt: "补卡单"
       return: "撤销单"
 
-  烤禽:
-    name: "烤禽/熟食"
-    description: "烤禽加工、冷链出货、门店与批发配送"
-    units:
-      primary: "箱"
-      primary_label: "箱数"
-    product_fields:
-      name: "品名"
-      model: "规格"
-    order_types:
-      shipment: "出货单"
-      receipt: "入库单"
-      return: "退货单"
-
   批发:
     name: "批发/分销"
     description: "批发、分销、渠道与客户管理"
