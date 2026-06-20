@@ -372,17 +372,34 @@ async def run_market_first_login(
                 if local_admin.get("success") and user_role == "admin":
                     session_id = local_admin.get("session_id")
                     if session_id:
+                        # 复用 finalize 补充租户绑定 + 本地 mod 权益 fallback
+                        local_admin = await finalize_enterprise_login(
+                            result=local_admin,
+                            session_id=str(session_id),
+                            market_result=market_result,
+                            account_kind=account_kind,
+                            username=login_username,
+                            sku=sku,
+                            skip_market_sync=True,
+                        )
+                        # finalize skip_market_sync 分支不写 market_is_admin/market_is_enterprise，此处补充
+                        # enterprise SKU 管理员默认拥有企业版权益（市场不可达时）
                         persist_session_account_meta(
                             str(session_id),
                             account_kind="admin",
-                            company_brand="",
+                            company_brand=str(local_admin.get("company_brand") or ""),
                             market_user_id=None,
                             market_is_admin=True,
-                            market_is_enterprise=False,
+                            market_is_enterprise=True,
+                            tenant_id=(
+                                int(local_admin["tenant_id"])
+                                if local_admin.get("tenant_id")
+                                else None
+                            ),
                         )
                     local_admin["account_kind"] = "admin"
                     local_admin["market_is_admin"] = True
-                    local_admin["market_is_enterprise"] = False
+                    local_admin["market_is_enterprise"] = True
                     local_admin["market_account"] = {
                         "success": False,
                         "market_base_url": (market_result or {}).get("market_base_url"),
