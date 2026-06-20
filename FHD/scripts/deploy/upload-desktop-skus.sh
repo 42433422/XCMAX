@@ -12,11 +12,11 @@ RELEASE_ROOT="${ROOT}/release/xcagi-v${VERSION}"
 
 HOST="${XCAGI_UPDATE_SSH_HOST:-119.27.178.147}"
 USER="${XCAGI_UPDATE_SSH_USER:-root}"
-REMOTE_BASE="${XCAGI_UPDATE_SSH_PATH:-/var/www/update/releases/stable}"
+REMOTE_BASE="${XCAGI_UPDATE_SSH_PATH:-/var/www/update}"
 SSH_KEY="${XCAGI_UPDATE_SSH_KEY:-}"
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
-SCP_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
+SSH_OPTS=(-o StrictHostKeyChecking=no -o ServerAliveInterval=30)
+SCP_OPTS=(-o StrictHostKeyChecking=no -o ServerAliveInterval=30)
 if [[ -n "${SSH_KEY}" ]]; then
   SSH_OPTS+=(-i "${SSH_KEY}")
   SCP_OPTS+=(-i "${SSH_KEY}")

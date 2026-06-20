@@ -10,15 +10,18 @@ $Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $Version = $Version.TrimStart('v', 'V')
 
 $hostName = $env:XCAGI_UPDATE_SSH_HOST
+if ([string]::IsNullOrWhiteSpace($hostName)) { $hostName = '119.27.178.147' }
 $sshUser = $env:XCAGI_UPDATE_SSH_USER
+if ([string]::IsNullOrWhiteSpace($sshUser)) { $sshUser = 'root' }
 $remoteBase = $env:XCAGI_UPDATE_SSH_PATH
+if ([string]::IsNullOrWhiteSpace($remoteBase)) { $remoteBase = '/var/www/update' }
 $sshKey = $env:XCAGI_UPDATE_SSH_KEY
 
 if (-not $hostName -or -not $sshUser -or -not $remoteBase) {
   throw @"
 缺少上传环境变量（勿写入 git）:
-  XCAGI_UPDATE_SSH_HOST
-  XCAGI_UPDATE_SSH_USER
+  XCAGI_UPDATE_SSH_HOST（默认: 119.27.178.147）
+  XCAGI_UPDATE_SSH_USER（默认: root）
   XCAGI_UPDATE_SSH_PATH   例: /var/www/update
 可选: XCAGI_UPDATE_SSH_KEY  私钥路径
 "@
@@ -31,10 +34,10 @@ if (-not (Test-Path $releaseRoot)) {
 
 $skus = if ($ProductSku -eq 'all') { @('personal', 'enterprise') } else { @($ProductSku) }
 $sshTarget = "${sshUser}@${hostName}"
-$rsyncSsh = 'ssh'
+$rsyncSsh = 'ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30'
 if ($sshKey) {
   $keyPath = Resolve-Path $sshKey
-  $rsyncSsh = "ssh -i `"$keyPath`" -o StrictHostKeyChecking=accept-new"
+  $rsyncSsh = "ssh -i `"$keyPath`" -o StrictHostKeyChecking=no -o ServerAliveInterval=30"
 }
 
 foreach ($sku in $skus) {
