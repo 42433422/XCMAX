@@ -1,4 +1,5 @@
 """Persona 聚合根。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -9,7 +10,6 @@ from app.domain.persona.value_objects import (
     PersonaIdentity,
     RapportScore,
 )
-
 
 # 行业 → 初始身份映射
 _INDUSTRY_IDENTITY_MAP: dict[str, tuple[str, str]] = {
@@ -65,12 +65,12 @@ class PersonaProfile:
             self.identity = _resolve_initial_identity(self.industry)
 
     @classmethod
-    def create(cls, user_id: str, industry: str) -> "PersonaProfile":
+    def create(cls, user_id: str, industry: str) -> PersonaProfile:
         """冷启动工厂方法：根据行业创建初始画像。"""
         identity = _resolve_initial_identity(industry)
         return cls(user_id=user_id, identity=identity)
 
-    def update_axes(self, new_axes: PersonaAxes) -> "PersonaProfile":
+    def update_axes(self, new_axes: PersonaAxes) -> PersonaProfile:
         """返回更新了四轴的新画像实例。"""
         return PersonaProfile(
             user_id=self.user_id,
@@ -82,7 +82,7 @@ class PersonaProfile:
             updated_at=datetime.now(),
         )
 
-    def update_rapport(self, new_rapport: RapportScore) -> "PersonaProfile":
+    def update_rapport(self, new_rapport: RapportScore) -> PersonaProfile:
         """返回更新了关系深度的新画像实例。"""
         return PersonaProfile(
             user_id=self.user_id,
@@ -94,7 +94,7 @@ class PersonaProfile:
             updated_at=datetime.now(),
         )
 
-    def drift_identity(self, new_identity: PersonaIdentity) -> "PersonaProfile":
+    def drift_identity(self, new_identity: PersonaIdentity) -> PersonaProfile:
         """返回漂移了身份的新画像实例。"""
         return PersonaProfile(
             user_id=self.user_id,
@@ -106,7 +106,7 @@ class PersonaProfile:
             updated_at=datetime.now(),
         )
 
-    def increment_domain(self, domain: str) -> "PersonaProfile":
+    def increment_domain(self, domain: str) -> PersonaProfile:
         """增加某业务域的计数，返回新画像实例。"""
         counts = dict(self.business_domain_counts)
         counts[domain] = counts.get(domain, 0) + 1
@@ -132,7 +132,7 @@ class PersonaProfile:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "PersonaProfile":
+    def from_dict(cls, d: dict) -> PersonaProfile:
         return cls(
             user_id=d["user_id"],
             identity=PersonaIdentity.from_dict(d["identity"]),

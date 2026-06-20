@@ -1,4 +1,5 @@
 """L1 规则推断器：实时从用户消息提取 persona 信号。"""
+
 from __future__ import annotations
 
 import re
@@ -19,10 +20,12 @@ class RuleInferResult:
 # 语气词/emoji 模式
 _MODAL_PARTICLES = re.compile(r"[哈呢呀哦嘛啦哇呗]")
 _EMOJI_PATTERN = re.compile(
-    "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF]"
+    "[\U0001f600-\U0001f64f\U0001f300-\U0001f5ff\U0001f680-\U0001f6ff\U0001f1e0-\U0001f1ff]"
 )
 # 祈使句模式
-_IMPERATIVE_PATTERN = re.compile(r"^(帮我|查下|弄一下|搞一下|弄下|搞下|处理下|处理一下|弄|查|搞|做)")
+_IMPERATIVE_PATTERN = re.compile(
+    r"^(帮我|查下|弄一下|搞一下|弄下|搞下|处理下|处理一下|弄|查|搞|做)"
+)
 # 详细/简洁请求
 _DETAIL_REQUEST = re.compile(r"(详细|展开|具体|说说|讲讲|解释)")
 _BRIEF_REQUEST = re.compile(r"(简单|简洁|长话短说|少说|概括|摘要)")

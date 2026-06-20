@@ -1,4 +1,5 @@
 """L2 embedding 推断器：定期聚类发现隐藏模式。"""
+
 from __future__ import annotations
 
 import logging
@@ -79,7 +80,7 @@ class EmbeddingInferencer:
                 pattern_label=pattern,
                 confidence=0.6,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  embedding API 边界：任何异常都降级为中性值
             logger.warning("L2 embedding 推断失败，返回中性值: %s", e)
             return EmbeddingInferResult(
                 axes=PersonaAxes(),
@@ -97,7 +98,6 @@ class EmbeddingInferencer:
 
         # 简化：用向量维度方差作为风格一致性指标
         # 实际生产应训练分类器或聚类
-        first_vec = embeddings[0]
         avg_len = sum(len(v) for v in embeddings) / len(embeddings)
 
         # 占位逻辑：根据向量长度和数量粗略分类

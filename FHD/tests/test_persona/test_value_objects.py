@@ -1,4 +1,5 @@
 """Persona 值对象测试。"""
+
 from __future__ import annotations
 
 import pytest
@@ -123,7 +124,9 @@ class TestRapportScore:
         assert RapportScore(score=0.2).is_stranger() is True
 
     def test_to_dict_returns_all_fields(self):
-        rapport = RapportScore(score=0.5, interaction_count=100, business_depth=0.4, emotion_signal_count=10)
+        rapport = RapportScore(
+            score=0.5, interaction_count=100, business_depth=0.4, emotion_signal_count=10
+        )
         d = rapport.to_dict()
         assert d["score"] == 0.5
         assert d["interaction_count"] == 100

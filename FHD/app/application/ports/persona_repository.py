@@ -1,4 +1,5 @@
 """Persona 画像仓储接口 (Port)。"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

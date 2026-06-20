@@ -58,8 +58,12 @@ class PersonaPromptBuilder:
             str: 完整 system prompt
         """
         # 身份段
-        brief = self._identity_resolver.resolve_brief(profile.identity, profile.rapport)
-        identity_section = f"你是{profile.identity.name}，{brief}。"
+        identity = profile.identity
+        if identity is None:
+            # 理论上 __post_init__ 已保证 identity 非空，此处为类型守卫
+            raise ValueError("PersonaProfile.identity 不能为空（生成 prompt 前必须先解析身份）")
+        brief = self._identity_resolver.resolve_brief(identity, profile.rapport)
+        identity_section = f"你是{identity.name}，{brief}。"
 
         # 风格段
         axes = profile.axes
