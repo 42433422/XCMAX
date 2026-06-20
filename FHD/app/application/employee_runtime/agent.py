@@ -207,7 +207,13 @@ class EmployeeAgent:
             if not gate.get("ok"):
                 from app.application.employee_runtime.metrics import record_employee_run
 
-                record_employee_run(employee_id, success=False, blocked=True)
+                record_employee_run(
+                    employee_id,
+                    success=False,
+                    blocked=True,
+                    task=task,
+                    summary=str(gate.get("reason") or gate.get("message") or ""),
+                )
                 return self._blocked_result(pack, task, handler_list, gate, t0)
 
             upstream = self._run_upstream_collaboration(task, payload, manifest, config)
@@ -245,7 +251,7 @@ class EmployeeAgent:
                     if self._is_interactive_chat_payload(payload):
                         from app.application.employee_runtime.metrics import record_employee_run
 
-                        record_employee_run(employee_id, success=True)
+                        record_employee_run(employee_id, success=True, task=task)
                         return self._interactive_chat_fallback_result(
                             pack,
                             manifest,
@@ -279,7 +285,12 @@ class EmployeeAgent:
 
             from app.application.employee_runtime.metrics import record_employee_run
 
-            record_employee_run(employee_id, success=ok)
+            record_employee_run(
+                employee_id,
+                success=ok,
+                task=task,
+                summary=self._summarize(result),
+            )
             if not ok:
                 try:
                     from app.application.employee_runtime.triggers import (
