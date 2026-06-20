@@ -239,10 +239,22 @@ class ModstorePlatformAdapter:
             except RECOVERABLE_ERRORS:
                 pass
 
-        auth_token = kwargs.get("auth_token") or os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
-        # 非 Mobile JWT 的请求头 token（桌面端 market token）可直接透传
-        if not auth_token and not is_mobile_jwt:
+        # Token 优先级（高 → 低）：
+        #   1. kwargs 显式传入的 auth_token
+        #   2. 请求头中的 market token（非 Mobile JWT，桌面端/移动端均可）
+        #   3. FHD Session 表中绑定的 market token（Mobile JWT 场景）
+        #   4. latest_session_market_token fallback（桌面端非 Mobile JWT 兜底）
+        #   5. MODSTORE_AUTH_TOKEN 环境变量（最后兜底，仅当以上都无）
+        # 注意：环境变量必须作为最后兜底，否则会覆盖移动端用户自己的 market token，
+        # 导致用过期/无效的环境变量 token 调用 MODstore → 401。
+        token_source = "none"
+        auth_token = kwargs.get("auth_token") or ""
+        if auth_token:
+            token_source = "kwargs"
+        # 非 Mobile JWT 的请求头 token（桌面端 market token / 移动端 market token）直接透传
+        if not auth_token and not is_mobile_jwt and request_auth_token:
             auth_token = request_auth_token
+            token_source = "request"
 
         if not auth_token and (session_id or request or is_mobile_jwt):
             try:
@@ -262,6 +274,7 @@ class ModstorePlatformAdapter:
                     token_from_session = session_market_token(effective_session_id)
                     if token_from_session:
                         auth_token = token_from_session
+                        token_source = "session"
                         logger.debug(
                             "从FHD Session [%s...] 获取到平台Token (长度: %s)",
                             effective_session_id[:8],
@@ -287,11 +300,19 @@ class ModstorePlatformAdapter:
                         latest_token = latest_session_market_token()
                         if latest_token:
                             auth_token = latest_token
+                            token_source = "latest_session"
                             logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
             except ImportError as e:
                 logger.error("无法导入market_account模块: %s", e)
             except RECOVERABLE_ERRORS as e:
                 logger.error("从Session获取Token失败: %s", e, exc_info=True)
+
+        # 环境变量作为最后兜底（桌面端无请求头 token 且 session 表无绑定场景）
+        if not auth_token:
+            env_token = os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
+            if env_token:
+                auth_token = env_token
+                token_source = "env"
 
         instance = cls(
             platform_url=platform_url,
@@ -299,9 +320,7 @@ class ModstorePlatformAdapter:
             **{k: v for k, v in kwargs.items() if k not in ("platform_url", "auth_token")},
         )
 
-        instance._source = (
-            "session" if auth_token and not os.environ.get("MODSTORE_AUTH_TOKEN") else "env"
-        )
+        instance._source = token_source
 
         return instance
 
