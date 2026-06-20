@@ -12,8 +12,13 @@ import pytest
 # The module uses a hyphen in directory name, so we need importlib
 _MODULE_PATH = os.path.join(
     os.path.dirname(__file__),  # tests/test_infrastructure/
-    "..", "..",  # FHD/
-    "app", "infrastructure", "skills", "sidebar-menu-manager", "sidebar_menu_manager.py",
+    "..",
+    "..",  # FHD/
+    "app",
+    "infrastructure",
+    "skills",
+    "sidebar-menu-manager",
+    "sidebar_menu_manager.py",
 )
 spec = importlib.util.spec_from_file_location(
     "sidebar_menu_manager",
