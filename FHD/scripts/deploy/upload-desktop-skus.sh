@@ -52,10 +52,12 @@ atomic_upload() {
 
 for sku in "${skus[@]}"; do
   local_dir="${RELEASE_ROOT}/${sku}"
-  remote_dir="${REMOTE_BASE}/${sku}"
   [[ -d "${local_dir}" ]] || { echo "[err] 缺少目录 ${local_dir}" >&2; exit 1; }
-  echo "[upload] ${sku} -> ${REMOTE}:${remote_dir}/"
-  ssh "${SSH_OPTS[@]}" "${REMOTE}" "mkdir -p '${remote_dir}'"
+  trimmed_remote_base="${REMOTE_BASE%/}"
+  legacy_remote_dir="${trimmed_remote_base}/${sku}"
+  versioned_remote_dir="${trimmed_remote_base}/xcagi-v${VERSION}/${sku}"
+  echo "[upload] ${sku} -> ${REMOTE}:${legacy_remote_dir}/ 和 ${REMOTE}:${versioned_remote_dir}/"
+  ssh "${SSH_OPTS[@]}" "${REMOTE}" "mkdir -p '${legacy_remote_dir}' '${versioned_remote_dir}'"
   shopt -s nullglob
   for pattern in \
     "XCAGI-*-Setup-${VERSION}-x64.exe" \
@@ -68,7 +70,8 @@ for sku in "${skus[@]}"; do
     for f in "${local_dir}"/${pattern}; do
       [[ -f "${f}" ]] || continue
       echo "  -> $(basename "${f}")"
-      atomic_upload "${f}" "${remote_dir}/$(basename "${f}")"
+      atomic_upload "${f}" "${legacy_remote_dir}/$(basename "${f}")"
+      atomic_upload "${f}" "${versioned_remote_dir}/$(basename "${f}")"
     done
   done
   shopt -u nullglob

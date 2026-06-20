@@ -33,10 +33,12 @@ Windows 安装流水线会在 `scripts/package/build-installer.ps1` 末尾自动
 客户只需把官方 stable 目录 mirror 到内网 HTTP(S) 服务，例如：
 
 - `https://intranet.example/xcagi/releases/stable/latest.yml`
-- `https://intranet.example/xcagi/releases/stable/XCAGI-Setup-10.0.0-x64.exe`
+- `https://intranet.example/xcagi/releases/stable/XCAGI-Enterprise-Setup-10.0.0-x64.exe`
 - （可选）同目录 `*.blockmap` 供主程序 electron-updater 差分更新；下载器只用 yml + Setup。
 
-将下载器中 **Base URL** 设为 `https://intranet.example/xcagi/releases/stable` 即可。
+可直接把 **Base URL** 设为与你环境一致的版本化入口，例如：
+
+- `https://intranet.example/xcagi-v10.0.0/enterprise`
 
 ## NSIS / electron-builder 静默安装（IT 脚本）
 

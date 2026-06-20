@@ -19,7 +19,7 @@ if (-not $hostName -or -not $sshUser -or -not $remoteBase) {
 缺少上传环境变量（勿写入 git）:
   XCAGI_UPDATE_SSH_HOST
   XCAGI_UPDATE_SSH_USER
-  XCAGI_UPDATE_SSH_PATH   例: /var/www/update/releases/stable
+  XCAGI_UPDATE_SSH_PATH   例: /var/www/update
 可选: XCAGI_UPDATE_SSH_KEY  私钥路径
 "@
 }
@@ -42,7 +42,10 @@ foreach ($sku in $skus) {
   if (-not (Test-Path $localDir)) {
     throw "缺少 SKU 目录: $localDir"
   }
-  $remoteDir = "$($remoteBase.TrimEnd('/'))/$sku/"
+  $trimmedRemoteBase = $remoteBase.TrimEnd('/')
+  $legacyRemoteDir = "$trimmedRemoteBase/$sku/"
+  $versionedRemoteDir = "$trimmedRemoteBase/xcagi-v$Version/$sku/"
+  $remoteDirs = @($legacyRemoteDir, $versionedRemoteDir) | Sort-Object -Unique
   $files = @(
     Get-ChildItem $localDir -Filter 'XCAGI-*-Setup-*-x64.exe' -File -ErrorAction SilentlyContinue
     Get-ChildItem $localDir -Filter 'latest.yml' -File -ErrorAction SilentlyContinue
@@ -52,26 +55,39 @@ foreach ($sku in $skus) {
     throw "$sku 目录无待上传文件"
   }
 
-  Write-Host "Upload $sku -> $sshTarget`:$remoteDir"
+  Write-Host "Upload $sku -> $sshTarget`: $legacyRemoteDir and $versionedRemoteDir"
+  $remotePathList = $remoteDirs | ForEach-Object { "  - $_" }
+  Write-Host ($remotePathList -join "`n")
   $rsyncArgs = @(
     '-avz',
     '--progress',
     '--chmod=D755,F644',
     '-e', $rsyncSsh,
     "$localDir/",
-    "${sshTarget}:${remoteDir}"
+    ''
   )
+
   if ($DryRun) {
-    Write-Host "DRY RUN: rsync $($rsyncArgs -join ' ')"
+    foreach ($remoteDir in $remoteDirs) {
+      $args = @($rsyncArgs)
+      $args[$args.Length - 1] = "${sshTarget}:${remoteDir}"
+      Write-Host "DRY RUN: rsync $($args -join ' ')"
+    }
     continue
   }
-  & rsync @rsyncArgs
-  if ($LASTEXITCODE -ne 0) {
-    throw "rsync failed for SKU $sku (exit $LASTEXITCODE)"
+
+  foreach ($remoteDir in $remoteDirs) {
+    $args = @($rsyncArgs)
+    $args[$args.Length - 1] = "${sshTarget}:${remoteDir}"
+    & rsync @args
+    if ($LASTEXITCODE -ne 0) {
+      throw "rsync failed for SKU $sku at ${remoteDir} (exit $LASTEXITCODE)"
+    }
   }
+
   $setup = $files | Where-Object { $_.Extension -eq '.exe' -and $_.Name -like 'XCAGI-*-Setup-*' } | Select-Object -First 1
   if ($setup) {
-    $url = "https://update.xcagi.com/releases/stable/$sku/$($setup.Name)"
+    $url = "https://xiu-ci.com/xcagi-v$Version/$sku/$($setup.Name)"
     Write-Host "  Public URL (verify): $url"
   }
 }
