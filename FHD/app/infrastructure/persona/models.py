@@ -1,5 +1,6 @@
 # FHD/app/infrastructure/persona/models.py
 """Persona DB ORM 模型。"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -41,6 +42,4 @@ class PersonaEventLogModel(Base):
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
     event_data: Mapped[str] = mapped_column(Text, nullable=False)
     trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.now
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)

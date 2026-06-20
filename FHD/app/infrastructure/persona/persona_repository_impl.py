@@ -1,5 +1,6 @@
 # FHD/app/infrastructure/persona/persona_repository_impl.py
 """Persona 画像仓储实现（Redis 热数据 + DB 冷数据）。"""
+
 from __future__ import annotations
 
 import json
@@ -120,9 +121,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
         )
         scalars_result = result.scalars() if hasattr(result, "scalars") else []
         rows = (
-            scalars_result.all()
-            if hasattr(scalars_result, "all")
-            else list(scalars_result or [])
+            scalars_result.all() if hasattr(scalars_result, "all") else list(scalars_result or [])
         )
         return [
             {
