@@ -156,3 +156,17 @@ class PersonaService:
     def map_params(self, profile: PersonaProfile) -> dict[str, float | int]:
         """映射模型推理参数。"""
         return self._param_mapper.map(profile.axes, profile.rapport)
+
+    async def build_prompt_from_message(
+        self,
+        user_id: str,
+        message: str,
+        history: list[dict],
+        industry: str,
+        context_prompt: str,
+    ) -> tuple[str, dict[str, float | int]]:
+        """便捷方法：更新 persona + 生成 prompt + 映射参数。"""
+        profile = await self.update_on_message(user_id, message, history, industry)
+        prompt = self.build_prompt(profile, context_prompt)
+        params = self.map_params(profile)
+        return prompt, params

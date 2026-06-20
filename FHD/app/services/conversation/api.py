@@ -11,6 +11,20 @@ logger = logging.getLogger(__name__)
 
 _ai_response_cache = get_ai_response_cache()
 
+LEGACY_BASE_PROMPT = """你是一个专业的业务助手，服务于使用 XCAGI 系统的用户。
+你的职责：
+1. 友好、专业地回答用户问题
+2. 协助用户处理发货单、产品、客户等业务
+3. 提供清晰、简洁的回答
+4. 如果不确定，请诚实地告知用户
+
+XCAGI 系统主要功能：
+- 发货单生成和管理
+- 产品和客户管理
+- 订单处理
+- 文件上传和导出
+- 数据查询和统计"""
+
 
 def _make_ai_response_cache_key(message: str, context_hash: str = "") -> str:
     import hashlib
@@ -426,6 +440,31 @@ class ApiMixin(NeuroEventPublisherMixin):
             },
         }
 
+    def _build_system_prompt_with_persona(
+        self,
+        user_id: str,
+        message: str,
+        history: list[dict],
+        industry: str,
+        context_prompt: str,
+    ) -> str:
+        """使用 persona 生成 system prompt。
+
+        若 persona_service 不可用，回退到 LEGACY_BASE_PROMPT。
+
+        Returns:
+            str: system prompt 字符串。
+        """
+        if not getattr(self, "persona_service", None):
+            # Fallback：无 persona 服务时用旧 prompt
+            return LEGACY_BASE_PROMPT + (
+                "\n\n" + context_prompt if context_prompt else ""
+            )
+
+        # 同步路径：直接调用 build_prompt 生成 prompt
+        # 注意：异步完整流程（含 persona 更新）请使用 build_prompt_from_message
+        return self.persona_service.build_prompt(None, context_prompt)
+
     async def _call_ai(
         self, message: str, context: ConversationContext, intent_result: dict[str, Any]
     ) -> dict[str, Any]:
@@ -446,22 +485,21 @@ class ApiMixin(NeuroEventPublisherMixin):
                 "data": {"model": current_model, "cached": True, "intent": intent_result},
             }
 
-        base_prompt = """你是一个专业的业务助手，服务于使用 XCAGI 系统的用户。
-你的职责：
-1. 友好、专业地回答用户问题
-2. 协助用户处理发货单、产品、客户等业务
-3. 提供清晰、简洁的回答
-4. 如果不确定，请诚实地告知用户
-
-XCAGI 系统主要功能：
-- 发货单生成和管理
-- 产品和客户管理
-- 订单处理
-- 文件上传和导出
-- 数据查询和统计"""
-
         context_prompt = self._build_context_prompt(context)
-        system_prompt = base_prompt + ("\n\n" + context_prompt if context_prompt else "")
+
+        if getattr(self, "persona_service", None):
+            system_prompt, persona_params = await self.persona_service.build_prompt_from_message(
+                user_id=context.user_id,
+                message=message,
+                history=context.conversation_history or [],
+                industry=getattr(context, "industry", "通用"),
+                context_prompt=context_prompt,
+            )
+        else:
+            system_prompt = LEGACY_BASE_PROMPT + (
+                "\n\n" + context_prompt if context_prompt else ""
+            )
+            persona_params = None
 
         messages = [{"role": "system", "content": system_prompt}]
 
