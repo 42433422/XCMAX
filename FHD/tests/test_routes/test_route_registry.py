@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 
 from app.fastapi_routes import register_all_routes
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.fastapi_routes.registry import RouteRegistry
 
 
@@ -33,11 +34,7 @@ def test_no_duplicate_registry_mount_names():
     strict=False,
 )
 def test_auth_session_validate_not_fallback(app: FastAPI):
-    paths = []
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        if path:
-            paths.append(path)
+    paths = [route.path for route in iter_effective_routes(app.routes) if route.path]
     assert "/api/auth/session/validate" in paths or any("session/validate" in p for p in paths)
 
 
@@ -56,6 +53,6 @@ def test_registry_detect_conflicts_empty_for_unique_routers():
 
 
 def test_health_routes_registered(app: FastAPI):
-    paths = {getattr(r, "path", "") for r in app.routes}
+    paths = {route.path for route in iter_effective_routes(app.routes)}
     assert "/api/health" in paths
     assert "/api/ping" in paths

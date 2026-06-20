@@ -8,7 +8,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Mock the RAG module before importing
+import pytest
+
+# Mock the RAG module before importing the target, then restore it so collection
+# of package-level RAG tests still sees the real package.
 rag_mock = types.ModuleType("app.infrastructure.rag")
 rag_mock.RagService = MagicMock
 rag_mock.get_default_embedder = MagicMock(return_value=None)

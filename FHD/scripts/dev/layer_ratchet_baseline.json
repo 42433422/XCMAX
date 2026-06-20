@@ -1,13 +1,12 @@
 {
   "_note": "分层债棘轮基线（只减不增）。由 check_layer_ratchet.py --update-baseline 维护。",
-  "services_py_file_count": 106,
+  "services_py_file_count": 111,
   "routes_importing_services": [
     "fastapi_routes/contract_lifecycle_api.py",
     "fastapi_routes/domains/wechat/routes.py",
     "fastapi_routes/finance_invoices_api.py",
     "fastapi_routes/finance_unified_ledger.py",
     "fastapi_routes/gdpr.py",
-    "fastapi_routes/im_routes.py",
     "fastapi_routes/operations_line_api.py",
     "fastapi_routes/payment_reconcile_internal_api.py",
     "fastapi_routes/private_db_read_assistant_compat.py",

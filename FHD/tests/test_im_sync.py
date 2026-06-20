@@ -25,6 +25,7 @@ from app.services.xcmax_sync_service import (
 @pytest.fixture()
 def im_db(tmp_path, monkeypatch: pytest.MonkeyPatch):
     sync_db = tmp_path / "xcmax_sync.db"
+    monkeypatch.delenv("DATABASE_PATH", raising=False)
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     monkeypatch.setattr("app.db.xcmax_sync._db_path", None)
 
@@ -53,6 +54,7 @@ def im_db(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture(autouse=True)
 def _reset_sync_path(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    monkeypatch.delenv("DATABASE_PATH", raising=False)
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     monkeypatch.setattr("app.db.xcmax_sync._db_path", None)
 

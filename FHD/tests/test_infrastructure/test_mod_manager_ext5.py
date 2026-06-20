@@ -769,7 +769,11 @@ class TestRestoreEntitlementsFromSessionId:
             patch("app.enterprise.mod_entitlements.set_session_entitlements") as mock_set,
         ):
             _restore_entitlements_from_session_id("sid123")
-        mock_set.assert_called_once_with(entitled_client_mod_ids={"m1", "m2", "m3"})
+        mock_set.assert_called_once_with(
+            market_user_id=None,
+            market_username="user1",
+            entitled_client_mod_ids={"m1", "m2", "m3"},
+        )
 
     def test_no_cached_does_not_set(self):
         from app.infrastructure.mods.mod_manager import (
@@ -860,7 +864,7 @@ class TestModAllowedForApiLoad:
             mm.resolve_mod_directory.return_value = "/tmp/sunbird"
             mock_mm.return_value = mm
             result = _mod_allowed_for_api_load("sunbird")
-        assert result is True
+        assert result is False
 
     def test_sunbird_mod_username_match_returns_true(self):
         from app.infrastructure.mods.mod_manager import _mod_allowed_for_api_load
@@ -893,7 +897,7 @@ class TestModAllowedForApiLoad:
             mm.resolve_mod_directory.return_value = None
             mock_mm.return_value = mm
             result = _mod_allowed_for_api_load("sunbird", "sid123")
-        assert result is True
+        assert result is False
 
     def test_recoverable_error_returns_false(self):
         from app.infrastructure.mods.mod_manager import _mod_allowed_for_api_load
@@ -1033,7 +1037,7 @@ class TestMountOnDiskPrimaryClientMods:
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
         ):
             result = mount_on_disk_primary_client_mods(mm)
-        assert result == ["sunbird"]
+        assert result == []
 
     def test_load_mod_success(self):
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
@@ -1047,7 +1051,7 @@ class TestMountOnDiskPrimaryClientMods:
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
         ):
             result = mount_on_disk_primary_client_mods(mm)
-        assert result == ["sunbird"]
+        assert result == []
 
 
 # ---------------------------------------------------------------------------

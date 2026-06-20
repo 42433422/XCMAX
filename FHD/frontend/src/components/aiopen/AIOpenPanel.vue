@@ -280,6 +280,8 @@ const readyStatus = computed(() => {
   return 'off'
 })
 
+const aiOpenActive = computed(() => remoteControlEnabled.value || cursorEnabled.value)
+
 const featureIntro = [
   { icon: '◎', title: '虚拟光标', desc: 'AI 看见页面，帮你点击和输入' },
   { icon: '⚡', title: '业务调用', desc: '查订单、发消息、调接口' },
@@ -537,7 +539,7 @@ const createKey = async () => {
 }
 
 const quickSetup = async () => {
-  if (readyStatus.value === 'ready') return
+  if (aiOpenActive.value) return
   setupRunning.value = true
   accessResult.value = ''
   try {

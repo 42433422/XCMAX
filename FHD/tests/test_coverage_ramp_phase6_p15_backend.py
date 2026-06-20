@@ -37,9 +37,11 @@ from app.fastapi_routes.mod_store_routes import router as mod_store_router
 def _clear_market_token_caches():
     ma._MARKET_SESSION_TOKENS.clear()
     ma._MARKET_SESSION_REFRESH_TOKENS.clear()
+    ma._ACCOUNT_OVERVIEW_CACHE.clear()
     yield
     ma._MARKET_SESSION_TOKENS.clear()
     ma._MARKET_SESSION_REFRESH_TOKENS.clear()
+    ma._ACCOUNT_OVERVIEW_CACHE.clear()
 
 
 @pytest.fixture

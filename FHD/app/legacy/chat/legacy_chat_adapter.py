@@ -15,6 +15,7 @@ import os
 import threading
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from typing import Any
 
 from openai import OpenAI
@@ -159,6 +160,44 @@ def _append_last_tool_record(
         }
     )
     _LAST_TOOL_TRACE.records = records
+
+
+def reset_last_tool_result() -> None:
+    _LAST_TOOL_RESULT.set(None)
+
+
+def _should_replace_tool_result(
+    previous: dict[str, Any] | None,
+    new_payload: dict[str, Any] | None,
+) -> bool:
+    if not previous:
+        return bool(new_payload)
+    if not new_payload:
+        return False
+    prev_success = previous.get("success") is True
+    new_success = new_payload.get("success") is True
+    if new_success and not prev_success:
+        return True
+    if prev_success and not new_success:
+        return False
+    if new_success and not previous.get("download_url") and new_payload.get("download_url"):
+        return True
+    return False
+
+
+def _record_tool_result(tool_key: str, payload: dict[str, Any] | None) -> None:
+    if not payload or payload.get("requires_token"):
+        return
+    record = {
+        "tool_key": tool_key,
+        "success": payload.get("success"),
+        "payload": payload,
+    }
+    if payload.get("download_url"):
+        record["download_url"] = payload.get("download_url")
+    previous = _LAST_TOOL_RESULT.get()
+    if _should_replace_tool_result(previous, record):
+        _LAST_TOOL_RESULT.set(record)
 
 
 def _tool_key(name: str, args: str) -> str:

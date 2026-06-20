@@ -138,7 +138,7 @@
           </summary>
           <div class="settings-card__body settings-card__body--flush">
             <HostModBridgeView
-              v-if="isAdminConsole || modelPaymentBridgeInstalled"
+              v-if="showModelPaymentBridge"
               embedded
               mod-id="xcagi-model-payment-bridge"
               view="ModelPaymentView"
@@ -1615,6 +1615,11 @@ const selectableExtensionMods = computed(() =>
 const workflowEmployeeMods = computed(() =>
   mods.value.filter((m) => isWorkflowEmployeeModId(String(m.id || ''))),
 );
+
+const showModelPaymentBridge = computed(() => {
+  if (isAdminConsole) return true;
+  return modelPaymentBridgeInstalled.value;
+});
 
 function goHostPackOnboarding() {
   router.push({ path: '/onboarding', query: { step: 'host-pack' } });

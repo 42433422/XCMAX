@@ -61,7 +61,6 @@ from app.domain.neuro.processors.conscious import (
 from app.domain.value_objects import ContactInfo
 from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
 
-
 # ===========================================================================
 # Shared fixtures
 # ===========================================================================
@@ -369,9 +368,10 @@ class TestInitDbAuthBootstrap:
         from app.db.init_db import _seed_default_admin_user
 
         # Create users table with a row
-        from app.db.models.user import Session, User
+        from app.db.models.user import Session as UserSession
+        from app.db.models.user import User
 
-        Base.metadata.create_all(sqlite_engine, tables=[User.__table__, Session.__table__])
+        Base.metadata.create_all(sqlite_engine, tables=[User.__table__, UserSession.__table__])
         # Use ORM insert so column defaults (role, is_active, etc.) are applied.
         SessionLocal = sessionmaker(bind=sqlite_engine)
         with SessionLocal() as session:

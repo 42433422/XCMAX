@@ -46,10 +46,9 @@ import json
 import os
 import re
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
-
 
 # ---------------------------------------------------------------------------
 # 基础工具
@@ -135,51 +134,46 @@ class Finding:
 
 
 def collect_runtime_routes(app) -> list[RuntimeRoute]:
-    from starlette.routing import Mount
-
     try:
         from fastapi.routing import APIRoute
     except ImportError:  # pragma: no cover - FastAPI 必然提供
         from starlette.routing import APIRoute  # type: ignore[no-redef]
 
+    from app.fastapi_routes.openapi_route_compat import iter_effective_routes
     from app.utils.openapi_path import normalize_path_template
 
     out: list[RuntimeRoute] = []
 
-    def walk(routes: Iterable[Any], prefix: str = "") -> None:
-        for r in routes:
-            if isinstance(r, APIRoute):
-                raw = prefix + str(r.path)
-                norm = _norm_path(normalize_path_template(raw))
-                for m in r.methods or ():
-                    method = _norm_method(m)
-                    if method not in _DOC_METHODS:
-                        continue
-                    endpoint = getattr(r, "endpoint", None)
-                    ep_mod = getattr(endpoint, "__module__", "") or ""
-                    ep_qname = (
-                        getattr(endpoint, "__qualname__", "")
-                        or getattr(endpoint, "__name__", "")
-                        or ""
-                    )
-                    fq = f"{ep_mod}.{ep_qname}" if ep_mod and ep_qname else (ep_qname or ep_mod)
-                    out.append(
-                        RuntimeRoute(
-                            method=method,
-                            path=norm,
-                            raw_path=raw,
-                            include_in_schema=bool(getattr(r, "include_in_schema", True)),
-                            endpoint_name=getattr(r, "name", "") or "",
-                            endpoint_qualname=fq,
-                            tags=list(getattr(r, "tags", None) or []),
-                            summary=str(getattr(r, "summary", "") or ""),
-                            operation_id=str(getattr(r, "operation_id", "") or ""),
-                        )
-                    )
-            elif isinstance(r, Mount):
-                walk(r.routes, prefix + str(r.path).rstrip("/"))
-
-    walk(app.routes)
+    for r in iter_effective_routes(app.routes):
+        if not isinstance(r.original_route, APIRoute):
+            continue
+        raw = str(r.path)
+        norm = _norm_path(normalize_path_template(raw))
+        for m in r.methods or ():
+            method = _norm_method(m)
+            if method not in _DOC_METHODS:
+                continue
+            endpoint = r.endpoint
+            ep_mod = getattr(endpoint, "__module__", "") or ""
+            ep_qname = (
+                getattr(endpoint, "__qualname__", "")
+                or getattr(endpoint, "__name__", "")
+                or ""
+            )
+            fq = f"{ep_mod}.{ep_qname}" if ep_mod and ep_qname else (ep_qname or ep_mod)
+            out.append(
+                RuntimeRoute(
+                    method=method,
+                    path=norm,
+                    raw_path=raw,
+                    include_in_schema=bool(r.include_in_schema),
+                    endpoint_name=r.name,
+                    endpoint_qualname=fq,
+                    tags=list(r.tags or []),
+                    summary=str(r.summary or ""),
+                    operation_id=str(r.operation_id or ""),
+                )
+            )
     return out
 
 

@@ -101,9 +101,10 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "cache-dependency-path: frontend/package-lock.json",
         "cache-dependency-path: FHD/frontend/package-lock.json",
     )
-    content = content.replace(
-        "desktop/package-lock.json",
+    content = re.sub(
+        r"(?<!FHD/)desktop/package-lock\.json",
         "FHD/desktop/package-lock.json",
+        content,
     )
     content = content.replace(
         "working-directory: frontend",
@@ -116,6 +117,10 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
     # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory
     content = content.replace("dist/deploy/", "FHD/dist/deploy/")
     content = content.replace("path: dist/deploy\n", "path: FHD/dist/deploy\n")
+    content = content.replace(
+        "path: build/ci-sunbird-artifact/**",
+        "path: FHD/build/ci-sunbird-artifact/**",
+    )
     content = content.replace(
         "          context: .\n          file: ./docker/Dockerfile.fhd-api",
         "          context: FHD\n          file: FHD/docker/Dockerfile.fhd-api",
@@ -151,6 +156,11 @@ def publish_fhd() -> list[str]:
         body = src.read_text(encoding="utf-8").strip()
         if not body or "jobs:" not in body:
             continue
+        body = re.sub(
+            r"^# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root\.py\n",
+            "",
+            body,
+        )
         out_name = WORKFLOW_RENAMES.get(src.name, f"fhd-{src.name}")
         body = _insert_defaults(body, DEFAULTS_FHD)
         body = _prefix_fhd_paths(body, out_name)

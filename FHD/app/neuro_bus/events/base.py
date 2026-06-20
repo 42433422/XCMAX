@@ -28,6 +28,7 @@ class EventMetadata:
     """事件元数据 - 用于链路追踪和监控"""
 
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    correlation_id: str | None = None
     trace_id: str | None = None
     span_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     parent_span_id: str | None = None
@@ -42,6 +43,7 @@ class EventMetadata:
     def to_dict(self) -> dict[str, Any]:
         return {
             "event_id": self.event_id,
+            "correlation_id": self.correlation_id,
             "trace_id": self.trace_id,
             "span_id": self.span_id,
             "parent_span_id": self.parent_span_id,

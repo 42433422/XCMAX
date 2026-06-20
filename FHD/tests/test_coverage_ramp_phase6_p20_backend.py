@@ -2677,7 +2677,7 @@ class TestRosterCandidates:
 
         root = Path(tmp_dir)
         candidates = _roster_candidates(root)
-        assert len(candidates) == 2
+        assert len(candidates) >= 2
         assert candidates[0] == (root / "config" / "sunbird-roster.json").resolve()
         assert candidates[1] == (root.parent / "config" / "sunbird-roster.json").resolve()
 

@@ -24,7 +24,9 @@ spec = importlib.util.spec_from_file_location(
     "sidebar_menu_manager",
     os.path.abspath(_MODULE_PATH),
 )
+assert spec is not None
 _mod = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
 spec.loader.exec_module(_mod)
 
 add_menu_item = _mod.add_menu_item

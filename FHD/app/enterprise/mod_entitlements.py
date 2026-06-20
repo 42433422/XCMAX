@@ -18,6 +18,7 @@ from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+RECOVERABLE_IMPORT_ERRORS = (ImportError, AttributeError, *RECOVERABLE_ERRORS)
 
 # 进程内缓存：登录成功后由 legacy_auth 写入；登出清空
 _cached_market_user_id: int | None = None
