@@ -1,5 +1,6 @@
 # FHD/tests/test_persona/test_persona_repository_impl.py
 """PersonaRepositoryImpl 仓储实现测试。"""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
