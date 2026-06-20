@@ -56,6 +56,25 @@ def _private_db_client() -> TestClient:
     return TestClient(app)
 
 
+def _collect_paths(app: FastAPI) -> list[str]:
+    paths: set[str] = set()
+
+    def _walk(routes):
+        for route in routes:
+            # FastAPI 0.138+ 用 _IncludedRouter 包装 include_router 的路由，
+            # 实际路径在 original_router.routes 中；旧版直接展开为 Route。
+            orig = getattr(route, "original_router", None)
+            if orig is not None:
+                _walk(getattr(orig, "routes", []))
+            else:
+                path = getattr(route, "path", None)
+                if path:
+                    paths.add(path)
+
+    _walk(app.routes)
+    return sorted(paths)
+
+
 # ---------------------------------------------------------------------------
 # wechat compat_routes — _starred_row_for_frontend / _search_hit_for_frontend
 # ---------------------------------------------------------------------------
@@ -1293,6 +1312,6 @@ def test_register_private_db_read_assistant_routes_attaches_router() -> None:
     ).register_private_db_read_assistant_routes
     register(app)
     # 路由应已挂载
-    paths = [r.path for r in app.routes]
+    paths = _collect_paths(app)
     assert any(f"/api/mod/{MOD_ID}/status" in p for p in paths)
     assert any(f"/api/mod/{MOD_ID}/sources" in p for p in paths)

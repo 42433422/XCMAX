@@ -12,6 +12,25 @@ from fastapi import FastAPI
 from app.legacy.routes.legacy_compat import register_legacy_compat_routes
 
 
+def _collect_paths(app: FastAPI) -> list[str]:
+    paths: set[str] = set()
+
+    def _walk(routes):
+        for route in routes:
+            # FastAPI 0.138+ 用 _IncludedRouter 包装 include_router 的路由，
+            # 实际路径在 original_router.routes 中；旧版直接展开为 Route。
+            orig = getattr(route, "original_router", None)
+            if orig is not None:
+                _walk(getattr(orig, "routes", []))
+            else:
+                path = getattr(route, "path", None)
+                if path:
+                    paths.add(path)
+
+    _walk(app.routes)
+    return sorted(paths)
+
+
 @pytest.fixture
 def fresh_app():
     """Create a fresh FastAPI app for each test."""
@@ -30,7 +49,7 @@ class TestRegisterLegacyCompatRoutes:
             ),
         ):
             register_legacy_compat_routes(fresh_app)
-        routes = [r.path for r in fresh_app.routes]
+        routes = _collect_paths(fresh_app)
         assert len(routes) > 0
 
     def test_registers_without_legacy_gap_by_default(self, fresh_app):
@@ -193,6 +212,5 @@ class TestRegisterLegacyCompatRoutes:
         ):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             register_legacy_compat_routes(fresh_app)
-        route_paths = [getattr(r, "path", "") for r in fresh_app.routes]
-        non_empty = [p for p in route_paths if p]
+        non_empty = _collect_paths(fresh_app)
         assert len(non_empty) > 10
