@@ -105,6 +105,8 @@ class PersonaService:
         new_interaction_count = profile.rapport.interaction_count + 1
         new_domain_counts = dict(profile.business_domain_counts)
         # 简化：每轮都计入当前身份域
+        if profile.identity is None:
+            raise ValueError("PersonaProfile.identity 不能为空（更新 rapport 前必须先解析身份）")
         current_domain = profile.identity.business_domain
         new_domain_counts[current_domain] = new_domain_counts.get(current_domain, 0) + 1
 

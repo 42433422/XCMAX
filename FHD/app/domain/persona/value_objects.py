@@ -1,7 +1,8 @@
 """Persona 值对象。"""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 def _clamp01(value: float) -> float:
@@ -47,7 +48,7 @@ class PersonaAxes:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, float]) -> "PersonaAxes":
+    def from_dict(cls, d: dict[str, float]) -> PersonaAxes:
         return cls(
             warmth=d["warmth"],
             detail=d["detail"],
@@ -55,7 +56,7 @@ class PersonaAxes:
             structure=d["structure"],
         )
 
-    def clamp(self, **offsets: float) -> "PersonaAxes":
+    def clamp(self, **offsets: float) -> PersonaAxes:
         """对指定轴施加偏移并 clamp 到 [0,1]，返回新实例。"""
         return PersonaAxes(
             warmth=_clamp01(self.warmth + offsets.get("warmth_offset", 0.0)),
@@ -89,7 +90,7 @@ class PersonaIdentity:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, str]) -> "PersonaIdentity":
+    def from_dict(cls, d: dict[str, str]) -> PersonaIdentity:
         return cls(
             name=d["name"],
             brief=d.get("brief", ""),
@@ -134,7 +135,7 @@ class RapportScore:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, float | int]) -> "RapportScore":
+    def from_dict(cls, d: dict[str, float | int]) -> RapportScore:
         return cls(
             score=float(d.get("score", 0.3)),
             interaction_count=int(d.get("interaction_count", 0)),

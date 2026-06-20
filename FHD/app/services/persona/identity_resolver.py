@@ -1,9 +1,9 @@
 """身份解析器：行业映射 + 业务漂移 + 关系深度演进。"""
+
 from __future__ import annotations
 
-from app.domain.persona.entities import PersonaProfile, _INDUSTRY_IDENTITY_MAP
+from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.value_objects import PersonaIdentity, RapportScore
-
 
 # 业务域 → 身份名映射（用于漂移目标解析）
 _DOMAIN_IDENTITY_NAME_MAP: dict[str, str] = {
@@ -46,9 +46,13 @@ class IdentityResolver:
         """判断是否需要业务漂移。"""
         if not profile.business_domain_counts:
             return False
+        if profile.identity is None:
+            return False
         current_domain = profile.identity.business_domain
         # 找出操作最多的业务域
-        top_domain = max(profile.business_domain_counts, key=profile.business_domain_counts.get)
+        top_domain = max(
+            profile.business_domain_counts, key=lambda k: profile.business_domain_counts.get(k, 0)
+        )
         if top_domain == current_domain:
             return False
         top_count = profile.business_domain_counts[top_domain]
@@ -65,7 +69,11 @@ class IdentityResolver:
         """解析漂移目标身份。"""
         if not self.should_drift(profile):
             return None
-        top_domain = max(profile.business_domain_counts, key=profile.business_domain_counts.get)
+        if profile.identity is None:
+            return None
+        top_domain = max(
+            profile.business_domain_counts, key=lambda k: profile.business_domain_counts.get(k, 0)
+        )
         name = _DOMAIN_IDENTITY_NAME_MAP.get(top_domain, f"{top_domain}管家")
         return PersonaIdentity(
             name=name,

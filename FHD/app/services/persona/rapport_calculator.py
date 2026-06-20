@@ -1,4 +1,5 @@
 """关系深度计算器。"""
+
 from __future__ import annotations
 
 from app.domain.persona.value_objects import RapportScore

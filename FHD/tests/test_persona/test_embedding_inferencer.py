@@ -1,4 +1,5 @@
 """L2 embedding 推断器测试。"""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -7,7 +8,7 @@ import pytest
 
 from app.domain.persona.value_objects import PersonaAxes
 from app.infrastructure.persona.embedding_client import EmbeddingClient
-from app.services.persona.embedding_inferencer import EmbeddingInferResult, EmbeddingInferencer
+from app.services.persona.embedding_inferencer import EmbeddingInferencer, EmbeddingInferResult
 
 
 class TestEmbeddingInferencer:

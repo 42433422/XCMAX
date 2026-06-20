@@ -48,7 +48,7 @@ class AxesFuser:
         """
         if l2 is None and l3 is None:
             base = l1
-        elif l3 is None:
+        elif l2 is not None and l3 is None:
             base = PersonaAxes(
                 warmth=self.WEIGHT_L1_WITH_L2 * l1.warmth + self.WEIGHT_L2_WITH_L1 * l2.warmth,
                 detail=self.WEIGHT_L1_WITH_L2 * l1.detail + self.WEIGHT_L2_WITH_L1 * l2.detail,
@@ -57,7 +57,7 @@ class AxesFuser:
                 structure=self.WEIGHT_L1_WITH_L2 * l1.structure
                 + self.WEIGHT_L2_WITH_L1 * l2.structure,
             )
-        else:
+        elif l2 is not None and l3 is not None:
             base = PersonaAxes(
                 warmth=self.WEIGHT_L1_FULL * l1.warmth
                 + self.WEIGHT_L2_FULL * l2.warmth
@@ -72,6 +72,9 @@ class AxesFuser:
                 + self.WEIGHT_L2_FULL * l2.structure
                 + self.WEIGHT_L3_FULL * l3.structure,
             )
+        else:
+            # l2 is None but l3 is not None: 退化到 L1 only（L3 依赖 L2 提供模式）
+            base = l1
 
         # 软偏移：用户信号弱时才应用 rapport 偏移
         if signal_strength < self.SIGNAL_STRENGTH_THRESHOLD:

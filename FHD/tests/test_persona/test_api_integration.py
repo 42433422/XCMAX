@@ -1,5 +1,6 @@
 # FHD/tests/test_persona/test_api_integration.py
 """api.py persona 集成测试。"""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock

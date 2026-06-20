@@ -1,4 +1,5 @@
 """PersonaProfile 聚合根测试。"""
+
 from __future__ import annotations
 
 import pytest
@@ -75,7 +76,12 @@ class TestPersonaProfile:
                 "industry": "服务业",
             },
             "axes": {"warmth": 0.7, "detail": 0.4, "proactivity": 0.6, "structure": 0.8},
-            "rapport": {"score": 0.5, "interaction_count": 100, "business_depth": 0.4, "emotion_signal_count": 10},
+            "rapport": {
+                "score": 0.5,
+                "interaction_count": 100,
+                "business_depth": 0.4,
+                "emotion_signal_count": 10,
+            },
         }
         profile = PersonaProfile.from_dict(d)
         assert profile.user_id == "user-1"

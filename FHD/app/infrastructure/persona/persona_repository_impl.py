@@ -167,12 +167,15 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
 
     def _profile_to_model(self, profile: PersonaProfile) -> PersonaProfileModel:
         """领域对象 → DB 模型。"""
+        identity = profile.identity
+        if identity is None:
+            raise ValueError("PersonaProfile.identity 不能为空（持久化前必须先解析身份）")
         return PersonaProfileModel(
             user_id=profile.user_id,
-            industry=profile.identity.industry,
-            identity_name=profile.identity.name,
-            identity_brief=profile.identity.brief,
-            business_domain=profile.identity.business_domain,
+            industry=identity.industry,
+            identity_name=identity.name,
+            identity_brief=identity.brief,
+            business_domain=identity.business_domain,
             rapport_score=profile.rapport.score,
             warmth=profile.axes.warmth,
             detail=profile.axes.detail,

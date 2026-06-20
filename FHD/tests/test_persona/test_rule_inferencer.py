@@ -1,4 +1,5 @@
 """L1 规则推断器测试。"""
+
 from __future__ import annotations
 
 import pytest

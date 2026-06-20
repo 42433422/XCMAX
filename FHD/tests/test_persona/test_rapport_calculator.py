@@ -1,4 +1,5 @@
 """Rapport 计算器测试。"""
+
 from __future__ import annotations
 
 import pytest

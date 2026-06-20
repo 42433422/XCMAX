@@ -1,4 +1,5 @@
 """L3 LLM 推断器测试。"""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.domain.persona.value_objects import PersonaAxes
-from app.services.persona.llm_inferencer import LlmInferResult, LlmInferencer
+from app.services.persona.llm_inferencer import LlmInferencer, LlmInferResult
 
 
 class TestLlmInferencer:
@@ -21,13 +22,15 @@ class TestLlmInferencer:
                 "choices": [
                     {
                         "message": {
-                            "content": json.dumps({
-                                "warmth": 0.7,
-                                "detail": 0.4,
-                                "proactivity": 0.6,
-                                "structure": 0.8,
-                                "reason": "用户倾向口语化交流",
-                            })
+                            "content": json.dumps(
+                                {
+                                    "warmth": 0.7,
+                                    "detail": 0.4,
+                                    "proactivity": 0.6,
+                                    "structure": 0.8,
+                                    "reason": "用户倾向口语化交流",
+                                }
+                            )
                         }
                     }
                 ]
