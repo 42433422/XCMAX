@@ -9,6 +9,33 @@ data class MobileEnvelope<T>(
     val data: T? = null,
 )
 
+data class AiCircleComment(
+    val id: Int = 0,
+    val author_name: String = "",
+    val body: String = "",
+    val created_at: String = "",
+)
+
+data class AiCirclePost(
+    val id: Int = 0,
+    val author_kind: String = "",
+    val author_user_id: Int? = null,
+    val employee_id: String? = null,
+    val author_name: String = "",
+    val author_avatar: String? = null,
+    val body: String = "",
+    val source_type: String = "",
+    val created_at: String = "",
+    val like_count: Int = 0,
+    val liked_by_me: Boolean = false,
+    val comments: List<AiCircleComment> = emptyList(),
+)
+
+data class AiCircleListData(
+    val items: List<AiCirclePost> = emptyList(),
+    val count: Int = 0,
+)
+
 data class UserDto(
     val id: Int = 0,
     val username: String = "",

@@ -1800,6 +1800,49 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
+    suspend fun loadAiCirclePosts(): Result<List<com.xiuci.xcagi.mobile.core.model.AiCirclePost>> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().aiCirclePosts()
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "交流圈加载失败" }))
+        else Result.success(res.data?.items ?: emptyList())
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun createAiCirclePost(body: String): Result<Unit> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().createAiCirclePost(com.xiuci.xcagi.mobile.core.network.AiCircleTextBody(body))
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "发布失败" }))
+        else Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun toggleAiCircleLike(postId: Int): Result<Unit> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().toggleAiCircleLike(postId)
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "点赞失败" }))
+        else Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun addAiCircleComment(postId: Int, body: String): Result<Unit> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().addAiCircleComment(
+            postId,
+            com.xiuci.xcagi.mobile.core.network.AiCircleTextBody(body),
+        )
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "评论失败" }))
+        else Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     /** 拉取市场钱包余额与会员信息（移动端"我"页面展示）。 */
     suspend fun fetchWalletBalance(): Result<WalletBalanceDto> = try {
         syncRouterFromStore()

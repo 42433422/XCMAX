@@ -2,6 +2,7 @@ package com.xiuci.xcagi.mobile.core.network
 
 import com.google.gson.JsonObject
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
+import com.xiuci.xcagi.mobile.core.model.AiCircleListData
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
@@ -83,6 +84,7 @@ data class SyncPushBody(val items: List<SyncPushItem> = emptyList())
 data class ImDirectBody(val peer_user_id: Int)
 
 data class ImSendBody(val body: String)
+data class AiCircleTextBody(val body: String)
 
 /**
  * 钱包余额信息（移动端"我"页面展示）。
@@ -224,6 +226,21 @@ interface FhdApi {
 
     @GET(ApiEndpoints.NAV_MENU)
     suspend fun mobileNavMenu(): MobileEnvelope<NavMenuData>
+
+    @GET(ApiEndpoints.CIRCLE_POSTS)
+    suspend fun aiCirclePosts(@Query("limit") limit: Int = 50): MobileEnvelope<AiCircleListData>
+
+    @POST(ApiEndpoints.CIRCLE_POSTS)
+    suspend fun createAiCirclePost(@Body body: AiCircleTextBody): MobileEnvelope<Map<String, Int>>
+
+    @POST(ApiEndpoints.CIRCLE_LIKE)
+    suspend fun toggleAiCircleLike(@Path("postId") postId: Int): MobileEnvelope<Map<String, Boolean>>
+
+    @POST(ApiEndpoints.CIRCLE_COMMENTS)
+    suspend fun addAiCircleComment(
+        @Path("postId") postId: Int,
+        @Body body: AiCircleTextBody,
+    ): MobileEnvelope<Map<String, Int>>
 
     @GET(ApiEndpoints.ADMIN_HOME)
     suspend fun mobileAdminHome(): MobileEnvelope<AdminMobileHomeData>
