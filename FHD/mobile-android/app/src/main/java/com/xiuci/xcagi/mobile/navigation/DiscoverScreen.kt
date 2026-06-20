@@ -26,6 +26,7 @@ fun DiscoverScreen(
     onScan: () -> Unit,
     onOcr: () -> Unit,
     onAiCircle: () -> Unit,
+    onNotifications: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         WeTopBar(
@@ -79,7 +80,7 @@ fun DiscoverScreen(
                         iconBg = MaterialTheme.colorScheme.errorContainer,
                         showArrow = true,
                         showDivider = false,
-                        onClick = { /* notifications */ },
+                        onClick = onNotifications,
                     )
                 }
             }

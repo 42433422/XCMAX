@@ -9,5 +9,5 @@
   },
   "pattern": "open_risk_to_audited_closed_item",
   "schema_version": 1,
-  "summary": "Do not hide stale loop risks in prompts; close them with an auditable resolution record after the real fix lands."
+  "summary": "不要在提示中隐藏陈旧的循环风险；真实修复落地后用可审计的解决记录关闭它们。"
 }

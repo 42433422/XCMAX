@@ -24,6 +24,9 @@ export class ApiEndpoints {
 
   // 审批
   static readonly APPROVAL_REQUESTS: string = `${ApiEndpoints.BASE}/approval/requests`;
+  static readonly APPROVAL_DETAIL: string = `api/approval/requests/{id}`;
+  static readonly APPROVAL_APPROVE: string = `api/approval/requests/{id}/approve`;
+  static readonly APPROVAL_REJECT: string = `api/approval/requests/{id}/reject`;
 
   // 客户
   static readonly CUSTOMERS: string = `${ApiEndpoints.BASE}/customers`;

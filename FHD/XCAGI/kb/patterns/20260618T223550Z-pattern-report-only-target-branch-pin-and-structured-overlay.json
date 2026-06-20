@@ -8,5 +8,5 @@
   },
   "pattern": "report_only_target_branch_pin_and_structured_overlay_failure",
   "schema_version": 1,
-  "summary": "When review/QA delegates run in separate branches, always pin the true target branch and make local validation setup failures structured and auditable."
+  "summary": "当审查/QA 委派在独立分支运行时，始终固定真实目标分支，并使本地验证设置失败结构化且可审计。"
 }

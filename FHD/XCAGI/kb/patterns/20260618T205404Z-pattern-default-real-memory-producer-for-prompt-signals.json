@@ -8,5 +8,5 @@
   },
   "pattern": "default_real_memory_producer_for_prompt_signals",
   "schema_version": 1,
-  "summary": "Prompt signal collectors should read real SSOT memory by default when the production caller has no injection point."
+  "summary": "当生产调用方没有注入点时，提示信号收集器应默认读取真实 SSOT 记忆。"
 }

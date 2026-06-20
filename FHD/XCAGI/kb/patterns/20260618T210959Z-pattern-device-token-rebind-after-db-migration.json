@@ -8,5 +8,5 @@
   },
   "pattern": "device_token_rebind_after_db_migration",
   "schema_version": 1,
-  "summary": "When moving controller API DBs, rebind long-lived device tokens to the configured device id."
+  "summary": "迁移控制器 API DB 时，需将长期 device token 重新绑定到配置的 device id。"
 }

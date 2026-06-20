@@ -44,6 +44,7 @@ import com.xiuci.xcagi.mobile.core.network.RelayConfirmCodeBody
 import com.xiuci.xcagi.mobile.core.network.RelayTaskCreateBody
 import com.xiuci.xcagi.mobile.core.network.RegisterRequest
 import com.xiuci.xcagi.mobile.core.network.RejectBody
+import com.xiuci.xcagi.mobile.core.network.WalletBalanceDto
 import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.network.ServerMode
@@ -162,6 +163,23 @@ class XcagiRepository @Inject constructor(
     }
 
     private suspend fun bearer(): String = authHeader()
+
+    /**
+     * LLM 对话专用鉴权头。
+     *
+     * 后端 /api/ai/chat/stream 最终会调用 MODstore LLM 上游，MODstore 只认 market token。
+     * 移动端默认的 FHD Mobile JWT 无法直接调用 MODstore，后端需要从 session 表查 market token，
+     * 查不到会 fallback 到 latest_session_market_token()（有越权风险）。
+     *
+     * 因此移动端 chat 请求必须优先携带 market token，让后端走透传路径，
+     * 仅在 market token 缺失时才 fallback 到 FHD JWT（后端会尝试 session 查找）。
+     */
+    private suspend fun authHeaderForChat(): String {
+        val market = sessionStore.marketAccessToken()
+        if (market.isNotBlank()) return "Bearer $market"
+        val fhd = sessionStore.fhdAccessFlow.first()
+        return if (fhd.isNotBlank()) "Bearer $fhd" else ""
+    }
 
     suspend fun hasNativeFhdAuth(): Boolean = sessionStore.fhdAccessFlow.first().isNotBlank()
 
@@ -1006,11 +1024,21 @@ class XcagiRepository @Inject constructor(
             }
             preferCloudIfLanUnreachable()
         }
+        // 构造上下文：取最近6条对话（与桌面端 useChatRequest.ts slice(-6) 一致）
+        val recentMessages = db.chatDao().getBySession(sessionId)
+            .takeLast(6)
+            .map { row ->
+                mapOf(
+                    "role" to (row.role.ifBlank { "user" }),
+                    "content" to row.text.take(500),
+                )
+            }
         sseChat.streamChat(
             message,
-            authHeader(),
+            authHeaderForChat(),
             userId(),
             useCloud = useCloud,
+            recentMessages = recentMessages,
             onToken = { t ->
                 acc.append(t)
                 onToken(t)
@@ -1552,6 +1580,14 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    /** 返回最近一次缓存写入时间戳（毫秒）。无缓存返回 0。用于 TTL 判断。 */
+    suspend fun cachedModInfosAt(): Long =
+        try {
+            db.modInfoCacheDao().getAll().maxOfOrNull { it.cachedAt } ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
+
     /** 网络刷新员工列表并写入 Room 缓存。网络失败或返回空列表时保留旧缓存。 */
     suspend fun refreshAndCacheModInfos(adminMode: Boolean): Result<List<ModInfo>> {
         val result = if (adminMode) loadAdminModInfos() else loadModInfos()
@@ -1626,6 +1662,37 @@ class XcagiRepository @Inject constructor(
         else Result.success(res.data ?: emptyMap())
     } catch (e: Exception) {
         Result.failure(e)
+    }
+
+    /** 拉取市场钱包余额与会员信息（移动端"我"页面展示）。 */
+    suspend fun fetchWalletBalance(): Result<WalletBalanceDto> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().mobileWalletBalance()
+        if (!res.success) Result.failure(Exception(res.message ?: "余额加载失败"))
+        else Result.success(res.data ?: WalletBalanceDto())
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    /** 将钱包余额序列化为 JSON 写入 DataStore（冷启动秒出用）。 */
+    suspend fun saveCachedWalletBalance(dto: WalletBalanceDto) {
+        try {
+            sessionStore.setWalletBalanceJson(gson.toJson(dto))
+        } catch (_: Exception) {
+            // 缓存写入失败不阻断 UI
+        }
+    }
+
+    /** 从 DataStore 读取缓存的钱包余额 JSON 并反序列化。无缓存返回 null。 */
+    suspend fun loadCachedWalletBalance(): WalletBalanceDto? {
+        val json = sessionStore.walletBalanceJson()
+        if (json.isBlank()) return null
+        return try {
+            gson.fromJson(json, WalletBalanceDto::class.java)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun marketCatalog(): Result<List<ListItem>> = try {
@@ -1784,6 +1851,7 @@ class XcagiRepository @Inject constructor(
                     name = it.textValue("name").ifBlank { it.textValue("label") },
                 )
             },
+            avatar_url = textValue("avatar_url").ifBlank { null },
             frontend_menu = menus,
             menu_overrides = overrides,
             workflow_employees = workflowEmployees,
@@ -1810,6 +1878,7 @@ class XcagiRepository @Inject constructor(
             market_material_category = textValue("market_material_category"),
             market_license_scope = textValue("market_license_scope"),
             market_security_level = textValue("market_security_level"),
+            market_avatar = textValue("market_avatar").ifBlank { null },
         )
     }
 

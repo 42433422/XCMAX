@@ -15,8 +15,8 @@ export interface MobileRefreshRequest {
 }
 
 export interface ModStoreCatalogPayload {
-  installed: Record<string, any>[];
-  available: Record<string, any>[];
+  installed: Record<string, Object>[];
+  available: Record<string, Object>[];
   indexed_count: number;
 }
 
@@ -27,7 +27,7 @@ export interface ModStoreCatalogResponse {
 
 export interface ModStoreDependenciesResponse {
   success?: boolean;
-  data: Record<string, any>;
+  data: Record<string, Object>;
 }
 
 export interface ModStoreDetailData {
@@ -36,8 +36,8 @@ export interface ModStoreDetailData {
   version: string;
   author: string;
   description: string;
-  statistics?: any | any;
-  ratings?: any[];
+  statistics?: Object;
+  ratings?: Object[];
   rating_count?: number;
   source: string;
   catalog_base_url: string;
@@ -51,16 +51,16 @@ export interface ModStoreDetailResponse {
 export interface ModStoreInstallResult {
   success: boolean;
   message: string;
-  data?: Record<string, any> | any;
+  data?: Object;
 }
 
 export interface ModStoreListResponse {
   success?: boolean;
-  data: Record<string, any>[];
+  data: Record<string, Object>[];
 }
 
 export interface ModStoreMarketCatalogPayload {
-  items: Record<string, any>[];
+  items: Record<string, Object>[];
   total: number;
   collection?: string;
 }
@@ -77,19 +77,19 @@ export interface ModStoreNotImplementedResponse {
 
 export interface ModStoreRebuildResponse {
   success?: boolean;
-  data: Record<string, any>;
-  message?: string | any;
+  data: Record<string, Object>;
+  message?: string | Object;
 }
 
 export interface ModStoreSimpleResponse {
   success: boolean;
-  message?: string | any;
-  data?: Record<string, any> | any;
+  message?: string | Object;
+  data?: Object;
 }
 
 export interface ModStoreUpdatesResponse {
   success?: boolean;
-  data: Record<string, any>;
+  data: Record<string, Object>;
 }
 
 export interface PairingExchangeBody {
@@ -122,7 +122,7 @@ export interface SyncPushItem {
   entity_type: string;
   entity_id: string;
   operation?: string;
-  payload?: Record<string, any>;
+  payload?: Record<string, Object>;
 }
 
 export interface UserRoleAssign {

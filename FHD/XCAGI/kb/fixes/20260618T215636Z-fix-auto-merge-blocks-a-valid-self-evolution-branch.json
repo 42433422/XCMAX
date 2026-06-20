@@ -9,7 +9,7 @@
     ],
     "source": "codex_direct_fix"
   },
-  "root_cause": "The dynamic low-risk scope allowed self-maintenance code/tests but did not allow the new fixes/patterns/metrics knowledge-base paths, contradicting the self-evolution requirement.",
+  "root_cause": "动态低风险范围允许自维护代码/测试，但未允许新的 fixes/patterns/metrics 知识库路径，与自演化需求相矛盾。",
   "schema_version": 1,
-  "symptom": "Auto-merge blocks a valid self-evolution branch because employee wrote FHD/XCAGI/kb/fixes/*.md as required"
+  "symptom": "自动合并阻塞了合法的自演化分支，因为 employee 按要求写入了 FHD/XCAGI/kb/fixes/*.md"
 }

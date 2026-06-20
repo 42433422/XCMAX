@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileEmptyState
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
@@ -80,7 +82,6 @@ internal data class AiEmployeeProfile(
     val avatarUrl: String? = null,
 ) {
     val key: String = "$modId:$employeeId"
-    val avatarText: String = name.firstOrNull()?.toString() ?: "AI"
     val sourceLabel: String =
         when {
             marketPkgId.isNotBlank() -> "AI市场 · ${modName.ifBlank { "已安装员工" }}"
@@ -148,7 +149,7 @@ private fun AiEmployeeProfile.abilityLabels(): List<String> {
     return labels.take(4)
 }
 
-/** 员工头像颜色（与列表页/对话页统一，硬编码保证一致性，非 Composable 可在任意位置调用） */
+/** AI 圈预览标签色；头像已统一使用图片资源。 */
 internal fun aiEmployeeAvatarColor(key: String): Color {
     val colors = listOf(
         Color(0xFF3370FF),
@@ -170,7 +171,7 @@ fun AiCircleScreen(
 ) {
     val modInfos by vm.modInfos.collectAsState()
     val displayName by vm.displayName.collectAsState()
-    val avatarUri by vm.avatarUri.collectAsState()
+    val avatarSource by vm.userAvatarSource.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
 
     LaunchedEffect(Unit) { vm.refreshModInfos() }
@@ -194,7 +195,7 @@ fun AiCircleScreen(
                 AiCircleHeader(
                     employees = employees,
                     displayName = displayName.ifBlank { "当前账号" },
-                    avatarUri = avatarUri,
+                    avatarUri = avatarSource,
                 )
             }
             itemsIndexed(
@@ -259,13 +260,10 @@ private fun AiCircleHeader(
                     modifier = Modifier.padding(end = 10.dp),
                 )
                 LocalProfileAvatar(
-                    displayName = displayName,
-                    avatarUri = avatarUri,
+                    imageSource = avatarUri,
                     modifier = Modifier.border(2.dp, Color.White, MaterialTheme.shapes.extraSmall),
                     size = 50.dp,
                     shape = MaterialTheme.shapes.extraSmall,
-                    containerColor = Color(0xFF1FA67A),
-                    contentColor = Color.White,
                 )
             }
         }
@@ -758,20 +756,13 @@ private fun AiProfileActionRow(
 
 @Composable
 private fun AiEmployeeAvatar(employee: AiEmployeeProfile, size: androidx.compose.ui.unit.Dp) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(aiEmployeeAvatarColor(employee.key)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            employee.avatarText,
-            style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-        )
-    }
+    AppAvatar(
+        imageSource = employee.avatarUrl,
+        fallback = AppAvatarFallback.AI_EMPLOYEE,
+        size = size,
+        shape = CircleShape,
+        contentDescription = employee.name,
+    )
 }
 
 @Composable

@@ -1,13 +1,18 @@
 import { MobileApiClient } from '../api/MobileApiClient';
-import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, ModInfo, UserDto } from '../models/MobileModels';
-import { buildConversations, buildEmployees, findEmployee } from '../state/AppDataBuilder';
+import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, DutyRosterData, ModInfo, UserDto } from '../models/MobileModels';
+import { buildConversations, buildDutyRoster, buildEmployees, findEmployee } from '../state/AppDataBuilder';
 import { NotificationManager } from '../state/NotificationManager';
+import { DutyRosterPage } from './DutyRosterPage';
 import { LoginPage } from './LoginPage';
 import { MainShell } from './MainShell';
 import { SettingsPage } from './SettingsPage';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:5000/';
 const TAB_MESSAGES = 0;
+
+function emptyDutyRoster(): DutyRosterData {
+  return { areas: [], totalPlanned: 0, totalOnDuty: 0 };
+}
 
 @Entry
 @Component
@@ -38,10 +43,12 @@ struct Index {
   @Provide mods: ModInfo[] = [];
   @Provide employees: AiEmployeeProfile[] = [];
   @Provide conversations: ConversationSummary[] = buildConversations([]);
+  @Provide dutyRoster: DutyRosterData = emptyDutyRoster();
   // 设置模块状态：对齐 Android AppViewModel.biometricEnabled / themeMode
   @Provide biometricEnabled: boolean = false;
   @Provide themeMode: string = 'system';
   @Provide showSettings: boolean = false;
+  @State showDutyRoster: boolean = false;
 
   build() {
     Column() {
@@ -53,7 +60,8 @@ struct Index {
             onStartEmployeeChat: (key: string) => this.startEmployeeChat(key),
             onRefreshHome: () => this.refreshHome(),
             onLogout: () => this.logout(),
-            onOpenSettings: () => this.openSettings()
+            onOpenSettings: () => this.openSettings(),
+            onOpenDutyRoster: () => this.openDutyRoster()
           });
           if (this.showSettings) {
             SettingsPage({
@@ -62,6 +70,12 @@ struct Index {
               onSetThemeMode: (mode: string) => this.setThemeMode(mode),
               onSubmitFeedback: (message: string, onDone: () => void) => this.submitFeedback(message, onDone),
               onCheckForUpdate: () => this.checkForUpdate()
+            });
+          }
+          if (this.showDutyRoster) {
+            DutyRosterPage({
+              onBack: () => this.closeDutyRoster(),
+              onStartEmployeeChat: (key: string) => this.startEmployeeChatFromDuty(key)
             });
           }
         }
@@ -148,6 +162,7 @@ struct Index {
     this.mods = mods;
     this.employees = buildEmployees(mods);
     this.conversations = buildConversations(this.employees);
+    this.dutyRoster = buildDutyRoster(mods);
   }
   private async refreshHome(): Promise<void> {
     if (this.loading) return;
@@ -214,8 +229,9 @@ struct Index {
     this.accessToken = ''; this.sessionId = ''; this.api.setAccessToken('');
     this.loggedIn = false; this.selectedTab = TAB_MESSAGES; this.selectedEmployeeKey = '';
     this.activeConversationId = ''; this.mods = []; this.employees = [];
-    this.conversations = buildConversations([]); this.statusText = '已退出企业账号';
-    this.showSettings = false; this.notifier.unregister();
+    this.conversations = buildConversations([]); this.dutyRoster = emptyDutyRoster();
+    this.statusText = '已退出企业账号';
+    this.showSettings = false; this.showDutyRoster = false; this.notifier.unregister();
   }
   private errorMessage(err: object): string { return cleanText((err as Error).message, '未知错误'); }
 
@@ -225,6 +241,18 @@ struct Index {
   }
   private closeSettings(): void {
     this.showSettings = false;
+  }
+
+  // ── 员工入岗 / 值班编制 ──
+  private openDutyRoster(): void {
+    this.showDutyRoster = true;
+  }
+  private closeDutyRoster(): void {
+    this.showDutyRoster = false;
+  }
+  private startEmployeeChatFromDuty(employeeKey: string): void {
+    this.showDutyRoster = false;
+    this.startEmployeeChat(employeeKey);
   }
   private setBiometricEnabled(enabled: boolean): void {
     this.biometricEnabled = enabled;

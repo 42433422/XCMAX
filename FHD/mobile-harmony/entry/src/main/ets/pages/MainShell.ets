@@ -23,6 +23,7 @@ export struct MainShell {
   onRefreshHome: () => void = () => {};
   onLogout: () => void = () => {};
   onOpenSettings: () => void = () => {};
+  onOpenDutyRoster: () => void = () => {};
 
   build() {
     this.MainShell();
@@ -43,7 +44,9 @@ export struct MainShell {
           onStartEmployeeChat: (employeeKey: string) => this.onStartEmployeeChat(employeeKey)
         });
       } else if (this.selectedTab === TAB_DISCOVER) {
-        DiscoverPage();
+        DiscoverPage({
+          onOpenDutyRoster: () => this.onOpenDutyRoster()
+        });
       } else {
         ProfilePage({
           onRefreshHome: () => this.onRefreshHome(),

@@ -82,7 +82,7 @@ async function reviewGovernanceAudit() {
     await refresh()
   } catch (err: unknown) {
     const e = err as { message?: unknown; detail?: unknown }
-    governanceReviewError.value = String(e?.message || e?.detail || err || '治理审计复核失败')
+    governanceReviewError.value = String(e?.message || e?.detail || err || '操作审计复核失败')
   } finally {
     governanceReviewBusy.value = false
   }
@@ -114,7 +114,7 @@ const activeGateItems = computed(() =>
     .map((item) => asRecord(item))
     .filter((item) => firstText(item.key, item.label)),
 )
-const runtimeSchemaVersion = computed(() => firstText(asRecord(raw.value).schema_version, 'unknown'))
+const runtimeSchemaVersion = computed(() => firstText(asRecord(raw.value).schema_version, '未知'))
 const runtimeContract = computed<AnyRecord>(() => asRecord(asRecord(raw.value).contract))
 const runtimeContractValidation = computed<AnyRecord>(() => asRecord(asRecord(raw.value).contract_validation))
 const runtimeContractRequiredFields = computed(() =>
@@ -266,7 +266,7 @@ const governanceAuditLastSummary = computed(() => {
   const skipped = Number(summary.skipped)
   const failed = Number(summary.failed)
   if ([onboarded, skipped, failed].every((n) => Number.isFinite(n))) {
-    return `onboarded ${onboarded} · skipped ${skipped} · failed ${failed}`
+    return `已上岗 ${onboarded} · 已跳过 ${skipped} · 失败 ${failed}`
   }
   return ''
 })
@@ -276,9 +276,9 @@ function governanceSummaryText(row: AnyRecord): string {
   const skipped = Number(summary.skipped)
   const failed = Number(summary.failed)
   if ([onboarded, skipped, failed].every((n) => Number.isFinite(n))) {
-    return `onboarded ${onboarded} · skipped ${skipped} · failed ${failed}`
+    return `已上岗 ${onboarded} · 跳过 ${skipped} · 失败 ${failed}`
   }
-  return firstText(row.status, row.ok === false ? 'failed' : 'success')
+  return firstText(row.status, row.ok === false ? '失败' : '成功')
 }
 const uiBridgeDutyRosterLocation = computed<RouteLocationRaw | null>(() => {
   if (!router.hasRoute('duty-roster-graph')) return null
@@ -329,7 +329,7 @@ function collectEmployeeMentions(value: unknown, out: Map<string, { id: string; 
   if (typeof value === 'string') {
     const match = value.match(/\b[a-z][a-z0-9]+(?:-[a-z0-9]+)+\b/g) || []
     for (const id of match) {
-      if (!out.has(id)) out.set(id, { id, stage: 'mentioned', source })
+      if (!out.has(id)) out.set(id, { id, stage: '提及', source })
     }
     return
   }
@@ -343,7 +343,7 @@ function collectEmployeeMentions(value: unknown, out: Map<string, { id: string; 
   if (id && id.includes('-')) {
     out.set(id, {
       id,
-      stage: firstText(row.step, row.stage, row.role, row.phase, row.status, 'loop'),
+      stage: firstText(row.step, row.stage, row.role, row.phase, row.status, '循环'),
       source,
     })
   }
@@ -363,11 +363,11 @@ const structuredParticipants = computed(() =>
       const role = firstText(row.role_label, row.role)
       const stage = asArray(row.stage_labels).map((x) => asString(x)).filter(Boolean).join(' / ')
         || asArray(row.stages).map((x) => asString(x)).filter(Boolean).join(' / ')
-        || 'loop'
+        || '循环'
       return {
         id,
         stage: role ? `${role} · ${stage}` : stage,
-        source: asArray(row.sources).map((x) => asString(x)).filter(Boolean).join(' / ') || 'participants',
+        source: asArray(row.sources).map((x) => asString(x)).filter(Boolean).join(' / ') || '参与员工',
         rosterLabel: firstText(row.roster_label, row.roster_status),
         rosterStatus: firstText(row.roster_status),
         dutyRegisteredLabel: firstText(row.duty_registered_label),
@@ -381,10 +381,10 @@ const structuredParticipants = computed(() =>
 const teamLanes = computed(() => {
   if (structuredParticipants.value.length) return structuredParticipants.value.slice(0, 12)
   const found = new Map<string, { id: string; stage: string; source: string; rosterLabel?: string; rosterStatus?: string; dutyRegisteredLabel?: string; dutyRegistered?: unknown; department?: string }>()
-  collectEmployeeMentions(evidence.value.steps_by_open_run, found, 'open run')
-  collectEmployeeMentions(evidence.value.recent_rows, found, 'ledger')
-  collectEmployeeMentions(memory.value.last_run, found, 'last run')
-  collectEmployeeMentions(memory.value.recent_runs, found, 'memory')
+  collectEmployeeMentions(evidence.value.steps_by_open_run, found, '运行中')
+  collectEmployeeMentions(evidence.value.recent_rows, found, '记录')
+  collectEmployeeMentions(memory.value.last_run, found, '最近运行')
+  collectEmployeeMentions(memory.value.recent_runs, found, '历史')
   return Array.from(found.values()).slice(0, 12)
 })
 
@@ -399,7 +399,7 @@ const runTimeline = computed(() => {
     items.push({
       phase: 'policy',
       step: 'risk_gate',
-      label: 'Risk / Merge Gate',
+      label: '风险检查',
       status: firstText(md.action, md.reason),
       reason: firstText(md.reason),
       qa_verdict: firstText(md.qa_verdict),
@@ -442,9 +442,9 @@ const decisionCards = computed(() => {
   const cards = [
     {
       key: 'action',
-      label: 'Action',
+      label: '动作',
       value: firstText(md.action, '等待决策'),
-      sub: firstText(md.reason, 'policy pending'),
+      sub: firstText(md.reason, '策略待定'),
     },
   ]
   const v1 = asRecord(md.risk_score_v1)
@@ -459,48 +459,48 @@ const decisionCards = computed(() => {
     key: 'v1',
     label: 'V1 风险分',
     value: String(v1.score),
-    sub: `max ${v1.max_allowed ?? '—'} · ${firstText(v1.reason, v1.source, '')}`,
+    sub: `最大 ${v1.max_allowed ?? '—'} · ${firstText(v1.reason, v1.source, '')}`,
   })
   if (v2.score != null) cards.push({
     key: 'v2',
     label: 'V2 安全分',
     value: String(v2.score),
-    sub: `min ${v2.min_allowed ?? '—'} · ${firstText(v2.reason, v2.source, '')}`,
+    sub: `最小 ${v2.min_allowed ?? '—'} · ${firstText(v2.reason, v2.source, '')}`,
   })
   if (v3.score != null) cards.push({
     key: 'v3',
     label: 'V3 安全分',
     value: String(v3.score),
-    sub: `min ${v3.min_allowed ?? '—'} · ${firstText(v3.reason, v3.source, '')}`,
+    sub: `最小 ${v3.min_allowed ?? '—'} · ${firstText(v3.reason, v3.source, '')}`,
   })
   if (md.qa_verdict || md.review_max_severity) cards.push({
     key: 'qa',
-    label: 'QA / Review',
+    label: 'QA / 审查',
     value: firstText(md.qa_verdict, '—'),
-    sub: md.review_max_severity ? `review ${md.review_max_severity}` : 'structured gate',
+    sub: md.review_max_severity ? `审查 ${md.review_max_severity}` : '结构化检查',
   })
   if (Object.keys(roster).length) cards.push({
     key: 'roster',
-    label: 'Roster Gate',
-    value: firstText(roster.action, roster.ok === true ? 'allow' : 'blocked'),
-    sub: firstText(roster.reason, roster.policy, 'roster policy'),
+    label: '排班检查',
+    value: firstText(roster.action, roster.ok === true ? '允许' : '异常'),
+    sub: firstText(roster.reason, roster.policy, '排班策略'),
   })
   if (Object.keys(governance).length) cards.push({
     key: 'governance',
-    label: 'Governance Gate',
-    value: firstText(governance.action, governance.ok === true ? 'allow' : 'blocked'),
+    label: '管理检查',
+    value: firstText(governance.action, governance.ok === true ? '允许' : '异常'),
     sub: firstText(
       governance.reason,
       asRecord(governance.summary).health,
       governance.policy,
-      'governance audit policy',
+      '审计策略',
     ),
   })
   if (Object.keys(evolution).length) cards.push({
     key: 'evolution',
-    label: 'Evolution Gate',
-    value: evolution.pause === true ? 'pause' : 'allow',
-    sub: firstText(evolution.reason, `history ${evolution.history_count ?? 0}`, 'evolution metrics policy'),
+    label: '进化检查',
+    value: evolution.pause === true ? '暂停' : '允许',
+    sub: firstText(evolution.reason, `历史 ${evolution.history_count ?? 0}`, '进化策略'),
   })
   return cards
 })
@@ -512,15 +512,15 @@ const kbCards = computed(() => {
     {
       key: 'redisvl',
       label: 'RedisVL',
-      value: redis.ready === true ? 'ready' : 'not ready',
-      sub: firstText(redis.reason, redis.error, redis.backend, 'vector index'),
+      value: redis.ready === true ? '就绪' : '未就绪',
+      sub: firstText(redis.reason, redis.error, redis.backend, '向量索引'),
       tone: redis.ready === true ? 'ok' : 'warn',
     },
     {
       key: 'fix',
       label: '修复知识命中',
       value: String(asNumber(kb.fix_hit_count, 0)),
-      sub: firstText(kb.engine, 'KB search'),
+      sub: firstText(kb.engine, '知识库搜索'),
       tone: asNumber(kb.fix_hit_count, 0) > 0 ? 'ok' : 'idle',
     },
     {
@@ -540,7 +540,7 @@ const kbHitLines = computed(() => {
   }).filter(Boolean)
   const patterns = asArray(kbSummary.value.top_pattern_hits).map((item) => {
     const row = asRecord(item)
-    return firstText(row.pattern, row.summary, row.path)
+    return firstText(row.summary, row.pattern, row.path)
   }).filter(Boolean)
   return [...fixes, ...patterns].slice(0, 5)
 })
@@ -579,14 +579,14 @@ const proactiveCards = computed(() => {
       key: 'types',
       label: '任务类型',
       value: String(kinds.size),
-      sub: Array.from(kinds).slice(0, 3).join(' / ') || 'performance / coverage / debt',
+      sub: Array.from(kinds).slice(0, 3).join(' / ') || '性能 / 覆盖率 / 债务',
       tone: kinds.size > 0 ? 'ok' : 'idle',
     },
     {
       key: 'source',
       label: '信号源',
       value: firstText(proactiveSignals.value.source, proactiveSignals.value.engine, 'scripts/dev'),
-      sub: firstText(proactiveSignals.value.generated_at, proactiveSignals.value.checked_at, 'runtime scan'),
+      sub: firstText(proactiveSignals.value.generated_at, proactiveSignals.value.checked_at, '运行时扫描'),
       tone: 'idle',
     },
   ]
@@ -609,8 +609,8 @@ function proactiveCandidateMeta(item: Record<string, unknown>): string {
   return [
     firstText(item.task_type, item.kind, item.category, item.signal_type),
     firstText(item.source, item.script, item.metric),
-    item.score != null ? `score ${item.score}` : '',
-  ].filter(Boolean).join(' · ') || 'proactive signal'
+    item.score != null ? `评分 ${item.score}` : '',
+  ].filter(Boolean).join(' · ') || '主动信号'
 }
 
 const metricWindows = computed(() =>
@@ -636,16 +636,16 @@ const rosterAlignmentCards = computed(() => [
   },
   {
     key: 'participants',
-    label: 'Loop 编制命中',
+    label: '排班匹配',
     value: `${rosterAlignment.value.in_roster_count ?? '—'}`,
-    sub: `runtime participants ${rosterAlignment.value.participant_count ?? 0}`,
+    sub: `运行时参与 ${rosterAlignment.value.participant_count ?? 0}`,
     tone: Number(rosterAlignment.value.in_roster_count || 0) > 0 ? 'run' : 'warn',
   },
   {
     key: 'deployed',
-    label: 'Loop 上岗命中',
+    label: '上岗匹配',
     value: `${rosterAlignment.value.in_deployed_count ?? '—'}`,
-    sub: `registered duty ${rosterAlignment.value.deployed_count ?? 0}`,
+    sub: `已登记上岗 ${rosterAlignment.value.deployed_count ?? 0}`,
     tone: Number(rosterAlignment.value.in_deployed_count || 0) > 0 ? 'run' : 'warn',
   },
   {
@@ -666,14 +666,14 @@ const rosterAlignmentCards = computed(() => [
     key: 'coverage',
     label: '部门覆盖',
     value: `${rosterCoverage.value.length}`,
-    sub: firstText(rosterAlignment.value.status, 'roster alignment'),
+    sub: firstText(rosterAlignment.value.status, '排班匹配'),
     tone: rosterCoverage.value.length > 0 ? 'run' : 'warn',
   },
   {
     key: 'gate',
     label: '隔离策略',
     value: firstText(rosterGate.value.action, '—'),
-    sub: firstText(rosterGate.value.reason, rosterGate.value.policy, 'roster gate'),
+    sub: firstText(rosterGate.value.reason, rosterGate.value.policy, '排班检查'),
     tone: rosterGate.value.blocking === true ? 'bad' : rosterGate.value.action === 'allow' ? 'ok' : 'warn',
   },
 ])
@@ -685,21 +685,21 @@ const evolutionMetricCards = computed(() => {
       key: 'pause',
       label: '自进化状态',
       value: evolutionMetrics.value.pause === true ? '暂停' : '允许运行',
-      sub: firstText(evolutionMetrics.value.reason, 'metrics gate'),
+      sub: firstText(evolutionMetrics.value.reason, '指标检查'),
       tone: evolutionMetrics.value.pause === true ? 'bad' : 'ok',
     },
     {
       key: 'coverage',
       label: '覆盖率变化',
       value: latest.coverage_delta == null ? '—' : `${latest.coverage_delta}`,
-      sub: `${firstText(latest.from_week, 'from')} → ${firstText(latest.to_week, 'to')}`,
+      sub: `${firstText(latest.from_week, '起始')} → ${firstText(latest.to_week, '结束')}`,
       tone: latest.coverage_delta != null && Number(latest.coverage_delta) >= 0.5 ? 'ok' : 'warn',
     },
     {
       key: 'pytest',
       label: 'pytest 通过数',
       value: latest.passed_delta == null ? '—' : `${latest.passed_delta}`,
-      sub: `history ${evolutionMetrics.value.history_count ?? 0}`,
+      sub: `历史 ${evolutionMetrics.value.history_count ?? 0}`,
       tone: latest.passed_delta != null && Number(latest.passed_delta) >= 0 ? 'ok' : 'warn',
     },
     {
@@ -755,12 +755,12 @@ const loopStages = computed(() => [
     key: 'signals',
     title: '信号感知',
     value: `${signalCount.value}/${threshold.value}`,
-    meta: firstText(gate.value.reason, 'below_threshold'),
+    meta: firstText(gate.value.reason, '未达标'),
     tone: signalCount.value >= threshold.value ? 'warn' : 'idle',
   },
   {
     key: 'incident',
-    title: 'Incident 入池',
+    title: '异常记录',
     value: String(asNumber(gate.value.incident_count, 0)),
     meta: `${asNumber(gate.value.lookback_hours, 24)}h 窗口`,
     tone: asNumber(gate.value.incident_count, 0) > 0 ? 'running' : 'idle',
@@ -769,19 +769,19 @@ const loopStages = computed(() => [
     key: 'team',
     title: '三员工执行',
     value: openRunIds.value.length ? `${openRunIds.value.length} 轮` : '待命',
-    meta: 'Scout / Fix / QA',
+    meta: '侦察 / 修复 / QA',
     tone: openRunIds.value.length ? 'running' : 'idle',
   },
   {
     key: 'qa',
     title: 'QA JSON',
     value: qaVerdict.value,
-    meta: '结构化门禁',
+    meta: '结构化检查',
     tone: qaVerdict.value === 'PASS' ? 'ok' : qaVerdict.value === 'FAIL' ? 'bad' : 'idle',
   },
   {
     key: 'risk',
-    title: 'Risk Gate',
+    title: '风险检查',
     value: riskScore.value ? String(riskScore.value.value) : '待评分',
     meta: riskScore.value?.label || 'V1/V2/V3',
     tone: riskScore.value ? 'ok' : 'idle',
@@ -790,16 +790,16 @@ const loopStages = computed(() => [
     key: 'merge',
     title: '合并/审批',
     value: actionLabel.value,
-    meta: branchName.value || 'branch 待回写',
+    meta: branchName.value || '分支待回写',
     tone: /merge|merged|pass|auto/i.test(actionLabel.value) ? 'ok' : 'idle',
   },
 ])
 
 const evidenceCards = computed(() => [
-  { label: 'Para task', value: paraTaskId.value || '无进行中任务' },
-  { label: 'Open items', value: String(openItems.value.length) },
-  { label: 'Recent runs', value: String(recentRuns.value.length) },
-  { label: 'Cooldown', value: `${asNumber(policy.value.cooldown_minutes, 360)} min` },
+  { label: 'Para 任务', value: paraTaskId.value || '无进行中任务' },
+  { label: '待处理项', value: String(openItems.value.length) },
+  { label: '最近运行', value: String(recentRuns.value.length) },
+  { label: '冷却', value: `${asNumber(policy.value.cooldown_minutes, 360)} 分钟` },
 ])
 
 const openApprovalItems = computed(() =>
@@ -812,13 +812,13 @@ const openApprovalItems = computed(() =>
 </script>
 
 <template>
-  <section class="selp" :class="[`selp--${statusTone}`, { 'selp--compact': compact }]" aria-label="自进化 loop 运行状态">
+  <section class="selp" :class="[`selp--${statusTone}`, { 'selp--compact': compact }]" aria-label="自进化循环运行状态">
     <div class="selp-head">
       <div>
-        <p class="selp-kicker">Self-Evolution Loop</p>
-        <h3 class="selp-title">自维护 / 自进化真实运行线</h3>
+        <p class="selp-kicker">自进化循环</p>
+        <h3 class="selp-title">系统自动维护状态</h3>
         <p class="selp-desc">
-          读取后端 self-maintenance ledger、gate、policy 与 memory；不是静态演示。
+          展示系统自动维护的真实运行情况。
         </p>
       </div>
       <div class="selp-state">
@@ -832,7 +832,7 @@ const openApprovalItems = computed(() =>
 
     <p v-if="error" class="selp-error">{{ error }}</p>
 
-    <div class="selp-meta" role="list" aria-label="loop 调度与证据">
+    <div class="selp-meta" role="list" aria-label="循环调度与证据">
       <div class="selp-meta-card" role="listitem">
         <span>每日调度</span>
         <strong>{{ cronLine }}</strong>
@@ -841,7 +841,7 @@ const openApprovalItems = computed(() =>
         <span>{{ card.label }}</span>
         <strong>{{ card.value }}</strong>
         <button
-          v-if="card.label === 'Para task' && paraTaskId"
+          v-if="card.label === 'Para 任务' && paraTaskId"
           type="button"
           class="selp-copy"
           @click="copyParaTaskId"
@@ -851,13 +851,13 @@ const openApprovalItems = computed(() =>
       </div>
     </div>
 
-    <div v-if="uiBridgeVisible" class="selp-ui-bridge" :class="`selp-ui-bridge--${firstText(uiBridge.tone, 'ok')}`">
+    <div v-if="uiBridgeVisible" class="selp-ui-bridge" :class="`selp-ui-bridge--${firstText(uiBridge.tone, '正常')}`">
       <div class="selp-ui-bridge-main">
-        <span>UI Bridge · {{ firstText(uiBridge.state, 'runtime') }}</span>
-        <strong>{{ firstText(uiBridge.title, 'Loop 桥接状态') }}</strong>
-        <small>{{ firstText(uiBridge.detail, '后端 runtime 正在统一员工空间、编制图谱和完整 Loop 的展示意图。') }}</small>
+        <span>操作引导 · {{ firstText(uiBridge.state, '运行时') }}</span>
+        <strong>{{ firstText(uiBridge.title, '操作引导状态') }}</strong>
+        <small>{{ firstText(uiBridge.detail, '后端正在统一员工空间、排班和循环的展示。') }}</small>
         <div class="selp-ui-bridge-actions">
-          <router-link v-if="uiBridgeDutyRosterLocation" :to="uiBridgeDutyRosterLocation">去编制图谱</router-link>
+          <router-link v-if="uiBridgeDutyRosterLocation" :to="uiBridgeDutyRosterLocation">去排班管理</router-link>
           <router-link v-if="uiBridgeEmployeeSpaceLocation" :to="uiBridgeEmployeeSpaceLocation">去员工空间</router-link>
           <button
             v-if="canReviewGovernanceAudit || governanceReviewBusy"
@@ -865,11 +865,11 @@ const openApprovalItems = computed(() =>
             :disabled="governanceReviewBusy"
             @click="reviewGovernanceAudit"
           >
-            {{ governanceReviewBusy ? '复核中...' : '人工复核治理审计' }}
+            {{ governanceReviewBusy ? '复核中...' : '人工复核审计' }}
           </button>
         </div>
         <small v-if="governanceReviewResult" class="selp-ui-bridge-review selp-ui-bridge-review--ok">
-          治理审计已复核：{{ asRecord(governanceReviewResult.summary).health || 'ok' }}
+          审计已复核：{{ asRecord(governanceReviewResult.summary).health || '正常' }}
         </small>
         <small v-if="governanceReviewError" class="selp-ui-bridge-review selp-ui-bridge-review--bad">
           {{ governanceReviewError }}
@@ -878,55 +878,55 @@ const openApprovalItems = computed(() =>
       <div class="selp-ui-bridge-surfaces" role="list" aria-label="三端职责">
         <div role="listitem">
           <span>员工空间</span>
-          <strong>{{ firstText(employeeSpaceBridge.role, 'execution_surface') }}</strong>
-          <small>{{ firstText(employeeSpaceBridge.cta, '看执行现场') }}</small>
+          <strong>{{ firstText(employeeSpaceBridge.role, '执行区') }}</strong>
+          <small>{{ firstText(employeeSpaceBridge.cta, '查看执行情况') }}</small>
         </div>
         <div role="listitem">
-          <span>编制图谱</span>
-          <strong>{{ firstText(dutyRosterBridge.role, 'governance_surface') }}</strong>
-          <small>{{ firstText(dutyRosterBridge.cta, '查看编制准入') }}</small>
+          <span>排班管理</span>
+          <strong>{{ firstText(dutyRosterBridge.role, '管理区') }}</strong>
+          <small>{{ firstText(dutyRosterBridge.cta, '查看排班要求') }}</small>
         </div>
         <div role="listitem">
-          <span>主动作</span>
-          <strong>{{ firstText(uiBridgeGovernanceAction.label, uiBridge.primary_action, 'observe') }}</strong>
-          <small>{{ firstText(uiBridgeGovernanceAction.status, uiBridge.primary_surface, 'self_evolution_loop') }} · {{ firstText(uiBridgeGovernanceAction.view, uiBridge.primary_view, 'department') }}</small>
+          <span>当前操作</span>
+          <strong>{{ firstText(uiBridgeGovernanceAction.label, uiBridge.primary_action, '观察') }}</strong>
+          <small>{{ firstText(uiBridgeGovernanceAction.status, uiBridge.primary_surface, '自进化循环') }} · {{ firstText(uiBridgeGovernanceAction.view, uiBridge.primary_view, '部门') }}</small>
         </div>
         <div role="listitem">
           <span>目标员工</span>
           <strong>{{ firstText(uiBridge.primary_employee_id, uiBridgeTargets[0], '—') }}</strong>
-          <small>{{ uiBridgeTargets.length ? `targets ${uiBridgeTargets.length}` : '无定向目标' }}</small>
+          <small>{{ uiBridgeTargets.length ? `目标 ${uiBridgeTargets.length}` : '无定向目标' }}</small>
         </div>
       </div>
       <div v-if="uiBridgeActions.length || uiBridgeTargets.length" class="selp-ui-bridge-foot">
-        <span v-if="uiBridgePath.length">path: {{ uiBridgePath.join(' -> ') }}</span>
-        <span v-if="uiBridgeGovernanceAction.id">governance: {{ uiBridgeGovernanceAction.id }} · {{ uiBridgeGovernanceAction.requires_admin === true ? 'admin-only' : (uiBridgeGovernanceAction.executable === false ? 'view-only' : 'executable') }}</span>
+        <span v-if="uiBridgePath.length">路径: {{ uiBridgePath.join(' -> ') }}</span>
+        <span v-if="uiBridgeGovernanceAction.id">治理: {{ uiBridgeGovernanceAction.id }} · {{ uiBridgeGovernanceAction.requires_admin === true ? '仅管理员' : (uiBridgeGovernanceAction.executable === false ? '仅查看' : '可执行') }}</span>
         <span v-if="uiBridgeActions.length">{{ uiBridgeActions.slice(0, 4).join(' / ') }}</span>
-        <small v-if="uiBridgeBlockedIds.length">isolated: {{ uiBridgeBlockedIds.slice(0, 8).join(' / ') }}</small>
-        <small v-if="uiBridgeTargets.length">targets: {{ uiBridgeTargets.slice(0, 8).join(' / ') }}</small>
+        <small v-if="uiBridgeBlockedIds.length">已隔离: {{ uiBridgeBlockedIds.slice(0, 8).join(' / ') }}</small>
+        <small v-if="uiBridgeTargets.length">目标: {{ uiBridgeTargets.slice(0, 8).join(' / ') }}</small>
         <small v-if="governanceAuditLast.action">
-          last governance: {{ governanceAuditLast.action }} · {{ governanceAuditLast.status || (governanceAuditLast.ok === false ? 'failed' : 'success') }}<template v-if="governanceAuditLastSummary"> · {{ governanceAuditLastSummary }}</template><template v-if="governanceAuditLastTargets.length"> · {{ governanceAuditLastTargets.slice(0, 4).join(' / ') }}</template>
+          最近治理: {{ governanceAuditLast.action }} · {{ governanceAuditLast.status || (governanceAuditLast.ok === false ? '失败' : '成功') }}<template v-if="governanceAuditLastSummary"> · {{ governanceAuditLastSummary }}</template><template v-if="governanceAuditLastTargets.length"> · {{ governanceAuditLastTargets.slice(0, 4).join(' / ') }}</template>
         </small>
       </div>
     </div>
 
-    <div class="selp-contract" :class="runtimeContractOk ? 'selp-contract--ok' : 'selp-contract--bad'" aria-label="Runtime contract">
+    <div class="selp-contract" :class="runtimeContractOk ? 'selp-contract--ok' : 'selp-contract--bad'" aria-label="系统状态检查">
       <div class="selp-contract-head">
-        <span>Runtime contract</span>
-        <strong>{{ runtimeContractOk ? 'trusted' : 'blocked' }} · {{ runtimeSchemaVersion }}</strong>
+        <span>系统状态检查</span>
+        <strong>{{ runtimeContractOk ? '正常' : '异常' }} · {{ runtimeSchemaVersion }}</strong>
         <small>
-          required {{ runtimeContractValidation.required_count ?? runtimeContractRequiredFields.length }} · missing {{ runtimeContractMissingFields.length + runtimeSurfaceMissing.length }}
+          必需 {{ runtimeContractValidation.required_count ?? runtimeContractRequiredFields.length }} · 缺失 {{ runtimeContractMissingFields.length + runtimeSurfaceMissing.length }}
           <template v-if="runtimeContractMissingFields.length"> · {{ runtimeContractMissingFields.slice(0, 5).join(' / ') }}</template>
           <template v-else-if="runtimeSurfaceMissing.length"> · {{ runtimeSurfaceMissing.slice(0, 5).join(' / ') }}</template>
         </small>
       </div>
       <div class="selp-contract-grid">
         <div class="selp-contract-primary">
-          <span>Primary state</span>
-          <strong>{{ firstText(runtimeContractStatus.state, runtimeSurfaceIncidentSummary.status, runtimeContractOk ? 'trusted' : 'blocked') }}</strong>
-          <small>{{ firstText(runtimeContractPrimaryRoute.action, runtimeContractStatus.primary_action, runtimeSurfaceIncidentSummary.primary_action, runtimeSurfaceReadiness.action, runtimeContractOk ? 'all clear' : 'inspect contract') }} -> {{ firstText(runtimeContractPrimaryRoute.surface, runtimeContractStatus.primary_target_surface, 'self_evolution_loop_runtime') }}</small>
-          <small v-if="firstText(runtimeContractPrimaryRoute.employee_id, asArray(runtimeContractPrimaryRoute.target_employee_ids)[0])">target employee · {{ firstText(runtimeContractPrimaryRoute.employee_id, asArray(runtimeContractPrimaryRoute.target_employee_ids)[0]) }}</small>
-          <small>global={{ runtimeContractStatus.global_ok === false ? 'blocked' : 'ok' }} · all_surfaces={{ runtimeContractStatus.all_surfaces_ok === false ? 'blocked' : 'ok' }}</small>
-          <small>{{ runtimeContractPrimaryRoute.requires_admin ? 'admin-only' : 'operator' }} · {{ runtimeContractPrimaryRoute.executable ? 'executable' : 'navigate-only' }} · {{ firstText(runtimeContractPrimaryRoute.detail, 'route supplied by backend contract_status') }}</small>
+          <span>当前状态</span>
+          <strong>{{ firstText(runtimeContractStatus.state, runtimeSurfaceIncidentSummary.status, runtimeContractOk ? '正常' : '异常') }}</strong>
+          <small>{{ firstText(runtimeContractPrimaryRoute.action, runtimeContractStatus.primary_action, runtimeSurfaceIncidentSummary.primary_action, runtimeSurfaceReadiness.action, runtimeContractOk ? '全部正常' : '检查问题') }} -> {{ firstText(runtimeContractPrimaryRoute.surface, runtimeContractStatus.primary_target_surface, '系统运行时') }}</small>
+          <small v-if="firstText(runtimeContractPrimaryRoute.employee_id, asArray(runtimeContractPrimaryRoute.target_employee_ids)[0])">目标员工 · {{ firstText(runtimeContractPrimaryRoute.employee_id, asArray(runtimeContractPrimaryRoute.target_employee_ids)[0]) }}</small>
+          <small>全局={{ runtimeContractStatus.global_ok === false ? '异常' : '正常' }} · 所有模块={{ runtimeContractStatus.all_surfaces_ok === false ? '异常' : '正常' }}</small>
+          <small>{{ runtimeContractPrimaryRoute.requires_admin ? '仅管理员' : '操作员' }} · {{ runtimeContractPrimaryRoute.executable ? '可执行' : '仅导航' }} · {{ firstText(runtimeContractPrimaryRoute.detail, '由后端提供') }}</small>
           <router-link
             v-if="runtimeContractPrimaryRoute.surface === 'duty_roster_graph' && runtimeContractDutyRosterLocation"
             :to="runtimeContractDutyRosterLocation"
@@ -939,51 +939,51 @@ const openApprovalItems = computed(() =>
           >
             {{ firstText(runtimeContractPrimaryRoute.label, '打开目标面') }}
           </router-link>
-          <small v-else>route fallback · {{ firstText(runtimeContractPrimaryRoute.view, 'department') }}</small>
+          <small v-else>默认路由 · {{ firstText(runtimeContractPrimaryRoute.view, '部门') }}</small>
         </div>
         <div>
-          <span>Surfaces</span>
+          <span>功能模块</span>
           <strong>{{ runtimeContractSurfaces.length || 0 }}</strong>
-          <small>{{ runtimeContractSurfaces.join(' / ') || 'contract.surfaces missing' }}</small>
+          <small>{{ runtimeContractSurfaces.join(' / ') || '模块信息缺失' }}</small>
         </div>
         <div>
-          <span>Gate deps</span>
+          <span>前置检查</span>
           <strong>{{ runtimeContractGateDependencies.length || 0 }}</strong>
-          <small>{{ runtimeContractGateDependencies.slice(0, 4).join(' / ') || 'contract.gate_dependencies missing' }}</small>
+          <small>{{ runtimeContractGateDependencies.slice(0, 4).join(' / ') || '检查项信息缺失' }}</small>
         </div>
         <div>
-          <span>Policy</span>
-          <strong>{{ runtimeContractOk ? 'allow view' : 'do not trust' }}</strong>
-          <small>完整 Loop 面板与员工空间、编制图谱共用同一 contract guard。</small>
+          <span>策略</span>
+          <strong>{{ runtimeContractOk ? '可查看' : '不可信' }}</strong>
+          <small>完整面板与员工空间、排班管理共用同一状态检查。</small>
         </div>
         <div>
-          <span>Surface ready</span>
-          <strong>{{ runtimeSurfaceReadinessOk ? 'ready' : 'blocked' }}</strong>
-          <small>{{ runtimeSurfaceMissing.length ? `${runtimeSurfaceReadiness.action || 'repair'} · ${runtimeSurfaceMissing.slice(0, 3).join(' / ')}` : (runtimeSurfaceReadiness.title || runtimeSurfaceKey) }}</small>
+          <span>模块就绪</span>
+          <strong>{{ runtimeSurfaceReadinessOk ? '就绪' : '异常' }}</strong>
+          <small>{{ runtimeSurfaceMissing.length ? `${runtimeSurfaceReadiness.action || '修复'} · ${runtimeSurfaceMissing.slice(0, 3).join(' / ')}` : (runtimeSurfaceReadiness.title || runtimeSurfaceKey) }}</small>
         </div>
         <div>
-          <span>Surface incidents</span>
+          <span>模块异常</span>
           <strong>{{ runtimeSurfaceIncidents.length }} / {{ runtimeAllSurfaceIncidents.length }}</strong>
-          <small>{{ runtimeSurfaceIncidents.length ? `${firstText(runtimeSurfaceIncident.action, runtimeSurfaceIncident.title, 'inspect_runtime_contract')} -> ${firstText(runtimeSurfaceIncident.target_surface, runtimeSurfaceKey)} · ${asArray(runtimeSurfaceIncident.missing).slice(0, 3).join(' / ') || runtimeSurfaceKey}` : 'current surface clear' }}</small>
+          <small>{{ runtimeSurfaceIncidents.length ? `${firstText(runtimeSurfaceIncident.action, runtimeSurfaceIncident.title, '检查系统状态')} -> ${firstText(runtimeSurfaceIncident.target_surface, runtimeSurfaceKey)} · ${asArray(runtimeSurfaceIncident.missing).slice(0, 3).join(' / ') || runtimeSurfaceKey}` : '当前模块正常' }}</small>
         </div>
         <div>
-          <span>Incident summary</span>
+          <span>异常汇总</span>
           <strong>{{ firstText(runtimeSurfaceIncidentSummary.status, runtimeSurfaceIncidentSummary.total ?? 0) }}</strong>
-          <small>{{ firstText(runtimeSurfaceIncidentSummary.primary_action) ? `${runtimeSurfaceIncidentSummary.primary_action} -> ${firstText(runtimeSurfaceIncidentSummary.primary_target_surface, runtimeSurfaceIncidentSummary.primary_surface, 'unknown')} · total ${runtimeSurfaceIncidentSummary.total ?? 0}` : (asArray(runtimeSurfaceIncidentSummary.actions).slice(0, 3).join(' / ') || 'all surfaces clear') }}</small>
+          <small>{{ firstText(runtimeSurfaceIncidentSummary.primary_action) ? `${runtimeSurfaceIncidentSummary.primary_action} -> ${firstText(runtimeSurfaceIncidentSummary.primary_target_surface, runtimeSurfaceIncidentSummary.primary_surface, '未知')} · 总计 ${runtimeSurfaceIncidentSummary.total ?? 0}` : (asArray(runtimeSurfaceIncidentSummary.actions).slice(0, 3).join(' / ') || '所有模块正常') }}</small>
         </div>
         <div>
-          <span>Global nested audit</span>
-          <strong>{{ runtimeContractMissingNested.length ? `missing ${runtimeContractMissingNested.length}` : 'clear' }}</strong>
-          <small>{{ runtimeContractMissingNested.length ? runtimeContractMissingNested.slice(0, 4).join(' / ') : `global=${runtimeContractValidation.global_ok === false ? 'blocked' : 'ok'} · all_surfaces=${runtimeContractValidation.all_surfaces_ok === false ? 'blocked' : 'ok'}` }}</small>
+          <span>审计记录</span>
+          <strong>{{ runtimeContractMissingNested.length ? `缺失 ${runtimeContractMissingNested.length}` : '正常' }}</strong>
+          <small>{{ runtimeContractMissingNested.length ? runtimeContractMissingNested.slice(0, 4).join(' / ') : `全局=${runtimeContractValidation.global_ok === false ? '异常' : '正常'} · 所有模块=${runtimeContractValidation.all_surfaces_ok === false ? '异常' : '正常'}` }}</small>
         </div>
       </div>
     </div>
 
-    <div v-if="activeGateItems.length" class="selp-active-gates" aria-label="当前门禁总览">
+    <div v-if="activeGateItems.length" class="selp-active-gates" aria-label="检查项总览">
       <div class="selp-active-gates-head">
-        <span>Active gates</span>
-        <strong>{{ activeGates.ok === false ? 'blocked' : 'clear' }}</strong>
-        <small>{{ activeGates.blocking_count ?? 0 }} blocking · {{ asArray(activeGates.blocking_keys).join(' / ') || 'none' }}</small>
+        <span>检查项</span>
+        <strong>{{ activeGates.ok === false ? '异常' : '正常' }}</strong>
+        <small>{{ activeGates.blocking_count ?? 0 }} 阻断 · {{ asArray(activeGates.blocking_keys).join(' / ') || '无' }}</small>
       </div>
       <div class="selp-active-gates-grid" role="list">
         <div
@@ -994,46 +994,46 @@ const openApprovalItems = computed(() =>
           role="listitem"
         >
           <span>{{ gateItem.label || gateItem.key }}</span>
-          <strong>{{ gateItem.status || (gateItem.ok === false ? 'blocked' : 'allow') }}</strong>
-          <small>{{ firstText(gateItem.reason, gateItem.detail, 'ready') }}</small>
+          <strong>{{ gateItem.status || (gateItem.ok === false ? '异常' : '允许') }}</strong>
+          <small>{{ firstText(gateItem.reason, gateItem.detail, '就绪') }}</small>
         </div>
       </div>
     </div>
 
-    <div v-if="runtimeAllSurfaceIncidents.length" class="selp-contract-incidents" aria-label="Surface contract incidents">
+    <div v-if="runtimeAllSurfaceIncidents.length" class="selp-contract-incidents" aria-label="模块异常事件">
       <div class="selp-contract-incidents-head">
-        <span>Surface incidents</span>
+        <span>模块异常</span>
         <strong>{{ runtimeAllSurfaceIncidents.length }}</strong>
-        <small>{{ asArray(runtimeSurfaceIncidentSummary.surfaces).slice(0, 4).join(' / ') || 'contract incidents' }}</small>
+        <small>{{ asArray(runtimeSurfaceIncidentSummary.surfaces).slice(0, 4).join(' / ') || '异常事件' }}</small>
       </div>
       <div class="selp-contract-incidents-grid" role="list">
         <div
           v-for="incident in runtimeAllSurfaceIncidents"
           :key="firstText(incident.id, incident.surface, incident.action)"
           class="selp-contract-incident"
-          :class="`selp-contract-incident--${firstText(incident.severity, 'bad')}`"
+          :class="`selp-contract-incident--${firstText(incident.severity, '严重')}`"
           role="listitem"
         >
-          <span>{{ firstText(incident.surface, 'surface') }} · {{ firstText(incident.severity, 'bad') }}</span>
-          <strong>{{ firstText(incident.title, 'Surface contract incident') }}</strong>
-          <small>{{ firstText(incident.action, 'inspect_runtime_contract') }} -> {{ firstText(incident.target_surface, 'self_evolution_loop_runtime') }}</small>
-          <small>{{ incident.requires_admin ? 'admin-only' : 'operator' }} · {{ incident.executable ? 'executable' : 'navigate-only' }} · {{ firstText(incident.id, 'contract:surface') }}</small>
-          <small>{{ firstText(incident.source, 'contract_validation') }} · {{ firstText(incident.schema_version, runtimeSchemaVersion) }} · {{ firstText(incident.created_at, 'time unknown') }}</small>
-          <em>{{ asArray(incident.missing).map((item) => asString(item)).filter(Boolean).slice(0, 5).join(' / ') || firstText(incident.detail, 'missing dependencies') }}</em>
+          <span>{{ firstText(incident.surface, '模块') }} · {{ firstText(incident.severity, '严重') }}</span>
+          <strong>{{ firstText(incident.title, '模块异常事件') }}</strong>
+          <small>{{ firstText(incident.action, '检查系统状态') }} -> {{ firstText(incident.target_surface, '系统运行时') }}</small>
+          <small>{{ incident.requires_admin ? '仅管理员' : '操作员' }} · {{ incident.executable ? '可执行' : '仅导航' }} · {{ firstText(incident.id, '状态:模块') }}</small>
+          <small>{{ firstText(incident.source, '状态校验') }} · {{ firstText(incident.schema_version, runtimeSchemaVersion) }} · {{ firstText(incident.created_at, '时间未知') }}</small>
+          <em>{{ asArray(incident.missing).map((item) => asString(item)).filter(Boolean).slice(0, 5).join(' / ') || firstText(incident.detail, '缺少依赖') }}</em>
         </div>
       </div>
     </div>
 
     <div v-if="governanceAuditRecent.length" class="selp-governance-audit" aria-label="最近治理动作">
       <div class="selp-governance-audit-head">
-        <span>Governance audit</span>
-        <strong>{{ firstText(governanceAuditSummary.health, 'ok') }} · {{ governanceAuditRecent.length }}</strong>
-        <small>{{ governanceAuditSummary.success_count ?? 0 }} ok · {{ governanceAuditSummary.failure_count ?? 0 }} failed · consecutive {{ governanceAuditSummary.consecutive_failures ?? 0 }}</small>
+        <span>操作审计</span>
+        <strong>{{ firstText(governanceAuditSummary.health, '正常') }} · {{ governanceAuditRecent.length }}</strong>
+        <small>{{ governanceAuditSummary.success_count ?? 0 }} 正常 · {{ governanceAuditSummary.failure_count ?? 0 }} 失败 · 连续 {{ governanceAuditSummary.consecutive_failures ?? 0 }}</small>
       </div>
       <ul>
         <li v-for="item in governanceAuditRecent.slice().reverse().slice(0, 5)" :key="`${item.created_at || item.action}-${item.exit_code ?? ''}`">
-          <span>{{ item.action || 'governance' }}</span>
-          <strong>{{ item.status || (item.ok === false ? 'failed' : 'success') }}</strong>
+          <span>{{ item.action || '治理' }}</span>
+          <strong>{{ item.status || (item.ok === false ? '失败' : '成功') }}</strong>
           <small>{{ governanceSummaryText(item) }}<template v-if="asArray(item.target_employee_ids).length"> · {{ asArray(item.target_employee_ids).slice(0, 3).join(' / ') }}</template></small>
         </li>
       </ul>
@@ -1042,25 +1042,25 @@ const openApprovalItems = computed(() =>
     <div v-if="openApprovalItems.length" class="selp-open-items" aria-label="待处理审批与记忆项">
       <div v-for="item in openApprovalItems" :key="`${item.kind || 'item'}-${item.run_id || item.created_at}`" class="selp-open-item">
         <div>
-          <span>{{ item.kind || 'open item' }}</span>
-          <strong>{{ item.reason || 'pending' }}</strong>
+          <span>{{ item.kind || '待处理项' }}</span>
+          <strong>{{ item.reason || '待处理' }}</strong>
           <small>
-            <template v-if="item.run_id">run {{ item.run_id }}</template>
-            <template v-if="item.task_id"> · task {{ item.task_id }}</template>
+            <template v-if="item.run_id">运行 {{ item.run_id }}</template>
+            <template v-if="item.task_id"> · 任务 {{ item.task_id }}</template>
             <template v-if="item.created_at"> · {{ item.created_at }}</template>
           </small>
         </div>
         <small v-if="asRecord(item.roster_gate).action || asRecord(item.roster_gate).reason" class="selp-open-item-gate">
-          roster {{ asRecord(item.roster_gate).action || 'gate' }} · {{ asRecord(item.roster_gate).reason || 'policy' }}
+          排班 {{ asRecord(item.roster_gate).action || '检查' }} · {{ asRecord(item.roster_gate).reason || '策略' }}
         </small>
         <small v-if="asArray(asRecord(item.active_gates).blocking_keys).length" class="selp-open-item-gate">
-          active gates blocked · {{ asArray(asRecord(item.active_gates).blocking_keys).join(' / ') }}
+          检查项未通过 · {{ asArray(asRecord(item.active_gates).blocking_keys).join(' / ') }}
         </small>
         <small v-if="asRecord(item.governance_gate).action || asRecord(item.governance_gate).reason" class="selp-open-item-gate">
-          governance {{ asRecord(item.governance_gate).action || 'gate' }} · {{ asRecord(item.governance_gate).reason || 'policy' }}
+          管理 {{ asRecord(item.governance_gate).action || '检查' }} · {{ asRecord(item.governance_gate).reason || '策略' }}
         </small>
         <small v-if="asRecord(item.evolution_gate).pause === true || asRecord(item.evolution_gate).reason" class="selp-open-item-gate">
-          evolution {{ asRecord(item.evolution_gate).pause === true ? 'pause' : 'allow' }} · {{ asRecord(item.evolution_gate).reason || 'metrics policy' }}
+          进化 {{ asRecord(item.evolution_gate).pause === true ? '暂停' : '允许' }} · {{ asRecord(item.evolution_gate).reason || '指标策略' }}
         </small>
         <small v-if="asArray(asRecord(item.roster_gate).out_of_roster_ids).length" class="selp-open-item-ids">
           {{ asArray(asRecord(item.roster_gate).out_of_roster_ids).slice(0, 4).join(' / ') }}
@@ -1071,7 +1071,7 @@ const openApprovalItems = computed(() =>
       </div>
     </div>
 
-    <div class="selp-flow" role="list" aria-label="自进化 loop 阶段">
+    <div class="selp-flow" role="list" aria-label="自进化循环阶段">
       <div
         v-for="stage in loopStages"
         :key="stage.key"
@@ -1086,7 +1086,7 @@ const openApprovalItems = computed(() =>
       </div>
     </div>
 
-    <div class="selp-decision" role="list" aria-label="auto merge 决策">
+    <div class="selp-decision" role="list" aria-label="自动合并决策">
       <div v-for="card in decisionCards" :key="card.key" class="selp-decision-card" role="listitem">
         <span>{{ card.label }}</span>
         <strong>{{ card.value }}</strong>
@@ -1115,14 +1115,14 @@ const openApprovalItems = computed(() =>
             <dd>{{ hit.root_cause || '—' }}</dd>
             <dt>修复 diff</dt>
             <dd><code>{{ hit.fix_diff || '—' }}</code></dd>
-            <dt>required tests</dt>
+            <dt>必需测试</dt>
             <dd>{{ Array.isArray(hit.required_tests) && hit.required_tests.length ? hit.required_tests.join(' / ') : '—' }}</dd>
-            <dt>rollback plan</dt>
+            <dt>回滚方案</dt>
             <dd>{{ firstText(hit.rollback_plan, asRecord(hit.executable_template).rollback_plan, '—') }}</dd>
           </dl>
         </details>
         <details v-for="hit in kbPatternHitDetails" :key="`pattern-${hit.path || hit.pattern}`" class="selp-kb-detail">
-          <summary>{{ hit.pattern || hit.summary || '代码模式命中' }}</summary>
+          <summary>{{ hit.summary || hit.pattern || '代码模式命中' }}</summary>
           <dl>
             <dt>模式</dt>
             <dd>{{ hit.pattern || '—' }}</dd>
@@ -1130,7 +1130,7 @@ const openApprovalItems = computed(() =>
             <dd>{{ hit.summary || '—' }}</dd>
             <dt>适用性</dt>
             <dd>{{ hit.applicability || '—' }}</dd>
-            <dt>patch strategy</dt>
+            <dt>补丁策略</dt>
             <dd>{{ hit.patch_strategy || '—' }}</dd>
           </dl>
         </details>
@@ -1163,16 +1163,16 @@ const openApprovalItems = computed(() =>
       </div>
       <ul v-if="metricWindows.length" class="selp-metrics-windows">
         <li v-for="window in metricWindows" :key="`${window.from_week}-${window.to_week}`">
-          <strong>{{ window.from_week || 'from' }} → {{ window.to_week || 'to' }}</strong>
+          <strong>{{ window.from_week || '起始' }} → {{ window.to_week || '结束' }}</strong>
           <span>
-            coverage {{ window.coverage_delta ?? '—' }} · pytest {{ window.passed_delta ?? '—' }} · debt {{ window.debt_delta ?? '—' }}
+            覆盖率 {{ window.coverage_delta ?? '—' }} · pytest {{ window.passed_delta ?? '—' }} · 债务 {{ window.debt_delta ?? '—' }}
           </span>
           <small v-if="Array.isArray(window.misses) && window.misses.length">{{ window.misses.join(' / ') }}</small>
         </li>
       </ul>
     </div>
 
-    <div class="selp-roster" aria-label="编制对齐与员工隔离">
+    <div class="selp-roster" aria-label="排班匹配与员工隔离">
       <div class="selp-roster-cards" role="list">
         <div v-for="card in rosterAlignmentCards" :key="card.key" class="selp-roster-card" :class="`selp-roster-card--${card.tone}`" role="listitem">
           <span>{{ card.label }}</span>
@@ -1199,27 +1199,27 @@ const openApprovalItems = computed(() =>
       </ul>
     </div>
 
-    <div class="selp-team" role="list" aria-label="loop 参与员工">
+    <div class="selp-team" role="list" aria-label="循环参与员工">
       <div class="selp-team-head">
         <span>参与员工泳道</span>
-        <strong>{{ teamLanes.length ? `${teamLanes.length} 名` : '等待 ledger 回写' }}</strong>
+        <strong>{{ teamLanes.length ? `${teamLanes.length} 名` : '等待记录回写' }}</strong>
       </div>
       <div v-if="teamLanes.length" class="selp-team-list">
         <span v-for="lane in teamLanes" :key="`${lane.id}-${lane.stage}`" class="selp-team-chip" :class="{ 'selp-team-chip--outside': lane.rosterStatus === 'out_of_roster' || lane.dutyRegistered === false }" role="listitem">
           <strong>{{ lane.id }}</strong>
           <small>{{ lane.stage }} · {{ lane.source }}</small>
-          <small v-if="lane.rosterLabel || lane.dutyRegisteredLabel || lane.department">{{ lane.rosterLabel || '编制未知' }}<template v-if="lane.dutyRegisteredLabel"> · {{ lane.dutyRegisteredLabel }}</template><template v-if="lane.department"> · {{ lane.department }}</template></small>
+          <small v-if="lane.rosterLabel || lane.dutyRegisteredLabel || lane.department">{{ lane.rosterLabel || '排班未知' }}<template v-if="lane.dutyRegisteredLabel"> · {{ lane.dutyRegisteredLabel }}</template><template v-if="lane.department"> · {{ lane.department }}</template></small>
         </span>
       </div>
       <p v-else class="selp-team-empty">
-        当前 status payload 尚未暴露员工 ID；后端 ledger 一旦写入 employee_id / actor / assignee 会自动显示。
+        当前状态数据尚未暴露员工 ID；后端记录一旦写入 employee_id / actor / assignee 会自动显示。
       </p>
     </div>
 
-    <div v-if="runTimeline" class="selp-timeline" aria-label="自进化 run 时间线">
+    <div v-if="runTimeline" class="selp-timeline" aria-label="自进化运行时间线">
       <div class="selp-timeline-head">
-        <span>Run 时间线</span>
-        <strong>#{{ runTimeline.runId || 'unknown' }}{{ runTimeline.open ? ' · 运行中' : '' }}</strong>
+        <span>运行时间线</span>
+        <strong>#{{ runTimeline.runId || '未知' }}{{ runTimeline.open ? ' · 运行中' : '' }}</strong>
       </div>
       <ol class="selp-timeline-list">
         <li v-for="(item, idx) in runTimeline.items" :key="`${item.phase}-${item.step}-${idx}`" class="selp-timeline-item">
@@ -1232,7 +1232,7 @@ const openApprovalItems = computed(() =>
               <template v-if="item.status"> · {{ item.status }}</template>
             </span>
             <small v-if="item.roster_label || item.department_label" class="selp-timeline-roster" :class="{ 'selp-timeline-roster--outside': item.roster_status === 'out_of_roster' }">
-              {{ item.roster_label || item.roster_status || '编制未知' }}
+              {{ item.roster_label || item.roster_status || '排班未知' }}
               <template v-if="item.duty_registered_label"> · {{ item.duty_registered_label }}</template>
               <template v-if="item.department_label"> · {{ item.department_label }}</template>
             </small>
@@ -1240,7 +1240,7 @@ const openApprovalItems = computed(() =>
               <template v-if="item.para_task_id">Para {{ item.para_task_id }}</template>
               <template v-if="item.branch"> · {{ item.branch }}</template>
               <template v-if="item.qa_verdict"> · QA {{ item.qa_verdict }}</template>
-              <template v-if="item.review_max_severity"> · Review {{ item.review_max_severity }}</template>
+              <template v-if="item.review_max_severity"> · 审查 {{ item.review_max_severity }}</template>
               <template v-if="item.created_at"> · {{ item.created_at }}</template>
             </small>
             <div v-if="item.qa_verdict || item.review_max_severity" class="selp-report">
@@ -1248,18 +1248,18 @@ const openApprovalItems = computed(() =>
                 QA {{ item.qa_verdict }}
               </span>
               <span v-if="item.qa_target_branch_available !== null && item.qa_target_branch_available !== undefined" class="selp-report-pill">
-                branch {{ item.qa_target_branch_available ? 'ok' : 'missing' }}
+                分支 {{ item.qa_target_branch_available ? '正常' : '缺失' }}
               </span>
-              <span v-if="item.qa_risk_class" class="selp-report-pill">risk {{ item.qa_risk_class }}</span>
-              <span v-if="item.review_max_severity" class="selp-report-pill">review {{ item.review_max_severity }}</span>
+              <span v-if="item.qa_risk_class" class="selp-report-pill">风险 {{ item.qa_risk_class }}</span>
+              <span v-if="item.review_max_severity" class="selp-report-pill">审查 {{ item.review_max_severity }}</span>
               <span v-if="Array.isArray(item.qa_tested_commands) && item.qa_tested_commands.length" class="selp-report-pill">
-                tests {{ item.qa_tested_commands.length }}
+                测试 {{ item.qa_tested_commands.length }}
               </span>
               <span v-if="Array.isArray(item.qa_blocking_findings) && item.qa_blocking_findings.length" class="selp-report-pill selp-report-pill--bad">
-                blockers {{ item.qa_blocking_findings.length }}
+                阻断项 {{ item.qa_blocking_findings.length }}
               </span>
               <span v-if="Array.isArray(item.review_findings) && item.review_findings.length" class="selp-report-pill">
-                findings {{ item.review_findings.length }}
+                发现 {{ item.review_findings.length }}
               </span>
             </div>
           </div>
@@ -1269,9 +1269,9 @@ const openApprovalItems = computed(() =>
 
     <div v-if="!compact" class="selp-bottom">
       <div class="selp-policy">
-        <span>Auto merge</span>
+        <span>自动合并</span>
         <strong>{{ policy.auto_merge_low_risk === false ? '关闭' : '低风险开启' }}</strong>
-        <small>max risk {{ policy.auto_merge_max_risk_score ?? '—' }} · min safety {{ policy.auto_merge_min_safety_score_v2 ?? '—' }}</small>
+        <small>最大风险 {{ policy.auto_merge_max_risk_score ?? '—' }} · 最小安全 {{ policy.auto_merge_min_safety_score_v2 ?? '—' }}</small>
       </div>
       <div class="selp-policy">
         <span>最近分支</span>

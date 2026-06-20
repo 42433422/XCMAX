@@ -9,7 +9,7 @@
     ],
     "source": "codex_direct_fix"
   },
-  "root_cause": "The migrated DevFleet SQLite DB had only inactive devices without device_token_hash, so the launchd e2e-agent token could not authenticate and bind to the fixed MODSTORE_PARA_DEVICE_ID.",
+  "root_cause": "迁移后的 DevFleet SQLite DB 只包含未激活且无 device_token_hash 的设备，导致 launchd e2e-agent token 无法认证并绑定到固定的 MODSTORE_PARA_DEVICE_ID。",
   "schema_version": 1,
-  "symptom": "Para API is healthy but self-maintenance loop says configured device is not online; /api/devices is empty"
+  "symptom": "Para API 健康但自维护循环提示配置的设备不在线；/api/devices 为空"
 }

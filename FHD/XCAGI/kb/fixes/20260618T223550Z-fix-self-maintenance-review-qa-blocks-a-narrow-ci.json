@@ -6,7 +6,7 @@
     "component": "cr_narrow_ci,self_maintenance_loop_runner",
     "run_id": "36b812a6-dfab-4c00-8ee6-e975ff93f9cc"
   },
-  "root_cause": "cr_narrow_ci copied too broad a tree and allowed overlay preparation exceptions to escape without a structured validation step. The report-only review/QA prompt did not pin repo/base/target branch fetch semantics, so QA could compare the report-only workspace branch instead of the employee code branch.",
+  "root_cause": "cr_narrow_ci 复制了过宽的目录树，并允许覆盖准备异常在没有结构化验证步骤的情况下逃逸。仅报告的审查/QA 提示未固定 repo/base/target branch 的拉取语义，导致 QA 可能比较仅报告工作区分支而非 employee 代码分支。",
   "schema_version": 1,
-  "symptom": "Self-maintenance review/QA blocks a narrow CI overlay branch: overlay prep lacks structured failure cleanup, copies runtime DB/state, and report-only QA inspects its own empty branch instead of the target branch."
+  "symptom": "自维护审查/QA 阻塞了窄范围 CI 覆盖分支：覆盖准备缺少结构化失败清理，复制了运行时 DB/状态，且仅报告 QA 检查了自己的空分支而非目标分支。"
 }

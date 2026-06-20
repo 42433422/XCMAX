@@ -1680,3 +1680,132 @@ async def get_cs_messages(
     if since:
         messages = [m for m in messages if str(m.get("timestamp") or "") > since]
     return format_mobile_response(data={"messages": messages, "persist_error": error})
+
+
+# ── 钱包 / 余额 ──
+
+
+@extension_router.get("/wallet/balance")
+async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user)):
+    """返回当前用户的市场钱包余额与会员信息（供移动端"我"页面展示）。
+
+    数据来源：market ``/api/wallet/overview`` + ``/api/payment/my-plan``。
+    任一上游不可用时返回降级空值，保持 200 以便客户端渲染占位 UI。
+    """
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.fastapi_routes.market_account import (
+        _auth_header,
+        _market_base_url,
+        _proxy_json,
+        latest_session_market_token,
+        session_market_token,
+    )
+    from app.security.mobile_jwt import verify_mobile_jwt
+
+    # 1) 解析移动端 session_id，优先用 session 绑定的 market token
+    sid = ""
+    auth_hdr = request.headers.get("Authorization") or ""
+    if auth_hdr.startswith("Bearer "):
+        payload = verify_mobile_jwt(auth_hdr[7:].strip())
+        if payload:
+            sid = str(payload.get("session_id") or "")
+    if not sid:
+        from app.infrastructure.auth.dependencies import session_id_from_request
+
+        sid = session_id_from_request(request)
+    market_token = ""
+    if sid:
+        market_token = session_market_token(sid)
+    if not market_token:
+        market_token = latest_session_market_token()
+    if not market_token:
+        return format_mobile_response(
+            data={
+                "balance": None,
+                "currency": "CNY",
+                "membership_level": None,
+                "experience": None,
+                "byok_configured": False,
+                "synced": False,
+                "message": "尚未绑定市场账号",
+            }
+        )
+    authorization = _auth_header(market_token)
+
+    # 2) 拉取钱包概览
+    wallet_payload = await _proxy_json(
+        "GET", "/api/wallet/overview", authorization=authorization, return_error_payload=True
+    )
+    if isinstance(wallet_payload, dict) and wallet_payload.get("__proxy_error__"):
+        # 降级：尝试 /api/wallet/balance
+        wallet_payload = await _proxy_json(
+            "GET", "/api/wallet/balance", authorization=authorization, return_error_payload=True
+        )
+    wallet_obj: dict[str, Any] = {}
+    if isinstance(wallet_payload, dict) and not wallet_payload.get("__proxy_error__"):
+        wallet_obj = (
+            wallet_payload.get("wallet")
+            if isinstance(wallet_payload.get("wallet"), dict)
+            else wallet_payload
+        )
+    elif isinstance(wallet_payload, dict) and wallet_payload.get("__proxy_error__"):
+        logger.warning(
+            "mobile_wallet_balance: wallet overview unavailable: %s",
+            wallet_payload.get("payload"),
+        )
+
+    # 3) 拉取套餐/会员信息
+    plan_payload = await _proxy_json(
+        "GET", "/api/payment/my-plan", authorization=authorization, return_error_payload=True
+    )
+    plan_obj: dict[str, Any] = {}
+    if isinstance(plan_payload, dict) and not plan_payload.get("__proxy_error__"):
+        plan_obj = plan_payload if isinstance(plan_payload, dict) else {}
+    elif isinstance(plan_payload, dict) and plan_payload.get("__proxy_error__"):
+        logger.warning(
+            "mobile_wallet_balance: my-plan unavailable: %s",
+            plan_payload.get("payload"),
+        )
+
+    # 4) 拉取 BYOK 状态
+    llm_payload = await _proxy_json(
+        "GET", "/api/llm/status", authorization=authorization, return_error_payload=True
+    )
+    byok_count = 0
+    if isinstance(llm_payload, dict) and not llm_payload.get("__proxy_error__"):
+        providers = llm_payload.get("providers") or []
+        byok_count = len([p for p in providers if isinstance(p, dict) and p.get("has_user_override")])
+
+    # 5) 组装简化余额信息
+    balance_raw = wallet_obj.get("balance")
+    try:
+        balance_val = (
+            float(balance_raw) if balance_raw is not None else None
+        )
+    except (TypeError, ValueError):
+        balance_val = None
+    membership = plan_obj.get("membership") if isinstance(plan_obj, dict) else None
+    membership_level = None
+    if isinstance(membership, dict):
+        membership_level = membership.get("level") or membership.get("name") or membership.get("tier")
+    elif isinstance(membership, str):
+        membership_level = membership
+    experience = None
+    if isinstance(membership, dict):
+        experience = membership.get("experience") or membership.get("exp")
+
+    return format_mobile_response(
+        data={
+            "balance": balance_val,
+            "currency": str(wallet_obj.get("currency") or "CNY"),
+            "membership_level": membership_level,
+            "experience": experience,
+            "byok_configured": byok_count > 0,
+            "byok_count": byok_count,
+            "synced": balance_val is not None,
+            "market_base_url": _market_base_url(),
+        }
+    )

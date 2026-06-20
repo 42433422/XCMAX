@@ -124,25 +124,22 @@ fun WeTopBarCircleAction(
 
 @Composable
 fun WeTopBarAvatarAction(
-    text: String,
+    imageSource: Any? = null,
+    fallback: AppAvatarFallback,
     onClick: () -> Unit,
-    containerColor: Color,
     modifier: Modifier = Modifier,
-    contentColor: Color = Color.White,
 ) {
     Box(
         modifier
             .size(32.dp)
-            .clip(CircleShape)
-            .background(containerColor)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text.take(2),
-            style = MaterialTheme.typography.labelMedium,
-            color = contentColor,
-            fontWeight = FontWeight.SemiBold,
+        AppAvatar(
+            imageSource = imageSource,
+            fallback = fallback,
+            size = 32.dp,
+            shape = CircleShape,
         )
     }
 }

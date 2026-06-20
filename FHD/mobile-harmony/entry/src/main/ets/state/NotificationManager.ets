@@ -24,7 +24,7 @@ export class NotificationChannels {
 
   // 通道 → HarmonyOS slot type 映射
   // Android IMPORTANCE_HIGH → SOCIAL_COMMUNICATION
-  // Android IMPORTANCE_DEFAULT → GENERAL_INFORMATION
+  // Android IMPORTANCE_DEFAULT → CONTENT_INFORMATION
   // Android IMPORTANCE_LOW → OTHER_TYPES
   static slotTypeOf(channel: string): notificationManager.SlotType {
     if (channel === NotificationChannels.APPROVAL) {
@@ -34,9 +34,9 @@ export class NotificationChannels {
       return notificationManager.SlotType.OTHER_TYPES;
     }
     if (channel === NotificationChannels.SYSTEM) {
-      return notificationManager.SlotType.GENERAL_INFORMATION;
+      return notificationManager.SlotType.CONTENT_INFORMATION;
     }
-    return notificationManager.SlotType.GENERAL_INFORMATION;
+    return notificationManager.SlotType.CONTENT_INFORMATION;
   }
 
   static labelOf(channel: string): string {
@@ -152,6 +152,9 @@ export class NotificationManager {
     this.notifications = [entry].concat(this.notifications);
 
     try {
+      // 注：NotificationRequest.slotType 在当前 SDK 期望 @ohos.notification.SlotType，
+      // 与 @ohos.notificationManager.SlotType 类型不兼容（SDK 内部模块冲突）。
+      // slotType 为可选字段，此处省略以使用系统默认通道；通知发布失败已被 catch 兜底。
       const request: notificationManager.NotificationRequest = {
         id: entry.id,
         content: {
@@ -162,7 +165,6 @@ export class NotificationManager {
             additionalText: NotificationChannels.labelOf(payload.channel),
           },
         },
-        slotType: NotificationChannels.slotTypeOf(payload.channel),
         label: payload.channel,
       };
       await notificationManager.publish(request);
@@ -211,9 +213,14 @@ export class NotificationManager {
 
   // 标记已读
   markRead(id: number): void {
-    this.notifications = this.notifications.map((item: NotificationEntry) => {
+    this.notifications = this.notifications.map((item: NotificationEntry): NotificationEntry => {
       if (item.id === id) {
-        return { id: item.id, title: item.title, body: item.body, route: item.route, channel: item.channel, messageId: item.messageId, sessionId: item.sessionId, source: item.source, timestamp: item.timestamp, read: true };
+        const updated: NotificationEntry = {
+          id: item.id, title: item.title, body: item.body, route: item.route,
+          channel: item.channel, messageId: item.messageId, sessionId: item.sessionId,
+          source: item.source, timestamp: item.timestamp, read: true
+        };
+        return updated;
       }
       return item;
     });
@@ -221,8 +228,13 @@ export class NotificationManager {
 
   // 全部标记已读
   markAllRead(): void {
-    this.notifications = this.notifications.map((item: NotificationEntry) => {
-      return { id: item.id, title: item.title, body: item.body, route: item.route, channel: item.channel, messageId: item.messageId, sessionId: item.sessionId, source: item.source, timestamp: item.timestamp, read: true };
+    this.notifications = this.notifications.map((item: NotificationEntry): NotificationEntry => {
+      const updated: NotificationEntry = {
+        id: item.id, title: item.title, body: item.body, route: item.route,
+        channel: item.channel, messageId: item.messageId, sessionId: item.sessionId,
+        source: item.source, timestamp: item.timestamp, read: true
+      };
+      return updated;
     });
   }
 

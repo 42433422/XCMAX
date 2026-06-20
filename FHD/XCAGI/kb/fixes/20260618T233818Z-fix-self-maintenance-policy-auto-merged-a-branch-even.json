@@ -6,7 +6,7 @@
     "component": "self_maintenance_loop_runner",
     "run_id": "84c3aaf5-d3ff-420f-a31b-4680451cebbd"
   },
-  "root_cause": "High-risk report parser only matched phrases such as result: fail and did not detect standalone FAIL lines, blocking QA findings, or recommendation: do not merge.",
+  "root_cause": "高风险报告解析器只匹配 result: fail 等短语，未检测独立的 FAIL 行、阻塞性 QA 发现或 recommendation: do not merge。",
   "schema_version": 1,
-  "symptom": "Self-maintenance policy auto-merged a branch even though report-only QA output began with FAIL and recommended not to merge."
+  "symptom": "自维护策略自动合并了一个分支，尽管仅报告的 QA 输出以 FAIL 开头并建议不要合并。"
 }

@@ -268,7 +268,7 @@
             <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
               <i class="fa fa-bookmark"></i>
             </span>
-            <span class="settings-row__label">Memory v2</span>
+            <span class="settings-row__label">记忆库 v2</span>
             <span class="settings-row__meta">{{ memoryV2FoldMeta }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
@@ -335,7 +335,7 @@
                 class="settings-item__control settings-item__control--text memory-v2-form__input"
                 type="text"
                 maxlength="64"
-                placeholder="key"
+                placeholder="键"
                 :disabled="memoryV2Creating"
               >
               <input
@@ -343,7 +343,7 @@
                 class="settings-item__control settings-item__control--text memory-v2-form__input"
                 type="text"
                 maxlength="240"
-                placeholder="value"
+                placeholder="值"
                 :disabled="memoryV2Creating"
               >
               <input
@@ -402,8 +402,8 @@
                 </div>
 
                 <div class="memory-v2-item__meta">
-                  <span>{{ record.source || 'unknown' }}</span>
-                  <span>confidence {{ Number(record.confidence || 0).toFixed(2) }}</span>
+                  <span>{{ record.source || '未知' }}</span>
+                  <span>置信度 {{ Number(record.confidence || 0).toFixed(2) }}</span>
                 </div>
 
                 <div class="memory-v2-actions">

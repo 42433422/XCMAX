@@ -18,7 +18,7 @@
     "baseline_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/metrics/self_maintenance_clean_baseline.json",
     "component": "self_maintenance_loop_runner,self_evolution_knowledge"
   },
-  "root_cause": "Policy parsed prose instead of a structured contract; QA had no clean baseline to separate historical failures from new failures; merge gate fields were implicit; Para device availability ignored codex currentTask; fix knowledge lacked applicability and rollback instructions.",
+  "root_cause": "策略解析散文而非结构化契约；QA 没有干净基线来区分历史失败与新失败；合并门禁字段是隐式的；Para 设备可用性忽略了 codex currentTask；修复知识缺少适用性和回滚说明。",
   "schema_version": 1,
-  "symptom": "Self-maintenance loop relies on natural-language QA/review reports, dirty full-test history, loose merge gates, Para currentTask contamination, and non-executable KB records."
+  "symptom": "自维护循环依赖自然语言 QA/审查报告、脏的全量测试历史、松散的合并门禁、Para currentTask 污染和不可执行的 KB 记录。"
 }

@@ -9,7 +9,7 @@
     ],
     "source": "codex_direct_fix"
   },
-  "root_cause": "The collector did not read the real self-maintenance loop memory file by default, so prior review_or_qa_reported_risk and failed_steps were invisible to digest/vibe prompts.",
+  "root_cause": "收集器默认未读取真实的自维护循环记忆文件，导致历史的 review_or_qa_reported_risk 和 failed_steps 对 digest/vibe 提示不可见。",
   "schema_version": 1,
-  "symptom": "evolution_signal_collector loop memory support is ineffective because digest_vibe_prep calls collect_evolution_signals() without injecting memory"
+  "symptom": "evolution_signal_collector 的循环记忆支持无效，因为 digest_vibe_prep 调用 collect_evolution_signals() 时未注入记忆"
 }

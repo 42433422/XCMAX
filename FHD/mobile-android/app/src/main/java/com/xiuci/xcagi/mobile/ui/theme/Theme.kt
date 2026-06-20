@@ -104,18 +104,27 @@ private val LightExtraColors = XcagiExtraColors(
     n400 = N400, n500 = N500, n600 = N600, n700 = N700, n800 = N800, n900 = N900,
 )
 
+// ── 深色主题专用色（中性深灰，参考微信深色模式）──
+private val DarkBg = Color(0xFF1A1A1A)          // 主背景：中性深灰黑
+private val DarkSurface = Color(0xFF242424)      // 卡片表面：深灰
+private val DarkSurfaceVariant = Color(0xFF2E2E2E) // 次级表面
+private val DarkBorder = Color(0xFF383838)       // 边框/分割线
+private val DarkTextPrimary = Color(0xFFE5E5E5)  // 主文字：浅灰白
+private val DarkTextSecondary = Color(0xFF888888) // 次文字
+private val DarkTextTertiary = Color(0xFF5C5C5C)  // 三级文字/占位
+
 private val DarkExtraColors = XcagiExtraColors(
     brandBlue = BrandBlueLight,
     brandBlueContainer = Color(0xFF1A3A80),
     weChatGreen = Color(0xFF6FAA4A),
     weChatOnline = FuncGreenLight,
-    weChatInputBg = N700,
-    weChatDivider = N600,
+    weChatInputBg = DarkSurfaceVariant,
+    weChatDivider = DarkBorder,
     success = FuncGreenLight,
     warning = FuncWarning,
     danger = FuncDanger,
-    n00 = N900, n50 = N800, n100 = N700, n200 = N600, n300 = N500,
-    n400 = N400, n500 = N300, n600 = N200, n700 = N100, n800 = N50, n900 = N00,
+    n00 = DarkBg, n50 = DarkSurface, n100 = DarkSurfaceVariant, n200 = DarkBorder, n300 = DarkTextTertiary,
+    n400 = DarkTextSecondary, n500 = DarkTextSecondary, n600 = DarkTextTertiary, n700 = DarkBorder, n800 = DarkSurface, n900 = DarkBg,
 )
 
 private val DarkColors = darkColorScheme(
@@ -128,14 +137,14 @@ private val DarkColors = darkColorScheme(
     secondaryContainer = Color(0xFF005B3F),
     onSecondaryContainer = FuncGreenLight,
     tertiary = BrandBlueLight,
-    background = N900,
-    onBackground = N100,
-    surface = N800,
-    onSurface = N100,
-    surfaceVariant = N700,
-    onSurfaceVariant = N400,
-    outline = N400,
-    outlineVariant = N700,
+    background = DarkBg,
+    onBackground = DarkTextPrimary,
+    surface = DarkSurface,
+    onSurface = DarkTextPrimary,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkTextSecondary,
+    outline = DarkBorder,
+    outlineVariant = DarkSurfaceVariant,
     error = FuncDanger,
     onError = Color.White,
     errorContainer = Color(0xFF5C1A1A),

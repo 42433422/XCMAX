@@ -8,5 +8,5 @@
   },
   "pattern": "normalize_repo_relative_paths_before_policy_or_ci_routing",
   "schema_version": 1,
-  "summary": "Self-maintenance gates must normalize repo path shapes before inferring tests, and marker-only approval must fail closed for recent human-strategy risk memory."
+  "summary": "自维护门禁在推断测试前必须规范化仓库路径形态，且仅标记的批准对最近的人工策略风险记忆必须失败即关闭。"
 }

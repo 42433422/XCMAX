@@ -404,9 +404,10 @@ fun XcagiNavHost(
                         popExitTransition = { WeFadeTransition.exit() },
                 ) {
                     DiscoverScreen(
-                            onScan = { nav.navigate(Routes.SCAN_QR) },
-                            onOcr = { nav.navigate(Routes.OCR) },
-                            onAiCircle = { nav.navigate(Routes.AI_CIRCLE) },
+                        onScan = { nav.navigate(Routes.SCAN_QR) },
+                        onOcr = { nav.navigate(Routes.OCR) },
+                        onAiCircle = { nav.navigate(Routes.AI_CIRCLE) },
+                        onNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
                     )
                 }
                 composable(
@@ -444,7 +445,7 @@ fun XcagiNavHost(
                             },
                     )
                 }
-                // AI 对话 — 复用现有 ChatScreen
+                // AI 对话 — 小C助理，走 /api/ai/chat/stream（与桌面端智能对话一致）
                 composable(
                         Routes.AI_CHAT,
                         enterTransition = { slideInHorizontally(tween(300)) { it } },
@@ -454,13 +455,8 @@ fun XcagiNavHost(
                 ) {
                     ChatScreen(
                             vm,
-                            useCustomerServiceBackend = true,
+                            useCustomerServiceBackend = false,
                             onBack = { nav.popBackStack() },
-                            profileAvatar =
-                                    ChatTopProfileAvatar(
-                                            text = "C",
-                                            containerColor = XcagiTheme.extra.brandBlue,
-                                    ),
                             onOpenProfile = {
                                 nav.navigate(
                                         Routes.fixedPartnerProfile(FixedPartnerKinds.ASSISTANT)
@@ -688,6 +684,9 @@ fun XcagiNavHost(
                     }
                 }
                 composable(Routes.LONGTAIL) { LongTailScreen(vm) }
+                composable(Routes.NOTIFICATIONS) {
+                    NotificationListScreen(onBack = { nav.popBackStack() })
+                }
                 composable(Routes.ABOUT) {
                     val cfg by vm.appConfig.collectAsState()
                     AboutScreen(

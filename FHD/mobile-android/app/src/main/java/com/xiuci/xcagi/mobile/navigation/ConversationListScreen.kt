@@ -3,8 +3,6 @@ package com.xiuci.xcagi.mobile.navigation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,27 +19,33 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -53,12 +57,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
-import com.xiuci.xcagi.mobile.model.AvatarType
 import com.xiuci.xcagi.mobile.model.ConversationItem
 import com.xiuci.xcagi.mobile.model.ConversationType
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.ui.AppViewModel
-import com.xiuci.xcagi.mobile.ui.components.mobile.CodexAppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -67,6 +71,7 @@ import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 // ═══════════════════════════════════════════
 // 首页 — 会话列表（微信风格）
 // ═══════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationListScreen(
         vm: AppViewModel,
@@ -80,16 +85,28 @@ fun ConversationListScreen(
 ) {
     val conversations by vm.conversations.collectAsState()
     val displayName by vm.displayName.collectAsState()
-    val avatarUri by vm.avatarUri.collectAsState()
+    val avatarSource by vm.userAvatarSource.collectAsState()
     val accountKindLabel by vm.accountKindLabel.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf(ConversationFilter.ALL) }
+    val refreshing by vm.conversationsRefreshing.collectAsState()
+    // 使用 rememberSaveable 保持 UI 状态：切 tab / 旋转屏幕后搜索词和筛选不丢失
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedFilter by rememberSaveable { mutableStateOf(ConversationFilter.ALL) }
+    // 保持列表滚动位置：切 tab 回来后不回到顶部
+    val listState = rememberLazyListState()
     val isEnterprise = ProductSkuConfig.showsEnterpriseNav
     val hasEcosystemEmployees = conversations.any { it.type == ConversationType.AI_TASK }
     val employeeCount = conversations.count { it.type == ConversationType.AI_TASK }
     val unreadTotal = conversations.sumOf { it.unreadCount }
 
+    // 首次进入：拉取一次（受 TTL 控制，5 分钟内不重复请求）
     LaunchedEffect(isEnterprise, accountKindLabel) { vm.loadConversations(isEnterprise) }
+
+    // ON_RESUME 静默刷新：从其他页面返回时，若缓存过期则后台刷新（不显示 loading）
+    // force=false → TTL 内不刷新；静默刷新不触发 refreshing 状态，用户无感知
+    LifecycleResumeEffect(Unit) {
+        vm.loadConversations(isEnterprise, force = false)
+        onPauseOrDispose { }
+    }
 
     val filtered =
             remember(searchQuery, selectedFilter, conversations) {
@@ -116,7 +133,7 @@ fun ConversationListScreen(
                                 displayName.ifBlank {
                                     if (isEnterprise) "XCAGI 企业版" else "XCAGI 个人版"
                                 },
-                        avatarUri = avatarUri,
+                        avatarUri = avatarSource,
                         subtitle =
                                 buildString {
                                     append(accountKindLabel.ifBlank { "未登录" })
@@ -137,51 +154,69 @@ fun ConversationListScreen(
             },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            LazyColumn(
+            // 下拉刷新：用户主动下拉时强制刷新（force=true），保留旧数据不闪烁
+            PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { vm.loadConversations(isEnterprise, force = true) },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                items(filtered, key = { it.id }) { item ->
-                    ConversationCell(
-                            item = item,
-                            onClick = {
-                                when (item.id) {
-                                    PinnedIds.ASSISTANT -> onOpenAssistant()
-                                    PinnedIds.CS -> onOpenCustomerService()
-                                    PinnedIds.CODEX -> onOpenConversation(PinnedIds.CODEX)
-                                    else -> onOpenConversation(item.id)
+                LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                ) {
+                    items(filtered, key = { it.id }) { item ->
+                        ConversationCell(
+                                item = item,
+                                onClick = {
+                                    when (item.id) {
+                                        PinnedIds.ASSISTANT -> onOpenAssistant()
+                                        PinnedIds.CS -> onOpenCustomerService()
+                                        PinnedIds.CODEX -> onOpenConversation(PinnedIds.CODEX)
+                                        else -> onOpenConversation(item.id)
+                                    }
                                 }
-                            }
-                    )
-                    HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            thickness = 0.5.dp,
-                            modifier = Modifier.padding(start = 84.dp),
-                    )
-                }
+                        )
+                        HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                thickness = 0.5.dp,
+                                modifier = Modifier.padding(start = 84.dp),
+                        )
+                    }
 
-                if (!hasEcosystemEmployees && searchQuery.isBlank() && selectedFilter == ConversationFilter.ALL) {
-                    item { EcosystemSyncHint(onRefresh = { vm.loadConversations(isEnterprise) }) }
-                }
+                    if (!hasEcosystemEmployees && searchQuery.isBlank() && selectedFilter == ConversationFilter.ALL) {
+                        item { EcosystemSyncHint(onRefresh = { vm.loadConversations(isEnterprise, force = true) }) }
+                    }
 
-                if (filtered.isEmpty()) {
-                    item {
-                        Box(
-                                Modifier.fillParentMaxSize().padding(vertical = 80.dp),
-                                contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                        "暂无会话",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(Spacing.sm))
-                                Text(
-                                        "和小C助理聊聊吧",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.outline,
-                                )
+                    if (filtered.isEmpty()) {
+                        item {
+                            Box(
+                                    Modifier.fillParentMaxSize().padding(vertical = 80.dp),
+                                    contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    if (refreshing) {
+                                        CircularProgressIndicator(
+                                                modifier = Modifier.size(28.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                        )
+                                        Spacer(Modifier.height(Spacing.sm))
+                                    }
+                                    Text(
+                                            if (refreshing) "正在同步会话…" else "暂无会话",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (!refreshing) {
+                                        Spacer(Modifier.height(Spacing.sm))
+                                        Text(
+                                                "下拉刷新或和小C助理聊聊吧",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.outline,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -223,7 +258,7 @@ private fun MessageHomeHeader(
                         .padding(start = Spacing.lg, end = Spacing.lg, top = 8.dp, bottom = 10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BrandIdentityAvatar(displayName, avatarUri)
+                BrandIdentityAvatar(avatarUri)
                 Spacer(Modifier.width(Spacing.md))
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -276,14 +311,11 @@ private fun MessageHomeHeader(
 }
 
 @Composable
-private fun BrandIdentityAvatar(displayName: String, avatarUri: String) {
+private fun BrandIdentityAvatar(avatarUri: String) {
     LocalProfileAvatar(
-            displayName = displayName,
-            avatarUri = avatarUri,
+            imageSource = avatarUri,
             size = 44.dp,
             shape = RoundedCornerShape(10.dp),
-            containerColor = XcagiTheme.extra.brandBlueContainer,
-            contentColor = XcagiTheme.extra.brandBlue,
     )
 }
 
@@ -296,7 +328,7 @@ internal fun SearchBarField(
 ) {
     Surface(
             shape = RoundedCornerShape(20.dp),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surfaceVariant,
             border = BorderStroke(0.5.dp, XcagiTheme.extra.n200),
             shadowElevation = Elevation.none,
             modifier = modifier.height(38.dp),
@@ -638,19 +670,17 @@ private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
         ) {
             // ── 头像 ──
             Box {
-                when (item.avatarType) {
-                    AvatarType.ICON -> PinnedAvatar(type = item.type)
-                    AvatarType.LETTER ->
-                            LetterAvatar(
-                                    letter = item.avatarLetter ?: 'A',
-                                    colorOverride = item.avatarColor,
-                            )
-                    AvatarType.URL ->
-                            UrlAvatar(
-                                url = item.avatarUrl,
-                                letter = item.avatarLetter ?: 'A',
-                                colorOverride = item.avatarColor,
-                            )
+                when (item.type) {
+                    ConversationType.PINNED_ASSISTANT,
+                    ConversationType.PINNED_CS,
+                    ConversationType.PINNED_CODEX -> PinnedAvatar(type = item.type)
+                    else -> AppAvatar(
+                        imageSource = item.avatarUrl,
+                        fallback = AppAvatarFallback.AI_EMPLOYEE,
+                        size = 52.dp,
+                        shape = MaterialTheme.shapes.small,
+                        contentDescription = item.title,
+                    )
                 }
 
                 // 待读角标：头像右上角红色圆点
@@ -779,114 +809,36 @@ private fun PinnedAvatar(type: ConversationType) {
     }
 }
 
-/** 小C助理头像 — 品牌蓝底 + 白色 C */
+/** 小C助理固定图片头像 */
 @Composable
 private fun AssistantAvatar() {
-    Box(
-            modifier =
-                    Modifier.size(52.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(XcagiTheme.extra.brandBlue),
-            contentAlignment = Alignment.Center,
-    ) {
-        Box(
-                modifier =
-                        Modifier.size(34.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.95f)),
-                contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                    text = "C",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = XcagiTheme.extra.brandBlue,
-            )
-        }
-    }
+    AppAvatar(
+        fallback = AppAvatarFallback.ASSISTANT,
+        size = 52.dp,
+        shape = MaterialTheme.shapes.small,
+        contentDescription = "小C助理",
+    )
 }
 
-/** 专属客服头像 — 微信绿底 + 白色耳机图标 */
+/** 专属客服固定图片头像 */
 @Composable
 private fun CsAvatar() {
-    Box(
-            modifier =
-                    Modifier.size(52.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(XcagiTheme.extra.weChatOnline),
-            contentAlignment = Alignment.Center,
-    ) {
-        Box(
-                modifier =
-                        Modifier.size(34.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.95f)),
-                contentAlignment = Alignment.Center,
-        ) {
-            // 简洁的客服符号 — 用文字绘制，避免 Material Icon 的廉价感
-            Text(
-                    text = "客",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = XcagiTheme.extra.weChatOnline,
-            )
-        }
-    }
+    AppAvatar(
+        fallback = AppAvatarFallback.CUSTOMER_SERVICE,
+        size = 52.dp,
+        shape = MaterialTheme.shapes.small,
+        contentDescription = "专属客服",
+    )
 }
 
 /** 超级员工-Codex 头像 */
 @Composable
 private fun CodexAvatar() {
-    CodexAppAvatar(
+    AppAvatar(
+        fallback = AppAvatarFallback.CODEX,
         size = 52.dp,
-        cornerRadius = 10.dp,
-        contentPadding = 0.dp,
-    )
-}
-
-// ═══════════════════════════════════════════
-// 字母头像
-// ═══════════════════════════════════════════
-@Composable
-private fun LetterAvatar(letter: Char, colorOverride: Color? = null) {
-    val colors =
-            listOf(
-                    XcagiTheme.extra.brandBlue,
-                    XcagiTheme.extra.success,
-                    XcagiTheme.extra.warning,
-                    XcagiTheme.extra.danger,
-                    Color(0xFF8B5CF6),
-                    Color(0xFF00ACC1),
-            )
-    val idx = Math.floorMod(letter.code, colors.size)
-    Box(
-            modifier =
-                    Modifier.size(52.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(colorOverride ?: colors[idx]),
-            contentAlignment = Alignment.Center,
-    ) {
-        Text(
-                text = letter.uppercaseChar().toString(),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-        )
-    }
-}
-
-/** 网络图片头像，加载失败回退字母头像 */
-@Composable
-private fun UrlAvatar(url: String?, letter: Char, colorOverride: Color? = null) {
-    if (url.isNullOrBlank()) {
-        LetterAvatar(letter = letter, colorOverride = colorOverride)
-        return
-    }
-    AsyncImage(
-            model = url,
-            contentDescription = null,
-            modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small),
-            contentScale = ContentScale.Crop,
+        shape = MaterialTheme.shapes.small,
+        contentDescription = "超级员工-Codex",
     )
 }
 

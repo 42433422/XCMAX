@@ -8,7 +8,7 @@
     ],
     "source": "codex_direct_fix"
   },
-  "root_cause": "Manual/stale task failure updated sub_tasks/tasks but did not clear tool_statuses.current_task for codex.",
+  "root_cause": "手动/旧任务失败更新了 sub_tasks/tasks 但未清除 codex 的 tool_statuses.current_task。",
   "schema_version": 1,
-  "symptom": "Device shows codex idle but currentTask still points to failed stale task, blocking new dispatch visibility"
+  "symptom": "设备显示 codex 空闲但 currentTask 仍指向失败的旧任务，阻塞了新调度的可见性"
 }

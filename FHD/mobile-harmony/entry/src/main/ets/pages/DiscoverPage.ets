@@ -1,4 +1,4 @@
-import { AiEmployeeProfile, ModInfo } from '../models/MobileModels';
+import { AiEmployeeProfile, DutyRosterData, ModInfo } from '../models/MobileModels';
 
 const TAB_CONTACTS = 1;
 
@@ -9,6 +9,9 @@ export struct DiscoverPage {
   @Consume mods: ModInfo[];
   @Consume selectedEmployeeKey: string;
   @Consume selectedTab: number;
+  @Consume dutyRoster: DutyRosterData;
+
+  onOpenDutyRoster: () => void = () => {};
 
   build() {
     this.DiscoverArea();
@@ -30,6 +33,8 @@ export struct DiscoverPage {
         }
         .width('100%')
         .padding({ left: 18, right: 18, top: 18 });
+
+        this.DutyRosterEntry();
 
         if (this.employees.length === 0) {
           this.EmptyCard('等待企业端员工', '这里不会预置无关员工；企业端下载并启用 AI 员工后，动态内容会在这里生成。');
@@ -75,6 +80,47 @@ export struct DiscoverPage {
     }
     .width('100%')
     .layoutWeight(1);
+  }
+
+  @Builder
+  DutyRosterEntry() {
+    Row({ space: 14 }) {
+      // 组织架构图标（对标前端 admin-duty-graph 节点）
+      Text('岗')
+        .width(48)
+        .height(48)
+        .borderRadius(14)
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#FFFFFF')
+        .textAlign(TextAlign.Center)
+        .backgroundColor('#BE185D');
+
+      Column({ space: 3 }) {
+        Text('员工入岗')
+          .fontSize(17)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#111827')
+          .maxLines(1);
+        Text(`值班编制 · 在岗 ${this.dutyRoster.totalOnDuty} / ${this.dutyRoster.totalPlanned} · ${this.dutyRoster.areas.length} 个区域`)
+          .fontSize(13)
+          .fontColor('#4B5563')
+          .maxLines(1);
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1);
+
+      Text('>')
+        .fontSize(20)
+        .fontColor('#9CA3AF');
+    }
+    .width('100%')
+    .padding(16)
+    .margin({ left: 14, right: 14 })
+    .backgroundColor('#FFFFFF')
+    .borderRadius(14)
+    .border({ width: 1, color: '#E5E7EB' })
+    .onClick(() => this.onOpenDutyRoster());
   }
 
   @Builder
