@@ -337,8 +337,9 @@ public partial class MainWindow : Window
             UpdateInstallProgress(94, "正在写入太阳鸟业务数据…");
             try
             {
+                var sunbirdProgress = new Progress<string>(msg => UpdateInstallProgress(96, msg));
                 var deployed = await SunbirdSeedExtractor.DeployToUserDataAsync(
-                    progress: msg => UpdateInstallProgress(96, msg),
+                    progress: sunbirdProgress,
                     cancellationToken: _installCts.Token).ConfigureAwait(true);
                 sunbirdNote = deployed ? "已获取太阳鸟业务数据" : "太阳鸟业务数据未写入";
             }
