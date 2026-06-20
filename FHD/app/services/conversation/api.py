@@ -457,9 +457,7 @@ class ApiMixin(NeuroEventPublisherMixin):
         """
         if not getattr(self, "persona_service", None):
             # Fallback：无 persona 服务时用旧 prompt
-            return LEGACY_BASE_PROMPT + (
-                "\n\n" + context_prompt if context_prompt else ""
-            )
+            return LEGACY_BASE_PROMPT + ("\n\n" + context_prompt if context_prompt else "")
 
         # 同步路径：直接调用 build_prompt 生成 prompt
         # 注意：异步完整流程（含 persona 更新）请使用 build_prompt_from_message
@@ -488,7 +486,7 @@ class ApiMixin(NeuroEventPublisherMixin):
         context_prompt = self._build_context_prompt(context)
 
         if getattr(self, "persona_service", None):
-            system_prompt, persona_params = await self.persona_service.build_prompt_from_message(
+            system_prompt, _persona_params = await self.persona_service.build_prompt_from_message(
                 user_id=context.user_id,
                 message=message,
                 history=context.conversation_history or [],
@@ -496,10 +494,7 @@ class ApiMixin(NeuroEventPublisherMixin):
                 context_prompt=context_prompt,
             )
         else:
-            system_prompt = LEGACY_BASE_PROMPT + (
-                "\n\n" + context_prompt if context_prompt else ""
-            )
-            persona_params = None
+            system_prompt = LEGACY_BASE_PROMPT + ("\n\n" + context_prompt if context_prompt else "")
 
         messages = [{"role": "system", "content": system_prompt}]
 
