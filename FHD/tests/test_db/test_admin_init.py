@@ -28,7 +28,9 @@ class TestInitUserDb:
 class TestCreateAdminUser:
     def test_create_admin_user_already_exists(self):
         mock_session = MagicMock()
-        mock_session.execute = MagicMock(return_value=MagicMock(fetchone=MagicMock(return_value=(1,))))
+        mock_session.execute = MagicMock(
+            return_value=MagicMock(fetchone=MagicMock(return_value=(1,)))
+        )
         mock_session.commit = MagicMock()
         mock_session.__enter__ = MagicMock(return_value=mock_session)
         mock_session.__exit__ = MagicMock(return_value=False)
@@ -61,7 +63,10 @@ class TestCreateAdminUser:
                     from app.db.admin_init import create_admin_user
 
                     result = create_admin_user(
-                        username="newadmin", password="secret", display_name="New Admin", role="admin"
+                        username="newadmin",
+                        password="secret",
+                        display_name="New Admin",
+                        role="admin",
                     )
         assert result["success"] is True
         assert "已创建" in result["message"]
@@ -120,7 +125,11 @@ class TestCreateAdminFromEnv:
 
         with patch.dict(
             os.environ,
-            {"ADMIN_USERNAME": "envadmin", "ADMIN_PASSWORD": "envpw", "ADMIN_DISPLAY_NAME": "Env Admin"},
+            {
+                "ADMIN_USERNAME": "envadmin",
+                "ADMIN_PASSWORD": "envpw",
+                "ADMIN_DISPLAY_NAME": "Env Admin",
+            },
             clear=False,
         ):
             with patch("app.db.admin_init.SessionLocal", return_value=mock_session):

@@ -135,4 +135,3 @@ def get_safety_domain() -> SafetyNeuroDomain:
         _safety_domain = SafetyNeuroDomain()
         get_domain_registry().register(_safety_domain)
     return _safety_domain
-

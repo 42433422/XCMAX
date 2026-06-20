@@ -5,6 +5,7 @@ Focuses on ``_parse_filter`` lookup operators (``__gte``/``__gt``/``__lte``/
 paths, plus edge cases for ``get_distinct_values``/``get_all``/``delete`` that
 ext2 does not yet exercise.
 """
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -137,7 +138,7 @@ class TestParseFilterGte:
         mc = _make_model_with_field("price")
         out = UnifiedQueryService._parse_filter(mc, "price__gte", 100)
         assert out == "ge:price"
-        getattr(mc, "price").__ge__.assert_called_once_with(100)
+        mc.price.__ge__.assert_called_once_with(100)
 
     def test_gte_unknown_field_returns_none(self):
         class NoField:
@@ -152,7 +153,7 @@ class TestParseFilterGt:
         mc = _make_model_with_field("price")
         out = UnifiedQueryService._parse_filter(mc, "price__gt", 100)
         assert out == "gt:price"
-        getattr(mc, "price").__gt__.assert_called_once_with(100)
+        mc.price.__gt__.assert_called_once_with(100)
 
 
 class TestParseFilterLte:
@@ -160,7 +161,7 @@ class TestParseFilterLte:
         mc = _make_model_with_field("price")
         out = UnifiedQueryService._parse_filter(mc, "price__lte", 100)
         assert out == "le:price"
-        getattr(mc, "price").__le__.assert_called_once_with(100)
+        mc.price.__le__.assert_called_once_with(100)
 
 
 class TestParseFilterLt:
@@ -168,7 +169,7 @@ class TestParseFilterLt:
         mc = _make_model_with_field("price")
         out = UnifiedQueryService._parse_filter(mc, "price__lt", 100)
         assert out == "lt:price"
-        getattr(mc, "price").__lt__.assert_called_once_with(100)
+        mc.price.__lt__.assert_called_once_with(100)
 
 
 class TestParseFilterNe:
@@ -176,7 +177,7 @@ class TestParseFilterNe:
         mc = _make_model_with_field("status")
         out = UnifiedQueryService._parse_filter(mc, "status__ne", "deleted")
         assert out == "ne:status"
-        getattr(mc, "status").__ne__.assert_called_once_with("deleted")
+        mc.status.__ne__.assert_called_once_with("deleted")
 
 
 class TestParseFilterIn:
@@ -184,7 +185,7 @@ class TestParseFilterIn:
         mc = _make_model_with_field("id")
         out = UnifiedQueryService._parse_filter(mc, "id__in", [1, 2, 3])
         assert out == "in:id"
-        getattr(mc, "id").in_.assert_called_once_with([1, 2, 3])
+        mc.id.in_.assert_called_once_with([1, 2, 3])
 
     def test_in_unknown_field_returns_none(self):
         class NoField:
@@ -199,7 +200,7 @@ class TestParseFilterLike:
         mc = _make_model_with_field("name")
         out = UnifiedQueryService._parse_filter(mc, "name__like", "abc")
         assert out == "like:name"
-        getattr(mc, "name").like.assert_called_once_with("%abc%")
+        mc.name.like.assert_called_once_with("%abc%")
 
     def test_like_unknown_field_returns_none(self):
         class NoField:
@@ -214,7 +215,7 @@ class TestParseFilterIlike:
         mc = _make_model_with_field("name")
         out = UnifiedQueryService._parse_filter(mc, "name__ilike", "abc")
         assert out == "ilike:name"
-        getattr(mc, "name").ilike.assert_called_once_with("%abc%")
+        mc.name.ilike.assert_called_once_with("%abc%")
 
     def test_ilike_unknown_field_returns_none(self):
         class NoField:
@@ -238,7 +239,7 @@ class TestParseFilterDefaultEq:
         mc = _make_model_with_field("id")
         out = UnifiedQueryService._parse_filter(mc, "id", [1, 2, 3])
         assert out == "in:id"
-        getattr(mc, "id").in_.assert_called_once_with([1, 2, 3])
+        mc.id.in_.assert_called_once_with([1, 2, 3])
 
     def test_unknown_field_returns_none(self):
         class NoField:
@@ -414,9 +415,7 @@ class TestGetAllEdge:
         mc.field2 = attr2
         db = _FakeDb(items=[MagicMock()])
         with patch.object(uqs_mod, "get_db", lambda: _fake_get_db(db)):
-            out = UnifiedQueryService.get_all(
-                mc, order_by=[("field1", "asc"), ("field2", "desc")]
-            )
+            out = UnifiedQueryService.get_all(mc, order_by=[("field1", "asc"), ("field2", "desc")])
         assert len(out) == 1
         attr1.asc.assert_called_once()
         attr2.desc.assert_called_once()
@@ -427,18 +426,14 @@ class TestGetAllEdge:
 
         db = _FakeDb(items=[MagicMock()])
         with patch.object(uqs_mod, "get_db", lambda: _fake_get_db(db)):
-            out = UnifiedQueryService.get_all(
-                NoField(), filter_kwargs={"unknown": "x"}
-            )
+            out = UnifiedQueryService.get_all(NoField(), filter_kwargs={"unknown": "x"})
         assert len(out) == 1
 
     def test_filter_kwargs_with_in_operator(self):
         mc = _make_model_with_field("id")
         db = _FakeDb(items=[MagicMock()])
         with patch.object(uqs_mod, "get_db", lambda: _fake_get_db(db)):
-            out = UnifiedQueryService.get_all(
-                mc, filter_kwargs={"id__in": [1, 2, 3]}
-            )
+            out = UnifiedQueryService.get_all(mc, filter_kwargs={"id__in": [1, 2, 3]})
         assert len(out) == 1
 
     def test_no_order_by(self):
@@ -666,8 +661,7 @@ class TestFindPurchaseUnitEdge:
         # filter_by should have been called with the kwargs
         # _FakeQuery stores filter_by kwargs in _filters
         assert any(
-            isinstance(f, dict) and f == {"id": 1, "unit_name": "u"}
-            for f in db.last_query._filters
+            isinstance(f, dict) and f == {"id": 1, "unit_name": "u"} for f in db.last_query._filters
         )
 
 
@@ -729,10 +723,7 @@ class TestFindProductEdge:
             out = find_product(id=1)
         assert out is not None
         assert db.last_query is not None
-        assert any(
-            isinstance(f, dict) and f == {"id": 1}
-            for f in db.last_query._filters
-        )
+        assert any(isinstance(f, dict) and f == {"id": 1} for f in db.last_query._filters)
 
 
 class TestCheckPurchaseUnitExistsEdge:

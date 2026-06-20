@@ -9,7 +9,6 @@ import pytest
 
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -201,9 +200,11 @@ class TestGetOrCreateDirect:
         conv = _make_conversation(conv_id=20, title="用户1 ↔ 用户2")
         with patch.object(svc, "_find_direct_conversation", return_value=None):
             db.get.return_value = conv
+
             # After flush, conv.id should be set
             def _flush_side_effect():
                 conv.id = 20
+
             db.flush.side_effect = _flush_side_effect
             db.refresh.side_effect = lambda x: None
             result = svc.get_or_create_direct(1, 2)
@@ -271,10 +272,12 @@ class TestSendMessage:
         db.get.return_value = conv
         db.refresh.side_effect = lambda x: setattr(x, "id", 1)
         svc = ImApplicationService(db)
-        with patch.object(svc, "_get_member", return_value=MagicMock()), \
-             patch.object(svc, "_member_user_ids", return_value=[1, 2]), \
-             patch.object(svc, "_display_name", return_value="Alice"), \
-             patch.object(ImApplicationService, "_record_im_message_change", return_value=12345):
+        with (
+            patch.object(svc, "_get_member", return_value=MagicMock()),
+            patch.object(svc, "_member_user_ids", return_value=[1, 2]),
+            patch.object(svc, "_display_name", return_value="Alice"),
+            patch.object(ImApplicationService, "_record_im_message_change", return_value=12345),
+        ):
             result = svc.send_message(1, 1, "hello")
         assert result["message"]["body"] == "hello"
         assert result["member_user_ids"] == [1, 2]
@@ -284,10 +287,12 @@ class TestSendMessage:
         db = MagicMock()
         long_body = "x" * 5000
         svc = ImApplicationService(db)
-        with patch.object(svc, "_get_member", return_value=MagicMock()), \
-             patch.object(svc, "_member_user_ids", return_value=[1]), \
-             patch.object(svc, "_display_name", return_value="A"), \
-             patch.object(ImApplicationService, "_record_im_message_change", return_value=0):
+        with (
+            patch.object(svc, "_get_member", return_value=MagicMock()),
+            patch.object(svc, "_member_user_ids", return_value=[1]),
+            patch.object(svc, "_display_name", return_value="A"),
+            patch.object(ImApplicationService, "_record_im_message_change", return_value=0),
+        ):
             # The body is truncated to 4000 chars in the model
             svc.send_message(1, 1, long_body)
         # Verify db.add was called - the body passed to ImMessage is truncated
@@ -313,9 +318,11 @@ class TestMarkRead:
         db = MagicMock()
         member = _make_member(conversation_id=1, user_id=1, last_read_message_id=5)
         svc = ImApplicationService(db)
-        with patch.object(svc, "_get_member", return_value=member), \
-             patch.object(svc, "_member_user_ids", return_value=[1, 2]), \
-             patch.object(ImApplicationService, "_record_im_read_change", return_value=999):
+        with (
+            patch.object(svc, "_get_member", return_value=member),
+            patch.object(svc, "_member_user_ids", return_value=[1, 2]),
+            patch.object(ImApplicationService, "_record_im_read_change", return_value=999),
+        ):
             result = svc.mark_read(1, 1, 10)
         assert result["last_read_message_id"] == 10
         assert result["updated_at_ms"] == 999
@@ -324,9 +331,11 @@ class TestMarkRead:
         db = MagicMock()
         member = _make_member(conversation_id=1, user_id=1, last_read_message_id=20)
         svc = ImApplicationService(db)
-        with patch.object(svc, "_get_member", return_value=member), \
-             patch.object(svc, "_member_user_ids", return_value=[1]), \
-             patch.object(ImApplicationService, "_record_im_read_change", return_value=0):
+        with (
+            patch.object(svc, "_get_member", return_value=member),
+            patch.object(svc, "_member_user_ids", return_value=[1]),
+            patch.object(ImApplicationService, "_record_im_read_change", return_value=0),
+        ):
             result = svc.mark_read(1, 1, 10)
         assert result["last_read_message_id"] == 20
 
@@ -376,8 +385,10 @@ class TestListContacts:
 
 class TestRecordChanges:
     def test_record_im_message_change(self):
-        with patch("app.services.xcmax_sync_service.record_change") as mock_rc, \
-             patch("app.services.xcmax_sync_service.utc_now_ms", return_value=1000):
+        with (
+            patch("app.services.xcmax_sync_service.record_change") as mock_rc,
+            patch("app.services.xcmax_sync_service.utc_now_ms", return_value=1000),
+        ):
             result = ImApplicationService._record_im_message_change(
                 {"id": 1, "body": "hi"}, actor="1"
             )
@@ -385,8 +396,10 @@ class TestRecordChanges:
         mock_rc.assert_called_once()
 
     def test_record_im_read_change(self):
-        with patch("app.services.xcmax_sync_service.record_change") as mock_rc, \
-             patch("app.services.xcmax_sync_service.utc_now_ms", return_value=2000):
+        with (
+            patch("app.services.xcmax_sync_service.record_change") as mock_rc,
+            patch("app.services.xcmax_sync_service.utc_now_ms", return_value=2000),
+        ):
             result = ImApplicationService._record_im_read_change(
                 conversation_id=1, user_id=1, last_read_message_id=5, actor="1"
             )
@@ -447,15 +460,19 @@ class TestListConversations:
 
     def test_returns_conversations_with_direct_peer(self):
         db = MagicMock()
-        conv = _make_conversation(conv_id=1, is_direct=True, title=None, last_message_at=datetime(2026, 1, 1))
+        conv = _make_conversation(
+            conv_id=1, is_direct=True, title=None, last_message_at=datetime(2026, 1, 1)
+        )
         msg = _make_message(msg_id=10, body="hi")
         # First call returns conversations, second returns last message, third returns unread count
         db.execute.return_value.scalars.return_value.all.return_value = [conv]
         db.execute.return_value.scalars.return_value.first.return_value = msg
         svc = ImApplicationService(db)
-        with patch.object(svc, "_direct_peer_id", return_value=2), \
-             patch.object(svc, "_display_name", return_value="Bob"), \
-             patch.object(svc, "_count_unread", return_value=3):
+        with (
+            patch.object(svc, "_direct_peer_id", return_value=2),
+            patch.object(svc, "_display_name", return_value="Bob"),
+            patch.object(svc, "_count_unread", return_value=3),
+        ):
             result = svc.list_conversations(1)
         assert len(result) == 1
         assert result[0]["title"] == "Bob"
@@ -464,7 +481,9 @@ class TestListConversations:
 
     def test_returns_group_conversation_with_title(self):
         db = MagicMock()
-        conv = _make_conversation(conv_id=1, is_direct=False, title="Team Chat", last_message_at=None)
+        conv = _make_conversation(
+            conv_id=1, is_direct=False, title="Team Chat", last_message_at=None
+        )
         db.execute.return_value.scalars.return_value.all.return_value = [conv]
         svc = ImApplicationService(db)
         with patch.object(svc, "_count_unread", return_value=0):

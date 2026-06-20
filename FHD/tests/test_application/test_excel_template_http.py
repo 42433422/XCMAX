@@ -19,7 +19,6 @@ from app.application.excel_template_http_app_service import (
     excel_templates_test,
 )
 
-
 # ========================= _map_template_category =======================
 
 

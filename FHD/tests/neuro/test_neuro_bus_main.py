@@ -1,4 +1,5 @@
 """Tests for app.neuro_bus.__main__ — Neuro-DDD Architecture Verification Script."""
+
 from __future__ import annotations
 
 import asyncio
@@ -15,10 +16,10 @@ from app.neuro_bus.__main__ import (
     test_reflex_arc,
 )
 
-
 # ---------------------------------------------------------------------------
 # test_imports
 # ---------------------------------------------------------------------------
+
 
 class TestTestImports:
     """test_imports() — 模块导入验证"""
@@ -53,6 +54,7 @@ class TestTestImports:
 # test_reflex_arc
 # ---------------------------------------------------------------------------
 
+
 class TestTestReflexArc:
     """test_reflex_arc() — ReflexArc 响应时间 SLA 测试"""
 
@@ -64,13 +66,16 @@ class TestTestReflexArc:
         mock_result.reflex_type.value = "greet"
         mock_reflex_arc.process.return_value = mock_result
 
-        with patch(
-            "app.neuro_bus.__main__.get_reflex_arc",
-            return_value=mock_reflex_arc,
-            create=True,
-        ), patch(
-            "app.domain.neuro.reflex_arc.get_reflex_arc",
-            return_value=mock_reflex_arc,
+        with (
+            patch(
+                "app.neuro_bus.__main__.get_reflex_arc",
+                return_value=mock_reflex_arc,
+                create=True,
+            ),
+            patch(
+                "app.domain.neuro.reflex_arc.get_reflex_arc",
+                return_value=mock_reflex_arc,
+            ),
         ):
             result = test_reflex_arc()
         assert result is True
@@ -116,6 +121,7 @@ class TestTestReflexArc:
 # ---------------------------------------------------------------------------
 # test_neurobus
 # ---------------------------------------------------------------------------
+
 
 class TestTestNeurobus:
     """test_neurobus() — NeuroBus 事件流测试"""
@@ -173,6 +179,7 @@ class TestTestNeurobus:
 # test_domains
 # ---------------------------------------------------------------------------
 
+
 class TestTestDomains:
     """test_domains() — NeuroDomains 测试"""
 
@@ -185,15 +192,20 @@ class TestTestDomains:
             "order": {"events": 5},
         }
 
-        with patch(
-            "app.neuro_bus.domains.base.get_domain_registry",
-            return_value=mock_registry,
-        ), patch(
-            "app.neuro_bus.domains.intent_domain.get_intent_domain",
-        ), patch(
-            "app.neuro_bus.domains.order_domain.get_order_domain",
-        ), patch(
-            "app.neuro_bus.domains.payment_domain.get_payment_domain",
+        with (
+            patch(
+                "app.neuro_bus.domains.base.get_domain_registry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "app.neuro_bus.domains.intent_domain.get_intent_domain",
+            ),
+            patch(
+                "app.neuro_bus.domains.order_domain.get_order_domain",
+            ),
+            patch(
+                "app.neuro_bus.domains.payment_domain.get_payment_domain",
+            ),
         ):
             result = test_domains()
         assert result is True
@@ -204,11 +216,14 @@ class TestTestDomains:
         mock_registry.list_domains.return_value = ["intent"]
         mock_registry.get_all_stats.return_value = {}
 
-        with patch(
-            "app.neuro_bus.domains.base.get_domain_registry",
-            return_value=mock_registry,
-        ), patch(
-            "app.neuro_bus.domains.intent_domain.get_intent_domain",
+        with (
+            patch(
+                "app.neuro_bus.domains.base.get_domain_registry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "app.neuro_bus.domains.intent_domain.get_intent_domain",
+            ),
         ):
             result = test_domains()
         assert result is False
@@ -226,6 +241,7 @@ class TestTestDomains:
 # ---------------------------------------------------------------------------
 # test_processors
 # ---------------------------------------------------------------------------
+
 
 class TestTestProcessors:
     """test_processors() — 处理器协调器测试"""
@@ -249,9 +265,7 @@ class TestTestProcessors:
         mock_decision3.processor_type.value = "conscious"
         mock_decision3.reason = "complex query"
 
-        mock_coordinator.route.side_effect = [
-            mock_decision1, mock_decision2, mock_decision3
-        ]
+        mock_coordinator.route.side_effect = [mock_decision1, mock_decision2, mock_decision3]
         mock_coordinator.get_stats.return_value = {"total": 3}
 
         with patch(
@@ -275,6 +289,7 @@ class TestTestProcessors:
 # ---------------------------------------------------------------------------
 # main()
 # ---------------------------------------------------------------------------
+
 
 class TestMain:
     """main() — 主入口"""

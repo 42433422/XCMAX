@@ -14,15 +14,14 @@ from fastapi.testclient import TestClient
 from app.fastapi_routes.mobile_api import (
     MobileLoginRequest,
     MobileRefreshRequest,
-    get_mobile_user,
-    mobile_me,
     _parse_web_auth_login_response,
     _should_retry_mobile_admin_login,
     _user_public_dict,
     _web_login_error_message,
+    get_mobile_user,
+    mobile_me,
     router,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -134,7 +133,9 @@ class TestUserPublicDict:
         user.role = "admin"
         user.is_active = True
         user.wx_avatar_url = None
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"):
+        with patch(
+            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+        ):
             result = _user_public_dict(user)
         assert result["id"] == 1
         assert result["username"] == "testuser"
@@ -150,7 +151,10 @@ class TestUserPublicDict:
         user.role = "user"
         user.is_active = True
         user.wx_avatar_url = "https://example.com/avatar.jpg"
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="https://example.com/avatar.jpg"):
+        with patch(
+            "app.utils.user_avatar_storage.public_avatar_url",
+            return_value="https://example.com/avatar.jpg",
+        ):
             result = _user_public_dict(user)
         assert result["avatar_url"] == "https://example.com/avatar.jpg"
 
@@ -237,13 +241,16 @@ class TestMobileHostDiscoverHint:
     def test_success(self, client):
         mock_info = MagicMock()
         mock_info.model_dump.return_value = {"ip": "192.168.1.1", "port": 5100}
-        with patch(
-            "app.fastapi_routes.lan_routes.host_info",
-            new_callable=AsyncMock,
-            return_value=mock_info,
-        ), patch(
-            "app.utils.listen_port.resolve_listen_port",
-            return_value=5100,
+        with (
+            patch(
+                "app.fastapi_routes.lan_routes.host_info",
+                new_callable=AsyncMock,
+                return_value=mock_info,
+            ),
+            patch(
+                "app.utils.listen_port.resolve_listen_port",
+                return_value=5100,
+            ),
         ):
             resp = client.get("/api/mobile/v1/host/discover-hint")
         assert resp.status_code == 200
@@ -279,8 +286,12 @@ class TestMobileAuthLoginLogic:
         assert msg == "密码错误"
 
     def test_should_retry_mobile_admin_login_from_enterprise_gate(self):
-        assert _should_retry_mobile_admin_login("管理员账号不能从企业账号入口登录，请切换到管理员入口登录。", "enterprise")
-        assert not _should_retry_mobile_admin_login("管理员账号不能从企业账号入口登录，请切换到管理员入口登录。", "admin")
+        assert _should_retry_mobile_admin_login(
+            "管理员账号不能从企业账号入口登录，请切换到管理员入口登录。", "enterprise"
+        )
+        assert not _should_retry_mobile_admin_login(
+            "管理员账号不能从企业账号入口登录，请切换到管理员入口登录。", "admin"
+        )
 
 
 class TestMobileAuthLoginRoute:
@@ -311,9 +322,7 @@ class TestMobileAuthLoginRoute:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
 
         resp = client.post(
             "/api/mobile/v1/auth/login",
@@ -338,9 +347,7 @@ class TestMobileMeLogic:
     """Test the /me endpoint helper logic at the unit level."""
 
     @pytest.mark.asyncio
-    async def test_get_mobile_user_invalid_bearer_does_not_fall_back_to_session(
-        self, monkeypatch
-    ):
+    async def test_get_mobile_user_invalid_bearer_does_not_fall_back_to_session(self, monkeypatch):
         from fastapi import Request
 
         resolved = []
@@ -361,9 +368,7 @@ class TestMobileMeLogic:
         assert resolved == []
 
     @pytest.mark.asyncio
-    async def test_get_mobile_user_expunges_bearer_user_before_session_commit(
-        self, monkeypatch
-    ):
+    async def test_get_mobile_user_expunges_bearer_user_before_session_commit(self, monkeypatch):
         from fastapi import Request
 
         user = SimpleNamespace(
@@ -469,7 +474,9 @@ class TestMobileMeLogic:
         user.role = "admin"
         user.is_active = True
         user.wx_avatar_url = None
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"):
+        with patch(
+            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+        ):
             result = _user_public_dict(user)
         assert result["id"] == 1
         assert result["username"] == "meuser"

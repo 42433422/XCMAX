@@ -15,7 +15,6 @@ from app.application.aibiz_web_terminal_service import (
     _unwrap,
 )
 
-
 # ========================= _LANE_BY_TERMINAL =============================
 
 

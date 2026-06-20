@@ -35,7 +35,9 @@ def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]
         "specialized_tools": get_employee_tools(employee_id),
     }
 
-    async def _call_llm(messages: list[dict[str, Any]], max_tokens: int = 4000, temperature: float = 0.7) -> dict[str, Any]:
+    async def _call_llm(
+        messages: list[dict[str, Any]], max_tokens: int = 4000, temperature: float = 0.7
+    ) -> dict[str, Any]:
         try:
             from app.mod_sdk.mod_employee_llm import mod_employee_complete
 
@@ -44,7 +46,12 @@ def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]
             )
             if isinstance(result, dict) and result.get("success"):
                 return {"ok": True, "content": result.get("content", "")}
-            return {"ok": False, "error": result.get("error", "LLM 调用失败") if isinstance(result, dict) else "未知错误"}
+            return {
+                "ok": False,
+                "error": result.get("error", "LLM 调用失败")
+                if isinstance(result, dict)
+                else "未知错误",
+            }
         except Exception as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
             return {"ok": False, "error": repr(exc)}
 

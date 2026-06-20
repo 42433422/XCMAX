@@ -267,8 +267,13 @@ class TestMainCustomModel:
 
         mock_trainer_instance = MagicMock()
         with (
-            patch("app.services.distillation_trainer.DistillationTrainer", return_value=mock_trainer_instance) as MockTrainer,
-            patch("sys.argv", ["distillation_trainer", "--data", data_path, "--model", "custom-model"]),
+            patch(
+                "app.services.distillation_trainer.DistillationTrainer",
+                return_value=mock_trainer_instance,
+            ) as MockTrainer,
+            patch(
+                "sys.argv", ["distillation_trainer", "--data", data_path, "--model", "custom-model"]
+            ),
         ):
             main()
             MockTrainer.assert_called_once()

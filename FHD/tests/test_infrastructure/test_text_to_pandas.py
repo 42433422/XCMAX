@@ -1,14 +1,15 @@
 """Tests for app.infrastructure.excel.text_to_pandas."""
+
 from __future__ import annotations
 
-import pytest
 import pandas as pd
+import pytest
 
 from app.infrastructure.excel.text_to_pandas import (
-    _validate_generated_code,
-    _safe_exec_pandas,
-    SAFE_BUILTINS,
     MAX_CODE_LENGTH,
+    SAFE_BUILTINS,
+    _safe_exec_pandas,
+    _validate_generated_code,
 )
 
 

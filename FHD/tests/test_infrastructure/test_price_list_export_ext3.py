@@ -26,7 +26,6 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-
 # ---------------------------------------------------------------------------
 # _format_price_cell — additional branches
 # ---------------------------------------------------------------------------
@@ -410,12 +409,15 @@ class TestSnapshotBodyRowTcBorders:
         row.cells = [cell]
         table.rows = [row]
 
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=1,
-        ), patch(
-            "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
-            return_value=None,
+        with (
+            patch(
+                "app.infrastructure.documents.price_list_export._tbl_row_count",
+                return_value=1,
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
+                return_value=None,
+            ),
         ):
             result = _snapshot_body_row_tc_borders(table, 0)
         assert result == [None]
@@ -439,12 +441,15 @@ class TestPickBorderTemplateRowIndex:
         row.cells = [cell]
         table.rows = [row, row, row]
 
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=3,
-        ), patch(
-            "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
-            return_value=None,
+        with (
+            patch(
+                "app.infrastructure.documents.price_list_export._tbl_row_count",
+                return_value=3,
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
+                return_value=None,
+            ),
         ):
             result = _pick_border_template_row_index(table, 1)
         assert result == 1
@@ -461,12 +466,15 @@ class TestPickBorderTemplateRowIndex:
         row.cells = [cell]
         table.rows = [row, row, row]
 
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=3,
-        ), patch(
-            "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
-            return_value=OxmlElement("w:tcBorders"),
+        with (
+            patch(
+                "app.infrastructure.documents.price_list_export._tbl_row_count",
+                return_value=3,
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
+                return_value=OxmlElement("w:tcBorders"),
+            ),
         ):
             result = _pick_border_template_row_index(table, 1)
         assert result == 1
@@ -499,12 +507,15 @@ class TestApplyTcBordersToAllBodyRows:
         table.rows = [row, row]
 
         snap = OxmlElement("w:tcBorders")
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=2,
-        ), patch(
-            "app.infrastructure.documents.price_list_export._tc_apply_tc_borders_snapshot"
-        ) as mock_apply:
+        with (
+            patch(
+                "app.infrastructure.documents.price_list_export._tbl_row_count",
+                return_value=2,
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export._tc_apply_tc_borders_snapshot"
+            ) as mock_apply,
+        ):
             _apply_tc_borders_to_all_body_rows(table, 1, [snap])
         assert mock_apply.call_count == 1
 
@@ -699,7 +710,10 @@ class TestWriteProductRowAdditional:
         cells = [MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()]
         prod = {"model_number": "M1", "name": "P1", "specification": "S1", "price": 100}
         _write_product_row(
-            cells, prod, 1, with_serial=True,
+            cells,
+            prod,
+            1,
+            with_serial=True,
             col_map={"model": 1, "name": 2, "spec": 3, "price": 4},
         )
         assert cells[0].text == "1"
@@ -714,7 +728,10 @@ class TestWriteProductRowAdditional:
         cells = [MagicMock(), MagicMock(), MagicMock(), MagicMock()]
         prod = {"model_number": "M1", "name": "P1", "specification": "S1", "price": 100}
         _write_product_row(
-            cells, prod, 1, with_serial=False,
+            cells,
+            prod,
+            1,
+            with_serial=False,
             col_map={"model": 0, "name": 1, "spec": 2, "price": 3},
         )
         assert cells[0].text == "M1"
@@ -725,7 +742,10 @@ class TestWriteProductRowAdditional:
         cells = [MagicMock()]
         prod = {"model_number": "M1"}
         _write_product_row(
-            cells, prod, 1, with_serial=False,
+            cells,
+            prod,
+            1,
+            with_serial=False,
             col_map={"model": 5, "name": 6, "spec": 7, "price": 8},
         )
         # All indices out of range, should not raise
@@ -1363,12 +1383,15 @@ class TestTemplatePreviewJson:
             build_sales_contract_template_preview_json,
         )
 
-        with patch(
-            "app.infrastructure.documents.price_list_export.resolve_template_path_with_meta",
-            return_value=(Path("/tmp/contract.docx"), "contract.docx"),
-        ), patch(
-            "app.infrastructure.documents.price_list_export.read_excel_sales_contract_preview",
-            return_value={"success": True, "data": []},
+        with (
+            patch(
+                "app.infrastructure.documents.price_list_export.resolve_template_path_with_meta",
+                return_value=(Path("/tmp/contract.docx"), "contract.docx"),
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export.read_excel_sales_contract_preview",
+                return_value={"success": True, "data": []},
+            ),
         ):
             result = build_sales_contract_template_preview_json()
         assert result["success"] is True

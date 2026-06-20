@@ -1,4 +1,5 @@
 """Tests for app.application.unit_products_import_app_service — unit products import."""
+
 from __future__ import annotations
 
 import os
@@ -10,10 +11,10 @@ import pytest
 
 from app.application.unit_products_import_app_service import UnitProductsImportService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def service():
@@ -27,9 +28,11 @@ def service():
 
 def _mock_db_ctx(mock_db):
     """Return a context manager that yields mock_db."""
+
     @contextmanager
     def _ctx():
         yield mock_db
+
     return _ctx()
 
 
@@ -79,6 +82,7 @@ def _create_test_sqlite_db(db_path: str, products: list[dict] | None = None):
 # ---------------------------------------------------------------------------
 # _validate_params
 # ---------------------------------------------------------------------------
+
 
 class TestValidateParams:
     """_validate_params() — 输入参数验证"""
@@ -140,6 +144,7 @@ class TestValidateParams:
 # _parse_float / _parse_int
 # ---------------------------------------------------------------------------
 
+
 class TestParseHelpers:
     """_parse_float() / _parse_int() — 数值解析"""
 
@@ -184,16 +189,20 @@ class TestParseHelpers:
 # _read_source_products
 # ---------------------------------------------------------------------------
 
+
 class TestReadSourceProducts:
     """_read_source_products() — 读取源产品数据"""
 
     def test_read_products_from_sqlite(self, tmp_path):
         """从 SQLite 读取产品"""
         db_path = str(tmp_path / "test.db")
-        _create_test_sqlite_db(db_path, [
-            {"name": "产品A", "model_number": "M-001", "price": 10.5, "quantity": 100},
-            {"name": "产品B", "model_number": "M-002", "price": 20.0, "quantity": 50},
-        ])
+        _create_test_sqlite_db(
+            db_path,
+            [
+                {"name": "产品A", "model_number": "M-001", "price": 10.5, "quantity": 100},
+                {"name": "产品B", "model_number": "M-002", "price": 20.0, "quantity": 50},
+            ],
+        )
 
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
@@ -209,10 +218,13 @@ class TestReadSourceProducts:
     def test_read_products_no_name_skipped(self, tmp_path):
         """无名称的产品被跳过"""
         db_path = str(tmp_path / "test.db")
-        _create_test_sqlite_db(db_path, [
-            {"name": "", "model_number": "M-001", "price": 10.0, "quantity": 5},
-            {"name": "有效产品", "model_number": "M-002", "price": 20.0, "quantity": 10},
-        ])
+        _create_test_sqlite_db(
+            db_path,
+            [
+                {"name": "", "model_number": "M-001", "price": 10.0, "quantity": 5},
+                {"name": "有效产品", "model_number": "M-002", "price": 20.0, "quantity": 10},
+            ],
+        )
 
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
@@ -255,19 +267,22 @@ class TestReadSourceProducts:
     def test_read_products_with_all_fields(self, tmp_path):
         """包含所有字段的产品"""
         db_path = str(tmp_path / "test.db")
-        _create_test_sqlite_db(db_path, [
-            {
-                "name": "完整产品",
-                "model_number": "FULL-001",
-                "specification": "100x200",
-                "price": 99.99,
-                "quantity": 200,
-                "description": "测试描述",
-                "category": "电子",
-                "brand": "品牌A",
-                "is_active": 1,
-            },
-        ])
+        _create_test_sqlite_db(
+            db_path,
+            [
+                {
+                    "name": "完整产品",
+                    "model_number": "FULL-001",
+                    "specification": "100x200",
+                    "price": 99.99,
+                    "quantity": 200,
+                    "description": "测试描述",
+                    "category": "电子",
+                    "brand": "品牌A",
+                    "is_active": 1,
+                },
+            ],
+        )
 
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
@@ -291,6 +306,7 @@ class TestReadSourceProducts:
 # ---------------------------------------------------------------------------
 # _ensure_unit_exists
 # ---------------------------------------------------------------------------
+
 
 class TestEnsureUnitExists:
     """_ensure_unit_exists() — 确保购买单位存在"""
@@ -382,6 +398,7 @@ class TestEnsureUnitExists:
 # _deduplicate_products
 # ---------------------------------------------------------------------------
 
+
 class TestDeduplicateProducts:
     """_deduplicate_products() — 产品去重"""
 
@@ -458,6 +475,7 @@ class TestDeduplicateProducts:
 # import_unit_products (integration-level with mocks)
 # ---------------------------------------------------------------------------
 
+
 class TestImportUnitProducts:
     """import_unit_products() — 完整导入流程"""
 
@@ -506,9 +524,12 @@ class TestImportUnitProducts:
     def test_successful_import(self, mock_sqlite_conn, mock_get_db, service, tmp_path):
         """成功导入产品"""
         db_path = str(tmp_path / "products.db")
-        _create_test_sqlite_db(db_path, [
-            {"name": "产品A", "model_number": "M-001", "price": 10.0, "quantity": 100},
-        ])
+        _create_test_sqlite_db(
+            db_path,
+            [
+                {"name": "产品A", "model_number": "M-001", "price": 10.0, "quantity": 100},
+            ],
+        )
 
         real_conn = sqlite3.connect(db_path)
 
@@ -543,9 +564,12 @@ class TestImportUnitProducts:
     def test_all_duplicates_skipped(self, mock_sqlite_conn, mock_get_db, service, tmp_path):
         """全部重复时跳过"""
         db_path = str(tmp_path / "dup.db")
-        _create_test_sqlite_db(db_path, [
-            {"name": "产品A", "model_number": "M-001", "price": 10.0, "quantity": 100},
-        ])
+        _create_test_sqlite_db(
+            db_path,
+            [
+                {"name": "产品A", "model_number": "M-001", "price": 10.0, "quantity": 100},
+            ],
+        )
 
         real_conn = sqlite3.connect(db_path)
 
@@ -566,9 +590,7 @@ class TestImportUnitProducts:
             patch.object(service, "upload_dir", str(tmp_path)),
             patch.object(service, "_ensure_unit_exists", return_value=True),
         ):
-            result = service.import_unit_products(
-                "dup.db", "单位", skip_duplicates=True
-            )
+            result = service.import_unit_products("dup.db", "单位", skip_duplicates=True)
 
         real_conn.close()
         assert result["success"] is True
@@ -579,9 +601,12 @@ class TestImportUnitProducts:
     def test_recoverable_error(self, mock_sqlite_conn, service, tmp_path):
         """导入过程抛出 RECOVERABLE_ERRORS"""
         db_path = str(tmp_path / "error.db")
-        _create_test_sqlite_db(db_path, [
-            {"name": "产品A", "model_number": "M-001", "price": 10.0, "quantity": 100},
-        ])
+        _create_test_sqlite_db(
+            db_path,
+            [
+                {"name": "产品A", "model_number": "M-001", "price": 10.0, "quantity": 100},
+            ],
+        )
 
         @contextmanager
         def _ctx(path):
@@ -600,9 +625,12 @@ class TestImportUnitProducts:
     def test_skip_duplicates_false(self, mock_sqlite_conn, mock_get_db, service, tmp_path):
         """skip_duplicates=False 时不跳过重复"""
         db_path = str(tmp_path / "nodup.db")
-        _create_test_sqlite_db(db_path, [
-            {"name": "产品A", "model_number": "M-001", "price": 10.0, "quantity": 100},
-        ])
+        _create_test_sqlite_db(
+            db_path,
+            [
+                {"name": "产品A", "model_number": "M-001", "price": 10.0, "quantity": 100},
+            ],
+        )
 
         real_conn = sqlite3.connect(db_path)
 
@@ -621,9 +649,7 @@ class TestImportUnitProducts:
                 return_value={"imported": 1, "message": "导入完成", "failed_products": []},
             ),
         ):
-            result = service.import_unit_products(
-                "nodup.db", "单位", skip_duplicates=False
-            )
+            result = service.import_unit_products("nodup.db", "单位", skip_duplicates=False)
 
         real_conn.close()
         assert result["success"] is True
@@ -633,6 +659,7 @@ class TestImportUnitProducts:
 # ---------------------------------------------------------------------------
 # _batch_import_products
 # ---------------------------------------------------------------------------
+
 
 class TestBatchImportProducts:
     """_batch_import_products() — 批量导入产品"""
@@ -663,6 +690,7 @@ class TestBatchImportProducts:
 # get_unit_products_import_app_service
 # ---------------------------------------------------------------------------
 
+
 class TestGetService:
     """get_unit_products_import_app_service() — 获取服务单例"""
 
@@ -680,5 +708,6 @@ class TestGetService:
             from app.application.unit_products_import_app_service import (
                 get_unit_products_import_app_service,
             )
+
             result = get_unit_products_import_app_service()
         assert result is not None

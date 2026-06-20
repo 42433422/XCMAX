@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.application.enterprise_login_flow import (
     _login_client_http_status,
+    ensure_local_user_after_market,
     market_auth_error_response,
     resolve_market_username,
-    ensure_local_user_after_market,
 )
-
 
 # ---------------------------------------------------------------------------
 # _login_client_http_status
@@ -66,11 +65,13 @@ class TestMarketAuthErrorResponse:
         assert "修茈市场账号验证失败" in result.body.decode("utf-8")
 
     def test_includes_market_base_url(self):
-        result = market_auth_error_response({
-            "status_code": 500,
-            "message": "err",
-            "market_base_url": "https://example.com",
-        })
+        result = market_auth_error_response(
+            {
+                "status_code": 500,
+                "message": "err",
+                "market_base_url": "https://example.com",
+            }
+        )
         assert b"example.com" in result.body
 
 
@@ -81,29 +82,39 @@ class TestMarketAuthErrorResponse:
 
 class TestResolveMarketUsername:
     def test_returns_username_from_blob(self):
-        with patch("app.application.enterprise_login_flow.extract_market_user_blob",
-                   return_value={"username": "alice", "phone": "", "email": ""}):
+        with patch(
+            "app.application.enterprise_login_flow.extract_market_user_blob",
+            return_value={"username": "alice", "phone": "", "email": ""},
+        ):
             assert resolve_market_username({}) == "alice"
 
     def test_returns_phone_from_blob(self):
-        with patch("app.application.enterprise_login_flow.extract_market_user_blob",
-                   return_value={"username": "", "phone": "123", "email": ""}):
+        with patch(
+            "app.application.enterprise_login_flow.extract_market_user_blob",
+            return_value={"username": "", "phone": "123", "email": ""},
+        ):
             assert resolve_market_username({}) == "123"
 
     def test_returns_email_from_blob(self):
-        with patch("app.application.enterprise_login_flow.extract_market_user_blob",
-                   return_value={"username": "", "phone": "", "email": "a@b.com"}):
+        with patch(
+            "app.application.enterprise_login_flow.extract_market_user_blob",
+            return_value={"username": "", "phone": "", "email": "a@b.com"},
+        ):
             assert resolve_market_username({}) == "a@b.com"
 
     def test_falls_back_to_raw(self):
-        with patch("app.application.enterprise_login_flow.extract_market_user_blob",
-                   return_value={"username": "", "phone": "", "email": ""}):
+        with patch(
+            "app.application.enterprise_login_flow.extract_market_user_blob",
+            return_value={"username": "", "phone": "", "email": ""},
+        ):
             result = resolve_market_username({"raw": {"username": "raw_user"}})
             assert result == "raw_user"
 
     def test_returns_empty_when_nothing(self):
-        with patch("app.application.enterprise_login_flow.extract_market_user_blob",
-                   return_value={"username": "", "phone": "", "email": ""}):
+        with patch(
+            "app.application.enterprise_login_flow.extract_market_user_blob",
+            return_value={"username": "", "phone": "", "email": ""},
+        ):
             assert resolve_market_username({"raw": {}}) == ""
 
 
@@ -134,8 +145,10 @@ class TestEnsureLocalUserAfterMarket:
         auth_svc = MagicMock()
         auth_svc.login.return_value = {"success": False}
         mock_user = MagicMock()
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.ensure_runtime_auth_bootstrap"):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.ensure_runtime_auth_bootstrap"),
+        ):
             mock_db = MagicMock()
             mock_db.query.return_value.filter.return_value.first.return_value = mock_user
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
@@ -156,9 +169,12 @@ class TestEnsureLocalUserAfterMarket:
     async def test_database_error(self):
         auth_svc = MagicMock()
         auth_svc.login.return_value = {"success": False}
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.ensure_runtime_auth_bootstrap",
-                   side_effect=RuntimeError("db down")):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch(
+                "app.db.init_db.ensure_runtime_auth_bootstrap", side_effect=RuntimeError("db down")
+            ),
+        ):
             mock_get_db.side_effect = RuntimeError("db down")
             result, err = await ensure_local_user_after_market(
                 username="alice",
@@ -176,14 +192,18 @@ class TestEnsureLocalUserAfterMarket:
     async def test_jit_create_fails(self):
         auth_svc = MagicMock()
         auth_svc.login.return_value = {"success": False}
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.ensure_runtime_auth_bootstrap"):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.ensure_runtime_auth_bootstrap"),
+        ):
             mock_db = MagicMock()
             mock_db.query.return_value.filter.return_value.first.return_value = None
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-            with patch("app.application.enterprise_login_flow.extract_market_user_blob",
-                       return_value={"email": ""}):
+            with patch(
+                "app.application.enterprise_login_flow.extract_market_user_blob",
+                return_value={"email": ""},
+            ):
                 result, err = await ensure_local_user_after_market(
                     username="newuser",
                     password=None,

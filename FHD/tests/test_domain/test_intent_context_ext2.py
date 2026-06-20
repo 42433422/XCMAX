@@ -5,6 +5,7 @@ Covers ``PendingIntent`` (is_expired / merge_slots / to_dict),
 should_adopt_new_intent, get_pending_summary, cleanup_expired,
 get_all_pending_count), ``IntentContextContainer``, and notifier paths.
 """
+
 from __future__ import annotations
 
 import time
@@ -13,25 +14,22 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.domain.services.conversation.context.intent_context import (
-    AdoptionReason,
     HIGH_PRIORITY_INTENTS,
     LOW_PRIORITY_INTENTS,
     SPECIAL_INTENTS,
+    AdoptionReason,
     IntentContext,
     IntentContextContainer,
     PendingIntent,
     get_intent_context,
 )
 
-
 # ── PendingIntent ────────────────────────────────────────────────────────────
 
 
 class TestPendingIntent:
     def test_default_values(self):
-        p = PendingIntent(
-            intent="greeting", slots={}, missing_slots=[]
-        )
+        p = PendingIntent(intent="greeting", slots={}, missing_slots=[])
         assert p.intent == "greeting"
         assert p.slots == {}
         assert p.missing_slots == []
@@ -56,9 +54,7 @@ class TestPendingIntent:
         assert p.is_expired(max_age_seconds=10) is True
 
     def test_merge_slots_combines(self):
-        p = PendingIntent(
-            intent="i", slots={"a": "1"}, missing_slots=["b", "c"]
-        )
+        p = PendingIntent(intent="i", slots={"a": "1"}, missing_slots=["b", "c"])
         merged = p.merge_slots({"b": "2"})
         assert merged.slots == {"a": "1", "b": "2"}
         # c still missing
@@ -72,9 +68,7 @@ class TestPendingIntent:
         assert merged.slots == {"a": "new"}
 
     def test_merge_slots_clears_missing_when_filled(self):
-        p = PendingIntent(
-            intent="i", slots={}, missing_slots=["a", "b"]
-        )
+        p = PendingIntent(intent="i", slots={}, missing_slots=["a", "b"])
         merged = p.merge_slots({"a": "1", "b": "2"})
         assert merged.missing_slots == []
 
@@ -171,9 +165,7 @@ class TestIntentContextMergeSlots:
 
     def test_merges_and_updates(self):
         ctx = IntentContext()
-        p = PendingIntent(
-            intent="i", slots={"a": "1"}, missing_slots=["b"]
-        )
+        p = PendingIntent(intent="i", slots={"a": "1"}, missing_slots=["b"])
         ctx.set_pending("u1", p)
         updated = ctx.merge_slots("u1", {"b": "2"})
         assert updated is not None
@@ -395,9 +387,7 @@ class TestNotifierPaths:
         # Trigger lazy load
         fake_notifier_module = MagicMock()
         fake_notifier_module.get_context_notifier.return_value = "notifier_obj"
-        with patch.dict(
-            "sys.modules", {"app.contexts.context_notifier": fake_notifier_module}
-        ):
+        with patch.dict("sys.modules", {"app.contexts.context_notifier": fake_notifier_module}):
             result = ctx._get_notifier()
         assert result == "notifier_obj"
         assert ctx._notifier == "notifier_obj"

@@ -16,7 +16,6 @@ from app.application.shipment_app_service import ShipmentApplicationService
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
 from app.legacy.domain.legacy_vo import ContactInfo, Money, Quantity
 
-
 # ---------------------------------------------------------------------------
 # Dummy implementations for testing (reuse pattern from existing test)
 # ---------------------------------------------------------------------------
@@ -126,7 +125,9 @@ class DummyRecordCommand:
         return {"success": True, "cleared": True}
 
     def update_record(self, record_id: int, *, unit_name=None, date=None, fields=None) -> dict:
-        self.updated.append({"record_id": record_id, "unit_name": unit_name, "date": date, "fields": fields})
+        self.updated.append(
+            {"record_id": record_id, "unit_name": unit_name, "date": date, "fields": fields}
+        )
         return {"success": True, "record_id": record_id}
 
     def delete_record(self, record_id: int) -> dict:
@@ -194,8 +195,20 @@ class TestCreateShipment:
         repo = DummyRepository()
         svc = ShipmentApplicationService(repository=repo)
         items = [
-            {"product_name": "产品A", "quantity_tins": 3, "tin_spec": 20.0, "unit_price": 10.0, "amount": 600.0},
-            {"product_name": "产品B", "quantity_tins": 2, "tin_spec": 10.0, "unit_price": 20.0, "amount": 400.0},
+            {
+                "product_name": "产品A",
+                "quantity_tins": 3,
+                "tin_spec": 20.0,
+                "unit_price": 10.0,
+                "amount": 600.0,
+            },
+            {
+                "product_name": "产品B",
+                "quantity_tins": 2,
+                "tin_spec": 10.0,
+                "unit_price": 20.0,
+                "amount": 400.0,
+            },
         ]
         result = svc.create_shipment(unit_name="测试单位", items_data=items)
         assert result["success"] is True
@@ -207,7 +220,13 @@ class TestCreateShipment:
         svc = ShipmentApplicationService(repository=repo)
         items = [
             {"product_name": "", "quantity_tins": 1},  # invalid: empty name
-            {"product_name": "产品A", "quantity_tins": 1, "tin_spec": 10.0, "unit_price": 5.0, "amount": 50.0},
+            {
+                "product_name": "产品A",
+                "quantity_tins": 1,
+                "tin_spec": 10.0,
+                "unit_price": 5.0,
+                "amount": 50.0,
+            },
         ]
         result = svc.create_shipment(unit_name="测试单位", items_data=items)
         assert result["success"] is True
@@ -217,7 +236,15 @@ class TestCreateShipment:
         repo = MagicMock()
         repo.save.side_effect = RuntimeError("DB connection lost")
         svc = ShipmentApplicationService(repository=repo)
-        items = [{"product_name": "产品A", "quantity_tins": 1, "tin_spec": 10.0, "unit_price": 5.0, "amount": 50.0}]
+        items = [
+            {
+                "product_name": "产品A",
+                "quantity_tins": 1,
+                "tin_spec": 10.0,
+                "unit_price": 5.0,
+                "amount": 50.0,
+            }
+        ]
         result = svc.create_shipment(unit_name="测试单位", items_data=items)
         assert result["success"] is False
         assert "创建失败" in result["message"]
@@ -226,7 +253,15 @@ class TestCreateShipment:
         """Hook trigger failure should not block shipment creation."""
         repo = DummyRepository()
         svc = ShipmentApplicationService(repository=repo)
-        items = [{"product_name": "产品A", "quantity_tins": 1, "tin_spec": 10.0, "unit_price": 5.0, "amount": 50.0}]
+        items = [
+            {
+                "product_name": "产品A",
+                "quantity_tins": 1,
+                "tin_spec": 10.0,
+                "unit_price": 5.0,
+                "amount": 50.0,
+            }
+        ]
         with patch("app.infrastructure.mods.hooks.trigger", side_effect=RuntimeError("hook fail")):
             result = svc.create_shipment(unit_name="测试单位", items_data=items)
         assert result["success"] is True
@@ -479,23 +514,25 @@ class TestDeleteShipmentRecord:
 
 class TestExportShipmentRecords:
     def test_export_without_template(self, tmp_path):
-        rq = DummyRecordQuery(data=[
-            {
-                "id": 1,
-                "purchase_unit": "单位A",
-                "product_name": "产品A",
-                "model_number": "M1",
-                "quantity_kg": 100,
-                "quantity_tins": 5,
-                "tin_spec": "20kg",
-                "unit_price": 10,
-                "amount": 1000,
-                "status": "pending",
-                "created_at": datetime(2026, 1, 1),
-                "printed_at": None,
-                "printer_name": "",
-            }
-        ])
+        rq = DummyRecordQuery(
+            data=[
+                {
+                    "id": 1,
+                    "purchase_unit": "单位A",
+                    "product_name": "产品A",
+                    "model_number": "M1",
+                    "quantity_kg": 100,
+                    "quantity_tins": 5,
+                    "tin_spec": "20kg",
+                    "unit_price": 10,
+                    "amount": 1000,
+                    "status": "pending",
+                    "created_at": datetime(2026, 1, 1),
+                    "printed_at": None,
+                    "printer_name": "",
+                }
+            ]
+        )
         with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records()
@@ -504,25 +541,65 @@ class TestExportShipmentRecords:
             assert result["file_path"].endswith(".xlsx")
 
     def test_export_with_unit_name(self, tmp_path):
-        rq = DummyRecordQuery(data=[
-            {"id": 1, "purchase_unit": "单位A", "product_name": "产品A", "model_number": "M1",
-             "quantity_kg": 100, "quantity_tins": 5, "tin_spec": "20kg", "unit_price": 10,
-             "amount": 1000, "status": "pending", "created_at": None, "printed_at": None, "printer_name": ""},
-        ])
+        rq = DummyRecordQuery(
+            data=[
+                {
+                    "id": 1,
+                    "purchase_unit": "单位A",
+                    "product_name": "产品A",
+                    "model_number": "M1",
+                    "quantity_kg": 100,
+                    "quantity_tins": 5,
+                    "tin_spec": "20kg",
+                    "unit_price": 10,
+                    "amount": 1000,
+                    "status": "pending",
+                    "created_at": None,
+                    "printed_at": None,
+                    "printer_name": "",
+                },
+            ]
+        )
         with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(unit_name="单位A")
             assert result["success"] is True
 
     def test_export_status_filter_printed(self, tmp_path):
-        rq = DummyRecordQuery(data=[
-            {"id": 1, "status": "printed", "purchase_unit": "", "product_name": "",
-             "model_number": "", "quantity_kg": 0, "quantity_tins": 0, "tin_spec": "",
-             "unit_price": 0, "amount": 0, "created_at": None, "printed_at": None, "printer_name": ""},
-            {"id": 2, "status": "pending", "purchase_unit": "", "product_name": "",
-             "model_number": "", "quantity_kg": 0, "quantity_tins": 0, "tin_spec": "",
-             "unit_price": 0, "amount": 0, "created_at": None, "printed_at": None, "printer_name": ""},
-        ])
+        rq = DummyRecordQuery(
+            data=[
+                {
+                    "id": 1,
+                    "status": "printed",
+                    "purchase_unit": "",
+                    "product_name": "",
+                    "model_number": "",
+                    "quantity_kg": 0,
+                    "quantity_tins": 0,
+                    "tin_spec": "",
+                    "unit_price": 0,
+                    "amount": 0,
+                    "created_at": None,
+                    "printed_at": None,
+                    "printer_name": "",
+                },
+                {
+                    "id": 2,
+                    "status": "pending",
+                    "purchase_unit": "",
+                    "product_name": "",
+                    "model_number": "",
+                    "quantity_kg": 0,
+                    "quantity_tins": 0,
+                    "tin_spec": "",
+                    "unit_price": 0,
+                    "amount": 0,
+                    "created_at": None,
+                    "printed_at": None,
+                    "printer_name": "",
+                },
+            ]
+        )
         with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(status_filter="printed")
@@ -530,14 +607,40 @@ class TestExportShipmentRecords:
             assert result["count"] == 1
 
     def test_export_status_filter_pending(self, tmp_path):
-        rq = DummyRecordQuery(data=[
-            {"id": 1, "status": "printed", "purchase_unit": "", "product_name": "",
-             "model_number": "", "quantity_kg": 0, "quantity_tins": 0, "tin_spec": "",
-             "unit_price": 0, "amount": 0, "created_at": None, "printed_at": None, "printer_name": ""},
-            {"id": 2, "status": "", "purchase_unit": "", "product_name": "",
-             "model_number": "", "quantity_kg": 0, "quantity_tins": 0, "tin_spec": "",
-             "unit_price": 0, "amount": 0, "created_at": None, "printed_at": None, "printer_name": ""},
-        ])
+        rq = DummyRecordQuery(
+            data=[
+                {
+                    "id": 1,
+                    "status": "printed",
+                    "purchase_unit": "",
+                    "product_name": "",
+                    "model_number": "",
+                    "quantity_kg": 0,
+                    "quantity_tins": 0,
+                    "tin_spec": "",
+                    "unit_price": 0,
+                    "amount": 0,
+                    "created_at": None,
+                    "printed_at": None,
+                    "printer_name": "",
+                },
+                {
+                    "id": 2,
+                    "status": "",
+                    "purchase_unit": "",
+                    "product_name": "",
+                    "model_number": "",
+                    "quantity_kg": 0,
+                    "quantity_tins": 0,
+                    "tin_spec": "",
+                    "unit_price": 0,
+                    "amount": 0,
+                    "created_at": None,
+                    "printed_at": None,
+                    "printer_name": "",
+                },
+            ]
+        )
         with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(status_filter="pending")
@@ -549,8 +652,10 @@ class TestExportShipmentRecords:
         mock_template_svc = MagicMock()
         mock_template_svc.get_templates.return_value = {"templates": []}
 
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)), \
-             patch("app.application.get_template_app_service", return_value=mock_template_svc):
+        with (
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.application.get_template_app_service", return_value=mock_template_svc),
+        ):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(template_id="99")
             assert result["success"] is False
@@ -560,11 +665,20 @@ class TestExportShipmentRecords:
         rq = DummyRecordQuery(data=[{"id": 1}])
         mock_template_svc = MagicMock()
         mock_template_svc.get_templates.return_value = {
-            "templates": [{"id": "1", "business_scope": "orders", "template_type": "订单", "path": "/tmp/t.xlsx"}]
+            "templates": [
+                {
+                    "id": "1",
+                    "business_scope": "orders",
+                    "template_type": "订单",
+                    "path": "/tmp/t.xlsx",
+                }
+            ]
         }
 
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)), \
-             patch("app.application.get_template_app_service", return_value=mock_template_svc):
+        with (
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.application.get_template_app_service", return_value=mock_template_svc),
+        ):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(template_id="1")
             assert result["success"] is False
@@ -574,11 +688,21 @@ class TestExportShipmentRecords:
         rq = DummyRecordQuery(data=[{"id": 1}])
         mock_template_svc = MagicMock()
         mock_template_svc.get_templates.return_value = {
-            "templates": [{"id": "1", "business_scope": "shipmentRecords", "template_type": "出货记录", "path": "", "file_path": ""}]
+            "templates": [
+                {
+                    "id": "1",
+                    "business_scope": "shipmentRecords",
+                    "template_type": "出货记录",
+                    "path": "",
+                    "file_path": "",
+                }
+            ]
         }
 
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)), \
-             patch("app.application.get_template_app_service", return_value=mock_template_svc):
+        with (
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.application.get_template_app_service", return_value=mock_template_svc),
+        ):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(template_id="1")
             assert result["success"] is False
@@ -588,12 +712,21 @@ class TestExportShipmentRecords:
         rq = DummyRecordQuery(data=[{"id": 1}])
         mock_template_svc = MagicMock()
         mock_template_svc.get_templates.return_value = {
-            "templates": [{"id": "1", "business_scope": "shipmentRecords", "template_type": "出货记录", "path": "/nonexistent/template.xlsx"}]
+            "templates": [
+                {
+                    "id": "1",
+                    "business_scope": "shipmentRecords",
+                    "template_type": "出货记录",
+                    "path": "/nonexistent/template.xlsx",
+                }
+            ]
         }
 
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)), \
-             patch("app.application.get_template_app_service", return_value=mock_template_svc), \
-             patch("os.path.exists", return_value=False):
+        with (
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.application.get_template_app_service", return_value=mock_template_svc),
+            patch("os.path.exists", return_value=False),
+        ):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(template_id="1")
             assert result["success"] is False
@@ -616,11 +749,25 @@ class TestExportShipmentRecords:
             assert result["count"] == 0
 
     def test_export_status_filter_chinese_printed(self, tmp_path):
-        rq = DummyRecordQuery(data=[
-            {"id": 1, "status": "printed", "purchase_unit": "", "product_name": "",
-             "model_number": "", "quantity_kg": 0, "quantity_tins": 0, "tin_spec": "",
-             "unit_price": 0, "amount": 0, "created_at": None, "printed_at": None, "printer_name": ""},
-        ])
+        rq = DummyRecordQuery(
+            data=[
+                {
+                    "id": 1,
+                    "status": "printed",
+                    "purchase_unit": "",
+                    "product_name": "",
+                    "model_number": "",
+                    "quantity_kg": 0,
+                    "quantity_tins": 0,
+                    "tin_spec": "",
+                    "unit_price": 0,
+                    "amount": 0,
+                    "created_at": None,
+                    "printed_at": None,
+                    "printer_name": "",
+                },
+            ]
+        )
         with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(status_filter="已打印")
@@ -628,11 +775,25 @@ class TestExportShipmentRecords:
             assert result["count"] == 1
 
     def test_export_status_filter_chinese_pending(self, tmp_path):
-        rq = DummyRecordQuery(data=[
-            {"id": 1, "status": "", "purchase_unit": "", "product_name": "",
-             "model_number": "", "quantity_kg": 0, "quantity_tins": 0, "tin_spec": "",
-             "unit_price": 0, "amount": 0, "created_at": None, "printed_at": None, "printer_name": ""},
-        ])
+        rq = DummyRecordQuery(
+            data=[
+                {
+                    "id": 1,
+                    "status": "",
+                    "purchase_unit": "",
+                    "product_name": "",
+                    "model_number": "",
+                    "quantity_kg": 0,
+                    "quantity_tins": 0,
+                    "tin_spec": "",
+                    "unit_price": 0,
+                    "amount": 0,
+                    "created_at": None,
+                    "printed_at": None,
+                    "printer_name": "",
+                },
+            ]
+        )
         with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(status_filter="未打印")

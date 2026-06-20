@@ -39,8 +39,8 @@ from app.infrastructure.documents.price_list_export import (
     build_sales_contract_template_preview_json,
 )
 from app.infrastructure.persistence.product_repository_impl import (
-    SQLAlchemyProductRepository,
     TRIVIAL_MEASURE_UNITS,
+    SQLAlchemyProductRepository,
 )
 from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
 from app.services.tools_workflow_registered import (
@@ -55,7 +55,6 @@ from app.services.tools_workflow_registered import (
     _registered_router_wechat,
     execute_registered_workflow_tool,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -106,7 +105,9 @@ def _chat_svc() -> AIChatApplicationService:
 
     mock_ai.chat = _chat
     with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai),
+        patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
         patch("app.application.ai_chat_app_service.WorkflowEngine"),
@@ -325,14 +326,24 @@ def test_legacy_chat_redirect() -> None:
 
 def test_legacy_ai_ecosystem_list() -> None:
     resp = dispatch_legacy_tool_payload(
-        "ai_ecosystem", "list", {}, json_response_fn=_j, hdr_getter=_hdr, parse_order_text_fn=lambda t: {}
+        "ai_ecosystem",
+        "list",
+        {},
+        json_response_fn=_j,
+        hdr_getter=_hdr,
+        parse_order_text_fn=lambda t: {},
     )
     assert "integrations" in resp["body"]["data"]
 
 
 def test_legacy_ai_ecosystem_view() -> None:
     resp = dispatch_legacy_tool_payload(
-        "ai_ecosystem", "view", {}, json_response_fn=_j, hdr_getter=_hdr, parse_order_text_fn=lambda t: {}
+        "ai_ecosystem",
+        "view",
+        {},
+        json_response_fn=_j,
+        hdr_getter=_hdr,
+        parse_order_text_fn=lambda t: {},
     )
     assert "ai-ecosystem" in resp["body"]["redirect"]
 
@@ -447,18 +458,14 @@ def test_legacy_products_view_redirect() -> None:
 @patch("app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message")
 def test_registered_normal_slot_product_query(mock_run: MagicMock) -> None:
     mock_run.return_value = {"success": True}
-    out = _registered_router_normal_slot_dispatch(
-        "product_query", {}, {}, "normal", "查5003"
-    )
+    out = _registered_router_normal_slot_dispatch("product_query", {}, {}, "normal", "查5003")
     assert out["success"] is True
 
 
 @patch("app.application.get_material_application_service")
 def test_registered_materials_create(mock_get: MagicMock) -> None:
     mock_get.return_value.create_material.return_value = {"success": True}
-    out = _registered_router_materials(
-        "create", {"name": "铜粉"}, {}, "pro", ""
-    )
+    out = _registered_router_materials("create", {"name": "铜粉"}, {}, "pro", "")
     assert out["success"] is True
 
 
@@ -472,9 +479,7 @@ def test_registered_materials_delete(mock_get: MagicMock) -> None:
 @patch("app.bootstrap.get_shipment_app_service")
 def test_registered_shipment_query(mock_get: MagicMock) -> None:
     mock_get.return_value.get_shipment_records.return_value = [{"id": 1}]
-    out = _registered_router_shipment_records(
-        "query", {"unit_name": "甲"}, {}, "pro", ""
-    )
+    out = _registered_router_shipment_records("query", {"unit_name": "甲"}, {}, "pro", "")
     assert out["success"] is True
     assert out["data"]
 
@@ -525,7 +530,9 @@ def test_registered_excel_analysis_read(mock_analyzer: MagicMock, mock_toolkit: 
 
 @patch("app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill")
 @patch("app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill")
-def test_registered_excel_analysis_statistics(mock_analyzer: MagicMock, mock_toolkit: MagicMock) -> None:
+def test_registered_excel_analysis_statistics(
+    mock_analyzer: MagicMock, mock_toolkit: MagicMock
+) -> None:
     mock_toolkit.return_value.execute.return_value = {
         "success": True,
         "content": [{"cells": [{"value": 1}, {"value": 5}]}],
@@ -593,7 +600,9 @@ def market_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 @pytest.mark.asyncio
-async def test_market_register_route(market_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_market_register_route(
+    market_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.fastapi_routes import market_account as market_mod
 
     async def _reg(username, password, email, verification_code=""):
@@ -609,7 +618,9 @@ async def test_market_register_route(market_client: TestClient, monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_market_login_route(market_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_market_login_route(
+    market_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.fastapi_routes import market_account as market_mod
 
     async def _login(username, password):
@@ -768,8 +779,7 @@ def test_ensure_table_row_count_expands() -> None:
 def test_build_price_list_many_products(tmp_path) -> None:
     tpl = _write_docx_template(tmp_path / "tpl.docx")
     products = [
-        {"model": f"M{i}", "name": f"产品{i}", "spec": "1L", "price": i * 10}
-        for i in range(1, 35)
+        {"model": f"M{i}", "name": f"产品{i}", "spec": "1L", "price": i * 10} for i in range(1, 35)
     ]
     data = build_price_list_docx_bytes(
         template_path=tpl,

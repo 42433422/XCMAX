@@ -1,4 +1,5 @@
 """Tests for app.services.kitten_report.save_service."""
+
 from __future__ import annotations
 
 import json
@@ -19,6 +20,7 @@ def save_dir():
     d = tempfile.mkdtemp()
     yield d
     import shutil
+
     shutil.rmtree(d, ignore_errors=True)
 
 
@@ -36,6 +38,7 @@ class TestInit:
         svc = AnalysisSaveService(save_dir=d)
         assert os.path.isdir(d)
         import shutil
+
         shutil.rmtree(d, ignore_errors=True)
 
     def test_default_save_dir(self):
@@ -67,9 +70,7 @@ class TestSaveAnalysis:
         assert data["metadata"] == {}
 
     def test_save_with_metadata(self, svc, save_dir):
-        result = svc.save_analysis(
-            "report", {"key": "val"}, metadata={"note": "test"}
-        )
+        result = svc.save_analysis("report", {"key": "val"}, metadata={"note": "test"})
         filepath = os.path.join(save_dir, result["filename"])
         with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
@@ -106,6 +107,7 @@ class TestListSavedAnalyses:
 
     def test_sorted_by_created_at_desc(self, svc):
         import time
+
         svc.save_analysis("first", {"key": "val1"})
         time.sleep(0.01)
         svc.save_analysis("second", {"key": "val2"})
@@ -268,6 +270,7 @@ class TestGetStatisticsSummary:
 
     def test_summary_with_data(self, svc):
         import time
+
         svc.save_analysis("type_a", {"key": "val1"})
         time.sleep(1.1)  # Ensure different timestamps
         svc.save_analysis("type_b", {"key": "val2"})

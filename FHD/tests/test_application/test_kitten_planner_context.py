@@ -1,8 +1,10 @@
 """Tests for app.application.kitten_planner_context."""
+
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 from app.application.kitten_planner_context import (
     _session_key_from_context,

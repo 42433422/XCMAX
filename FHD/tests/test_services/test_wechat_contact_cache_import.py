@@ -1,4 +1,5 @@
 """Tests for app.services.wechat_contact_cache_import — comprehensive coverage."""
+
 from __future__ import annotations
 
 import json
@@ -14,7 +15,6 @@ from app.services.wechat_contact_cache_import import (
     refresh_wechat_contacts_from_decrypt,
     wechat_message_source_size_payload,
 )
-
 
 # ---------------------------------------------------------------------------
 # _resolve_wechat_decrypt_dir
@@ -135,10 +135,13 @@ class TestEnsureDecryptedWechatDbs:
             assert "config.py" in result["message"]
 
     def test_module_not_found_error(self):
-        with patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value="/fake/path",
-        ), patch.dict("sys.modules", {"config": None, "key_utils": None}):
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value="/fake/path",
+            ),
+            patch.dict("sys.modules", {"config": None, "key_utils": None}),
+        ):
             result = ensure_decrypted_wechat_dbs()
             assert result["success"] is False
             assert result["reason"] == "not_configured"
@@ -157,10 +160,13 @@ class TestEnsureDecryptedWechatDbs:
         mock_config_mod = MagicMock()
         mock_config_mod.load_config.return_value = mock_config
 
-        with patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": MagicMock()}):
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": MagicMock()}),
+        ):
             result = ensure_decrypted_wechat_dbs()
             assert result["success"] is False
             assert result["reason"] == "not_configured"
@@ -182,10 +188,13 @@ class TestEnsureDecryptedWechatDbs:
         mock_config_mod = MagicMock()
         mock_config_mod.load_config.return_value = mock_config
 
-        with patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": MagicMock()}):
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": MagicMock()}),
+        ):
             result = ensure_decrypted_wechat_dbs()
             assert result["success"] is False
             assert result["reason"] == "not_configured"
@@ -214,10 +223,13 @@ class TestEnsureDecryptedWechatDbs:
         mock_key_utils = MagicMock()
         mock_key_utils.strip_key_metadata.return_value = []
 
-        with patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": mock_key_utils}):
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": mock_key_utils}),
+        ):
             result = ensure_decrypted_wechat_dbs()
             assert result["success"] is False
             assert result["reason"] == "not_configured"
@@ -248,10 +260,13 @@ class TestEnsureDecryptedWechatDbs:
         mock_key_utils = MagicMock()
         mock_key_utils.strip_key_metadata.return_value = [{"key": "value"}]
 
-        with patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": mock_key_utils}):
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": mock_key_utils}),
+        ):
             result = ensure_decrypted_wechat_dbs()
             assert result["success"] is True
             assert "decrypted" in result
@@ -291,10 +306,13 @@ class TestEnsureDecryptedWechatDbs:
 
         original_path = sys.path.copy()
         try:
-            with patch(
-                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-                return_value=str(wechat_dir),
-            ), patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": mock_key_utils}):
+            with (
+                patch(
+                    "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                    return_value=str(wechat_dir),
+                ),
+                patch.dict("sys.modules", {"config": mock_config_mod, "key_utils": mock_key_utils}),
+            ):
                 ensure_decrypted_wechat_dbs()
                 # Path should have been added
                 assert str(wechat_dir) in sys.path
@@ -334,15 +352,17 @@ class TestRefreshWechatContactsFromDecrypt:
         decrypted_dir = wechat_dir / "decrypted"
         decrypted_dir.mkdir(parents=True)
 
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
-            return_value={"success": True, "message": "ok"},
-        ), patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db"
-        ) as mock_get_db:
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
+                return_value={"success": True, "message": "ok"},
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch("app.services.wechat_contact_cache_import.get_db") as mock_get_db,
+        ):
             mock_db = MagicMock()
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
@@ -372,12 +392,8 @@ class TestRefreshWechatContactsFromDecrypt:
             "CREATE TABLE contact (username TEXT, nick_name TEXT, remark TEXT, "
             "is_in_chat_room TEXT, delete_flag INTEGER)"
         )
-        conn.execute(
-            "INSERT INTO contact VALUES ('wxid_test', '测试用户', '备注', '0', 0)"
-        )
-        conn.execute(
-            "INSERT INTO contact VALUES ('group@chatroom', '测试群', '', '1', 0)"
-        )
+        conn.execute("INSERT INTO contact VALUES ('wxid_test', '测试用户', '备注', '0', 0)")
+        conn.execute("INSERT INTO contact VALUES ('group@chatroom', '测试群', '', '1', 0)")
         conn.commit()
         conn.close()
 
@@ -387,15 +403,17 @@ class TestRefreshWechatContactsFromDecrypt:
         mock_db.bind = MagicMock()
         mock_db.bind.dialect.name = "sqlite"
 
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
-            return_value={"success": True, "message": "ok"},
-        ), patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db"
-        ) as mock_get_db:
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
+                return_value={"success": True, "message": "ok"},
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch("app.services.wechat_contact_cache_import.get_db") as mock_get_db,
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             payload, status = refresh_wechat_contacts_from_decrypt()
@@ -412,12 +430,8 @@ class TestRefreshWechatContactsFromDecrypt:
         # Create message_0.db with Name2Id table
         msg_db_path = str(msg_dir / "message_0.db")
         conn = sqlite3.connect(msg_db_path)
-        conn.execute(
-            "CREATE TABLE Name2Id (user_name TEXT, is_session INTEGER)"
-        )
-        conn.execute(
-            "INSERT INTO Name2Id VALUES ('wxid_msg_user', 1)"
-        )
+        conn.execute("CREATE TABLE Name2Id (user_name TEXT, is_session INTEGER)")
+        conn.execute("INSERT INTO Name2Id VALUES ('wxid_msg_user', 1)")
         conn.commit()
         conn.close()
 
@@ -427,15 +441,17 @@ class TestRefreshWechatContactsFromDecrypt:
         mock_db.bind = MagicMock()
         mock_db.bind.dialect.name = "sqlite"
 
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
-            return_value={"success": True, "message": "ok"},
-        ), patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db"
-        ) as mock_get_db:
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
+                return_value={"success": True, "message": "ok"},
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch("app.services.wechat_contact_cache_import.get_db") as mock_get_db,
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             payload, status = refresh_wechat_contacts_from_decrypt()
@@ -454,9 +470,7 @@ class TestRefreshWechatContactsFromDecrypt:
             "CREATE TABLE contact (username TEXT, nick_name TEXT, remark TEXT, "
             "is_in_chat_room TEXT, delete_flag INTEGER)"
         )
-        conn.execute(
-            "INSERT INTO contact VALUES ('wxid_existing', '旧名', '旧备注', '0', 0)"
-        )
+        conn.execute("INSERT INTO contact VALUES ('wxid_existing', '旧名', '旧备注', '0', 0)")
         conn.commit()
         conn.close()
 
@@ -474,15 +488,17 @@ class TestRefreshWechatContactsFromDecrypt:
         mock_db.bind = MagicMock()
         mock_db.bind.dialect.name = "sqlite"
 
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
-            return_value={"success": True, "message": "ok"},
-        ), patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db"
-        ) as mock_get_db:
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
+                return_value={"success": True, "message": "ok"},
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch("app.services.wechat_contact_cache_import.get_db") as mock_get_db,
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             payload, status = refresh_wechat_contacts_from_decrypt()
@@ -515,15 +531,17 @@ class TestRefreshWechatContactsFromDecrypt:
         mock_db.bind = MagicMock()
         mock_db.bind.dialect.name = "sqlite"
 
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
-            return_value={"success": True, "message": "ok"},
-        ), patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db"
-        ) as mock_get_db:
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
+                return_value={"success": True, "message": "ok"},
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch("app.services.wechat_contact_cache_import.get_db") as mock_get_db,
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             payload, status = refresh_wechat_contacts_from_decrypt()
@@ -543,9 +561,7 @@ class TestRefreshWechatContactsFromDecrypt:
             "CREATE TABLE contact (username TEXT, nick_name TEXT, remark TEXT, "
             "is_in_chat_room TEXT, delete_flag INTEGER)"
         )
-        conn.execute(
-            "INSERT INTO contact VALUES ('123@chatroom', '群聊', '', '0', 0)"
-        )
+        conn.execute("INSERT INTO contact VALUES ('123@chatroom', '群聊', '', '0', 0)")
         conn.commit()
         conn.close()
 
@@ -558,15 +574,17 @@ class TestRefreshWechatContactsFromDecrypt:
         added_contacts = []
         mock_db.add = lambda c: added_contacts.append(c)
 
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
-            return_value={"success": True, "message": "ok"},
-        ), patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db"
-        ) as mock_get_db:
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
+                return_value={"success": True, "message": "ok"},
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch("app.services.wechat_contact_cache_import.get_db") as mock_get_db,
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             payload, status = refresh_wechat_contacts_from_decrypt()
@@ -596,15 +614,17 @@ class TestRefreshWechatContactsFromDecrypt:
         mock_db.bind.dialect.name = "postgresql"
         mock_db.execute.return_value = MagicMock()
 
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
-            return_value={"success": True, "message": "ok"},
-        ), patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db"
-        ) as mock_get_db:
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
+                return_value={"success": True, "message": "ok"},
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch("app.services.wechat_contact_cache_import.get_db") as mock_get_db,
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             payload, status = refresh_wechat_contacts_from_decrypt()
@@ -697,15 +717,18 @@ class TestWechatMessageSourceSizePayload:
             assert payload["size"] == 0
 
     def test_exception_returns_500(self):
-        with patch.dict(
-            "sys.modules",
-            {
-                "app.services.unified_query_service": MagicMock(),
-                "app.db.models": MagicMock(),
-            },
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db",
-            side_effect=RuntimeError("db error"),
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "app.services.unified_query_service": MagicMock(),
+                    "app.db.models": MagicMock(),
+                },
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import.get_db",
+                side_effect=RuntimeError("db error"),
+            ),
         ):
             # The function imports inside, so we need to mock the import chain
             with patch(

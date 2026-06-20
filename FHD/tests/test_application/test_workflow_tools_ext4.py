@@ -16,7 +16,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _excel_cell_as_clean_str
 # ---------------------------------------------------------------------------
@@ -280,7 +279,10 @@ class TestGetWorkflowToolRegistry:
         assert isinstance(result, list)
 
     def test_invalidate_and_reget(self):
-        from app.application.tools.workflow import get_workflow_tool_registry, invalidate_workflow_tool_registry
+        from app.application.tools.workflow import (
+            get_workflow_tool_registry,
+            invalidate_workflow_tool_registry,
+        )
 
         invalidate_workflow_tool_registry()
         result = get_workflow_tool_registry()

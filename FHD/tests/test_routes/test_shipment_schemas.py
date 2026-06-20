@@ -1,12 +1,13 @@
 """Tests for app.fastapi_routes.shipment.schemas."""
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from app.fastapi_routes.shipment.schemas import (
-    ShipmentItem,
     ShipmentGenerateRequest,
+    ShipmentItem,
     ShipmentPrintRequest,
 )
 
@@ -25,8 +26,7 @@ class TestShipmentItem:
 
     def test_all_fields(self):
         item = ShipmentItem(
-            product_id=1, quantity=10,
-            product_name="Test", unit_price=99.9, amount=999.0
+            product_id=1, quantity=10, product_name="Test", unit_price=99.9, amount=999.0
         )
         assert item.product_name == "Test"
         assert item.unit_price == 99.9

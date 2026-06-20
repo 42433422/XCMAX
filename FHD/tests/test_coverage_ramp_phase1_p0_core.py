@@ -21,6 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from app.application import aibiz_web_terminal_service as aibiz_mod
 from app.application.auth_app_service import AuthApplicationService, _authenticate_failure_message
 from app.application.excel_template_http_app_service import (
     _decompose_from_grid,
@@ -51,7 +52,6 @@ from app.application.session_account_meta import (
 )
 from app.application.template_app_service import TemplateApplicationService
 from app.application.tools.workflow import _parse_excel_header_row_1based
-from app.application import aibiz_web_terminal_service as aibiz_mod
 from app.contexts.context_notifier import get_context_notifier
 from app.db.validators import ModelValidators, register_model_validators
 from app.errors import AppError, AuthError, ErrorCode
@@ -61,7 +61,6 @@ from app.middleware.subscription_gate import SubscriptionGateMiddleware, _subscr
 from app.schemas.finance_schema import FinanceTransactionCreate, FinanceTransactionUpdate
 from app.schemas.rbac_schema import PermissionCreate, RoleCreate, RoleUpdate, UserRoleAssign
 from app.utils.mobile_api import format_error_response, format_mobile_response, paginate_list
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -103,7 +102,9 @@ def test_excel_map_template_category_label() -> None:
 
 
 def test_excel_normalize_template_dto_word() -> None:
-    dto = _normalize_template_dto({"template_type": "发货单", "file_path": "a.docx", "exists": True})
+    dto = _normalize_template_dto(
+        {"template_type": "发货单", "file_path": "a.docx", "exists": True}
+    )
     assert dto["category"] == "word"
     assert dto["preview_capable"] is True
 
@@ -496,12 +497,15 @@ async def test_subscription_gate_blocks_inactive(monkeypatch: pytest.MonkeyPatch
         return {"ok": True}
 
     app.add_middleware(SubscriptionGateMiddleware)
-    with patch(
-        "app.infrastructure.auth.dependencies.resolve_session_user",
-        return_value=SimpleNamespace(id=1),
-    ), patch(
-        "app.application.tenant_subscription_app_service.subscription_status_for_user",
-        return_value={"active": False},
+    with (
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=SimpleNamespace(id=1),
+        ),
+        patch(
+            "app.application.tenant_subscription_app_service.subscription_status_for_user",
+            return_value={"active": False},
+        ),
     ):
         client = TestClient(app)
         r = client.get("/api/products")

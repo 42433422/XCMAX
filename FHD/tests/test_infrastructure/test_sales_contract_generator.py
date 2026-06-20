@@ -1,15 +1,17 @@
 """测试 sales_contract_generator 模块的销售合同生成。"""
+
 import os
-import pytest
-from unittest.mock import MagicMock, patch
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.infrastructure.documents.sales_contract_generator import SalesContractGenerator
-
 
 # ---------------------------------------------------------------------------
 # _num_to_chinese_upper
 # ---------------------------------------------------------------------------
+
 
 class TestNumToChineseUpper:
     @pytest.fixture
@@ -63,6 +65,7 @@ class TestNumToChineseUpper:
 # __init__
 # ---------------------------------------------------------------------------
 
+
 class TestInit:
     def test_custom_output_dir(self, tmp_path):
         gen = SalesContractGenerator(
@@ -83,6 +86,7 @@ class TestInit:
 # ---------------------------------------------------------------------------
 # generate
 # ---------------------------------------------------------------------------
+
 
 class TestGenerate:
     @pytest.fixture
@@ -132,8 +136,15 @@ class TestGenerate:
         MockDoc.return_value = self._make_mock_doc()
 
         products = [
-            {"model_number": "306B", "name": "PU亮光硬化剂", "spec": "10KG×1",
-             "unit": "桶", "quantity": "10 KG", "unit_price": "39.2", "amount": "392"},
+            {
+                "model_number": "306B",
+                "name": "PU亮光硬化剂",
+                "spec": "10KG×1",
+                "unit": "桶",
+                "quantity": "10 KG",
+                "unit_price": "39.2",
+                "amount": "392",
+            },
         ]
         result = gen.generate("测试客户", products=products)
         assert result["success"] is True
@@ -159,6 +170,7 @@ class TestGenerate:
 # ---------------------------------------------------------------------------
 # _fill_customer
 # ---------------------------------------------------------------------------
+
 
 class TestFillCustomer:
     @pytest.fixture
@@ -191,6 +203,7 @@ class TestFillCustomer:
 # ---------------------------------------------------------------------------
 # _fill_address_date
 # ---------------------------------------------------------------------------
+
 
 class TestFillAddressDate:
     @pytest.fixture

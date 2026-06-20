@@ -10,7 +10,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.ai_engines.rasa.nlu_service import _find_latest_local_model, get_rasa_nlu_service, reset_rasa_nlu_service
+from app.ai_engines.rasa.nlu_service import (
+    _find_latest_local_model,
+    get_rasa_nlu_service,
+    reset_rasa_nlu_service,
+)
 from app.domain.context.session_context import (
     detected_excel_header_row_1based,
     enrich_excel_tool_arguments,
@@ -39,9 +43,11 @@ from app.infrastructure.rag.hybrid_retriever import HybridRetriever, RetrievedCh
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
 from app.services.conversation.handlers import HandlersMixin
 from app.services.kitten_report.docx_export import _html_to_plain, build_kitten_docx
-from app.services.kitten_report.financial_plugins import FinancialReportPlugin, InventoryValuationPlugin
+from app.services.kitten_report.financial_plugins import (
+    FinancialReportPlugin,
+    InventoryValuationPlugin,
+)
 from app.services.kitten_report.service import KittenReportExportService
-
 
 # ---------------------------------------------------------------------------
 # conversation handlers (hard rules + greeting/goodbye/help)
@@ -243,7 +249,9 @@ def test_enrich_excel_tool_arguments_fills_path_and_header() -> None:
 
 
 def test_format_recent_messages_excerpt() -> None:
-    ctx = {"recent_messages": [{"role": "user", "content": "开单"}, {"role": "ai", "content": "好的"}]}
+    ctx = {
+        "recent_messages": [{"role": "user", "content": "开单"}, {"role": "ai", "content": "好的"}]
+    }
     txt = format_recent_messages_excerpt_for_llm(ctx)
     assert txt is not None
     assert "开单" in txt
@@ -303,18 +311,18 @@ def test_hybrid_retriever_bm25_only() -> None:
 
 
 def test_hybrid_retriever_with_embedder() -> None:
-  def _emb(text: str) -> list[float]:
-      return [1.0, 0.0] if "发货" in text else [0.0, 1.0]
+    def _emb(text: str) -> list[float]:
+        return [1.0, 0.0] if "发货" in text else [0.0, 1.0]
 
-  retriever = HybridRetriever(embedder=_emb)
-  retriever.index(
-      [
-          RetrievedChunk(text="发货单管理", score=0.0, chunk_index=0),
-          RetrievedChunk(text="库存查询", score=0.0, chunk_index=1),
-      ]
-  )
-  hits = retriever.retrieve("发货")
-  assert hits[0].text == "发货单管理"
+    retriever = HybridRetriever(embedder=_emb)
+    retriever.index(
+        [
+            RetrievedChunk(text="发货单管理", score=0.0, chunk_index=0),
+            RetrievedChunk(text="库存查询", score=0.0, chunk_index=1),
+        ]
+    )
+    hits = retriever.retrieve("发货")
+    assert hits[0].text == "发货单管理"
 
 
 def test_citation_tracker_strips_markers() -> None:
@@ -425,7 +433,9 @@ def test_rasa_nlu_service_singleton() -> None:
     assert a is b
 
 
-def test_find_latest_local_model_returns_none_when_missing(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_find_latest_local_model_returns_none_when_missing(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         "app.ai_engines.rasa.nlu_service.os.path.isdir",
         lambda _p: False,

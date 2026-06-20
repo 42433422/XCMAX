@@ -1,4 +1,5 @@
 """Tests for app.application.ai_chat_rag_integration."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -18,14 +19,21 @@ class TestGetRagService:
     @patch("app.application.ai_chat_rag_integration.is_rag_enabled", return_value=False)
     def test_returns_none_when_rag_disabled(self, mock_enabled: MagicMock) -> None:
         import app.application.ai_chat_rag_integration as mod
+
         mod._rag_service = None
         result = get_rag_service()
         assert result is None
 
     @patch("app.application.ai_chat_rag_integration.is_rag_enabled", return_value=True)
-    @patch("app.application.ai_chat_rag_integration.get_default_embedder", side_effect=ImportError("no embedder"))
-    def test_returns_none_on_init_failure(self, mock_embedder: MagicMock, mock_enabled: MagicMock) -> None:
+    @patch(
+        "app.application.ai_chat_rag_integration.get_default_embedder",
+        side_effect=ImportError("no embedder"),
+    )
+    def test_returns_none_on_init_failure(
+        self, mock_embedder: MagicMock, mock_enabled: MagicMock
+    ) -> None:
         import app.application.ai_chat_rag_integration as mod
+
         mod._rag_service = None
         result = get_rag_service()
         assert result is None
@@ -96,7 +104,9 @@ class TestGetRagStatus:
     @patch("app.application.ai_chat_rag_integration.get_default_embedder", return_value=MagicMock())
     @patch("app.application.ai_chat_rag_integration.is_rag_enabled", return_value=True)
     @patch("app.application.ai_chat_rag_integration.get_rag_service", return_value=MagicMock())
-    def test_rag_enabled(self, mock_service: MagicMock, mock_enabled: MagicMock, mock_embedder: MagicMock) -> None:
+    def test_rag_enabled(
+        self, mock_service: MagicMock, mock_enabled: MagicMock, mock_embedder: MagicMock
+    ) -> None:
         result = get_rag_status()
         assert result["enabled"] is True
         assert result["service_available"] is True

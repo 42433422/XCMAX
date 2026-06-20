@@ -57,7 +57,10 @@ def test_dataset_query_route_executes_dataset_rag_tool_through_agent(
 
     with (
         _patch_agent_repo(repo),
-        patch("app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=service),
+        patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+            return_value=service,
+        ),
     ):
         response = _client().post(
             "/api/knowledge/v1/datasets/platform-docs/query",
@@ -146,7 +149,11 @@ def _configure_service_for_action(service: MagicMock, action: str) -> None:
             "ingest_document",
             lambda client: client.post(
                 "/api/knowledge/v1/datasets/platform-docs/documents",
-                json={"source": "policy.pdf", "text": "Use AgentOrchestrator.", "tenant_id": "tenant-a"},
+                json={
+                    "source": "policy.pdf",
+                    "text": "Use AgentOrchestrator.",
+                    "tenant_id": "tenant-a",
+                },
                 headers=_dataset_headers(),
             ),
             lambda service: service.ingest_document.call_args.kwargs,
@@ -236,7 +243,10 @@ def test_dataset_mutation_routes_execute_dataset_rag_tools_through_agent(
 
     with (
         _patch_agent_repo(repo),
-        patch("app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=service),
+        patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+            return_value=service,
+        ),
     ):
         response = request_factory(_client())
 

@@ -1,4 +1,5 @@
 """Deep tests for ``app.services.unified_intent_recognizer`` covering remaining uncovered branches."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -68,9 +69,7 @@ class TestRecognizeMainDeep:
         assert result.confidence == 0.85
         assert result.sources_used == ["quick"]
 
-    def test_quick_recognize_no_tool_key(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_quick_recognize_no_tool_key(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         quick_result = {
             "primary_intent": "order",
             "tool_key": None,
@@ -95,11 +94,12 @@ class TestRecognizeMainDeep:
             "elapsed_ms": 10,
             "source": "quick_command",
         }
-        with patch(
-            "app.services.intent_service.quick_recognize",
-            return_value=quick_result,
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
+        with (
+            patch(
+                "app.services.intent_service.quick_recognize",
+                return_value=quick_result,
+            ),
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
         ):
             result = fresh_recognizer.recognize("msg", context_data={"k": "v"})
         assert result.intent_hints == []
@@ -107,11 +107,10 @@ class TestRecognizeMainDeep:
     def test_no_context_data_skips_context_recognition(
         self, fresh_recognizer: UnifiedIntentRecognizer
     ) -> None:
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_from_context"
-        ) as mock_ctx:
+        with (
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
+            patch.object(UnifiedIntentRecognizer, "_recognize_from_context") as mock_ctx,
+        ):
             fresh_recognizer.recognize("msg")
         mock_ctx.assert_not_called()
 
@@ -121,10 +120,11 @@ class TestRecognizeMainDeep:
         mock_distilled = MagicMock()
         mock_distilled.is_available.return_value = True
         fresh_recognizer._distilled_recognizer = mock_distilled
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_distilled", return_value=None
-        ) as mock_dist, patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
+        with (
+            patch.object(
+                UnifiedIntentRecognizer, "_recognize_distilled", return_value=None
+            ) as mock_dist,
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
         ):
             fresh_recognizer.recognize("msg")
         mock_dist.assert_called_once()
@@ -135,34 +135,29 @@ class TestRecognizeMainDeep:
         mock_distilled = MagicMock()
         mock_distilled.is_available.return_value = False
         fresh_recognizer._distilled_recognizer = mock_distilled
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_distilled"
-        ) as mock_dist, patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
+        with (
+            patch.object(UnifiedIntentRecognizer, "_recognize_distilled") as mock_dist,
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
         ):
             fresh_recognizer.recognize("msg")
         mock_dist.assert_not_called()
 
-    def test_bert_recognizer_present_runs(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_bert_recognizer_present_runs(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         fresh_recognizer._bert_recognizer = MagicMock()
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_bert", return_value=None
-        ) as mock_bert, patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
+        with (
+            patch.object(
+                UnifiedIntentRecognizer, "_recognize_bert", return_value=None
+            ) as mock_bert,
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
         ):
             fresh_recognizer.recognize("msg")
         mock_bert.assert_called_once()
 
-    def test_bert_recognizer_none_skipped(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_bert_recognizer_none_skipped(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         fresh_recognizer._bert_recognizer = None
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_bert"
-        ) as mock_bert, patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
+        with (
+            patch.object(UnifiedIntentRecognizer, "_recognize_bert") as mock_bert,
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
         ):
             fresh_recognizer.recognize("msg")
         mock_bert.assert_not_called()
@@ -175,11 +170,10 @@ class TestRecognizeMainDeep:
             "tool_execution_profile": "normal",
             "ui_surface": "normal",
         }
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_deepseek"
-        ) as mock_ds:
+        with (
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
+            patch.object(UnifiedIntentRecognizer, "_recognize_deepseek") as mock_ds,
+        ):
             fresh_recognizer.recognize("msg", context_data=ctx)
         mock_ds.assert_not_called()
 
@@ -191,11 +185,12 @@ class TestRecognizeMainDeep:
             "tool_execution_profile": "normal",
             "ui_surface": "advanced",
         }
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
-        ) as mock_ds:
+        with (
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
+            patch.object(
+                UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
+            ) as mock_ds,
+        ):
             fresh_recognizer.recognize("msg", context_data=ctx)
         mock_ds.assert_called_once()
 
@@ -207,11 +202,12 @@ class TestRecognizeMainDeep:
             "tool_execution_profile": "advanced",
             "ui_surface": "normal",
         }
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
-        ) as mock_ds:
+        with (
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
+            patch.object(
+                UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
+            ) as mock_ds,
+        ):
             fresh_recognizer.recognize("msg", context_data=ctx)
         mock_ds.assert_called_once()
 
@@ -225,11 +221,12 @@ class TestRecognizeMainDeep:
             "tool_execution_profile": "",
             "ui_surface": "",
         }
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
-        ) as mock_ds:
+        with (
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
+            patch.object(
+                UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
+            ) as mock_ds,
+        ):
             fresh_recognizer.recognize("msg", context_data=ctx)
         mock_ds.assert_called_once()
 
@@ -241,25 +238,24 @@ class TestRecognizeMainDeep:
         # quick_recognize raise a RuntimeError (which IS in RECOVERABLE_ERRORS),
         # and patch _recognize_from_context to handle the non-dict gracefully.
         fresh_recognizer._deepseek_recognizer = MagicMock()
-        with patch(
-            "app.services.intent_service.quick_recognize",
-            side_effect=RuntimeError("simulated infra failure"),
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_from_context", return_value=None
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
-        ) as mock_ds:
+        with (
+            patch(
+                "app.services.intent_service.quick_recognize",
+                side_effect=RuntimeError("simulated infra failure"),
+            ),
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
+            patch.object(UnifiedIntentRecognizer, "_recognize_from_context", return_value=None),
+            patch.object(
+                UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
+            ) as mock_ds,
+        ):
             fresh_recognizer.recognize("msg", context_data={"pending_confirmation": False})
         mock_ds.assert_called_once()
 
     def test_recognize_returns_recognizer_result(
         self, fresh_recognizer: UnifiedIntentRecognizer
     ) -> None:
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=None
-        ):
+        with patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None):
             result = fresh_recognizer.recognize("msg")
         assert isinstance(result, RecognizerResult)
         assert result.raw_results == {}
@@ -269,10 +265,11 @@ class TestRecognizeMainDeep:
     ) -> None:
         rule_result = {"primary_intent": "order", "tool_key": "order"}
         ctx_result = {"primary_intent": "ctx_intent", "confidence": 0.6}
-        with patch.object(
-            UnifiedIntentRecognizer, "_recognize_rule", return_value=rule_result
-        ), patch.object(
-            UnifiedIntentRecognizer, "_recognize_from_context", return_value=ctx_result
+        with (
+            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=rule_result),
+            patch.object(
+                UnifiedIntentRecognizer, "_recognize_from_context", return_value=ctx_result
+            ),
         ):
             result = fresh_recognizer.recognize("msg", context_data={"k": "v"})
         assert isinstance(result, RecognizerResult)
@@ -284,9 +281,7 @@ class TestRecognizeMainDeep:
 
 
 class TestRecognizeDeepseekDeep:
-    def test_deepseek_success_with_intent(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_deepseek_success_with_intent(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         mock_ds = MagicMock()
 
         async def fake_recognize(msg, ctx):
@@ -300,9 +295,7 @@ class TestRecognizeDeepseekDeep:
         assert result["confidence"] == 0.9
         assert result["slots"] == {"k": "v"}
 
-    def test_deepseek_success_no_slots_key(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_deepseek_success_no_slots_key(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         mock_ds = MagicMock()
 
         async def fake_recognize(msg, ctx):
@@ -314,9 +307,7 @@ class TestRecognizeDeepseekDeep:
         assert result is not None
         assert result["slots"] == {}
 
-    def test_deepseek_with_context_passed(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_deepseek_with_context_passed(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         mock_ds = MagicMock()
         captured_ctx = {}
 
@@ -345,9 +336,7 @@ class TestMergeResultsDeep:
         result = fresh_recognizer._merge_results(results, "msg", None)
         assert result["primary_intent"] == "chat"
 
-    def test_rule_no_tool_key_skipped(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_rule_no_tool_key_skipped(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         results = {
             "rule": {"tool_key": None, "primary_intent": "order"},
             "distilled": {"primary_intent": "chat", "confidence": 0.9},
@@ -374,9 +363,7 @@ class TestMergeResultsDeep:
         # confidence < 0.75, falls through
         assert result["primary_intent"] == "order"
 
-    def test_context_no_user_prefs(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_context_no_user_prefs(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         results = {"context": {"primary_intent": "order", "confidence": 0.9}}
         ctx = {}
         result = fresh_recognizer._merge_results(results, "msg", ctx)
@@ -402,9 +389,7 @@ class TestMergeResultsDeep:
         result = fresh_recognizer._merge_results(results, "msg", None)
         assert result["primary_intent"] == "ctx"
 
-    def test_bert_high_confidence_selected(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_bert_high_confidence_selected(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         results = {"bert": {"primary_intent": "bert_intent", "confidence": 0.9}}
         result = fresh_recognizer._merge_results(results, "msg", None)
         assert result["primary_intent"] == "bert_intent"
@@ -423,9 +408,7 @@ class TestMergeResultsDeep:
         result = fresh_recognizer._merge_results(results, "msg", None)
         assert result["primary_intent"] == "hybrid_intent"
 
-    def test_no_context_falls_to_rule(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_no_context_falls_to_rule(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         results = {"rule": {"primary_intent": "order", "confidence": 0.5}}
         result = fresh_recognizer._merge_results(results, "msg", None)
         assert result["primary_intent"] == "order"
@@ -456,9 +439,7 @@ class TestRecognizeFromContextDeep:
         )
         assert result is None
 
-    def test_last_intent_no_slots(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_last_intent_no_slots(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         result = fresh_recognizer._recognize_from_context(
             "msg", {"last_intent": "order", "last_slots": {}}
         )
@@ -466,25 +447,17 @@ class TestRecognizeFromContextDeep:
         # falls through to recent_intents
         assert result is None
 
-    def test_current_intent_no_slots(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_current_intent_no_slots(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         result = fresh_recognizer._recognize_from_context(
             "msg", {"current_intent": "order", "last_slots": {}}
         )
         assert result is None
 
-    def test_recent_intents_empty(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
-        result = fresh_recognizer._recognize_from_context(
-            "msg", {"recent_intents": []}
-        )
+    def test_recent_intents_empty(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
+        result = fresh_recognizer._recognize_from_context("msg", {"recent_intents": []})
         assert result is None
 
-    def test_no_relevant_context_keys(
-        self, fresh_recognizer: UnifiedIntentRecognizer
-    ) -> None:
+    def test_no_relevant_context_keys(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         result = fresh_recognizer._recognize_from_context("msg", {"other_key": "value"})
         assert result is None
 
@@ -499,29 +472,21 @@ class TestSingletonAccessorsDeep:
         import app.services.unified_intent_recognizer as mod
 
         monkeypatch.setattr(mod, "_unified_recognizer", None)
-        monkeypatch.setattr(
-            UnifiedIntentRecognizer, "_init_recognizers", lambda self: None
-        )
+        monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", lambda self: None)
         r1 = get_unified_intent_recognizer()
         r2 = get_unified_intent_recognizer()
         assert r1 is r2
 
-    def test_reload_unified_recognizer_no_existing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_reload_unified_recognizer_no_existing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import app.services.unified_intent_recognizer as mod
 
         monkeypatch.setattr(mod, "_unified_recognizer", None)
-        monkeypatch.setattr(
-            UnifiedIntentRecognizer, "_init_recognizers", lambda self: None
-        )
+        monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", lambda self: None)
         # _unified_recognizer is None, so reload doesn't call .reload()
         r = reload_unified_recognizer()
         assert r is not None
 
-    def test_reload_unified_recognizer_with_existing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_reload_unified_recognizer_with_existing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import app.services.unified_intent_recognizer as mod
 
         existing = MagicMock()

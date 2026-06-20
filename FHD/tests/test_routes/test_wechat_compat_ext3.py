@@ -28,7 +28,6 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -116,10 +115,13 @@ class TestWechatWorkModeFeed:
         keys_path.write_text("[]")
         monkeypatch.setenv("WECHAT_DECRYPT_PATH", str(tmp_path))
 
-        with patch(
-            "app.fastapi_routes.domains.wechat.compat_routes.RECOVERABLE_ERRORS",
-            (ValueError,),
-        ), patch("os.path.exists", side_effect=ValueError("forced")):
+        with (
+            patch(
+                "app.fastapi_routes.domains.wechat.compat_routes.RECOVERABLE_ERRORS",
+                (ValueError,),
+            ),
+            patch("os.path.exists", side_effect=ValueError("forced")),
+        ):
             result = wechat_work_mode_feed(per_contact=5)
         assert result["items"] == []
         assert "error" in result
@@ -202,10 +204,10 @@ class TestWechatContactsSearchCompat:
         assert result["results"] == []
 
     def test_with_keyword_no_match(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_search_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -217,10 +219,10 @@ class TestWechatContactsSearchCompat:
         assert result["results"] == []
 
     def test_with_q_match(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_search_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -233,10 +235,10 @@ class TestWechatContactsSearchCompat:
         assert result["results"][0]["display_name"] == "Alice"
 
     def test_with_keyword_match(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_search_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -252,10 +254,10 @@ class TestWechatContactsSearchCompat:
         assert result["results"][0]["remark"] == "VIP客户"
 
     def test_match_by_wxid(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_search_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["special_wxid"] = {
             "id": 1,
@@ -267,10 +269,10 @@ class TestWechatContactsSearchCompat:
         assert len(result["results"]) == 1
 
     def test_match_by_type(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_search_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -289,10 +291,10 @@ class TestWechatContactsSearchCompat:
 
 class TestWechatContactsListCompat:
     def test_list_all(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_list_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -310,10 +312,10 @@ class TestWechatContactsListCompat:
         assert len(result["data"]) == 2
 
     def test_filter_by_type_contact(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_list_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -332,10 +334,10 @@ class TestWechatContactsListCompat:
         assert result["data"][0]["contact_type"] == "contact"
 
     def test_filter_by_type_group(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_list_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -354,10 +356,10 @@ class TestWechatContactsListCompat:
         assert result["data"][0]["contact_type"] == "group"
 
     def test_filter_by_keyword(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_list_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -376,10 +378,10 @@ class TestWechatContactsListCompat:
         assert result["data"][0]["contact_name"] == "Alice"
 
     def test_filter_by_keyword_remark(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_list_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -392,10 +394,10 @@ class TestWechatContactsListCompat:
         assert len(result["data"]) == 1
 
     def test_filter_by_keyword_wxid(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_list_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["special_wxid"] = {
             "id": 1,
@@ -403,16 +405,14 @@ class TestWechatContactsListCompat:
             "wxid": "special_wxid",
             "type": "contact",
         }
-        result = wechat_contacts_list_compat(
-            type="all", keyword="special", page=1, per_page=50
-        )
+        result = wechat_contacts_list_compat(type="all", keyword="special", page=1, per_page=50)
         assert len(result["data"]) == 1
 
     def test_pagination(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_list_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -445,9 +445,7 @@ class TestWechatContactsCreateCompat:
             wechat_contacts_create_compat,
         )
 
-        result = wechat_contacts_create_compat(
-            body={"wechat_id": "wx1", "contact_name": "Alice"}
-        )
+        result = wechat_contacts_create_compat(body={"wechat_id": "wx1", "contact_name": "Alice"})
         assert result["success"] is True
         assert "id" in result["data"]
 
@@ -466,16 +464,14 @@ class TestWechatContactsCreateCompat:
             wechat_contacts_create_compat,
         )
 
-        result = wechat_contacts_create_compat(
-            body={"wxid": "wx3", "contact_type": "group"}
-        )
+        result = wechat_contacts_create_compat(body={"wxid": "wx3", "contact_type": "group"})
         assert result["success"] is True
 
     def test_create_default_type(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_create_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         result = wechat_contacts_create_compat(body={"wxid": "wx4"})
         assert result["success"] is True
@@ -489,8 +485,8 @@ class TestWechatContactsCreateCompat:
 
 class TestWechatStarredList:
     def test_list_all(self):
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_list
         from app.fastapi_routes.domains.wechat import compat_routes as mod
+        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_list
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -502,8 +498,8 @@ class TestWechatStarredList:
         assert result["total"] == 1
 
     def test_filter_by_type(self):
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_list
         from app.fastapi_routes.domains.wechat import compat_routes as mod
+        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_list
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -521,8 +517,8 @@ class TestWechatStarredList:
         assert result["total"] == 1
 
     def test_filter_by_keyword(self):
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_list
         from app.fastapi_routes.domains.wechat import compat_routes as mod
+        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_list
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -541,8 +537,8 @@ class TestWechatStarredList:
 
 class TestWechatStarredDelete:
     def test_delete_existing(self):
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_delete
         from app.fastapi_routes.domains.wechat import compat_routes as mod
+        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_delete
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -575,8 +571,8 @@ class TestWechatStarredClear:
         assert "0" in result["message"]
 
     def test_clear_with_items(self):
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_clear
         from app.fastapi_routes.domains.wechat import compat_routes as mod
+        from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_clear
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -612,9 +608,7 @@ class TestWechatStarredAdd:
     def test_add_with_wxid(self):
         from app.fastapi_routes.domains.wechat.compat_routes import wechat_starred_add
 
-        result = wechat_starred_add(
-            body={"wxid": "wx1", "nickname": "Alice", "type": "contact"}
-        )
+        result = wechat_starred_add(body={"wxid": "wx1", "nickname": "Alice", "type": "contact"})
         assert result["success"] is True
         assert result["data"]["wxid"] == "wx1"
 
@@ -649,10 +643,10 @@ class TestWechatStarredAdd:
 
 class TestWechatContactsDeleteCompat:
     def test_delete_existing(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_delete_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -680,10 +674,10 @@ class TestWechatContactsDeleteCompat:
 
 class TestWechatContactsUpdateCompat:
     def test_update_existing_contact_name(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_update_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -696,10 +690,10 @@ class TestWechatContactsUpdateCompat:
         assert result["data"]["contact_name"] == "New Name"
 
     def test_update_existing_remark(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_update_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -712,10 +706,10 @@ class TestWechatContactsUpdateCompat:
         assert result["data"]["remark"] == "VIP"
 
     def test_update_existing_wechat_id(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_update_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -728,10 +722,10 @@ class TestWechatContactsUpdateCompat:
         assert result["data"]["wechat_id"] == "new_wxid"
 
     def test_update_existing_contact_type(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_update_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -752,10 +746,10 @@ class TestWechatContactsUpdateCompat:
         assert result["success"] is False
 
     def test_update_empty_body(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_update_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,
@@ -825,10 +819,10 @@ class TestWechatContactsRefreshContactCacheCompat:
 class TestWechatContactsUnstarAllCompat:
     @pytest.mark.asyncio
     async def test_unstar_all(self):
+        from app.fastapi_routes.domains.wechat import compat_routes as mod
         from app.fastapi_routes.domains.wechat.compat_routes import (
             wechat_contacts_unstar_all_compat,
         )
-        from app.fastapi_routes.domains.wechat import compat_routes as mod
 
         mod._STARRED_CONTACTS_DB["wx1"] = {
             "id": 1,

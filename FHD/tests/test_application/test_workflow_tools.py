@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-
 # ========================= _parse_excel_header_row_1based ================
 
 
@@ -219,8 +218,8 @@ class TestGetWorkflowToolRegistry:
 
     def test_bulk_import_with_token(self, monkeypatch):
         from app.application.tools.workflow import (
-            get_workflow_tool_registry,
             _workflow_tool_registry_cache,
+            get_workflow_tool_registry,
         )
 
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "test-token")
@@ -241,12 +240,12 @@ class TestGetWorkflowToolRegistry:
 
 class TestInvalidateWorkflowToolRegistry:
     def test_invalidate_clears_cache(self):
-        from app.application.tools.workflow import (
-            invalidate_workflow_tool_registry,
-            get_workflow_tool_registry,
-            _workflow_tool_registry_cache,
-        )
         import app.application.tools.workflow as mod
+        from app.application.tools.workflow import (
+            _workflow_tool_registry_cache,
+            get_workflow_tool_registry,
+            invalidate_workflow_tool_registry,
+        )
 
         get_workflow_tool_registry()  # populate cache
         invalidate_workflow_tool_registry()
@@ -335,6 +334,7 @@ class TestHandleExcelAnalysis:
 class TestRunNaturalLanguagePandas:
     def test_basic_query_no_translation(self):
         import pandas as pd
+
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
@@ -345,6 +345,7 @@ class TestRunNaturalLanguagePandas:
 
     def test_empty_dataframe(self):
         import pandas as pd
+
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": []})
@@ -353,6 +354,7 @@ class TestRunNaturalLanguagePandas:
 
     def test_translation_error_graceful(self):
         import pandas as pd
+
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": [1]})

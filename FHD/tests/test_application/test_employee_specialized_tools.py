@@ -153,7 +153,11 @@ class TestHandleSpecialized:
         """validate_employee_pack 验证合法员工包。"""
         result = await handle_specialized(
             "employee-pack-curator",
-            {"handler": "specialized", "tool": "validate_employee_pack", "params": {"pack_id": "fhd-core-maintainer"}},
+            {
+                "handler": "specialized",
+                "tool": "validate_employee_pack",
+                "params": {"pack_id": "fhd-core-maintainer"},
+            },
             {},
         )
         assert result["ok"] is True
@@ -164,7 +168,11 @@ class TestHandleSpecialized:
         """validate_employee_pack 验证不存在的员工包。"""
         result = await handle_specialized(
             "employee-pack-curator",
-            {"handler": "specialized", "tool": "validate_employee_pack", "params": {"pack_id": "nonexistent-pack"}},
+            {
+                "handler": "specialized",
+                "tool": "validate_employee_pack",
+                "params": {"pack_id": "nonexistent-pack"},
+            },
             {},
         )
         assert result["ok"] is False
@@ -186,7 +194,11 @@ class TestHandleSpecialized:
         """read_file 拒绝路径越界。"""
         result = await handle_specialized(
             "doc-knowledge-curator",
-            {"handler": "specialized", "tool": "read_file", "params": {"path": "../../../etc/passwd"}},
+            {
+                "handler": "specialized",
+                "tool": "read_file",
+                "params": {"path": "../../../etc/passwd"},
+            },
             {},
         )
         assert result["ok"] is False
@@ -197,7 +209,11 @@ class TestHandleSpecialized:
         """sandbox_python 拒绝危险 import（无 confirm）。"""
         result = await handle_specialized(
             "artifact-generator",
-            {"handler": "specialized", "tool": "sandbox_python", "params": {"code": "import os; print(os.getcwd())"}},
+            {
+                "handler": "specialized",
+                "tool": "sandbox_python",
+                "params": {"code": "import os; print(os.getcwd())"},
+            },
             {},
         )
         assert result["ok"] is False

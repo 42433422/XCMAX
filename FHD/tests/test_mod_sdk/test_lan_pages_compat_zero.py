@@ -1,4 +1,5 @@
 """Tests for app.mod_sdk.lan_pages_compat."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

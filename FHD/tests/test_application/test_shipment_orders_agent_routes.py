@@ -73,9 +73,7 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
         generate_batch = client.post(
             "/api/shipment/generate-batch",
             json={
-                "shipments": [
-                    {"unit_name": "星光贸易", "products": [{"name": "5003", "qty": 2}]}
-                ]
+                "shipments": [{"unit_name": "星光贸易", "products": [{"name": "5003", "qty": 2}]}]
             },
             headers={"X-User-Id": "tenant-a"},
         )

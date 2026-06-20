@@ -21,6 +21,7 @@ def register_wechat_domain_handlers(domain):
     将原 wechat_domain.py 中 _setup_handlers 的闭包迁出至此，
     业务逻辑保持不变（仅将 self 改为 domain 参数）。
     """
+
     @domain.on("wechat.message.received", priority=1)
     async def on_message(event):
         msg_type = event.payload.get("msg_type")

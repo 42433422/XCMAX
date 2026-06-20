@@ -25,7 +25,6 @@ from app.domain.services.conversation.context.intent_context import (
     PendingIntent,
 )
 
-
 # ---------------------------------------------------------------------------
 # IntentResult
 # ---------------------------------------------------------------------------
@@ -170,13 +169,17 @@ class TestProcessHelp:
 class TestProcessConfirmation:
     def test_confirmed_pending_triggers_tool_call(self):
         mock_ic = MagicMock()
-        pending = PendingIntent(intent="shipment_generate", slots={"unit_name": "Co"}, missing_slots=[], source="test")
+        pending = PendingIntent(
+            intent="shipment_generate", slots={"unit_name": "Co"}, missing_slots=[], source="test"
+        )
         mock_ic.get_pending.return_value = pending
         mock_cc = MagicMock()
         mock_cc.is_duplicate.return_value = (False, None, False)
         facade = ContextFacade(intent_context=mock_ic, chat_context=mock_cc)
 
-        ir = IntentResult(primary_intent="shipment_generate", tool_key=None, slots={}, is_confirmation=True)
+        ir = IntentResult(
+            primary_intent="shipment_generate", tool_key=None, slots={}, is_confirmation=True
+        )
         result = facade.process("user1", "确认", ir)
         assert result.action == ProcessingAction.TOOL_CALL
 
@@ -189,13 +192,17 @@ class TestProcessConfirmation:
 class TestProcessNegation:
     def test_negated_with_pending(self):
         mock_ic = MagicMock()
-        pending = PendingIntent(intent="shipment_generate", slots={}, missing_slots=["unit_name"], source="test")
+        pending = PendingIntent(
+            intent="shipment_generate", slots={}, missing_slots=["unit_name"], source="test"
+        )
         mock_ic.get_pending.return_value = pending
         mock_cc = MagicMock()
         mock_cc.is_duplicate.return_value = (False, None, False)
         facade = ContextFacade(intent_context=mock_ic, chat_context=mock_cc)
 
-        ir = IntentResult(primary_intent="negation", tool_key=None, slots={}, is_negation_intent=True)
+        ir = IntentResult(
+            primary_intent="negation", tool_key=None, slots={}, is_negation_intent=True
+        )
         result = facade.process("user1", "取消", ir)
         assert result.action == ProcessingAction.NEGATED
         assert "取消" in result.text
@@ -227,7 +234,9 @@ class TestProcessSlotFill:
             source="test",
         )
         mock_ic.should_adopt_new_intent.return_value = (
-            True, AdoptionReason.MERGE_SLOTS, merged_pending
+            True,
+            AdoptionReason.MERGE_SLOTS,
+            merged_pending,
         )
         # merged_slots in decision must reflect the incomplete state
         decision = ContextDecision(
@@ -258,7 +267,12 @@ class TestProcessToolCall:
         ir = IntentResult(
             primary_intent="shipment_generate",
             tool_key="shipment_generate",
-            slots={"unit_name": "Co", "model_number": "M1", "tin_spec": "S1", "quantity_tins": "10"},
+            slots={
+                "unit_name": "Co",
+                "model_number": "M1",
+                "tin_spec": "S1",
+                "quantity_tins": "10",
+            },
         )
         result = facade.process("user1", "发货", ir)
         assert result.action == ProcessingAction.TOOL_CALL
@@ -284,10 +298,14 @@ class TestProcessToolCall:
 class TestProcessIntentSwitch:
     def test_switch_requested(self):
         mock_ic = MagicMock()
-        pending = PendingIntent(intent="shipment_generate", slots={}, missing_slots=["unit_name"], source="test")
+        pending = PendingIntent(
+            intent="shipment_generate", slots={}, missing_slots=["unit_name"], source="test"
+        )
         mock_ic.get_pending.return_value = pending
         mock_ic.should_adopt_new_intent.return_value = (
-            True, AdoptionReason.SWITCH_REQUESTED, pending
+            True,
+            AdoptionReason.SWITCH_REQUESTED,
+            pending,
         )
         mock_cc = MagicMock()
         mock_cc.is_duplicate.return_value = (False, None, False)
@@ -307,10 +325,14 @@ class TestProcessIntentSwitch:
 class TestProcessPreservedIntent:
     def test_preserved_intent_greeting(self):
         mock_ic = MagicMock()
-        pending = PendingIntent(intent="shipment_generate", slots={}, missing_slots=["unit_name"], source="test")
+        pending = PendingIntent(
+            intent="shipment_generate", slots={}, missing_slots=["unit_name"], source="test"
+        )
         mock_ic.get_pending.return_value = pending
         mock_ic.should_adopt_new_intent.return_value = (
-            False, AdoptionReason.INTENT_PRESERVED, None
+            False,
+            AdoptionReason.INTENT_PRESERVED,
+            None,
         )
         mock_cc = MagicMock()
         mock_cc.is_duplicate.return_value = (False, None, False)
@@ -323,10 +345,14 @@ class TestProcessPreservedIntent:
 
     def test_preserved_intent_tool_call(self):
         mock_ic = MagicMock()
-        pending = PendingIntent(intent="shipment_generate", slots={"unit_name": "Co"}, missing_slots=[], source="test")
+        pending = PendingIntent(
+            intent="shipment_generate", slots={"unit_name": "Co"}, missing_slots=[], source="test"
+        )
         mock_ic.get_pending.return_value = pending
         mock_ic.should_adopt_new_intent.return_value = (
-            False, AdoptionReason.INTENT_PRESERVED, None
+            False,
+            AdoptionReason.INTENT_PRESERVED,
+            None,
         )
         mock_cc = MagicMock()
         mock_cc.is_duplicate.return_value = (False, None, False)

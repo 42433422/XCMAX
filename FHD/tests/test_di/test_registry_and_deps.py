@@ -56,7 +56,14 @@ class TestFastapiDeps:
     def test_uses_app_state_services_when_present(self):
         container = ServiceContainer()
         app = SimpleNamespace(state=SimpleNamespace(services=container))
-        scope = {"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b"", "app": app}
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "query_string": b"",
+            "app": app,
+        }
         req = Request(scope)
         assert get_service_container(req) is container
 
@@ -114,6 +121,13 @@ class TestRegistryArchitecture:
     def test_falls_back_to_global_registry_when_services_missing(self):
         container = get_service_registry()
         app = SimpleNamespace(state=SimpleNamespace())
-        scope = {"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b"", "app": app}
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "query_string": b"",
+            "app": app,
+        }
         req = Request(scope)
         assert get_service_container(req) is container

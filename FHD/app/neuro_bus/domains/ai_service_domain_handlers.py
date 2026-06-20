@@ -20,6 +20,7 @@ def register_ai_service_domain_handlers(domain):
     将原 ai_service_domain.py 中 _setup_handlers 的闭包迁出至此，
     业务逻辑保持不变（仅将 self 改为 domain 参数）。
     """
+
     @domain.on("ai.completed", priority=1)
     async def on_completed(event):
         domain._request_count += 1

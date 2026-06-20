@@ -1,8 +1,9 @@
 """Tests for app.infrastructure.excel.text_to_pandas."""
+
 from __future__ import annotations
 
-import pytest
 import pandas as pd
+import pytest
 
 from app.infrastructure.excel.text_to_pandas import (
     MAX_CODE_LENGTH,

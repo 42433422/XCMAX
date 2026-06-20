@@ -1,4 +1,5 @@
 """SLA 采集器单测。"""
+
 import json
 from pathlib import Path
 

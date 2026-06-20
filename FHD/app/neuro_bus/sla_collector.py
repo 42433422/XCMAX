@@ -1,4 +1,5 @@
 """SLA 实测采集器 — 写入 jsonl 供离线分析。"""
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,10 @@ def _default_measurements_path() -> Path:
 
 def _collect_enabled() -> bool:
     return os.environ.get("XCAGI_NEURO_BUS_SLA_COLLECT", "").strip().lower() in {
-        "1", "true", "yes", "on"
+        "1",
+        "true",
+        "yes",
+        "on",
     }
 
 

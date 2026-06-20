@@ -48,9 +48,7 @@ class TestParseSingleExtended:
             "confidence": 0.9,
             "parse_method": "ai",
         }
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", return_value=ai_data
-        ):
+        with patch.object(AIProductParser, "_cached_call_ai_api", return_value=ai_data):
             result = parser.parse_single("text", use_ai=True, fallback_to_rule=False)
         assert result["success"] is True
         assert result["parse_method"] == "ai"
@@ -65,9 +63,7 @@ class TestParseSingleExtended:
             "quantity": None,
             "unit": "",
         }
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", return_value=ai_data
-        ):
+        with patch.object(AIProductParser, "_cached_call_ai_api", return_value=ai_data):
             result = parser.parse_single("text", use_ai=True, fallback_to_rule=False)
         assert result["success"] is False
         assert result["parse_method"] == "ai"
@@ -76,9 +72,7 @@ class TestParseSingleExtended:
     def test_parse_single_ai_invalid_with_fallback_rule_valid(self) -> None:
         parser = AIProductParser()
         ai_data = {"product_code": "", "product_name": "", "quantity": None, "unit": ""}
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", return_value=ai_data
-        ):
+        with patch.object(AIProductParser, "_cached_call_ai_api", return_value=ai_data):
             result = parser.parse_single(
                 "七彩乐园9803规格12要3桶", use_ai=True, fallback_to_rule=True
             )
@@ -88,12 +82,8 @@ class TestParseSingleExtended:
     def test_parse_single_ai_invalid_with_fallback_rule_invalid_hybrid(self) -> None:
         parser = AIProductParser()
         ai_data = {"product_code": "", "product_name": "", "quantity": None, "unit": ""}
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", return_value=ai_data
-        ):
-            result = parser.parse_single(
-                "no product info here", use_ai=True, fallback_to_rule=True
-            )
+        with patch.object(AIProductParser, "_cached_call_ai_api", return_value=ai_data):
+            result = parser.parse_single("no product info here", use_ai=True, fallback_to_rule=True)
         assert result["success"] is False
         assert result["parse_method"] == "hybrid"
 
@@ -115,9 +105,7 @@ class TestParseBatchExtended:
 
     def test_parse_batch_multiple_items(self) -> None:
         parser = AIProductParser()
-        results = parser.parse_batch(
-            ["七彩乐园9803规格12要3桶", "", "no info"], use_ai=False
-        )
+        results = parser.parse_batch(["七彩乐园9803规格12要3桶", "", "no info"], use_ai=False)
         assert len(results) == 3
         assert results[0]["success"] is True
         assert results[1]["success"] is False
@@ -329,9 +317,7 @@ class TestShouldCacheAiResultExtended:
         assert result is False
 
     def test_should_cache_zero_confidence_returns_false(self) -> None:
-        result = AIProductParser._should_cache_ai_result(
-            {"product_code": "9803", "confidence": 0}
-        )
+        result = AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": 0})
         assert result is False
 
     def test_should_cache_valid_returns_true(self) -> None:
@@ -353,13 +339,16 @@ class TestCachedCallAiApiExtended:
         expected = {"product_code": "9803", "confidence": 0.9}
         mock_cache = MagicMock()
         mock_cache.get_or_compute.return_value = expected
-        with patch(
-            "app.services.ai_product_parser._get_product_parse_cache",
-            return_value=mock_cache,
-        ), patch(
-            "app.services.ai_product_parser.get_request_active_mod_id",
-            return_value="mod1",
-            create=True,
+        with (
+            patch(
+                "app.services.ai_product_parser._get_product_parse_cache",
+                return_value=mock_cache,
+            ),
+            patch(
+                "app.services.ai_product_parser.get_request_active_mod_id",
+                return_value="mod1",
+                create=True,
+            ),
         ):
             # The function imports get_request_active_mod_id lazily, patch at source
             with patch(
@@ -372,12 +361,15 @@ class TestCachedCallAiApiExtended:
 
     def test_cached_call_ai_api_recoverable_error_falls_back(self) -> None:
         parser = AIProductParser()
-        with patch(
-            "app.services.ai_product_parser._get_product_parse_cache",
-            side_effect=RuntimeError("cache down"),
-        ), patch.object(
-            AIProductParser, "_call_ai_api", return_value={"product_code": "fallback"}
-        ) as mock_call:
+        with (
+            patch(
+                "app.services.ai_product_parser._get_product_parse_cache",
+                side_effect=RuntimeError("cache down"),
+            ),
+            patch.object(
+                AIProductParser, "_call_ai_api", return_value={"product_code": "fallback"}
+            ) as mock_call,
+        ):
             result = parser._cached_call_ai_api("text")
         assert result == {"product_code": "fallback"}
         mock_call.assert_called_once_with("text")
@@ -426,12 +418,15 @@ class TestCallAiApiExtended:
         async def mock_call_api():
             return api_response
 
-        with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
-            return_value="key",
-        ), patch(
-            "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(return_value=api_response),
+        with (
+            patch(
+                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                return_value="key",
+            ),
+            patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=api_response),
+            ),
         ):
             result = parser._call_ai_api("text")
         assert result is not None
@@ -441,26 +436,31 @@ class TestCallAiApiExtended:
 
     def test_call_ai_api_with_code_block_content(self) -> None:
         parser = AIProductParser()
-        content = "```json\n" + json.dumps(
-            {
-                "product_code": "9803",
-                "product_name": "name",
-                "specification": "spec",
-                "quantity": 3,
-                "unit": "桶",
-                "purchase_unit": "客户",
-            }
-        ) + "\n```"
-        api_response = {
-            "choices": [{"message": {"content": content}}]
-        }
+        content = (
+            "```json\n"
+            + json.dumps(
+                {
+                    "product_code": "9803",
+                    "product_name": "name",
+                    "specification": "spec",
+                    "quantity": 3,
+                    "unit": "桶",
+                    "purchase_unit": "客户",
+                }
+            )
+            + "\n```"
+        )
+        api_response = {"choices": [{"message": {"content": content}}]}
 
-        with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
-            return_value="key",
-        ), patch(
-            "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(return_value=api_response),
+        with (
+            patch(
+                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                return_value="key",
+            ),
+            patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=api_response),
+            ),
         ):
             result = parser._call_ai_api("text")
         assert result is not None
@@ -478,18 +478,18 @@ class TestCallAiApiExtended:
                 "purchase_unit": "客户",
             }
         )
-        api_response = {
-            "choices": [{"message": {"content": content}}]
-        }
+        api_response = {"choices": [{"message": {"content": content}}]}
 
-        with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
-            return_value="key",
-        ), patch(
-            "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(return_value=api_response),
-        ), patch(
-            "app.services.deepseek_intent_service.cn_to_number", return_value=3
+        with (
+            patch(
+                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                return_value="key",
+            ),
+            patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=api_response),
+            ),
+            patch("app.services.deepseek_intent_service.cn_to_number", return_value=3),
         ):
             result = parser._call_ai_api("text")
         assert result is not None
@@ -497,25 +497,29 @@ class TestCallAiApiExtended:
 
     def test_call_ai_api_no_choices_returns_none(self) -> None:
         parser = AIProductParser()
-        with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
-            return_value="key",
-        ), patch(
-            "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(return_value={"choices": []}),
+        with (
+            patch(
+                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                return_value="key",
+            ),
+            patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value={"choices": []}),
+            ),
         ):
             result = parser._call_ai_api("text")
         assert result is None
 
     def test_call_ai_api_empty_content_returns_none(self) -> None:
         parser = AIProductParser()
-        with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
-            return_value="key",
-        ), patch(
-            "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(
-                return_value={"choices": [{"message": {"content": ""}}]}
+        with (
+            patch(
+                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                return_value="key",
+            ),
+            patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value={"choices": [{"message": {"content": ""}}]}),
             ),
         ):
             result = parser._call_ai_api("text")
@@ -523,13 +527,14 @@ class TestCallAiApiExtended:
 
     def test_call_ai_api_no_json_match_returns_none(self) -> None:
         parser = AIProductParser()
-        with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
-            return_value="key",
-        ), patch(
-            "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(
-                return_value={"choices": [{"message": {"content": "no json here"}}]}
+        with (
+            patch(
+                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                return_value="key",
+            ),
+            patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value={"choices": [{"message": {"content": "no json here"}}]}),
             ),
         ):
             result = parser._call_ai_api("text")
@@ -537,7 +542,9 @@ class TestCallAiApiExtended:
 
 
 class TestGetProductParseCacheExtended:
-    def test_get_product_parse_cache_creates_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_get_product_parse_cache_creates_singleton(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # Reset the singleton
         import app.services.ai_product_parser as mod
 
@@ -547,9 +554,7 @@ class TestGetProductParseCacheExtended:
             mock_cache_cls = MagicMock()
             mock_instance = MagicMock()
             mock_cache_cls.return_value = mock_instance
-            monkeypatch.setattr(
-                "app.infrastructure.cache.intent_cache.IntentCache", mock_cache_cls
-            )
+            monkeypatch.setattr("app.infrastructure.cache.intent_cache.IntentCache", mock_cache_cls)
             cache1 = _get_product_parse_cache()
             cache2 = _get_product_parse_cache()
             assert cache1 is cache2

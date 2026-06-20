@@ -41,51 +41,63 @@ async def test_execute_compat_chat_attaches_agent_run_id() -> None:
     repo = InMemoryAgentRunRepository()
     body = XcagiCompatChatBody(message="查库存", user_id="u42", source="desktop")
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch(
-        "app.application.planner_compat_service.set_llm_mode"
-    ), patch(
-        "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-        return_value=({"workspace": "demo"}, []),
-    ), patch(
-        "app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"
-    ), patch(
-        "app.application.planner_compat_service.resolve_ai_tier",
-        return_value="p1",
-    ), patch(
-        "app.application.planner_compat_service.runtime_context_with_tier",
-        return_value={"workspace": "demo", "ai_tier": "p1"},
-    ), patch(
-        "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-        new_callable=AsyncMock,
-        return_value={"workspace": "demo", "ai_tier": "p1"},
-    ), patch(
-        "app.application.kitten_planner_context.kitten_reply_attachments",
-        return_value={},
-    ), patch(
-        "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-        return_value=(True, None),
-    ), patch(
-        "app.application.planner_compat_service._message_requires_db_read_token",
-        return_value=False,
-    ), patch(
-        "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-        return_value=None,
-    ), patch(
-        "app.application.planner_compat_service._ensure_vector_index_if_needed",
-        return_value=None,
-    ), patch(
-        "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-        return_value=30.0,
-    ), patch(
-        "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-        return_value=MagicMock(),
-    ), patch(
-        "app.application.planner_compat_service.run_agent_chat",
-        return_value="库存正常",
-    ) as mock_chat:
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch("app.application.planner_compat_service.set_llm_mode"),
+        patch(
+            "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
+            return_value=({"workspace": "demo"}, []),
+        ),
+        patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
+        patch(
+            "app.application.planner_compat_service.resolve_ai_tier",
+            return_value="p1",
+        ),
+        patch(
+            "app.application.planner_compat_service.runtime_context_with_tier",
+            return_value={"workspace": "demo", "ai_tier": "p1"},
+        ),
+        patch(
+            "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
+            new_callable=AsyncMock,
+            return_value={"workspace": "demo", "ai_tier": "p1"},
+        ),
+        patch(
+            "app.application.kitten_planner_context.kitten_reply_attachments",
+            return_value={},
+        ),
+        patch(
+            "app.application.planner_compat_service._ensure_chat_db_read_authorized",
+            return_value=(True, None),
+        ),
+        patch(
+            "app.application.planner_compat_service._message_requires_db_read_token",
+            return_value=False,
+        ),
+        patch(
+            "app.application.planner_compat_service.planner_workflow_interrupt_reply",
+            return_value=None,
+        ),
+        patch(
+            "app.application.planner_compat_service._ensure_vector_index_if_needed",
+            return_value=None,
+        ),
+        patch(
+            "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
+            return_value=30.0,
+        ),
+        patch(
+            "app.application.planner_compat_service.create_modstore_openai_client_from_request",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.application.planner_compat_service.run_agent_chat",
+            return_value="库存正常",
+        ) as mock_chat,
+    ):
         result = await execute_compat_chat(_make_request(), body)
 
     run_id = result["run_id"]
@@ -125,53 +137,66 @@ async def test_execute_compat_chat_observes_reply_tool_records_across_thread() -
         ],
     }
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch(
-        "app.application.planner_compat_service.set_llm_mode"
-    ), patch(
-        "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-        return_value=({"workspace": "demo"}, []),
-    ), patch(
-        "app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"
-    ), patch(
-        "app.application.planner_compat_service.resolve_ai_tier",
-        return_value="p1",
-    ), patch(
-        "app.application.planner_compat_service.runtime_context_with_tier",
-        return_value={"workspace": "demo", "ai_tier": "p1"},
-    ), patch(
-        "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-        new_callable=AsyncMock,
-        return_value={"workspace": "demo", "ai_tier": "p1"},
-    ), patch(
-        "app.application.kitten_planner_context.kitten_reply_attachments",
-        return_value={},
-    ), patch(
-        "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-        return_value=(True, None),
-    ), patch(
-        "app.application.planner_compat_service._message_requires_db_read_token",
-        return_value=False,
-    ), patch(
-        "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-        return_value=None,
-    ), patch(
-        "app.application.planner_compat_service._ensure_vector_index_if_needed",
-        return_value=None,
-    ), patch(
-        "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-        return_value=30.0,
-    ), patch(
-        "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-        return_value=MagicMock(),
-    ), patch(
-        "app.application.planner_compat_service.run_agent_chat",
-        return_value=reply,
-    ), patch(
-        "app.application.facades.tools_facade.execute_registered_workflow_tool"
-    ) as mock_execute:
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch("app.application.planner_compat_service.set_llm_mode"),
+        patch(
+            "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
+            return_value=({"workspace": "demo"}, []),
+        ),
+        patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
+        patch(
+            "app.application.planner_compat_service.resolve_ai_tier",
+            return_value="p1",
+        ),
+        patch(
+            "app.application.planner_compat_service.runtime_context_with_tier",
+            return_value={"workspace": "demo", "ai_tier": "p1"},
+        ),
+        patch(
+            "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
+            new_callable=AsyncMock,
+            return_value={"workspace": "demo", "ai_tier": "p1"},
+        ),
+        patch(
+            "app.application.kitten_planner_context.kitten_reply_attachments",
+            return_value={},
+        ),
+        patch(
+            "app.application.planner_compat_service._ensure_chat_db_read_authorized",
+            return_value=(True, None),
+        ),
+        patch(
+            "app.application.planner_compat_service._message_requires_db_read_token",
+            return_value=False,
+        ),
+        patch(
+            "app.application.planner_compat_service.planner_workflow_interrupt_reply",
+            return_value=None,
+        ),
+        patch(
+            "app.application.planner_compat_service._ensure_vector_index_if_needed",
+            return_value=None,
+        ),
+        patch(
+            "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
+            return_value=30.0,
+        ),
+        patch(
+            "app.application.planner_compat_service.create_modstore_openai_client_from_request",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.application.planner_compat_service.run_agent_chat",
+            return_value=reply,
+        ),
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_execute,
+    ):
         result = await execute_compat_chat(_make_request(), body)
 
     run = repo.get(result["run_id"])
@@ -198,44 +223,54 @@ async def test_execute_compat_chat_batch_precreates_agent_run_per_message() -> N
     def runtime_with_tier(ctx: dict, tier: str) -> dict:
         return {**ctx, "ai_tier": tier}
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch(
-        "app.application.planner_compat_service.set_llm_mode"
-    ), patch(
-        "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-        side_effect=lambda _ctx, msg: ({"workspace": "demo", "message": msg}, []),
-    ), patch(
-        "app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"
-    ), patch(
-        "app.application.planner_compat_service.resolve_ai_tier",
-        return_value="p1",
-    ), patch(
-        "app.application.planner_compat_service.runtime_context_with_tier",
-        side_effect=runtime_with_tier,
-    ), patch(
-        "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-        return_value=(True, None),
-    ), patch(
-        "app.application.planner_compat_service._message_requires_db_read_token",
-        return_value=False,
-    ), patch(
-        "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-        return_value=None,
-    ), patch(
-        "app.application.planner_compat_service._ensure_vector_index_if_needed",
-        return_value=None,
-    ), patch(
-        "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-        return_value=30.0,
-    ), patch(
-        "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-        return_value=MagicMock(),
-    ), patch(
-        "app.application.planner_compat_service.run_agent_chat",
-        side_effect=lambda message, **_kwargs: f"{message}完成",
-    ) as mock_chat:
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch("app.application.planner_compat_service.set_llm_mode"),
+        patch(
+            "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
+            side_effect=lambda _ctx, msg: ({"workspace": "demo", "message": msg}, []),
+        ),
+        patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
+        patch(
+            "app.application.planner_compat_service.resolve_ai_tier",
+            return_value="p1",
+        ),
+        patch(
+            "app.application.planner_compat_service.runtime_context_with_tier",
+            side_effect=runtime_with_tier,
+        ),
+        patch(
+            "app.application.planner_compat_service._ensure_chat_db_read_authorized",
+            return_value=(True, None),
+        ),
+        patch(
+            "app.application.planner_compat_service._message_requires_db_read_token",
+            return_value=False,
+        ),
+        patch(
+            "app.application.planner_compat_service.planner_workflow_interrupt_reply",
+            return_value=None,
+        ),
+        patch(
+            "app.application.planner_compat_service._ensure_vector_index_if_needed",
+            return_value=None,
+        ),
+        patch(
+            "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
+            return_value=30.0,
+        ),
+        patch(
+            "app.application.planner_compat_service.create_modstore_openai_client_from_request",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.application.planner_compat_service.run_agent_chat",
+            side_effect=lambda message, **_kwargs: f"{message}完成",
+        ) as mock_chat,
+    ):
         result = await execute_compat_chat_batch(_make_request(), body)
 
     assert result["success"] is True
@@ -263,38 +298,47 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
     repo = InMemoryAgentRunRepository()
     body = XcagiCompatChatBody(message="hello", user_id="stream-user", source="desktop")
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch.object(
-        stream_helpers,
-        "effective_db_read_token",
-        return_value="",
-    ), patch.object(
-        stream_helpers,
-        "_merge_runtime_context_with_message_paths",
-        return_value=({"workspace": "demo"}, []),
-    ), patch.object(
-        stream_helpers,
-        "runtime_context_with_tier",
-        return_value={"workspace": "demo", "ai_tier": "p1"},
-    ), patch.object(
-        stream_helpers,
-        "planner_workflow_interrupt_reply",
-        return_value=None,
-    ), patch.object(
-        stream_helpers,
-        "_ensure_vector_index_if_needed",
-        return_value=None,
-    ), patch.object(
-        stream_helpers,
-        "create_modstore_openai_client_from_request",
-        return_value=MagicMock(),
-    ), patch.object(
-        stream_helpers,
-        "_xcagi_guarded_planner_stream_events",
-        return_value=iter([{"type": "token", "text": "hello"}, {"type": "done"}]),
-    ) as mock_stream:
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch.object(
+            stream_helpers,
+            "effective_db_read_token",
+            return_value="",
+        ),
+        patch.object(
+            stream_helpers,
+            "_merge_runtime_context_with_message_paths",
+            return_value=({"workspace": "demo"}, []),
+        ),
+        patch.object(
+            stream_helpers,
+            "runtime_context_with_tier",
+            return_value={"workspace": "demo", "ai_tier": "p1"},
+        ),
+        patch.object(
+            stream_helpers,
+            "planner_workflow_interrupt_reply",
+            return_value=None,
+        ),
+        patch.object(
+            stream_helpers,
+            "_ensure_vector_index_if_needed",
+            return_value=None,
+        ),
+        patch.object(
+            stream_helpers,
+            "create_modstore_openai_client_from_request",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            stream_helpers,
+            "_xcagi_guarded_planner_stream_events",
+            return_value=iter([{"type": "token", "text": "hello"}, {"type": "done"}]),
+        ) as mock_stream,
+    ):
         chunks = list(
             stream_helpers._xcagi_planner_stream_bytes(
                 _make_request(),
@@ -324,46 +368,55 @@ def test_stream_requires_token_event_finalizes_waiting_agent_run() -> None:
     repo = InMemoryAgentRunRepository()
     body = XcagiCompatChatBody(message="写入数据库", user_id="stream-user", source="desktop")
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch.object(
-        stream_helpers,
-        "effective_db_read_token",
-        return_value="",
-    ), patch.object(
-        stream_helpers,
-        "_merge_runtime_context_with_message_paths",
-        return_value=({"workspace": "demo"}, []),
-    ), patch.object(
-        stream_helpers,
-        "runtime_context_with_tier",
-        return_value={"workspace": "demo", "ai_tier": "p1"},
-    ), patch.object(
-        stream_helpers,
-        "planner_workflow_interrupt_reply",
-        return_value=None,
-    ), patch.object(
-        stream_helpers,
-        "_ensure_vector_index_if_needed",
-        return_value=None,
-    ), patch.object(
-        stream_helpers,
-        "create_modstore_openai_client_from_request",
-        return_value=MagicMock(),
-    ), patch.object(
-        stream_helpers,
-        "_xcagi_guarded_planner_stream_events",
-        return_value=iter(
-            [
-                {"type": "token", "text": "partial"},
-                {
-                    "type": "requires_token",
-                    "token_name": "DB_WRITE_TOKEN",
-                    "token_description": "数据库写入令牌",
-                    "message": "需要写入授权",
-                },
-            ]
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch.object(
+            stream_helpers,
+            "effective_db_read_token",
+            return_value="",
+        ),
+        patch.object(
+            stream_helpers,
+            "_merge_runtime_context_with_message_paths",
+            return_value=({"workspace": "demo"}, []),
+        ),
+        patch.object(
+            stream_helpers,
+            "runtime_context_with_tier",
+            return_value={"workspace": "demo", "ai_tier": "p1"},
+        ),
+        patch.object(
+            stream_helpers,
+            "planner_workflow_interrupt_reply",
+            return_value=None,
+        ),
+        patch.object(
+            stream_helpers,
+            "_ensure_vector_index_if_needed",
+            return_value=None,
+        ),
+        patch.object(
+            stream_helpers,
+            "create_modstore_openai_client_from_request",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            stream_helpers,
+            "_xcagi_guarded_planner_stream_events",
+            return_value=iter(
+                [
+                    {"type": "token", "text": "partial"},
+                    {
+                        "type": "requires_token",
+                        "token_name": "DB_WRITE_TOKEN",
+                        "token_description": "数据库写入令牌",
+                        "message": "需要写入授权",
+                    },
+                ]
+            ),
         ),
     ):
         chunks = list(
@@ -390,37 +443,46 @@ def test_stream_error_event_finalizes_failed_agent_run() -> None:
     repo = InMemoryAgentRunRepository()
     body = XcagiCompatChatBody(message="hello", user_id="stream-user", source="desktop")
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch.object(
-        stream_helpers,
-        "effective_db_read_token",
-        return_value="",
-    ), patch.object(
-        stream_helpers,
-        "_merge_runtime_context_with_message_paths",
-        return_value=({"workspace": "demo"}, []),
-    ), patch.object(
-        stream_helpers,
-        "runtime_context_with_tier",
-        return_value={"workspace": "demo", "ai_tier": "p1"},
-    ), patch.object(
-        stream_helpers,
-        "planner_workflow_interrupt_reply",
-        return_value=None,
-    ), patch.object(
-        stream_helpers,
-        "_ensure_vector_index_if_needed",
-        return_value=None,
-    ), patch.object(
-        stream_helpers,
-        "create_modstore_openai_client_from_request",
-        return_value=MagicMock(),
-    ), patch.object(
-        stream_helpers,
-        "_xcagi_guarded_planner_stream_events",
-        return_value=iter([{"type": "error", "message": "stream error", "status_code": 503}]),
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch.object(
+            stream_helpers,
+            "effective_db_read_token",
+            return_value="",
+        ),
+        patch.object(
+            stream_helpers,
+            "_merge_runtime_context_with_message_paths",
+            return_value=({"workspace": "demo"}, []),
+        ),
+        patch.object(
+            stream_helpers,
+            "runtime_context_with_tier",
+            return_value={"workspace": "demo", "ai_tier": "p1"},
+        ),
+        patch.object(
+            stream_helpers,
+            "planner_workflow_interrupt_reply",
+            return_value=None,
+        ),
+        patch.object(
+            stream_helpers,
+            "_ensure_vector_index_if_needed",
+            return_value=None,
+        ),
+        patch.object(
+            stream_helpers,
+            "create_modstore_openai_client_from_request",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            stream_helpers,
+            "_xcagi_guarded_planner_stream_events",
+            return_value=iter([{"type": "error", "message": "stream error", "status_code": 503}]),
+        ),
     ):
         chunks = list(
             stream_helpers._xcagi_planner_stream_bytes(

@@ -45,7 +45,10 @@ class TestIntentExample:
 
 class TestIntentDataset:
     def test_len(self):
-        examples = [IntentExample(text="hi", label="greet"), IntentExample(text="bye", label="goodbye")]
+        examples = [
+            IntentExample(text="hi", label="greet"),
+            IntentExample(text="bye", label="goodbye"),
+        ]
         mock_tokenizer = MagicMock()
         mock_tokenizer.return_value = {
             "input_ids": MagicMock(squeeze=MagicMock(return_value=MagicMock())),
@@ -111,7 +114,9 @@ class TestParseNluYaml:
                 },
             ]
         }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(data, f, allow_unicode=True)
             path = f.name
         try:
@@ -135,7 +140,9 @@ class TestParseNluYaml:
                 },
             ]
         }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(data, f, allow_unicode=True)
             path = f.name
         try:
@@ -156,7 +163,9 @@ class TestParseNluYaml:
                 },
             ]
         }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(data, f, allow_unicode=True)
             path = f.name
         try:
@@ -178,7 +187,9 @@ class TestLoadTrainingData:
             {"text": "发货", "label": "shipment_generate"},
             {"text": "你好", "label": "greet"},
         ]
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as f:
             json.dump(data, f, ensure_ascii=False)
             path = f.name
         try:
@@ -194,7 +205,9 @@ class TestLoadTrainingData:
             {"label": "greet"},  # missing text
             {"text": "你好", "label": "greet"},
         ]
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as f:
             json.dump(data, f, ensure_ascii=False)
             path = f.name
         try:
@@ -212,7 +225,9 @@ class TestLoadTrainingData:
         import yaml
 
         data = {"nlu": [{"intent": "greet", "examples": "- hi"}]}
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(data, f, allow_unicode=True)
             path = f.name
         try:

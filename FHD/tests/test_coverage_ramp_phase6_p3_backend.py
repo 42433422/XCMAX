@@ -25,7 +25,6 @@ from app.services.hybrid_intent_service import (
     reset_hybrid_intent_service,
 )
 
-
 # ---------------------------------------------------------------------------
 # order_store — fixtures
 # ---------------------------------------------------------------------------
@@ -168,9 +167,7 @@ def test_apply_notify_paid_already_paid_idempotent(isolated_order_store: Path) -
         amount_yuan="50.00",
         local_user_id=1,
     )
-    order_store.apply_notify_paid(
-        out_trade_no="OT-4", trade_no="T-1", total_amount="50.00"
-    )
+    order_store.apply_notify_paid(out_trade_no="OT-4", trade_no="T-1", total_amount="50.00")
     # second notify → already_paid
     reason, snap = order_store.apply_notify_paid(
         out_trade_no="OT-4", trade_no="T-1", total_amount="50.00"
@@ -452,9 +449,7 @@ def test_get_entitlement_returns_copy(isolated_order_store: Path) -> None:
         amount_yuan="1.00",
         local_user_id=1,
     )
-    order_store.apply_notify_paid(
-        out_trade_no="OT-G", trade_no="TG", total_amount="1.00"
-    )
+    order_store.apply_notify_paid(out_trade_no="OT-G", trade_no="TG", total_amount="1.00")
     ent = order_store.get_entitlement("plan-G")
     assert ent is not None
     assert ent["plan_id"] == "plan-G"
@@ -530,9 +525,7 @@ def test_update_order_status_empty_out_trade_no_returns_none(
 def test_update_order_status_unknown_order_returns_none(
     isolated_order_store: Path,
 ) -> None:
-    assert (
-        order_store.update_order_status(out_trade_no="nope", status="closed") is None
-    )
+    assert order_store.update_order_status(out_trade_no="nope", status="closed") is None
 
 
 def test_update_order_status_without_extra(isolated_order_store: Path) -> None:
@@ -619,9 +612,7 @@ def test_grant_entitlement_accumulates_purchase_count(
         amount_yuan="1.00",
         local_user_id=1,
     )
-    order_store.apply_notify_paid(
-        out_trade_no="OT-A1", trade_no="TA1", total_amount="1.00"
-    )
+    order_store.apply_notify_paid(out_trade_no="OT-A1", trade_no="TA1", total_amount="1.00")
     # Second paid order for plan-A (different out_trade_no)
     order_store.record_checkout_pending(
         out_trade_no="OT-A2",
@@ -630,9 +621,7 @@ def test_grant_entitlement_accumulates_purchase_count(
         amount_yuan="1.00",
         local_user_id=1,
     )
-    order_store.apply_notify_paid(
-        out_trade_no="OT-A2", trade_no="TA2", total_amount="1.00"
-    )
+    order_store.apply_notify_paid(out_trade_no="OT-A2", trade_no="TA2", total_amount="1.00")
     ent = order_store.get_entitlement("plan-A")
     assert ent is not None
     assert ent["purchase_count"] == 2
@@ -958,9 +947,7 @@ async def test_recognize_rasa_negated_message_clears_rasa_fields() -> None:
 @pytest.mark.asyncio
 async def test_recognize_rasa_no_intent_name() -> None:
     fake_rasa = MagicMock()
-    fake_rasa.parse = AsyncMock(
-        return_value={"intent": None, "text": "x"}
-    )
+    fake_rasa.parse = AsyncMock(return_value={"intent": None, "text": "x"})
     svc = _make_service(
         use_rasa=True,
         rasa_service=fake_rasa,
@@ -1000,17 +987,17 @@ def test_recognize_sync_returns_result() -> None:
 
 def test_recognize_sync_handles_timeout() -> None:
     svc = _make_service(use_rasa=False, use_bert=False)
-    with patch.object(
-        HybridIntentService, "recognize", new=AsyncMock(side_effect=_slow_recognize)
-    ):
+    with patch.object(HybridIntentService, "recognize", new=AsyncMock(side_effect=_slow_recognize)):
         # Force timeout by patching future.result to raise TimeoutError
         import concurrent.futures
 
         original = concurrent.futures.ThreadPoolExecutor
         result = svc.recognize_sync("hello")
     # Should fall back to rule_recognize_intents
-    assert "sources_used" not in result or result.get("primary_intent") is None or isinstance(
-        result, dict
+    assert (
+        "sources_used" not in result
+        or result.get("primary_intent") is None
+        or isinstance(result, dict)
     )
 
 

@@ -1,4 +1,5 @@
 """routing_log.append_routing_decision 字段扩展测试。"""
+
 import json
 import os
 from pathlib import Path

@@ -66,7 +66,9 @@ class TestExplicitAllowlist:
 
 class TestCapabilityText:
     def test_from_employee_capabilities_dict_and_str(self):
-        manifest = {"employee": {"capabilities": [{"label": "Excel", "description": "表格"}, "图表"]}}
+        manifest = {
+            "employee": {"capabilities": [{"label": "Excel", "description": "表格"}, "图表"]}
+        }
         text = ts._capability_text(manifest, {})
         assert "excel" in text and "图表" in text
 
@@ -92,7 +94,9 @@ class TestIsReadOnly:
         assert ts.is_read_only({}, {"actions": {"agent": {"workspace": {"read_only": True}}}})
 
     def test_v2_workspace_policy(self):
-        assert ts.is_read_only({"employee_config_v2": {"workspace_policy": {"read_only": True}}}, {})
+        assert ts.is_read_only(
+            {"employee_config_v2": {"workspace_policy": {"read_only": True}}}, {}
+        )
 
     def test_default_false(self):
         assert ts.is_read_only({}, {}) is False
@@ -104,9 +108,7 @@ class TestResolveEmployeeTools:
         assert ts.resolve_employee_tools("e", {}, {}) is None
 
     def test_explicit_allowlist_filtered_to_base(self, fake_base):
-        specs = ts.resolve_employee_tools(
-            "e", {}, {"tools": ["excel_analysis", "nonexistent"]}
-        )
+        specs = ts.resolve_employee_tools("e", {}, {"tools": ["excel_analysis", "nonexistent"]})
         names = [s["function"]["name"] for s in specs]
         assert names == ["excel_analysis"]
 

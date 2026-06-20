@@ -642,13 +642,16 @@ def test_attach_chat_trace_run_orchestrates_low_risk_tool_call() -> None:
         "data": {"text": "查询到 1 个产品"},
     }
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch(
-        "app.application.facades.tools_facade.execute_registered_workflow_tool",
-        return_value={"success": True, "data": [{"model_number": "5003"}]},
-    ) as mock_execute:
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            return_value={"success": True, "data": [{"model_number": "5003"}]},
+        ) as mock_execute,
+    ):
         result = attach_chat_trace_run(
             payload,
             message="查产品 5003",
@@ -694,12 +697,15 @@ def test_attach_chat_trace_run_does_not_orchestrate_medium_nested_action() -> No
         "data": {"text": "准备创建产品"},
     }
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch(
-        "app.application.facades.tools_facade.execute_registered_workflow_tool"
-    ) as mock_execute:
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_execute,
+    ):
         result = attach_chat_trace_run(
             payload,
             message="新增产品 A1",
@@ -737,12 +743,15 @@ def test_attach_chat_trace_run_observes_legacy_tool_records_without_reexecution(
         },
     }
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
-    ), patch(
-        "app.application.facades.tools_facade.execute_registered_workflow_tool"
-    ) as mock_execute:
+    with (
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_execute,
+    ):
         result = attach_chat_trace_run(
             payload,
             message="查产品 5003",

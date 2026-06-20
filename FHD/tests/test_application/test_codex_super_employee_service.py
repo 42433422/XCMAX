@@ -11,6 +11,7 @@ from app.application.codex_super_employee_service import (
     CodexSuperEmployeeService,
 )
 
+
 def fake_codex_runner(reply: str, seen: list[list[str]] | None = None):
     def runner(cmd, **kwargs):
         seen.append(list(cmd)) if seen is not None else None

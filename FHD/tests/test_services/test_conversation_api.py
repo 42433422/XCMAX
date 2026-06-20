@@ -1,4 +1,5 @@
 """Tests for app.services.conversation.api (ApiMixin)."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -71,9 +72,7 @@ class TestCallAiOffline:
         svc.add_to_history = MagicMock()
         ctx = ConversationContext(user_id="u1", metadata={})
 
-        result = await svc._call_ai_offline(
-            "hello", ctx, {"final_intent": "create_order"}
-        )
+        result = await svc._call_ai_offline("hello", ctx, {"final_intent": "create_order"})
         assert result["action"] == "offline_response"
         assert "create_order" in result["text"]
 
@@ -83,9 +82,7 @@ class TestCallAiOffline:
         svc.add_to_history = MagicMock()
         ctx = ConversationContext(user_id="u1", metadata={})
 
-        result = await svc._call_ai_offline(
-            "hello", ctx, {"final_intent": "unk"}
-        )
+        result = await svc._call_ai_offline("hello", ctx, {"final_intent": "unk"})
         assert result["action"] == "offline_response"
         assert "离线模式" in result["text"]
 
@@ -95,9 +92,7 @@ class TestCallAiOffline:
         svc.add_to_history = MagicMock()
         ctx = ConversationContext(user_id="u1", metadata={})
 
-        result = await svc._call_ai_offline(
-            "hello", ctx, {"primary_intent": "query_products"}
-        )
+        result = await svc._call_ai_offline("hello", ctx, {"primary_intent": "query_products"})
         assert result["action"] == "offline_response"
         assert "query_products" in result["text"]
 
@@ -281,9 +276,7 @@ class TestExecuteOrGenerateResponse:
         svc._build_context_prompt = MagicMock(return_value="")
 
         with (
-            patch(
-                "app.services.conversation.api._ai_response_cache"
-            ) as mock_cache,
+            patch("app.services.conversation.api._ai_response_cache") as mock_cache,
             patch.object(svc, "call_llm_api", new_callable=AsyncMock, return_value={"choices": []}),
         ):
             mock_cache.get.return_value = None
@@ -359,7 +352,9 @@ class TestCallLlmApi:
         svc = _ConcreteApi()
         mock_provider = MagicMock()
         mock_provider.provider_id = "openai_compatible"
-        mock_provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto-account")
+        mock_provider._adapter = SimpleNamespace(
+            provider_name="xcauto", model_name="xcauto-account"
+        )
         mock_provider.chat_completion = AsyncMock(
             return_value={
                 "choices": [{"message": {"content": "hi"}}],
@@ -412,9 +407,7 @@ class TestCallDeepseekLegacy:
     async def test_returns_none_without_api_key(self):
         svc = _ConcreteApi()
         svc.api_key = ""
-        result = await svc._call_deepseek_legacy(
-            [{"role": "user", "content": "hi"}]
-        )
+        result = await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
         assert result is None
 
     @pytest.mark.asyncio
@@ -430,10 +423,10 @@ class TestCallDeepseekLegacy:
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client.aclose = AsyncMock()
 
-        with patch.object(svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client):
-            result = await svc._call_deepseek_legacy(
-                [{"role": "user", "content": "hi"}]
-            )
+        with patch.object(
+            svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client
+        ):
+            result = await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
         assert result is not None
         assert result["choices"][0]["message"]["content"] == "hello"
 
@@ -448,10 +441,10 @@ class TestCallDeepseekLegacy:
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client.aclose = AsyncMock()
 
-        with patch.object(svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client):
-            result = await svc._call_deepseek_legacy(
-                [{"role": "user", "content": "hi"}]
-            )
+        with patch.object(
+            svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client
+        ):
+            result = await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
         assert result is None
 
 
@@ -481,12 +474,8 @@ class TestTokenUsagePersisted:
                 "app.infrastructure.llm.providers.registry.get_active_provider",
                 return_value=mock_provider,
             ),
-            patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
-            ),
-            patch(
-                "app.infrastructure.billing.model_usage.record_model_usage"
-            ) as mock_record,
+            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
+            patch("app.infrastructure.billing.model_usage.record_model_usage") as mock_record,
         ):
             await svc.call_llm_api([{"role": "user", "content": "hi"}])
 
@@ -519,9 +508,7 @@ class TestTokenUsagePersisted:
                 "app.infrastructure.llm.providers.registry.get_active_provider",
                 return_value=mock_provider,
             ),
-            patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
-            ),
+            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
             patch(
                 "app.infrastructure.billing.model_usage.record_model_usage",
                 side_effect=RuntimeError("ledger write failed"),
@@ -549,13 +536,11 @@ class TestTokenUsagePersisted:
         mock_client.aclose = AsyncMock()
 
         with (
-            patch.object(svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client),
-            patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
+            patch.object(
+                svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client
             ),
-            patch(
-                "app.infrastructure.billing.model_usage.record_model_usage"
-            ) as mock_record,
+            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
+            patch("app.infrastructure.billing.model_usage.record_model_usage") as mock_record,
         ):
             await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
 
@@ -591,9 +576,7 @@ class TestTokenUsagePersisted:
                 "app.infrastructure.llm.providers.registry.get_active_provider",
                 return_value=mock_provider,
             ),
-            patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
-            ),
+            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
         ):
             await svc.call_llm_api([{"role": "user", "content": "hi"}])
 
@@ -624,9 +607,7 @@ class TestCallAi:
         svc._metadata_cache_hash = MagicMock(return_value="hash")
         svc.model = "test-model"
 
-        with patch(
-            "app.services.conversation.api._ai_response_cache"
-        ) as mock_cache:
+        with patch("app.services.conversation.api._ai_response_cache") as mock_cache:
             mock_cache.get.return_value = "cached reply"
             ctx = ConversationContext(user_id="u1", metadata={})
             result = await svc._call_ai("hello", ctx, {"final_intent": "greeting"})
@@ -643,9 +624,7 @@ class TestCallAi:
         svc.model = "test-model"
 
         with (
-            patch(
-                "app.services.conversation.api._ai_response_cache"
-            ) as mock_cache,
+            patch("app.services.conversation.api._ai_response_cache") as mock_cache,
             patch.object(svc, "call_llm_api", new_callable=AsyncMock, return_value=None),
         ):
             mock_cache.get.return_value = None

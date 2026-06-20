@@ -10,7 +10,7 @@ def test_admin_console_static_serves_history_fallback(monkeypatch, tmp_path: Pat
     dist = tmp_path / "templates" / "admin-vue-dist"
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text(
-        "<!doctype html><title>XCMAX 服务器后台</title><div id=\"app\"></div>",
+        '<!doctype html><title>XCMAX 服务器后台</title><div id="app"></div>',
         encoding="utf-8",
     )
     (dist / "assets" / "app.js").write_text("console.log('admin')", encoding="utf-8")

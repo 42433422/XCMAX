@@ -89,7 +89,9 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             assert created_body["agent_status"] == "completed"
             candidate = created_body["candidate"]
             memory_id = candidate["memory_id"]
-            _assert_memory_run(repo, created_body["run_id"], action="propose_candidate", risk="medium")
+            _assert_memory_run(
+                repo, created_body["run_id"], action="propose_candidate", risk="medium"
+            )
 
             confirmed = client.post(
                 f"/memory/v2/{memory_id}/confirm",

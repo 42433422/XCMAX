@@ -322,11 +322,10 @@ def _mobile_session_meta(request: Request) -> dict[str, Any]:
     return jwt_meta
 
 
-def _require_mobile_admin(
-    request: Request, user: Any
-) -> tuple[dict[str, Any], Any | None]:
-    from app.utils.mobile_api import format_mobile_response
+def _require_mobile_admin(request: Request, user: Any) -> tuple[dict[str, Any], Any | None]:
     from fastapi.responses import JSONResponse
+
+    from app.utils.mobile_api import format_mobile_response
 
     if user is None:
         return {}, JSONResponse(
@@ -350,8 +349,9 @@ def _require_mobile_admin_or_enterprise(
     request: Request, user: Any
 ) -> tuple[dict[str, Any], Any | None]:
     """企业端 + 管理端都可访问的 Codex 超级员工专用鉴权。"""
-    from app.utils.mobile_api import format_mobile_response
     from fastapi.responses import JSONResponse
+
+    from app.utils.mobile_api import format_mobile_response
 
     if user is None:
         return {}, JSONResponse(
@@ -366,7 +366,8 @@ def _require_mobile_admin_or_enterprise(
     if account_kind == "enterprise":
         return meta, None
     if account_kind in {"admin", "admin_portal"} and (
-        bool(meta.get("market_is_admin")) or role in {"admin", "admin_portal", "super_admin", "owner"}
+        bool(meta.get("market_is_admin"))
+        or role in {"admin", "admin_portal", "super_admin", "owner"}
     ):
         return meta, None
     return meta, JSONResponse(

@@ -25,7 +25,6 @@ from app.fastapi_routes.lan_settings_routes import (
 )
 from app.security.lan_config import LanConfig, reset_lan_config_cache
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -316,9 +315,7 @@ def app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     cfg = _make_cfg(enabled=False, admin_host_ips=("127.0.0.1",))
     monkeypatch.setattr(mod, "get_lan_config", lambda: cfg)
     # Also patch within lan_settings_routes module-level reference
-    monkeypatch.setattr(
-        "app.fastapi_routes.lan_settings_routes.get_lan_config", lambda: cfg
-    )
+    monkeypatch.setattr("app.fastapi_routes.lan_settings_routes.get_lan_config", lambda: cfg)
     # Patch _authorize to always succeed (TestClient uses "testclient" as client IP,
     # which is not in admin_host_ips, so we bypass authorization for route tests)
     monkeypatch.setattr(
@@ -362,9 +359,7 @@ class TestGetSettingsRoute:
     def test_get_settings_unauthorized(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cfg = _make_cfg(enabled=False, admin_host_ips=("127.0.0.1",))
         monkeypatch.setattr(mod, "get_lan_config", lambda: cfg)
-        monkeypatch.setattr(
-            "app.fastapi_routes.lan_settings_routes.get_lan_config", lambda: cfg
-        )
+        monkeypatch.setattr("app.fastapi_routes.lan_settings_routes.get_lan_config", lambda: cfg)
         monkeypatch.setattr(
             "app.fastapi_routes.lan_settings_routes.load_overrides",
             lambda: LanSettingsOverride(),
@@ -474,16 +469,16 @@ class TestUpdateSettingsRoute:
         )
         assert r.status_code == 200
 
-    def test_update_audit_failure_swallowed(self, app_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_update_audit_failure_swallowed(
+        self, app_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # write_audit raises a recoverable error -> should be swallowed
         from app.utils.operational_errors import RECOVERABLE_ERRORS
 
         def _raise(**kw):
             raise ValueError("audit db locked")
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.lan_settings_routes.write_audit", _raise
-        )
+        monkeypatch.setattr("app.fastapi_routes.lan_settings_routes.write_audit", _raise)
         r = app_client.post(
             "/api/lan/admin/settings",
             json={"license_secret": "longenoughsecret"},

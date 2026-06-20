@@ -114,7 +114,9 @@ def test_performance_cache_invalidate_executes_system_maintenance_tool_through_a
 
     with (
         _patch_agent_repo(repo),
-        patch("app.utils.performance_initializer.get_performance_optimizer", return_value=optimizer),
+        patch(
+            "app.utils.performance_initializer.get_performance_optimizer", return_value=optimizer
+        ),
     ):
         response = _client().post(
             "/api/performance/cache/invalidate",
@@ -147,7 +149,10 @@ def test_performance_reinitialize_executes_system_maintenance_tool_through_agent
 
     with (
         _patch_agent_repo(repo),
-        patch("app.utils.performance_initializer.init_performance_optimization", return_value=optimizer),
+        patch(
+            "app.utils.performance_initializer.init_performance_optimization",
+            return_value=optimizer,
+        ),
     ):
         response = _client().post(
             "/api/performance/optimize/reinitialize",

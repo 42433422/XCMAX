@@ -557,7 +557,9 @@ class MobileRelayService:
         return _row_dict(row) if row else None
 
     def _public_desktop(self, data: dict[str, Any]) -> dict[str, Any]:
-        capabilities = data.get("capabilities") if isinstance(data.get("capabilities"), dict) else {}
+        capabilities = (
+            data.get("capabilities") if isinstance(data.get("capabilities"), dict) else {}
+        )
         host = str(capabilities.get("host") or "").strip()
         port = int(capabilities.get("port") or 0)
         local_base_url = ""

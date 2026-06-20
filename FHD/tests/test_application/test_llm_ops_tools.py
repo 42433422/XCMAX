@@ -3,6 +3,7 @@
 验证 5 个工具真的能工作（真实读 .env / 真实 HTTP ping / 真实价格表），
 而非靠 LLM 编造数据。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -26,7 +27,6 @@ from app.mod_sdk.employee_specialized_tools import (  # noqa: E402
     _read_env_file,
     handle_specialized,
 )
-
 
 # ---------------------------------------------------------------------------
 # 全局变量隔离 fixture
@@ -52,6 +52,7 @@ def _preserve_tool_registry_state():
         del TOOL_REGISTRY[new_key]
     for k, fn in tool_registry_snapshot.items():
         TOOL_REGISTRY[k] = fn
+
 
 # ---------------------------------------------------------------------------
 # 工具注册验证
@@ -135,7 +136,7 @@ class TestMaskSecret:
 
 
 class TestReadEnvFile:
-    """ .env 文件解析验证。"""
+    """.env 文件解析验证。"""
 
     def test_reads_fhd_env_file(self):
         """能读取 FHD/.env 文件。"""
@@ -147,6 +148,7 @@ class TestReadEnvFile:
     def test_skips_comments_and_empty_lines(self):
         """跳过注释和空行。"""
         import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
             f.write("# 这是注释\n\nKEY1=val1\nKEY2=val2\n")
             path = Path(f.name)
@@ -159,8 +161,9 @@ class TestReadEnvFile:
     def test_strips_quotes(self):
         """去除值的引号。"""
         import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
-            f.write('KEY1="quoted"\nKEY2=\'single\'\nKEY3=bare\n')
+            f.write("KEY1=\"quoted\"\nKEY2='single'\nKEY3=bare\n")
             path = Path(f.name)
         try:
             env_map = _read_env_file(path)
@@ -185,6 +188,7 @@ class TestReadLlmEnvConfig:
     def test_reads_real_env_file(self):
         """真实读取 FHD/.env，返回 LLM 配置。"""
         from dotenv import load_dotenv
+
         load_dotenv()  # 确保 .env 已加载
         fn = TOOL_REGISTRY["read_llm_env_config"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
@@ -195,6 +199,7 @@ class TestReadLlmEnvConfig:
     def test_api_key_is_masked_in_output(self):
         """输出的 API key 必须脱敏，不含完整 key。"""
         from dotenv import load_dotenv
+
         load_dotenv()
         fn = TOOL_REGISTRY["read_llm_env_config"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
@@ -211,6 +216,7 @@ class TestReadLlmEnvConfig:
     def test_returns_configured_provider(self):
         """返回 configured_provider 字段。"""
         from dotenv import load_dotenv
+
         load_dotenv()
         fn = TOOL_REGISTRY["read_llm_env_config"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
@@ -263,10 +269,23 @@ class TestListConfiguredProviders:
 
     def test_empty_when_no_keys(self, monkeypatch):
         """没有任何 key 时返回空 provider 列表（ollama 除外，因 no_auth）。"""
-        for key in ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY",
-                     "ZHIPU_API_KEY", "MOONSHOT_API_KEY", "SILICONFLOW_API_KEY",
-                     "OPENROUTER_API_KEY", "VOLC_API_KEY", "ARK_API_KEY", "XCAUTO_API_KEY", "XCAUTO_PAT",
-                     "MIMO_API_KEY", "KIMI_API_KEY", "QWEN_API_KEY", "GLM_API_KEY"):
+        for key in (
+            "OPENAI_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "ZHIPU_API_KEY",
+            "MOONSHOT_API_KEY",
+            "SILICONFLOW_API_KEY",
+            "OPENROUTER_API_KEY",
+            "VOLC_API_KEY",
+            "ARK_API_KEY",
+            "XCAUTO_API_KEY",
+            "XCAUTO_PAT",
+            "MIMO_API_KEY",
+            "KIMI_API_KEY",
+            "QWEN_API_KEY",
+            "GLM_API_KEY",
+        ):
             monkeypatch.delenv(key, raising=False)
         fn = TOOL_REGISTRY["list_configured_providers"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
@@ -274,7 +293,9 @@ class TestListConfiguredProviders:
         # ollama 是 no_auth，所以可能还有 1 个
         providers = result["providers"]
         provider_names = [p["provider"] for p in providers]
-        assert all(name == "ollama" for name in provider_names), f"应该只剩 ollama，实际: {provider_names}"
+        assert all(name == "ollama" for name in provider_names), (
+            f"应该只剩 ollama，实际: {provider_names}"
+        )
 
     def test_lists_multiple_providers(self, monkeypatch):
         """配了多个 provider key 时列出多家。"""
@@ -308,6 +329,7 @@ class TestTestLlmKeyHealth:
     def test_pings_bai_and_returns_health_status(self):
         """真实 ping b.ai，返回健康状态（需要 .env 配了 key）。"""
         from dotenv import load_dotenv
+
         load_dotenv()
         if not os.environ.get("OPENAI_API_KEY"):
             pytest.skip("OPENAI_API_KEY 未配置，跳过真实 ping 测试")
@@ -326,9 +348,17 @@ class TestTestLlmKeyHealth:
 
     def test_returns_error_when_no_key(self, monkeypatch):
         """没有 key 时返回明确错误。"""
-        for key in ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY",
-                     "ZHIPU_API_KEY", "MOONSHOT_API_KEY", "SILICONFLOW_API_KEY",
-                     "OPENROUTER_API_KEY", "VOLC_API_KEY", "ARK_API_KEY"):
+        for key in (
+            "OPENAI_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "ZHIPU_API_KEY",
+            "MOONSHOT_API_KEY",
+            "SILICONFLOW_API_KEY",
+            "OPENROUTER_API_KEY",
+            "VOLC_API_KEY",
+            "ARK_API_KEY",
+        ):
             monkeypatch.delenv(key, raising=False)
         fn = TOOL_REGISTRY["test_llm_key_health"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
@@ -339,6 +369,7 @@ class TestTestLlmKeyHealth:
     def test_healthy_count_field_present(self):
         """结果包含 healthy_count 字段。"""
         from dotenv import load_dotenv
+
         load_dotenv()
         if not os.environ.get("OPENAI_API_KEY"):
             pytest.skip("OPENAI_API_KEY 未配置")
@@ -361,6 +392,7 @@ class TestQueryProviderUsage:
     def test_queries_bai_billing_endpoints(self):
         """真实探测 b.ai billing endpoint。"""
         from dotenv import load_dotenv
+
         load_dotenv()
         if not os.environ.get("OPENAI_API_KEY"):
             pytest.skip("OPENAI_API_KEY 未配置")
@@ -377,9 +409,17 @@ class TestQueryProviderUsage:
 
     def test_returns_error_when_no_key(self, monkeypatch):
         """没有任何 provider key 时返回错误或空结果。"""
-        for key in ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY",
-                     "ZHIPU_API_KEY", "MOONSHOT_API_KEY", "SILICONFLOW_API_KEY",
-                     "OPENROUTER_API_KEY", "VOLC_API_KEY", "ARK_API_KEY"):
+        for key in (
+            "OPENAI_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "ZHIPU_API_KEY",
+            "MOONSHOT_API_KEY",
+            "SILICONFLOW_API_KEY",
+            "OPENROUTER_API_KEY",
+            "VOLC_API_KEY",
+            "ARK_API_KEY",
+        ):
             monkeypatch.delenv(key, raising=False)
         fn = TOOL_REGISTRY["query_provider_usage"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
@@ -424,7 +464,14 @@ class TestProviderProfiles:
 
     def test_all_required_fields_present(self):
         """每个 profile 有必需字段。"""
-        required = {"name", "env_keys", "base_url_default", "default_model", "ping_model", "billing_endpoints"}
+        required = {
+            "name",
+            "env_keys",
+            "base_url_default",
+            "default_model",
+            "ping_model",
+            "billing_endpoints",
+        }
         for p in _PROVIDER_PROFILES:
             missing = required - set(p.keys())
             assert not missing, f"provider {p.get('name')} 缺字段: {missing}"
@@ -432,7 +479,19 @@ class TestProviderProfiles:
     def test_covers_mainstream_providers(self):
         """覆盖主流 11 家 provider。"""
         names = {p["name"] for p in _PROVIDER_PROFILES}
-        expected = {"b.ai", "openai", "deepseek", "qwen", "zhipu", "moonshot", "siliconflow", "openrouter", "volcengine", "ollama", "mimo"}
+        expected = {
+            "b.ai",
+            "openai",
+            "deepseek",
+            "qwen",
+            "zhipu",
+            "moonshot",
+            "siliconflow",
+            "openrouter",
+            "volcengine",
+            "ollama",
+            "mimo",
+        }
         assert names == expected, f"缺少: {expected - names}"
 
     def test_ollama_is_no_auth(self):
@@ -467,6 +526,7 @@ class TestProviderProfiles:
     def test_env_keys_derived_correctly(self):
         """_LLM_ENV_KEYS 从 profiles 派生，包含所有 provider 的 env_keys。"""
         from app.mod_sdk.employee_specialized_tools import _LLM_ENV_KEYS
+
         for p in _PROVIDER_PROFILES:
             for k in p["env_keys"]:
                 assert k in _LLM_ENV_KEYS, f"{k} 不在 _LLM_ENV_KEYS"
@@ -537,7 +597,9 @@ class TestCompareModelPrices:
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
         assert result["cheapest"] is not None
         # 最便宜的应该是 glm-4-flash（免费）或 qwen-plus
-        assert result["cheapest"]["output_per_1m"] == 0 or result["cheapest"]["model"] == "qwen-plus"
+        assert (
+            result["cheapest"]["output_per_1m"] == 0 or result["cheapest"]["model"] == "qwen-plus"
+        )
 
     def test_model_prices_have_required_fields(self):
         """每个模型价格条目有必需字段。"""
@@ -663,7 +725,9 @@ class TestHandleSpecializedDispatch:
     def test_dispatches_compare_model_prices(self):
         """handle_specialized 能调度 compare_model_prices。"""
         result = asyncio.get_event_loop().run_until_complete(
-            handle_specialized("llm-ops-engineer", {"tool": "compare_model_prices", "params": {}}, {})
+            handle_specialized(
+                "llm-ops-engineer", {"tool": "compare_model_prices", "params": {}}, {}
+            )
         )
         assert result["ok"] is True
         assert "prices" in result
@@ -671,9 +735,12 @@ class TestHandleSpecializedDispatch:
     def test_dispatches_read_llm_env_config(self):
         """handle_specialized 能调度 read_llm_env_config。"""
         from dotenv import load_dotenv
+
         load_dotenv()
         result = asyncio.get_event_loop().run_until_complete(
-            handle_specialized("llm-ops-engineer", {"tool": "read_llm_env_config", "params": {}}, {})
+            handle_specialized(
+                "llm-ops-engineer", {"tool": "read_llm_env_config", "params": {}}, {}
+            )
         )
         assert result["ok"] is True
         assert "env_config" in result
@@ -681,9 +748,12 @@ class TestHandleSpecializedDispatch:
     def test_dispatches_list_configured_providers(self):
         """handle_specialized 能调度 list_configured_providers。"""
         from dotenv import load_dotenv
+
         load_dotenv()
         result = asyncio.get_event_loop().run_until_complete(
-            handle_specialized("llm-ops-engineer", {"tool": "list_configured_providers", "params": {}}, {})
+            handle_specialized(
+                "llm-ops-engineer", {"tool": "list_configured_providers", "params": {}}, {}
+            )
         )
         assert result["ok"] is True
         assert "providers" in result
@@ -691,7 +761,9 @@ class TestHandleSpecializedDispatch:
     def test_blocks_other_employees_from_llm_ops_tools(self):
         """其他员工不能调用 llm-ops-engineer 的专属工具。"""
         result = asyncio.get_event_loop().run_until_complete(
-            handle_specialized("fhd-core-maintainer", {"tool": "compare_model_prices", "params": {}}, {})
+            handle_specialized(
+                "fhd-core-maintainer", {"tool": "compare_model_prices", "params": {}}, {}
+            )
         )
         assert result["ok"] is False
         assert "不在员工" in result["error"]

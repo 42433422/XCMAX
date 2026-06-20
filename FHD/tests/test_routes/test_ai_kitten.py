@@ -61,7 +61,9 @@ def test_business_snapshot_success(client: TestClient, monkeypatch: pytest.Monke
     assert body["data"] == fake_snap
 
 
-def test_business_snapshot_recoverable_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_business_snapshot_recoverable_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.build_kitten_business_snapshot",
         MagicMock(side_effect=ValueError("DB 不可用")),
@@ -341,7 +343,9 @@ def test_saved_export_success(client: TestClient, monkeypatch: pytest.MonkeyPatc
     assert "report.xlsx" in r.headers.get("content-disposition", "")
 
 
-def test_saved_export_failure_returns_400(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_saved_export_failure_returns_400(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_save_svc = MagicMock()
     fake_save_svc.export_analysis_to_xlsx.return_value = {
         "success": False,
@@ -354,7 +358,9 @@ def test_saved_export_failure_returns_400(client: TestClient, monkeypatch: pytes
     assert body["success"] is False
 
 
-def test_saved_export_no_file_name_uses_default(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_saved_export_no_file_name_uses_default(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_save_svc = MagicMock()
     fake_save_svc.export_analysis_to_xlsx.return_value = {
         "success": True,
@@ -367,7 +373,9 @@ def test_saved_export_no_file_name_uses_default(client: TestClient, monkeypatch:
     assert r.status_code == 500
 
 
-def test_saved_export_no_content_uses_empty(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_saved_export_no_content_uses_empty(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_save_svc = MagicMock()
     fake_save_svc.export_analysis_to_xlsx.return_value = {
         "success": True,
@@ -378,7 +386,9 @@ def test_saved_export_no_content_uses_empty(client: TestClient, monkeypatch: pyt
     assert r.status_code == 200
 
 
-def test_saved_export_recoverable_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_saved_export_recoverable_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_save_svc = MagicMock()
     fake_save_svc.export_analysis_to_xlsx.side_effect = RuntimeError("服务错误")
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
@@ -404,7 +414,9 @@ def test_saved_delete_success(client: TestClient, monkeypatch: pytest.MonkeyPatc
     assert "删除成功" in body["message"]
 
 
-def test_saved_delete_failure_returns_400(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_saved_delete_failure_returns_400(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_save_svc = MagicMock()
     fake_save_svc.delete_analysis.return_value = {"success": False, "message": "记录不存在"}
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
@@ -414,7 +426,9 @@ def test_saved_delete_failure_returns_400(client: TestClient, monkeypatch: pytes
     assert body["success"] is False
 
 
-def test_saved_delete_recoverable_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_saved_delete_recoverable_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_save_svc = MagicMock()
     fake_save_svc.delete_analysis.side_effect = OSError("IO 错误")
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
@@ -469,7 +483,11 @@ def test_financial_report_attaches_agent_run(
         key="inventory", title="库存估值", level="info", summary="摘要", details={}
     )
     fake_save_svc = MagicMock()
-    fake_save_svc.save_analysis.return_value = {"success": True, "id": "r-trace", "filename": "f.xlsx"}
+    fake_save_svc.save_analysis.return_value = {
+        "success": True,
+        "id": "r-trace",
+        "filename": "f.xlsx",
+    }
 
     monkeypatch.setattr(f"{_FACADE}.FinancialReportPlugin", lambda: fake_fin_plugin)
     monkeypatch.setattr(f"{_FACADE}.InventoryValuationPlugin", lambda: fake_inv_plugin)
@@ -541,7 +559,9 @@ def test_financial_report_empty_body(client: TestClient, monkeypatch: pytest.Mon
     assert body["success"] is True
 
 
-def test_financial_report_recoverable_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_financial_report_recoverable_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_fin_plugin = MagicMock()
     fake_fin_plugin.run.side_effect = ValueError("数据解析失败")
 
@@ -573,7 +593,9 @@ def test_report_export_success(client: TestClient, monkeypatch: pytest.MonkeyPat
     assert "spreadsheetml" in r.headers.get("content-type", "")
 
 
-def test_report_export_no_filename_uses_default(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_report_export_no_filename_uses_default(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_svc_cls = MagicMock()
     fake_instance = fake_svc_cls.return_value
     fake_instance.build_report.return_value = {"content": b"xlsx-data"}
@@ -585,7 +607,9 @@ def test_report_export_no_filename_uses_default(client: TestClient, monkeypatch:
     assert r.status_code == 500
 
 
-def test_report_export_no_content_uses_empty(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_report_export_no_content_uses_empty(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_svc_cls = MagicMock()
     fake_instance = fake_svc_cls.return_value
     fake_instance.build_report.return_value = {"file_name": "r.xlsx"}
@@ -595,7 +619,9 @@ def test_report_export_no_content_uses_empty(client: TestClient, monkeypatch: py
     assert r.status_code == 200
 
 
-def test_report_export_recoverable_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_report_export_recoverable_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake_svc_cls = MagicMock()
     fake_instance = fake_svc_cls.return_value
     fake_instance.build_report.side_effect = RuntimeError("构建失败")
@@ -623,7 +649,9 @@ def test_report_export_docx_success(client: TestClient, monkeypatch: pytest.Monk
     assert "wordprocessingml" in r.headers.get("content-type", "")
 
 
-def test_report_export_docx_no_filename_uses_default(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_report_export_docx_no_filename_uses_default(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.build_kitten_docx",
         lambda body: {"content": b"docx-data"},
@@ -634,7 +662,9 @@ def test_report_export_docx_no_filename_uses_default(client: TestClient, monkeyp
     assert r.status_code == 500
 
 
-def test_report_export_docx_no_content_uses_empty(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_report_export_docx_no_content_uses_empty(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.build_kitten_docx",
         lambda body: {"file_name": "r.docx"},
@@ -643,7 +673,9 @@ def test_report_export_docx_no_content_uses_empty(client: TestClient, monkeypatc
     assert r.status_code == 200
 
 
-def test_report_export_docx_recoverable_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_report_export_docx_recoverable_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.build_kitten_docx",
         MagicMock(side_effect=OSError("磁盘满")),
@@ -660,7 +692,9 @@ def test_report_export_docx_recoverable_error(client: TestClient, monkeypatch: p
 # ---------------------------------------------------------------------------
 
 
-def test_document_generate_docx_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_document_generate_docx_success(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.generate_office_file",
         lambda prompt, fmt: (b"docx-bytes", "生成文档.docx"),
@@ -701,12 +735,16 @@ def test_document_generate_attaches_agent_run_header_and_artifact(
     assert run.artifacts[0].uri == "/api/ai/kitten/document/generate"
 
 
-def test_document_generate_xlsx_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_document_generate_xlsx_success(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.generate_office_file",
         lambda prompt, fmt: (b"xlsx-bytes", "生成表格.xlsx"),
     )
-    r = client.post("/api/ai/kitten/document/generate", json={"prompt": "做一个报表", "format": "xlsx"})
+    r = client.post(
+        "/api/ai/kitten/document/generate", json={"prompt": "做一个报表", "format": "xlsx"}
+    )
     assert r.status_code == 200
     assert "spreadsheetml" in r.headers.get("content-type", "")
 
@@ -749,7 +787,9 @@ def test_document_generate_uses_message_as_prompt_fallback(
     assert r.status_code == 200
 
 
-def test_document_generate_runtime_error_returns_503(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_document_generate_runtime_error_returns_503(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.generate_office_file",
         MagicMock(side_effect=RuntimeError("LLM 服务不可用")),
@@ -795,7 +835,11 @@ def test_document_generate_ascii_filename_fallback(
 def test_document_pickup_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.pop_document_pickup",
-        lambda token: (b"file-bytes", "文档.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        lambda token: (
+            b"file-bytes",
+            "文档.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
     )
     r = client.get("/api/ai/kitten/document/pickup/tok123")
     assert r.status_code == 200
@@ -814,7 +858,9 @@ def test_document_pickup_not_found(client: TestClient, monkeypatch: pytest.Monke
     assert "链接无效或已过期" in body["message"]
 
 
-def test_document_pickup_no_mime_uses_octet_stream(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_document_pickup_no_mime_uses_octet_stream(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.pop_document_pickup",
         lambda token: (b"bytes", "file.bin", None),
@@ -824,7 +870,9 @@ def test_document_pickup_no_mime_uses_octet_stream(client: TestClient, monkeypat
     assert "octet-stream" in r.headers.get("content-type", "")
 
 
-def test_document_pickup_ascii_filename_fallback(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_document_pickup_ascii_filename_fallback(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.pop_document_pickup",
         lambda token: (b"bytes", "纯中文.bin", "application/octet-stream"),
@@ -840,7 +888,9 @@ def test_document_pickup_ascii_filename_fallback(client: TestClient, monkeypatch
 # ---------------------------------------------------------------------------
 
 
-def test_business_snapshot_response_is_json(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_business_snapshot_response_is_json(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         f"{_FACADE}.build_kitten_business_snapshot",
         lambda: {},

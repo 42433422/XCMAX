@@ -1,7 +1,9 @@
 """Tests for app.infrastructure.attendance.workspace_paths."""
+
 from __future__ import annotations
 
 import os
+
 import pytest
 
 from app.infrastructure.attendance.workspace_paths import resolve_workspace_excel

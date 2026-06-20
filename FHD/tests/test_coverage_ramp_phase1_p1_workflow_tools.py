@@ -20,7 +20,6 @@ from app.application.tools.workflow import (
 )
 from app.application.workflow.planner import execute_tool, get_tool_registry
 
-
 # ---------------------------------------------------------------------------
 # workflow.py pure helpers
 # ---------------------------------------------------------------------------

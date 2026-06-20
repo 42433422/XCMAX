@@ -24,7 +24,6 @@ from app.infrastructure.skills.excel_analyzer.excel_template_analyzer import (
     get_excel_analyzer_skill,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helper to create a mock worksheet
 # ---------------------------------------------------------------------------
@@ -104,12 +103,15 @@ class TestAnalyzeTemplateHappyPath:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ) as mock_load, patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ) as mock_load,
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
         ):
             result = analyze_template(str(excel_path))
 
@@ -136,12 +138,15 @@ class TestAnalyzeTemplateHappyPath:
         wb.sheetnames = ["Sheet1", "Sheet2"]
         wb.__getitem__ = MagicMock(return_value=ws2)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
         ):
             result = analyze_template(str(excel_path), sheet_name="Sheet2")
             assert result["success"] is True
@@ -173,12 +178,15 @@ class TestAnalyzeTemplateHappyPath:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="C",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="C",
+            ),
         ):
             result = analyze_template(str(excel_path), verbose=True)
             assert result["success"] is True
@@ -210,12 +218,15 @@ class TestAnalyzeTemplateMergedCells:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
         ):
             result = analyze_template(str(excel_path))
             assert result["success"] is True
@@ -241,12 +252,15 @@ class TestAnalyzeTemplateMergedCells:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
         ):
             result = analyze_template(str(excel_path))
             assert result["merged_cells"][0]["purpose"] == "汇总区域"
@@ -268,12 +282,15 @@ class TestAnalyzeTemplateMergedCells:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
         ):
             result = analyze_template(str(excel_path))
             assert result["merged_cells"][0]["purpose"] == "签名区域"
@@ -295,12 +312,15 @@ class TestAnalyzeTemplateMergedCells:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
         ):
             result = analyze_template(str(excel_path))
             assert result["merged_cells"][0]["purpose"] == "数据区域"
@@ -321,12 +341,15 @@ class TestAnalyzeTemplateMergedCells:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
         ):
             result = analyze_template(str(excel_path))
             assert len(result["merged_cells"]) == 1
@@ -349,7 +372,9 @@ class TestAnalyzeTemplateErrors:
         excel_path.write_bytes(b"fake")
 
         # Simulate ImportError by patching the import inside the function
-        original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        original_import = (
+            __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        )
 
         def fake_import(name, *args, **kwargs):
             if name == "openpyxl":
@@ -501,12 +526,15 @@ class TestAnalyzeToJson:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
         ):
             result = analyze_to_json(str(excel_path), str(output_path))
             assert result["success"] is True
@@ -526,14 +554,16 @@ class TestAnalyzeToJson:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            return_value="E",
-        ), patch(
-            "builtins.open", side_effect=RuntimeError("disk full")
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                return_value="E",
+            ),
+            patch("builtins.open", side_effect=RuntimeError("disk full")),
         ):
             result = analyze_to_json(str(excel_path), str(output_path))
             assert result["success"] is False

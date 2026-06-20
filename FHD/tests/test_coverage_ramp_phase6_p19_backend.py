@@ -41,9 +41,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.shell import xcagi_mods_discover as discover_mod
 from app.infrastructure.db import mod_database_url as mod_db_url_mod
-
+from app.shell import xcagi_mods_discover as discover_mod
 
 # ===========================================================================
 # Shared helpers / fixtures
@@ -137,25 +136,19 @@ class TestEffectiveSingleModId:
 
     def test_returns_env_var_value(self, monkeypatch):
         monkeypatch.setenv("XCAGI_SINGLE_MOD_ID", "my-mod")
-        with patch(
-            "app.request_active_mod_ctx.get_request_active_mod_id", return_value=""
-        ):
+        with patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value=""):
             result = discover_mod._effective_single_mod_id()
         assert result == "my-mod"
 
     def test_returns_ctx_value_over_env(self, monkeypatch):
         monkeypatch.setenv("XCAGI_SINGLE_MOD_ID", "env-mod")
-        with patch(
-            "app.request_active_mod_ctx.get_request_active_mod_id", return_value="ctx-mod"
-        ):
+        with patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value="ctx-mod"):
             result = discover_mod._effective_single_mod_id()
         assert result == "ctx-mod"
 
     def test_returns_none_when_empty(self, monkeypatch):
         monkeypatch.delenv("XCAGI_SINGLE_MOD_ID", raising=False)
-        with patch(
-            "app.request_active_mod_ctx.get_request_active_mod_id", return_value=""
-        ):
+        with patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value=""):
             result = discover_mod._effective_single_mod_id()
         assert result is None
 
@@ -174,25 +167,19 @@ class TestFilterManifestRowsToSingle:
 
     def test_no_filter_returns_all(self):
         rows = [{"id": "a"}, {"id": "b"}]
-        with patch(
-            "app.shell.xcagi_mods_discover._effective_single_mod_id", return_value=None
-        ):
+        with patch("app.shell.xcagi_mods_discover._effective_single_mod_id", return_value=None):
             result = discover_mod._filter_manifest_rows_to_single(rows)
         assert result == rows
 
     def test_filter_matches_single(self):
         rows = [{"id": "a"}, {"id": "b"}]
-        with patch(
-            "app.shell.xcagi_mods_discover._effective_single_mod_id", return_value="a"
-        ):
+        with patch("app.shell.xcagi_mods_discover._effective_single_mod_id", return_value="a"):
             result = discover_mod._filter_manifest_rows_to_single(rows)
         assert result == [{"id": "a"}]
 
     def test_filter_no_match_returns_empty(self):
         rows = [{"id": "a"}]
-        with patch(
-            "app.shell.xcagi_mods_discover._effective_single_mod_id", return_value="z"
-        ):
+        with patch("app.shell.xcagi_mods_discover._effective_single_mod_id", return_value="z"):
             result = discover_mod._filter_manifest_rows_to_single(rows)
         assert result == []
 
@@ -345,18 +332,14 @@ class TestLoadingStatusExtras:
 
     def test_returns_extras_with_primary(self):
         rows = [{"id": "p1", "name": "P1", "version": "1.0", "primary": True}]
-        with patch(
-            "app.shell.xcagi_mods_discover.read_manifest_dicts", return_value=rows
-        ):
+        with patch("app.shell.xcagi_mods_discover.read_manifest_dicts", return_value=rows):
             extras = discover_mod.loading_status_extras()
         assert extras["primary_mod_id"] == "p1"
         assert extras["mods_loaded"] == 1
 
     def test_returns_extras_no_primary(self):
         rows = [{"id": "a", "name": "A", "version": "1.0"}]
-        with patch(
-            "app.shell.xcagi_mods_discover.read_manifest_dicts", return_value=rows
-        ):
+        with patch("app.shell.xcagi_mods_discover.read_manifest_dicts", return_value=rows):
             extras = discover_mod.loading_status_extras()
         assert extras["primary_mod_id"] is None
 
@@ -447,9 +430,7 @@ class TestSqliteUrlWithModSuffix:
     """Cover ``_sqlite_url_with_mod_suffix``."""
 
     def test_adds_suffix(self):
-        result = mod_db_url_mod._sqlite_url_with_mod_suffix(
-            "sqlite:///data/xcagi.db", "my-mod"
-        )
+        result = mod_db_url_mod._sqlite_url_with_mod_suffix("sqlite:///data/xcagi.db", "my-mod")
         assert "xcagi__my_mod.db" in result
 
     def test_empty_mod_id_returns_base(self):
@@ -461,9 +442,7 @@ class TestSqliteUrlWithModSuffix:
         assert result == "sqlite:///:memory:"
 
     def test_non_sqlite_returns_base(self):
-        result = mod_db_url_mod._sqlite_url_with_mod_suffix(
-            "postgresql://host/db", "my-mod"
-        )
+        result = mod_db_url_mod._sqlite_url_with_mod_suffix("postgresql://host/db", "my-mod")
         assert result == "postgresql://host/db"
 
 
@@ -477,9 +456,7 @@ class TestPostgresUrlWithModDb:
         assert "xcagi__my_mod" in result
 
     def test_empty_mod_id_returns_base(self):
-        result = mod_db_url_mod._postgres_url_with_mod_db(
-            "postgresql://host/xcagi", ""
-        )
+        result = mod_db_url_mod._postgres_url_with_mod_db("postgresql://host/xcagi", "")
         assert result == "postgresql://host/xcagi"
 
     def test_already_suffixed_returns_base(self):
@@ -489,9 +466,7 @@ class TestPostgresUrlWithModDb:
         assert result == "postgresql://host/xcagi__my_mod"
 
     def test_non_postgres_returns_base(self):
-        result = mod_db_url_mod._postgres_url_with_mod_db(
-            "mysql://host/xcagi", "my-mod"
-        )
+        result = mod_db_url_mod._postgres_url_with_mod_db("mysql://host/xcagi", "my-mod")
         assert result == "mysql://host/xcagi"
 
 
@@ -613,15 +588,15 @@ class TestDistillationCollectSamplesViaDeepseek:
         from app.services.distillation_data_collector import collect_samples_via_deepseek
 
         mock_intent_result = {"intent": "unknown_intent", "slots": {}, "confidence": 0.9}
-        with patch(
-            "app.services.distillation_data_collector.get_sample_count", return_value=0
-        ), patch(
-            "app.services.distillation_data_collector.call_deepseek_intent",
-            new_callable=AsyncMock,
-            return_value=mock_intent_result,
-        ), patch(
-            "app.services.distillation_data_collector.save_distillation_sample"
-        ) as mock_save:
+        with (
+            patch("app.services.distillation_data_collector.get_sample_count", return_value=0),
+            patch(
+                "app.services.distillation_data_collector.call_deepseek_intent",
+                new_callable=AsyncMock,
+                return_value=mock_intent_result,
+            ),
+            patch("app.services.distillation_data_collector.save_distillation_sample") as mock_save,
+        ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         # unknown_intent is not in INTENT_LABELS, so no samples saved
         assert count == 0
@@ -630,14 +605,14 @@ class TestDistillationCollectSamplesViaDeepseek:
     async def test_collect_samples_invalid_result_skipped(self):
         from app.services.distillation_data_collector import collect_samples_via_deepseek
 
-        with patch(
-            "app.services.distillation_data_collector.get_sample_count", return_value=0
-        ), patch(
-            "app.services.distillation_data_collector.call_deepseek_intent",
-            new_callable=AsyncMock,
-            return_value=None,
-        ), patch(
-            "app.services.distillation_data_collector.save_distillation_sample"
+        with (
+            patch("app.services.distillation_data_collector.get_sample_count", return_value=0),
+            patch(
+                "app.services.distillation_data_collector.call_deepseek_intent",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("app.services.distillation_data_collector.save_distillation_sample"),
         ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         assert count == 0
@@ -647,15 +622,15 @@ class TestDistillationCollectSamplesViaDeepseek:
         from app.services.distillation_data_collector import collect_samples_via_deepseek
 
         mock_result = {"intent": "greet", "slots": {}, "confidence": 0.9}
-        with patch(
-            "app.services.distillation_data_collector.get_sample_count", return_value=0
-        ), patch(
-            "app.services.distillation_data_collector.call_deepseek_intent",
-            new_callable=AsyncMock,
-            return_value=mock_result,
-        ), patch(
-            "app.services.distillation_data_collector.save_distillation_sample"
-        ) as mock_save:
+        with (
+            patch("app.services.distillation_data_collector.get_sample_count", return_value=0),
+            patch(
+                "app.services.distillation_data_collector.call_deepseek_intent",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+            patch("app.services.distillation_data_collector.save_distillation_sample") as mock_save,
+        ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         assert count > 0
         mock_save.assert_called()
@@ -668,9 +643,10 @@ class TestDistillationMain:
     async def test_main_init_flag(self):
         from app.services.distillation_data_collector import main
 
-        with patch("sys.argv", ["prog", "--init"]), patch(
-            "app.services.distillation_data_collector.init_distillation_db"
-        ) as mock_init:
+        with (
+            patch("sys.argv", ["prog", "--init"]),
+            patch("app.services.distillation_data_collector.init_distillation_db") as mock_init,
+        ):
             await main()
         mock_init.assert_called_once()
 
@@ -678,11 +654,13 @@ class TestDistillationMain:
     async def test_main_stats_flag(self):
         from app.services.distillation_data_collector import main
 
-        with patch("sys.argv", ["prog", "--stats"]), patch(
-            "app.services.distillation_data_collector.init_distillation_db"
-        ), patch(
-            "app.services.distillation_data_collector.get_sample_stats",
-            return_value={"greet": 5},
+        with (
+            patch("sys.argv", ["prog", "--stats"]),
+            patch("app.services.distillation_data_collector.init_distillation_db"),
+            patch(
+                "app.services.distillation_data_collector.get_sample_stats",
+                return_value={"greet": 5},
+            ),
         ):
             await main()
 
@@ -690,11 +668,13 @@ class TestDistillationMain:
     async def test_main_collect_no_key(self):
         from app.services.distillation_data_collector import main
 
-        with patch("sys.argv", ["prog", "--collect"]), patch(
-            "app.services.distillation_data_collector.init_distillation_db"
-        ), patch(
-            "app.services.distillation_data_collector.get_deepseek_api_key",
-            return_value="",
+        with (
+            patch("sys.argv", ["prog", "--collect"]),
+            patch("app.services.distillation_data_collector.init_distillation_db"),
+            patch(
+                "app.services.distillation_data_collector.get_deepseek_api_key",
+                return_value="",
+            ),
         ):
             await main()  # Should not raise
 
@@ -739,9 +719,7 @@ class TestPerformanceOptimizerInit:
 
         opt = PerformanceOptimizer()
         with (
-            patch(
-                "app.utils.redis_cache.get_redis_cache", side_effect=RuntimeError("no redis")
-            ),
+            patch("app.utils.redis_cache.get_redis_cache", side_effect=RuntimeError("no redis")),
             patch("app.utils.query_optimizer.get_query_optimizer", return_value=MagicMock()),
             patch("app.utils.async_tasks.get_async_task_manager", return_value=MagicMock()),
             patch(
@@ -935,9 +913,7 @@ class TestInitPerformanceOptimization:
     def test_calls_initialize(self):
         from app.utils.performance_initializer import init_performance_optimization
 
-        with patch(
-            "app.utils.performance_initializer.get_performance_optimizer"
-        ) as mock_get:
+        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
             mock_opt = MagicMock()
             mock_get.return_value = mock_opt
             result = init_performance_optimization()
@@ -1054,10 +1030,13 @@ class TestExcelVectorIngest:
 
     def test_ingest_multipart_wrong_extension_returns_400(self, tmp_dir):
         mock_svc = MagicMock()
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-            return_value=mock_svc,
-        ), patch("app.fastapi_routes.excel_vector.get_upload_dir", return_value=tmp_dir):
+        with (
+            patch(
+                "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+                return_value=mock_svc,
+            ),
+            patch("app.fastapi_routes.excel_vector.get_upload_dir", return_value=tmp_dir),
+        ):
             client = _excel_vector_client()
             r = client.post(
                 "/api/excel/vector/ingest",
@@ -1068,14 +1047,23 @@ class TestExcelVectorIngest:
     def test_ingest_multipart_valid_file(self, tmp_dir):
         mock_svc = MagicMock()
         mock_svc.ingest_excel.return_value = {"success": True, "index_id": "x"}
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-            return_value=mock_svc,
-        ), patch("app.fastapi_routes.excel_vector.get_upload_dir", return_value=tmp_dir):
+        with (
+            patch(
+                "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+                return_value=mock_svc,
+            ),
+            patch("app.fastapi_routes.excel_vector.get_upload_dir", return_value=tmp_dir),
+        ):
             client = _excel_vector_client()
             r = client.post(
                 "/api/excel/vector/ingest",
-                files={"excel_file": ("test.xlsx", b"hello", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                files={
+                    "excel_file": (
+                        "test.xlsx",
+                        b"hello",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
             )
         assert r.status_code == 200
 
@@ -1196,32 +1184,34 @@ class TestBindTenantForLogin:
     def test_success_with_tenant_id(self):
         from app.application.enterprise_login_flow import bind_tenant_for_login
 
-        with patch(
-            "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            return_value=42,
-        ), patch(
-            "app.application.tenant_subscription_app_service.sync_tenant_display_name",
-            return_value="BrandCo",
+        with (
+            patch(
+                "app.application.tenant_subscription_app_service.provision_trial_for_user",
+                return_value=42,
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.sync_tenant_display_name",
+                return_value="BrandCo",
+            ),
         ):
-            result = bind_tenant_for_login(
-                user_id=1, company_brand="BrandCo", username="alice"
-            )
+            result = bind_tenant_for_login(user_id=1, company_brand="BrandCo", username="alice")
         assert result["tenant_id"] == 42
         assert result["tenant_name"] == "BrandCo"
 
     def test_no_tenant_id_returns_none(self):
         from app.application.enterprise_login_flow import bind_tenant_for_login
 
-        with patch(
-            "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            return_value=None,
-        ), patch(
-            "app.application.tenant_subscription_app_service.sync_tenant_display_name",
-            return_value="",
+        with (
+            patch(
+                "app.application.tenant_subscription_app_service.provision_trial_for_user",
+                return_value=None,
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.sync_tenant_display_name",
+                return_value="",
+            ),
         ):
-            result = bind_tenant_for_login(
-                user_id=1, company_brand="", username="alice"
-            )
+            result = bind_tenant_for_login(user_id=1, company_brand="", username="alice")
         assert result["tenant_id"] is None
 
     def test_exception_returns_empty(self):
@@ -1231,24 +1221,23 @@ class TestBindTenantForLogin:
             "app.application.tenant_subscription_app_service.provision_trial_for_user",
             side_effect=RuntimeError("db down"),
         ):
-            result = bind_tenant_for_login(
-                user_id=1, company_brand="X", username="alice"
-            )
+            result = bind_tenant_for_login(user_id=1, company_brand="X", username="alice")
         assert result["tenant_id"] is None
 
     def test_company_brand_fallback(self):
         from app.application.enterprise_login_flow import bind_tenant_for_login
 
-        with patch(
-            "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            return_value=10,
-        ), patch(
-            "app.application.tenant_subscription_app_service.sync_tenant_display_name",
-            return_value=None,
+        with (
+            patch(
+                "app.application.tenant_subscription_app_service.provision_trial_for_user",
+                return_value=10,
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.sync_tenant_display_name",
+                return_value=None,
+            ),
         ):
-            result = bind_tenant_for_login(
-                user_id=1, company_brand="MyBrand", username="alice"
-            )
+            result = bind_tenant_for_login(user_id=1, company_brand="MyBrand", username="alice")
         assert result["tenant_name"] == "MyBrand"
 
 
@@ -1283,19 +1272,27 @@ class TestFinalizeEnterpriseLogin:
         }
         result = {"success": True, "user": {"id": 1}}
 
-        with patch(
-            "app.fastapi_routes.market_account.save_session_market_token"
-        ) as mock_save, patch(
-            "app.application.enterprise_login_flow.extract_market_user_blob",
-            return_value={"id": 10, "company": "Co", "username": "alice", "phone": "", "email": ""},
-        ), patch(
-            "app.application.enterprise_login_flow.company_brand_from_user_blob",
-            return_value="Co",
-        ), patch(
-            "app.application.enterprise_login_flow.persist_session_account_meta"
-        ), patch(
-            "app.application.enterprise_login_flow.bind_tenant_for_login",
-            return_value={"tenant_id": 5, "tenant_name": "Co"},
+        with (
+            patch("app.fastapi_routes.market_account.save_session_market_token") as mock_save,
+            patch(
+                "app.application.enterprise_login_flow.extract_market_user_blob",
+                return_value={
+                    "id": 10,
+                    "company": "Co",
+                    "username": "alice",
+                    "phone": "",
+                    "email": "",
+                },
+            ),
+            patch(
+                "app.application.enterprise_login_flow.company_brand_from_user_blob",
+                return_value="Co",
+            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
+            patch(
+                "app.application.enterprise_login_flow.bind_tenant_for_login",
+                return_value={"tenant_id": 5, "tenant_name": "Co"},
+            ),
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -1315,10 +1312,9 @@ class TestFinalizeEnterpriseLogin:
         market_result = {"success": False, "message": "bad creds"}
         result = {"success": True, "user": {"id": 1}}
 
-        with patch(
-            "app.fastapi_routes.market_account.save_session_market_token"
-        ), patch(
-            "app.application.enterprise_login_flow.persist_session_account_meta"
+        with (
+            patch("app.fastapi_routes.market_account.save_session_market_token"),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -1336,13 +1332,13 @@ class TestFinalizeEnterpriseLogin:
 
         result = {"success": True, "user": {"id": 1}}
 
-        with patch(
-            "app.fastapi_routes.market_account.save_session_market_token"
-        ), patch(
-            "app.application.enterprise_login_flow.persist_session_account_meta"
-        ), patch(
-            "app.application.enterprise_login_flow.bind_tenant_for_login",
-            return_value={"tenant_id": None, "tenant_name": ""},
+        with (
+            patch("app.fastapi_routes.market_account.save_session_market_token"),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
+            patch(
+                "app.application.enterprise_login_flow.bind_tenant_for_login",
+                return_value={"tenant_id": None, "tenant_name": ""},
+            ),
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -1362,12 +1358,15 @@ class TestFinalizeEnterpriseLogin:
         result = {"success": True, "user": {"id": 1}}
         market_result = {"success": True, "token": "tok"}
 
-        with patch(
-            "app.fastapi_routes.market_account.save_session_market_token",
-            side_effect=RuntimeError("db down"),
-        ), patch(
-            "app.application.enterprise_login_flow.extract_market_user_blob",
-            side_effect=RuntimeError("db down"),
+        with (
+            patch(
+                "app.fastapi_routes.market_account.save_session_market_token",
+                side_effect=RuntimeError("db down"),
+            ),
+            patch(
+                "app.application.enterprise_login_flow.extract_market_user_blob",
+                side_effect=RuntimeError("db down"),
+            ),
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -1613,8 +1612,9 @@ class TestTemplatesGetOne:
         # 200, so exercise the keyword guard by calling templates_get_one
         # directly (the route /api/templates/{template_id} with "list" would
         # be shadowed by the explicit /api/templates/list alias route).
-        from app.fastapi_routes.template_api import templates_get_one
         from fastapi import HTTPException
+
+        from app.fastapi_routes.template_api import templates_get_one
 
         with pytest.raises(HTTPException) as exc:
             templates_get_one("list")
@@ -2032,9 +2032,10 @@ class TestSendToUserDevices:
             {"push_provider": "fcm", "push_token": "fcm1"},
             {"push_provider": "jpush", "push_token": "jp1"},
         ]
-        with patch("app.services.mobile_push.send_fcm", return_value=True) as mock_fcm, patch(
-            "app.services.mobile_push.send_jpush", return_value=True
-        ) as mock_jp:
+        with (
+            patch("app.services.mobile_push.send_fcm", return_value=True) as mock_fcm,
+            patch("app.services.mobile_push.send_jpush", return_value=True) as mock_jp,
+        ):
             result = send_to_user_devices(devices, "title", "body")
         mock_fcm.assert_called_once_with(["fcm1"], "title", "body", None)
         mock_jp.assert_called_once_with(["jp1"], "title", "body", None)
@@ -2067,8 +2068,9 @@ class TestNotifyUser:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.all.return_value = [mock_row]
 
-        with patch("app.db.session.get_db") as mock_get_db, patch(
-            "app.db.models.mobile_device.MobileDeviceToken"
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.models.mobile_device.MobileDeviceToken"),
         ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)

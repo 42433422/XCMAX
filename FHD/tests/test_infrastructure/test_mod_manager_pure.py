@@ -154,8 +154,8 @@ class TestModManagerRecordFailures:
 
 class TestModManagerMetadataToApiDict:
     def test_basic_conversion(self):
-        from app.infrastructure.mods.mod_manager import ModManager
         from app.infrastructure.mods.manifest import ModMetadata
+        from app.infrastructure.mods.mod_manager import ModManager
 
         mm = ModManager(mods_root="/tmp/test_mods")
         meta = ModMetadata(

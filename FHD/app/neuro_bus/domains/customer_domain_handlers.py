@@ -20,6 +20,7 @@ def register_customer_domain_handlers(domain):
     将原 customer_domain.py 中 _setup_handlers 的闭包迁出至此，
     业务逻辑保持不变（仅将 self 改为 domain 参数）。
     """
+
     @domain.on("customer.registered", priority=1)
     async def on_registered(event):
         customer_id = event.payload.get("customer_id")

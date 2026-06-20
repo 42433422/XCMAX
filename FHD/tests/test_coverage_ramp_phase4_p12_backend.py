@@ -84,9 +84,7 @@ def test_platform_stream_payload_invalid_json() -> None:
 
 
 def test_platform_stream_payload_with_choices() -> None:
-    out = _platform_stream_payload_to_openai_chunk(
-        '{"choices": [{"message": {"content": "hey"}}]}'
-    )
+    out = _platform_stream_payload_to_openai_chunk('{"choices": [{"message": {"content": "hey"}}]}')
     assert out["choices"][0]["delta"]["content"] == "hey"
 
 
@@ -124,9 +122,7 @@ def test_init_defaults() -> None:
 
 
 def test_init_explicit_strips_bearer() -> None:
-    a = ModstorePlatformAdapter(
-        platform_url="http://h/", auth_token="Bearer tk", user_id=7
-    )
+    a = ModstorePlatformAdapter(platform_url="http://h/", auth_token="Bearer tk", user_id=7)
     assert a.platform_url == "http://h"  # trailing slash stripped
     assert a.auth_token == "tk"
     assert a.user_id == 7

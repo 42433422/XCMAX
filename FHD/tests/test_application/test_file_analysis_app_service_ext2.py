@@ -14,7 +14,6 @@ from app.application.file_analysis_app_service import (
 )
 from app.di.registry import reset_service_registry
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -59,9 +58,7 @@ def _make_sqlite_db(path: str, schema: dict[str, list[tuple]] | None = None) -> 
                     placeholders = ", ".join("?" * n_cols)
                     # Each row may have fewer values than cols; pad with None
                     padded = [tuple(list(r) + [None] * (n_cols - len(r))) for r in rows]
-                    conn.executemany(
-                        f"INSERT INTO {table} VALUES ({placeholders})", padded
-                    )
+                    conn.executemany(f"INSERT INTO {table} VALUES ({placeholders})", padded)
         else:
             # Ensure the SQLite header is written even with an empty schema
             conn.execute("CREATE TABLE _empty (id INTEGER)")
@@ -154,26 +151,20 @@ def test_determine_suggested_use_customers() -> None:
 
 def test_determine_suggested_use_unit_products_db() -> None:
     svc = FileAnalysisService()
-    out = svc._determine_suggested_use(
-        ["products"], {"products": ["model_number", "name", "unit"]}
-    )
+    out = svc._determine_suggested_use(["products"], {"products": ["model_number", "name", "unit"]})
     assert out == "unit_products_db"
 
 
 def test_determine_suggested_use_products_without_required_cols() -> None:
     svc = FileAnalysisService()
     # Missing model_number -> not unit_products_db
-    out = svc._determine_suggested_use(
-        ["products"], {"products": ["name", "unit"]}
-    )
+    out = svc._determine_suggested_use(["products"], {"products": ["name", "unit"]})
     assert out == "sqlite_db"
 
 
 def test_determine_suggested_use_products_without_unit_col() -> None:
     svc = FileAnalysisService()
-    out = svc._determine_suggested_use(
-        ["products"], {"products": ["model_number", "name"]}
-    )
+    out = svc._determine_suggested_use(["products"], {"products": ["model_number", "name"]})
     assert out == "sqlite_db"
 
 
@@ -331,9 +322,7 @@ def test_analyze_sqlite_db_error(tmp_path) -> None:
     # raises an error in RECOVERABLE_ERRORS instead.
     # Actually, sqlite3.connect on a directory raises sqlite3.OperationalError.
     # Let's mock sqlite_conn to raise ValueError.
-    with patch(
-        "app.application.file_analysis_app_service.sqlite_conn"
-    ) as mock_conn:
+    with patch("app.application.file_analysis_app_service.sqlite_conn") as mock_conn:
         mock_conn.side_effect = ValueError("cannot open db")
         out = svc._analyze_sqlite_db("/nonexistent", "x.db", "x.db", "x.db")
         assert out["success"] is False
@@ -377,7 +366,7 @@ def test_analyze_sqlite_db_pragma_error(tmp_path) -> None:
 
 def test_analyze_sqlite_db_many_tables_truncates_to_six(tmp_path) -> None:
     db_path = tmp_path / "many.db"
-    schema = {f"t{i}": [(f"id INTEGER", (i,))] for i in range(8)}
+    schema = {f"t{i}": [("id INTEGER", (i,))] for i in range(8)}
     _make_sqlite_db(str(db_path), schema)
     svc = FileAnalysisService()
     out = svc._analyze_sqlite_db(str(db_path), "many.db", "many.db", "many.db")
@@ -446,7 +435,11 @@ def test_analyze_file_sqlite_success(tmp_path) -> None:
     db_path = tmp_path / "src.db"
     _make_sqlite_db(
         str(db_path),
-        {"products": [("id INTEGER, name TEXT, unit TEXT, model_number TEXT", (1, "A", "box", "M1"))]},
+        {
+            "products": [
+                ("id INTEGER, name TEXT, unit TEXT, model_number TEXT", (1, "A", "box", "M1"))
+            ]
+        },
     )
     with open(db_path, "rb") as fh:
         content = fh.read()

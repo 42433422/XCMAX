@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.lan_admin_routes — coverage ramp."""
+
 from __future__ import annotations
 
 import time
@@ -223,7 +224,13 @@ def _make_app_with_overrides(dep_override=None, dep_host_override=None):
 
 
 def _admin_actor():
-    return {"ip": "192.168.1.1", "jti": "test-jti", "key_id": 1, "is_admin_host": True, "is_admin_key": False}
+    return {
+        "ip": "192.168.1.1",
+        "jti": "test-jti",
+        "key_id": 1,
+        "is_admin_host": True,
+        "is_admin_key": False,
+    }
 
 
 def _admin_host_actor():

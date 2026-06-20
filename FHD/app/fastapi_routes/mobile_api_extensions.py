@@ -20,15 +20,28 @@ from fastapi.responses import JSONResponse
 
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.security.mobile_pairing import (
-    consume_by_shortcode,
-    consume_pairing_nonce,
-    issue_pairing_nonce,
-    lookup_by_shortcode,
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _admin_employee_match_keys,
+    _apply_market_profile,
+    _compact_text,
+    _enrich_workflow_employees,
+    _load_admin_duty_records,
+    _load_market_ai_employee_profile_index,
+    _mobile_request_user_id,
+    _require_mobile_admin,
+    _require_mobile_admin_or_enterprise,
 )
-from app.services.mobile_relay_service import MobileRelayService
-from app.utils.mobile_api import format_mobile_response, paginate_list
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.fastapi_routes.mobile_extensions.constants import (
+    ADMIN_MOBILE_FEATURES,
+)
+from app.fastapi_routes.mobile_extensions.cs_helpers import (
+    _coerce_user_cs_reply,
+    _mobile_cs_source_id,
+    _mobile_cs_source_name,
+    _safe_user_id,
+    _safe_user_text,
+    _service_request_to_cs_messages,
+)
 
 # ── 子模块导入 ──
 from app.fastapi_routes.mobile_extensions.models import (
@@ -49,19 +62,12 @@ from app.fastapi_routes.mobile_extensions.models import (
     SyncAckBody,
     SyncPullBody,
     SyncPushBody,
-    SyncPushItem,
-)
-from app.fastapi_routes.mobile_extensions.constants import (
-    ADMIN_MOBILE_FEATURES,
-    _MARKET_AI_EMPLOYEE_CACHE,
 )
 from app.fastapi_routes.mobile_extensions.pairing_helpers import (
     _enrich_pairing_payload,
     _guess_lan_ipv4,
     _host_is_private_or_loopback,
-    _pairing_api_base_url,
     _pairing_issue_port,
-    _request_host_port,
 )
 from app.fastapi_routes.mobile_extensions.relay_helpers import (
     _mobile_user_identity,
@@ -69,33 +75,15 @@ from app.fastapi_routes.mobile_extensions.relay_helpers import (
     _relay_admin_fallback_user,
     _relay_mobile_auth_payload,
 )
-from app.fastapi_routes.mobile_extensions.admin_helpers import (
-    _admin_employee_match_keys,
-    _apply_market_profile,
-    _candidate_duty_registry_paths,
-    _compact_text,
-    _employee_text,
-    _enrich_workflow_employees,
-    _index_market_ai_employee_profiles,
-    _load_admin_duty_records,
-    _load_market_ai_employee_profile_index,
-    _market_profile_keys,
-    _market_profile_text,
-    _mobile_request_user_id,
-    _mobile_session_meta,
-    _require_mobile_admin,
-    _require_mobile_admin_or_enterprise,
-    _workflow_employee_match_keys,
-    _workflow_employee_to_dict,
+from app.security.mobile_pairing import (
+    consume_by_shortcode,
+    consume_pairing_nonce,
+    issue_pairing_nonce,
+    lookup_by_shortcode,
 )
-from app.fastapi_routes.mobile_extensions.cs_helpers import (
-    _coerce_user_cs_reply,
-    _mobile_cs_source_id,
-    _mobile_cs_source_name,
-    _safe_user_id,
-    _safe_user_text,
-    _service_request_to_cs_messages,
-)
+from app.services.mobile_relay_service import MobileRelayService
+from app.utils.mobile_api import format_mobile_response, paginate_list
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
@@ -357,7 +345,12 @@ def _mobile_mod_items(
                     "industry": getattr(m, "industry", {})
                     if isinstance(getattr(m, "industry", {}), dict)
                     else {},
-                    "avatar_url": str(getattr(m, "avatar", "") or getattr(m, "logo", "") or getattr(m, "icon", "") or ""),
+                    "avatar_url": str(
+                        getattr(m, "avatar", "")
+                        or getattr(m, "logo", "")
+                        or getattr(m, "icon", "")
+                        or ""
+                    ),
                     "frontend_menu": menu if isinstance(menu, list) else [],
                     "menu": menu if isinstance(menu, list) else [],
                     "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
@@ -818,7 +811,9 @@ async def mobile_service_bridge_requests(
             .limit(per_page)
             .all()
         )
-        return format_mobile_response(data=paginate_list([r.to_dict() for r in items], total, page, per_page))
+        return format_mobile_response(
+            data=paginate_list([r.to_dict() for r in items], total, page, per_page)
+        )
 
 
 @extension_router.put("/service-bridge/requests/{request_id}/respond")
@@ -1777,20 +1772,22 @@ async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user))
     byok_count = 0
     if isinstance(llm_payload, dict) and not llm_payload.get("__proxy_error__"):
         providers = llm_payload.get("providers") or []
-        byok_count = len([p for p in providers if isinstance(p, dict) and p.get("has_user_override")])
+        byok_count = len(
+            [p for p in providers if isinstance(p, dict) and p.get("has_user_override")]
+        )
 
     # 5) 组装简化余额信息
     balance_raw = wallet_obj.get("balance")
     try:
-        balance_val = (
-            float(balance_raw) if balance_raw is not None else None
-        )
+        balance_val = float(balance_raw) if balance_raw is not None else None
     except (TypeError, ValueError):
         balance_val = None
     membership = plan_obj.get("membership") if isinstance(plan_obj, dict) else None
     membership_level = None
     if isinstance(membership, dict):
-        membership_level = membership.get("level") or membership.get("name") or membership.get("tier")
+        membership_level = (
+            membership.get("level") or membership.get("name") or membership.get("tier")
+        )
     elif isinstance(membership, str):
         membership_level = membership
     experience = None

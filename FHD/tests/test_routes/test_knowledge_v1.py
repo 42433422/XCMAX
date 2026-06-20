@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.knowledge_v1 — using mock for unavailable RAG imports."""
+
 from __future__ import annotations
 
 import sys

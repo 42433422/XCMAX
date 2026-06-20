@@ -1,4 +1,5 @@
 """Deep tests for ``app.traditional_mode_fs`` covering remaining uncovered branches."""
+
 from __future__ import annotations
 
 import base64

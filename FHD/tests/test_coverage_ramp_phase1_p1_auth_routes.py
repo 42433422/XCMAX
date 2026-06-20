@@ -105,7 +105,9 @@ def test_auth_me_success(mock_get_svc: MagicMock, auth_client: TestClient) -> No
     mock_get_svc.return_value = svc
     with (
         patch.object(auth_routes, "resolve_session_user", return_value=user),
-        patch.object(auth_routes, "_session_meta_for_response", return_value={"account_kind": "personal"}),
+        patch.object(
+            auth_routes, "_session_meta_for_response", return_value={"account_kind": "personal"}
+        ),
     ):
         r = auth_client.get("/api/auth/me")
     assert r.status_code == 200
@@ -208,7 +210,9 @@ def test_auth_forgot_account_empty(auth_client: TestClient) -> None:
 
 
 @patch("app.application.auth_app_service.get_auth_app_service")
-def test_auth_register_disabled_enterprise(mock_get_svc: MagicMock, auth_client: TestClient) -> None:
+def test_auth_register_disabled_enterprise(
+    mock_get_svc: MagicMock, auth_client: TestClient
+) -> None:
     with (
         patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
         patch.dict("os.environ", {"FHD_ALLOW_OPEN_REGISTRATION": "0"}, clear=False),
@@ -227,9 +231,7 @@ def test_auth_oidc_status(auth_client: TestClient) -> None:
 
 
 def test_auth_qr_issue(auth_client: TestClient) -> None:
-    with patch(
-        "app.application.auth_app_service.get_auth_app_service"
-    ) as mock_get:
+    with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
         svc = MagicMock()
         svc.issue_qr_login.return_value = {"qr_id": "q1", "url": "http://x"}
         mock_get.return_value = svc
@@ -238,9 +240,7 @@ def test_auth_qr_issue(auth_client: TestClient) -> None:
 
 
 def test_auth_qr_status_not_found(auth_client: TestClient) -> None:
-    with patch(
-        "app.application.auth_app_service.get_auth_app_service"
-    ) as mock_get:
+    with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
         svc = MagicMock()
         svc.get_qr_login_status.return_value = None
         mock_get.return_value = svc
@@ -352,9 +352,7 @@ def test_users_delete_self_blocked(mock_get_svc: MagicMock, admin_auth_client: T
 
 @patch("app.db.session.get_db")
 @patch("app.application.auth_app_service.get_auth_app_service")
-def test_find_local_users_by_email(
-    mock_get_svc: MagicMock, mock_get_db: MagicMock
-) -> None:
+def test_find_local_users_by_email(mock_get_svc: MagicMock, mock_get_db: MagicMock) -> None:
     mock_db = MagicMock()
     cm = MagicMock()
     cm.__enter__.return_value = mock_db

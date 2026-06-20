@@ -26,9 +26,8 @@ from app.application.workflow.planner import (
     _execute_shipment_records_tool,
     execute_tool,
 )
-from app.infrastructure.rag.semantic_chunker import SemanticChunker
 from app.infrastructure.rag.rag_service import RagQuery
-
+from app.infrastructure.rag.semantic_chunker import SemanticChunker
 
 # ---------------------------------------------------------------------------
 # workflow import preview helpers
@@ -47,7 +46,9 @@ def test_import_products_preview_mode() -> None:
 
 def test_import_customers_preview_mode() -> None:
     df = pd.DataFrame([{"单位名称": "七彩", "联系人": "张三", "电话": "13800000000"}])
-    out = json.loads(_import_customers_preview_or_execute(df, list(df.columns), confirm=False, row_count=1))
+    out = json.loads(
+        _import_customers_preview_or_execute(df, list(df.columns), confirm=False, row_count=1)
+    )
     assert out["success"] is True
 
 
@@ -118,7 +119,10 @@ def test_execute_tool_unknown_returns_error() -> None:
 
 def test_skip_pro_excel_deterministic_import_context() -> None:
     assert _skip_pro_excel_deterministic_import({"excel_import_ai_decides": True}) is True
-    assert _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True}) is False
+    assert (
+        _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True})
+        is False
+    )
 
 
 def test_skip_pro_excel_deterministic_import_env(monkeypatch: pytest.MonkeyPatch) -> None:

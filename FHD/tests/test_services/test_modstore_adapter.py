@@ -23,7 +23,6 @@ from app.services.conversation.modstore_adapter import (
     create_modstore_openai_client_from_request,
 )
 
-
 # ---------------------------------------------------------------------------
 # _strip_bearer_prefix
 # ---------------------------------------------------------------------------
@@ -143,24 +142,18 @@ class TestPlatformStreamPayload:
         assert out["choices"][0]["delta"]["content"] == "hello"
 
     def test_json_with_choices(self):
-        payload = json.dumps(
-            {"choices": [{"message": {"content": "x"}, "finish_reason": None}]}
-        )
+        payload = json.dumps({"choices": [{"message": {"content": "x"}, "finish_reason": None}]})
         out = _platform_stream_payload_to_openai_chunk(payload)
         assert out is not None
         assert out["choices"][0]["delta"]["content"] == "x"
 
     def test_error_type_raises(self):
         with pytest.raises(ValueError, match="boom"):
-            _platform_stream_payload_to_openai_chunk(
-                '{"type":"error","message":"boom"}'
-            )
+            _platform_stream_payload_to_openai_chunk('{"type":"error","message":"boom"}')
 
     def test_error_type_with_error_field(self):
         with pytest.raises(ValueError, match="err_msg"):
-            _platform_stream_payload_to_openai_chunk(
-                '{"type":"error","error":"err_msg"}'
-            )
+            _platform_stream_payload_to_openai_chunk('{"type":"error","error":"err_msg"}')
 
     def test_dict_with_content(self):
         payload = json.dumps({"content": "some text"})
@@ -254,9 +247,7 @@ class TestModstorePlatformAdapterProperties:
         assert adapter.provider_name == "modstore-openai"
 
     def test_model_name(self):
-        adapter = ModstorePlatformAdapter(
-            platform_url="http://example.com", default_model="gpt-4"
-        )
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com", default_model="gpt-4")
         assert adapter.model_name == "gpt-4"
 
     def test_is_configured_true(self):
@@ -273,9 +264,7 @@ class TestModstorePlatformAdapterProperties:
         assert adapter.is_configured is False
 
     def test_repr(self):
-        adapter = ModstorePlatformAdapter(
-            platform_url="http://example.com", auth_token="mytoken"
-        )
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com", auth_token="mytoken")
         r = repr(adapter)
         assert "ModstorePlatformAdapter" in r
         assert "example.com" in r
@@ -288,17 +277,13 @@ class TestModstorePlatformAdapterProperties:
 
 class TestBuildHeaders:
     def test_with_token(self):
-        adapter = ModstorePlatformAdapter(
-            platform_url="http://example.com", auth_token="mytoken"
-        )
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com", auth_token="mytoken")
         headers = adapter._build_headers()
         assert headers["Authorization"] == "Bearer mytoken"
         assert headers["Content-Type"] == "application/json"
 
     def test_without_token(self):
-        adapter = ModstorePlatformAdapter(
-            platform_url="http://example.com", auth_token=""
-        )
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com", auth_token="")
         headers = adapter._build_headers()
         assert "Authorization" not in headers
 
@@ -390,11 +375,13 @@ class TestNormalizeResponse:
 
     def test_with_usage_dataclass(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
+
         # Create a dataclass-like object with __dict__
         class Usage:
             def __init__(self):
                 self.prompt_tokens = 5
                 self.completion_tokens = 2
+
         usage_obj = Usage()
         raw = {"content": "hi", "usage": usage_obj}
         result = adapter._normalize_response(raw, "p", "m")
@@ -493,6 +480,7 @@ class TestChatCompletion:
     @pytest.mark.asyncio
     async def test_http_error_raises(self, monkeypatch):
         import httpx
+
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
         mock_client = AsyncMock()
         # httpx.ConnectError is a subclass of httpx.HTTPError
@@ -546,9 +534,7 @@ class TestStreamChatCompletion:
         adapter = ModstorePlatformAdapter(platform_url=None)
         adapter.platform_url = ""
         with pytest.raises(ValueError, match="未配置"):
-            async for _ in adapter.stream_chat_completion(
-                [{"role": "user", "content": "hi"}]
-            ):
+            async for _ in adapter.stream_chat_completion([{"role": "user", "content": "hi"}]):
                 pass
 
 
@@ -580,9 +566,7 @@ class TestChatCompletionSync:
             mock_client_instance.__exit__ = MagicMock(return_value=False)
             mock_client_instance.post.return_value = mock_response
             MockClient.return_value = mock_client_instance
-            result = adapter.chat_completion_sync(
-                [{"role": "user", "content": "hi"}]
-            )
+            result = adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
             assert result["choices"][0]["message"]["content"] == "hello sync"
 
     def test_error_status_raises(self, monkeypatch):
@@ -597,9 +581,7 @@ class TestChatCompletionSync:
             mock_client_instance.post.return_value = mock_response
             MockClient.return_value = mock_client_instance
             with pytest.raises(ValueError, match="403"):
-                adapter.chat_completion_sync(
-                    [{"role": "user", "content": "hi"}]
-                )
+                adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
 
 
 # ---------------------------------------------------------------------------
@@ -764,9 +746,7 @@ class TestModstoreOpenAICompletions:
         }
         with patch.object(adapter, "chat_completion_sync", return_value=mock_response):
             completions = _ModstoreOpenAICompletions(adapter)
-            result = completions.create(
-                messages=[{"role": "user", "content": "hi"}], stream=False
-            )
+            result = completions.create(messages=[{"role": "user", "content": "hi"}], stream=False)
             assert result.choices[0].message.content == "hi"
 
     def test_create_stream_non_native(self, monkeypatch):
@@ -785,9 +765,7 @@ class TestModstoreOpenAICompletions:
         with patch.object(adapter, "chat_completion_sync", return_value=mock_response):
             completions = _ModstoreOpenAICompletions(adapter)
             chunks = list(
-                completions.create(
-                    messages=[{"role": "user", "content": "hi"}], stream=True
-                )
+                completions.create(messages=[{"role": "user", "content": "hi"}], stream=True)
             )
             assert len(chunks) == 1
             assert chunks[0].choices[0].delta.content == "streamed"

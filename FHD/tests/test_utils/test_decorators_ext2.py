@@ -6,6 +6,7 @@ path), ``deduplicated``, ``async_task`` (sync mode + async submit + failure),
 ``circuit_breaker`` (open / recovery / fallback), ``retry`` (callback), and
 ``combined_optimization`` (multi-strategy).
 """
+
 from __future__ import annotations
 
 import os
@@ -183,6 +184,7 @@ class TestRateLimited:
             fake_json_module = MagicMock()
             fake_json_module.json_response.return_value = ({"message": "rate"}, 429)
             with patch.dict("sys.modules", {"app.http.json_response": fake_json_module}):
+
                 @dec.rate_limited(max_requests=1)
                 def fn(x):
                     return x
@@ -195,6 +197,7 @@ class TestRateLimited:
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10)
             def fn(x):
                 return x * 2
@@ -205,32 +208,31 @@ class TestRateLimited:
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10, key_func=lambda *a, **k: "custom-key")
             def fn(x):
                 return x
 
             fn(5)
-            fake_rl_module.check_rate_limit.assert_called_once_with(
-                "custom-key", "fn", 10, 60
-            )
+            fake_rl_module.check_rate_limit.assert_called_once_with("custom-key", "fn", 10, 60)
 
     def test_uses_first_arg_when_no_key_func(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10)
             def fn(user_id, x):
                 return x
 
             fn("user-1", 5)
-            fake_rl_module.check_rate_limit.assert_called_once_with(
-                "user-1", "fn", 10, 60
-            )
+            fake_rl_module.check_rate_limit.assert_called_once_with("user-1", "fn", 10, 60)
 
     def test_uses_object_id_when_self_present(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10)
             def method(self_, x):
                 return x
@@ -243,6 +245,7 @@ class TestRateLimited:
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.side_effect = RuntimeError("redis down")
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10)
             def fn(x):
                 return x
@@ -276,6 +279,7 @@ class TestMonitored:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.monitored("my_metric")
             def fn(x):
                 return x * 2
@@ -298,6 +302,7 @@ class TestMonitored:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.monitored("my_metric")
             def fn():
                 raise RuntimeError("boom")
@@ -330,6 +335,7 @@ class TestDeduplicated:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.deduplicated(window_seconds=30)
             def fn(x):
                 return x
@@ -348,6 +354,7 @@ class TestDeduplicated:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.deduplicated(window_seconds=30)
             def fn(x):
                 return x
@@ -373,12 +380,17 @@ class TestAsyncTask:
         # registered a non-None async_task_manager, which would make the
         # decorator submit instead of falling back to sync. Force the
         # optimizer components to report no async manager.
-        with patch.object(dec, "get_optimizer_components", return_value={
-            "cache": None,
-            "monitor": None,
-            "deduplicator": None,
-            "async_manager": None,
-        }):
+        with patch.object(
+            dec,
+            "get_optimizer_components",
+            return_value={
+                "cache": None,
+                "monitor": None,
+                "deduplicator": None,
+                "async_manager": None,
+            },
+        ):
+
             @dec.async_task()
             def fn(x):
                 return x * 2
@@ -401,6 +413,7 @@ class TestAsyncTask:
             async_task_manager=async_mgr,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.async_task()
             def fn(x):
                 return x
@@ -423,6 +436,7 @@ class TestAsyncTask:
             async_task_manager=async_mgr,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.async_task()
             def fn(x):
                 return x
@@ -447,6 +461,7 @@ class TestAsyncTask:
             async_task_manager=async_mgr,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.async_task()
             def fn(x):
                 return x
@@ -467,6 +482,7 @@ class TestAsyncTask:
             async_task_manager=async_mgr,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.async_task()
             def fn(x):
                 return x
@@ -477,12 +493,17 @@ class TestAsyncTask:
         # Force optimizer components to report no async manager so async_submit
         # raises RuntimeError regardless of any real initializer state leaked
         # from earlier tests in the full suite.
-        with patch.object(dec, "get_optimizer_components", return_value={
-            "cache": None,
-            "monitor": None,
-            "deduplicator": None,
-            "async_manager": None,
-        }):
+        with patch.object(
+            dec,
+            "get_optimizer_components",
+            return_value={
+                "cache": None,
+                "monitor": None,
+                "deduplicator": None,
+                "async_manager": None,
+            },
+        ):
+
             @dec.async_task()
             def fn(x):
                 return x

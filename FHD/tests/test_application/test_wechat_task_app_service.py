@@ -20,9 +20,11 @@ def service():
 
 def _mock_db_ctx(mock_db: MagicMock):
     """Return a context manager that yields mock_db, for patching get_db."""
+
     @contextmanager
     def _ctx():
         yield mock_db
+
     return _ctx
 
 
@@ -192,8 +194,10 @@ class TestConfirmTask:
             assert result["success"] is False
 
     def test_success(self, service):
-        with patch.object(service, "_task_exists", return_value=True), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_task_exists", return_value=True),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.confirm_task(1)
             assert result["success"] is True
 
@@ -210,8 +214,10 @@ class TestIgnoreTask:
             assert result["success"] is False
 
     def test_success(self, service):
-        with patch.object(service, "_task_exists", return_value=True), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_task_exists", return_value=True),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.ignore_task(1)
             assert result["success"] is True
 
@@ -229,33 +235,45 @@ class TestProcessMessage:
 
     def test_order_message(self, service):
         task = {"raw_text": "买 5箱 产品A"}
-        with patch.object(service, "_get_task", return_value=task), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_get_task", return_value=task),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.process_message(1)
             assert result["success"] is True
             assert "order_info" in result
 
     def test_shipment_message(self, service):
         task = {"raw_text": "发货：明天安排"}
-        with patch.object(service, "_get_task", return_value=task), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_get_task", return_value=task),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.process_message(1)
             assert result["success"] is True
             assert "shipment_info" in result
 
     def test_unknown_message(self, service):
         task = {"raw_text": "hello world"}
-        with patch.object(service, "_get_task", return_value=task), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_get_task", return_value=task),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.process_message(1)
             assert result["success"] is True
             assert "待处理" in result["message"]
 
     def test_process_order_failure(self, service):
         task = {"raw_text": "买 5箱 产品A"}
-        with patch.object(service, "_get_task", return_value=task), \
-             patch.object(service, "_process_order_message", return_value={"success": False, "message": "fail"}), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_get_task", return_value=task),
+            patch.object(
+                service,
+                "_process_order_message",
+                return_value={"success": False, "message": "fail"},
+            ),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.process_message(1)
             assert result["success"] is False
 
@@ -320,7 +338,9 @@ class TestUpdateTaskStatus:
     def test_task_not_found(self, service):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service._update_task_status(999, "pending")
             assert result is False
 
@@ -329,7 +349,9 @@ class TestUpdateTaskStatus:
             mock_db = MagicMock()
             mock_task = MagicMock()
             mock_db.query.return_value.filter.return_value.first.return_value = mock_task
-            with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+            with patch(
+                "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+            ):
                 result = service._update_task_status(1, status)
                 assert result is True
 
@@ -355,14 +377,20 @@ class TestGetTasks:
         mock_task.last_status_at = None
         mock_task.created_at = None
         mock_task.updated_at = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_task]
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_task
+        ]
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service.get_tasks()
             assert len(result) == 1
             assert result[0]["id"] == 1
 
     def test_error(self, service):
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=RuntimeError("fail")
+        ):
             result = service.get_tasks()
             assert result == []
 
@@ -381,20 +409,28 @@ class TestGetContacts:
         mock_row.last_message_time = 0
         mock_row.message_count = 5
         mock_db = MagicMock()
-        mock_db.query.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_row]
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        mock_db.query.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_row
+        ]
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service.get_contacts()
             assert len(result) == 1
 
     def test_with_keyword(self, service):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = []
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service.get_contacts(keyword="test")
             assert result == []
 
     def test_error(self, service):
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=RuntimeError("fail")
+        ):
             result = service.get_contacts()
             assert result == []
 
@@ -437,7 +473,9 @@ class TestInsertOrIgnoreWechatTask:
         existing = MagicMock()
         existing.id = 42
         mock_db.query.return_value.filter.return_value.first.return_value = existing
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service._insert_or_ignore_wechat_task(
                 raw_text="test", message_id="msg1", username="u1"
             )
@@ -448,15 +486,20 @@ class TestInsertOrIgnoreWechatTask:
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_task = MagicMock()
         mock_task.id = 1
+
         def mock_refresh(task):
             task.id = 1
+
         mock_db.refresh = mock_refresh
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service._insert_or_ignore_wechat_task(raw_text="test message")
             assert result == 1
 
     def test_integrity_error(self, service):
         from sqlalchemy.exc import IntegrityError
+
         existing = MagicMock()
         existing.id = 99
         call_count = 0
@@ -479,7 +522,9 @@ class TestInsertOrIgnoreWechatTask:
     def test_recoverable_error(self, service):
         mock_db = MagicMock()
         mock_db.add.side_effect = OSError("disk full")
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service._insert_or_ignore_wechat_task(raw_text="test")
             assert result is None
 
@@ -506,7 +551,9 @@ class TestGetTask:
         mock_task.created_at = None
         mock_task.updated_at = None
         mock_db.query.return_value.filter.return_value.first.return_value = mock_task
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service._get_task(1)
             assert result is not None
             assert result["id"] == 1
@@ -514,12 +561,16 @@ class TestGetTask:
     def test_not_found(self, service):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             result = service._get_task(999)
             assert result is None
 
     def test_error(self, service):
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=RuntimeError("fail")
+        ):
             result = service._get_task(1)
             assert result is None
 
@@ -533,17 +584,23 @@ class TestTaskExists:
     def test_exists(self, service):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             assert service._task_exists(1) is True
 
     def test_not_exists(self, service):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=_mock_db_ctx(mock_db)
+        ):
             assert service._task_exists(999) is False
 
     def test_error(self, service):
-        with patch("app.application.wechat_task_app_service.get_db", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.application.wechat_task_app_service.get_db", side_effect=RuntimeError("fail")
+        ):
             assert service._task_exists(1) is False
 
 
@@ -555,6 +612,7 @@ class TestTaskExists:
 class TestGetWechatTaskAppService:
     def test_singleton(self):
         import app.application.wechat_task_app_service as mod
+
         old = mod._wechat_task_app_service
         mod._wechat_task_app_service = None
         try:

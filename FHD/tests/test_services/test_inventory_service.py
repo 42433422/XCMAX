@@ -1,4 +1,5 @@
 """Tests for app.services.inventory_service — coverage ramp."""
+
 from __future__ import annotations
 
 from datetime import datetime

@@ -15,7 +15,6 @@ from app.application.workflow.planner import (
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
-
 # ========================= _WORKFLOW_TOOL_HANDLERS ========================
 
 
@@ -193,7 +192,11 @@ class TestLLMWorkflowPlannerPlanExtended:
         mock_plan = PlanGraph(
             plan_id="p1",
             intent="product_query",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={"keyword": "test"})],
+            nodes=[
+                WorkflowNode(
+                    node_id="n1", tool_id="products", action="query", params={"keyword": "test"}
+                )
+            ],
         )
         with (
             patch.object(planner, "_plan_with_react_multiagent", return_value=mock_plan),

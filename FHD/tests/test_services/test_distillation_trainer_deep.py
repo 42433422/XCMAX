@@ -103,8 +103,10 @@ def _install_torch_transformers_stubs() -> None:
         def __call__(self, fn=None):
             if fn is None:
                 return self
+
             def wrapper(*a, **kw):
                 return fn(*a, **kw)
+
             return wrapper
 
         def __enter__(self):
@@ -333,10 +335,13 @@ class TestDistillationTrainerInitDeep:
 class TestLoadDataJSONLDeep:
     def test_load_jsonl_valid(self, tmp_path):
         path = tmp_path / "d.jsonl"
-        _make_jsonl(path, [
-            {"text": "你好", "label": "greet"},
-            {"text": "开单", "label": "shipment_generate"},
-        ])
+        _make_jsonl(
+            path,
+            [
+                {"text": "你好", "label": "greet"},
+                {"text": "开单", "label": "shipment_generate"},
+            ],
+        )
         t = DistillationTrainer.__new__(DistillationTrainer)
         texts, labels = t.load_data(str(path))
         assert texts == ["你好", "开单"]
@@ -344,10 +349,13 @@ class TestLoadDataJSONLDeep:
 
     def test_load_jsonl_unknown_label_skipped(self, tmp_path):
         path = tmp_path / "d.jsonl"
-        _make_jsonl(path, [
-            {"text": "hi", "label": "greet"},
-            {"text": "x", "label": "no_such_label"},
-        ])
+        _make_jsonl(
+            path,
+            [
+                {"text": "hi", "label": "greet"},
+                {"text": "x", "label": "no_such_label"},
+            ],
+        )
         t = DistillationTrainer.__new__(DistillationTrainer)
         texts, labels = t.load_data(str(path))
         assert texts == ["hi"]
@@ -447,10 +455,12 @@ class TestPrepareDataDeep:
         labels = [i % 10 for i in range(110)]  # 10 unique labels
 
         t = DistillationTrainer(device="cpu")
-        with patch("app.services.distillation_trainer.BertTokenizer") as mtok, \
-             patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel, \
-             patch("app.services.distillation_trainer.DataLoader") as mdl, \
-             patch("app.services.distillation_trainer.train_test_split") as msplit:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer") as mtok,
+            patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel,
+            patch("app.services.distillation_trainer.DataLoader") as mdl,
+            patch("app.services.distillation_trainer.train_test_split") as msplit,
+        ):
             msplit.return_value = (texts[:88], texts[88:], labels[:88], labels[88:])
             mtok.from_pretrained.return_value = MagicMock()
             mmodel.from_pretrained.return_value = MagicMock()
@@ -473,10 +483,12 @@ class TestPrepareDataDeep:
         labels = [i % 3 for i in range(20)]  # only 3 unique labels
 
         t = DistillationTrainer(device="cpu")
-        with patch("app.services.distillation_trainer.BertTokenizer") as mtok, \
-             patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel, \
-             patch("app.services.distillation_trainer.DataLoader") as mdl, \
-             patch("app.services.distillation_trainer.train_test_split") as msplit:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer") as mtok,
+            patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel,
+            patch("app.services.distillation_trainer.DataLoader") as mdl,
+            patch("app.services.distillation_trainer.train_test_split") as msplit,
+        ):
             msplit.return_value = (texts[:16], texts[16:], labels[:16], labels[16:])
             mtok.from_pretrained.return_value = MagicMock()
             mmodel.from_pretrained.return_value = MagicMock()
@@ -492,10 +504,12 @@ class TestPrepareDataDeep:
         labels = [0] * 20
 
         t = DistillationTrainer(device="cpu")
-        with patch("app.services.distillation_trainer.BertTokenizer") as mtok, \
-             patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel, \
-             patch("app.services.distillation_trainer.DataLoader"), \
-             patch("app.services.distillation_trainer.train_test_split") as msplit:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer") as mtok,
+            patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel,
+            patch("app.services.distillation_trainer.DataLoader"),
+            patch("app.services.distillation_trainer.train_test_split") as msplit,
+        ):
             msplit.return_value = (texts[:10], texts[10:], labels[:10], labels[10:])
             mtok.from_pretrained.return_value = MagicMock()
             mmodel.from_pretrained.return_value = MagicMock()
@@ -673,8 +687,10 @@ class TestEvaluateDeep:
 
         preds_tensor = _Tensor(0, numpy_val=[0, 1])
 
-        with patch("app.services.distillation_trainer.torch") as mock_torch, \
-             patch("app.services.distillation_trainer.accuracy_score") as mock_acc:
+        with (
+            patch("app.services.distillation_trainer.torch") as mock_torch,
+            patch("app.services.distillation_trainer.accuracy_score") as mock_acc,
+        ):
             mock_torch.argmax.return_value = preds_tensor
             mock_torch.no_grad = MagicMock()
             mock_acc.return_value = 1.0
@@ -784,12 +800,14 @@ class TestTrainOrchestrationDeep:
         # Mock the heavy steps but keep train() orchestration real
         t.prepare_data = MagicMock()
         t.train_epoch = MagicMock(return_value=(0.5, 0.8))
-        t.evaluate = MagicMock(return_value={
-            "val_loss": 0.4,
-            "val_accuracy": 0.9,
-            "preds": [0, 1],
-            "labels": [0, 1],
-        })
+        t.evaluate = MagicMock(
+            return_value={
+                "val_loss": 0.4,
+                "val_accuracy": 0.9,
+                "preds": [0, 1],
+                "labels": [0, 1],
+            }
+        )
         t.save_checkpoint = MagicMock()
         t.tokenizer = MagicMock()
         t.model = MagicMock()
@@ -797,11 +815,15 @@ class TestTrainOrchestrationDeep:
         t.val_loader = [MagicMock()]
         t.model.parameters.return_value = iter([MagicMock()])
 
-        with patch("app.services.distillation_trainer.AdamW") as mock_adamw, \
-             patch("app.services.distillation_trainer.get_linear_schedule_with_warmup") as mock_sched, \
-             patch("app.services.distillation_trainer.classification_report") as mock_report, \
-             patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)), \
-             patch("app.services.distillation_trainer.LOG_DIR", str(log_dir)):
+        with (
+            patch("app.services.distillation_trainer.AdamW") as mock_adamw,
+            patch(
+                "app.services.distillation_trainer.get_linear_schedule_with_warmup"
+            ) as mock_sched,
+            patch("app.services.distillation_trainer.classification_report") as mock_report,
+            patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)),
+            patch("app.services.distillation_trainer.LOG_DIR", str(log_dir)),
+        ):
             mock_adamw.return_value = MagicMock()
             mock_sched.return_value = MagicMock()
             mock_report.return_value = "report"
@@ -835,12 +857,14 @@ class TestTrainOrchestrationDeep:
         t = DistillationTrainer(device="cpu", epochs=1)
         t.prepare_data = MagicMock()
         t.train_epoch = MagicMock(return_value=(0.5, 0.0))
-        t.evaluate = MagicMock(return_value={
-            "val_loss": 0.4,
-            "val_accuracy": 0.0,
-            "preds": [0],
-            "labels": [1],
-        })
+        t.evaluate = MagicMock(
+            return_value={
+                "val_loss": 0.4,
+                "val_accuracy": 0.0,
+                "preds": [0],
+                "labels": [1],
+            }
+        )
         t.save_checkpoint = MagicMock()
         t.tokenizer = MagicMock()
         t.model = MagicMock()
@@ -848,11 +872,16 @@ class TestTrainOrchestrationDeep:
         t.val_loader = [MagicMock()]
         t.model.parameters.return_value = iter([MagicMock()])
 
-        with patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()), \
-             patch("app.services.distillation_trainer.get_linear_schedule_with_warmup", return_value=MagicMock()), \
-             patch("app.services.distillation_trainer.classification_report", return_value="r"), \
-             patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)), \
-             patch("app.services.distillation_trainer.LOG_DIR", str(log_dir)):
+        with (
+            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                return_value=MagicMock(),
+            ),
+            patch("app.services.distillation_trainer.classification_report", return_value="r"),
+            patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)),
+            patch("app.services.distillation_trainer.LOG_DIR", str(log_dir)),
+        ):
             t.train(str(path), output_dir=str(ckpt_dir))
 
         # Only "last" checkpoint saved (best_accuracy stays 0, 0.0 > 0 is False)
@@ -871,11 +900,13 @@ class TestMainCLIDeep:
 
     def test_main_default_data_path_nonexistent(self, tmp_path):
         fake_default = str(tmp_path / "default.jsonl")
-        with patch("sys.argv", ["distillation_trainer"]), \
-             patch(
-                 "app.services.distillation_trainer.get_distillation_training_data_path",
-                 return_value=fake_default,
-             ):
+        with (
+            patch("sys.argv", ["distillation_trainer"]),
+            patch(
+                "app.services.distillation_trainer.get_distillation_training_data_path",
+                return_value=fake_default,
+            ),
+        ):
             main()
 
     def test_main_invokes_trainer_train(self, tmp_path):
@@ -883,18 +914,29 @@ class TestMainCLIDeep:
         _make_jsonl(path, [{"text": f"t{i}", "label": "greet"} for i in range(15)])
         out_dir = str(tmp_path / "out")
 
-        with patch("sys.argv", [
-            "distillation_trainer",
-            "--data", str(path),
-            "--output", out_dir,
-            "--epochs", "1",
-            "--batch_size", "8",
-            "--lr", "0.001",
-            "--max_length", "32",
-            "--model", "custom-model",
-        ]), patch(
-            "app.services.distillation_trainer.DistillationTrainer"
-        ) as mock_cls:
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "distillation_trainer",
+                    "--data",
+                    str(path),
+                    "--output",
+                    out_dir,
+                    "--epochs",
+                    "1",
+                    "--batch_size",
+                    "8",
+                    "--lr",
+                    "0.001",
+                    "--max_length",
+                    "32",
+                    "--model",
+                    "custom-model",
+                ],
+            ),
+            patch("app.services.distillation_trainer.DistillationTrainer") as mock_cls,
+        ):
             mock_inst = MagicMock()
             mock_cls.return_value = mock_inst
             main()
@@ -905,9 +947,7 @@ class TestMainCLIDeep:
             assert kwargs["learning_rate"] == 0.001
             assert kwargs["batch_size"] == 8
             assert kwargs["epochs"] == 1
-            mock_inst.train.assert_called_once_with(
-                data_path=str(path), output_dir=out_dir
-            )
+            mock_inst.train.assert_called_once_with(data_path=str(path), output_dir=out_dir)
 
 
 # ---------------------------------------------------------------------------

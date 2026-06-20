@@ -14,7 +14,6 @@ from app.di.registry import (
     set_service_registry,
 )
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # ServiceContainer
 # ══════════════════════════════════════════════════════════════════════════════
@@ -58,12 +57,14 @@ class TestServiceContainer:
 class TestGetServiceRegistry:
     def test_creates_singleton(self, monkeypatch):
         import app.di.registry as reg
+
         monkeypatch.setattr(reg, "_registry", None)
         registry = get_service_registry()
         assert isinstance(registry, ServiceContainer)
 
     def test_returns_same(self, monkeypatch):
         import app.di.registry as reg
+
         monkeypatch.setattr(reg, "_registry", None)
         r1 = get_service_registry()
         r2 = get_service_registry()
@@ -73,6 +74,7 @@ class TestGetServiceRegistry:
 class TestSetServiceRegistry:
     def test_set_custom(self, monkeypatch):
         import app.di.registry as reg
+
         custom = ServiceContainer()
         set_service_registry(custom)
         assert get_service_registry() is custom
@@ -80,6 +82,7 @@ class TestSetServiceRegistry:
 
     def test_set_none(self, monkeypatch):
         import app.di.registry as reg
+
         set_service_registry(None)
         assert reg._registry is None
 
@@ -87,6 +90,7 @@ class TestSetServiceRegistry:
 class TestResetServiceRegistry:
     def test_reset(self, monkeypatch):
         import app.di.registry as reg
+
         get_service_registry()  # create one
         reset_service_registry()
         assert reg._registry is None
@@ -103,8 +107,8 @@ class TestFastapiDeps:
         assert result is mock_container
 
     def test_get_service_container_fallback(self, monkeypatch):
-        from app.di.fastapi_deps import get_service_container
         import app.di.registry as reg
+        from app.di.fastapi_deps import get_service_container
 
         monkeypatch.setattr(reg, "_registry", None)
         mock_request = MagicMock()

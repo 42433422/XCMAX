@@ -8,10 +8,10 @@ import pytest
 
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
-from app.legacy.domain.legacy_vo import ContactInfo, Money, Quantity
 from app.infrastructure.documents.shipment_document_generator_impl import (
     LegacyShipmentDocumentGenerator,
 )
+from app.legacy.domain.legacy_vo import ContactInfo, Money, Quantity
 
 
 class DummyRepo:

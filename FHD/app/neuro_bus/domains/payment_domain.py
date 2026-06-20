@@ -144,4 +144,3 @@ def get_payment_domain() -> PaymentNeuroDomain:
         _payment_domain = PaymentNeuroDomain()
         get_domain_registry().register(_payment_domain)
     return _payment_domain
-

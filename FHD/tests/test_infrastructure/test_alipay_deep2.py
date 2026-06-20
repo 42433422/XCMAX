@@ -14,6 +14,7 @@ Targets remaining uncovered branches:
 - query_order (uncovered)
 - _notify_url_path_ok
 """
+
 from __future__ import annotations
 
 import os
@@ -126,15 +127,11 @@ class TestCredentialResolvers:
         assert alipay_mod.alipay_public_key_pem() == "path pub key"
 
     def test_public_key_pem_from_bundled(self, clear_alipay_env, monkeypatch):
-        with patch.object(
-            alipay_mod, "_default_bundled_alipay_public_key", return_value="bundled"
-        ):
+        with patch.object(alipay_mod, "_default_bundled_alipay_public_key", return_value="bundled"):
             assert alipay_mod.alipay_public_key_pem() == "bundled"
 
     def test_public_key_pem_empty_when_all_missing(self, clear_alipay_env, monkeypatch):
-        with patch.object(
-            alipay_mod, "_default_bundled_alipay_public_key", return_value=""
-        ):
+        with patch.object(alipay_mod, "_default_bundled_alipay_public_key", return_value=""):
             assert alipay_mod.alipay_public_key_pem() == ""
 
 
@@ -265,9 +262,7 @@ class TestCredentialsReady:
 class TestPrecreateOrder:
     def test_delegates_to_try_precreate(self, clear_alipay_env):
         # When credentials missing, returns failure
-        result = alipay_mod.precreate_order(
-            out_trade_no="O1", subject="s", total_amount="0.01"
-        )
+        result = alipay_mod.precreate_order(out_trade_no="O1", subject="s", total_amount="0.01")
         assert result["success"] is False
         assert "ALIPAY_APP_ID" in result["message"]
 
@@ -304,7 +299,10 @@ class TestQueryOrder:
 
     def test_success_with_out_trade_no(self, monkeypatch):
         fake_client = MagicMock()
-        fake_client.api_alipay_trade_query.return_value = {"code": "10000", "trade_status": "TRADE_SUCCESS"}
+        fake_client.api_alipay_trade_query.return_value = {
+            "code": "10000",
+            "trade_status": "TRADE_SUCCESS",
+        }
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             result = alipay_mod.query_order(out_trade_no="O1")
         assert result["success"] is True
@@ -360,14 +358,14 @@ class TestQueryOrder:
 
 class TestNotifyUrlPathOk:
     def test_correct_path(self):
-        assert alipay_mod._notify_url_path_ok(
-            "https://x.com/api/model-payment/notify/alipay"
-        ) is True
+        assert (
+            alipay_mod._notify_url_path_ok("https://x.com/api/model-payment/notify/alipay") is True
+        )
 
     def test_correct_path_with_trailing_slash(self):
-        assert alipay_mod._notify_url_path_ok(
-            "https://x.com/api/model-payment/notify/alipay/"
-        ) is True
+        assert (
+            alipay_mod._notify_url_path_ok("https://x.com/api/model-payment/notify/alipay/") is True
+        )
 
     def test_wrong_path(self):
         assert alipay_mod._notify_url_path_ok("https://x.com/wrong") is False
@@ -432,9 +430,7 @@ class TestDiagnosticsSnapshotDeep:
     def test_with_bundled_key(self, clear_alipay_env, monkeypatch):
         monkeypatch.setenv("ALIPAY_APP_ID", "20210001")
         monkeypatch.setenv("ALIPAY_APP_PRIVATE_KEY", "key")
-        with patch.object(
-            alipay_mod, "_default_bundled_alipay_public_key", return_value="bundled"
-        ):
+        with patch.object(alipay_mod, "_default_bundled_alipay_public_key", return_value="bundled"):
             fake_alipay = MagicMock()
             with patch.dict("sys.modules", {"alipay": fake_alipay}):
                 snap = alipay_mod.diagnostics_snapshot()

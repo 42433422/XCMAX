@@ -1,4 +1,5 @@
 """Tracer OTel 集成测试。"""
+
 import sys
 from unittest.mock import MagicMock, patch
 

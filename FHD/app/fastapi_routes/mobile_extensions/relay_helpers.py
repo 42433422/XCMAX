@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 from app.security.mobile_jwt import issue_mobile_tokens
@@ -57,11 +56,17 @@ def _relay_mobile_auth_payload(
     return {
         "user": user_public,
         "session_id": session_id,
-        "session_token": str(relay.get("session_token") or user_public.get("session_token") or session_id).strip(),
+        "session_token": str(
+            relay.get("session_token") or user_public.get("session_token") or session_id
+        ).strip(),
         "account_id": str(relay.get("account_id") or user_public.get("account_id") or uid).strip(),
         "tenant_id": str(relay.get("tenant_id") or user_public.get("tenant_id") or "").strip(),
-        "relay_base_url": str(relay.get("relay_base_url") or user_public.get("relay_base_url") or "").strip(),
-        "local_base_url": str(relay.get("local_base_url") or user_public.get("local_base_url") or "").strip(),
+        "relay_base_url": str(
+            relay.get("relay_base_url") or user_public.get("relay_base_url") or ""
+        ).strip(),
+        "local_base_url": str(
+            relay.get("local_base_url") or user_public.get("local_base_url") or ""
+        ).strip(),
         "paired_at": str(relay.get("paired_at") or user_public.get("paired_at") or "").strip(),
         "account_kind": account_kind,
         **issue_mobile_tokens(

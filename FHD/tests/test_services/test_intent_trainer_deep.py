@@ -313,14 +313,17 @@ class TestParseNluYamlDeep:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_single_intent_multiple_examples(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: greet
   examples: |
     - 你好
     - 嗨
     - 早
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         assert len(result) == 3
         assert all(r.label == "greet" for r in result)
@@ -329,7 +332,9 @@ nlu:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_multiple_intents(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: greet
   examples: |
@@ -337,7 +342,8 @@ nlu:
 - intent: goodbye
   examples: |
     - 再见
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         assert len(result) == 2
         labels = {r.label for r in result}
@@ -346,13 +352,16 @@ nlu:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_negation_test_renamed_to_negation(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: negation_test
   examples: |
     - 不要
     - 不需要
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         assert len(result) == 2
         assert all(r.label == "negation" for r in result)
@@ -360,24 +369,30 @@ nlu:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_empty_examples(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: greet
   examples: |
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         assert result == []
 
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_item_without_intent_key_skipped(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - something_else: value
 - intent: greet
   examples: |
     - hi
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         assert len(result) == 1
         assert result[0].label == "greet"
@@ -385,13 +400,16 @@ nlu:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_item_without_examples_key_skipped(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: greet
 - intent: goodbye
   examples: |
     - bye
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         assert len(result) == 1
         assert result[0].label == "goodbye"
@@ -399,14 +417,17 @@ nlu:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_empty_text_after_dash_skipped(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: greet
   examples: |
     - 你好
     -
     - 嗨
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         assert len(result) == 2
         assert result[0].text == "你好"
@@ -415,9 +436,12 @@ nlu:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_no_nlu_key(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 other_key: value
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         assert result == []
 
@@ -431,13 +455,16 @@ other_key: value
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_line_without_dash_skipped(self, tmp_path):
         path = tmp_path / "nlu.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: greet
   examples: |
     你好
     - 嗨
-""")
+""",
+        )
         result = parse_nlu_yaml(str(path))
         # Only the line starting with "-" is picked up
         assert len(result) == 1
@@ -461,12 +488,15 @@ class TestLoadTrainingDataDeep:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_load_yml(self, tmp_path):
         path = tmp_path / "data.yml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: greet
   examples: |
     - 你好
-""")
+""",
+        )
         result = load_training_data(str(path))
         assert len(result) == 1
         assert result[0].label == "greet"
@@ -474,22 +504,28 @@ nlu:
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
     def test_load_yaml_extension(self, tmp_path):
         path = tmp_path / "data.yaml"
-        _write_yaml(path, """
+        _write_yaml(
+            path,
+            """
 nlu:
 - intent: help
   examples: |
     - 帮助
-""")
+""",
+        )
         result = load_training_data(str(path))
         assert len(result) == 1
         assert result[0].label == "help"
 
     def test_load_json_valid(self, tmp_path):
         path = tmp_path / "data.json"
-        _write_json(path, [
-            {"text": "你好", "label": "greet"},
-            {"text": "再见", "label": "goodbye"},
-        ])
+        _write_json(
+            path,
+            [
+                {"text": "你好", "label": "greet"},
+                {"text": "再见", "label": "goodbye"},
+            ],
+        )
         result = load_training_data(str(path))
         assert len(result) == 2
         assert result[0].text == "你好"
@@ -602,20 +638,24 @@ class TestComputeMetricsDeep:
     def test_partial(self):
         import numpy as np
 
-        result = compute_metrics((
-            np.array([[0.9, 0.1], [0.1, 0.9], [0.8, 0.2]]),
-            np.array([0, 1, 1]),
-        ))
+        result = compute_metrics(
+            (
+                np.array([[0.9, 0.1], [0.1, 0.9], [0.8, 0.2]]),
+                np.array([0, 1, 1]),
+            )
+        )
         assert 0 < result["accuracy"] < 1
 
     def test_multiclass(self):
         import numpy as np
 
-        logits = np.array([
-            [0.8, 0.1, 0.1],
-            [0.1, 0.8, 0.1],
-            [0.1, 0.1, 0.8],
-        ])
+        logits = np.array(
+            [
+                [0.8, 0.1, 0.1],
+                [0.1, 0.8, 0.1],
+                [0.1, 0.1, 0.8],
+            ]
+        )
         labels = np.array([0, 1, 2])
         result = compute_metrics((logits, labels))
         assert result["accuracy"] == 1.0
@@ -663,9 +703,7 @@ class TestTrainIntentModelDeep:
         mock_dcp,
         tmp_path,
     ):
-        mock_load.return_value = [
-            IntentExample(f"t{i}", "greet") for i in range(20)
-        ]
+        mock_load.return_value = [IntentExample(f"t{i}", "greet") for i in range(20)]
         mock_tok.from_pretrained.return_value = MagicMock()
         mock_config.from_pretrained.return_value = MagicMock()
         mock_model_cls.from_pretrained.return_value = MagicMock()
@@ -876,16 +914,26 @@ class TestMainCLIDeep:
     @patch("app.services.intent_trainer.train_intent_model")
     def test_main_calls_train(self, mock_train, tmp_path):
         mock_train.return_value = str(tmp_path / "final")
-        with patch("sys.argv", [
-            "intent_trainer",
-            "--data", "fake.json",
-            "--epochs", "2",
-            "--batch_size", "8",
-            "--lr", "0.001",
-            "--max_length", "128",
-            "--model", "custom-model",
-            "--output", str(tmp_path / "out"),
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "intent_trainer",
+                "--data",
+                "fake.json",
+                "--epochs",
+                "2",
+                "--batch_size",
+                "8",
+                "--lr",
+                "0.001",
+                "--max_length",
+                "128",
+                "--model",
+                "custom-model",
+                "--output",
+                str(tmp_path / "out"),
+            ],
+        ):
             main()
 
             _, kwargs = mock_train.call_args
@@ -901,13 +949,19 @@ class TestMainCLIDeep:
     @patch("app.services.intent_trainer.train_intent_model")
     def test_main_with_export_onnx_flag(self, mock_train, mock_export, tmp_path):
         mock_train.return_value = str(tmp_path / "final")
-        with patch("sys.argv", [
-            "intent_trainer",
-            "--data", "fake.json",
-            "--epochs", "1",
-            "--export_onnx",
-            "--output", str(tmp_path / "out"),
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "intent_trainer",
+                "--data",
+                "fake.json",
+                "--epochs",
+                "1",
+                "--export_onnx",
+                "--output",
+                str(tmp_path / "out"),
+            ],
+        ):
             main()
 
             mock_train.assert_called_once()
@@ -921,11 +975,16 @@ class TestMainCLIDeep:
     @patch("app.services.intent_trainer.train_intent_model")
     def test_main_without_export_onnx_flag(self, mock_train, mock_export, tmp_path):
         mock_train.return_value = str(tmp_path / "final")
-        with patch("sys.argv", [
-            "intent_trainer",
-            "--data", "fake.json",
-            "--epochs", "1",
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "intent_trainer",
+                "--data",
+                "fake.json",
+                "--epochs",
+                "1",
+            ],
+        ):
             main()
 
             mock_train.assert_called_once()

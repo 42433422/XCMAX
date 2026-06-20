@@ -121,6 +121,8 @@ _DEFAULT_BYPASS = (
 )
 
 # 前缀放行：即使用户自定义 LAN_BYPASS_PATHS 覆盖了默认列表，登录 / Mod 壳层 / 调试上报仍可直达。
+# /api/ai/* 放行原因：AI chat 路由有自己的 market token 鉴权（透传给 MODstore LLM 上游），
+# 不依赖 LAN 许可 token；移动端无 cookie/X-LAN-Token，若不加 bypass 会返回 401 导致小C助理不可用。
 DEFAULT_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
     "/api/mobile/v1",
     "/api/mods",
@@ -133,6 +135,7 @@ DEFAULT_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
     "/api/system",
     "/api/neuro",
     "/api/neurobus",
+    "/api/ai",
 )
 
 

@@ -11,14 +11,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+# mobile_api 末尾才挂载 extension_router，须先 import mobile_api 打破循环依赖
+import app.fastapi_routes.mobile_api_extensions as mobile_ext  # noqa: E402
 from app.fastapi_routes import mobile_api as mobile_api_mod
 from app.fastapi_routes import rbac as rbac_routes
 from app.fastapi_routes.domains.static import routes as static_routes
 from app.infrastructure.auth import tenant_context
-
-# mobile_api 末尾才挂载 extension_router，须先 import mobile_api 打破循环依赖
-import app.fastapi_routes.mobile_api_extensions as mobile_ext  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -194,7 +192,9 @@ def test_static_console_route(static_client: TestClient) -> None:
     assert r.status_code == 200
 
 
-def test_static_traditional_list(monkeypatch: pytest.MonkeyPatch, static_client: TestClient) -> None:
+def test_static_traditional_list(
+    monkeypatch: pytest.MonkeyPatch, static_client: TestClient
+) -> None:
     monkeypatch.setattr(
         static_routes,
         "list_files_response",
@@ -204,7 +204,9 @@ def test_static_traditional_list(monkeypatch: pytest.MonkeyPatch, static_client:
     assert r.status_code == 200
 
 
-def test_static_traditional_root(monkeypatch: pytest.MonkeyPatch, static_client: TestClient) -> None:
+def test_static_traditional_root(
+    monkeypatch: pytest.MonkeyPatch, static_client: TestClient
+) -> None:
     monkeypatch.setattr(static_routes, "root_info_response", lambda: {"root": "/"})
     r = static_client.get("/api/traditional-mode/root")
     assert r.status_code == 200
@@ -270,17 +272,25 @@ def test_static_traditional_agent_move_copy(
         "copy_response",
         lambda src, dst, overwrite=False: ({"success": True}, 200),
     )
-    assert static_client.post(
-        "/api/traditional-mode/agent/move",
-        json={"src": "a", "dst": "b"},
-    ).status_code == 200
-    assert static_client.post(
-        "/api/traditional-mode/agent/copy",
-        json={"src": "a", "dst": "b"},
-    ).status_code == 200
+    assert (
+        static_client.post(
+            "/api/traditional-mode/agent/move",
+            json={"src": "a", "dst": "b"},
+        ).status_code
+        == 200
+    )
+    assert (
+        static_client.post(
+            "/api/traditional-mode/agent/copy",
+            json={"src": "a", "dst": "b"},
+        ).status_code
+        == 200
+    )
 
 
-def test_static_outputs_missing(tmp_path, monkeypatch: pytest.MonkeyPatch, static_client: TestClient) -> None:
+def test_static_outputs_missing(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, static_client: TestClient
+) -> None:
     monkeypatch.setattr(
         "app.utils.path_utils.get_app_data_dir",
         lambda: str(tmp_path / "missing_outputs"),
@@ -310,7 +320,9 @@ def test_mobile_approval_list_unauthorized() -> None:
 
 
 @patch("app.db.session.get_db")
-def test_mobile_approval_list_success(mock_get_db: MagicMock, mobile_ext_client: TestClient) -> None:
+def test_mobile_approval_list_success(
+    mock_get_db: MagicMock, mobile_ext_client: TestClient
+) -> None:
     mock_db = MagicMock()
     cm = MagicMock()
     cm.__enter__.return_value = mock_db

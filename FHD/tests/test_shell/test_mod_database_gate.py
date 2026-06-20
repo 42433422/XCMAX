@@ -7,7 +7,12 @@ from unittest.mock import patch
 
 import pytest
 
-from app.shell.mod_database_gate import _required_mod_ids, _enabled_mod_ids, mod_db_gate_state, mod_db_gate_open
+from app.shell.mod_database_gate import (
+    _enabled_mod_ids,
+    _required_mod_ids,
+    mod_db_gate_open,
+    mod_db_gate_state,
+)
 
 
 class TestRequiredModIds:
@@ -74,7 +79,9 @@ class TestModDbGateState:
         assert result["required_mod_ids"] == []
 
     def test_gate_closed_when_missing_mod(self):
-        with patch.dict(os.environ, {"FHD_DB_MOD_GATE": "mod-x", "FHD_ENABLED_MOD_IDS": ""}, clear=False):
+        with patch.dict(
+            os.environ, {"FHD_DB_MOD_GATE": "mod-x", "FHD_ENABLED_MOD_IDS": ""}, clear=False
+        ):
             result = mod_db_gate_state()
         assert result["gate_open"] is False
         assert "mod-x" in result["missing_mod_ids"]
@@ -107,7 +114,9 @@ class TestModDbGateOpen:
             assert mod_db_gate_open() is True
 
     def test_closed_when_missing(self):
-        with patch.dict(os.environ, {"FHD_DB_MOD_GATE": "missing-mod", "FHD_ENABLED_MOD_IDS": ""}, clear=False):
+        with patch.dict(
+            os.environ, {"FHD_DB_MOD_GATE": "missing-mod", "FHD_ENABLED_MOD_IDS": ""}, clear=False
+        ):
             assert mod_db_gate_open() is False
 
     def test_open_when_satisfied(self):

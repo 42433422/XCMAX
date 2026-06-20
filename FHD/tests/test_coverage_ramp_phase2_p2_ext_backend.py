@@ -23,11 +23,10 @@ from app.infrastructure.persistence.wechat_contact_store_impl import (
     resolve_decrypt_contact_db_path,
 )
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
-from app.services.conversation.context import ConversationContext, ContextMixin
+from app.services.conversation.context import ContextMixin, ConversationContext
 from app.services.conversation.intent import IntentMixin
 from app.services.kitten_report.chart_data_service import ChartDataService
 from app.services.kitten_report.save_service import AnalysisSaveService
-
 
 # ---------------------------------------------------------------------------
 # conversation context + intent mixin helpers
@@ -148,9 +147,7 @@ def test_read_rows_from_contact_db(tmp_path) -> None:
     conn.execute(
         "CREATE TABLE contact (username TEXT, nick_name TEXT, remark TEXT, is_in_chat_room INT, delete_flag INT)"
     )
-    conn.execute(
-        "INSERT INTO contact VALUES ('u1', '张三', '备注', 0, 0)"
-    )
+    conn.execute("INSERT INTO contact VALUES ('u1', '张三', '备注', 0, 0)")
     conn.commit()
     conn.close()
     rows = _read_rows_from_contact_db(str(db_path), limit=10)

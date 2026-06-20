@@ -199,7 +199,9 @@ def test_business_shipment_create_route_runs_through_agent_orchestrator(
             "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
             return_value=repo,
         ),
-        patch("app.neuro_bus.application_neuro_bridge.publish_neuro_event", return_value=True) as publish,
+        patch(
+            "app.neuro_bus.application_neuro_bridge.publish_neuro_event", return_value=True
+        ) as publish,
     ):
         response = _client().post(
             "/api/business/shipment/create",

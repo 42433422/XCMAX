@@ -35,25 +35,26 @@ class TestSendWechatViaAutomation:
             assert "安全校验" in result["message"]
 
     def test_automation_success(self):
-        with patch(
-            "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply",
-            return_value="safe msg",
-        ), patch(
-            "app.desktop_automation.service.get_desktop_automation_service"
-        ) as mock_svc:
+        with (
+            patch(
+                "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply",
+                return_value="safe msg",
+            ),
+            patch("app.desktop_automation.service.get_desktop_automation_service") as mock_svc,
+        ):
             mock_svc.return_value.send_wechat_message.return_value = {"success": True}
             result = routes._send_wechat_via_automation("张三", "test msg")
             assert result["success"] is True
 
     def test_automation_fail_non_windows(self):
-        with patch(
-            "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply",
-            return_value="safe msg",
-        ), patch(
-            "app.desktop_automation.service.get_desktop_automation_service"
-        ) as mock_svc, patch(
-            "app.fastapi_routes.domains.wechat.routes.sys"
-        ) as mock_sys:
+        with (
+            patch(
+                "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply",
+                return_value="safe msg",
+            ),
+            patch("app.desktop_automation.service.get_desktop_automation_service") as mock_svc,
+            patch("app.fastapi_routes.domains.wechat.routes.sys") as mock_sys,
+        ):
             mock_sys.platform = "darwin"
             mock_svc.return_value.send_wechat_message.return_value = {
                 "success": False,
@@ -96,11 +97,14 @@ class TestWechatTasks:
 
 class TestWechatStarredMessages:
     def test_group_type_with_sync(self, client: TestClient):
-        with patch(
-            "app.services.wechat_group_customer_bridge.sync_bound_groups_from_live_wechat"
-        ) as mock_sync, patch(
-            "app.services.wechat_group_customer_bridge.build_starred_group_feed",
-            return_value=[{"id": 1}],
+        with (
+            patch(
+                "app.services.wechat_group_customer_bridge.sync_bound_groups_from_live_wechat"
+            ) as mock_sync,
+            patch(
+                "app.services.wechat_group_customer_bridge.build_starred_group_feed",
+                return_value=[{"id": 1}],
+            ),
         ):
             r = client.get(
                 "/wechat/starred-messages",
@@ -109,11 +113,12 @@ class TestWechatStarredMessages:
             assert r.json()["success"] is True
 
     def test_group_type_sync_no_market_user_id(self, client: TestClient):
-        with patch(
-            "app.services.wechat_group_customer_bridge.sync_group_messages"
-        ) as mock_sync, patch(
-            "app.services.wechat_group_customer_bridge.build_starred_group_feed",
-            return_value=[],
+        with (
+            patch("app.services.wechat_group_customer_bridge.sync_group_messages") as mock_sync,
+            patch(
+                "app.services.wechat_group_customer_bridge.build_starred_group_feed",
+                return_value=[],
+            ),
         ):
             r = client.get(
                 "/wechat/starred-messages",
@@ -126,15 +131,16 @@ class TestWechatStarredMessages:
         mock_svc.get_contacts.return_value = [
             {"id": 1, "contact_name": "张三", "remark": "", "contact_type": "contact"}
         ]
-        mock_svc.get_contact_context.return_value = [
-            {"content": "hello", "timestamp": 1700000000}
-        ]
-        with patch(
-            "app.application.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ), patch(
-            "app.services.wechat_group_customer_bridge._latest_context_message",
-            return_value={"content": "hello", "timestamp": 1700000000},
+        mock_svc.get_contact_context.return_value = [{"content": "hello", "timestamp": 1700000000}]
+        with (
+            patch(
+                "app.application.get_wechat_contact_app_service",
+                return_value=mock_svc,
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge._latest_context_message",
+                return_value={"content": "hello", "timestamp": 1700000000},
+            ),
         ):
             r = client.get("/wechat/starred-messages", params={"type": "contact"})
             assert r.json()["success"] is True
@@ -231,23 +237,29 @@ class TestWechatContactsListApi:
     def test_fallback_to_app_service(self, client: TestClient):
         mock_svc = MagicMock()
         mock_svc.get_contacts.return_value = [{"id": 1}]
-        with patch(
-            "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
-            return_value=None,
-        ), patch(
-            "app.application.get_wechat_contact_app_service",
-            return_value=mock_svc,
+        with (
+            patch(
+                "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
+                return_value=None,
+            ),
+            patch(
+                "app.application.get_wechat_contact_app_service",
+                return_value=mock_svc,
+            ),
         ):
             r = client.get("/wechat/contacts")
             assert r.json()["success"] is True
 
     def test_error(self, client: TestClient):
-        with patch(
-            "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
-            side_effect=Exception("fail"),
-        ), patch(
-            "app.application.get_wechat_contact_app_service",
-            side_effect=Exception("fail"),
+        with (
+            patch(
+                "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
+                side_effect=Exception("fail"),
+            ),
+            patch(
+                "app.application.get_wechat_contact_app_service",
+                side_effect=Exception("fail"),
+            ),
         ):
             r = client.get("/wechat/contacts")
             assert r.status_code == 500
@@ -336,12 +348,15 @@ class TestWechatContactContextApi:
         mock_svc = MagicMock()
         mock_svc.get_contact_context.return_value = []
         mock_svc.refresh_messages = MagicMock()
-        with patch(
-            "app.application.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ), patch(
-            "app.services.wechat_decrypt_autoconfig.prepare_wechat_message_db_for_read",
-            create=True,
+        with (
+            patch(
+                "app.application.get_wechat_contact_app_service",
+                return_value=mock_svc,
+            ),
+            patch(
+                "app.services.wechat_decrypt_autoconfig.prepare_wechat_message_db_for_read",
+                create=True,
+            ),
         ):
             r = client.get("/wechat/contacts/1/context", params={"refresh": True})
             assert r.json()["success"] is True
@@ -556,7 +571,9 @@ class TestWechatContactsSendMessage:
         assert r.status_code == 400
 
     def test_empty_message(self, client: TestClient):
-        r = client.post("/wechat_contacts/send_message", json={"contact_name": "张三", "message": ""})
+        r = client.post(
+            "/wechat_contacts/send_message", json={"contact_name": "张三", "message": ""}
+        )
         assert r.status_code == 400
 
     def test_send_success(self, client: TestClient):
@@ -616,12 +633,15 @@ class TestWechatContactsSendMessageToId:
     def test_send_success(self, client: TestClient):
         mock_svc = MagicMock()
         mock_svc.get_contact_by_id.return_value = {"contact_name": "张三"}
-        with patch(
-            "app.application.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ), patch(
-            "app.fastapi_routes.domains.wechat.routes._send_wechat_via_automation",
-            return_value={"success": True, "message": "已发送"},
+        with (
+            patch(
+                "app.application.get_wechat_contact_app_service",
+                return_value=mock_svc,
+            ),
+            patch(
+                "app.fastapi_routes.domains.wechat.routes._send_wechat_via_automation",
+                return_value={"success": True, "message": "已发送"},
+            ),
         ):
             r = client.post("/wechat_contacts/1/send_message", json={"message": "hello"})
             assert r.json()["success"] is True
@@ -629,12 +649,15 @@ class TestWechatContactsSendMessageToId:
     def test_send_failure(self, client: TestClient):
         mock_svc = MagicMock()
         mock_svc.get_contact_by_id.return_value = {"contact_name": "张三"}
-        with patch(
-            "app.application.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ), patch(
-            "app.fastapi_routes.domains.wechat.routes._send_wechat_via_automation",
-            return_value={"success": False, "message": "发送失败"},
+        with (
+            patch(
+                "app.application.get_wechat_contact_app_service",
+                return_value=mock_svc,
+            ),
+            patch(
+                "app.fastapi_routes.domains.wechat.routes._send_wechat_via_automation",
+                return_value={"success": False, "message": "发送失败"},
+            ),
         ):
             r = client.post("/wechat_contacts/1/send_message", json={"message": "hello"})
             assert r.status_code == 500
@@ -642,12 +665,15 @@ class TestWechatContactsSendMessageToId:
     def test_send_exception(self, client: TestClient):
         mock_svc = MagicMock()
         mock_svc.get_contact_by_id.return_value = {"contact_name": "张三"}
-        with patch(
-            "app.application.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ), patch(
-            "app.fastapi_routes.domains.wechat.routes._send_wechat_via_automation",
-            side_effect=Exception("unexpected"),
+        with (
+            patch(
+                "app.application.get_wechat_contact_app_service",
+                return_value=mock_svc,
+            ),
+            patch(
+                "app.fastapi_routes.domains.wechat.routes._send_wechat_via_automation",
+                side_effect=Exception("unexpected"),
+            ),
         ):
             r = client.post("/wechat_contacts/1/send_message", json={"message": "hello"})
             assert r.status_code == 500

@@ -1,17 +1,19 @@
 """Tests for app.application.impersonation_bridge."""
+
 from __future__ import annotations
 
 import time
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.application.impersonation_bridge import (
-    create_impersonation_bridge_token,
-    consume_impersonation_bridge_token,
-    _purge_expired_bridge_tokens,
     _BRIDGE,
     _BRIDGE_TTL_SEC,
     _copy_session_row_fields,
+    _purge_expired_bridge_tokens,
+    consume_impersonation_bridge_token,
+    create_impersonation_bridge_token,
 )
 
 

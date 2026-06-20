@@ -1,12 +1,13 @@
 """Tests for app.domain.admin_digest_identity."""
+
 from __future__ import annotations
 
 import pytest
 
 from app.domain.admin_digest_identity import (
     daily_digest_identity_code,
-    verify_digest_identity_code,
     digest_identity_payload,
+    verify_digest_identity_code,
 )
 
 

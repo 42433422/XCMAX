@@ -217,7 +217,10 @@ def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
         assert "human review" in waiting.steps[0].params["user_request"]
         assert waiting.metadata["artifact_count"] == 1
         assert waiting.metadata["dataset_ingest_count"] == 1
-        assert waiting.metadata["plan"]["metadata"]["document_export"]["requires_user_confirmation"] is True
+        assert (
+            waiting.metadata["plan"]["metadata"]["document_export"]["requires_user_confirmation"]
+            is True
+        )
 
         with (
             patch(
@@ -229,8 +232,14 @@ def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
                 return_value="doc-token",
             ),
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool", return_value=(None, None)),
-            patch("app.application.employee_pack_runner.try_execute_employee_planner_tool", return_value=None),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+            ),
+            patch(
+                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                return_value=None,
+            ),
         ):
             completed = orchestrator.continue_run(waiting.run_id, approved_by="tester")
     finally:

@@ -1,4 +1,5 @@
 """Tests for app.application.employee_runtime.agent_loop."""
+
 from __future__ import annotations
 
 import json
@@ -103,9 +104,14 @@ class TestDefaultEmployeeTools:
 class TestRunEmployeeAgentLoop:
     """Tests for run_employee_agent_loop."""
 
-    @patch("app.infrastructure.llm.client.get_openai_compatible_client", side_effect=RuntimeError("no key"))
+    @patch(
+        "app.infrastructure.llm.client.get_openai_compatible_client",
+        side_effect=RuntimeError("no key"),
+    )
     @patch("app.infrastructure.llm.client.require_api_key", side_effect=RuntimeError("no key"))
-    def test_degraded_when_llm_unavailable(self, mock_key: MagicMock, mock_client: MagicMock) -> None:
+    def test_degraded_when_llm_unavailable(
+        self, mock_key: MagicMock, mock_client: MagicMock
+    ) -> None:
         result = run_employee_agent_loop(
             employee_id="emp1",
             system_prompt="test",
@@ -119,7 +125,9 @@ class TestRunEmployeeAgentLoop:
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-test")
-    def test_direct_text_response(self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock) -> None:
+    def test_direct_text_response(
+        self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock
+    ) -> None:
         msg = MagicMock()
         msg.content = "Hello from assistant"
         msg.tool_calls = None
@@ -142,7 +150,9 @@ class TestRunEmployeeAgentLoop:
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-test")
-    def test_max_iterations_reached(self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock) -> None:
+    def test_max_iterations_reached(
+        self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock
+    ) -> None:
         tc = MagicMock()
         tc.id = "call_1"
         tc.function.name = "some_tool"
@@ -156,7 +166,9 @@ class TestRunEmployeeAgentLoop:
         completion.choices = [choice]
         mock_client.return_value.chat.completions.create.return_value = completion
 
-        with patch("app.application.tools.workflow.execute_workflow_tool", return_value='{"success": true}'):
+        with patch(
+            "app.application.tools.workflow.execute_workflow_tool", return_value='{"success": true}'
+        ):
             result = run_employee_agent_loop(
                 employee_id="emp1",
                 system_prompt="test",
@@ -170,7 +182,9 @@ class TestRunEmployeeAgentLoop:
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-test")
-    def test_gate_blocks_tool_call(self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock) -> None:
+    def test_gate_blocks_tool_call(
+        self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock
+    ) -> None:
         tc = MagicMock()
         tc.id = "call_1"
         tc.function.name = "dangerous_tool"
@@ -208,8 +222,12 @@ class TestRunEmployeeAgentLoop:
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-test")
-    def test_llm_call_failure_returns_error(self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock) -> None:
-        mock_client.return_value.chat.completions.create.side_effect = ConnectionError("network down")
+    def test_llm_call_failure_returns_error(
+        self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock
+    ) -> None:
+        mock_client.return_value.chat.completions.create.side_effect = ConnectionError(
+            "network down"
+        )
 
         result = run_employee_agent_loop(
             employee_id="emp1",

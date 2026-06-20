@@ -1,8 +1,10 @@
 """Tests for app.fastapi_routes.openapi_route_compat."""
+
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.fastapi_routes.openapi_route_compat import (
     hide_trailing_slash_openapi_duplicates,

@@ -24,7 +24,12 @@ _ACTION_ORDER = (ProcessorType.REFLEX, ProcessorType.SUBCONSCIOUS, ProcessorType
 _CANARY_STATE_PATH = Path(
     os.environ.get(
         "XCAGI_ROUTING_CANARY_STATE",
-        str(Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "canary_state.json"),
+        str(
+            Path(__file__).resolve().parents[3]
+            / "resources"
+            / "routing_policies"
+            / "canary_state.json"
+        ),
     )
 )
 _CANARY_CACHE_TTL = 30.0  # 秒，每 30 秒刷新一次 canary 状态
@@ -66,7 +71,9 @@ def _load_canary_state() -> tuple[float, str]:
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         # 回退到环境变量
         _canary_cache = {
-            "canary_ratio": _parse_canary_ratio(os.environ.get("XCAGI_ROUTING_POLICY_CANARY_RATIO", "0.0")),
+            "canary_ratio": _parse_canary_ratio(
+                os.environ.get("XCAGI_ROUTING_POLICY_CANARY_RATIO", "0.0")
+            ),
             "mode": (os.environ.get("XCAGI_ROUTING_POLICY_ENABLED") or "").strip().lower(),
         }
     _canary_cache_ts = now

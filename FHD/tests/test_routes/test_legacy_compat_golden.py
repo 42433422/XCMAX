@@ -19,9 +19,10 @@ from app.legacy.routes.legacy_compat import register_legacy_compat_routes
 @pytest.fixture
 def legacy_app() -> FastAPI:
     """Mount full legacy compat routes onto a fresh app."""
-    with patch(
-        "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
-    ), patch.dict(os.environ, {}, clear=False):
+    with (
+        patch("app.legacy.routes.legacy_compat.register_legacy_gap_routers"),
+        patch.dict(os.environ, {}, clear=False),
+    ):
         os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
         app = FastAPI()
         register_legacy_compat_routes(app)
@@ -42,7 +43,10 @@ EXPECTED_ROUTER_PATHS: tuple[tuple[str, str], ...] = (
     ("system_routes", "/api/system"),
     ("code_editor", "/api/code-editor"),
     ("wechat_decrypt", "/api/wechat/decrypt"),
-    ("xcagi_compat", "/api/ai/unified_chat"),  # aggregator mounts conversation compat with prefix=/api
+    (
+        "xcagi_compat",
+        "/api/ai/unified_chat",
+    ),  # aggregator mounts conversation compat with prefix=/api
     ("document_templates", "/api/document-templates"),
     ("xcagi_startup", "/api/startup"),
     ("template_api", "/api/templates"),
@@ -70,9 +74,7 @@ EXPECTED_ROUTER_PATHS: tuple[tuple[str, str], ...] = (
 
 
 @pytest.mark.parametrize("router_name,expected_prefix", EXPECTED_ROUTER_PATHS)
-def test_router_mounts_expected_path(
-    legacy_app: FastAPI, router_name: str, expected_prefix: str
-):
+def test_router_mounts_expected_path(legacy_app: FastAPI, router_name: str, expected_prefix: str):
     """Each router must mount at least one path starting with its expected prefix."""
     paths = _paths(legacy_app)
     matching = [p for p in paths if p.startswith(expected_prefix) or expected_prefix in p]
@@ -86,9 +88,7 @@ def test_router_mounts_expected_path(
 def test_total_mounted_path_count(legacy_app: FastAPI):
     """Sanity: full legacy stack mounts a substantial number of paths."""
     paths = _paths(legacy_app)
-    assert len(paths) >= 50, (
-        f"expected >=50 mounted paths from full legacy stack, got {len(paths)}"
-    )
+    assert len(paths) >= 50, f"expected >=50 mounted paths from full legacy stack, got {len(paths)}"
 
 
 def test_critical_early_mount_paths_present(legacy_app: FastAPI):
