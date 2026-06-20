@@ -19,7 +19,7 @@ if [[ "${FHD_INSTALL_VIA_SSH:-0}" == "1" ]]; then
   HOST="${FHD_PUSH_HOST:-119.27.178.147}"
   USER="${FHD_PUSH_USER:-root}"
   SSH_KEY="${FHD_PUSH_SSH_KEY:-}"
-  SSH_OPTS=(-o StrictHostKeyChecking=accept-new)
+  SSH_OPTS=(-o StrictHostKeyChecking=no)
   if [[ -n "$SSH_KEY" ]]; then
     SSH_OPTS+=(-i "$SSH_KEY")
   fi
