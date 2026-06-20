@@ -69,6 +69,13 @@ export type MarketLlmCatalogData = {
   market_base_url?: string;
 };
 
+export type MarketCheckoutData = Record<string, unknown> & {
+  ok?: boolean;
+  type?: string;
+  redirect_url?: string;
+  order_id?: string;
+};
+
 /** 将用户粘贴的整行 ``Authorization: Bearer …`` 规范为可提交的 authorization 字段。 */
 export function normalizePastedAuthorization(raw: string): string {
   let t = (raw || '').trim();

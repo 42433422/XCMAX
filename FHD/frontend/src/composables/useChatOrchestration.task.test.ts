@@ -280,16 +280,16 @@ describe('useChatOrchestration task/print', () => {
         ok: true,
         json: async () => ({
           requires_token: true,
-          token_name: 'DB_WRITE_TOKEN',
-          message: '需要写入令牌',
+          token_name: 'PAYMENT_TOKEN',
+          message: '需要支付授权令牌',
         }),
       }),
     )
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
     api.showTaskConfirm({
       type: 'custom',
-      title: '写库',
-      api_url: '/api/write',
+      title: '支付',
+      api_url: '/api/pay',
       payload: {},
     })
     await api.confirmTask()

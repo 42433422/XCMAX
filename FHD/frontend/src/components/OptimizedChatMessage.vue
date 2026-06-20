@@ -131,6 +131,7 @@ import type { UiChatMessage } from '@/types/chat-ui';
 import ContextSummaryPills from '@/components/chat/ContextSummaryPills.vue';
 import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue';
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue';
+import ContextSummaryPills from '@/components/chat/ContextSummaryPills.vue';
 
 interface Props {
   message: UiChatMessage;
@@ -168,6 +169,19 @@ const sanitizedContent = computed(() => {
 const collapsedPreview = computed(() => {
   const text = props.message.content.replace(/<[^>]*>/g, '');
   return text.slice(0, 100) + (text.length > 100 ? '...' : '');
+});
+
+const contextSummaryText = computed(() => {
+  const summary = props.message.contextSummary;
+  if (summary == null) return '';
+  if (typeof summary === 'string') return summary.trim();
+  if (typeof summary === 'object' && !Array.isArray(summary)) {
+    const items = (summary as { items?: unknown }).items;
+    if (Array.isArray(items)) {
+      return items.map((item) => String(item).trim()).filter(Boolean).join(' + ');
+    }
+  }
+  return String(summary).trim();
 });
 
 // 消息样式（用于虚拟列表定位）

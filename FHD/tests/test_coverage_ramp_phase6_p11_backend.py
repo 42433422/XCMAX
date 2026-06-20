@@ -883,7 +883,7 @@ def test_persist_no_session_row_returns(monkeypatch: pytest.MonkeyPatch) -> None
         def __exit__(self, *args: Any) -> None:
             pass
 
-    monkeypatch.setattr("app.db.session.get_db", lambda: _Ctx())
+    monkeypatch.setattr("app.db.session.get_host_db", lambda: _Ctx())
     monkeypatch.setattr("app.db.models.user.Session", MagicMock())
     persist_entitlements_to_session_row("sid", {"a"})
     mock_db.query.return_value.filter.return_value.first.assert_called_once()
@@ -903,7 +903,7 @@ def test_persist_writes_row(monkeypatch: pytest.MonkeyPatch) -> None:
         def __exit__(self, *args: Any) -> None:
             pass
 
-    monkeypatch.setattr("app.db.session.get_db", lambda: _Ctx())
+    monkeypatch.setattr("app.db.session.get_host_db", lambda: _Ctx())
     monkeypatch.setattr("app.db.models.user.Session", MagicMock())
     set_session_entitlements(
         market_user_id=10,

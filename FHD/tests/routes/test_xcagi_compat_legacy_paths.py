@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.fastapi_routes.xcagi_compat import router
 
 

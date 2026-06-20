@@ -1337,9 +1337,6 @@ def get_event_store() -> EventStore:
     return _event_store_instance
 
 
-# 快捷函数
-
-
 def store_event(event: NeuroEvent, stream_id: str | None = None) -> str:
     """快捷函数：存储事件"""
     return get_event_store().append(event, stream_id)

@@ -215,7 +215,7 @@ async def catalog_download_to(path: str, dest: Path) -> None:
     url = _catalog_url(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
+        async with httpx.AsyncClient(timeout=None, trust_env=False) as client:
             async with client.stream("GET", url, headers=_catalog_headers()) as resp:
                 if resp.status_code >= 400:
                     text = await resp.aread()

@@ -35,6 +35,14 @@ def test_apply_sorts_by_priority():
     from fastapi import FastAPI
 
     app = FastAPI()
+    included_paths: list[list[str]] = []
+    original_include_router = app.include_router
+
+    def record_include_router(router: APIRouter, **kwargs):
+        included_paths.append([getattr(route, "path", "") for route in router.routes])
+        return original_include_router(router, **kwargs)
+
+    app.include_router = record_include_router
     registry.apply(app)
     # FastAPI 0.138+ 用 _IncludedRouter 包装 include_router 的路由，
     # 实际路径在 original_router.routes 中；旧版直接展开为 Route。

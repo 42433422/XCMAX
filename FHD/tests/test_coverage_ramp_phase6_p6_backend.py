@@ -1305,6 +1305,8 @@ def test_private_db_send_message_with_none_values() -> None:
 
 
 def test_register_private_db_read_assistant_routes_attaches_router() -> None:
+    from app.fastapi_routes.openapi_route_compat import iter_effective_routes
+
     app = FastAPI()
     register = __import__(
         "app.fastapi_routes.private_db_read_assistant_compat",

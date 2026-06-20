@@ -160,7 +160,7 @@ function scheduleReconnect(): void {
 }
 
 function openEventSource(): void {
-  if (typeof window === 'undefined' || eventSource) return;
+  if (typeof window === 'undefined' || typeof EventSource === 'undefined' || eventSource) return;
   const cursor = readStoredCursor();
   const url = `/api/xcmax/sync/stream?since_cursor=${cursor}`;
   eventSource = new EventSource(url);

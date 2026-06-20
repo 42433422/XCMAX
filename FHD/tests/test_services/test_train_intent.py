@@ -14,10 +14,11 @@ from app.services.train_intent import (  # noqa: E402
     evaluate_model,
     main,
     serve_model,
-    test_model as _do_test_model,
     train_model,
 )
-
+from app.services.train_intent import (
+    test_model as _do_test_model,
+)
 
 # ---------------------------------------------------------------------------
 # train_model

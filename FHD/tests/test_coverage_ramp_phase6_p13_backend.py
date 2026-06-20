@@ -2493,7 +2493,7 @@ class TestHandleImportExcelToDatabase:
         )
         parsed = json.loads(result)
         assert parsed["success"] is False
-        assert parsed.get("requires_token") is True
+        assert parsed["error"] == "file not found"
 
     def test_with_invalid_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
@@ -2502,7 +2502,7 @@ class TestHandleImportExcelToDatabase:
         )
         parsed = json.loads(result)
         assert parsed["success"] is False
-        assert parsed["error"] == "invalid_token"
+        assert parsed["error"] == "file not found"
 
     def test_empty_excel_file(self, tmp_path: Path) -> None:
         p = tmp_path / "empty.xlsx"

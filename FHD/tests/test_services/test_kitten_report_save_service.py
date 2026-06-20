@@ -160,12 +160,11 @@ class TestDeleteAnalysis:
         # The source code reads from file which lacks filepath,
         # so deletion may report "File not found" but the analysis is gone
         # Let's just verify the method doesn't crash
-        assert "success" in result
+        assert result is True
 
     def test_delete_nonexistent_analysis(self, svc):
         result = svc.delete_analysis("nonexistent_id")
-        assert result["success"] is False
-        assert "not found" in result["message"]
+        assert result is False
 
     def test_delete_file_already_removed(self, svc, save_dir):
         saved = svc.save_analysis("financial", {"key": "val"})
@@ -175,7 +174,7 @@ class TestDeleteAnalysis:
         # The analysis metadata is still in memory from get_analysis
         # but the file is gone, so filepath won't exist
         result = svc.delete_analysis(saved["id"])
-        assert result["success"] is False
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
