@@ -162,6 +162,7 @@ class AIConversationService(
         self.user_preference_service = get_user_preference_service()
         self._deepseek_async_client: Any = None
         self._deepseek_async_loop: Any = None
+        self.persona_service = None  # 默认 None，由外部注入
 
     def add_to_history(self, user_id: str, role: str, content: str) -> bool:
         context = self.contexts.get(user_id)
