@@ -153,6 +153,11 @@ def _ensure_columns(engine: Engine) -> None:
         ("daily_digest_records", "release_train_after", "TEXT DEFAULT ''"),
         ("daily_digest_records", "release_kind", "TEXT DEFAULT ''"),
         ("transactions", "idempotency_key", "TEXT DEFAULT ''"),
+        ("ai_model_prices", "official_input_price_per_1k", "FLOAT"),
+        ("ai_model_prices", "official_output_price_per_1k", "FLOAT"),
+        ("ai_model_prices", "official_min_charge", "FLOAT"),
+        ("ai_model_prices", "official_source", "VARCHAR(512) DEFAULT ''"),
+        ("ai_model_prices", "official_synced_at", "DATETIME"),
     ]
     for table, column, ddl in patches:
         _add_column_if_missing(engine, table, column, ddl)
