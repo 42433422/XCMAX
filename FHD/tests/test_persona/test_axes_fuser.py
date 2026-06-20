@@ -1,4 +1,5 @@
 """三层融合器测试。"""
+
 from __future__ import annotations
 
 import pytest
@@ -39,9 +40,7 @@ class TestAxesFuser:
 
     def test_soft_offset_applied_when_rapport_high(self, fuser):
         l1 = PersonaAxes(warmth=0.5, detail=0.5, proactivity=0.5, structure=0.5)
-        result = fuser.fuse(
-            l1=l1, l2=None, l3=None, rapport=RapportScore(score=1.0)
-        )
+        result = fuser.fuse(l1=l1, l2=None, l3=None, rapport=RapportScore(score=1.0))
         # rapport=1.0 → warmth +0.2, proactivity +0.2, detail +0.1
         assert result.warmth == pytest.approx(0.7, abs=0.01)
         assert result.proactivity == pytest.approx(0.7, abs=0.01)
@@ -62,9 +61,7 @@ class TestAxesFuser:
 
     def test_soft_offset_mid_rapport(self, fuser):
         l1 = PersonaAxes(warmth=0.5, detail=0.5, proactivity=0.5, structure=0.5)
-        result = fuser.fuse(
-            l1=l1, l2=None, l3=None, rapport=RapportScore(score=0.5)
-        )
+        result = fuser.fuse(l1=l1, l2=None, l3=None, rapport=RapportScore(score=0.5))
         # rapport=0.5 → warmth +0.1, proactivity +0.1
         assert result.warmth == pytest.approx(0.6, abs=0.01)
         assert result.proactivity == pytest.approx(0.6, abs=0.01)

@@ -1,4 +1,5 @@
 """模型参数映射器测试。"""
+
 from __future__ import annotations
 
 import pytest

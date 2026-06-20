@@ -1,9 +1,9 @@
 """Persona Prompt 生成器：参数 → prompt 文本。"""
+
 from __future__ import annotations
 
 from app.domain.persona.entities import PersonaProfile
 from app.services.persona.identity_resolver import IdentityResolver
-
 
 # 四轴 → 指令句映射
 _WARMTH_INSTRUCTIONS = [

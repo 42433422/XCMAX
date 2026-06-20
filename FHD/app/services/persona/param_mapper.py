@@ -1,4 +1,5 @@
 """Persona 模型参数映射器：四轴 → 推理参数。"""
+
 from __future__ import annotations
 
 from app.domain.persona.value_objects import PersonaAxes, RapportScore
