@@ -37,7 +37,14 @@ def _bump(key: str, employee_id: str | None = None, *, delta: int = 1) -> None:
             per[employee_id] = row
 
 
-def record_employee_run(employee_id: str, *, success: bool, blocked: bool = False) -> None:
+def record_employee_run(
+    employee_id: str,
+    *,
+    success: bool,
+    blocked: bool = False,
+    task: str = "",
+    summary: str = "",
+) -> None:
     now = _now_iso()
     _bump("runs_total", employee_id)
     if blocked:
@@ -57,6 +64,18 @@ def record_employee_run(employee_id: str, *, success: bool, blocked: bool = Fals
             "blocked": bool(blocked),
         }
         per[employee_id] = row
+    try:
+        from app.application.ai_circle_service import record_employee_activity
+
+        record_employee_activity(
+            employee_id,
+            success=success,
+            blocked=blocked,
+            task=task,
+            summary=summary,
+        )
+    except Exception:  # metrics must never break employee execution
+        pass
 
 
 def record_employee_trigger(employee_id: str, event_type: str) -> None:

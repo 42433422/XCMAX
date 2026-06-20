@@ -45,6 +45,8 @@ from app.fastapi_routes.mobile_extensions.cs_helpers import (
 
 # ── 子模块导入 ──
 from app.fastapi_routes.mobile_extensions.models import (
+    AiCircleCommentBody,
+    AiCirclePostBody,
     AuthQrConfirmBody,
     CodexSuperEmployeeMobileMessageBody,
     DeviceRegisterBody,
@@ -90,6 +92,36 @@ OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 extension_router = APIRouter(tags=["mobile-api-ext"])
+
+
+def _ai_circle_user(user: Any) -> tuple[int, str, str | None]:
+    uid = int(getattr(user, "id", 0) or 0)
+    name = str(
+        getattr(user, "display_name", "") or getattr(user, "username", "") or "企业成员"
+    ).strip()
+    avatar = getattr(user, "wx_avatar_url", None)
+    return uid, name, str(avatar).strip() if avatar else None
+
+
+def _ai_circle_employee_profiles() -> dict[str, dict[str, str]]:
+    profiles: dict[str, dict[str, str]] = {}
+    for mod in _mobile_mod_items():
+        mod_avatar = str(mod.get("avatar_url") or "").strip()
+        for employee in mod.get("workflow_employees") or []:
+            if not isinstance(employee, dict):
+                continue
+            employee_id = str(employee.get("id") or "").strip()
+            if not employee_id:
+                continue
+            profiles[employee_id] = {
+                "name": str(
+                    employee.get("label")
+                    or employee.get("panel_title")
+                    or employee_id
+                ).strip(),
+                "avatar": str(employee.get("market_avatar") or mod_avatar).strip(),
+            }
+    return profiles
 
 
 # ── 设备表初始化 ──
@@ -1192,6 +1224,95 @@ async def mobile_admin_codex_super_employee_invoke(
 
 
 # ── MOD / 平台 / 首页 ──
+
+
+@extension_router.get("/circle/posts")
+async def mobile_ai_circle_posts(
+    limit: int = Query(default=50, ge=1, le=100),
+    user=Depends(get_mobile_user),
+):
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.application.ai_circle_service import list_posts
+
+    uid, _, _ = _ai_circle_user(user)
+    posts = list_posts(user_id=uid, limit=limit)
+    profiles = _ai_circle_employee_profiles()
+    for post in posts:
+        profile = profiles.get(str(post.get("employee_id") or ""))
+        if profile:
+            post["author_name"] = profile["name"]
+            post["author_avatar"] = profile["avatar"] or post.get("author_avatar")
+    return format_mobile_response(data={"items": posts, "count": len(posts)})
+
+
+@extension_router.post("/circle/posts")
+async def mobile_ai_circle_create_post(
+    body: AiCirclePostBody,
+    user=Depends(get_mobile_user),
+):
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.application.ai_circle_service import create_user_post
+
+    uid, name, avatar = _ai_circle_user(user)
+    try:
+        post_id = create_user_post(user_id=uid, author_name=name, avatar=avatar, body=body.body)
+        return format_mobile_response(data={"id": post_id}, message="发布成功")
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+
+
+@extension_router.post("/circle/posts/{post_id}/like")
+async def mobile_ai_circle_toggle_like(post_id: int, user=Depends(get_mobile_user)):
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.application.ai_circle_service import toggle_like
+
+    uid, _, _ = _ai_circle_user(user)
+    try:
+        liked = toggle_like(post_id=post_id, user_id=uid)
+        return format_mobile_response(data={"liked": liked})
+    except LookupError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=404), status_code=404
+        )
+
+
+@extension_router.post("/circle/posts/{post_id}/comments")
+async def mobile_ai_circle_add_comment(
+    post_id: int,
+    body: AiCircleCommentBody,
+    user=Depends(get_mobile_user),
+):
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.application.ai_circle_service import add_comment
+
+    uid, name, _ = _ai_circle_user(user)
+    try:
+        comment_id = add_comment(
+            post_id=post_id, user_id=uid, author_name=name, body=body.body
+        )
+        return format_mobile_response(data={"id": comment_id}, message="评论成功")
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except LookupError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=404), status_code=404
+        )
 
 
 @extension_router.get("/mods")

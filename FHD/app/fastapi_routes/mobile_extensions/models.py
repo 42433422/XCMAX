@@ -106,3 +106,11 @@ class AuthQrConfirmBody(BaseModel):
 class OidcExchangeBody(BaseModel):
     code: str = Field(..., min_length=4)
     state: str = Field(..., min_length=8)
+
+
+class AiCirclePostBody(BaseModel):
+    body: str = Field(..., min_length=1, max_length=2000)
+
+
+class AiCircleCommentBody(BaseModel):
+    body: str = Field(..., min_length=1, max_length=500)
