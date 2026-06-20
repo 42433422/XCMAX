@@ -6,7 +6,7 @@
     "component": "cr_narrow_ci,self_maintenance_policy,ops_staged_auto_approve",
     "run_id": "e7a2510f-ce0d-4cb2-a6b7-b7938160b226"
   },
-  "root_cause": "Path handling used raw rel_path for overlay/test inference, so monorepo-root inputs with MODstore_deploy/ prefixes bypassed modstore_server smoke fallback or double-prefixed overlay paths. loop_memory_requires_executable_change only considered stop/open_items, not await_human_strategy_approval/recent completed_waiting_human_strategy states.",
+  "root_cause": "路径处理使用原始 rel_path 进行覆盖/测试推断，导致带 MODstore_deploy/ 前缀的 monorepo 根目录输入绕过 modstore_server 冒烟回退或产生双重前缀的覆盖路径。loop_memory_requires_executable_change 只考虑 stop/open_items，未考虑 await_human_strategy_approval/最近的 completed_waiting_human_strategy 状态。",
   "schema_version": 1,
-  "symptom": "Self-maintenance loop still fails after target-branch prompt fix: narrow CI loses smoke fallback for prefixed MODstore_deploy paths and marker-only gate does not fail closed for recent review/QA risk memory."
+  "symptom": "自维护循环在 target-branch 提示修复后仍失败：窄范围 CI 对带前缀的 MODstore_deploy 路径丢失冒烟回退，且仅标记的门禁对最近的审查/QA 风险记忆未执行失败即关闭。"
 }

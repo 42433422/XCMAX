@@ -48,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.R
+import com.xiuci.xcagi.mobile.core.network.WalletBalanceDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
@@ -85,8 +87,16 @@ fun ProfileScreen(
     val accountKindLabel by vm.accountKindLabel.collectAsState()
     val serverModeLabel by vm.serverModeLabel.collectAsState()
     val avatarUri by vm.avatarUri.collectAsState()
+    val avatarSource by vm.userAvatarSource.collectAsState()
     val hub by vm.homeHub.collectAsState()
     val appConfig by vm.appConfig.collectAsState()
+    val walletBalance by vm.walletBalance.collectAsState()
+
+    // ON_RESUME 静默刷新余额：进入"我"页面时自动拉取最新值（缓存已秒出）
+    LifecycleResumeEffect(Unit) {
+        vm.loadWalletBalance()
+        onPauseOrDispose { }
+    }
     var showDelete by remember { mutableStateOf(false) }
     var deletePassword by remember { mutableStateOf("") }
     var showProfileEditor by remember { mutableStateOf(false) }
@@ -126,8 +136,7 @@ fun ProfileScreen(
                             contentAlignment = Alignment.BottomEnd,
                         ) {
                             LocalProfileAvatar(
-                                displayName = displayName.ifBlank { "U" },
-                                avatarUri = avatarUri,
+                                imageSource = avatarSource,
                                 size = 56.dp,
                             )
                             Box(
@@ -189,6 +198,8 @@ fun ProfileScreen(
 
             // ── 状态/服务 ──
             item {
+                WeSpacer(Spacing.sm)
+                WalletBalanceCard(walletBalance) { vm.loadWalletBalance() }
                 WeSpacer(Spacing.sm)
                 WeCellGroup {
                     WeCell(
@@ -302,6 +313,7 @@ fun ProfileScreen(
         ProfileEditorDialog(
             displayName = displayName.ifBlank { "未登录" },
             avatarUri = avatarUri,
+            avatarSource = avatarSource,
             draftName = profileNameDraft,
             onDraftNameChange = { profileNameDraft = it.take(32) },
             onPickAvatar = { avatarPicker.launch(arrayOf("image/*")) },
@@ -319,6 +331,7 @@ fun ProfileScreen(
 private fun ProfileEditorDialog(
     displayName: String,
     avatarUri: String,
+    avatarSource: String,
     draftName: String,
     onDraftNameChange: (String) -> Unit,
     onPickAvatar: () -> Unit,
@@ -332,8 +345,7 @@ private fun ProfileEditorDialog(
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 LocalProfileAvatar(
-                    displayName = draftName.ifBlank { displayName },
-                    avatarUri = avatarUri,
+                    imageSource = avatarSource,
                     size = 76.dp,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -396,4 +408,125 @@ private fun StatusPill(
             color = if (selected) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/**
+ * 钱包余额卡片：展示账户余额、会员等级、经验值、BYOK 状态。
+ * 数据为空时显示占位文案，点击刷新。
+ */
+@Composable
+private fun WalletBalanceCard(
+    wallet: WalletBalanceDto?,
+    onRefresh: () -> Unit,
+) {
+    val balanceText = wallet?.balance?.let { formatBalance(it) } ?: "—"
+    val currency = wallet?.currency?.takeIf { it.isNotBlank() } ?: "CNY"
+    val membership = wallet?.membership_level?.takeIf { it.isNotBlank() }
+    val experience = wallet?.experience
+    val byokOn = wallet?.byok_configured == true
+    val synced = wallet?.synced == true
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(
+                        XcagiTheme.extra.brandBlue,
+                        androidx.compose.ui.graphics.Color(0xFF5B8DEF),
+                    )
+                )
+            )
+            .clickable(onClick = onRefresh)
+            .padding(Spacing.lg),
+    ) {
+        Column {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "账户余额",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                )
+                Icon(
+                    Icons.Outlined.Refresh,
+                    contentDescription = "刷新",
+                    modifier = Modifier.size(16.dp),
+                    tint = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                )
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            Row(
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text(
+                    balanceText,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    currency,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(Spacing.md))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                BalanceMetric(
+                    label = "会员等级",
+                    value = membership ?: "未开通",
+                )
+                BalanceMetric(
+                    label = "经验值",
+                    value = experience?.toString() ?: "—",
+                )
+                BalanceMetric(
+                    label = "BYOK",
+                    value = if (byokOn) "已开通" else "未开通",
+                )
+            }
+            if (!synced && wallet?.message?.isNotBlank() == true) {
+                Spacer(Modifier.height(Spacing.sm))
+                Text(
+                    wallet.message,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceMetric(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = androidx.compose.ui.graphics.Color.White,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+private fun formatBalance(value: Double): String {
+    val fmt = java.text.DecimalFormat("#,##0.00")
+    return fmt.format(value)
 }

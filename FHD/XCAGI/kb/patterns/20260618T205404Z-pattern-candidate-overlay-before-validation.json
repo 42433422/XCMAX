@@ -8,5 +8,5 @@
   },
   "pattern": "candidate_overlay_before_validation",
   "schema_version": 1,
-  "summary": "Validate candidate code, not stale disk code, and support root/MODstore_deploy production layout."
+  "summary": "验证候选代码而非陈旧的磁盘代码，并支持 root/MODstore_deploy 生产布局。"
 }

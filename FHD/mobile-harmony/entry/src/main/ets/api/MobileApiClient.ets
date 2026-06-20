@@ -1,7 +1,11 @@
 import http from '@ohos.net.http';
 import { ApiEndpoints } from './ApiEndpoints';
 import {
+  ApprovalDetail,
+  ApprovalItem,
+  ChatMessage,
   ChatResponseData,
+  CsInfo,
   MobileEnvelope,
   MobileHomeData,
   MobileLoginData,
@@ -25,6 +29,10 @@ interface PairingRequestBody {
 interface ChatRequestBody {
   message: string;
   session_id: string;
+}
+
+interface ApprovalActionBody {
+  opinion: string;
 }
 
 export class MobileApiClient {
@@ -99,6 +107,47 @@ export class MobileApiClient {
       http.RequestMethod.POST,
       body
     );
+    return response;
+  }
+
+  // ── 审批流 ──
+  async approvals(): Promise<ApprovalItem[]> {
+    const envelope = await this.request<ApprovalItem[]>(ApiEndpoints.APPROVAL_REQUESTS, http.RequestMethod.GET);
+    return envelope.data || [];
+  }
+
+  async approvalDetail(id: number): Promise<ApprovalDetail> {
+    const path = ApiEndpoints.APPROVAL_DETAIL.replace('{id}', id.toString());
+    const envelope = await this.request<ApprovalDetail>(path, http.RequestMethod.GET);
+    return envelope.data || ({} as ApprovalDetail);
+  }
+
+  async approve(id: number, opinion: string): Promise<void> {
+    const path = ApiEndpoints.APPROVAL_APPROVE.replace('{id}', id.toString());
+    const body: ApprovalActionBody = { opinion: opinion };
+    await this.request<Object>(path, http.RequestMethod.POST, body);
+  }
+
+  async reject(id: number, reason: string): Promise<void> {
+    const path = ApiEndpoints.APPROVAL_REJECT.replace('{id}', id.toString());
+    const body: ApprovalActionBody = { opinion: reason };
+    await this.request<Object>(path, http.RequestMethod.POST, body);
+  }
+
+  // ── 客服 ──
+  async csInfo(): Promise<CsInfo> {
+    const envelope = await this.request<CsInfo>(ApiEndpoints.CS_INFO, http.RequestMethod.GET);
+    return envelope.data || ({ title: '专属客服', subtitle: '在线', online: true } as CsInfo);
+  }
+
+  async csMessages(): Promise<ChatMessage[]> {
+    const envelope = await this.request<ChatMessage[]>(ApiEndpoints.CS_MESSAGES, http.RequestMethod.GET);
+    return envelope.data || [];
+  }
+
+  async csSend(message: string): Promise<ChatResponseData> {
+    const body: ChatRequestBody = { message: message, session_id: 'cs' };
+    const response = await this.rawRequest<ChatResponseData>('api/cs/chat', http.RequestMethod.POST, body);
     return response;
   }
 

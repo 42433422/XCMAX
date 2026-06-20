@@ -9,7 +9,7 @@
     ],
     "source": "codex_direct_fix"
   },
-  "root_cause": "_first_user_id assumed every runtime User model has is_active and every DB already has a users table; migrated/runtime-lite databases can lack either.",
+  "root_cause": "_first_user_id 假设每个运行时 User 模型都有 is_active 且每个 DB 都已有 users 表；迁移后/轻量运行时数据库可能缺少其中之一。",
   "schema_version": 1,
-  "symptom": "self-maintenance loop crashes before dispatch: User model has no is_active or users table is missing"
+  "symptom": "自维护循环在调度前崩溃：User 模型没有 is_active 或 users 表缺失"
 }

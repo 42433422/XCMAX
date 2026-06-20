@@ -6,7 +6,7 @@
     "closed_runtime_items": 15,
     "component": "self_maintenance_loop_runner"
   },
-  "root_cause": "Loop memory only appended failed_steps/human_strategy_approval records and had no closed_items audit trail or success-based resolver. QA treated stale historical open_items as current unresolved risk.",
+  "root_cause": "循环记忆只追加 failed_steps/human_strategy_approval 记录，没有 closed_items 审计轨迹或基于成功的解决器。QA 将陈旧的历史 open_items 当作当前未解决的风险。",
   "schema_version": 1,
-  "symptom": "Self-maintenance QA repeatedly fails because historical loop open_items remain unresolved after the underlying bugs are fixed."
+  "symptom": "自维护 QA 反复失败，因为底层 bug 修复后历史遗留的待处理项仍未关闭。"
 }

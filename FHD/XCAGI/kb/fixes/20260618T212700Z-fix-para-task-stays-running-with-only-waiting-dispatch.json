@@ -9,7 +9,7 @@
     ],
     "source": "codex_direct_fix"
   },
-  "root_cause": "Two launchd jobs started e2e-agent with the same device token, so each WebSocket connection replaced the other and tasks were not reliably delivered.",
+  "root_cause": "两个 launchd 作业使用相同 device token 启动 e2e-agent，导致每个 WebSocket 连接互相替换，任务无法可靠送达。",
   "schema_version": 1,
-  "symptom": "Para task stays running with only waiting-dispatch log; e2e-agent repeatedly online/disconnected"
+  "symptom": "Para 任务持续运行但只有 waiting-dispatch 日志；e2e-agent 反复在线/断开"
 }

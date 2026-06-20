@@ -58,6 +58,7 @@ constructor(
     private val relayAccountIdKey = stringPreferencesKey("relay_account_id")
     private val relayTenantIdKey = stringPreferencesKey("relay_tenant_id")
     private val relayPairedAtKey = stringPreferencesKey("relay_paired_at")
+    private val walletBalanceJsonKey = stringPreferencesKey("wallet_balance_json")
 
     val fhdHostFlow: Flow<String> = context.dataStore.data.map { it[fhdHost] ?: "" }
     val userIdFlow: Flow<Int> = context.dataStore.data.map { it[userIdKey] ?: 0 }
@@ -337,6 +338,20 @@ constructor(
         val p = savedPasswordFlow.first()
         return autoLoginFlow.first() && u.isNotBlank() && p.isNotBlank()
     }
+
+    /** 钱包余额缓存 JSON（冷启动秒出用）。空字符串表示无缓存。 */
+    val walletBalanceJsonFlow: Flow<String> =
+            context.dataStore.data.map { it[walletBalanceJsonKey] ?: "" }
+
+    suspend fun setWalletBalanceJson(json: String) {
+        context.dataStore.edit { prefs ->
+            val value = json.trim()
+            if (value.isBlank()) prefs.remove(walletBalanceJsonKey)
+            else prefs[walletBalanceJsonKey] = value
+        }
+    }
+
+    suspend fun walletBalanceJson(): String = walletBalanceJsonFlow.first()
 
     suspend fun clear() {
         context.dataStore.edit { it.clear() }

@@ -221,13 +221,30 @@ class ModstorePlatformAdapter:
             except RECOVERABLE_ERRORS:
                 request_auth = ""
 
-        auth_token = (
-            kwargs.get("auth_token")
-            or os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
-            or _strip_bearer_prefix(request_auth)
-        )
+        # 移动端携带的是 FHD 签发的 Mobile JWT，MODstore 不认识，必须改从
+        # FHD session 中取真正的 market token（与 /api/mobile/v1/wallet/balance
+        # 的认证模式一致）。桌面端浏览器携带的是 market token 或 session cookie，
+        # 可以直接透传。
+        request_auth_token = _strip_bearer_prefix(request_auth)
+        mobile_session_id = ""
+        is_mobile_jwt = False
+        if request_auth_token:
+            try:
+                from app.security.mobile_jwt import verify_mobile_jwt
 
-        if not auth_token and (session_id or request):
+                mobile_payload = verify_mobile_jwt(request_auth_token)
+                if mobile_payload:
+                    is_mobile_jwt = True
+                    mobile_session_id = str(mobile_payload.get("session_id") or "")
+            except RECOVERABLE_ERRORS:
+                pass
+
+        auth_token = kwargs.get("auth_token") or os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
+        # 非 Mobile JWT 的请求头 token（桌面端 market token）可直接透传
+        if not auth_token and not is_mobile_jwt:
+            auth_token = request_auth_token
+
+        if not auth_token and (session_id or request or is_mobile_jwt):
             try:
                 from app.fastapi_routes.market_account import (
                     latest_session_market_token,
@@ -235,8 +252,10 @@ class ModstorePlatformAdapter:
                     session_market_token,
                 )
 
-                effective_session_id = session_id or (
-                    session_id_from_request(request) if request else ""
+                effective_session_id = (
+                    session_id
+                    or mobile_session_id
+                    or (session_id_from_request(request) if request else "")
                 )
 
                 if effective_session_id:
@@ -255,11 +274,20 @@ class ModstorePlatformAdapter:
                         )
                 else:
                     logger.warning("无法获取有效的Session ID")
+                # 安全约束：移动端 JWT 场景下禁止 fallback 到 latest_session_market_token()，
+                # 否则会取到其他用户持久化的 market token，导致越权调用 LLM 并计费到他人账户。
+                # 桌面端（非 mobile JWT）保留 fallback，因其 session 过期兜底场景需要。
                 if not auth_token:
-                    latest_token = latest_session_market_token()
-                    if latest_token:
-                        auth_token = latest_token
-                        logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
+                    if is_mobile_jwt:
+                        logger.warning(
+                            "移动端 JWT Session [%s...] 未绑定市场账号，拒绝 fallback 到他人 token",
+                            (effective_session_id or "")[:8],
+                        )
+                    else:
+                        latest_token = latest_session_market_token()
+                        if latest_token:
+                            auth_token = latest_token
+                            logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
             except ImportError as e:
                 logger.error("无法导入market_account模块: %s", e)
             except RECOVERABLE_ERRORS as e:

@@ -202,7 +202,8 @@
             "deploy-release-officer",
             "change-request-auditor",
             "mobile-android-release-officer",
-            "mobile-ios-release-officer"
+            "mobile-ios-release-officer",
+            "mobile-harmony-release-officer"
           ]
         },
         "ota-monitor": {
@@ -219,7 +220,8 @@
             "daily-orchestrator",
             "intake-dispatcher",
             "task-router-officer",
-            "dbops-engineer"
+            "dbops-engineer",
+            "llm-ops-engineer"
           ]
         }
       }
@@ -312,7 +314,8 @@
         "enterprise-adoption-officer",
         "delivery-receipt-officer",
         "mobile-android-release-officer",
-        "mobile-ios-release-officer"
+        "mobile-ios-release-officer",
+        "mobile-harmony-release-officer"
       ]
     },
     "quality-and-docs": {

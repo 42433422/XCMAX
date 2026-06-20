@@ -8,5 +8,5 @@
   },
   "pattern": "clear_tool_current_task_after_stale_failure",
   "schema_version": 1,
-  "summary": "Dispatch recovery must clear both task state and per-tool current task state."
+  "summary": "调度恢复必须同时清除任务状态和按工具的 current task 状态。"
 }

@@ -17,10 +17,6 @@ data class ConversationItem(
     val timestamp: Long,
 
     // ── 头像 ──
-    val avatarType: AvatarType,
-    val avatarIcon: Int? = null,
-    val avatarLetter: Char? = null,
-    val avatarColor: Color? = null,
     val avatarUrl: String? = null,
 
     // ── 状态 ──
@@ -40,8 +36,6 @@ enum class ConversationType {
     AI_TASK,              // AI 任务会话
     SYSTEM_NOTIFICATION,  // 系统通知
 }
-
-enum class AvatarType { ICON, LETTER, URL }
 
 /** 固定联系人 ID 常量 */
 object PinnedIds {

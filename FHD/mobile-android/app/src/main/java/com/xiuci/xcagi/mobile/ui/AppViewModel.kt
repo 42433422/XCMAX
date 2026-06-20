@@ -20,19 +20,18 @@ import com.xiuci.xcagi.mobile.core.model.ModMenuItem
 import com.xiuci.xcagi.mobile.core.network.PairingQrCodec
 import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
+import com.xiuci.xcagi.mobile.core.network.WalletBalanceDto
 import com.xiuci.xcagi.mobile.core.observability.XcagiAnalytics
 import com.xiuci.xcagi.mobile.core.push.PushRegistrar
 import com.xiuci.xcagi.mobile.core.repository.XcagiRepository
 import com.xiuci.xcagi.mobile.core.sync.MobileSyncRepository
 import com.xiuci.xcagi.mobile.core.work.MobileSyncWorker
-import com.xiuci.xcagi.mobile.model.AvatarType
 import com.xiuci.xcagi.mobile.model.ConversationItem
 import com.xiuci.xcagi.mobile.model.ConversationType
 import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.model.CsMessageItemDto
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.navigation.Routes
-import com.xiuci.xcagi.mobile.navigation.aiEmployeeAvatarColor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
@@ -71,6 +70,9 @@ constructor(
         private val analytics: XcagiAnalytics,
         private val csRepository: CsRepository,
 ) : ViewModel() {
+    /** 缓存 TTL：超过此时间（毫秒）后再次进入页面会触发静默刷新。5 分钟。 */
+    private val modInfoCacheTtlMs: Long = 5 * 60 * 1000L
+
     val isLoggedIn =
             sessionStore.isLoggedInFlow.stateIn(
                     viewModelScope,
@@ -233,11 +235,18 @@ constructor(
     private val _homeHub = MutableStateFlow(HomeHubState())
     val homeHub: StateFlow<HomeHubState> = _homeHub.asStateFlow()
 
+    private val _walletBalance = MutableStateFlow<WalletBalanceDto?>(null)
+    val walletBalance: StateFlow<WalletBalanceDto?> = _walletBalance.asStateFlow()
+
     private val _approvalPendingCount = MutableStateFlow(0)
     val approvalPendingCount: StateFlow<Int> = _approvalPendingCount.asStateFlow()
 
     private val _chatSuggestions = MutableStateFlow<List<ChatSuggestion>>(emptyList())
     val chatSuggestions: StateFlow<List<ChatSuggestion>> = _chatSuggestions.asStateFlow()
+
+    /** 会话列表后台刷新中（用于下拉刷新指示器与 UI 反馈） */
+    private val _conversationsRefreshing = MutableStateFlow(false)
+    val conversationsRefreshing: StateFlow<Boolean> = _conversationsRefreshing.asStateFlow()
 
     // 微信风格：conversations 从本地 DB Flow 派生，网络请求只写入 DB，不直接操作 UI 状态
     val conversations: StateFlow<List<ConversationItem>> =
@@ -290,12 +299,18 @@ constructor(
     val autoLoggingIn: StateFlow<Boolean> = _autoLoggingIn.asStateFlow()
     val updatePrompt: StateFlow<UpdatePrompt?> = _updatePrompt.asStateFlow()
 
-    private val _modInfos = MutableStateFlow<List<ModInfo>>(emptyList())
-    val modInfos: StateFlow<List<ModInfo>> = _modInfos.asStateFlow()
+    // 微信风格：modInfos 也从 DB Flow 派生，与 conversations 共享同一数据源，彻底消除头像不一致
+    val modInfos: StateFlow<List<ModInfo>> =
+            repo.observeCachedModInfos()
+                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // 用户头像 URL（从登录响应或本地存储获取）
     private val _userAvatarUrl = MutableStateFlow<String?>(null)
     val userAvatarUrl: StateFlow<String?> = _userAvatarUrl.asStateFlow()
+    val userAvatarSource: StateFlow<String> =
+            combine(avatarUri, userAvatarUrl) { localUri, remoteUrl ->
+                localUri.ifBlank { remoteUrl.orEmpty() }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
     fun refreshUserAvatar() {
         viewModelScope.launch {
@@ -304,7 +319,7 @@ constructor(
     }
 
     val dynamicMenuItems: StateFlow<List<ModMenuItem>> =
-            _modInfos
+            modInfos
                     .map { mods -> mods.flatMap { it.frontend_menu } }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -329,6 +344,11 @@ constructor(
         pushRegistrar.initSdk()
         analytics.log("app_open")
         viewModelScope.launch {
+            // 冷启动：先从本地缓存恢复钱包余额（秒出，避免"—"闪烁）
+            try {
+                repo.loadCachedWalletBalance()?.let { _walletBalance.value = it }
+            } catch (_: Exception) {
+            }
             repo.fetchAppConfig().onSuccess {
                 _appConfig.value = it
                 ProductSkuConfig.remoteSku = it.sku
@@ -356,6 +376,10 @@ constructor(
                 /* 离线或电脑未开：不阻塞进入 App */
             }
             updateSyncWork(sessionStore.autoSyncFlow.first())
+            // 已登录用户：冷启动后台静默刷新余额（缓存已秒出，此处更新最新值）
+            if (sessionStore.isLoggedInFlow.first()) {
+                loadWalletBalance()
+            }
         }
     }
 
@@ -394,6 +418,8 @@ constructor(
                             snack("欢迎回来，$it")
                             refreshMarketTokens()
                             refreshConversationRuntime()
+                            refreshUserAvatar()
+                            loadWalletBalance()
                             registerPushWithHint()
                             _startRoute.value = Routes.CHAT
                         }
@@ -558,6 +584,20 @@ constructor(
                 }
             }
 
+    /** 拉取钱包余额（移动端"我"页面展示）。失败时保留旧值，不弹错误。成功后写入缓存。 */
+    fun loadWalletBalance() =
+            viewModelScope.launch {
+                try {
+                    val result = repo.fetchWalletBalance()
+                    result.onSuccess {
+                        _walletBalance.value = it
+                        repo.saveCachedWalletBalance(it)
+                    }
+                } catch (_: Exception) {
+                    // 静默失败，保留旧值
+                }
+            }
+
     private fun rebuildChatSuggestions(mods: List<ListItem>, pcOnline: Boolean) {
         val base =
                 mutableListOf(
@@ -571,22 +611,48 @@ constructor(
         _chatSuggestions.value = base
     }
 
-    /** 网络刷新员工列表并写入 DB；conversations 由 DB Flow 自动驱动更新 */
-    fun loadConversations(isEnterprise: Boolean) {
+    /**
+     * 网络刷新员工列表并写入 DB；conversations 由 DB Flow 自动驱动更新。
+     *
+     * @param isEnterprise 当前是否企业版（用于决定是否拉取员工列表）
+     * @param force true 时强制刷新（如下拉刷新）；false 时按 TTL 判断是否需要刷新
+     *
+     * 注意：只有 force=true（用户主动下拉）才显示 refreshing 指示器；
+     * 静默刷新（force=false）完全无感知，不触发 UI 状态变化。
+     */
+    fun loadConversations(isEnterprise: Boolean, force: Boolean = false) {
         conversationsLoadJob?.cancel()
         conversationsLoadJob = viewModelScope.launch {
             val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
-            if (!adminMode && !isEnterprise) return@launch
-            // 只写入 DB，conversations 会自动从 DB Flow 更新
-            repo.refreshAndCacheModInfos(adminMode)
+            // 个人账号也允许刷新（用于拉取个人 Mod 列表），不再提前 return
+            if (!adminMode && !isEnterprise && !force) return@launch
+            // TTL 判断：非强制刷新且缓存未过期时跳过
+            if (!force) {
+                val cachedAt = repo.cachedModInfosAt()
+                if (cachedAt > 0 && System.currentTimeMillis() - cachedAt < modInfoCacheTtlMs) {
+                    return@launch
+                }
+            }
+            // 只有用户主动下拉才显示 loading 指示器；静默刷新完全无感知
+            if (force) {
+                _conversationsRefreshing.value = true
+            }
+            try {
+                // 只写入 DB，conversations 会自动从 DB Flow 更新
+                repo.refreshAndCacheModInfos(adminMode)
+            } finally {
+                if (force) {
+                    _conversationsRefreshing.value = false
+                }
+            }
         }
     }
 
     private suspend fun rebuildConversationItems(isEnterprise: Boolean): Int {
         val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
         if (!adminMode && !isEnterprise) return 0
+        // 写入 DB，modInfos 和 conversations 都由 DB Flow 自动驱动
         val mods = repo.refreshAndCacheModInfos(adminMode).getOrElse { return 0 }
-        _modInfos.value = mods
         return mods.flatMap { it.workflow_employees }.size
     }
 
@@ -618,6 +684,7 @@ constructor(
         }
         loadHomeHub()
         refreshApprovalCount()
+        loadWalletBalance()
         registerPushWithHint()
         return employeeCount
     }
@@ -645,9 +712,6 @@ constructor(
                                 subtitle =
                                         employee.contactSubtitle(source),
                                 timestamp = System.currentTimeMillis(),
-                                avatarType = if (avatarUrl != null) AvatarType.URL else AvatarType.LETTER,
-                                avatarLetter = title.firstOrNull { !it.isWhitespace() } ?: 'A',
-                                avatarColor = aiEmployeeAvatarColor("${mod.id}:$employeeId"),
                                 avatarUrl = avatarUrl,
                         )
                     }
@@ -688,7 +752,6 @@ constructor(
                 title = "小C助理",
                 subtitle = "有什么可以帮您？",
                 timestamp = System.currentTimeMillis(),
-                avatarType = AvatarType.ICON,
                 isPinned = true,
             )
         )
@@ -701,7 +764,6 @@ constructor(
                             title = "超级员工-Codex",
                             subtitle = "全设备协同",
                             timestamp = System.currentTimeMillis(),
-                            avatarType = AvatarType.ICON,
                             isOnline = true,
                             isPinned = true,
                     )
@@ -717,7 +779,6 @@ constructor(
                     title = "专属客服",
                     subtitle = "您好，我是您的专属客服",
                     timestamp = System.currentTimeMillis() - 3600_000,
-                    avatarType = AvatarType.ICON,
                     isOnline = true,
                     isPinned = true,
                 )
@@ -899,6 +960,7 @@ constructor(
                             refreshMarketTokens()
                             refreshConversationRuntime()
                             refreshUserAvatar()
+                            loadWalletBalance()
                             registerPushWithHint()
                             onDone(true, null)
                         }
@@ -942,6 +1004,7 @@ constructor(
                             analytics.log("login_success", mapOf("method" to "phone"))
                             refreshMarketTokens()
                             refreshConversationRuntime()
+                            loadWalletBalance()
                             registerPushWithHint()
                             onDone(true)
                         }
@@ -1139,13 +1202,20 @@ constructor(
 	                                    inferChatAction(text, reply)
 	                                },
 	                                onError = { e ->
+	                                    // 保留原始错误到 logcat，便于排查 LLM 上游 401/SSL 超时等真实根因，
+	                                    // UI 层仍显示 productErrorMessage 改写后的友好文案。
+	                                    android.util.Log.e(
+	                                        "AppViewModel",
+	                                        "streamChat error (lan): $e",
+	                                        Exception(e),
+	                                    )
 	                                    _streaming.value = false
 	                                    _chatMessages.value =
 	                                            _chatMessages.value.dropLast(1) +
-                                                        ("assistant" to productErrorMessage(
-                                                                e,
-                                                                "对话暂不可用，请稍后重试",
-                                                        ))
+	                                                        ("assistant" to productErrorMessage(
+	                                                                e,
+	                                                                "对话暂不可用，请稍后重试",
+	                                                        ))
 	                                },
 	                        )
                     } else {
@@ -1167,13 +1237,20 @@ constructor(
 	                                    inferChatAction(text, reply)
 	                                },
 	                                onError = { e ->
+	                                    // 保留原始错误到 logcat，便于排查 LLM 上游 401/SSL 超时等真实根因，
+	                                    // UI 层仍显示 productErrorMessage 改写后的友好文案。
+	                                    android.util.Log.e(
+	                                        "AppViewModel",
+	                                        "streamChatCloud error: $e",
+	                                        Exception(e),
+	                                    )
 	                                    _streaming.value = false
 	                                    _chatMessages.value =
 	                                            _chatMessages.value.dropLast(1) +
 	                                                    ("assistant" to productErrorMessage(
-                                                                e,
-                                                                "当前离线同步不可用，请连接电脑或稍后重试。",
-                                                        ))
+	                                                                e,
+	                                                                "当前离线同步不可用，请连接电脑或稍后重试。",
+	                                                        ))
 	                                },
                         )
                     }
@@ -1305,9 +1382,6 @@ constructor(
     fun loadMods() =
             viewModelScope.launch {
                 val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
-                // 缓存优先：先读 Room 缓存避免列表闪空
-                val cached = repo.loadCachedModInfos(adminMode)
-                if (cached.isNotEmpty()) _modInfos.value = cached
                 if (adminMode) {
                     repo.loadAdminMobileHome()
                             .onSuccess { home ->
@@ -1325,10 +1399,8 @@ constructor(
                                     snack("需要管理端管理员账号", true)
                                 }
                             }
-                    repo.loadAdminModInfos().onSuccess {
-                        // 网络返回非空才更新；空列表通常是临时错误，保持缓存
-                        if (it.isNotEmpty()) _modInfos.value = it
-                    }.onFailure {
+                    // 管理端员工：写入 DB，modInfos 由 DB Flow 自动驱动
+                    repo.refreshAndCacheModInfos(adminMode).onFailure {
                         /* 管理端员工加载失败时静默，不阻断页面 */
                     }
                     return@launch
@@ -1345,10 +1417,8 @@ constructor(
                         else -> snack("生态功能暂不可用，同步中", true)
                     }
                 }
-                repo.loadModInfos().onSuccess {
-                    // 网络返回非空才更新；空列表通常是临时错误，保持缓存
-                    if (it.isNotEmpty()) _modInfos.value = it
-                }.onFailure {
+                // 普通模式员工：写入 DB，modInfos 由 DB Flow 自动驱动
+                repo.refreshAndCacheModInfos(adminMode).onFailure {
                     /* modInfos 加载失败时静默，不干扰用户 */
                 }
             }
@@ -1356,20 +1426,16 @@ constructor(
     fun refreshModInfos(showError: Boolean = false) =
             viewModelScope.launch {
                 val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
-                // 1. 先读缓存（UI 秒出）
-                val cached = repo.loadCachedModInfos(adminMode)
-                if (cached.isNotEmpty()) _modInfos.value = cached
-                // 2. 后台刷新
+                // 后台刷新写入 DB，modInfos 由 DB Flow 自动驱动
                 val result = repo.refreshAndCacheModInfos(adminMode)
                 result
-                        .onSuccess {
-                            // 网络返回非空才更新；空列表通常是临时错误，保持缓存
-                            if (it.isNotEmpty()) _modInfos.value = it
-                        }
                         .onFailure {
                             // 网络失败时保持缓存数据，不清空；仅无缓存且失败时才提示
-                            if (showError && cached.isEmpty()) {
-                                snack(productErrorMessage(it.message, "AI 员工同步失败，请重新绑定后台"), true)
+                            if (showError) {
+                                val cached = repo.loadCachedModInfos(adminMode)
+                                if (cached.isEmpty()) {
+                                    snack(productErrorMessage(it.message, "AI 员工同步失败，请重新绑定后台"), true)
+                                }
                             }
                         }
             }

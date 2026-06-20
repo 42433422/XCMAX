@@ -8,5 +8,5 @@
   },
   "pattern": "launchd_runtime_outside_desktop",
   "schema_version": 1,
-  "summary": "macOS launchd services should not depend on Desktop cwd when they must run unattended."
+  "summary": "macOS launchd 服务在需要无人值守运行时不应依赖 Desktop cwd。"
 }

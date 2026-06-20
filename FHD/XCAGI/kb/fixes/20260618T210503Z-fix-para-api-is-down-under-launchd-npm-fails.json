@@ -8,7 +8,7 @@
     ],
     "source": "codex_direct_fix"
   },
-  "root_cause": "macOS Desktop privacy restrictions can prevent launchd Node/npm processes from using a Desktop working directory, so e2e agents loop with ECONNREFUSED 127.0.0.1:3001.",
+  "root_cause": "macOS Desktop 隐私限制可能阻止 launchd 的 Node/npm 进程使用 Desktop 工作目录，导致 e2e agent 以 ECONNREFUSED 127.0.0.1:3001 循环报错。",
   "schema_version": 1,
-  "symptom": "Para API is down under launchd: npm fails with EPERM uv_cwd when WorkingDirectory points into Desktop"
+  "symptom": "Para API 在 launchd 下宕机：当 WorkingDirectory 指向 Desktop 时 npm 报 EPERM uv_cwd 错误"
 }

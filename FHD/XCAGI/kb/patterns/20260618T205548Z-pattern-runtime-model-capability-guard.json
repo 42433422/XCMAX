@@ -8,5 +8,5 @@
   },
   "pattern": "runtime_model_capability_guard",
   "schema_version": 1,
-  "summary": "Long-running maintenance controllers must tolerate older SQLite/runtime schemas before dispatching employees."
+  "summary": "长时间运行的维护控制器在调度 employee 前必须容忍较旧的 SQLite/运行时 schema。"
 }

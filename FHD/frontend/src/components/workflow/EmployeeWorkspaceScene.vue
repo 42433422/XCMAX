@@ -381,7 +381,7 @@ const loopRuntimeSurfaceReadinessCards = computed(() => {
       ok,
       known,
       blocked,
-      stateLabel: ok ? 'ready' : blocked ? 'blocked' : 'unknown',
+      stateLabel: ok ? '就绪' : blocked ? '异常' : '未知',
       ctaLabel: ok ? '查看链路' : blocked ? '处理断点' : '等待状态',
       tone: severity === 'bad' || blocked ? 'bad' : severity === 'warn' || !known ? 'warn' : 'ok',
       action: loopFirstText(item.action, ok ? 'watch' : known ? 'inspect_runtime_contract' : 'waiting_runtime_contract'),
@@ -523,7 +523,7 @@ const loopRuntimeCards = computed(() => {
       label: 'Loop 状态',
       value: loopStatusLabel.value,
       sub: loopRuntime.value && !loopRuntimeContractOk.value
-        ? `schema=${loopRuntimeSchemaVersion.value || 'unknown'}，不是当前 contract`
+        ? `版本=${loopRuntimeSchemaVersion.value || '未知'}，不是当前状态检查`
         : loopOpenRunCount.value > 0 ? `${loopOpenRunCount.value} 个 run 未闭环` : loopGateReasonText.value,
       tone: loopRuntime.value && !loopRuntimeContractOk.value ? 'bad' : loopOpenRunCount.value > 0 ? 'run' : loopRuntime.value ? 'ok' : 'warn',
     },
@@ -858,7 +858,7 @@ const loopRuntimeTruthCards = computed(() => [
   {
     key: 'contract',
     label: 'Runtime contract',
-    value: loopFirstText(loopRuntimeSchemaVersion.value, 'unknown'),
+    value: loopFirstText(loopRuntimeSchemaVersion.value, '未知'),
     sub: loopFirstText(
       loopRecord(loopRecord(loopRuntime.value).source).name,
       'schema/source missing',
@@ -883,7 +883,7 @@ const loopRuntimeTruthCards = computed(() => [
   {
     key: 'surface-ready',
     label: 'Employee surface',
-    value: loopRuntimeSurfaceReadinessOk.value ? 'ready' : 'blocked',
+    value: loopRuntimeSurfaceReadinessOk.value ? '就绪' : '异常',
     sub: loopRuntimeSurfaceMissing.value.length
       ? `${loopFirstText(loopRuntimeSurfaceReadiness.value.action, 'repair')} · ${loopRuntimeSurfaceMissing.value.slice(0, 3).join(' / ')}`
       : loopFirstText(loopRuntimeSurfaceReadiness.value.title, `required=${loopArray(loopRuntimeSurfaceReadiness.value.required).length || 0}`),
@@ -903,7 +903,7 @@ const loopRuntimeTruthCards = computed(() => [
     label: 'Incident summary',
     value: loopFirstText(loopRuntimeSurfaceIncidentSummary.value.status, `${loopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ?? 0}`),
     sub: loopFirstText(loopRuntimeSurfaceIncidentSummary.value.primary_action)
-      ? `${loopRuntimeSurfaceIncidentSummary.value.primary_action} -> ${loopFirstText(loopRuntimeSurfaceIncidentSummary.value.primary_target_surface, loopRuntimeSurfaceIncidentSummary.value.primary_surface, 'unknown')} · total ${loopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ?? 0}`
+      ? `${loopRuntimeSurfaceIncidentSummary.value.primary_action} -> ${loopFirstText(loopRuntimeSurfaceIncidentSummary.value.primary_target_surface, loopRuntimeSurfaceIncidentSummary.value.primary_surface, '未知')} · 总计 ${loopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ?? 0}`
       : loopArray(loopRuntimeSurfaceIncidentSummary.value.surfaces).length
       ? `surfaces=${loopArray(loopRuntimeSurfaceIncidentSummary.value.surfaces).map((item) => loopString(item)).filter(Boolean).join(' / ')}`
       : '全局 surface incident clear',
@@ -915,7 +915,7 @@ const loopRuntimeTruthCards = computed(() => [
     value: loopRuntimeContractMissingNested.value.length ? `missing ${loopRuntimeContractMissingNested.value.length}` : 'clear',
     sub: loopRuntimeContractMissingNested.value.length
       ? loopRuntimeContractMissingNested.value.slice(0, 4).join(' / ')
-      : `global=${loopRuntimeContractValidation.value.global_ok === false ? 'blocked' : 'ok'} · all_surfaces=${loopRuntimeContractValidation.value.all_surfaces_ok === false ? 'blocked' : 'ok'}`,
+      : `全局=${loopRuntimeContractValidation.value.global_ok === false ? '异常' : '正常'} · 所有模块=${loopRuntimeContractValidation.value.all_surfaces_ok === false ? '异常' : '正常'}`,
     tone: loopRuntimeContractMissingNested.value.length ? 'warn' : 'ok',
   },
   {
@@ -978,7 +978,7 @@ const loopRuntimeFreshnessCards = computed(() => {
     {
       key: 'refresh',
       label: 'Runtime update',
-      value: updatedAt || 'unknown',
+      value: updatedAt || '未知',
       sub: updatedAt ? '后端声明的最近更新时间' : '未拿到 updated/refreshed/last_seen 字段',
       tone: updatedAt ? 'ok' : 'warn',
     },
@@ -1054,7 +1054,7 @@ const loopDiagnosis = computed(() => {
     return {
       tone: 'bad',
       title: loopFirstText(loopRuntimeSurfaceReadiness.value.title, 'Loop runtime contract 不匹配'),
-      detail: `${loopRuntimeSurfaceReadiness.value.detail || `当前 schema=${loopRuntimeSchemaVersion.value || 'unknown'}，员工空间只信 self_maintenance_runtime.v1，避免旧接口被误判为真实自维护 loop。`}${missingText}`,
+      detail: `${loopRuntimeSurfaceReadiness.value.detail || `当前版本=${loopRuntimeSchemaVersion.value || '未知'}，员工空间只认 self_maintenance_runtime v1，避免旧接口被误判。`}${missingText}`,
       actions: [loopFirstText(loopRuntimeSurfaceReadiness.value.action, '检查后端 runtime status contract'), '回编制图谱查看治理待办'],
     }
   }
@@ -1167,7 +1167,7 @@ const loopGovernanceBridge = computed(() => {
       detail: '当前页负责看哪些上岗员工参与 Loop；编制图谱负责治理和准入，完整 Loop 负责时间线。',
       cta: '看治理面',
       actionLabel: '观察 Loop 状态',
-      actionStatus: loopOpenRunCount.value > 0 ? 'running' : 'ready',
+      actionStatus: loopOpenRunCount.value > 0 ? '运行中' : '就绪',
       actionExecutable: false,
       actionRequiresAdmin: false,
     }
@@ -1337,24 +1337,24 @@ const selectedDeskLoopState = computed(() =>
     <DutyRosterWorkflowLoopView surface="employee-space" compact />
     <SelfEvolutionLoopRuntimePanel surface="employee-space" compact />
 
-    <div class="ews-loop-console" role="region" aria-label="当前自进化 loop 员工">
+    <div class="ews-loop-console" role="region" aria-label="当前自进化循环员工">
       <div class="ews-loop-cockpit">
         <div class="ews-loop-cockpit-copy">
-          <span>Loop cockpit</span>
+          <span>循环驾驶舱</span>
           <strong>上岗员工正在执行自进化/自维护流程线</strong>
           <p>
             员工空间只展示真实上岗工位的执行现场；补登记、隔离、治理审计这些高风险动作统一回到编制图谱处理。
           </p>
         </div>
-        <div class="ews-loop-cockpit-meter" aria-label="Loop 总体状态">
+        <div class="ews-loop-cockpit-meter" aria-label="循环总体状态">
           <span>{{ loopStatusLabel }}</span>
           <strong>{{ loopAlignedInDeployedCount }}/{{ loopAlignedPlannedCount }}</strong>
           <small>on-duty coverage</small>
         </div>
         <div class="ews-loop-cockpit-meter ews-loop-cockpit-meter--gate" aria-label="Loop 门禁状态">
-          <span>{{ loopActiveGates.ok === false ? 'blocked' : 'clear' }}</span>
+          <span>{{ loopActiveGates.ok === false ? '异常' : '正常' }}</span>
           <strong>{{ loopActiveGates.blocking_count ?? 0 }}</strong>
-          <small>blocking gates</small>
+          <small>阻断中</small>
         </div>
       </div>
 
@@ -1363,7 +1363,7 @@ const selectedDeskLoopState = computed(() =>
           class="ews-loop-role-map-node ews-loop-role-map-node--active"
           :class="{ 'ews-loop-role-map-node--route': loopFirstText(loopRuntimeContractPrimaryRoute.surface) === 'employee_space' }"
         >
-          <span>Employee space</span>
+          <span>员工空间</span>
           <strong>执行现场</strong>
           <small>看上岗员工、任务 step、证据回写</small>
           <small>{{ loopFocusedEmployeeId ? `focus ${loopFocusedEmployeeId}` : `${loopOpenRunCount} open runs` }}</small>
@@ -1373,7 +1373,7 @@ const selectedDeskLoopState = computed(() =>
           class="ews-loop-role-map-node"
           :class="{ 'ews-loop-role-map-node--route': loopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface) === 'duty_roster_graph' }"
         >
-          <span>Duty roster graph</span>
+          <span>排班图谱</span>
           <strong>治理闸门</strong>
           <small>补登记、隔离非编制、审计复核</small>
           <small>{{ loopNotDeployedCount }} pending deploy · {{ loopOutOfRosterCount }} isolated risk</small>
@@ -1383,10 +1383,10 @@ const selectedDeskLoopState = computed(() =>
           class="ews-loop-role-map-node"
           :class="{ 'ews-loop-role-map-node--route': loopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface) === 'self_evolution_loop_runtime' }"
         >
-          <span>Runtime panel</span>
+          <span>运行时面板</span>
           <strong>完整链路</strong>
-          <small>contract、surface incident、时间线</small>
-          <small>{{ loopFirstText(loopRuntimeContractPrimaryRoute.view, 'runtime') }} · {{ loopRuntimeContractPrimaryRoute.executable ? 'executable' : 'navigate-only' }}</small>
+          <small>状态检查、模块异常、时间线</small>
+          <small>{{ loopFirstText(loopRuntimeContractPrimaryRoute.view, '运行时') }} · {{ loopRuntimeContractPrimaryRoute.executable ? '可执行' : '仅导航' }}</small>
         </div>
       </div>
 
@@ -1396,31 +1396,31 @@ const selectedDeskLoopState = computed(() =>
         aria-label="Loop 下一步动作"
       >
         <div class="ews-loop-directive-copy">
-          <span>Next operator move</span>
+          <span>下一步操作</span>
           <strong>{{ loopFirstText(loopRuntimeContractStatus.label, loopRuntimeSurfaceReadiness.title, loopRuntimeContractOk ? 'Loop 可继续观察' : '需要处理运行契约') }}</strong>
           <small>{{ loopFirstText(loopRuntimeContractStatus.detail, loopRuntimeContractPrimaryRoute.detail, loopRuntimeSurfaceReadiness.detail, '后端 runtime 会给出下一步 surface 和 action') }}</small>
         </div>
         <div class="ews-loop-directive-meta">
           <span>{{ loopFirstText(loopRuntimeContractPrimaryRoute.action, loopRuntimeContractStatus.primary_action, 'watch_loop') }}</span>
           <strong>{{ loopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface, 'employee_space') }}</strong>
-          <small>{{ loopRuntimeContractPrimaryRoute.requires_admin ? 'admin-only' : 'operator' }} · {{ loopRuntimeContractPrimaryRoute.executable ? 'executable' : 'navigate-only' }}</small>
+          <small>{{ loopRuntimeContractPrimaryRoute.requires_admin ? '仅管理员' : '操作员' }} · {{ loopRuntimeContractPrimaryRoute.executable ? '可执行' : '仅导航' }}</small>
           <small v-if="loopFirstText(loopRuntimeContractPrimaryRoute.employee_id, loopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0])">target {{ loopFirstText(loopRuntimeContractPrimaryRoute.employee_id, loopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0]) }}</small>
         </div>
         <router-link :to="loopRuntimePrimaryRouteLocation" class="ews-loop-directive-link">{{ loopRuntimePrimaryRouteLabel }}</router-link>
       </div>
 
       <div class="ews-loop-section-head" aria-label="三端健康对照说明">
-        <span>Surface readiness</span>
+        <span>模块就绪</span>
         <strong>三端对照，断点不混在员工卡里</strong>
-        <small>employee_space / duty_roster_graph / runtime_panel 同源读取 contract_validation.surface_readiness；unknown 不当作故障。</small>
-        <div class="ews-loop-section-legend" aria-label="readiness 三态图例">
-          <span class="ews-loop-section-dot ews-loop-section-dot--ok">ready</span>
-          <span class="ews-loop-section-dot ews-loop-section-dot--bad">blocked</span>
-          <span class="ews-loop-section-dot ews-loop-section-dot--warn">unknown</span>
+        <small>员工空间 / 排班图谱 / 运行时面板 同源读取状态检查；未知不当作故障。</small>
+        <div class="ews-loop-section-legend" aria-label="就绪三态图例">
+          <span class="ews-loop-section-dot ews-loop-section-dot--ok">就绪</span>
+          <span class="ews-loop-section-dot ews-loop-section-dot--bad">异常</span>
+          <span class="ews-loop-section-dot ews-loop-section-dot--warn">未知</span>
         </div>
       </div>
 
-      <div class="ews-loop-surface-grid" aria-label="三端 surface readiness">
+      <div class="ews-loop-surface-grid" aria-label="三端模块就绪">
         <div
           v-for="surface in loopRuntimeSurfaceReadinessCards"
           :key="surface.key"
@@ -1454,13 +1454,13 @@ const selectedDeskLoopState = computed(() =>
           class="ews-loop-truth-card ews-loop-truth-card--primary"
           :class="loopRuntimeContractStatus.tone === 'bad' ? 'ews-loop-truth-card--bad' : (loopNumber(loopRuntimeSurfaceIncidentSummary.total) ? 'ews-loop-truth-card--warn' : 'ews-loop-truth-card--ok')"
         >
-          <span>Primary contract state</span>
-          <strong>{{ loopFirstText(loopRuntimeContractStatus.state, loopRuntimeSurfaceIncidentSummary.status, loopRuntimeContractOk ? 'trusted' : 'blocked') }}</strong>
+          <span>主状态</span>
+          <strong>{{ loopFirstText(loopRuntimeContractStatus.state, loopRuntimeSurfaceIncidentSummary.status, loopRuntimeContractOk ? '正常' : '异常') }}</strong>
           <small>{{ loopFirstText(loopRuntimeContractPrimaryRoute.action, loopRuntimeContractStatus.primary_action, loopRuntimeSurfaceIncidentSummary.primary_action, loopRuntimeSurfaceReadiness.action, loopRuntimeContractOk ? 'all clear' : 'inspect contract') }} -> {{ loopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface, 'self_evolution_loop_runtime') }}</small>
           <small v-if="loopFirstText(loopRuntimeContractPrimaryRoute.employee_id, loopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0])">target employee · {{ loopFirstText(loopRuntimeContractPrimaryRoute.employee_id, loopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0]) }}</small>
-          <small>global={{ loopRuntimeContractStatus.global_ok === false ? 'blocked' : 'ok' }} · all_surfaces={{ loopRuntimeContractStatus.all_surfaces_ok === false ? 'blocked' : 'ok' }}</small>
+          <small>全局={{ loopRuntimeContractStatus.global_ok === false ? '异常' : '正常' }} · 所有模块={{ loopRuntimeContractStatus.all_surfaces_ok === false ? '异常' : '正常' }}</small>
           <small>view={{ loopFirstText(loopRuntimeContractPrimaryRoute.view, 'runtime') }} · label={{ loopFirstText(loopRuntimeContractPrimaryRoute.label, loopRuntimePrimaryRouteLabel) }}</small>
-          <small>{{ loopRuntimeContractPrimaryRoute.requires_admin ? 'admin-only' : 'operator' }} · {{ loopRuntimeContractPrimaryRoute.executable ? 'executable' : 'navigate-only' }} · {{ loopFirstText(loopRuntimeContractPrimaryRoute.detail, '按后端 primary_route 跳转') }}</small>
+          <small>{{ loopRuntimeContractPrimaryRoute.requires_admin ? '仅管理员' : '操作员' }} · {{ loopRuntimeContractPrimaryRoute.executable ? '可执行' : '仅导航' }} · {{ loopFirstText(loopRuntimeContractPrimaryRoute.detail, '按后端路由跳转') }}</small>
           <router-link :to="loopRuntimePrimaryRouteLocation">{{ loopRuntimePrimaryRouteLabel }}</router-link>
         </div>
         <div
@@ -1486,7 +1486,7 @@ const selectedDeskLoopState = computed(() =>
           <strong>{{ loopFirstText(incident.title, 'Surface contract incident') }}</strong>
           <small>{{ loopFirstText(incident.action, 'inspect_runtime_contract') }} -> {{ loopFirstText(incident.target_surface, 'self_evolution_loop_runtime') }}</small>
           <small>target view · {{ loopFirstText(incident.target_view, loopRuntimeContractPrimaryRoute.view, 'runtime') }}</small>
-          <small>{{ incident.requires_admin ? 'admin-only' : 'operator' }} · {{ incident.executable ? 'executable' : 'navigate-only' }} · {{ loopFirstText(incident.id, 'contract:employee_space') }}</small>
+          <small>{{ incident.requires_admin ? '仅管理员' : '操作员' }} · {{ incident.executable ? '可执行' : '仅导航' }} · {{ loopFirstText(incident.id, '状态:员工空间') }}</small>
           <small>{{ loopFirstText(incident.source, 'contract_validation') }} · {{ loopFirstText(incident.schema_version, loopRuntimeSchemaVersion) }} · {{ loopFirstText(incident.created_at, 'time unknown') }}</small>
           <em>{{ loopArray(incident.missing).map((item) => loopString(item)).filter(Boolean).slice(0, 5).join(' / ') || loopFirstText(incident.detail, 'missing dependencies') }}</em>
           <router-link :to="loopRuntimePrimaryRouteLocation">{{ loopRuntimePrimaryRouteLabel }}</router-link>
@@ -1508,7 +1508,7 @@ const selectedDeskLoopState = computed(() =>
 
       <div class="ews-loop-console-head">
         <div>
-          <span class="ews-loop-workers-k">Self-evolution bridge</span>
+          <span class="ews-loop-workers-k">自进化桥接</span>
           <strong>自维护 Loop 正在把后端员工调度映射到工位</strong>
         </div>
         <div class="ews-loop-console-actions">
@@ -1555,7 +1555,7 @@ const selectedDeskLoopState = computed(() =>
         :class="`ews-loop-focus-card--${loopFocusedWorkerTaskCard.tone}`"
         aria-label="当前聚焦员工 loop 状态"
       >
-        <span>Focused employee</span>
+        <span>关注员工</span>
         <strong>{{ loopFocusedWorkerTaskCard.id }} · {{ loopFocusedWorkerTaskCard.role }}</strong>
         <small>{{ loopFocusedWorkerTaskCard.department }} · {{ loopFocusedWorkerTaskCard.rosterLabel }} · {{ loopFocusedWorkerTaskCard.dutyLabel }}</small>
         <em>{{ loopFocusedWorkerTaskCard.eventCount }} steps · {{ loopFocusedWorkerTaskCard.latestStatus }}</em>
@@ -1566,7 +1566,7 @@ const selectedDeskLoopState = computed(() =>
         class="ews-loop-focus-card ews-loop-focus-card--warn"
         aria-label="当前聚焦员工没有 loop 工单"
       >
-        <span>Focused employee</span>
+        <span>关注员工</span>
         <strong>{{ loopFocusedEmployeeId }}</strong>
         <small>该员工当前没有 runtime/ledger 工单回写；页面不伪造任务。</small>
         <em>如果它应该参与 loop，请检查后端 participants 或 run_timelines 是否写 employee_id。</em>
@@ -1648,9 +1648,9 @@ const selectedDeskLoopState = computed(() =>
         </router-link>
       </div>
       <div v-else class="ews-loop-work-orders-empty" aria-label="本轮没有员工工作单">
-        <span>Loop work orders</span>
-        <strong>没有 ledger 工单</strong>
-        <small>当前 run_timelines 没有可聚合的员工任务；等待后端写入 run_id / employee_id / step。</small>
+        <span>循环工单</span>
+        <strong>没有记录工单</strong>
+        <small>当前运行时间线没有可聚合的员工任务；等待后端写入运行 ID / 员工 ID / 步骤。</small>
       </div>
 
       <div class="ews-loop-separation-matrix" aria-label="员工身份隔离矩阵">
@@ -1697,7 +1697,7 @@ const selectedDeskLoopState = computed(() =>
             <strong>{{ loopGovernanceBridge.title }}</strong>
             <small>{{ loopGovernanceBridge.detail }}</small>
             <small class="ews-loop-governance-action">
-              {{ loopGovernanceBridge.actionLabel }} · {{ loopGovernanceBridge.actionStatus }} · {{ loopGovernanceBridge.actionRequiresAdmin ? 'admin-only' : (loopGovernanceBridge.actionExecutable ? 'executable' : 'view-only') }}
+              {{ loopGovernanceBridge.actionLabel }} · {{ loopGovernanceBridge.actionStatus }} · {{ loopGovernanceBridge.actionRequiresAdmin ? '仅管理员' : (loopGovernanceBridge.actionExecutable ? '可执行' : '仅查看') }}
             </small>
             <small v-if="loopGovernanceAuditLast.action" class="ews-loop-governance-audit">
               最近治理：{{ loopGovernanceAuditLast.action }} · {{ loopGovernanceAuditLast.status || (loopGovernanceAuditLast.ok === false ? 'failed' : 'success') }}<template v-if="loopGovernanceAuditLastSummary"> · {{ loopGovernanceAuditLastSummary }}</template><template v-if="loopGovernanceAuditLastTargets.length"> · {{ loopGovernanceAuditLastTargets.slice(0, 4).join(' / ') }}</template>
@@ -1706,7 +1706,7 @@ const selectedDeskLoopState = computed(() =>
               治理健康：{{ loopGovernanceAuditSummary.health || 'ok' }} · {{ loopGovernanceAuditSummary.success_count ?? 0 }} ok · {{ loopGovernanceAuditSummary.failure_count ?? 0 }} failed · 连续失败 {{ loopGovernanceAuditSummary.consecutive_failures ?? 0 }}
             </small>
             <small v-if="loopActiveGates.blocking_count != null" class="ews-loop-governance-gates">
-              当前门禁：{{ loopActiveGates.ok === false ? 'blocked' : 'clear' }} · {{ loopActiveGates.blocking_count ?? 0 }} blocking<template v-if="loopActiveGateBlockingKeys.length"> · {{ loopActiveGateBlockingKeys.join(' / ') }}</template>
+              当前检查：{{ loopActiveGates.ok === false ? '异常' : '正常' }} · {{ loopActiveGates.blocking_count ?? 0 }} 阻断中<template v-if="loopActiveGateBlockingKeys.length"> · {{ loopActiveGateBlockingKeys.join(' / ') }}</template>
             </small>
             <small v-if="loopBridgeBlockedEmployeeIds.length" class="ews-loop-governance-isolation">
               隔离非编制：{{ loopBridgeBlockedEmployeeIds.slice(0, 5).join(' / ') }}

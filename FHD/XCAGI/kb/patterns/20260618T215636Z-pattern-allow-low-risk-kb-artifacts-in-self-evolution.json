@@ -8,5 +8,5 @@
   },
   "pattern": "allow_low_risk_kb_artifacts_in_self_evolution_scope",
   "schema_version": 1,
-  "summary": "Self-evolution outputs must be in the same merge policy scope as their code changes."
+  "summary": "自演化输出必须与其代码变更处于同一合并策略范围内。"
 }

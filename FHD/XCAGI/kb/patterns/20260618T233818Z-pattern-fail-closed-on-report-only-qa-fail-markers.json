@@ -8,5 +8,5 @@
   },
   "pattern": "fail_closed_on_report_only_qa_fail_markers",
   "schema_version": 1,
-  "summary": "Report-only employee reports must fail closed on explicit FAIL verdicts even when the phrase is not result: fail."
+  "summary": "仅报告的 employee 报告必须对显式 FAIL 裁定执行失败即关闭，即使短语不是 result: fail。"
 }

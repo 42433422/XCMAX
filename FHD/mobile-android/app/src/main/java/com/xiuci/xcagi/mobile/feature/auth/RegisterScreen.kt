@@ -50,7 +50,7 @@ fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
 
     Column(
             Modifier.fillMaxSize()
-                    .background(Color.White)
+                    .background(MaterialTheme.colorScheme.background)
                     .padding(horizontal = 24.dp)
                     .padding(top = 60.dp),
     ) {

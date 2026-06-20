@@ -44,6 +44,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 
@@ -60,7 +62,7 @@ private data class FixedPartnerProfileSpec(
     val source: String,
     val abilityLabels: List<String>,
     val circleLabels: List<String>,
-    val avatarText: String,
+    val avatarFallback: AppAvatarFallback,
     val avatarColor: Color,
 )
 
@@ -172,7 +174,7 @@ private fun fixedPartnerProfileSpec(
                 source = "XCAGI 企业版内置伙伴",
                 abilityLabels = listOf("智能对话", "快速模式", "深度分析", "拍照识图"),
                 circleLabels = listOf("对话", "分析", "识图"),
-                avatarText = "C",
+                avatarFallback = AppAvatarFallback.ASSISTANT,
                 avatarColor = assistantAvatarColor,
             )
         FixedPartnerKinds.CUSTOMER_SERVICE ->
@@ -184,7 +186,7 @@ private fun fixedPartnerProfileSpec(
                 source = "企业服务通道",
                 abilityLabels = listOf("服务咨询", "进度跟进", "问题反馈", "人工协同"),
                 circleLabels = listOf("服务", "协同", "反馈"),
-                avatarText = "客",
+                avatarFallback = AppAvatarFallback.CUSTOMER_SERVICE,
                 avatarColor = customerServiceAvatarColor,
             )
         else -> null
@@ -230,28 +232,12 @@ private fun FixedPartnerHeader(spec: FixedPartnerProfileSpec) {
             Modifier.padding(start = 28.dp, end = 24.dp, top = 34.dp, bottom = 34.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(76.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(spec.avatarColor.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(spec.avatarColor),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        spec.avatarText,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
+            AppAvatar(
+                fallback = spec.avatarFallback,
+                size = 76.dp,
+                shape = MaterialTheme.shapes.small,
+                contentDescription = spec.name,
+            )
             Spacer(Modifier.width(18.dp))
             Column(Modifier.weight(1f)) {
                 Text(

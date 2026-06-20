@@ -72,4 +72,7 @@ object ApiEndpoints {
 
     // 管理员
     const val ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/codex-super-employee/messages"
+
+    // 钱包 / 余额
+    const val WALLET_BALANCE = "$BASE/wallet/balance"
 }

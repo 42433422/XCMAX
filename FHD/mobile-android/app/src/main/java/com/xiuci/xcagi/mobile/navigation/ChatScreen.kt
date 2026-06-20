@@ -71,18 +71,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.ChatSuggestion
 import com.xiuci.xcagi.mobile.model.PinnedIds
-import com.xiuci.xcagi.mobile.ui.components.mobile.CodexAppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
@@ -90,27 +88,46 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
+import com.xiuci.xcagi.mobile.core.speech.VoiceInputSheet
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 
 // ── IM 风格色值（精致调色）──
-private val ImBubbleUser = Color(0xFF95EC69)       // 用户消息绿（微信同款）
-private val ImBubbleOther = Color(0xFFFFFFFF)       // 对方消息白
-private val ImChatBg = Color(0xFFEDEDED)           // 聊天背景灰（微信同款）
-private val ImTimestampColor = Color(0xFF999999)   // 时间戳灰
-private val ImTopBarBg = Color(0xFFF7F7F7)         // 顶栏背景（微灰，比纯白更柔和）
-private val ImDividerColor = Color(0xFFD9D9D9)     // 分隔线
-private val ImInputBarBg = Color(0xFFF7F7F7)       // 输入栏背景
-private val ImInputBg = Color(0xFFFFFFFF)          // 输入框背景
-private val ImInputBorder = Color(0xFFDDDDDD)      // 输入框边框
-private val ImTextPrimary = Color(0xFF1A1A1A)      // 主文字色（比纯黑柔和）
-private val ImTextSecondary = Color(0xFF888888)    // 次要文字色
-private val ImAvatarUser = Color(0xFF7EBAD8)       // 用户头像蓝
+// 深色主题适配：背景/文字/边框等使用 MaterialTheme.colorScheme，品牌色保留常量
+private val ImBubbleUser = Color(0xFF7AD04F)       // 用户消息绿（比微信更深一档）
 private val ImAvatarAi = Color(0xFF07C160)         // AI 头像绿（微信绿）
 
-data class ChatTopProfileAvatar(
-    val text: String,
-    val containerColor: Color,
-    val contentColor: Color = Color.White,
-)
+/** 聊天背景色（深色模式下用深蓝灰，浅色用微信灰） */
+@Composable
+private fun imChatBg() = MaterialTheme.colorScheme.background
+
+/** 顶栏/输入栏背景 */
+@Composable
+private fun imBarBg() = MaterialTheme.colorScheme.surface
+
+/** 分隔线 */
+@Composable
+private fun imDivider() = MaterialTheme.colorScheme.outlineVariant
+
+/** 输入框边框 */
+@Composable
+private fun imInputBorder() = MaterialTheme.colorScheme.outline
+
+/** 主文字色 */
+@Composable
+private fun imTextPrimary() = MaterialTheme.colorScheme.onSurface
+
+/** 次要文字色 */
+@Composable
+private fun imTextSecondary() = MaterialTheme.colorScheme.onSurfaceVariant
+
+/** 时间戳色 */
+@Composable
+private fun imTimestamp() = MaterialTheme.colorScheme.onSurfaceVariant
 
 private data class EmployeeConversationRef(
     val modId: String,
@@ -125,8 +142,18 @@ private fun parseEmployeeConversationRef(conversationId: String?): EmployeeConve
     return EmployeeConversationRef(modId = parts[1], employeeId = parts[2])
 }
 
-private fun isCodexConversation(conversationId: String?): Boolean =
+internal fun isCodexConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CODEX
+
+internal fun chatAvatarFallback(
+    conversationId: String?,
+    hasEmployeeProfile: Boolean,
+): AppAvatarFallback =
+    when {
+        isCodexConversation(conversationId) -> AppAvatarFallback.CODEX
+        hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
+        else -> AppAvatarFallback.ASSISTANT
+    }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -138,7 +165,6 @@ fun ChatScreen(
     onBack: (() -> Unit)? = null,
     onOpenMod: (String) -> Unit = {},
     onOpenOcr: () -> Unit = {},
-    profileAvatar: ChatTopProfileAvatar? = null,
     onOpenProfile: (() -> Unit)? = null,
     onOpenEmployeeProfile: (String, String) -> Unit = { _, _ -> },
 ) {
@@ -147,17 +173,58 @@ fun ChatScreen(
     val syncStale by vm.syncStaleHint.collectAsState()
     val chatAction by vm.chatAction.collectAsState()
     val suggestions by vm.chatSuggestions.collectAsState()
+    val userAvatarSource by vm.userAvatarSource.collectAsState()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showMoreSheet by remember { mutableStateOf(false) }
+    var showVoiceSheet by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // 录音权限请求
+    val recordPermissionLauncher =
+            rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                if (granted) showVoiceSheet = true
+                else vm.snack("需要麦克风权限才能使用语音输入")
+            }
+
+    fun startVoiceInput() {
+        val hasPermission =
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+        if (hasPermission) showVoiceSheet = true
+        else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
-    val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
+    val employeeRef = remember(conversationId) {
+        parseEmployeeConversationRef(conversationId).also {
+            android.util.Log.d(
+                "ChatAvatar",
+                "convId=[$conversationId] parsedRef=${it?.modId}/${it?.employeeId} mods=${modInfos.size} emps=${employees.size}"
+            )
+        }
+    }
     val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
     val employeeProfile =
         remember(employeeRef, employees) {
-            employeeRef?.let { employees.findEmployee(it.modId, it.employeeId) }
+            employeeRef?.let { ref ->
+                employees.findEmployee(ref.modId, ref.employeeId).also {
+                    android.util.Log.d(
+                        "ChatAvatar",
+                        "findEmployee ${ref.modId}/${ref.employeeId} -> found=${it != null} " +
+                            "avatarUrl=${it?.avatarUrl} name=${it?.name}"
+                    )
+                    if (it == null && employees.isNotEmpty()) {
+                        android.util.Log.d(
+                            "ChatAvatar",
+                            "available keys: ${employees.take(5).joinToString { "${it.modId}/${it.employeeId}" }}"
+                        )
+                    }
+                }
+            }
         }
     val resolvedTitle =
         when {
@@ -165,6 +232,7 @@ fun ChatScreen(
             codexConversation -> "超级员工-Codex"
             else -> conversationTitle
         }
+    val aiAvatarFallback = chatAvatarFallback(conversationId, employeeProfile != null)
 
     LaunchedEffect(Unit) {
         if (useCustomerServiceBackend) {
@@ -193,6 +261,16 @@ fun ChatScreen(
             vm.sendChat(text, conversationId)
         }
         input = ""
+    }
+
+    // 语音输入 BottomSheet
+    if (showVoiceSheet) {
+        VoiceInputSheet(
+                onResult = { text ->
+                    input = if (input.isBlank()) text else "$input $text"
+                },
+                onDismiss = { showVoiceSheet = false },
+        )
     }
 
     // 更多 BottomSheet
@@ -224,7 +302,7 @@ fun ChatScreen(
     }
 
     Scaffold(
-        containerColor = ImChatBg,
+        containerColor = imChatBg(),
         topBar = {
             ImTopBar(
                 title = resolvedTitle,
@@ -240,7 +318,7 @@ fun ChatScreen(
                 onSend = { submitMessage() },
                 onStop = { vm.stopChat() },
                 streaming = streaming,
-                onVoice = { vm.snack("语音输入功能即将上线，敬请期待") },
+                onVoice = { startVoiceInput() },
                 onMore = { showMoreSheet = true },
             )
         },
@@ -302,10 +380,9 @@ fun ChatScreen(
                             text = text,
                             isStreaming = streaming && isLastAssistant && role == "assistant",
                             showAvatar = isUserOrFirstInGroup(messages, index, role),
-                            aiAvatarUrl = employeeProfile?.avatarUrl ?: profileAvatar?.let { null },
-                            aiAvatarText = employeeProfile?.avatarText ?: "C",
-                            aiAvatarColor = employeeProfile?.let { aiEmployeeAvatarColor(it.key) } ?: ImAvatarAi,
-                            userAvatarUrl = vm.userAvatarUrl.collectAsState().value,
+                            aiAvatarUrl = employeeProfile?.avatarUrl,
+                            aiAvatarFallback = aiAvatarFallback,
+                            userAvatarUrl = userAvatarSource,
                         )
                     }
                 }
@@ -334,7 +411,7 @@ private fun ImTopBar(
     onMore: () -> Unit,
 ) {
     Surface(
-        color = ImTopBarBg,
+        color = imBarBg(),
         shadowElevation = 0.dp,
     ) {
         Column {
@@ -353,7 +430,7 @@ private fun ImTopBar(
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回",
-                        tint = ImTextPrimary,
+                        tint = imTextPrimary(),
                         modifier = Modifier.size(24.dp),
                     )
                 }
@@ -365,7 +442,7 @@ private fun ImTopBar(
                         letterSpacing = 0.5.sp,
                     ),
                     fontWeight = FontWeight.Medium,
-                    color = ImTextPrimary,
+                    color = imTextPrimary(),
                     modifier = Modifier.weight(1f).padding(start = 4.dp),
                 )
                 // 视频通话
@@ -376,7 +453,7 @@ private fun ImTopBar(
                     Icon(
                         Icons.Default.Videocam,
                         contentDescription = "视频",
-                        tint = ImTextPrimary,
+                        tint = imTextPrimary(),
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -388,48 +465,13 @@ private fun ImTopBar(
                     Icon(
                         Icons.Default.MoreHoriz,
                         contentDescription = "更多",
-                        tint = ImTextPrimary,
+                        tint = imTextPrimary(),
                         modifier = Modifier.size(22.dp),
                     )
                 }
             }
             // 精致底部分隔线（0.5dp）
-            HorizontalDivider(thickness = 0.5.dp, color = ImDividerColor)
-        }
-    }
-}
-
-// ══════════════════════════════════════════
-//  IM 头像组件（Coil 网络图 + 字母兜底）
-// ══════════════════════════════════════════
-@Composable
-private fun ImAvatar(
-    url: String?,
-    fallbackText: String,
-    backgroundColor: Color,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.size(40.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = backgroundColor,
-    ) {
-        if (!url.isNullOrBlank()) {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    fallbackText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-            }
+            HorizontalDivider(thickness = 0.5.dp, color = imDivider())
         }
     }
 }
@@ -445,8 +487,7 @@ private fun ImBubble(
     isStreaming: Boolean = false,
     showAvatar: Boolean = true,
     aiAvatarUrl: String? = null,
-    aiAvatarText: String = "C",
-    aiAvatarColor: Color = ImAvatarAi,
+    aiAvatarFallback: AppAvatarFallback = AppAvatarFallback.ASSISTANT,
     userAvatarUrl: String? = null,
 ) {
     val isUser = role == "user"
@@ -469,10 +510,11 @@ private fun ImBubble(
         // 对方头像
         if (!isUser) {
             if (showAvatar) {
-                ImAvatar(
-                    url = aiAvatarUrl,
-                    fallbackText = aiAvatarText,
-                    backgroundColor = aiAvatarColor,
+                AppAvatar(
+                    imageSource = aiAvatarUrl,
+                    fallback = aiAvatarFallback,
+                    size = 40.dp,
+                    shape = RoundedCornerShape(8.dp),
                 )
                 Spacer(Modifier.width(8.dp))
             } else {
@@ -489,7 +531,7 @@ private fun ImBubble(
                 bottomStart = 12.dp,
                 bottomEnd = 12.dp,
             ),
-            color = if (isUser) ImBubbleUser else ImBubbleOther,
+            color = if (isUser) ImBubbleUser else MaterialTheme.colorScheme.surface,
             shadowElevation = 1.dp,
             tonalElevation = 0.5.dp,
         ) {
@@ -499,7 +541,7 @@ private fun ImBubble(
                     fontSize = 15.sp,
                     lineHeight = 21.sp,
                 ),
-                color = if (isUser) Color(0xFF000000) else ImTextPrimary,
+                color = if (isUser) MaterialTheme.colorScheme.onSurface else imTextPrimary(),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             )
         }
@@ -508,10 +550,11 @@ private fun ImBubble(
         if (isUser) {
             if (showAvatar) {
                 Spacer(Modifier.width(8.dp))
-                ImAvatar(
-                    url = userAvatarUrl,
-                    fallbackText = "我",
-                    backgroundColor = ImAvatarUser,
+                AppAvatar(
+                    imageSource = userAvatarUrl,
+                    fallback = AppAvatarFallback.USER,
+                    size = 40.dp,
+                    shape = RoundedCornerShape(8.dp),
                 )
             } else {
                 Spacer(Modifier.width(48.dp))
@@ -535,12 +578,12 @@ private fun ImInputBar(
     onMore: (() -> Unit)? = null,
 ) {
     Surface(
-        color = ImInputBarBg,
+        color = imBarBg(),
         modifier = modifier.fillMaxWidth(),
     ) {
         Column {
             // 顶部分隔线
-            HorizontalDivider(thickness = 0.5.dp, color = ImDividerColor)
+            HorizontalDivider(thickness = 0.5.dp, color = imDivider())
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -554,7 +597,7 @@ private fun ImInputBar(
                         Icon(
                             Icons.Default.Mic,
                             contentDescription = "语音",
-                            tint = ImTextPrimary,
+                            tint = imTextPrimary(),
                             modifier = Modifier.size(22.dp),
                         )
                     }
@@ -563,7 +606,7 @@ private fun ImInputBar(
                 // 输入框（微信风格：圆角矩形+浅灰背景）
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = ImInputBg,
+                    color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.weight(1f).height(38.dp),
                 ) {
                     androidx.compose.foundation.text.BasicTextField(
@@ -572,7 +615,7 @@ private fun ImInputBar(
                         modifier = Modifier.padding(horizontal = 12.dp).fillMaxSize(),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = ImTextPrimary,
+                            color = imTextPrimary(),
                             fontSize = 15.sp,
                         ),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(ImAvatarAi),
@@ -582,7 +625,7 @@ private fun ImInputBar(
                                     Text(
                                         "发消息",
                                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                                        color = ImTextSecondary,
+                                        color = imTextSecondary(),
                                     )
                                 }
                                 inner()
@@ -655,7 +698,7 @@ fun AiEmployeeListScreen(
     LaunchedEffect(Unit) { vm.refreshModInfos() }
 
     Scaffold(
-        containerColor = ImChatBg,
+        containerColor = imChatBg(),
         topBar = {
             androidx.compose.material3.TopAppBar(
                 title = {
@@ -663,7 +706,7 @@ fun AiEmployeeListScreen(
                         "AI员工${filteredEmployees.size.takeIf { it > 0 }?.let { "($it)" }.orEmpty()}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF333333),
+                        color = imTextPrimary(),
                     )
                 },
                 navigationIcon = {
@@ -682,7 +725,7 @@ fun AiEmployeeListScreen(
                     }
                 },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
+                    containerColor = MaterialTheme.colorScheme.surface,
                 ),
                 windowInsets = WindowInsets(0.dp),
             )
@@ -715,13 +758,13 @@ fun AiEmployeeListScreen(
                     Text(
                         "暂无 AI 员工",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF333333),
+                        color = imTextPrimary(),
                     )
                     Spacer(Modifier.height(Spacing.xs))
                     Text(
                         "扫码绑定企业端或登录管理端后，员工会自动同步到这里。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF999999),
+                        color = imTextSecondary(),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
@@ -768,7 +811,7 @@ fun AiEmployeeListScreen(
                             Text(
                                 "未找到匹配的 AI 员工",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF999999),
+                                color = imTextSecondary(),
                             )
                         }
                     }
@@ -778,7 +821,7 @@ fun AiEmployeeListScreen(
                     key = { index, employee -> "${employee.key}:$index" },
                 ) { _, employee ->
                     Surface(
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.surface,
                         modifier = Modifier
                             .fillMaxWidth()
                             .animateItemPlacement()
@@ -790,21 +833,13 @@ fun AiEmployeeListScreen(
                                 .padding(horizontal = Spacing.md, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            val avatarColor = aiEmployeeAvatarColor(employee.key)
-                            Box(
-                                Modifier
-                                    .size(44.dp)
-                                    .clip(MaterialTheme.shapes.extraSmall)
-                                    .background(avatarColor),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    employee.avatarText,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                )
-                            }
+                            AppAvatar(
+                                imageSource = employee.avatarUrl,
+                                fallback = AppAvatarFallback.AI_EMPLOYEE,
+                                size = 44.dp,
+                                shape = MaterialTheme.shapes.extraSmall,
+                                contentDescription = employee.name,
+                            )
                             Spacer(Modifier.width(Spacing.md))
 
                             Column(Modifier.weight(1f)) {
@@ -812,14 +847,14 @@ fun AiEmployeeListScreen(
                                     employee.name,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF333333),
+                                    color = imTextPrimary(),
                                     maxLines = 1,
                                 )
                                 Spacer(Modifier.height(3.dp))
                                 Text(
                                     employee.summary,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = Color(0xFF999999),
+                                    color = imTextSecondary(),
                                     maxLines = 1,
                                 )
                                 Spacer(Modifier.height(2.dp))
@@ -834,12 +869,12 @@ fun AiEmployeeListScreen(
                             Icon(
                                 Icons.Default.ChevronRight,
                                 contentDescription = null,
-                                tint = Color(0xFFCCCCCC),
+                                tint = imTextSecondary(),
                                 modifier = Modifier.size(20.dp),
                             )
                         }
                     }
-                    HorizontalDivider(thickness = 0.5.dp, color = Color(0xFFEEEEEE), modifier = Modifier.padding(start = 68.dp))
+                    HorizontalDivider(thickness = 0.5.dp, color = imDivider(), modifier = Modifier.padding(start = 68.dp))
                 }
             }
         }

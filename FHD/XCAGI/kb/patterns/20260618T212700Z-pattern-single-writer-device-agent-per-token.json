@@ -8,5 +8,5 @@
   },
   "pattern": "single_writer_device_agent_per_token",
   "schema_version": 1,
-  "summary": "Remote worker devices need single ownership for each token to avoid websocket connection flapping."
+  "summary": "远程 worker 设备需要每个 token 的单一所有权，以避免 websocket 连接抖动。"
 }

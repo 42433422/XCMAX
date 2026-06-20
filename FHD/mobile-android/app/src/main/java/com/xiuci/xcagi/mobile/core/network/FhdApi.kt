@@ -84,6 +84,20 @@ data class ImDirectBody(val peer_user_id: Int)
 
 data class ImSendBody(val body: String)
 
+/**
+ * 钱包余额信息（移动端"我"页面展示）。
+ */
+data class WalletBalanceDto(
+    val balance: Double? = null,
+    val currency: String = "CNY",
+    val membership_level: String? = null,
+    val experience: Long? = null,
+    val byok_configured: Boolean = false,
+    val byok_count: Int = 0,
+    val synced: Boolean = false,
+    val message: String? = null,
+)
+
 interface FhdApi {
     @GET("api/health")
     suspend fun health(): Map<String, Any?>
@@ -273,4 +287,7 @@ interface FhdApi {
     suspend fun postCodexSuperEmployeeMessage(
         @Body body: CodexSuperEmployeeMobileMessageBody,
     ): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.WALLET_BALANCE)
+    suspend fun mobileWalletBalance(): MobileEnvelope<WalletBalanceDto>
 }

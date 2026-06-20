@@ -59,4 +59,6 @@ object Routes {
     const val BRAIN = "brain"
     /** 员工商店 / 能力库 */
     const val MOD_STORE = "mod_store"
+    /** 通知与公告 */
+    const val NOTIFICATIONS = "notifications"
 }

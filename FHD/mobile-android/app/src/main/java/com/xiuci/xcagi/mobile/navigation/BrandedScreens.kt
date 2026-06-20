@@ -76,7 +76,7 @@ fun ConnectScreen(
         onBack: (() -> Unit)? = null,
 ) {
         Column(
-                Modifier.fillMaxSize().background(Color.White).imePadding(),
+                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding(),
         ) {
                 WeTopBar(title = "Agent 远程控制", onBack = onBack)
 
@@ -168,7 +168,7 @@ fun AuthScreen(
 
         Column(
                 Modifier.fillMaxSize()
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                         .imePadding()
                         .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -506,7 +506,7 @@ private fun LoginInputBox(
                         .padding(horizontal = 24.dp)
                         .height(46.dp)
                         .clip(MaterialTheme.shapes.small)
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                         .border(
                                 BorderStroke(
                                         1.dp,
@@ -555,7 +555,7 @@ private fun LoginPasswordBox(
                         Modifier.fillMaxWidth()
                                 .height(46.dp)
                                 .clip(MaterialTheme.shapes.small)
-                                .background(Color.White)
+                                .background(MaterialTheme.colorScheme.surface)
                                 .border(
                                         BorderStroke(
                                                 1.dp,
@@ -787,7 +787,7 @@ private fun LoginSecondaryButton(
                         .height(48.dp)
                         .clip(MaterialTheme.shapes.small)
                         .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                         .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center,
         ) {
