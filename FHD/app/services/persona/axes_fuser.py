@@ -1,4 +1,5 @@
 """三层融合器：L1 + L2 + L3 加权融合 + rapport 软偏移。"""
+
 from __future__ import annotations
 
 from app.domain.persona.value_objects import PersonaAxes, RapportScore
@@ -51,15 +52,25 @@ class AxesFuser:
             base = PersonaAxes(
                 warmth=self.WEIGHT_L1_WITH_L2 * l1.warmth + self.WEIGHT_L2_WITH_L1 * l2.warmth,
                 detail=self.WEIGHT_L1_WITH_L2 * l1.detail + self.WEIGHT_L2_WITH_L1 * l2.detail,
-                proactivity=self.WEIGHT_L1_WITH_L2 * l1.proactivity + self.WEIGHT_L2_WITH_L1 * l2.proactivity,
-                structure=self.WEIGHT_L1_WITH_L2 * l1.structure + self.WEIGHT_L2_WITH_L1 * l2.structure,
+                proactivity=self.WEIGHT_L1_WITH_L2 * l1.proactivity
+                + self.WEIGHT_L2_WITH_L1 * l2.proactivity,
+                structure=self.WEIGHT_L1_WITH_L2 * l1.structure
+                + self.WEIGHT_L2_WITH_L1 * l2.structure,
             )
         else:
             base = PersonaAxes(
-                warmth=self.WEIGHT_L1_FULL * l1.warmth + self.WEIGHT_L2_FULL * l2.warmth + self.WEIGHT_L3_FULL * l3.warmth,
-                detail=self.WEIGHT_L1_FULL * l1.detail + self.WEIGHT_L2_FULL * l2.detail + self.WEIGHT_L3_FULL * l3.detail,
-                proactivity=self.WEIGHT_L1_FULL * l1.proactivity + self.WEIGHT_L2_FULL * l2.proactivity + self.WEIGHT_L3_FULL * l3.proactivity,
-                structure=self.WEIGHT_L1_FULL * l1.structure + self.WEIGHT_L2_FULL * l2.structure + self.WEIGHT_L3_FULL * l3.structure,
+                warmth=self.WEIGHT_L1_FULL * l1.warmth
+                + self.WEIGHT_L2_FULL * l2.warmth
+                + self.WEIGHT_L3_FULL * l3.warmth,
+                detail=self.WEIGHT_L1_FULL * l1.detail
+                + self.WEIGHT_L2_FULL * l2.detail
+                + self.WEIGHT_L3_FULL * l3.detail,
+                proactivity=self.WEIGHT_L1_FULL * l1.proactivity
+                + self.WEIGHT_L2_FULL * l2.proactivity
+                + self.WEIGHT_L3_FULL * l3.proactivity,
+                structure=self.WEIGHT_L1_FULL * l1.structure
+                + self.WEIGHT_L2_FULL * l2.structure
+                + self.WEIGHT_L3_FULL * l3.structure,
             )
 
         # 软偏移：用户信号弱时才应用 rapport 偏移
