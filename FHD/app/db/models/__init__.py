@@ -48,6 +48,7 @@ from app.db.models.shipment import ShipmentRecord
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.wechat import WechatContact, WechatContactContext, WechatTask
+from app.infrastructure.persona.models import PersonaEventLogModel, PersonaProfileModel
 
 __all__ = [
     "PurchaseUnit",
@@ -93,4 +94,6 @@ __all__ = [
     "MpNotification",
     "MpOrder",
     "MpOrderItem",
+    "PersonaProfileModel",
+    "PersonaEventLogModel",
 ]
