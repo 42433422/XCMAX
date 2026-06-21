@@ -27,12 +27,18 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.MarkChatUnread
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,6 +76,9 @@ import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.MobileAction
+import com.xiuci.xcagi.mobile.ui.components.mobile.MobileActionSheet
+import com.xiuci.xcagi.mobile.ui.components.mobile.pressScaleClickable
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -124,21 +133,33 @@ fun ConversationListScreen(
                 else aiGroups.filter { it.name.contains(searchQuery, ignoreCase = true) }
             }
 
-    // 长按群聊时的操作菜单
+    // 长按群聊时的操作菜单（统一精致 ActionSheet）
     longPressGroup?.let { g ->
-        AlertDialog(
-            onDismissRequest = { longPressGroup = null },
-            title = { Text(g.name.ifBlank { "群聊操作" }) },
-            text = {
-                Column {
-                    TextButton(onClick = { vm.markGroupUnread(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text("标为未读") }
-                    TextButton(onClick = { vm.toggleGroupPin(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_pinned) "取消置顶" else "置顶聊天") }
-                    TextButton(onClick = { vm.toggleGroupFollowed(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_followed) "不再关注" else "恢复关注") }
-                    TextButton(onClick = { vm.toggleGroupHidden(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_hidden) "显示该聊天" else "不显示该聊天") }
-                    TextButton(onClick = { vm.deleteGroup(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text("删除该聊天", color = MaterialTheme.colorScheme.error) }
-                }
-            },
-            confirmButton = { TextButton(onClick = { longPressGroup = null }) { Text("关闭") } },
+        MobileActionSheet(
+            title = g.name.ifBlank { "群聊操作" },
+            subtitle = if (g.member_count > 0) "${g.member_count} 个 AI 成员" else null,
+            onDismiss = { longPressGroup = null },
+            actions =
+                listOf(
+                    MobileAction("标为未读", Icons.Outlined.MarkChatUnread) {
+                        vm.markGroupUnread(g.id); haptics.click()
+                    },
+                    MobileAction(
+                        if (g.is_pinned) "取消置顶" else "置顶聊天",
+                        Icons.Outlined.PushPin,
+                    ) { vm.toggleGroupPin(g.id); haptics.click() },
+                    MobileAction(
+                        if (g.is_followed) "不再关注" else "恢复关注",
+                        if (g.is_followed) Icons.Outlined.NotificationsOff else Icons.Outlined.Notifications,
+                    ) { vm.toggleGroupFollowed(g.id); haptics.click() },
+                    MobileAction(
+                        if (g.is_hidden) "显示该聊天" else "不显示该聊天",
+                        if (g.is_hidden) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                    ) { vm.toggleGroupHidden(g.id); haptics.click() },
+                    MobileAction("删除该聊天", Icons.Outlined.Delete, danger = true) {
+                        vm.deleteGroup(g.id); haptics.click()
+                    },
+                ),
         )
     }
 
@@ -713,7 +734,7 @@ private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
 
     Surface(
             color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+            modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onClick),
     ) {
         Row(
                 Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 11.dp),

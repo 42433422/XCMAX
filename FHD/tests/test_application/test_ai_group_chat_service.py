@@ -300,3 +300,57 @@ def test_enterprise_groups_user_scoped(tmp_path: Path):
     svc.list_groups(user_id=2)
     assert len(svc.list_groups(user_id=1)) == 4
     assert len(svc.list_groups(user_id=2)) == 4
+
+
+# ── 群成员候选（普通员工 + 超级员工）──
+
+
+def test_list_member_candidates_marks_super(tmp_path: Path):
+    """候选列表带 is_super 标志，超级员工被标记，便于手机端打徽标。"""
+    emps = [
+        {
+            "employee_id": "e1",
+            "mod_id": "m1",
+            "name": "小销",
+            "summary": "获客",
+            "department_key": "ops_acquisition",
+        },
+        {
+            "employee_id": "codex-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Codex",
+            "summary": "CLI 直答",
+            "department_key": "",
+        },
+    ]
+    svc = make_service(tmp_path, employees=emps)
+    cands = svc.list_member_candidates()
+    by_id = {c["employee_id"]: c for c in cands}
+    assert by_id["e1"]["is_super"] is False
+    assert by_id["codex-super-employee"]["is_super"] is True
+    assert by_id["codex-super-employee"]["mod_id"] == "super-employee"
+
+
+def test_list_member_candidates_dedups(tmp_path: Path):
+    """同一 employee_id 去重，避免前端列表 key 冲突。"""
+    emps = [
+        {"employee_id": "e1", "name": "A"},
+        {"employee_id": "e1", "name": "B"},
+        {"employee_id": "", "name": "空 id 跳过"},
+    ]
+    svc = make_service(tmp_path, employees=emps)
+    cands = svc.list_member_candidates()
+    assert [c["employee_id"] for c in cands] == ["e1"]
+
+
+def test_append_super_employees_adds_codex_claude():
+    """_append_super_employees 把 Codex/Claude 追加进候选，保证手机端能把超级员工拉进群。"""
+    from app.application.ai_group_chat_service import _append_super_employees
+
+    emps: list[dict] = []
+    _append_super_employees(emps)
+    ids = {e["employee_id"] for e in emps}
+    assert "codex-super-employee" in ids
+    assert "claude-super-employee" in ids
+    # 统一标 mod_id=super-employee，后端据此路由到 _super_employee_reply。
+    assert all(e["mod_id"] == "super-employee" for e in emps)

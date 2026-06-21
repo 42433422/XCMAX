@@ -7,6 +7,7 @@ import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
+import com.xiuci.xcagi.mobile.core.model.AiGroupCandidatesData
 import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
 import com.xiuci.xcagi.mobile.core.model.AiGroupListData
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberBody
@@ -349,6 +350,9 @@ interface FhdApi {
     // ── AI 群聊 ──
     @GET(ApiEndpoints.AI_GROUPS)
     suspend fun getAiGroups(): MobileEnvelope<AiGroupListData>
+
+    @GET(ApiEndpoints.AI_GROUP_CANDIDATES)
+    suspend fun getAiGroupCandidates(): MobileEnvelope<AiGroupCandidatesData>
 
     @POST(ApiEndpoints.AI_GROUPS)
     suspend fun createAiGroup(@Body body: AiGroupCreateBody): MobileEnvelope<AiGroupWrap>
