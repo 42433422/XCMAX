@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.application.ai_group_chat_service import AiGroupChatService
+from app.domain.enterprise_org_layers import resolve_enterprise_org_layer
 
 
 def fake_departments() -> dict[str, dict[str, str]]:
@@ -15,6 +16,15 @@ def fake_departments() -> dict[str, dict[str, str]]:
         "prod_mod": {"label": "P-M Mod 部"},
         "prod_software": {"label": "P-S 软件部"},
         "shared_retention": {"label": "S-R 归档部"},
+    }
+
+
+def fake_enterprise_departments() -> dict[str, dict[str, str]]:
+    return {
+        "tools": {"label": "工具层"},
+        "execution": {"label": "执行层"},
+        "service": {"label": "服务层"},
+        "management": {"label": "管理层"},
     }
 
 
@@ -30,11 +40,15 @@ def make_completion(seen: list[dict] | None = None):
     return completion
 
 
-def make_service(tmp_path: Path, seen: list[dict] | None = None) -> AiGroupChatService:
+def make_service(
+    tmp_path: Path, seen: list[dict] | None = None, employees=None, mode: str = "admin"
+) -> AiGroupChatService:
     return AiGroupChatService(
         storage_root=tmp_path,
         completion_fn=make_completion(seen),
-        department_loader=fake_departments,
+        department_loader=fake_enterprise_departments if mode == "enterprise" else fake_departments,
+        employee_loader=(employees if callable(employees) else (lambda: employees or [])),
+        mode=mode,
     )
 
 
@@ -101,9 +115,7 @@ async def test_post_message_mention_targets_one(tmp_path: Path):
     svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e2", "name": "小服"})
 
     # 显式 mentions：只有 e2 回复
-    result = await svc.post_message(
-        user_id=1, group_id=gid, text="帮忙看下", mentions=["e2"]
-    )
+    result = await svc.post_message(user_id=1, group_id=gid, text="帮忙看下", mentions=["e2"])
     ai = [m for m in result["messages"] if m["role"] == "ai"]
     assert len(ai) == 1
     assert ai[0]["sender_name"] == "小服"
@@ -129,3 +141,162 @@ def test_create_custom_group(tmp_path: Path):
     g = svc.create_group(user_id=1, name="我的专属小队")
     assert g["name"] == "我的专属小队"
     assert len(svc.list_groups(user_id=1)) == 7
+
+
+def test_seed_populates_members_by_department(tmp_path: Path):
+    """种子群按编制把员工填进对应部门群。"""
+    emps = [
+        {
+            "employee_id": "e1",
+            "mod_id": "m1",
+            "name": "小销",
+            "summary": "获客",
+            "department_key": "ops_acquisition",
+        },
+        {
+            "employee_id": "e2",
+            "mod_id": "m1",
+            "name": "小伴",
+            "summary": "伙伴",
+            "department_key": "ops_partner",
+        },
+        {
+            "employee_id": "e3",
+            "mod_id": "m2",
+            "name": "小网",
+            "summary": "网站",
+            "department_key": "prod_web",
+        },
+        {
+            "employee_id": "e4",
+            "mod_id": "m2",
+            "name": "小软",
+            "summary": "软件",
+            "department_key": "prod_software",
+        },
+        {
+            "employee_id": "e_no_dept",
+            "mod_id": "m2",
+            "name": "游离",
+            "summary": "无部门",
+            "department_key": "",
+        },
+    ]
+    svc = make_service(tmp_path, employees=emps)
+    groups = svc.list_groups(user_id=1)
+    by_key = {g["department_key"]: g for g in groups}
+    assert by_key["ops_acquisition"]["member_count"] == 1
+    assert by_key["ops_acquisition"]["members"][0]["name"] == "小销"
+    assert by_key["ops_partner"]["member_count"] == 1
+    assert by_key["prod_web"]["member_count"] == 1
+    assert by_key["prod_mod"]["member_count"] == 0  # 无对应员工
+    # 游离员工不进任何部门群
+    all_ids = {m["employee_id"] for g in groups for m in g["members"]}
+    assert "e_no_dept" not in all_ids
+
+
+def test_backfill_existing_empty_groups(tmp_path: Path):
+    """已存在的空部门群首次访问时回填成员（仅一次，用户移人后不覆盖）。"""
+    # 先用空员工建群
+    svc = make_service(tmp_path, employees=[])
+    groups = svc.list_groups(user_id=1)
+    assert all(g["member_count"] == 0 for g in groups)
+
+    # 换一个带员工的服务实例（模拟"员工后同步"），再次 list 应回填
+    emps = [
+        {
+            "employee_id": "e1",
+            "mod_id": "m1",
+            "name": "小销",
+            "summary": "获客",
+            "department_key": "ops_acquisition",
+        },
+    ]
+    svc2 = make_service(tmp_path, employees=emps)
+    groups2 = svc2.list_groups(user_id=1)
+    by_key = {g["department_key"]: g for g in groups2}
+    assert by_key["ops_acquisition"]["member_count"] == 1
+
+    # 用户手动移人后，再次 list 不会自动加回（members_seeded 已置 True）
+    svc2.remove_member(user_id=1, group_id="dept:ops_acquisition", employee_id="e1")
+    groups3 = svc2.list_groups(user_id=1)
+    by_key3 = {g["department_key"]: g for g in groups3}
+    assert by_key3["ops_acquisition"]["member_count"] == 0
+
+
+# ── Enterprise 模式（4 部门）──
+
+
+def test_enterprise_seeds_four_department_groups(tmp_path: Path):
+    """enterprise 模式种出 4 个部门群（工具层/执行层/服务层/管理层）。"""
+    svc = make_service(tmp_path, mode="enterprise")
+    groups = svc.list_groups(user_id=1)
+    assert len(groups) == 4
+    names = [g["name"] for g in groups]
+    assert "工具层" in names
+    assert "执行层" in names
+    assert "服务层" in names
+    assert "管理层" in names
+    assert all(g["member_count"] == 0 for g in groups)
+
+
+def test_enterprise_seed_populates_members_by_layer(tmp_path: Path):
+    """enterprise 模式种子群按 resolve_enterprise_org_layer 派生结果填员。"""
+    emps = [
+        {
+            "employee_id": "label_print",
+            "mod_id": "m1",
+            "name": "标签打印",
+            "summary": "执行",
+            "department_key": resolve_enterprise_org_layer("label_print", "标签打印"),
+        },
+        {
+            "employee_id": "wechat_msg",
+            "mod_id": "m2",
+            "name": "微信消息",
+            "summary": "服务",
+            "department_key": resolve_enterprise_org_layer("wechat_msg", "微信消息"),
+        },
+        {
+            "employee_id": "lan_gate",
+            "mod_id": "m3",
+            "name": "局域网网关",
+            "summary": "工具",
+            "department_key": resolve_enterprise_org_layer("lan_gate", "局域网网关"),
+        },
+        {
+            "employee_id": "workflow_automator",
+            "mod_id": "m4",
+            "name": "流程编排器",
+            "summary": "管理",
+            "department_key": resolve_enterprise_org_layer("workflow_automator", "流程编排器"),
+        },
+    ]
+    svc = make_service(tmp_path, employees=emps, mode="enterprise")
+    groups = svc.list_groups(user_id=1)
+    by_key = {g["department_key"]: g for g in groups}
+    assert by_key["execution"]["member_count"] == 1
+    assert by_key["execution"]["members"][0]["name"] == "标签打印"
+    assert by_key["service"]["member_count"] == 1
+    assert by_key["tools"]["member_count"] == 1
+    assert by_key["management"]["member_count"] == 1
+
+
+def test_resolve_enterprise_org_layer_manifest_priority():
+    """manifest enterprise_layer 优先于 ID 表和关键词。"""
+    assert resolve_enterprise_org_layer("unknown_id", "未知", "", "service") == "service"
+    # ID 表优先于关键词
+    assert resolve_enterprise_org_layer("label_print", "标签打印") == "execution"
+    # 关键词匹配（"微信客服"只命中 service 规则）
+    assert resolve_enterprise_org_layer("custom_contact", "微信客服") == "service"
+    # 默认归入 management
+    assert resolve_enterprise_org_layer("totally_unknown", "完全未知") == "management"
+
+
+def test_enterprise_groups_user_scoped(tmp_path: Path):
+    """enterprise 模式群同样按用户隔离。"""
+    svc = make_service(tmp_path, mode="enterprise")
+    svc.list_groups(user_id=1)
+    svc.list_groups(user_id=2)
+    assert len(svc.list_groups(user_id=1)) == 4
+    assert len(svc.list_groups(user_id=2)) == 4

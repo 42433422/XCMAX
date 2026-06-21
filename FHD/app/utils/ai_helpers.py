@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 AI 聊天辅助工具函数
 

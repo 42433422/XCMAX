@@ -1031,33 +1031,25 @@ class XcagiRepository @Inject constructor(
         cacheChatMessage(sessionId = sessionId, role = "user", text = message)
         val acc = StringBuilder()
 
-        if (conversationId == PinnedIds.CODEX) {
-            streamCodexSuperEmployeeChat(
-                message = message,
-                onToken = { t ->
-                    acc.append(t)
-                    onToken(t)
-                },
-                onDone = onDone,
-                onError = onError,
-            )
-            val finalText = acc.toString()
-            if (finalText.isNotBlank()) {
-                cacheChatMessage(sessionId = sessionId, role = "assistant", text = finalText)
+        if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE) {
+            val isClaude = conversationId == PinnedIds.CLAUDE
+            val tokenSink: (String) -> Unit = { t -> acc.append(t); onToken(t) }
+            // 连不到本地 PC 但已配对中继电脑 → 经服务器中继到本地电脑执行（超级员工必须本地设备）。
+            val relayId = if (!isPcReachable()) sessionStore.relayDesktopId() else ""
+            if (relayId.isNotBlank()) {
+                streamRelayCodexTask(
+                    relayId = relayId,
+                    message = message,
+                    kind = if (isClaude) "claude.invoke" else "codex.invoke",
+                    onToken = tokenSink,
+                    onDone = onDone,
+                    onError = onError,
+                )
+            } else if (isClaude) {
+                streamClaudeSuperEmployeeChat(message = message, onToken = tokenSink, onDone = onDone, onError = onError)
+            } else {
+                streamCodexSuperEmployeeChat(message = message, onToken = tokenSink, onDone = onDone, onError = onError)
             }
-            return
-        }
-
-        if (conversationId == PinnedIds.CLAUDE) {
-            streamClaudeSuperEmployeeChat(
-                message = message,
-                onToken = { t ->
-                    acc.append(t)
-                    onToken(t)
-                },
-                onDone = onDone,
-                onError = onError,
-            )
             val finalText = acc.toString()
             if (finalText.isNotBlank()) {
                 cacheChatMessage(sessionId = sessionId, role = "assistant", text = finalText)
@@ -1348,6 +1340,30 @@ class XcagiRepository @Inject constructor(
             }
         }
 
+    suspend fun toggleAiGroupPin(groupId: String): Result<AiGroupDto?> = aiGroupCall {
+        fhd().toggleAiGroupPin(groupId).let { if (it.success) Result.success(it.data?.group) else fail(it) }
+    }
+
+    suspend fun markAiGroupUnread(groupId: String): Result<AiGroupDto?> = aiGroupCall {
+        fhd().markAiGroupUnread(groupId).let { if (it.success) Result.success(it.data?.group) else fail(it) }
+    }
+
+    suspend fun markAiGroupRead(groupId: String): Result<AiGroupDto?> = aiGroupCall {
+        fhd().markAiGroupRead(groupId).let { if (it.success) Result.success(it.data?.group) else fail(it) }
+    }
+
+    suspend fun toggleAiGroupFollowed(groupId: String): Result<AiGroupDto?> = aiGroupCall {
+        fhd().toggleAiGroupFollowed(groupId).let { if (it.success) Result.success(it.data?.group) else fail(it) }
+    }
+
+    suspend fun toggleAiGroupHidden(groupId: String): Result<AiGroupDto?> = aiGroupCall {
+        fhd().toggleAiGroupHidden(groupId).let { if (it.success) Result.success(it.data?.group) else fail(it) }
+    }
+
+    suspend fun deleteAiGroup(groupId: String): Result<Boolean> = aiGroupCall {
+        fhd().deleteAiGroup(groupId).let { if (it.success) Result.success(true) else fail(it) }
+    }
+
     private fun <T> fail(env: com.xiuci.xcagi.mobile.core.model.MobileEnvelope<*>): Result<T> =
         Result.failure(Exception(env.message.ifBlank { "群聊请求失败" }))
 
@@ -1585,15 +1601,21 @@ class XcagiRepository @Inject constructor(
     private suspend fun streamRelayCodexTask(
         relayId: String,
         message: String,
+        kind: String = "codex.invoke",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
     ) {
         try {
+            val toolLabel = if (kind.startsWith("claude")) "Claude" else "Codex"
+            // 中继任务由 Retrofit 直接发起，不走 SSE 的 401/403 刷新重试。
+            // 先用 refresh token 更新 FHD access token，避免保留登录态的手机在 token
+            // 过期后只能看到“重新登录”，实际请求根本到不了电脑执行端。
+            refreshFhdAccessToken()
             val created = fhd().relayCreateTask(
                 RelayTaskCreateBody(
                     relay_id = relayId,
-                    kind = "codex.invoke",
+                    kind = kind,
                     payload = mapOf(
                         "message" to message,
                         "context" to mapOf(
@@ -1614,7 +1636,7 @@ class XcagiRepository @Inject constructor(
                 onError("中继任务缺少 task_id")
                 return
             }
-            onToken("已派发到电脑执行端，等待 Codex 回写。")
+            onToken("已派发到电脑执行端，等待回写。")
             var lastStatus = "queued"
             repeat(150) {
                 delay(2000)
@@ -1623,7 +1645,7 @@ class XcagiRepository @Inject constructor(
                 val currentStatus = current["status"]?.toString().orEmpty()
                 if (currentStatus.isNotBlank() && currentStatus != lastStatus) {
                     when (currentStatus) {
-                        "running", "assigned" -> onToken("\n电脑执行端正在运行 Codex。")
+                        "running", "assigned" -> onToken("\n电脑执行端正在运行 $toolLabel。")
                         "queued" -> onToken("\n任务仍在服务器队列中。")
                     }
                     lastStatus = currentStatus
