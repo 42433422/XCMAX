@@ -156,7 +156,6 @@ function createIndustryState(overrides: Record<string, unknown> = {}) {
     loading: false,
     error: null,
     initialize: vi.fn(async () => undefined),
-    switchIndustry: vi.fn(async () => true),
     ...overrides,
   }
 }
@@ -536,20 +535,24 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(replaceSpy).toHaveBeenCalled()
   })
 
-  it('industry 步骤：industryStore 已加载但行业不同时调用 switchIndustry', async () => {
+  it('industry 步骤：industryStore 已加载但行业不同时直接进入下一步（不再调用 switchIndustry）', async () => {
     mockContainer.industryState = createIndustryState({
       isLoaded: true,
       currentIndustryId: '通用',
     })
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
+    const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
     await flushPromises()
     const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
     await chip.trigger('click')
     await flushPromises()
+    const replaceSpy = vi.spyOn(router, 'replace')
     const nextBtn = wrapper.find('.actions .btn.primary')
     await nextBtn.trigger('click')
     await flushPromises()
-    expect(mockContainer.industryState.switchIndustry).toHaveBeenCalled()
+    // 行业由后端 SSOT 决定，confirmIndustryAndNext 不再调用 switchIndustry，
+    // 仅进入下一步（host-pack）。
+    expect(replaceSpy).toHaveBeenCalled()
+    expect((mockContainer.industryState as any).switchIndustry).toBeUndefined()
   })
 
   // ===== 3. host-pack 步骤渲染 =====
@@ -1762,10 +1765,10 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(activeChip.text()).toContain('涂料')
   })
 
-  // ===== 25. industryStore 已加载且行业相同时不调用 switchIndustry =====
+  // ===== 25. confirmIndustryAndNext 不再调用 switchIndustry（行业由后端 SSOT 决定） =====
 
-  it('confirmIndustryAndNext：industryStore 已加载且行业相同时不调用 switchIndustry', async () => {
-    const { wrapper } = await mountComponent({
+  it('confirmIndustryAndNext：industryStore 已加载且行业相同时直接进入下一步', async () => {
+    const { wrapper, router } = await mountComponent({
       route: { step: 'industry' },
       industry: {
         isLoaded: true,
@@ -1778,11 +1781,13 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       },
     })
     await flushPromises()
-    mockContainer.industryState.switchIndustry.mockClear()
+    const replaceSpy = vi.spyOn(router, 'replace')
     const nextBtn = wrapper.find('.actions .btn.primary')
     await nextBtn.trigger('click')
     await flushPromises()
-    expect(mockContainer.industryState.switchIndustry).not.toHaveBeenCalled()
+    // switchIndustry 已删除，confirmIndustryAndNext 仅进入下一步。
+    expect((mockContainer.industryState as any).switchIndustry).toBeUndefined()
+    expect(replaceSpy).toHaveBeenCalled()
   })
 
   // ===== 26. catalogChipRow 测试 =====

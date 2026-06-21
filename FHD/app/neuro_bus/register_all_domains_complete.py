@@ -179,6 +179,18 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except RECOVERABLE_ERRORS as e:
         logger.error("[NeuroDomainRegistration] Conversation 领域注册失败: %s", e)
 
+    # 15. 核心 app service 真实落地消费者（products.imported / conversation.message_saved /
+    #     customer.changed）—— 为「只发布、无消费」的服务补齐持久副作用消费者。
+    try:
+        from app.neuro_bus.domains.application_event_consumers import (
+            register_application_event_consumers,
+        )
+
+        register_application_event_consumers(bus)
+        logger.info("[NeuroDomainRegistration] 核心 app service 消费者注册完成")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("[NeuroDomainRegistration] 核心 app service 消费者注册失败: %s", e)
+
     logger.info("[NeuroDomainRegistration] 所有领域处理器注册完成")
 
 

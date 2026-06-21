@@ -20,6 +20,19 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 
+def pytest_collection_modifyitems(config, items):
+    """按文件名自动给行覆盖率填充 stub 打 ``coverage_ramp`` 标记。
+
+    历史遗留 ~184 个 ``test_coverage_ramp_*.py``（约 5274 用例、占 ~25%）断言弱、
+    杀变体能力低。打标后可用 ``-m 'not coverage_ramp'`` 测量真实行为套件覆盖率，
+    与对外覆盖率口径分离（见 docs/reports/TO_9_PROGRAM.md T4/T5）。默认仍全量运行。
+    """
+    ramp_marker = pytest.mark.coverage_ramp
+    for item in items:
+        if os.path.basename(str(item.fspath)).startswith("test_coverage_ramp_"):
+            item.add_marker(ramp_marker)
+
+
 class _AutoCreatingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
     """Keep legacy ``asyncio.get_event_loop()`` behavior for sync tests."""
 

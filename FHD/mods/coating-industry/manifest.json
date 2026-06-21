@@ -26,7 +26,64 @@
   "industry": {
     "id": "涂料",
     "name": "涂料/化工行业",
-    "description": "适用于涂料配方、批次、质检与客户服务等场景"
+    "description": "适用于涂料配方、批次、质检与客户服务等场景",
+    "subsystems": {
+      "products": {
+        "label": "产品管理",
+        "entity": "产品",
+        "fields": [
+          { "key": "model_number", "label": "型号", "type": "text", "semantic": "model" },
+          { "key": "name", "label": "产品名称", "type": "text", "required": true, "semantic": "entity_name" },
+          { "key": "specification", "label": "规格", "type": "text", "semantic": "spec" },
+          { "key": "price", "label": "单价", "type": "number", "unit": "元", "semantic": "price" },
+          { "key": "unit", "label": "单位", "type": "text" },
+          { "key": "batch_no", "label": "批号", "type": "text", "semantic": "batch" },
+          { "key": "expire_date", "label": "保质期", "type": "date", "semantic": "expiry", "validators": [{ "type": "not_expired" }] }
+        ]
+      },
+      "customers": {
+        "label": "客户管理",
+        "entity": "客户",
+        "fields": [
+          { "key": "customer_name", "label": "客户名称", "type": "text", "required": true, "semantic": "entity_name" },
+          { "key": "contact_person", "label": "联系人", "type": "text" },
+          { "key": "contact_phone", "label": "联系电话", "type": "text" },
+          { "key": "address", "label": "地址", "type": "text" }
+        ]
+      },
+      "orders": {
+        "label": "发货单",
+        "entity": "发货单",
+        "fields": [
+          { "key": "purchase_unit", "label": "购买单位", "type": "text", "semantic": "foreign_ref" },
+          { "key": "product_name", "label": "产品名称", "type": "text", "semantic": "entity_name" },
+          { "key": "model_number", "label": "型号", "type": "text", "semantic": "model" },
+          { "key": "quantity_tins", "label": "数量 (桶)", "type": "number", "unit": "桶", "semantic": "primary_qty" },
+          { "key": "tin_spec", "label": "规格", "type": "text", "semantic": "spec" },
+          { "key": "quantity_kg", "label": "数量 (KG)", "type": "number", "unit": "kg", "semantic": "secondary_qty" },
+          { "key": "unit_price", "label": "单价", "type": "number", "unit": "元", "semantic": "price" },
+          { "key": "amount", "label": "金额", "type": "number", "unit": "元", "semantic": "derived" }
+        ],
+        "rules": {
+          "quantity_kg": { "op": "mul", "args": ["quantity_tins", "tin_spec"] },
+          "amount": { "op": "mul", "args": ["quantity_kg", "unit_price"] }
+        }
+      },
+      "shipment-records": {
+        "label": "出货记录",
+        "entity": "出货记录",
+        "fields": [
+          { "key": "purchase_unit", "label": "购买单位", "type": "text", "semantic": "foreign_ref" },
+          { "key": "product_name", "label": "产品名称", "type": "text", "semantic": "entity_name" },
+          { "key": "model_number", "label": "型号", "type": "text", "semantic": "model" },
+          { "key": "quantity_kg", "label": "数量 (KG)", "type": "number", "unit": "kg", "semantic": "secondary_qty" },
+          { "key": "quantity_tins", "label": "数量 (桶)", "type": "number", "unit": "桶", "semantic": "primary_qty" },
+          { "key": "tin_spec", "label": "规格", "type": "text", "semantic": "spec" },
+          { "key": "unit_price", "label": "单价", "type": "number", "semantic": "price" },
+          { "key": "amount", "label": "金额", "type": "number", "semantic": "derived" }
+        ]
+      }
+    }
   },
   "comms": {
     "exports": []

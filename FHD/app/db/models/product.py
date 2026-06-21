@@ -5,10 +5,10 @@ from sqlalchemy import Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.db.mixins import IntegerPrimaryKeyMixin, TimestampMixin
+from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 
-class Product(IntegerPrimaryKeyMixin, TimestampMixin, Base):
+class Product(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "products"
     __table_args__ = (
         Index("ix_products_unit", "unit"),
@@ -24,3 +24,4 @@ class Product(IntegerPrimaryKeyMixin, TimestampMixin, Base):
     brand: Mapped[Optional[str]] = mapped_column(String)
     unit: Mapped[str] = mapped_column(String, default="个")
     is_active: Mapped[int] = mapped_column(Integer, default=1)
+    # tenant_id 由 TenantScopedMixin 提供（多租户数据隔离作用域）

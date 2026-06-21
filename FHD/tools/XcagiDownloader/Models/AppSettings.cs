@@ -8,9 +8,27 @@ public sealed class UrlPreset
 
 public sealed class AppSettings
 {
+    private static string NormalizeReleaseVersion(string raw)
+    {
+        var version = raw?.Trim();
+        if (string.IsNullOrWhiteSpace(version))
+            return "10.0.0";
+        version = version.TrimStart('v', 'V');
+        return string.IsNullOrWhiteSpace(version) ? "10.0.0" : version;
+    }
+
+    private static string DefaultUpdateBaseUrl()
+    {
+        var version = NormalizeReleaseVersion(System.Environment.GetEnvironmentVariable("XCAGI_UPDATE_VERSION"));
+        return $"https://xiu-ci.com/xcagi-v{version}/";
+    }
+
     public List<UrlPreset> UrlPresets { get; set; } =
     [
-        new UrlPreset { Name = "官方 stable", BaseUrl = "https://update.xcagi.com/releases/stable/" },
+        new UrlPreset
+        {
+            Name = "官方 stable", BaseUrl = DefaultUpdateBaseUrl()
+        },
         new UrlPreset { Name = "自定义", BaseUrl = "" }
     ];
 
@@ -18,7 +36,7 @@ public sealed class AppSettings
     public int SelectedPresetIndex { get; set; }
 
     /// <summary>实际用于请求的基址（可与预设叠加编辑）。</summary>
-    public string CurrentBaseUrl { get; set; } = "https://update.xcagi.com/releases/stable/";
+    public string CurrentBaseUrl { get; set; } = DefaultUpdateBaseUrl();
 
     public bool UseSystemProxy { get; set; } = true;
 

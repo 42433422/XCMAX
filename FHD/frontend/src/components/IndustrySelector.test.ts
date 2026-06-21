@@ -14,7 +14,6 @@ vi.mock('@/stores/industry', () => ({
     currentConfig: { units: { primary: '桶' } },
     isLoaded: true,
     initialize: vi.fn().mockResolvedValue(undefined),
-    switchIndustry: vi.fn().mockResolvedValue(true),
   }),
 }))
 
@@ -37,51 +36,82 @@ describe('IndustrySelector', () => {
     expect(wrapper.text()).toContain('桶')
   })
 
-  it('toggles dropdown on click', async () => {
+  it('renders as readonly (no dropdown)', () => {
     const wrapper = mount(IndustrySelector, {
       global: { plugins: [createPinia()] },
     })
-    expect(wrapper.find('.selector-dropdown').exists()).toBe(false)
-    await wrapper.find('.selector-trigger').trigger('click')
-    expect(wrapper.find('.selector-dropdown').exists()).toBe(true)
-  })
-
-  it('closes dropdown on overlay click', async () => {
-    const wrapper = mount(IndustrySelector, {
-      global: { plugins: [createPinia()] },
-    })
-    await wrapper.find('.selector-trigger').trigger('click')
-    expect(wrapper.find('.selector-dropdown').exists()).toBe(true)
-    await wrapper.find('.dropdown-overlay').trigger('click')
+    expect(wrapper.classes()).toContain('is-readonly')
     expect(wrapper.find('.selector-dropdown').exists()).toBe(false)
   })
 
-  it('shows industry list when expanded', async () => {
+  it('does not toggle dropdown on click (readonly)', async () => {
     const wrapper = mount(IndustrySelector, {
       global: { plugins: [createPinia()] },
     })
     await wrapper.find('.selector-trigger').trigger('click')
-    const items = wrapper.findAll('.dropdown-item')
-    expect(items.length).toBe(2)
+    expect(wrapper.find('.selector-dropdown').exists()).toBe(false)
   })
 
-  it('marks current industry as active', async () => {
+  it('shows lock icon indicating readonly', () => {
     const wrapper = mount(IndustrySelector, {
       global: { plugins: [createPinia()] },
     })
-    await wrapper.find('.selector-trigger').trigger('click')
-    const items = wrapper.findAll('.dropdown-item')
-    expect(items[0].classes()).toContain('active')
+    expect(wrapper.find('.lock-icon').exists()).toBe(true)
   })
 
-  it('calls switchIndustry on item click', async () => {
+  it('shows admin tooltip', () => {
     const wrapper = mount(IndustrySelector, {
       global: { plugins: [createPinia()] },
     })
-    await wrapper.find('.selector-trigger').trigger('click')
-    const items = wrapper.findAll('.dropdown-item')
-    await items[1].trigger('click')
+    expect(wrapper.attributes('title')).toContain('行业由管理员设置')
+  })
+
+  it('shows loading text when current industry is null', async () => {
     const { useIndustryStore } = await import('@/stores/industry')
-    expect(useIndustryStore().switchIndustry).toHaveBeenCalledWith('attendance')
+    useIndustryStore.mockReturnValueOnce({
+      industries: [],
+      currentIndustryId: '',
+      currentIndustry: null,
+      currentConfig: null,
+      isLoaded: false,
+      initialize: vi.fn().mockResolvedValue(undefined),
+    })
+    const wrapper = mount(IndustrySelector, {
+      global: { plugins: [createPinia()] },
+    })
+    expect(wrapper.text()).toContain('加载中...')
+  })
+
+  it('hides unit badge when primary unit is empty', async () => {
+    const { useIndustryStore } = await import('@/stores/industry')
+    useIndustryStore.mockReturnValueOnce({
+      industries: [],
+      currentIndustryId: 'paint',
+      currentIndustry: { id: 'paint', name: '涂料' },
+      currentConfig: { units: { primary: '' } },
+      isLoaded: true,
+      initialize: vi.fn().mockResolvedValue(undefined),
+    })
+    const wrapper = mount(IndustrySelector, {
+      global: { plugins: [createPinia()] },
+    })
+    expect(wrapper.find('.industry-unit').exists()).toBe(false)
+  })
+
+  it('calls initialize on mount when not loaded', async () => {
+    const { useIndustryStore } = await import('@/stores/industry')
+    const initialize = vi.fn().mockResolvedValue(undefined)
+    useIndustryStore.mockReturnValueOnce({
+      industries: [],
+      currentIndustryId: '',
+      currentIndustry: null,
+      currentConfig: null,
+      isLoaded: false,
+      initialize,
+    })
+    await mount(IndustrySelector, {
+      global: { plugins: [createPinia()] },
+    })
+    await vi.waitFor(() => expect(initialize).toHaveBeenCalled())
   })
 })

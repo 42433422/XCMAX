@@ -1,7 +1,7 @@
 /**
  * mods.ts store 覆盖率补齐测试
  * 重点覆盖：mod facade 探针、loading-status 重试、菜单函数、权益匹配、
- * syncIndustryForActiveMod、ensureActiveModSelection、resolveModsAccountUsername 等
+ * ensureActiveModSelection、resolveModsAccountUsername 等
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
@@ -44,7 +44,6 @@ const mockBuildAttendanceIndustryModStub = vi.fn(() => ({
   author: 'xcagi',
   description: 'stub',
 }));
-const mockSwitchIndustry = vi.fn(async () => true);
 const mockUseAccountProfileStore = vi.fn(() => ({
   accountUsername: '',
   isAdminAccount: false,
@@ -180,7 +179,6 @@ vi.mock('@/utils/xcagiStorageKeys', () => ({
 vi.mock('@/stores/industry', () => ({
   useIndustryStore: () => ({
     currentIndustryId: '',
-    switchIndustry: (...args: unknown[]) => mockSwitchIndustry(...args),
     error: null,
   }),
 }));
@@ -362,7 +360,6 @@ describe('mods store – coverage 补齐', () => {
       author: 'xcagi',
       description: 'stub',
     });
-    mockSwitchIndustry.mockResolvedValue(true);
     mockUseAccountProfileStore.mockReturnValue({
       accountUsername: '',
       isAdminAccount: false,
@@ -1108,26 +1105,15 @@ describe('mods store – coverage 补齐', () => {
       expect(store.activeModId).toBe('');
     });
 
-    it('applyEntitledActiveMod 在 next 等于 current 且 force=true 时同步行业', async () => {
+    it('applyEntitledActiveMod 在 next 等于 current 时保持不变（SSOT 后不再同步行业）', async () => {
       const store = useModsStore();
       store.mods = sampleMods as never[];
       store.setActiveModId('attendance-industry');
       mockApiFetch.mockResolvedValue(makeResponse({ success: true, data: [] }));
 
       await store.applyEntitledActiveMod(['attendance-industry'], { force: true });
-      // next === current 且 force -> syncIndustryForActiveMod
-      expect(mockSwitchIndustry).toHaveBeenCalled();
-    });
-
-    it('applyEntitledActiveMod 在 next 等于 current 且 force=false 时不同步行业', async () => {
-      const store = useModsStore();
-      store.mods = sampleMods as never[];
-      store.setActiveModId('attendance-industry');
-      mockApiFetch.mockResolvedValue(makeResponse({ success: true, data: [] }));
-
-      await store.applyEntitledActiveMod(['attendance-industry'], { force: false });
-      // next === current 且 !force -> 不调用 syncIndustryForActiveMod
-      expect(mockSwitchIndustry).not.toHaveBeenCalled();
+      // next === current -> 不切换；SSOT 后也不再调用 syncIndustryForActiveMod
+      expect(store.activeModId).toBe('attendance-industry');
     });
 
     it('applyEntitledActiveMod 在 current 已匹配权益且非 force 时不切换', async () => {
@@ -1142,82 +1128,8 @@ describe('mods store – coverage 补齐', () => {
   });
 
   // ═══════════════════════════════════════════════════════════
-  // 5. syncIndustryForActiveMod 覆盖
+  // 5. syncIndustryForActiveMod 已删除（SSOT 收敛后行业由后端决定）
   // ═══════════════════════════════════════════════════════════
-  describe('syncIndustryForActiveMod', () => {
-    it('切换 active mod 时同步行业', async () => {
-      const store = useModsStore();
-      store.mods = sampleMods as never[];
-      store.setActiveModId('taiyangniao-pro');
-      mockApiFetch.mockResolvedValue(makeResponse({ success: true, data: [] }));
-
-      // force=true 且 next !== current -> setActiveModId + syncIndustryForActiveMod
-      await store.applyEntitledActiveMod(['attendance-industry'], { force: true });
-      expect(mockSwitchIndustry).toHaveBeenCalledWith('attendance');
-    });
-
-    it('行业相同时不调用 switchIndustry', async () => {
-      // 让 currentIndustryId 返回与 mod 相同的行业
-      vi.doMock('@/stores/industry', () => ({
-        useIndustryStore: () => ({
-          currentIndustryId: 'attendance',
-          switchIndustry: (...args: unknown[]) => mockSwitchIndustry(...args),
-          error: null,
-        }),
-      }));
-      vi.resetModules();
-      const { useModsStore: freshUseModsStore } = await import('./mods');
-      const store = freshUseModsStore();
-      store.mods = sampleMods as never[];
-      store.setActiveModId('attendance-industry');
-      mockApiFetch.mockResolvedValue(makeResponse({ success: true, data: [] }));
-
-      await store.applyEntitledActiveMod(['attendance-industry'], { force: true });
-      // 行业相同 -> 不调用 switchIndustry
-      expect(mockSwitchIndustry).not.toHaveBeenCalled();
-    });
-
-    it('switchIndustry 失败时输出警告', async () => {
-      // 使用 vi.doMock 设置 switchIndustry 返回 false 且 error 有值
-      vi.doMock('@/stores/industry', () => ({
-        useIndustryStore: () => ({
-          currentIndustryId: '',
-          switchIndustry: async () => false,
-          error: '切换失败',
-        }),
-      }));
-      vi.resetModules();
-      const { useModsStore: freshUseModsStore } = await import('./mods');
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const store = freshUseModsStore();
-      store.mods = sampleMods as never[];
-      store.setActiveModId('taiyangniao-pro');
-      mockApiFetch.mockResolvedValue(makeResponse({ success: true, data: [] }));
-
-      await store.applyEntitledActiveMod(['attendance-industry'], { force: true });
-      expect(warnSpy).toHaveBeenCalled();
-      warnSpy.mockRestore();
-    });
-
-    it('mod 无 industry 时不调用 switchIndustry', async () => {
-      const store = useModsStore();
-      store.mods = [
-        {
-          id: 'no-industry-mod',
-          name: 'No Industry',
-          version: '1.0',
-          author: '',
-          description: '',
-          primary: true,
-        },
-      ] as never[];
-      store.setActiveModId('no-industry-mod');
-      mockApiFetch.mockResolvedValue(makeResponse({ success: true, data: [] }));
-
-      await store.applyEntitledActiveMod(['no-industry-mod'], { force: true });
-      expect(mockSwitchIndustry).not.toHaveBeenCalled();
-    });
-  });
 
   // ═══════════════════════════════════════════════════════════
   // 6. ensureActiveModSelection 覆盖

@@ -101,7 +101,7 @@ class SalesContractGenerator:
         def _to_decimal(val):
             try:
                 return Decimal(str(val).replace(" KG", "").replace("kg", "").strip())
-            except:
+            except Exception:
                 return Decimal("0")
 
         total_quantity = sum(

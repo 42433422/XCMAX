@@ -159,7 +159,6 @@ vi.mock('@/utils/xcagiStorageKeys', () => ({
 vi.mock('@/stores/industry', () => ({
   useIndustryStore: () => ({
     currentIndustryId: '',
-    switchIndustry: vi.fn(async () => true),
     error: null,
   }),
 }));

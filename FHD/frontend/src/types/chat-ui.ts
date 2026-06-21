@@ -26,8 +26,8 @@ export interface UiChatMessage {
   downloadUrl?: string
   /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
   shipmentDownloadUrl?: string
+  /** 附件（Excel 分析等 Mod 回传的结构化数据） */
+  attachments?: Record<string, unknown>[]
 }
 
-export type UiChatMessageExtras = Partial<
-  Pick<UiChatMessage, 'shipmentDownloadUrl' | 'downloadUrl' | 'toolProgressLabel'>
->
+export type UiChatMessageExtras = Partial<UiChatMessage>

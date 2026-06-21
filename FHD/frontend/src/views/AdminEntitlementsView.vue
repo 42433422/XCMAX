@@ -127,7 +127,7 @@
           </div>
         </header>
 
-        <section class="admin-user-profile" aria-label="用户等级与行业">
+        <section class="admin-user-profile" aria-label="用户账号体系">
           <div class="admin-user-profile__row">
             <label class="admin-user-profile__field">
               <span class="admin-user-profile__label">等级</span>
@@ -141,6 +141,20 @@
                 <option v-for="id in INDUSTRY_PRESET_IDS" :key="id" :value="id">{{ id }}</option>
               </select>
             </label>
+            <label v-if="isEnterpriseProfile" class="admin-user-profile__field">
+              <span class="admin-user-profile__label">账号等级</span>
+              <select v-model="profileEditing.account_tier" class="admin-user-profile__select">
+                <option value="">未设</option>
+                <option v-for="t in ACCOUNT_TIER_OPTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
+              </select>
+            </label>
+            <label v-if="isEnterpriseProfile" class="admin-user-profile__field">
+              <span class="admin-user-profile__label">预算</span>
+              <select v-model="profileEditing.budget_range" class="admin-user-profile__select">
+                <option value="">未填</option>
+                <option v-for="b in BUDGET_RANGE_OPTIONS" :key="b" :value="b">{{ b }}</option>
+              </select>
+            </label>
             <button
               type="button"
               class="btn btn-primary btn-sm"
@@ -149,6 +163,17 @@
             >
               {{ profileSaving ? '保存中…' : '保存' }}
             </button>
+          </div>
+          <div class="admin-user-profile__row admin-user-profile__entitled">
+            <span class="admin-user-profile__label">已授权行业</span>
+            <label
+              v-for="id in INDUSTRY_PRESET_IDS"
+              :key="id"
+              class="admin-user-profile__chip"
+            >
+              <input type="checkbox" :value="id" v-model="profileEditing.entitled_industries" />
+              <span>{{ id }}</span>
+            </label>
           </div>
         </section>
 
@@ -252,6 +277,17 @@ type AdminUser = {
   mod_ids?: string[];
   tier?: string;
   industry_id?: string;
+  account_tier?: string;
+  budget_range?: string;
+  entitled_industries?: string[];
+};
+
+type LocalProfile = {
+  tier: string;
+  industry_id: string;
+  account_tier?: string;
+  budget_range?: string;
+  entitled_industries?: string[];
 };
 
 type WalletRow = {
@@ -304,9 +340,15 @@ const syncStatus = ref<Record<string, unknown> | null>(null);
 // 用户钱包余额（远端 market /api/admin/wallets，按 user_id 索引）
 const walletMap = ref<Map<number, WalletRow>>(new Map());
 
-// 用户等级与行业（本地持久化，按 username 合并远端用户列表）
-const userProfiles = ref<Record<string, { tier: string; industry_id: string }>>({});
-const profileEditing = ref({ tier: '', industry_id: '' });
+// 用户账号体系（本地持久化，按 username 合并远端用户列表）
+const userProfiles = ref<Record<string, LocalProfile>>({});
+const profileEditing = ref<{
+  tier: string;
+  industry_id: string;
+  account_tier: string;
+  budget_range: string;
+  entitled_industries: string[];
+}>({ tier: '', industry_id: '', account_tier: '', budget_range: '', entitled_industries: [] });
 const profileSaving = ref(false);
 
 const TIER_OPTIONS: { value: string; label: string }[] = [
@@ -314,6 +356,13 @@ const TIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'enterprise', label: '企业' },
   { value: 'admin', label: '管理员' },
 ];
+const ACCOUNT_TIER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'normal', label: '普通' },
+  { value: 'pro', label: 'Pro' },
+  { value: 'max', label: 'Max' },
+  { value: 'ultra', label: 'Ultra' },
+];
+const BUDGET_RANGE_OPTIONS = ['5 万以内', '5–20 万', '20–50 万', '50 万以上'];
 
 function resolveTier(u: AdminUser): string {
   return u.tier || (u.is_admin ? 'admin' : u.is_enterprise ? 'enterprise' : 'personal');
@@ -326,6 +375,8 @@ function tierLabel(u: AdminUser): string {
 const selectedUser = computed(() =>
   users.value.find((u) => u.id === selectedUserId.value) || null,
 );
+// 账号等级仅企业用户可设
+const isEnterpriseProfile = computed(() => profileEditing.value.tier === 'enterprise');
 
 const filteredUsers = computed(() => {
   const q = userFilter.value.trim().toLowerCase();
@@ -497,7 +548,7 @@ async function loadUsers() {
   // 合并本地 tier/industry_id（按 username 匹配）
   try {
     const profRes = await xcmaxAdminApi.getUserProfiles();
-    const profBody = profRes as { data?: Record<string, { tier: string; industry_id: string }> };
+    const profBody = profRes as { data?: Record<string, LocalProfile> };
     const profiles = profBody.data || {};
     userProfiles.value = profiles;
     for (const u of list) {
@@ -505,6 +556,9 @@ async function loadUsers() {
       if (p) {
         u.tier = p.tier;
         u.industry_id = p.industry_id;
+        u.account_tier = p.account_tier;
+        u.budget_range = p.budget_range;
+        u.entitled_industries = p.entitled_industries;
       }
     }
   } catch {
@@ -550,6 +604,9 @@ async function selectUser(u: AdminUser) {
   profileEditing.value = {
     tier: u.tier || (u.is_admin ? 'admin' : u.is_enterprise ? 'enterprise' : 'personal'),
     industry_id: u.industry_id || '通用',
+    account_tier: u.account_tier || '',
+    budget_range: u.budget_range || '',
+    entitled_industries: Array.isArray(u.entitled_industries) ? [...u.entitled_industries] : [],
   };
   try {
     const res = await xcmaxAdminApi.listUserMods(u.id);
@@ -565,13 +622,29 @@ async function saveProfile() {
   if (!selectedUser.value) return;
   profileSaving.value = true;
   try {
+    // 当前行业必须在已授权集合内（与后端校验一致）：自动并入避免 422
+    const entitled = [...profileEditing.value.entitled_industries];
+    if (
+      profileEditing.value.industry_id &&
+      !entitled.includes(profileEditing.value.industry_id)
+    ) {
+      entitled.push(profileEditing.value.industry_id);
+    }
+    const isEnterprise = profileEditing.value.tier === 'enterprise';
     await xcmaxAdminApi.setUserProfile(selectedUser.value.id, {
       username: selectedUser.value.username,
       tier: profileEditing.value.tier,
       industry_id: profileEditing.value.industry_id,
+      account_tier: isEnterprise ? profileEditing.value.account_tier || undefined : undefined,
+      budget_range: profileEditing.value.budget_range || undefined,
+      entitled_industries: entitled,
     });
     selectedUser.value.tier = profileEditing.value.tier;
     selectedUser.value.industry_id = profileEditing.value.industry_id;
+    selectedUser.value.account_tier = isEnterprise ? profileEditing.value.account_tier : '';
+    selectedUser.value.budget_range = profileEditing.value.budget_range;
+    selectedUser.value.entitled_industries = entitled;
+    profileEditing.value.entitled_industries = entitled;
     await appAlert('已保存');
   } catch (e) {
     await appAlert(`保存失败：${e instanceof Error ? e.message : String(e)}`);
@@ -952,6 +1025,25 @@ onMounted(async () => {
   font-size: 13px;
   background: #fff;
   min-width: 100px;
+}
+.admin-user-profile__entitled {
+  margin-top: 10px;
+  align-items: center;
+}
+.admin-user-profile__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #334155;
+  background: #fff;
+  cursor: pointer;
+}
+.admin-user-profile__chip input {
+  margin: 0;
 }
 
 .admin-entitlement-chain {

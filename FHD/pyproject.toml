@@ -153,8 +153,18 @@ ignore = [
 "app/utils/__init__.py" = ["F403", "F405", "F401", "F821"]
 "app/legacy/**" = ["BLE001"]
 "app/traditional_mode_fs.py" = ["BLE001"]
+# 顶层兜底 catch-all（已记录日志）：裸 except: 已统一改为 except Exception: 后由 BLE001 接管，
+# 这些 I/O / 文档生成 / 意图识别热路径的 catch-all 属合理设计，显式登记免噪。
+"app/utils/printer_automation.py" = ["BLE001"]
+"app/utils/print_utils.py" = ["BLE001"]
+"app/infrastructure/documents/sales_contract_generator.py" = ["BLE001"]
+"app/infrastructure/documents/shipment_document_generator_impl.py" = ["BLE001"]
+"app/services/deepseek_intent_service.py" = ["BLE001"]
+"app/services/tools_execution/order_parser.py" = ["BLE001"]
+"app/services/skills/label_template_generator/label_template_generator.py" = ["BLE001"]
+"resources/tools_legacy/**" = ["BLE001", "E722"]
 "app/infrastructure/gateways/product.py" = ["F822"]
-"**/__init__.py" = ["F401", "F403", "F405", "F811"]
+"**/__init__.py" = ["F401", "F403", "F405", "F811", "I001"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -205,6 +215,7 @@ markers = [
     "e2e: 端到端测试",
     "asyncio: 异步测试 (pytest-asyncio)",
     "release_gate: release train hard gate subset",
+    "coverage_ramp: 行覆盖率填充 stub（断言弱、杀变体能力低；非行为契约测试）。由 conftest 按文件名自动打标，可用 -m 'not coverage_ramp' 测真实行为套件",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -256,20 +267,23 @@ fail_under = 84
 directory = "htmlcov"
 show_contexts = true
 
-# Phase 4 变异测试基础设施（mutmut · v10 线内迭代 · 2026-06-14）
-# 用法：pip install mutmut && mutmut run
-# 首轮聚焦 Phase 4 长尾纯函数目录；逐步扩大 source_paths。
+# Phase 4 变异测试基础设施（mutmut 3.6.0 · 2026-06 修正）
+# 旧 1.x 键 runner=/dict_synonyms 被 mutmut 3.x 忽略 → 导致 `mutmut run` 退化为全量套件、CI 超时、
+# 从未真跑出杀死率。下面是 3.x 有效键（已本机验证可跑：app/di 62 变体/25 killed/约43% kill）。
+# 关键：mutmut 3.x 把源码复制进 mutants/ 后在那里跑测试，app 代码 `from resources.config...`
+# 依赖顶层 resources/ 包，故 also_copy 必须含 resources 与 tests，否则 baseline ModuleNotFoundError。
+# 用法：mutmut run && python scripts/dev/mutation_kill_report.py --threshold 40
+# 首轮聚焦低依赖包；补测后逐步扩大 source_paths（见 docs/reports/TO_9_PROGRAM.md T6/T9）。
 [tool.mutmut]
-source_paths = [
-    "app/http/",
-    "app/contexts/",
-    "app/di/",
-    "app/utils/",
-    "app/security/",
-    "app/middleware/",
+source_paths = ["app/di", "app/contexts", "app/security", "app/middleware"]
+also_copy = ["app", "resources", "tests", "conftest.py"]
+pytest_add_cli_args = ["-q", "-p", "no:cacheprovider", "--no-header"]
+pytest_add_cli_args_test_selection = [
+    "tests/test_di",
+    "tests/test_contexts",
+    "tests/test_security",
+    "tests/test_utils",
 ]
-runner = "python -m pytest tests/test_http tests/test_contexts tests/test_di -x --tb=no -q"
-dict_synonyms = ["Struct", "NamedTuple"]
 
 [build-system]
 requires = ["setuptools>=61"]

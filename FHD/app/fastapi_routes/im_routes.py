@@ -7,6 +7,8 @@ import logging
 from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+from app.application.ai_group_chat_service import AiGroupChatService
+from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.config import Config
@@ -14,7 +16,6 @@ from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     require_identified_user,
-    session_id_from_request,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -87,7 +88,7 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     except ImportError:
         from app.application.facades.session_facade import get_session_service
 
-    user = session_facade.get_session_service().validate_session(str(sid).strip())
+    user = get_session_service().validate_session(str(sid).strip())
     if user is None:
         return None
     return int(user.id)
@@ -368,6 +369,196 @@ def codex_super_employee_invoke(
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
         db.close()
+
+
+@router.get("/api/admin/claude-super-employee/messages")
+def claude_super_employee_messages(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+    limit: int = Query(default=80, ge=1, le=200),
+):
+    """管理端 Claude 超级员工软件内对话记录。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        messages = ClaudeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return {"success": True, "messages": messages}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("claude_super_employee_messages")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.post("/api/admin/claude-super-employee/messages")
+def claude_super_employee_invoke(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端 Claude 超级员工软件内调用入口。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        text = str(body.get("message") or body.get("body") or "").strip()
+        context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        result = ClaudeSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
+        return {"success": True, **result}
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("claude_super_employee_invoke")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+# ── AI 群聊（管理端/桌面）──
+
+
+def _ai_group_guard(request: Request):
+    """复用 Codex 的管理端会话校验；通过返回 uid，否则返回 (None, denied)。"""
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        return denied
+    finally:
+        db.close()
+
+
+@router.get("/api/admin/ai-groups")
+def admin_ai_groups_list(request: Request, user: CurrentUser = Depends(require_identified_user)):
+    denied = _ai_group_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        groups = AiGroupChatService().list_groups(user_id=_uid(user))
+        return {"success": True, "groups": groups}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_ai_groups_list")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.post("/api/admin/ai-groups")
+def admin_ai_groups_create(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    denied = _ai_group_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        group = AiGroupChatService().create_group(user_id=_uid(user), name=str(body.get("name") or ""))
+        return {"success": True, "group": group}
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_ai_groups_create")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.get("/api/admin/ai-groups/{group_id}/messages")
+def admin_ai_group_messages(
+    request: Request,
+    group_id: str,
+    limit: int = Query(default=100, ge=1, le=300),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    denied = _ai_group_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        messages = AiGroupChatService().get_messages(user_id=_uid(user), group_id=group_id, limit=limit)
+        return {"success": True, "messages": messages}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_ai_group_messages")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.post("/api/admin/ai-groups/{group_id}/messages")
+async def admin_ai_group_post(
+    request: Request,
+    group_id: str,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    denied = _ai_group_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        mentions = body.get("mentions")
+        result = await AiGroupChatService().post_message(
+            user_id=_uid(user),
+            group_id=group_id,
+            text=str(body.get("message") or ""),
+            sender_name=str(body.get("sender_name") or "我"),
+            mentions=mentions if isinstance(mentions, list) else None,
+        )
+        return {"success": True, **result}
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_ai_group_post")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.post("/api/admin/ai-groups/{group_id}/members")
+def admin_ai_group_add_member(
+    request: Request,
+    group_id: str,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    denied = _ai_group_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        group = AiGroupChatService().add_member(
+            user_id=_uid(user),
+            group_id=group_id,
+            member={
+                "employee_id": str(body.get("employee_id") or ""),
+                "mod_id": str(body.get("mod_id") or ""),
+                "name": str(body.get("name") or ""),
+                "avatar": str(body.get("avatar") or ""),
+                "summary": str(body.get("summary") or ""),
+            },
+        )
+        return {"success": True, "group": group}
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_ai_group_add_member")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.delete("/api/admin/ai-groups/{group_id}/members/{employee_id}")
+def admin_ai_group_remove_member(
+    request: Request,
+    group_id: str,
+    employee_id: str,
+    user: CurrentUser = Depends(require_identified_user),
+):
+    denied = _ai_group_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        group = AiGroupChatService().remove_member(
+            user_id=_uid(user), group_id=group_id, employee_id=employee_id
+        )
+        return {"success": True, "group": group}
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_ai_group_remove_member")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
 @router.websocket("/ws/im")

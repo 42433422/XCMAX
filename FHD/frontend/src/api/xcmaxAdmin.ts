@@ -74,7 +74,14 @@ export const xcmaxAdminApi = {
   },
   setUserProfile(
     userId: number,
-    payload: { username: string; tier?: string; industry_id?: string },
+    payload: {
+      username: string;
+      tier?: string;
+      industry_id?: string;
+      account_tier?: string;
+      budget_range?: string;
+      entitled_industries?: string[];
+    },
   ) {
     return api.put(`/api/xcmax/admin/users/${userId}/profile`, payload);
   },
