@@ -70,7 +70,6 @@ from app.services.skills.label_template_generator.label_template_generator impor
     get_label_template_generator_skill,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -809,8 +808,9 @@ class TestExtractTextWithOcr:
         pixel-scanning loops execute.  black_rows/black_cols mark full black lines
         (value=255) so the line-detection branch fires too.
         """
-        import numpy as np
         import sys
+
+        import numpy as np
 
         cv2_mock = MagicMock()
         # gray: all zero (no pixels by default)
@@ -884,6 +884,7 @@ class TestExtractTextWithOcr:
         Uses real numpy arrays so the pixel loops actually run.
         """
         import sys
+
         import numpy as np
 
         img = Image.new("RGB", (20, 10), "white")
@@ -917,6 +918,7 @@ class TestExtractTextWithOcr:
         and the grid branch where horizontal_lines/vertical_lines have <= 1 entries.
         """
         import sys
+
         import numpy as np
 
         # Use a small image; the function calls Image.open internally
@@ -966,6 +968,7 @@ class TestExtractTextWithOcr:
         The binary array has full black rows/cols so line-detection branches fire.
         """
         import sys
+
         import numpy as np
 
         # A 30x20 pixel image with H=30 (rows), W=20 (cols)
@@ -1031,6 +1034,7 @@ class TestExtractTextWithOcr:
         """Lines very close together (distance < 5px) exercise merge_very_close_lines
         'else' branch (lines 163-165: merged[-1] = (merged[-1] + line) // 2)."""
         import sys
+
         import numpy as np
 
         H, W = 50, 50
@@ -1070,6 +1074,7 @@ class TestExtractTextWithOcr:
         when current_length > max_continuous_length in the else branch (line 101-102).
         """
         import sys
+
         import numpy as np
 
         H, W = 10, 20
@@ -1110,6 +1115,7 @@ class TestExtractTextWithOcr:
         """Exercises the border detection branch inside cell construction (lines 222-236):
         0 < border_black_count < h*0.5 → should_merge_right=True."""
         import sys
+
         import numpy as np
 
         H, W = 60, 60
@@ -1229,27 +1235,18 @@ class TestClassifyFieldJiaSuffix:
 
     def test_label_ending_jia_maps_to_price(self):
         """A label not in common_labels but ending in '价' → fixed_label, price."""
-        from app.services.skills.label_template_generator.label_template_generator import (
-            _classify_field,
-        )
         field_type, field_key = _classify_field("特惠价")
         assert field_type == "fixed_label"
         assert field_key == "price"
 
     def test_known_label_takes_priority_over_jia_suffix(self):
         """'价格' IS in common_labels, so the first if-branch fires, not elif."""
-        from app.services.skills.label_template_generator.label_template_generator import (
-            _classify_field,
-        )
         field_type, field_key = _classify_field("价格")
         assert field_type == "fixed_label"
         assert field_key == "price"
 
     def test_unknown_label_not_ending_jia_is_dynamic(self):
         """Label not in common_labels and not ending in '价' → dynamic."""
-        from app.services.skills.label_template_generator.label_template_generator import (
-            _classify_field,
-        )
         field_type, field_key = _classify_field("批次号")
         assert field_type == "dynamic"
         assert field_key == "批次号"

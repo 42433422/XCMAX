@@ -13,12 +13,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.mod_sdk.customer_delivery_seed import (
+    _resolve_version,
     _safe_member_relpath,
     extract_customer_delivery_seed,
     install_customer_delivery_seed_package,
-    _resolve_version,
 )
-
 
 # ---------------------------------------------------------------------------
 # _safe_member_relpath

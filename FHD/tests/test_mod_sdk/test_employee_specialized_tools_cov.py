@@ -74,6 +74,8 @@ from app.mod_sdk.employee_specialized_tools import (
     tool_pack_release,
     tool_patch_file,
     tool_performance_status,
+    tool_query_local_token_usage,
+    tool_query_provider_usage,
     tool_read_file,
     tool_read_llm_env_config,
     tool_run_arch_fitness,
@@ -90,7 +92,6 @@ from app.mod_sdk.employee_specialized_tools import (
     tool_verify_version_anchors,
     tool_write_file,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1446,7 +1447,7 @@ class TestListConfiguredProviders:
     async def test_no_providers_configured(self):
         # Remove all provider keys from env
         keys_to_remove = [k for k in os.environ if "API_KEY" in k or "ARK" in k or "VOLC" in k]
-        env_override = {k: "" for k in keys_to_remove}
+        env_override = dict.fromkeys(keys_to_remove, "")
         with patch.dict(os.environ, env_override, clear=False):
             # Patch env to empty so no providers match
             with patch("os.environ", {}):

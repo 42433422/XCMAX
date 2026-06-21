@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Service metadata: (module_name, class_name, prefix, source, getter_name)
 # ---------------------------------------------------------------------------

@@ -2,16 +2,15 @@
 from __future__ import annotations
 
 import pytest
-
 from app.application.app_service_pair_registry import (
-    AppServicePair,
     APP_SERVICE_PAIRS,
-    iter_pairs,
+    AppServicePair,
     domains_on_v1_http,
     get_pair,
-    resolve_neuro_getter,
-    resolve_http_getter,
+    iter_pairs,
     neuro_v2_module_path,
+    resolve_http_getter,
+    resolve_neuro_getter,
 )
 
 
