@@ -140,3 +140,24 @@ def require_permission(permission_code: str) -> Callable[..., Any]:
         return user
 
     return _dependency
+
+
+def require_admin_user(request: Request) -> Any:
+    """要求当前登录用户 tier == "admin"，否则返回 403。
+
+    用于行业切换等仅限管理端操作的敏感路由。
+    """
+    user = get_logged_in_user(request)
+    tier = str(getattr(user, "tier", "") or "").strip()
+    if tier != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "success": False,
+                "message": {
+                    "code": "ADMIN_ONLY",
+                    "message": "仅管理端账号可执行此操作",
+                },
+            },
+        )
+    return user

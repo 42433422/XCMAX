@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 def _derive_industry_from_session(request: Request) -> str:
     """单一真相源 + 自动派生：从 session account_kind + User.industry_id 派生 industry。
 
-    1. admin 账号 → "企业管理"（运维助手身份）
+    1. admin 账号 → "管理端"（运维助手身份）
     2. 普通账号 → User.industry_id（涂料/考勤/批发/电商/餐饮/物流等）
     3. 兜底 → "通用"（业务管家身份）
 
@@ -63,9 +63,9 @@ def _derive_industry_from_session(request: Request) -> str:
         if not sid:
             return "通用"
         meta = load_session_account_meta(sid) or {}
-        # 1. admin 账号 → 企业管理
+        # 1. admin 账号 → 管理端
         if meta.get("account_kind") == "admin":
-            return "企业管理"
+            return "管理端"
         # 2. 普通账号 → User.industry_id
         local_user_id = meta.get("local_user_id")
         if local_user_id:
@@ -555,7 +555,7 @@ async def compat_chat_stream_async(
                 user_id = body.user_id or "default-user"
                 ctx = body.context or {}
                 # 单一真相源 + 自动派生：优先用前端传的 industry；
-                # 没传则从 session account_kind 派生（admin → 企业管理，其他 → 通用）
+                # 没传则从 session account_kind 派生（admin → 管理端，其他 → 通用）
                 industry = ctx.get("industry") if isinstance(ctx, dict) else None
                 if not industry:
                     industry = _derive_industry_from_session(request)

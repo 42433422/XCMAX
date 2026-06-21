@@ -19,9 +19,10 @@ app/infrastructure/mods/manifest.py::ModMetadata.industry。
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from app.infrastructure.auth.dependencies import require_admin_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -166,8 +167,12 @@ async def get_current_industry_endpoint(request: Request):
 
 
 @router.post("/industry")
-async def set_industry_endpoint(request_body: SetIndustryRequest, request: Request):
-    """Set current industry"""
+async def set_industry_endpoint(
+    request_body: SetIndustryRequest,
+    request: Request,
+    admin_user: Any = Depends(require_admin_user),
+):
+    """Set current industry（仅限管理端 admin 账号）。"""
     try:
         from resources.config.industry_config import (
             get_industry_profile,

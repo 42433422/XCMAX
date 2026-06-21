@@ -1,12 +1,9 @@
 import { computed } from 'vue'
-import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
-import { useModsStore } from '@/stores/mods'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
-import { isSelectableExtensionModId } from '@/constants/genericModPack'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { getIndustryPreset } from '@/constants/industryPresets'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord } from '@/utils/typeGuards'
 
 type StarterPackItem = {
   label: string
@@ -41,67 +38,16 @@ function normalizeStarterPack(rows: unknown): StarterPackItem[] {
 }
 
 /**
- * 选定 active mod：
- * 1. 若有 modsForUi 中其 industry.id === industryId，优先返回（保持原语义，让"切行业"决定 UI）
- * 2. 否则若 activeModId 存在且能在 modsForUi 中找到，直接返回该 mod；
- *    这样用户在 Settings 选 Mod 后，即便 server 当前行业还没跟上（backend init 滞后、
- *    或 industry 切换接口暂未受理），侧栏副标题/主单位/意图关键词仍能立刻按 mod 走，
- *    避免扩展模块与当前行业文案脱节。
+ * 行业 UI 文案 composable：只从 industryStore（SSOT）读取行业信息。
+ * Phase 1 SSOT 收敛后，行业由后端 User.industry_id 决定，前端不再从 active mod 推断。
  */
-function activeModForIndustry(
-  mods: unknown[],
-  activeModId: string,
-  industryId: string,
-): Record<string, unknown> | null {
-  if (activeModId) {
-    const direct = mods.find((m) => str(asRecord(m).id) === activeModId)
-    if (direct) {
-      if (isSelectableExtensionModId(activeModId)) return asRecord(direct)
-      const ext = mods.find((m) => isSelectableExtensionModId(str(asRecord(m).id)))
-      if (ext) return asRecord(ext)
-    }
-  }
-  let matched: Record<string, unknown> | null = null
-  for (const mod of mods) {
-    const modRow = asRecord(mod)
-    const modIndustryId = str(asRecord(modRow.industry).id)
-    if (!modIndustryId || modIndustryId !== industryId) continue
-    if (!matched) matched = modRow
-    if (activeModId && str(modRow.id) === activeModId) matched = modRow
-  }
-  return matched
-}
-
 export function useIndustryUiText() {
   const industryStore = useIndustryStore()
-  const modsStore = useModsStore()
-  const { modsForUi } = storeToRefs(modsStore)
 
   const industryId = computed(() => str(industryStore.currentIndustryId, DEFAULT_INDUSTRY_ID))
-  const activeMod = computed(() =>
-    activeModForIndustry(modsForUi.value || [], str(modsStore.activeModId), industryId.value),
-  )
-  /**
-   * 计算行业配置：active mod 的 manifest.industry 优先（用户在 Settings 选了
-   * 该 mod 就应该看到该 mod 的字段/意图），其次 server 给的 currentConfig。
-   * 让"切 mod" 立刻全栈生效，不依赖后端 industry 切换是否被接受。
-   */
-  const industryConfig = computed(() => {
-    const fromMod = asRecord(activeMod.value?.industry)
-    if (Object.keys(fromMod).length) return fromMod
-    return asRecord(industryStore.currentConfig)
-  })
-  /**
-   * active mod 的"实际行业 id"——优先用 mod manifest 声明的 industry.id；
-   * mod 没声明时回退到当前 industryStore，再不行用默认行业。这里不再硬等
-   * industryStore.currentIndustryId，让侧栏副标题可立刻反映 mod 切换。
-   */
-  const effectiveIndustryId = computed(() => {
-    const fromMod = str(asRecord(activeMod.value?.industry).id)
-    return fromMod || industryId.value
-  })
+  const industryConfig = computed(() => asRecord(industryStore.currentConfig))
   const uiLabels = computed<Record<string, unknown>>(() => {
-    const labels = activeMod.value?.ui_labels
+    const labels = industryConfig.value.ui_labels
     return labels && typeof labels === 'object' ? asRecord(labels) : {}
   })
 
@@ -135,7 +81,7 @@ export function useIndustryUiText() {
   const recordsName = computed(() =>
     str(
       uiLabels.value.records,
-      resolveCoreNavLabel('shipment-records', industryId.value, modsForUi.value) || `${shipmentOrderName.value}记录`,
+      resolveCoreNavLabel('shipment-records', industryId.value, []) || `${shipmentOrderName.value}记录`,
     ),
   )
   const queryTitle = computed(() => str(uiLabels.value.query_title, `${entityName.value}查询`))
@@ -151,15 +97,14 @@ export function useIndustryUiText() {
   const entityListName = computed(() =>
     str(
       uiLabels.value.entity_list,
-      resolveCoreNavLabel('products', effectiveIndustryId.value, modsForUi.value) || `${entityName.value}管理`,
+      resolveCoreNavLabel('products', industryId.value, []) || `${entityName.value}管理`,
     ),
   )
   const assistantSubtitle = computed(() => {
-    const mod = activeMod.value
-    const modName = str(mod?.name || mod?.id)
-    const indId = effectiveIndustryId.value
-    if (!modName) return `${indId}系统`
-    return `${modName}（${indId}系统）`
+    const indId = industryId.value
+    const indName = str(industryConfig.value.name)
+    if (indName) return `${indName}（${indId}系统）`
+    return `${indId}系统`
   })
 
   const emptyBeforeSearch = computed(() =>
@@ -172,9 +117,9 @@ export function useIndustryUiText() {
   )
 
   const starterPackPresets = computed<StarterPackItem[]>(() => {
-    const fromMod = normalizeStarterPack(activeMod.value?.ui_starter_pack)
-    if (fromMod.length) return fromMod
-    const preset = getIndustryPreset(effectiveIndustryId.value)
+    const fromConfig = normalizeStarterPack(industryConfig.value.ui_starter_pack)
+    if (fromConfig.length) return fromConfig
+    const preset = getIndustryPreset(industryId.value)
     const fromIndustry = preset.quickButtons
       .filter((b) => b.label !== '测试预览')
       .slice(0, 5)
@@ -184,10 +129,8 @@ export function useIndustryUiText() {
   })
 
   return {
-    activeMod,
     industryConfig,
     industryId,
-    effectiveIndustryId,
     entityName,
     entityPluralName,
     modelLabel,

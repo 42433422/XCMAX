@@ -569,9 +569,22 @@ def get_current_industry() -> str:
     """
     获取当前行业 ID。
 
-    优先级：运行时 default_industry（若被 set_current_industry 显式改过且在可用
-    集合内） → primary Mod 声明的行业 → 其他已加载 Mod 的首个行业 → YAML 默认。
+    优先级：请求上下文（request.state.industry_id，由 IndustryContextMiddleware 注入）
+    → 运行时 default_industry（若被 set_current_industry 显式改过且在可用集合内）
+    → primary Mod 声明的行业 → 其他已加载 Mod 的首个行业 → YAML 默认。
     """
+    # 优先从请求上下文读取（SSOT：每请求由中间件注入）
+    try:
+        from app.infrastructure.request_context import get_current_request
+
+        request = get_current_request()
+        if request is not None:
+            industry_id = getattr(request.state, "industry_id", None)
+            if industry_id:
+                return str(industry_id)
+    except Exception:  # noqa: BLE001 - 请求上下文读取失败不应阻断行业解析
+        pass
+
     config = _load_config()
     yaml_default = _resolve_default_industry(config)
 
@@ -595,25 +608,23 @@ def get_current_industry() -> str:
 
 def set_current_industry(industry_id: str) -> bool:
     """
-    设置当前行业（仅修改运行时状态，不持久化）。
+    设置当前行业（已废弃，no-op）。
 
-    合法集合 = 已加载 Mod 声明的行业 ∪ 磁盘扫描 Mod 声明的行业 ∪ YAML 行业。
-    任何一方承认即可。``_effective_mod_industries_dict()`` 内部先走 mod_manager
-    再走纯磁盘 manifest 兜底，所以 backend init 尚未完成的 Mod 也能即刻被设为
-    当前行业，无需等待 registry。
+    行业上下文现由 IndustryContextMiddleware 每请求从 User.industry_id 注入，
+    模块级可变状态不再维护。此函数保留仅为向后兼容，调用时发出 DeprecationWarning，
+    不再修改运行时状态，始终返回 True。
     """
-    global _industry_config
-    config = _load_config()
-    yaml_industries = _industries_dict_from_config(config)
-    mod_industries = _effective_mod_industries_dict()
+    import warnings
 
-    if industry_id not in yaml_industries and industry_id not in mod_industries:
-        logger.error(f"无法设置未知行业: {industry_id}")
-        return False
-
-    config["default_industry"] = industry_id
-    _industry_config = config
-    logger.info(f"当前行业已切换为: {industry_id}")
+    warnings.warn(
+        "industry_config.set_current_industry is deprecated and is now a no-op; "
+        "industry context is injected per-request by IndustryContextMiddleware.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.debug(
+        "set_current_industry(%s) called but is now a no-op (readonly SSOT)", industry_id
+    )
     return True
 
 

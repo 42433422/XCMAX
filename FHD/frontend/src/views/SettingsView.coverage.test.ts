@@ -131,7 +131,6 @@ const mockIndustryStore = {
   error: null as string | null,
   loadIndustries: vi.fn().mockResolvedValue(undefined),
   loadCurrentIndustry: vi.fn().mockResolvedValue(undefined),
-  switchIndustry: vi.fn().mockResolvedValue(true),
   initialize: vi.fn().mockResolvedValue(undefined),
   getIndustryById: vi.fn().mockReturnValue(null),
 }
@@ -1879,37 +1878,33 @@ describe('SettingsView – onActiveModChange', () => {
     wrapper.unmount()
   })
 
-  it('切换 mod 并切换行业成功时刷新页面', async () => {
+  it('切换 mod 时设置 activeModId 并刷新页面', async () => {
     mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1', industry: { id: 'ind1', name: '行业1' } }]
-    mockIndustryStore.switchIndustry.mockResolvedValueOnce(true)
+    const reloadSpy = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: reloadSpy },
+    })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onActiveModChange('ext-1')
     expect(mockModsStore.setActiveModId).toHaveBeenCalledWith('ext-1')
-    expect(mockIndustryStore.switchIndustry).toHaveBeenCalledWith('ind1')
+    expect(reloadSpy).toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('切换 mod 但行业切换失败时仅警告不回滚', async () => {
-    mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1', industry: { id: 'ind1', name: '行业1' } }]
-    mockIndustryStore.switchIndustry.mockResolvedValueOnce(false)
-    mockIndustryStore.error = '后端拒绝'
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    await vm.onActiveModChange('ext-1')
-    expect(warnSpy).toHaveBeenCalled()
-    wrapper.unmount()
-    warnSpy.mockRestore()
-  })
-
-  it('切换 mod 无 industry id 时不切换行业', async () => {
+  it('切换 mod 无 industry id 时仍设置 activeModId 并刷新', async () => {
     mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1' }]
+    const reloadSpy = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: reloadSpy },
+    })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onActiveModChange('ext-1')
     expect(mockModsStore.setActiveModId).toHaveBeenCalledWith('ext-1')
-    expect(mockIndustryStore.switchIndustry).not.toHaveBeenCalled()
+    expect(reloadSpy).toHaveBeenCalled()
     wrapper.unmount()
   })
 })
