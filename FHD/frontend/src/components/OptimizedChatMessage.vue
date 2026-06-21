@@ -131,7 +131,6 @@ import type { UiChatMessage } from '@/types/chat-ui';
 import ContextSummaryPills from '@/components/chat/ContextSummaryPills.vue';
 import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue';
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue';
-import ContextSummaryPills from '@/components/chat/ContextSummaryPills.vue';
 
 interface Props {
   message: UiChatMessage;
