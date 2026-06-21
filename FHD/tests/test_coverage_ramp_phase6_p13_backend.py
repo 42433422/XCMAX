@@ -2487,22 +2487,26 @@ class TestHandleImportExcelToDatabase:
         assert parsed["error"] == "file not found"
 
     def test_with_token_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 设置了 FHD_DB_WRITE_TOKEN 且 workspace_root is None 时，源码 fail-closed：
+        # 先做 token 鉴权（在文件存在性检查之前）。未提供 token → requires_token。
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
         result = _handle_import_excel_to_database(
             {"file_path": "/tmp/x.xlsx", "import_type": "products"},
         )
         parsed = json.loads(result)
         assert parsed["success"] is False
-        assert parsed["error"] == "file not found"
+        assert parsed["requires_token"] is True
+        assert parsed["token_name"] == "DB_WRITE_TOKEN"
 
     def test_with_invalid_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 提供了错误 token → 在文件检查之前即返回 invalid_token（fail-closed 安全门）。
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
         result = _handle_import_excel_to_database(
             {"file_path": "/tmp/x.xlsx", "import_type": "products", "db_write_token": "wrong"},
         )
         parsed = json.loads(result)
         assert parsed["success"] is False
-        assert parsed["error"] == "file not found"
+        assert parsed["error"] == "invalid_token"
 
     def test_empty_excel_file(self, tmp_path: Path) -> None:
         p = tmp_path / "empty.xlsx"
