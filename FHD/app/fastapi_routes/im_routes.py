@@ -14,7 +14,6 @@ from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     require_identified_user,
-    session_id_from_request,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -87,7 +86,7 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     except ImportError:
         from app.application.facades.session_facade import get_session_service
 
-    user = session_facade.get_session_service().validate_session(str(sid).strip())
+    user = get_session_service().validate_session(str(sid).strip())
     if user is None:
         return None
     return int(user.id)

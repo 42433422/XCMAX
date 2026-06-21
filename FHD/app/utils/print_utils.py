@@ -57,7 +57,7 @@ class PrinterUtils:
             try:
                 default_printer = win32print.GetDefaultPrinter()
                 logger.info("默认打印机: %s", default_printer)
-            except:
+            except Exception:
                 default_printer = None
                 logger.warning("无法获取默认打印机")
 
@@ -80,7 +80,7 @@ class PrinterUtils:
                     elif len(printer_info) > 5:
                         try:
                             status = int(printer_info[5]) if printer_info[5] else 0
-                        except:
+                        except Exception:
                             pass
 
                     status_text = self._get_printer_status(status)

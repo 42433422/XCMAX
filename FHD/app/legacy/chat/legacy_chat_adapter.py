@@ -66,6 +66,9 @@ def _resolve_chat_execute_tool():
 _TOOL_DEDUP: set[str] = set()
 _TOOL_DEDUP_LOCK = threading.Lock()
 _LAST_TOOL_TRACE = threading.local()
+_LAST_TOOL_RESULT: ContextVar[dict[str, Any] | None] = ContextVar(
+    "_LAST_TOOL_RESULT", default=None
+)
 
 # 这些工具可能在首轮就返回 requires_token,后续工具在串行语义下不应被执行;并行会改变该顺序。
 _TOKEN_ORDER_SENSITIVE_TOOLS = frozenset({"import_excel_to_database", "products_bulk_import"})
