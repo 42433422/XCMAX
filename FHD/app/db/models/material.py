@@ -6,9 +6,10 @@ from sqlalchemy import DateTime, Float, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class Material(Base):
+class Material(TenantScopedMixin, Base):
     __tablename__ = "materials"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

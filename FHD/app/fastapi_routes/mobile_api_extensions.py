@@ -18,6 +18,8 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from app.application.ai_group_chat_service import AiGroupChatService
+from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
@@ -47,7 +49,11 @@ from app.fastapi_routes.mobile_extensions.cs_helpers import (
 from app.fastapi_routes.mobile_extensions.models import (
     AiCircleCommentBody,
     AiCirclePostBody,
+    AiGroupCreateBody,
+    AiGroupMemberBody,
+    AiGroupMessageBody,
     AuthQrConfirmBody,
+    ClaudeSuperEmployeeMobileMessageBody,
     CodexSuperEmployeeMobileMessageBody,
     DeviceRegisterBody,
     MobileServiceBridgeRespondBody,
@@ -115,9 +121,7 @@ def _ai_circle_employee_profiles() -> dict[str, dict[str, str]]:
                 continue
             profiles[employee_id] = {
                 "name": str(
-                    employee.get("label")
-                    or employee.get("panel_title")
-                    or employee_id
+                    employee.get("label") or employee.get("panel_title") or employee_id
                 ).strip(),
                 "avatar": str(employee.get("market_avatar") or mod_avatar).strip(),
             }
@@ -475,7 +479,7 @@ def _admin_duty_mod_item(
         "author": "XCAGI 管理端",
         "description": f"{len(employees)} 位管理端编制 AI 员工，来自本机 duty registry。",
         "primary": True,
-        "industry": {"id": "admin", "name": "管理端"},
+        "industry": {"id": "管理端", "name": "管理端"},
         "frontend_menu": [],
         "menu": [],
         "menu_overrides": [],
@@ -1223,6 +1227,254 @@ async def mobile_admin_codex_super_employee_invoke(
         )
 
 
+@extension_router.get("/admin/claude-super-employee/messages")
+async def mobile_admin_claude_super_employee_messages(
+    request: Request,
+    limit: int = Query(default=80, ge=1, le=200),
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的 Claude 超级员工对话记录。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        messages = ClaudeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_claude_super_employee_messages")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/admin/claude-super-employee/messages")
+async def mobile_admin_claude_super_employee_invoke(
+    request: Request,
+    body: ClaudeSuperEmployeeMobileMessageBody,
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的软件内 Claude 调用入口。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    text = (body.message or body.body or "").strip()
+    context = dict(body.context or {})
+    context.setdefault("source", "mobile_im")
+    context.setdefault("client_surface", "mobile")
+    context.setdefault("target_devices", ["all"])
+    try:
+        result = ClaudeSuperEmployeeService().invoke(
+            user_id=uid,
+            message=text,
+            context=context,
+        )
+        return format_mobile_response(data=result)
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400),
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_claude_super_employee_invoke")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+# ── AI 群聊（微信式多 AI 群组）──
+
+
+def _mobile_group_uid(request: Request, user) -> int:
+    return _mobile_request_user_id(request, user)
+
+
+@extension_router.get("/ai-groups")
+async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user)):
+    """列出当前用户的 AI 群聊（首次自动按 6 个部门种出 6 个群）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        groups = AiGroupChatService().list_groups(user_id=uid)
+        return format_mobile_response(data={"groups": groups})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_groups_list")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.post("/ai-groups")
+async def mobile_ai_groups_create(
+    request: Request, body: AiGroupCreateBody, user=Depends(get_mobile_user)
+):
+    """创建自定义 AI 群聊。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        group = AiGroupChatService().create_group(user_id=uid, name=body.name)
+        return format_mobile_response(data={"group": group})
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_groups_create")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.get("/ai-groups/{group_id}/messages")
+async def mobile_ai_group_messages(
+    request: Request,
+    group_id: str,
+    limit: int = Query(default=100, ge=1, le=300),
+    user=Depends(get_mobile_user),
+):
+    """拉取某个 AI 群聊的历史消息。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        messages = AiGroupChatService().get_messages(user_id=uid, group_id=group_id, limit=limit)
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_messages")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.post("/ai-groups/{group_id}/messages")
+async def mobile_ai_group_post(
+    request: Request, group_id: str, body: AiGroupMessageBody, user=Depends(get_mobile_user)
+):
+    """在 AI 群聊里发消息：群成员各回一条；@ 了具体成员则只有 TA 回复。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        result = await AiGroupChatService().post_message(
+            user_id=uid,
+            group_id=group_id,
+            text=body.message,
+            sender_name=body.sender_name or "我",
+            mentions=body.mentions,
+        )
+        return format_mobile_response(data=result)
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_post")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.post("/ai-groups/{group_id}/members")
+async def mobile_ai_group_add_member(
+    request: Request, group_id: str, body: AiGroupMemberBody, user=Depends(get_mobile_user)
+):
+    """把一个 AI 员工拉进群。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        group = AiGroupChatService().add_member(
+            user_id=uid,
+            group_id=group_id,
+            member={
+                "employee_id": body.employee_id,
+                "mod_id": body.mod_id,
+                "name": body.name,
+                "avatar": body.avatar,
+                "summary": body.summary,
+            },
+        )
+        return format_mobile_response(data={"group": group})
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_add_member")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.delete("/ai-groups/{group_id}/members/{employee_id}")
+async def mobile_ai_group_remove_member(
+    request: Request, group_id: str, employee_id: str, user=Depends(get_mobile_user)
+):
+    """把一个 AI 员工移出群。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        group = AiGroupChatService().remove_member(
+            user_id=uid, group_id=group_id, employee_id=employee_id
+        )
+        return format_mobile_response(data={"group": group})
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_remove_member")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
 # ── MOD / 平台 / 首页 ──
 
 
@@ -1301,9 +1553,7 @@ async def mobile_ai_circle_add_comment(
 
     uid, name, _ = _ai_circle_user(user)
     try:
-        comment_id = add_comment(
-            post_id=post_id, user_id=uid, author_name=name, body=body.body
-        )
+        comment_id = add_comment(post_id=post_id, user_id=uid, author_name=name, body=body.body)
         return format_mobile_response(data={"id": comment_id}, message="评论成功")
     except ValueError as exc:
         return JSONResponse(
@@ -1380,26 +1630,50 @@ _CORE_NAV_ITEMS: list[dict[str, str]] = [
     {"key": "chat", "name": "智能对话", "icon": "fa-comments-o", "path": "/chat"},
     {"key": "im", "name": "信息", "icon": "fa-envelope-o", "path": "/im"},
     {"key": "ai-ecosystem", "name": "智能生态", "icon": "fa-sitemap", "path": "/ai-ecosystem"},
-    {"key": "employee-workflow", "name": "员工工作台", "icon": "fa-users", "path": "/employee-workflow"},
+    {
+        "key": "employee-workflow",
+        "name": "员工工作台",
+        "icon": "fa-users",
+        "path": "/employee-workflow",
+    },
     {"key": "products", "name": "业务对象", "icon": "fa-cubes", "path": "/products"},
     {"key": "customers", "name": "组织管理", "icon": "fa-users", "path": "/customers"},
     {"key": "orders", "name": "业务单据", "icon": "fa-file-text-o", "path": "/orders"},
-    {"key": "shipment-records", "name": "业务记录", "icon": "fa-industry", "path": "/shipment-records"},
+    {
+        "key": "shipment-records",
+        "name": "业务记录",
+        "icon": "fa-industry",
+        "path": "/shipment-records",
+    },
     {"key": "materials", "name": "资源库", "icon": "fa-archive", "path": "/materials"},
     {"key": "data-sources", "name": "数据来源", "icon": "fa-database", "path": "/data-sources"},
     {"key": "print", "name": "模板与打印", "icon": "fa-print", "path": "/print"},
     {"key": "settings", "name": "系统设置", "icon": "fa-cog", "path": "/settings"},
 ]
 
-_ADMIN_NAV_ITEM = {"key": "admin-entitlements", "name": "用户管理", "icon": "fa-shield", "path": "/admin-entitlements"}
+_ADMIN_NAV_ITEM = {
+    "key": "admin-entitlements",
+    "name": "用户管理",
+    "icon": "fa-shield",
+    "path": "/admin-entitlements",
+}
 
 # 角色 → 可见核心 key 白名单（None 表示全部可见）
 _ROLE_VISIBLE_KEYS: dict[str, set[str] | None] = {
     "admin": None,  # 全部
     "enterprise": {
-        "chat", "im", "ai-ecosystem", "employee-workflow",
-        "products", "customers", "orders", "shipment-records",
-        "materials", "data-sources", "print", "settings",
+        "chat",
+        "im",
+        "ai-ecosystem",
+        "employee-workflow",
+        "products",
+        "customers",
+        "orders",
+        "shipment-records",
+        "materials",
+        "data-sources",
+        "print",
+        "settings",
     },
     "personal": {"chat", "im", "ai-ecosystem", "settings"},
 }
@@ -1450,17 +1724,25 @@ async def mobile_nav_menu(user=Depends(get_mobile_user)):
                 menu_id = str(menu_entry.get("id") or menu_entry.get("key") or "").strip()
                 if not menu_id:
                     continue
-                menu_label = str(menu_entry.get("label") or menu_entry.get("name") or mod_name).strip()
-                menu_path = str(menu_entry.get("path") or menu_entry.get("url") or f"/mod/{mod_id}").strip()
-                menu_icon = str(menu_entry.get("icon") or menu_entry.get("iconClass") or "fa-cube").strip()
-                items.append({
-                    "key": f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id,
-                    "name": menu_label,
-                    "icon": menu_icon,
-                    "path": menu_path,
-                    "source": "mod",
-                    "mod_id": mod_id,
-                })
+                menu_label = str(
+                    menu_entry.get("label") or menu_entry.get("name") or mod_name
+                ).strip()
+                menu_path = str(
+                    menu_entry.get("path") or menu_entry.get("url") or f"/mod/{mod_id}"
+                ).strip()
+                menu_icon = str(
+                    menu_entry.get("icon") or menu_entry.get("iconClass") or "fa-cube"
+                ).strip()
+                items.append(
+                    {
+                        "key": f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id,
+                        "name": menu_label,
+                        "icon": menu_icon,
+                        "path": menu_path,
+                        "source": "mod",
+                        "mod_id": mod_id,
+                    }
+                )
     except OPERATIONAL_ERRORS as exc:
         logger.warning("nav-menu mod items failed: %s", exc)
 
@@ -1709,9 +1991,12 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
 async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
     """Android Custom Tabs OIDC 回调换 mobile JWT。"""
     from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import finalize_enterprise_login
+    from app.application.enterprise_login_flow import finalize_auth_after_oidc
     from app.application.session_account_meta import normalize_account_kind
-    from app.infrastructure.auth.oidc_provider import exchange_code_for_userinfo, verify_oidc_state
+    from app.infrastructure.auth.oidc_provider import (
+        exchange_oidc_authorization,
+        verify_oidc_state,
+    )
     from app.mod_sdk.product_skus import resolve_product_sku
     from app.security.mobile_jwt import issue_mobile_tokens
 
@@ -1722,7 +2007,10 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
             status_code=400,
         )
     try:
-        profile = await exchange_code_for_userinfo(body.code)
+        oidc_session = await exchange_oidc_authorization(body.code)
+        profile = (
+            oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
+        )
     except OPERATIONAL_ERRORS as exc:
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=502),
@@ -1746,14 +2034,12 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
     )
     username = str((auth_result.get("user") or {}).get("username") or "")
     session_id = auth_result.get("session_id")
-    payload = await finalize_enterprise_login(
-        result=auth_result,
-        session_id=str(session_id) if session_id else None,
-        market_result={"success": False},
+    payload = await finalize_auth_after_oidc(
+        auth_result=auth_result,
+        oidc_profile=profile,
+        oidc_access_token=str(oidc_session.get("access_token") or ""),
         account_kind=account_kind,
-        username=username,
         sku=sku,
-        skip_market_sync=True,
     )
     user_raw = payload.get("user") or {}
     tokens = issue_mobile_tokens(
@@ -1762,14 +2048,22 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         account_kind=str(payload.get("account_kind") or account_kind),
         username=username,
     )
-    return format_mobile_response(
-        data={
-            "user": user_raw,
-            "session_id": session_id,
-            "account_kind": payload.get("account_kind") or account_kind,
-            **tokens,
-        },
-    )
+    data: dict[str, Any] = {
+        "user": user_raw,
+        "session_id": session_id,
+        "account_kind": payload.get("account_kind") or account_kind,
+        **tokens,
+    }
+    for key in (
+        "market_access_token",
+        "market_refresh_token",
+        "company_brand",
+        "market_is_admin",
+        "market_is_enterprise",
+    ):
+        if key in payload and payload[key] is not None:
+            data[key] = payload[key]
+    return format_mobile_response(data=data)
 
 
 # ── 专属客服接口（企业版手机端） ──
@@ -1929,7 +2223,8 @@ async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user))
     if sid:
         market_token = session_market_token(sid)
     if not market_token:
-        market_token = latest_session_market_token()
+        # 多用户环境按 user_id 过滤，防止串号（fallback 仅用于单用户桌面模式）
+        market_token = latest_session_market_token(user_id=getattr(user, "id", None))
     if not market_token:
         return format_mobile_response(
             data={

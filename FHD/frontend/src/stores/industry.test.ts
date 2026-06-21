@@ -1,16 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { ref } from 'vue';
 
 const getIndustries = vi.fn();
 const getCurrentIndustry = vi.fn();
-const setIndustry = vi.fn();
 
 vi.mock('@/api/system', () => ({
   systemApi: {
     getIndustries: () => getIndustries(),
     getCurrentIndustry: () => getCurrentIndustry(),
-    setIndustry: (id: unknown) => setIndustry(id),
   },
 }));
 
@@ -21,11 +18,10 @@ beforeEach(() => {
   setActivePinia(createPinia());
   getIndustries.mockReset();
   getCurrentIndustry.mockReset();
-  setIndustry.mockReset();
 });
 
 describe('industry store', () => {
-  it('loadIndustries merges mod manifest industries', async () => {
+  it('loadIndustries only loads server industries (no mod manifest merge)', async () => {
     getIndustries.mockResolvedValue({
       success: true,
       data: { industries: [{ id: '通用', name: '通用', code: '通用' }] },
@@ -36,7 +32,7 @@ describe('industry store', () => {
     });
     const s = useIndustryStore();
     await s.loadIndustries();
-    expect(s.industries.map((i) => String(i.id))).toEqual(['通用', '涂料']);
+    expect(s.industries.map((i) => String(i.id))).toEqual(['通用']);
   });
 
   it('loadCurrentIndustry falls back to active mod industry', async () => {
@@ -52,18 +48,6 @@ describe('industry store', () => {
     expect(s.primaryUnit).toBe('天');
   });
 
-  it('switchIndustry reloads current industry on success', async () => {
-    setIndustry.mockResolvedValue({ success: true });
-    getCurrentIndustry.mockResolvedValue({
-      success: true,
-      data: { id: '电商', name: '电商', code: '电商', units: { primary: '件' } },
-    });
-    const s = useIndustryStore();
-    const ok = await s.switchIndustry('电商');
-    expect(ok).toBe(true);
-    expect(s.currentIndustryId).toBe('电商');
-  });
-
   it('getIndustryById finds loaded industry', async () => {
     getIndustries.mockResolvedValue({
       success: true,
@@ -73,5 +57,26 @@ describe('industry store', () => {
     await s.loadIndustries();
     expect(s.getIndustryById('物流')?.name).toBe('物流');
     expect(s.getIndustryById('missing')).toBeNull();
+  });
+
+  it('loadFromServer loads both current industry and industries list', async () => {
+    getIndustries.mockResolvedValue({
+      success: true,
+      data: { industries: [{ id: '电商', name: '电商', code: '电商' }] },
+    });
+    getCurrentIndustry.mockResolvedValue({
+      success: true,
+      data: { id: '电商', name: '电商', code: '电商', units: { primary: '件' } },
+    });
+    const s = useIndustryStore();
+    await s.loadFromServer();
+    expect(s.currentIndustryId).toBe('电商');
+    expect(s.industries.map((i) => String(i.id))).toEqual(['电商']);
+  });
+
+  it('termRules is defined and empty by default', () => {
+    const s = useIndustryStore();
+    expect(s.termRules).toBeDefined();
+    expect(Object.keys(s.termRules || {}).length).toBe(0);
   });
 });

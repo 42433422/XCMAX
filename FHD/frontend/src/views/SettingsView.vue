@@ -1694,31 +1694,14 @@ async function retryModRoutesLoad() {
 async function onActiveModChange(modId: string) {
   const next = String(modId || '').trim();
   if (!next || activeModId.value === next) return;
-  const nextMod = mods.value.find((m) => String(m.id || '').trim() === next);
-  const nextIndustryId = String(nextMod?.industry?.id || '').trim();
 
-  // 先把前端 activeModId 切到目标 mod；这样侧栏副标题、主单位、意图包等
-  // 由 useIndustryUiText / activeModIndustry 派生的 UI 立刻反映新选择，
-  // 不依赖后端 industry 切换是否被接受。
+  // 行业现在由后端 SSOT 决定（industryStore.switchIndustry 已删除）：
+  // 切换 active mod 后，前端只更新 activeModId，行业由后端在 mod 加载时
+  // 自动同步；UI 派生（useIndustryUiText / activeModIndustry）会跟随 mod 选择。
   modsStore.setActiveModId(next);
 
-  if (nextIndustryId && nextIndustryId !== String(industryStore.currentIndustryId || '').trim()) {
-    const success = await industryStore.switchIndustry(nextIndustryId);
-    if (!success) {
-      // 后端拒绝（旧版后端、或 Mod backend init 失败）：不再硬性回滚 active mod，
-      // 仅给一条提示并让前端 UI 沿用 manifest.industry 兜底（已由 industry.ts
-      // loadCurrentIndustry 失败分支与 useIndustryUiText effectiveIndustryId 处理）。
-      console.warn(
-        '[settings] 切换行业到',
-        nextIndustryId,
-        '失败：',
-        industryStore.error || '未知',
-        '；前端将沿用 mod manifest.industry 渲染',
-      );
-    }
-  }
-  // 切换 Mod 会改变侧栏菜单、工作流员工与 X-XCAGI-Active-Mod-Id 请求头，
-  // 同时同步当前行业，避免侧栏副标题和业务字段仍停留在旧行业。
+  // 切换 Mod 会改变侧栏菜单、工作流员工与 X-XCAGI-Active-Mod-Id 请求头；
+  // 刷新页面让后端按新 active mod 重新拉取行业 SSOT 与路由表。
   window.location.reload();
 }
 

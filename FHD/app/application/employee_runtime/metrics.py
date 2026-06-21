@@ -74,7 +74,7 @@ def record_employee_run(
             task=task,
             summary=summary,
         )
-    except Exception:  # metrics must never break employee execution
+    except Exception:  # noqa: BLE001  # metrics must never break employee execution
         pass
 
 

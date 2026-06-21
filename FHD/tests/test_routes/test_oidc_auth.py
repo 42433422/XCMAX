@@ -68,9 +68,14 @@ def test_oidc_callback_success_redirects_with_session(
 
     with (
         patch(
-            "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+            "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
             new_callable=AsyncMock,
-            return_value=profile,
+            return_value={"profile": profile, "access_token": "oidc-at"},
+        ),
+        patch(
+            "app.application.enterprise_login_flow.finalize_auth_after_oidc",
+            new_callable=AsyncMock,
+            return_value=auth_result,
         ),
         patch(
             "app.application.auth_app_service.get_auth_app_service",

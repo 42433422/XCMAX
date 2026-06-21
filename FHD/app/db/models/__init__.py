@@ -1,5 +1,6 @@
 from app.db.models.agent import AgentRunRecord
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
+from app.db.models.neuro_event_log import NeuroEventLog
 from app.db.models.butler_profile import ButlerUserProfile
 from app.db.models.ai import (
     AIConversation,
@@ -52,6 +53,9 @@ from app.db.models.user import User
 from app.db.models.wechat import WechatContact, WechatContactContext, WechatTask
 from app.infrastructure.persona.models import PersonaEventLogModel, PersonaProfileModel
 
+# 所有模型映射完成后安装全局多租户过滤事件（继承 TenantScopedMixin 的业务模型自动隔离）。
+from app.db import tenant_filter as _tenant_filter  # noqa: E402,F401
+
 __all__ = [
     "PurchaseUnit",
     "AgentRunRecord",
@@ -101,4 +105,5 @@ __all__ = [
     "MpOrderItem",
     "PersonaProfileModel",
     "PersonaEventLogModel",
+    "NeuroEventLog",
 ]

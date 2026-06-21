@@ -937,6 +937,38 @@ def ensure_user_preferences_bootstrap(
         raise
 
 
+def ensure_neuro_event_log_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """补齐 neuro_event_log 表（NeuroBus 核心 app service 消费者的持久落地副作用）。"""
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.neuro_event_log import NeuroEventLog
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        insp = inspect(real_engine)
+        tables = set(insp.get_table_names() or [])
+        if "neuro_event_log" not in tables:
+            logger.info("缺少 neuro_event_log 表，正在通过 ORM 创建 …")
+            Base.metadata.create_all(
+                real_engine,
+                tables=[NeuroEventLog.__table__],
+                checkfirst=True,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_neuro_event_log_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
 def ensure_runtime_auth_bootstrap(
     engine: Engine | None = None,
     *,
@@ -975,9 +1007,19 @@ def ensure_runtime_auth_bootstrap(
             database_url=url,
             swallow_errors=swallow_errors,
         )
+        ensure_neuro_event_log_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
     else:
         ensure_postgresql_auth_bootstrap(engine, database_url=url)
         ensure_user_preferences_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_neuro_event_log_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,
@@ -1294,6 +1336,7 @@ def ensure_sessions_account_meta_columns(
         ("impersonating_market_user_id", "INTEGER", None),
         ("impersonating_username", "VARCHAR(128)", "''"),
         ("tenant_id", "INTEGER", None),
+        ("market_membership_tier", "VARCHAR(32)", None),
     ]
     try:
         insp = inspect(real_engine)
@@ -1369,6 +1412,74 @@ def ensure_users_tenant_id_column(
         logger.warning("users.tenant_id 兼容补列失败: %s", exc)
 
 
+def ensure_business_tenant_id_columns(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """为业务表补齐 ``tenant_id`` 列（多租户数据隔离作用域；nullable）。
+
+    先覆盖核心业务表（products / purchase_units）；其余表按同一模式逐步纳入。
+    """
+    from sqlalchemy import inspect, text
+
+    real_engine: Engine | None = None
+    url = (database_url or "").strip()
+    if url:
+        try:
+            from app.db import _create_engine_for_url
+
+            real_engine = _create_engine_for_url(url)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("无法创建引擎以补齐业务表 tenant_id: %s", exc)
+    if real_engine is None and engine is not None:
+        real_engine = engine
+    if real_engine is None:
+        try:
+            from app.db import _get_engine as _get_real_engine
+
+            real_engine = _get_real_engine()
+        except RECOVERABLE_ERRORS:
+            return
+
+    business_tables = (
+        "products",
+        "purchase_units",
+        "materials",
+        "shipment_records",
+        "financial_transactions",
+        "suppliers",
+        "purchase_orders",
+        "purchase_order_items",
+        "purchase_inbounds",
+        "purchase_inbound_items",
+        "warehouses",
+        "storage_locations",
+        "inventory_ledger",
+        "inventory_transactions",
+    )
+    try:
+        insp = inspect(real_engine)
+        existing = set(insp.get_table_names() or [])
+        dialect = real_engine.dialect.name
+        with real_engine.begin() as conn:
+            for table in business_tables:
+                if table not in existing:
+                    continue
+                cols = {c["name"] for c in insp.get_columns(table)}
+                if "tenant_id" in cols:
+                    continue
+                logger.info("%s 缺少 tenant_id 列，正在补齐 …", table)
+                if dialect == "postgresql":
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS tenant_id INTEGER")
+                    )
+                else:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN tenant_id INTEGER"))
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("业务表 tenant_id 兼容补列失败: %s", exc)
+
+
 def ensure_user_profile_columns(
     engine: Engine | None = None,
     *,
@@ -1396,10 +1507,6 @@ def ensure_user_profile_columns(
         except RECOVERABLE_ERRORS:
             return
 
-    additions = [
-        ("tier", "VARCHAR(32)", "'personal'"),
-        ("industry_id", "VARCHAR(32)", "'通用'"),
-    ]
     try:
         insp = inspect(real_engine)
         tables = set(insp.get_table_names() or [])
@@ -1407,27 +1514,40 @@ def ensure_user_profile_columns(
             return
         cols = {c["name"] for c in insp.get_columns("users")}
         dialect = real_engine.dialect.name
+        # entitled_industries 为 JSON 列：postgresql 用 JSONB，其他方言用 TEXT
+        json_type = "JSONB" if dialect == "postgresql" else "TEXT"
+        additions = [
+            ("tier", "VARCHAR(32)", "'personal'"),
+            ("industry_id", "VARCHAR(32)", "'通用'"),
+            ("account_tier", "VARCHAR(32)", None),
+            ("budget_range", "VARCHAR(32)", None),
+            ("entitled_industries", json_type, None),
+            ("failed_login_attempts", "INTEGER", "0"),
+            ("locked_until", "TIMESTAMP", None),
+            ("email_verified", "BOOLEAN", "FALSE"),
+        ]
         with real_engine.begin() as conn:
             for name, col_type, default_sql in additions:
                 if name in cols:
                     continue
                 logger.info("users 缺少 %s 列，正在补齐 …", name)
+                default_clause = f" DEFAULT {default_sql}" if default_sql else ""
                 if dialect == "postgresql":
                     conn.execute(
                         text(
-                            f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {name} {col_type} DEFAULT {default_sql}"
+                            f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {name} {col_type}{default_clause}"
                         )
                     )
                 else:
                     conn.execute(
-                        text(f"ALTER TABLE users ADD COLUMN {name} {col_type} DEFAULT {default_sql}")
+                        text(f"ALTER TABLE users ADD COLUMN {name} {col_type}{default_clause}")
                     )
-        logger.info("users.tier/industry_id 已补齐")
+        logger.info("users 账号/行业列已补齐")
     except RECOVERABLE_ERRORS as exc:
-        logger.warning("users.tier/industry_id 兼容补列失败: %s", exc)
+        logger.warning("users 账号/行业列兼容补列失败: %s", exc)
 
 
-def init_im_tables(engine: Engine) -> None:
+def init_im_tables(engine: Engine | None = None, *, database_url: str | None = None) -> None:
     """在主库上创建企业内部 IM V0 表（im_conversations / members / messages）。"""
     if engine is None:
         if database_url:
@@ -1580,3 +1700,35 @@ def init_service_bridge_tables(engine: Engine) -> None:
         logger.info("service_bridge 表已就绪")
     except RECOVERABLE_ERRORS as exc:
         logger.warning("service_bridge 表 create_all 失败: %s", exc)
+
+
+def init_persona_tables(engine: Engine) -> None:
+    """在主库创建 persona 画像表（persona_profile / persona_event_log）。
+
+    注：本仓库 alembic 链在普通启动时不触发（建表统一走 init_db + lifespan），
+    故 persona 两张表必须在此显式 create_all，否则 PersonaRepositoryImpl 落盘会失败。
+    """
+    from app.db.base import Base
+    from app.infrastructure.persona.models import (  # noqa: F401
+        PersonaEventLogModel,
+        PersonaProfileModel,
+    )
+
+    target_tables = [
+        PersonaProfileModel.__table__,
+        PersonaEventLogModel.__table__,
+    ]
+
+    real_engine = engine
+    try:
+        from app.db import _get_engine as _get_real_engine
+
+        real_engine = _get_real_engine()
+    except RECOVERABLE_ERRORS:
+        pass
+
+    try:
+        Base.metadata.create_all(real_engine, tables=target_tables, checkfirst=True)
+        logger.info("persona 表已就绪")
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("persona 表 create_all 失败: %s", exc)

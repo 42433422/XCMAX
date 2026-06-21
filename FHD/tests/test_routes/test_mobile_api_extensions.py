@@ -692,7 +692,7 @@ class TestOidcExchange:
                 "app.infrastructure.auth.oidc_provider.verify_oidc_state", return_value=(True, "rt")
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
                 side_effect=_raise,
             ),
         ):

@@ -65,6 +65,64 @@ data class CodexSuperEmployeeMobileMessageBody(
     val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
 )
 
+data class ClaudeSuperEmployeeMobileMessageBody(
+    val body: String = "",
+    val message: String = "",
+    val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
+)
+
+// ── AI 群聊 ──
+data class AiGroupMemberDto(
+    val employee_id: String = "",
+    val mod_id: String = "",
+    val name: String = "",
+    val avatar: String = "",
+    val summary: String = "",
+)
+
+data class AiGroupDto(
+    val id: String = "",
+    val name: String = "",
+    val department_key: String = "",
+    val member_count: Int = 0,
+    val members: List<AiGroupMemberDto> = emptyList(),
+    val last_message_preview: String = "",
+    val last_message_at: String = "",
+)
+
+data class AiGroupMessageDto(
+    val id: String = "",
+    val group_id: String = "",
+    val role: String = "ai",
+    val sender_id: String = "",
+    val sender_name: String = "",
+    val sender_avatar: String = "",
+    val body: String = "",
+    val created_at: String = "",
+)
+
+data class AiGroupListData(val groups: List<AiGroupDto> = emptyList())
+data class AiGroupWrap(val group: AiGroupDto? = null)
+data class AiGroupMessagesData(val messages: List<AiGroupMessageDto> = emptyList())
+data class AiGroupPostData(
+    val group: AiGroupDto? = null,
+    val messages: List<AiGroupMessageDto> = emptyList(),
+)
+
+data class AiGroupCreateBody(val name: String = "")
+data class AiGroupMemberBody(
+    val employee_id: String = "",
+    val mod_id: String = "",
+    val name: String = "",
+    val avatar: String = "",
+    val summary: String = "",
+)
+data class AiGroupMessageBody(
+    val message: String = "",
+    val sender_name: String = "我",
+    val mentions: List<String> = emptyList(),
+)
+
 data class MeData(
     val user: UserDto? = null,
     val permissions: List<String>? = null,

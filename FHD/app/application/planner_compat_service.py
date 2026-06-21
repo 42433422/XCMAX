@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 def _derive_industry_from_session(request: Request) -> str:
     """单一真相源 + 自动派生：从 session account_kind + User.industry_id 派生 industry。
 
-    1. admin 账号 → "企业管理"（运维助手身份）
+    1. admin 账号 → "管理端"（运维助手身份）
     2. 普通账号 → User.industry_id（涂料/考勤/批发/电商/餐饮/物流等）
     3. 兜底 → "通用"（业务管家身份）
 
@@ -63,9 +63,9 @@ def _derive_industry_from_session(request: Request) -> str:
         if not sid:
             return "通用"
         meta = load_session_account_meta(sid) or {}
-        # 1. admin 账号 → 企业管理
+        # 1. admin 账号 → 管理端
         if meta.get("account_kind") == "admin":
-            return "企业管理"
+            return "管理端"
         # 2. 普通账号 → User.industry_id
         local_user_id = meta.get("local_user_id")
         if local_user_id:
@@ -76,7 +76,7 @@ def _derive_industry_from_session(request: Request) -> str:
                 row = db.query(User.industry_id).filter(User.id == local_user_id).first()
                 if row and row[0]:
                     return str(row[0]).strip()
-    except Exception:
+    except Exception:  # noqa: BLE001  # best-effort 派生，失败回退到默认行业
         logger.debug("derive_industry_from_session failed", exc_info=True)
     return "通用"
 
@@ -540,6 +540,39 @@ async def execute_compat_chat_batch(
     return {"success": ok, "batch": True, "results": results, "count": len(results)}
 
 
+def _recent_history(svc, user_id: str) -> list[dict]:
+    """从对话服务里尽力读取该用户最近历史（供 persona L2/L3 周期推断使用）。
+
+    取不到则返回空列表（容错，绝不因此中断流式响应）。
+    """
+    try:
+        contexts = getattr(svc, "contexts", None)
+        if not contexts:
+            return []
+        ctx = contexts.get(user_id)
+        hist = getattr(ctx, "conversation_history", None) if ctx else None
+        return list(hist) if hist else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
+    """统一对话流 user_id 口径，与 butler 路由 (_resolve_user_id_int) 对齐：
+    优先 body.user_id，其次 X-User-Id 头，最后默认 '1'（与 butler 默认 1 同源），
+    使单部署单用户时对话流与 Settings UI 天然指向同一画像（桥接合并 / 目标 5）。
+    """
+    uid = getattr(body, "user_id", None)
+    if uid:
+        return str(uid)
+    try:
+        hdr = request.headers.get("X-User-Id") or request.headers.get("X-User-ID")
+        if hdr and str(hdr).strip():
+            return str(hdr).strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return "1"
+
+
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
@@ -552,24 +585,30 @@ async def compat_chat_stream_async(
             persona_svc = getattr(svc, "persona_service", None)
             logger.info("persona_inject check: has_persona=%s msg=%s", persona_svc is not None, body.message[:50])
             if persona_svc is not None:
-                user_id = body.user_id or "default-user"
+                user_id = _resolve_chat_user_id(request, body)
                 ctx = body.context or {}
                 # 单一真相源 + 自动派生：优先用前端传的 industry；
-                # 没传则从 session account_kind 派生（admin → 企业管理，其他 → 通用）
+                # 没传则从 session account_kind 派生（admin → 管理端，其他 → 通用）
                 industry = ctx.get("industry") if isinstance(ctx, dict) else None
                 if not industry:
                     industry = _derive_industry_from_session(request)
-                logger.info("persona_inject ctx=%s industry=%s", ctx, industry)
+                history = _recent_history(svc, user_id)
+                logger.info(
+                    "persona_inject ctx=%s industry=%s history_len=%d",
+                    ctx,
+                    industry,
+                    len(history),
+                )
                 prompt, _params = await persona_svc.build_prompt_from_message(
                     user_id=user_id,
                     message=body.message,
-                    history=[],
+                    history=history,
                     industry=industry,
                     context_prompt="",
                 )
                 body.system_prompt = prompt
                 logger.info("persona_inject OK: prompt_len=%d", len(prompt))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # persona 注入为尽力而为，失败不应中断流式响应
             logger.warning("persona_inject FAIL: %s", e, exc_info=True)
 
     tier = ai_tier or resolve_ai_tier(request)
