@@ -787,7 +787,6 @@ async def auth_oidc_callback(request: Request):
         request.query_params.get("account_kind"),
         default="enterprise" if sku == "enterprise" else "personal",
     )
-    username = str((auth_result.get("user") or {}).get("username") or "")
     payload = await finalize_auth_after_oidc(
         auth_result=auth_result,
         oidc_profile=profile,
