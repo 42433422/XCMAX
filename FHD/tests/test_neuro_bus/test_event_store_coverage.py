@@ -515,9 +515,7 @@ class TestSqliteRoundTrip:
     def test_append_many_sqlite_conflict(self, sqlite_store):
         sqlite_store.append(_make_event(), stream_id="batch")
         with pytest.raises(WrongExpectedVersionError):
-            sqlite_store.append_many(
-                [_make_event()], stream_id="batch", expected_version=0
-            )
+            sqlite_store.append_many([_make_event()], stream_id="batch", expected_version=0)
 
     def test_callback_fires_in_append_many_sqlite(self, sqlite_store):
         seen: list[StoredEvent] = []
