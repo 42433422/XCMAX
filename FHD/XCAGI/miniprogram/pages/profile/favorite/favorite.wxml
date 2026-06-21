@@ -1,8 +1,0 @@
-<view class="page">
-  <view class="fav-item card" wx:for="{{items}}" wx:key="fav_id" bindtap="goDetail" data-id="{{item.product_id}}">
-    <image src="/assets/product-placeholder.png" mode="aspectFill"/>
-    <view class="info"><text class="name">{{item.product_name}}</text><text>¥{{item.price}}</text></view>
-    <text class="remove" catchtap="removeFav" data-id="{{item.fav_id}}">✕</text>
-  </view>
-  <view class="empty" wx:if="{{!loading&&!items.length}}"><text>暂无收藏</text></view>
-</view>

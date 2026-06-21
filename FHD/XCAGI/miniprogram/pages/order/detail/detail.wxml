@@ -1,8 +1,0 @@
-<view class="page">
-  <view class="status-bar" style="background: {{order._statusBg}}">
-    <text class="status-text">{{order._statusText}}</text>
-  </view>
-  <view class="card"><view class="section-title">收货信息</view><text>{{order.delivery_name}} {{order.delivery_phone}}</text><text>{{order.delivery_address}}</text></view>
-  <view class="card"><view class="section-title">商品明细</view><view wx:for="{{order.items}}" wx:key="id" class="item-row"><text>{{item.product_name}}</text><text>x{{item.quantity}} ¥{{item.subtotal}}</text></view></view>
-  <view class="card"><view class="section-title">订单信息</view><text>订单号: {{order.order_no}}</text><text>下单时间: {{order.created_at}}</text></view>
-</view>

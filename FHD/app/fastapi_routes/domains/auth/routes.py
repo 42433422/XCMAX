@@ -740,10 +740,10 @@ async def auth_oidc_callback(request: Request):
     from fastapi.responses import RedirectResponse
 
     from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import finalize_enterprise_login
+    from app.application.enterprise_login_flow import finalize_auth_after_oidc
     from app.application.session_account_meta import normalize_account_kind
     from app.infrastructure.auth.oidc_provider import (
-        exchange_code_for_userinfo,
+        exchange_oidc_authorization,
         frontend_redirect_path,
         oidc_enabled,
         verify_oidc_state,
@@ -764,7 +764,8 @@ async def auth_oidc_callback(request: Request):
         )
 
     try:
-        profile = await exchange_code_for_userinfo(code)
+        oidc_session = await exchange_oidc_authorization(code)
+        profile = oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
     except INFRA_TRANSIENT as exc:
         logger.exception("OIDC exchange failed")
         return RedirectResponse(
@@ -787,15 +788,12 @@ async def auth_oidc_callback(request: Request):
         default="enterprise" if sku == "enterprise" else "personal",
     )
     username = str((auth_result.get("user") or {}).get("username") or "")
-    session_id = auth_result.get("session_id")
-    payload = await finalize_enterprise_login(
-        result=auth_result,
-        session_id=str(session_id) if session_id else None,
-        market_result={"success": False, "message": "SSO 会话未绑定市场 token"},
+    payload = await finalize_auth_after_oidc(
+        auth_result=auth_result,
+        oidc_profile=profile,
+        oidc_access_token=str(oidc_session.get("access_token") or ""),
         account_kind=account_kind,
-        username=username,
         sku=sku,
-        skip_market_sync=True,
     )
     resp = RedirectResponse(url=f"{base}?oidc=ok", status_code=302)
     return _attach_session_cookie(resp, payload.get("session_id"))

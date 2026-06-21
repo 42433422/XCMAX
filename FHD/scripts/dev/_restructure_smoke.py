@@ -31,7 +31,6 @@ def main() -> int:
         "/api/ai/chat",
         "/api/model-payment/plans",
         "/api/shipment/create",
-        "/api/mp/v1/auth/login",
     ]
     missing = []
     for p in probes:

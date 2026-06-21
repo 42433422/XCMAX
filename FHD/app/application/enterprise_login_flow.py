@@ -466,3 +466,43 @@ async def run_market_first_login(
             sku=sku,
         )
     return result, None
+
+
+async def finalize_auth_after_oidc(
+    *,
+    auth_result: dict[str, Any],
+    oidc_profile: dict[str, Any],
+    oidc_access_token: str = "",
+    account_kind: AccountKind,
+    sku: str,
+) -> dict[str, Any]:
+    """OIDC 本地会话创建后，自动桥接 MODstore JWT 并走统一 finalize。"""
+    from app.fastapi_routes.market_account import login_market_for_oidc_profile
+
+    username = str((auth_result.get("user") or {}).get("username") or "")
+    session_id = auth_result.get("session_id")
+    market_result = await login_market_for_oidc_profile(
+        oidc_profile,
+        oidc_access_token=oidc_access_token,
+    )
+    if sku == "enterprise" and market_result.get("success"):
+        kind_err = validate_account_kind_for_market(
+            account_kind,
+            is_enterprise=bool(market_result.get("is_enterprise")),
+            is_market_admin=bool(market_result.get("is_market_admin")),
+        )
+        if kind_err:
+            market_result = {
+                "success": False,
+                "message": kind_err,
+                "market_base_url": market_result.get("market_base_url"),
+            }
+    return await finalize_enterprise_login(
+        result=auth_result,
+        session_id=str(session_id) if session_id else None,
+        market_result=market_result,
+        account_kind=account_kind,
+        username=username,
+        sku=sku,
+        skip_market_sync=not bool(market_result.get("success")),
+    )
