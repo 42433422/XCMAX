@@ -51,3 +51,38 @@ class TestEmbeddingInferencer:
     async def test_infer_single_message_returns_result(self, inferencer):
         result = await inferencer.infer("user-1", ["你好呀😊"])
         assert 0.0 <= result.axes.warmth <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_infer_discriminates_styles_by_embedding_values(self):
+        """守卫真实现：必须按 embedding 的值（参照质心余弦最近邻）区分模式，
+
+        而非旧占位的"向量维度长度/消息条数"。给不同风格的可分向量，
+        应稳定落到对应模式——占位逻辑做不到这一点。
+        """
+
+        def fake(texts):
+            out = []
+            for t in texts:
+                if any(k in t for k in ("详细", "耐心", "展开", "注意事项")):
+                    out.append([1.0, 0, 0, 0, 0, 0, 0, 0])
+                elif any(k in t for k in ("简要", "确认", "结论", "订单状态")):
+                    out.append([0, 1.0, 0, 0, 0, 0, 0, 0])
+                elif any(k in t for k in ("步骤", "优先级", "计划", "行动")):
+                    out.append([0, 0, 1.0, 0, 0, 0, 0, 0])
+                else:
+                    out.append([0.5, 0.5, 0, 0, 0, 0, 0, 0])
+            return out
+
+        client = MagicMock(spec=EmbeddingClient)
+        client.embed_texts = AsyncMock(side_effect=lambda texts: fake(texts))
+
+        proactive = await EmbeddingInferencer(client).infer(
+            "u", ["帮我把任务拆成步骤排好优先级", "给我清晰的计划和行动项", "下一步的步骤是什么"]
+        )
+        assert proactive.pattern_label == "proactive_structured"
+        assert proactive.confidence > 0.3
+
+        concise = await EmbeddingInferencer(client).infer(
+            "u", ["请简要回复", "确认继续", "需要结论"]
+        )
+        assert concise.pattern_label == "concise_formal"
