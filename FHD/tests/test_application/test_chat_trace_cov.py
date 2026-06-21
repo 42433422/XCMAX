@@ -24,6 +24,7 @@ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRe
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _ledger_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "ledger.json"))
@@ -45,6 +46,7 @@ def _make_run(**kwargs) -> AgentRun:
 # ===========================================================================
 # _trace_safe_value — lines 42-61
 # ===========================================================================
+
 
 class TestTraceSafeValue:
     def test_depth_limit_converts_to_str(self):
@@ -91,6 +93,7 @@ class TestTraceSafeValue:
         class MyObj:
             def __str__(self):
                 return "myobj"
+
         result = ct._trace_safe_value(MyObj())
         assert result == "myobj"
 
@@ -103,6 +106,7 @@ class TestTraceSafeValue:
 # ===========================================================================
 # _resolved_user_id — lines 64-81
 # ===========================================================================
+
 
 class TestResolvedUserId:
     def test_uses_explicit_user_id(self):
@@ -138,6 +142,7 @@ class TestResolvedUserId:
 # _payload_status — lines 89-95
 # ===========================================================================
 
+
 class TestPayloadStatus:
     def test_requires_token_returns_waiting_user(self):
         assert ct._payload_status({"requires_token": True}) == "waiting_user"
@@ -156,6 +161,7 @@ class TestPayloadStatus:
 # _payload_error_message — lines 98-106
 # ===========================================================================
 
+
 class TestPayloadErrorMessage:
     def test_uses_message_field(self):
         assert ct._payload_error_message({"message": "oops"}) == "oops"
@@ -173,6 +179,7 @@ class TestPayloadErrorMessage:
 # ===========================================================================
 # _iter_payload_dicts — lines 109-124
 # ===========================================================================
+
 
 class TestIterPayloadDicts:
     def test_yields_root(self):
@@ -204,6 +211,7 @@ class TestIterPayloadDicts:
 # _coerce_trace_int / _coerce_trace_float
 # ===========================================================================
 
+
 class TestCoerceHelpers:
     def test_int_valid(self):
         assert ct._coerce_trace_int("5") == 5
@@ -228,9 +236,12 @@ class TestCoerceHelpers:
 # _llm_call_from_trace — lines 253-309
 # ===========================================================================
 
+
 class TestLlmCallFromTrace:
     def test_returns_none_for_empty_trace(self):
-        with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=0):
+        with patch(
+            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=0
+        ):
             result = ct._llm_call_from_trace({})
         assert result is None
 
@@ -242,7 +253,9 @@ class TestLlmCallFromTrace:
             "completion_tokens": 50,
             "total_tokens": 150,
         }
-        with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=10):
+        with patch(
+            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=10
+        ):
             result = ct._llm_call_from_trace(trace)
         assert result is not None
         assert result.model == "gpt-4"
@@ -256,7 +269,9 @@ class TestLlmCallFromTrace:
             "completionTokens": 100,
             "totalTokens": 300,
         }
-        with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=20):
+        with patch(
+            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=20
+        ):
             result = ct._llm_call_from_trace(trace)
         assert result is not None
         assert result.provider_id == "azure"
@@ -268,7 +283,9 @@ class TestLlmCallFromTrace:
             "total_tokens": 100,
             "status": "weird_status",
         }
-        with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=5):
+        with patch(
+            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=5
+        ):
             result = ct._llm_call_from_trace(trace)
         assert result is not None
         assert result.status == "completed"
@@ -280,14 +297,18 @@ class TestLlmCallFromTrace:
             "total_tokens": 50,
             "call_id": "cid-abc",
         }
-        with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=3):
+        with patch(
+            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=3
+        ):
             result = ct._llm_call_from_trace(trace)
         assert result is not None
         assert result.call_id == "cid-abc"
 
     def test_error_field_creates_non_none_call(self):
         trace = {"error": "timeout", "provider": "openai", "model": "gpt-4"}
-        with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=0):
+        with patch(
+            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=0
+        ):
             result = ct._llm_call_from_trace(trace)
         assert result is not None
         assert result.error == "timeout"
@@ -299,7 +320,9 @@ class TestLlmCallFromTrace:
             "total_tokens": 100,
             "cost_units": 5,
         }
-        with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=0):
+        with patch(
+            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=0
+        ):
             result = ct._llm_call_from_trace(trace)
         assert result is not None
         assert result.billing_status == "metered"
@@ -309,24 +332,38 @@ class TestLlmCallFromTrace:
 # _append_llm_calls_to_run / _refresh_llm_metadata — lines 446-473
 # ===========================================================================
 
+
 class TestAppendLlmCallsToRun:
     def test_skips_duplicate_calls(self, repo):
         run = _make_run()
         # Pre-populate run.llm_calls with a call so its signature is in existing
         pre_call = LLMCall(
-            provider_id="openai", provider="openai", model="gpt-4",
-            prompt_tokens=10, completion_tokens=5, total_tokens=15,
+            provider_id="openai",
+            provider="openai",
+            model="gpt-4",
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
             billing_status="unmetered",
         )
         run.llm_calls.append(pre_call)
         # Now try to append another call with the same signature
         dup_call = LLMCall(
-            provider_id="openai", provider="openai", model="gpt-4",
-            prompt_tokens=10, completion_tokens=5, total_tokens=15,
+            provider_id="openai",
+            provider="openai",
+            model="gpt-4",
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
             billing_status="unmetered",
         )
-        entry = {"billing_status": "unmetered", "billing_source": "est", "cost_units": 0,
-                 "usage_id": "u1", "usage_key": "k1"}
+        entry = {
+            "billing_status": "unmetered",
+            "billing_source": "est",
+            "cost_units": 0,
+            "usage_id": "u1",
+            "usage_key": "k1",
+        }
         with patch("app.infrastructure.billing.model_usage.record_model_usage", return_value=entry):
             ct._append_llm_calls_to_run(run, [dup_call])
         # The duplicate should be skipped
@@ -335,13 +372,23 @@ class TestAppendLlmCallsToRun:
     def test_adds_new_calls_and_refreshes_metadata(self, repo):
         run = _make_run()
         call = LLMCall(
-            provider_id="openai", provider="openai", model="gpt-4",
-            prompt_tokens=100, completion_tokens=50, total_tokens=150,
+            provider_id="openai",
+            provider="openai",
+            model="gpt-4",
+            prompt_tokens=100,
+            completion_tokens=50,
+            total_tokens=150,
         )
-        with patch("app.infrastructure.billing.model_usage.record_model_usage", return_value={
-            "billing_status": "metered", "billing_source": "est", "cost_units": 10,
-            "usage_id": "uid1", "usage_key": "k1",
-        }):
+        with patch(
+            "app.infrastructure.billing.model_usage.record_model_usage",
+            return_value={
+                "billing_status": "metered",
+                "billing_source": "est",
+                "cost_units": 10,
+                "usage_id": "uid1",
+                "usage_key": "k1",
+            },
+        ):
             ct._append_llm_calls_to_run(run, [call])
         assert run.metadata["llm_call_count"] == 1
         assert run.metadata["llm_model"] == "gpt-4"
@@ -350,6 +397,7 @@ class TestAppendLlmCallsToRun:
 # ===========================================================================
 # _record_llm_usage_entry billing branches — lines 351-443
 # ===========================================================================
+
 
 class TestRecordLlmUsageEntry:
     def test_non_completed_returns_none(self):
@@ -407,7 +455,10 @@ class TestRecordLlmUsageEntry:
     def test_billing_record_failure_adds_event(self):
         run = _make_run()
         call = LLMCall(provider_id="x", provider="x", model="m", total_tokens=10)
-        with patch("app.infrastructure.billing.model_usage.record_model_usage", side_effect=RuntimeError("ledger down")):
+        with patch(
+            "app.infrastructure.billing.model_usage.record_model_usage",
+            side_effect=RuntimeError("ledger down"),
+        ):
             result = ct._record_llm_usage_entry(run, call)
         assert result is None
         assert any(e.event_type == "billing.record_failed" for e in run.events)
@@ -431,6 +482,7 @@ class TestRecordLlmUsageEntry:
 # ===========================================================================
 # _retrieval_call_from_payload — lines 526-584
 # ===========================================================================
+
 
 class TestRetrievalCallFromPayload:
     def test_no_chunks_citations_error_returns_none(self):
@@ -467,6 +519,7 @@ class TestRetrievalCallFromPayload:
 # ===========================================================================
 # _memory_reference_from_payload — lines 719-804
 # ===========================================================================
+
 
 class TestMemoryReferenceFromPayload:
     def test_no_marker_no_hits_returns_none(self):
@@ -511,6 +564,7 @@ class TestMemoryReferenceFromPayload:
 # _artifact_from_ocr_payload — lines 903-947
 # ===========================================================================
 
+
 class TestArtifactFromOcrPayload:
     def test_no_text_returns_none(self):
         result = ct._artifact_from_ocr_payload({})
@@ -545,6 +599,7 @@ class TestArtifactFromOcrPayload:
 # ===========================================================================
 # _artifact_from_file_analysis_payload — lines 950-1004
 # ===========================================================================
+
 
 class TestArtifactFromFileAnalysisPayload:
     def test_no_required_keys_returns_none(self):
@@ -600,6 +655,7 @@ class TestArtifactFromFileAnalysisPayload:
 # _mime_from_document_name / _artifact_type_from_document
 # ===========================================================================
 
+
 class TestMimeAndArtifactType:
     def test_pdf_mime(self):
         assert ct._mime_from_document_name("report.pdf") == "application/pdf"
@@ -623,10 +679,16 @@ class TestMimeAndArtifactType:
         assert ct._artifact_type_from_document("doc.docx", "") == "office_document"
 
     def test_artifact_type_office_by_mime(self):
-        assert ct._artifact_type_from_document("file.bin", "application/vnd.ms-officedocument") == "office_document"
+        assert (
+            ct._artifact_type_from_document("file.bin", "application/vnd.ms-officedocument")
+            == "office_document"
+        )
 
     def test_artifact_type_fallback(self):
-        assert ct._artifact_type_from_document("file.bin", "application/octet-stream") == "document_file"
+        assert (
+            ct._artifact_type_from_document("file.bin", "application/octet-stream")
+            == "document_file"
+        )
 
     def test_artifact_type_pdf_by_mime(self):
         assert ct._artifact_type_from_document("file", "application/pdf") == "pdf_document"
@@ -635,6 +697,7 @@ class TestMimeAndArtifactType:
 # ===========================================================================
 # _artifact_from_generated_document_payload — lines 1032-1090
 # ===========================================================================
+
 
 class TestArtifactFromGeneratedDocumentPayload:
     def test_no_document_marker_returns_none(self):
@@ -676,6 +739,7 @@ class TestArtifactFromGeneratedDocumentPayload:
 # _artifact_from_excel_analysis_payload — lines 1093-1128
 # ===========================================================================
 
+
 class TestArtifactFromExcelAnalysisPayload:
     def test_no_preview_data_returns_none(self):
         result = ct._artifact_from_excel_analysis_payload({})
@@ -712,6 +776,7 @@ class TestArtifactFromExcelAnalysisPayload:
 # _normalized_record_payload — lines 1236-1252
 # ===========================================================================
 
+
 class TestNormalizedRecordPayload:
     def test_basic_extraction(self):
         record = {
@@ -747,6 +812,7 @@ class TestNormalizedRecordPayload:
 # _attach_run_id — lines 1472-1481
 # ===========================================================================
 
+
 class TestAttachRunId:
     def test_attaches_run_id_to_root(self):
         payload = {"success": True}
@@ -770,6 +836,7 @@ class TestAttachRunId:
 # ===========================================================================
 # attach_chat_trace_run — lines 1686-1717
 # ===========================================================================
+
 
 class TestAttachChatTraceRun:
     def test_non_dict_payload_returned_as_is(self):
@@ -814,6 +881,7 @@ class TestAttachChatTraceRun:
 # create_chat_trace_run — lines 1597-1683
 # ===========================================================================
 
+
 class TestCreateChatTraceRun:
     def test_waiting_user_status(self, repo):
         payload = {"requires_token": True, "message": "需要授权", "token_name": "api_key"}
@@ -851,11 +919,19 @@ class TestCreateChatTraceRun:
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
         ):
-            with patch("app.infrastructure.billing.model_usage.record_model_usage", return_value={
-                "billing_status": "unmetered", "billing_source": "est", "cost_units": 0,
-                "usage_id": "u1", "usage_key": "k1",
-            }):
-                with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=5):
+            with patch(
+                "app.infrastructure.billing.model_usage.record_model_usage",
+                return_value={
+                    "billing_status": "unmetered",
+                    "billing_source": "est",
+                    "cost_units": 0,
+                    "usage_id": "u1",
+                    "usage_key": "k1",
+                },
+            ):
+                with patch(
+                    "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=5
+                ):
                     run = ct.create_chat_trace_run(payload, message="test", user_id="u2")
         assert run.status == "completed"
 
@@ -876,6 +952,7 @@ class TestCreateChatTraceRun:
 # ===========================================================================
 # finalize_legacy_chat_run — lines 1519-1594
 # ===========================================================================
+
 
 class TestFinalizeLegacyChatRun:
     def test_non_dict_payload_returned_as_is(self, repo):
@@ -939,6 +1016,7 @@ class TestFinalizeLegacyChatRun:
 # start_legacy_chat_run — lines 1484-1516
 # ===========================================================================
 
+
 class TestStartLegacyChatRun:
     def test_creates_run_with_running_status(self, repo):
         with patch(
@@ -963,6 +1041,7 @@ class TestStartLegacyChatRun:
 # _has_user_memory_marker
 # ===========================================================================
 
+
 class TestHasUserMemoryMarker:
     def test_marker_key_present(self):
         assert ct._has_user_memory_marker({"user_memory_rag": True}) is True
@@ -984,6 +1063,7 @@ class TestHasUserMemoryMarker:
 # _append_retrieval_calls_to_final_output
 # ===========================================================================
 
+
 class TestAppendRetrievalCallsToFinalOutput:
     def test_empty_calls_does_nothing(self):
         run = _make_run()
@@ -1003,6 +1083,7 @@ class TestAppendRetrievalCallsToFinalOutput:
 # _append_memory_references_to_final_output
 # ===========================================================================
 
+
 class TestAppendMemoryReferencesToFinalOutput:
     def test_empty_does_nothing(self):
         run = _make_run()
@@ -1012,7 +1093,9 @@ class TestAppendMemoryReferencesToFinalOutput:
 
     def test_appends_when_refs_present(self):
         run = _make_run()
-        ref = MemoryReference(query="q", memory_type="user_memory", source="mem_rag", hits=[], summary="summ")
+        ref = MemoryReference(
+            query="q", memory_type="user_memory", source="mem_rag", hits=[], summary="summ"
+        )
         run.memory_references.append(ref)
         ct._append_memory_references_to_final_output(run)
         assert "memory_references" in run.final_output
@@ -1021,6 +1104,7 @@ class TestAppendMemoryReferencesToFinalOutput:
 # ===========================================================================
 # _append_artifacts_to_final_output
 # ===========================================================================
+
 
 class TestAppendArtifactsToFinalOutput:
     def test_empty_does_nothing(self):

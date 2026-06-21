@@ -77,7 +77,9 @@ class TestMarketAdminProxyBranches:
         """Lines 105,109: prefer_local_modstore=True + GET → calls get_yuangon_onboard_status_local."""
         req = _mock_request()
         with (
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=True,
@@ -97,7 +99,9 @@ class TestMarketAdminProxyBranches:
         """Lines 111-112: prefer_local_modstore=True + POST → calls run_yuangon_onboard_local."""
         req = _mock_request()
         with (
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=True,
@@ -120,7 +124,9 @@ class TestMarketAdminProxyBranches:
         """Lines 113-118: local yuangon call raises → 502 with message."""
         req = _mock_request()
         with (
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=True,
@@ -141,7 +147,9 @@ class TestMarketAdminProxyBranches:
         """Lines 120-128: import of market_account helpers fails → 500."""
         req = _mock_request()
         with (
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=False,
@@ -167,12 +175,17 @@ class TestMarketAdminProxyBranches:
             return "Bearer token"
 
         with (
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.market_account._authorization_from_request", side_effect=fake_auth),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request",
+                side_effect=fake_auth,
+            ),
             patch(
                 "app.fastapi_routes.market_account._proxy_json",
                 new=AsyncMock(return_value={"ok": True}),
@@ -192,12 +205,16 @@ class TestMarketAdminProxyBranches:
         req = _mock_request()
         upstream = JSONResponse({"upstream": True}, status_code=200)
         with (
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.fastapi_routes.market_account._proxy_json",
                 new=AsyncMock(return_value=upstream),
@@ -212,12 +229,16 @@ class TestMarketAdminProxyBranches:
         """Lines 151-161: payload with __proxy_error__ and missing status_code → 502."""
         req = _mock_request()
         with (
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.fastapi_routes.market_account._proxy_json",
                 new=AsyncMock(
@@ -395,7 +416,9 @@ class TestSelfMaintenanceLocalOrProxy:
         """Line 233-234: path not starting with /api/ops/self-maintenance/ → None."""
         req = _mock_request()
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
         ):
             result = await admin_routes._self_maintenance_local_or_proxy(
                 req, "GET", "/api/other/path"
@@ -408,7 +431,9 @@ class TestSelfMaintenanceLocalOrProxy:
         req = _mock_request()
         status_result = {"running": True}
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=True,
@@ -434,7 +459,9 @@ class TestSelfMaintenanceLocalOrProxy:
             return {"ok": True}
 
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=True,
@@ -455,7 +482,9 @@ class TestSelfMaintenanceLocalOrProxy:
         req = _mock_request()
         review_result = {"reviewed": True}
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=True,
@@ -479,7 +508,9 @@ class TestSelfMaintenanceLocalOrProxy:
         req = _mock_request()
         proxy_result = {"proxied": True}
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=True,
@@ -501,7 +532,9 @@ class TestSelfMaintenanceLocalOrProxy:
         req = _mock_request()
         proxy_result = {"proxied": True}
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=True,
@@ -527,7 +560,9 @@ class TestSelfMaintenanceLocalOrProxy:
         local_result = {"local_fallback": True}
         proxy_404 = JSONResponse({}, status_code=404)
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=False,
@@ -552,7 +587,9 @@ class TestSelfMaintenanceLocalOrProxy:
         req = _mock_request()
         proxy_404 = JSONResponse({}, status_code=404)
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=False,
@@ -577,7 +614,9 @@ class TestSelfMaintenanceLocalOrProxy:
         req = _mock_request()
         proxy_500 = JSONResponse({"error": True}, status_code=500)
         with (
-            patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
+            ),
             patch(
                 "app.application.modstore_local_client.prefer_local_modstore",
                 return_value=False,
@@ -733,7 +772,9 @@ class TestAdminSetUserProfile:
         """Lines 675-677: gate not None → early return."""
         with patch(
             "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=JSONResponse({"success": False, "message": "需要管理员账号登录后访问"}, status_code=403),
+            return_value=JSONResponse(
+                {"success": False, "message": "需要管理员账号登录后访问"}, status_code=403
+            ),
         ):
             resp = client.put(
                 "/api/xcmax/admin/users/1/profile",
@@ -953,10 +994,22 @@ class TestCollectLocalLedger:
 
     def test_success_returns_totals(self):
         entries = [
-            {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
-             "cost_units": 10, "provider": "anthropic", "model": "claude"},
-            {"prompt_tokens": 200, "completion_tokens": 100, "total_tokens": 300,
-             "cost_units": 20, "provider": "anthropic", "model": "claude"},
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+                "cost_units": 10,
+                "provider": "anthropic",
+                "model": "claude",
+            },
+            {
+                "prompt_tokens": 200,
+                "completion_tokens": 100,
+                "total_tokens": 300,
+                "cost_units": 20,
+                "provider": "anthropic",
+                "model": "claude",
+            },
         ]
         with patch(
             "app.infrastructure.billing.model_usage.list_model_usage_entries",
@@ -1024,12 +1077,20 @@ class TestCollectCursorUsage:
     def test_success_aggregates(self):
         proc = MagicMock()
         proc.returncode = 0
-        proc.stdout = json.dumps({
-            "aggregations": [
-                {"modelIntent": "claude", "inputTokens": 100, "outputTokens": 50,
-                 "cacheReadTokens": 10, "cacheWriteTokens": 5, "totalCents": 20},
-            ]
-        })
+        proc.stdout = json.dumps(
+            {
+                "aggregations": [
+                    {
+                        "modelIntent": "claude",
+                        "inputTokens": 100,
+                        "outputTokens": 50,
+                        "cacheReadTokens": 10,
+                        "cacheWriteTokens": 5,
+                        "totalCents": 20,
+                    },
+                ]
+            }
+        )
         with (
             patch("shutil.which", return_value="/usr/bin/cursor-usage"),
             patch("os.path.exists", return_value=True),
@@ -1057,21 +1118,23 @@ class TestCollectCodexUsage:
         archived.mkdir()
         events = [
             json.dumps({"type": "session_meta", "payload": {"model": "gpt-5"}}),
-            json.dumps({
-                "type": "event_msg",
-                "payload": {
-                    "type": "token_count",
-                    "info": {
-                        "total_token_usage": {
-                            "input_tokens": 500,
-                            "cached_input_tokens": 100,
-                            "output_tokens": 200,
-                            "reasoning_output_tokens": 50,
-                            "total_tokens": 850,
-                        }
+            json.dumps(
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "total_token_usage": {
+                                "input_tokens": 500,
+                                "cached_input_tokens": 100,
+                                "output_tokens": 200,
+                                "reasoning_output_tokens": 50,
+                                "total_tokens": 850,
+                            }
+                        },
                     },
-                },
-            }),
+                }
+            ),
         ]
         (archived / "session1.jsonl").write_text("\n".join(events))
         with patch("os.path.expanduser", return_value=str(archived)):

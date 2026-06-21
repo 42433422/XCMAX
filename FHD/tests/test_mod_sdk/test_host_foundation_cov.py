@@ -37,6 +37,7 @@ from app.mod_sdk.host_foundation import (
 # 1. is_host_bridge_mod_id (lines 40-46)
 # ===========================================================================
 
+
 class TestIsHostBridgeMod:
     def test_empty_string_returns_false(self):
         assert is_host_bridge_mod_id("") is False
@@ -46,6 +47,7 @@ class TestIsHostBridgeMod:
 
     def test_generic_host_mod_ids(self):
         from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS
+
         for mid in list(GENERIC_HOST_MOD_IDS)[:2]:
             assert is_host_bridge_mod_id(mid) is True
 
@@ -63,6 +65,7 @@ class TestIsHostBridgeMod:
 # 2. is_workflow_employee_mod_id (line 49-50)
 # ===========================================================================
 
+
 class TestIsWorkflowEmployee:
     def test_starts_with_prefix(self):
         assert is_workflow_employee_mod_id("xcagi-workflow-employee-hr") is True
@@ -77,6 +80,7 @@ class TestIsWorkflowEmployee:
 # ===========================================================================
 # 3. is_infrastructure_mod_hidden_from_store (lines 53-66)
 # ===========================================================================
+
 
 class TestIsInfraModHidden:
     def test_empty_not_hidden(self):
@@ -105,6 +109,7 @@ class TestIsInfraModHidden:
 # 4. is_host_foundation_employee_pack (line 69-70)
 # ===========================================================================
 
+
 class TestIsHostFoundationEmployeePack:
     def test_exact_match(self):
         assert is_host_foundation_employee_pack(HOST_FOUNDATION_EMPLOYEE_PACK_ID) is True
@@ -119,6 +124,7 @@ class TestIsHostFoundationEmployeePack:
 # ===========================================================================
 # 5. is_aux_employee_pack_mod_id (lines 79-80)
 # ===========================================================================
+
 
 class TestIsAuxEmployeePack:
     def test_known_ids(self):
@@ -136,18 +142,21 @@ class TestIsAuxEmployeePack:
 # 6. _repo_mod_seed_dirs (lines 83-103): XCAGI_ROOT env var branch
 # ===========================================================================
 
+
 class TestRepoModSeedDirs:
     def test_xcagi_root_env_adds_path(self, tmp_path):
         mods_dir = tmp_path / "mods"
         mods_dir.mkdir()
         with patch.dict(os.environ, {"XCAGI_ROOT": str(tmp_path)}):
             from app.mod_sdk.host_foundation import _repo_mod_seed_dirs
+
             dirs = _repo_mod_seed_dirs()
         assert any(str(mods_dir) in str(d) for d in dirs)
 
     def test_xcagi_root_nonexistent_dir_ignored(self, tmp_path):
         with patch.dict(os.environ, {"XCAGI_ROOT": str(tmp_path / "does_not_exist")}):
             from app.mod_sdk.host_foundation import _repo_mod_seed_dirs
+
             dirs = _repo_mod_seed_dirs()
         # Should not crash
         assert isinstance(dirs, list)
@@ -156,6 +165,7 @@ class TestRepoModSeedDirs:
 # ===========================================================================
 # 7. read_aux_employee_pack_manifest (lines 106-119)
 # ===========================================================================
+
 
 class TestReadAuxEmployeePackManifest:
     def test_empty_id_returns_none(self):
@@ -172,7 +182,12 @@ class TestReadAuxEmployeePackManifest:
         (mod_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
         from app.mod_sdk.host_foundation import _repo_mod_seed_dirs
-        with patch.object(__import__("app.mod_sdk.host_foundation", fromlist=["_repo_mod_seed_dirs"]), "_repo_mod_seed_dirs", return_value=[tmp_path]):
+
+        with patch.object(
+            __import__("app.mod_sdk.host_foundation", fromlist=["_repo_mod_seed_dirs"]),
+            "_repo_mod_seed_dirs",
+            return_value=[tmp_path],
+        ):
             result = read_aux_employee_pack_manifest(pid)
         assert result is not None
 
@@ -201,10 +216,13 @@ class TestReadAuxEmployeePackManifest:
 # 8. aux_employee_pack_catalog_row (lines 122-147)
 # ===========================================================================
 
+
 class TestAuxEmployeePackCatalogRow:
     def test_row_with_no_manifest(self):
         pid = AUX_EMPLOYEE_PACK_MOD_IDS[0]
-        with patch("app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value=None):
+        with patch(
+            "app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value=None
+        ):
             row = aux_employee_pack_catalog_row(pack_id=pid, installed=False)
         assert row["id"] == pid
         assert row["is_installed"] is False
@@ -212,9 +230,17 @@ class TestAuxEmployeePackCatalogRow:
 
     def test_row_with_manifest(self):
         pid = AUX_EMPLOYEE_PACK_MOD_IDS[0]
-        manifest = {"id": "override-id", "name": "My Pack", "version": "3.0.0", "author": "me",
-                    "description": "desc", "dependencies": {"a": "1"}}
-        with patch("app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value=manifest):
+        manifest = {
+            "id": "override-id",
+            "name": "My Pack",
+            "version": "3.0.0",
+            "author": "me",
+            "description": "desc",
+            "dependencies": {"a": "1"},
+        }
+        with patch(
+            "app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value=manifest
+        ):
             row = aux_employee_pack_catalog_row(pack_id=pid, installed=True)
         assert row["is_installed"] is True
         assert row["version"] == "3.0.0"
@@ -223,7 +249,9 @@ class TestAuxEmployeePackCatalogRow:
     def test_row_dependencies_non_dict_defaulted(self):
         pid = AUX_EMPLOYEE_PACK_MOD_IDS[0]
         manifest = {"id": pid, "dependencies": "bad"}
-        with patch("app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value=manifest):
+        with patch(
+            "app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value=manifest
+        ):
             row = aux_employee_pack_catalog_row(pack_id=pid, installed=False)
         assert row["dependencies"] == {}
 
@@ -232,26 +260,33 @@ class TestAuxEmployeePackCatalogRow:
 # 9. inject_aux_employee_pack_rows (lines 150-160)
 # ===========================================================================
 
+
 class TestInjectAuxEmployeePackRows:
     def test_already_present_not_duplicated(self):
         # All packs already in rows → inject should not add any
         rows = [{"id": pid} for pid in AUX_EMPLOYEE_PACK_MOD_IDS]
         initial_len = len(rows)
         # Even with a valid manifest, all packs are in `seen` so none appended
-        with patch("app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value={"id": "x"}):
+        with patch(
+            "app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value={"id": "x"}
+        ):
             inject_aux_employee_pack_rows(rows, set())
         assert len(rows) == initial_len
 
     def test_no_manifest_not_added(self):
         rows: list = []
-        with patch("app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value=None):
+        with patch(
+            "app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value=None
+        ):
             inject_aux_employee_pack_rows(rows, set())
         assert rows == []
 
     def test_new_pack_added(self):
         rows: list = []
         pid = AUX_EMPLOYEE_PACK_MOD_IDS[0]
-        with patch("app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value={"id": pid}):
+        with patch(
+            "app.mod_sdk.host_foundation.read_aux_employee_pack_manifest", return_value={"id": pid}
+        ):
             inject_aux_employee_pack_rows(rows, {pid})
         assert any(r.get("id") == pid for r in rows)
 
@@ -259,6 +294,7 @@ class TestInjectAuxEmployeePackRows:
 # ===========================================================================
 # 10. install_aux_employee_pack_from_repo_seed (lines 163-189)
 # ===========================================================================
+
 
 class TestInstallAuxEmployeePackFromRepoSeed:
     def test_not_aux_pack_returns_false(self):
@@ -286,7 +322,10 @@ class TestInstallAuxEmployeePackFromRepoSeed:
         mock_mm.mods_root = str(dest_root)
 
         import app.infrastructure.mods.mod_manager as _mm_mod
-        with patch("app.mod_sdk.host_foundation._repo_mod_seed_dirs", return_value=[tmp_path / "mods"]):
+
+        with patch(
+            "app.mod_sdk.host_foundation._repo_mod_seed_dirs", return_value=[tmp_path / "mods"]
+        ):
             with patch.object(_mm_mod, "get_mod_manager", return_value=mock_mm):
                 ok, msg = install_aux_employee_pack_from_repo_seed(pid)
         assert ok is True
@@ -304,7 +343,10 @@ class TestInstallAuxEmployeePackFromRepoSeed:
         import shutil
 
         import app.infrastructure.mods.mod_manager as _mm_mod
-        with patch("app.mod_sdk.host_foundation._repo_mod_seed_dirs", return_value=[tmp_path / "mods"]):
+
+        with patch(
+            "app.mod_sdk.host_foundation._repo_mod_seed_dirs", return_value=[tmp_path / "mods"]
+        ):
             with patch.object(_mm_mod, "get_mod_manager", return_value=mock_mm):
                 with patch("shutil.copytree", side_effect=OSError("no space")):
                     ok, msg = install_aux_employee_pack_from_repo_seed(pid)
@@ -315,6 +357,7 @@ class TestInstallAuxEmployeePackFromRepoSeed:
 # ===========================================================================
 # 11. catalog_store_collection (lines 192-212)
 # ===========================================================================
+
 
 class TestCatalogStoreCollection:
     def test_non_dict_returns_industry(self):
@@ -357,20 +400,34 @@ class TestCatalogStoreCollection:
 # 12. try_materialize_host_foundation_if_needed (lines 280-284)
 # ===========================================================================
 
+
 class TestTryMaterializeIfNeeded:
     def test_employee_not_present_returns_none(self):
-        with patch("app.mod_sdk.host_foundation.host_foundation_employee_present", return_value=False):
+        with patch(
+            "app.mod_sdk.host_foundation.host_foundation_employee_present", return_value=False
+        ):
             assert try_materialize_host_foundation_if_needed() is None
 
     def test_bridges_ready_returns_none(self):
-        with patch("app.mod_sdk.host_foundation.host_foundation_employee_present", return_value=True):
-            with patch("app.mod_sdk.host_foundation.host_foundation_bridges_ready", return_value=True):
+        with patch(
+            "app.mod_sdk.host_foundation.host_foundation_employee_present", return_value=True
+        ):
+            with patch(
+                "app.mod_sdk.host_foundation.host_foundation_bridges_ready", return_value=True
+            ):
                 assert try_materialize_host_foundation_if_needed() is None
 
     def test_materialize_called_when_needed(self):
-        with patch("app.mod_sdk.host_foundation.host_foundation_employee_present", return_value=True):
-            with patch("app.mod_sdk.host_foundation.host_foundation_bridges_ready", return_value=False):
-                with patch("app.mod_sdk.host_foundation.materialize_host_foundation_bridges", return_value={"ready": True}) as mock_m:
+        with patch(
+            "app.mod_sdk.host_foundation.host_foundation_employee_present", return_value=True
+        ):
+            with patch(
+                "app.mod_sdk.host_foundation.host_foundation_bridges_ready", return_value=False
+            ):
+                with patch(
+                    "app.mod_sdk.host_foundation.materialize_host_foundation_bridges",
+                    return_value={"ready": True},
+                ) as mock_m:
                     result = try_materialize_host_foundation_if_needed("minimal")
         mock_m.assert_called_once_with("minimal")
         assert result == {"ready": True}

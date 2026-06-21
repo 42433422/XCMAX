@@ -254,7 +254,12 @@ class TestValidateSlots:
     def test_shipment_all_present(self, agent):
         plan = {
             "task_type": "shipment_generate",
-            "slots": {"unit_name": "X", "model_number": "9803", "tin_spec": 12.0, "quantity_tins": 3},
+            "slots": {
+                "unit_name": "X",
+                "model_number": "9803",
+                "tin_spec": 12.0,
+                "quantity_tins": 3,
+            },
         }
         r = agent.validate_slots(plan)
         assert r["success"] is True
@@ -358,7 +363,12 @@ class TestExecutePlan:
     def test_shipment_complete(self, agent):
         plan = {
             "task_type": "shipment_generate",
-            "slots": {"unit_name": "七彩", "quantity_tins": 3, "model_number": "9803", "tin_spec": 12.0},
+            "slots": {
+                "unit_name": "七彩",
+                "quantity_tins": 3,
+                "model_number": "9803",
+                "tin_spec": 12.0,
+            },
         }
         result = agent.execute_plan(plan)
         assert result["tool_key"] == "shipment_generate"
@@ -421,9 +431,7 @@ class TestProcessMessage:
 
     def test_complete_plan_returns_tool_call(self, agent):
         agent.ctx.get.return_value = None
-        result = agent.process_message(
-            "u1", "打印七彩乐园的发货单9803规格12要3桶"
-        )
+        result = agent.process_message("u1", "打印七彩乐园的发货单9803规格12要3桶")
         assert result is not None
         assert result["action"] == "tool_call"
         agent.ctx.clear.assert_called_once()
@@ -431,8 +439,12 @@ class TestProcessMessage:
     def test_execute_plan_no_tool_key_returns_none(self, agent):
         """If execute_plan returns no tool_key, process_message returns None."""
         agent.ctx.get.return_value = None
-        with patch.object(agent, "parse_task", return_value={"task_type": "unknown_xyz", "slots": {}}):
-            with patch.object(agent, "validate_slots", return_value={"success": True, "missing_slots": []}):
+        with patch.object(
+            agent, "parse_task", return_value={"task_type": "unknown_xyz", "slots": {}}
+        ):
+            with patch.object(
+                agent, "validate_slots", return_value={"success": True, "missing_slots": []}
+            ):
                 result = agent.process_message("u1", "x")
         assert result is None
 
@@ -473,6 +485,7 @@ class TestParseQtyToken:
 class TestGetTaskAgent:
     def test_singleton(self):
         import app.services.task_agent as _mod
+
         old = _mod._task_agent
         _mod._task_agent = None
         try:

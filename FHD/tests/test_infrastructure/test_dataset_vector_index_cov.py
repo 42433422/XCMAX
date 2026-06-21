@@ -33,6 +33,7 @@ from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_chunk(
     text="hello",
     metadata=None,
@@ -67,6 +68,7 @@ def sqlite_index(tmp_path):
 # _load_json_object
 # ---------------------------------------------------------------------------
 
+
 class TestLoadJsonObject:
     def test_dict_passthrough(self):
         assert _load_json_object({"a": 1}) == {"a": 1}
@@ -92,6 +94,7 @@ class TestLoadJsonObject:
 # _embedding_from_metadata
 # ---------------------------------------------------------------------------
 
+
 class TestEmbeddingFromMetadata:
     def test_no_embedding_key(self):
         assert _embedding_from_metadata({}) == []
@@ -110,6 +113,7 @@ class TestEmbeddingFromMetadata:
 # ---------------------------------------------------------------------------
 # _cosine
 # ---------------------------------------------------------------------------
+
 
 class TestCosine:
     def test_empty_vectors(self):
@@ -135,6 +139,7 @@ class TestCosine:
 # ---------------------------------------------------------------------------
 # _lexical_score and _tokenize_for_lexical
 # ---------------------------------------------------------------------------
+
 
 class TestLexicalScore:
     def test_empty_terms(self):
@@ -170,6 +175,7 @@ class TestTokenize:
 # _metadata_matches
 # ---------------------------------------------------------------------------
 
+
 class TestMetadataMatches:
     def test_simple_match(self):
         assert _metadata_matches({"k": "v"}, {"k": "v"}) is True
@@ -197,6 +203,7 @@ class TestMetadataMatches:
 # _filter_chunks
 # ---------------------------------------------------------------------------
 
+
 class TestFilterChunks:
     def _chunk_with_meta(self, meta):
         return _make_chunk(metadata=meta)
@@ -216,12 +223,18 @@ class TestFilterChunks:
     def test_metadata_filter_applied(self):
         c1 = _make_chunk(metadata={"status": "active"})
         c2 = _make_chunk(metadata={"status": "inactive"})
-        result = _filter_chunks([c1, c2], tenant_id="", version="", metadata_filter={"status": "active"})
+        result = _filter_chunks(
+            [c1, c2], tenant_id="", version="", metadata_filter={"status": "active"}
+        )
         assert len(result) == 1
 
     def test_version_latest_keeps_highest(self):
-        c1 = _make_chunk(source="src", metadata={"tenant_id": "", "source": "src", "document_version": 1})
-        c2 = _make_chunk(source="src", metadata={"tenant_id": "", "source": "src", "document_version": 2})
+        c1 = _make_chunk(
+            source="src", metadata={"tenant_id": "", "source": "src", "document_version": 1}
+        )
+        c2 = _make_chunk(
+            source="src", metadata={"tenant_id": "", "source": "src", "document_version": 2}
+        )
         result = _filter_chunks([c1, c2], tenant_id="", version="latest", metadata_filter={})
         assert len(result) == 1
         assert result[0].metadata["document_version"] == 2
@@ -252,17 +265,26 @@ class TestFilterChunks:
 # DatasetVectorSQLiteIndex
 # ---------------------------------------------------------------------------
 
+
 class TestSQLiteIndex:
     def test_init_creates_tables(self, sqlite_index):
         with sqlite3.connect(sqlite_index.db_path) as conn:
-            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            tables = {
+                r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
         assert "dataset_vector_indexes" in tables
         assert "dataset_vector_chunks" in tables
 
     def test_replace_and_delete(self, sqlite_index):
         chunk = _make_chunk(
-            metadata={"_embedding": [1.0, 0.0], "document_id": "doc1", "tenant_id": "t1",
-                       "source": "src", "document_version": 1, "version_label": "v1"}
+            metadata={
+                "_embedding": [1.0, 0.0],
+                "document_id": "doc1",
+                "tenant_id": "t1",
+                "source": "src",
+                "document_version": 1,
+                "version_label": "v1",
+            }
         )
         count = sqlite_index.replace_dataset("ds1", [chunk])
         assert count == 1
@@ -289,14 +311,28 @@ class TestSQLiteIndex:
         assert status["index_exists"] is True
 
     def test_query_with_tenant_filter(self, sqlite_index):
-        c1 = _make_chunk(text="text1", metadata={
-            "_embedding": [1.0, 0.0], "tenant_id": "t1",
-            "document_id": "d1", "source": "s", "document_version": 1, "version_label": ""
-        })
-        c2 = _make_chunk(text="text2", metadata={
-            "_embedding": [0.0, 1.0], "tenant_id": "t2",
-            "document_id": "d2", "source": "s", "document_version": 1, "version_label": ""
-        })
+        c1 = _make_chunk(
+            text="text1",
+            metadata={
+                "_embedding": [1.0, 0.0],
+                "tenant_id": "t1",
+                "document_id": "d1",
+                "source": "s",
+                "document_version": 1,
+                "version_label": "",
+            },
+        )
+        c2 = _make_chunk(
+            text="text2",
+            metadata={
+                "_embedding": [0.0, 1.0],
+                "tenant_id": "t2",
+                "document_id": "d2",
+                "source": "s",
+                "document_version": 1,
+                "version_label": "",
+            },
+        )
         sqlite_index.replace_dataset("ds3", [c1, c2])
         results = sqlite_index.query("ds3", [1.0, 0.0], tenant_id="t1", top_k=10)
         assert all(r.metadata.get("tenant_id") == "t1" for r in results)
@@ -318,10 +354,18 @@ class TestSQLiteIndex:
         assert len(rows) == 1
 
     def test_query_with_metadata_filter(self, sqlite_index):
-        c = _make_chunk(text="doc", metadata={
-            "_embedding": [1.0, 0.0], "tenant_id": "", "doc_type": "invoice",
-            "document_id": "d3", "source": "s", "document_version": 1, "version_label": ""
-        })
+        c = _make_chunk(
+            text="doc",
+            metadata={
+                "_embedding": [1.0, 0.0],
+                "tenant_id": "",
+                "doc_type": "invoice",
+                "document_id": "d3",
+                "source": "s",
+                "document_version": 1,
+                "version_label": "",
+            },
+        )
         sqlite_index.replace_dataset("ds6", [c])
         results = sqlite_index.query("ds6", [1.0, 0.0], metadata_filter={"doc_type": "invoice"})
         assert len(results) == 1
@@ -330,6 +374,7 @@ class TestSQLiteIndex:
 # ---------------------------------------------------------------------------
 # default_dataset_vector_index_path
 # ---------------------------------------------------------------------------
+
 
 class TestDefaultPath:
     def test_with_env_var(self, tmp_path, monkeypatch):

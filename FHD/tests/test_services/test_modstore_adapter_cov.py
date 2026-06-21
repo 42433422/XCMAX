@@ -26,6 +26,7 @@ from app.services.conversation.modstore_adapter import (
 # Helper: build a minimal adapter without external I/O
 # ---------------------------------------------------------------------------
 
+
 def _make_adapter(platform_url="http://test.local", auth_token="tok", user_id=None):
     with patch.dict(os.environ, {}, clear=False):
         return ModstorePlatformAdapter(
@@ -39,6 +40,7 @@ def _make_adapter(platform_url="http://test.local", auth_token="tok", user_id=No
 # L96 → L108: dict with no "choices", no "type"=="error", no content/delta
 # → _platform_stream_payload_to_openai_chunk returns None
 # ===========================================================================
+
 
 class TestPlatformStreamPayloadBranches:
     """Targets lines 84-108 (_platform_stream_payload_to_openai_chunk)."""
@@ -75,6 +77,7 @@ class TestPlatformStreamPayloadBranches:
 # L244: effective_session_id falsy → skip session token lookup
 # ===========================================================================
 
+
 class TestFromSessionBranches:
     """Targets from_session() missing branches L244, L258, L260."""
 
@@ -98,13 +101,17 @@ class TestFromSessionBranches:
         """L244=True, L258=True (no token yet), L260=True: latest_token found."""
         mock_mods = MagicMock()
         mock_mods.session_id_from_request.return_value = "sess123"
-        mock_mods.session_market_token.return_value = ""   # nothing for session
+        mock_mods.session_market_token.return_value = ""  # nothing for session
         mock_mods.latest_session_market_token.return_value = "latest_tok"
 
-        with patch.dict(os.environ, {
-            "MODSTORE_AUTH_TOKEN": "",
-            "XCAGI_MARKET_BASE_URL": "http://market.local",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "MODSTORE_AUTH_TOKEN": "",
+                "XCAGI_MARKET_BASE_URL": "http://market.local",
+            },
+            clear=False,
+        ):
             with patch.dict(
                 "sys.modules",
                 {"app.fastapi_routes.market_account": mock_mods},
@@ -119,10 +126,14 @@ class TestFromSessionBranches:
         mock_mods.latest_session_market_token.return_value = "should_not_use"
         mock_mods.session_id_from_request.return_value = "sess456"
 
-        with patch.dict(os.environ, {
-            "MODSTORE_AUTH_TOKEN": "",
-            "XCAGI_MARKET_BASE_URL": "http://market.local",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "MODSTORE_AUTH_TOKEN": "",
+                "XCAGI_MARKET_BASE_URL": "http://market.local",
+            },
+            clear=False,
+        ):
             with patch.dict(
                 "sys.modules",
                 {"app.fastapi_routes.market_account": mock_mods},
@@ -138,10 +149,14 @@ class TestFromSessionBranches:
         mock_mods.latest_session_market_token.return_value = ""
         mock_mods.session_market_token.return_value = ""
 
-        with patch.dict(os.environ, {
-            "MODSTORE_AUTH_TOKEN": "",
-            "XCAGI_MARKET_BASE_URL": "http://market.local",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "MODSTORE_AUTH_TOKEN": "",
+                "XCAGI_MARKET_BASE_URL": "http://market.local",
+            },
+            clear=False,
+        ):
             # Pass a dummy request so auth_token still triggers the try block
             fake_request = MagicMock()
             fake_request.headers.get.return_value = ""
@@ -157,13 +172,17 @@ class TestFromSessionBranches:
         """L260=False: latest_session_market_token returns '' (falsy) → auth_token stays ''."""
         mock_mods = MagicMock()
         mock_mods.session_market_token.return_value = ""
-        mock_mods.latest_session_market_token.return_value = ""   # falsy
+        mock_mods.latest_session_market_token.return_value = ""  # falsy
         mock_mods.session_id_from_request.return_value = "sess789"
 
-        with patch.dict(os.environ, {
-            "MODSTORE_AUTH_TOKEN": "",
-            "XCAGI_MARKET_BASE_URL": "http://market.local",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "MODSTORE_AUTH_TOKEN": "",
+                "XCAGI_MARKET_BASE_URL": "http://market.local",
+            },
+            clear=False,
+        ):
             with patch.dict(
                 "sys.modules",
                 {"app.fastapi_routes.market_account": mock_mods},
@@ -175,6 +194,7 @@ class TestFromSessionBranches:
 # ===========================================================================
 # L360: _get_client when client is already open (False branch)
 # ===========================================================================
+
 
 class TestGetClientAlreadyOpen:
     """L360 False branch: self._client is not None and not closed."""
@@ -194,6 +214,7 @@ class TestGetClientAlreadyOpen:
 # L517: stream_chat_completion raises when platform_url falsy
 # ===========================================================================
 
+
 class TestStreamChatCompletionNoPlatform:
     """L517 True branch: no platform_url → ValueError."""
 
@@ -212,6 +233,7 @@ class TestStreamChatCompletionNoPlatform:
 # ===========================================================================
 # L534-L535 / L534-L537: stream_chat_completion user_id branches
 # ===========================================================================
+
 
 class TestStreamChatCompletionUserIdBranch:
     """L534 True/False: user_id in payload."""
@@ -247,9 +269,7 @@ class TestStreamChatCompletionUserIdBranch:
         mock_client.stream = fake_stream_sync
         adapter._client = mock_client
 
-        async for _ in adapter.stream_chat_completion(
-            [{"role": "user", "content": "test"}]
-        ):
+        async for _ in adapter.stream_chat_completion([{"role": "user", "content": "test"}]):
             break
 
         assert captured_payload.get("user_id") == 42
@@ -285,9 +305,7 @@ class TestStreamChatCompletionUserIdBranch:
         mock_client.stream = fake_stream_sync
         adapter._client = mock_client
 
-        async for _ in adapter.stream_chat_completion(
-            [{"role": "user", "content": "test"}]
-        ):
+        async for _ in adapter.stream_chat_completion([{"role": "user", "content": "test"}]):
             break
 
         assert "user_id" not in captured_payload
@@ -296,6 +314,7 @@ class TestStreamChatCompletionUserIdBranch:
 # ===========================================================================
 # L542/L543: async for line + if line.startswith("data:") branches
 # ===========================================================================
+
 
 class TestStreamChatCompletionSSELines:
     """L542/L543: lines iteration; startswith('data:') True and False."""
@@ -327,9 +346,7 @@ class TestStreamChatCompletionSSELines:
         adapter._client = mock_client
 
         collected = []
-        async for chunk in adapter.stream_chat_completion(
-            [{"role": "user", "content": "hi"}]
-        ):
+        async for chunk in adapter.stream_chat_completion([{"role": "user", "content": "hi"}]):
             collected.append(chunk)
 
         assert collected == ["chunk1", "chunk2"]
@@ -361,9 +378,7 @@ class TestStreamChatCompletionSSELines:
         adapter._client = mock_client
 
         collected = []
-        async for chunk in adapter.stream_chat_completion(
-            [{"role": "user", "content": "hi"}]
-        ):
+        async for chunk in adapter.stream_chat_completion([{"role": "user", "content": "hi"}]):
             collected.append(chunk)
 
         assert collected == []
@@ -372,6 +387,7 @@ class TestStreamChatCompletionSSELines:
 # ===========================================================================
 # L563: chat_completion_sync demo-token check (True branch raises)
 # ===========================================================================
+
 
 class TestChatCompletionSyncDemoTokenBranch:
     """L563 True branch: demo token + non-local base URL → ValueError."""
@@ -429,6 +445,7 @@ class TestChatCompletionSyncDemoTokenBranch:
 # ===========================================================================
 # L583/L584: chat_completion_sync user_id branches
 # ===========================================================================
+
 
 class TestChatCompletionSyncUserIdBranch:
     """L583 True/False: user_id in payload for sync call."""
@@ -494,6 +511,7 @@ class TestChatCompletionSyncUserIdBranch:
 # ===========================================================================
 # L630/L631: stream_chat_completion_sync no platform_url raises
 # ===========================================================================
+
 
 class TestStreamChatCompletionSyncBranches:
     """L630/L631/L633 and L644-L674 SSE loop branches."""
@@ -605,6 +623,7 @@ class TestStreamChatCompletionSyncBranches:
 # L914/L946/L928/L930/L953-L955: _stream in _ModstoreOpenAICompletions
 # ===========================================================================
 
+
 class TestModstoreOpenAICompletionsStream:
     """L914/L946/L928/L930/L953-L955: _stream use_native_stream True/False branches."""
 
@@ -687,9 +706,7 @@ class TestModstoreOpenAICompletionsStream:
             yield '{"choices": [{"delta": {"content": "part1"}, "finish_reason": null}]}'
             yield '{"choices": [{"delta": {"content": "part2"}, "finish_reason": "stop"}]}'
 
-        completions._adapter.stream_chat_completion_sync = MagicMock(
-            side_effect=fake_sync_stream
-        )
+        completions._adapter.stream_chat_completion_sync = MagicMock(side_effect=fake_sync_stream)
 
         with patch.dict(os.environ, {"XCAGI_MODSTORE_USE_NATIVE_STREAM": "1"}):
             chunks = list(completions._stream(messages=[{"role": "user", "content": "hi"}]))
@@ -704,9 +721,7 @@ class TestModstoreOpenAICompletionsStream:
             yield "[DONE]"  # _platform_stream_payload_to_openai_chunk returns None for [DONE]
             yield '{"choices": [{"delta": {"content": "ok"}, "finish_reason": null}]}'
 
-        completions._adapter.stream_chat_completion_sync = MagicMock(
-            side_effect=fake_sync_stream
-        )
+        completions._adapter.stream_chat_completion_sync = MagicMock(side_effect=fake_sync_stream)
 
         with patch.dict(os.environ, {"XCAGI_MODSTORE_USE_NATIVE_STREAM": "true"}):
             chunks = list(completions._stream(messages=[{"role": "user", "content": "hi"}]))
@@ -719,6 +734,7 @@ class TestModstoreOpenAICompletionsStream:
 # L630 / L633: stream_chat_completion_sync user_id True/False already covered
 # above in TestStreamChatCompletionSyncBranches — extra alias test
 # ===========================================================================
+
 
 class TestStreamChatCompletionSyncNoPlatformAlias:
     """Confirm L630 False (platform_url present) does NOT raise."""
@@ -739,7 +755,5 @@ class TestStreamChatCompletionSyncNoPlatformAlias:
         outer_cm.stream = MagicMock(return_value=inner_cm)
 
         with patch("httpx.Client", return_value=outer_cm):
-            results = list(
-                adapter.stream_chat_completion_sync([{"role": "user", "content": "hi"}])
-            )
+            results = list(adapter.stream_chat_completion_sync([{"role": "user", "content": "hi"}]))
         assert results == ["ok"]

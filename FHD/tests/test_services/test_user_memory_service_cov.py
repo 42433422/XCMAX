@@ -187,22 +187,30 @@ class TestProposeMemoryCandidate:
         assert r["candidate"]["status"] == "rejected"
 
     def test_trusted_source_creates_pending(self, svc):
-        r = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        r = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         assert r["success"] is True
         assert r["candidate"]["status"] == "pending"
         assert r["candidate"]["source_policy"] == "trusted_pending"
 
     def test_observed_source_with_no_evidence_flags_it(self, svc):
-        r = svc.propose_memory_candidate("u1", "entity", "name", "Alice", source="agent_observation", evidence=None)
+        r = svc.propose_memory_candidate(
+            "u1", "entity", "name", "Alice", source="agent_observation", evidence=None
+        )
         assert "missing_evidence" in r["candidate"]["governance_flags"]
 
     def test_unknown_source_flagged(self, svc):
-        r = svc.propose_memory_candidate("u1", "entity", "name", "Bob", source="custom_unknown_source")
+        r = svc.propose_memory_candidate(
+            "u1", "entity", "name", "Bob", source="custom_unknown_source"
+        )
         assert "unknown_source" in r["candidate"]["governance_flags"]
 
     def test_duplicate_fingerprint_returns_existing(self, svc):
         svc.propose_memory_candidate("u1", "preference", "color", "green", source="user_explicit")
-        r2 = svc.propose_memory_candidate("u1", "preference", "color", "green", source="user_explicit")
+        r2 = svc.propose_memory_candidate(
+            "u1", "preference", "color", "green", source="user_explicit"
+        )
         assert r2["created"] is False
 
     def test_invalid_memory_type_raises(self, svc):
@@ -210,13 +218,17 @@ class TestProposeMemoryCandidate:
             svc.propose_memory_candidate("u1", "invalid_type", "k", "v")
 
     def test_invalid_confidence_defaults(self, svc):
-        r = svc.propose_memory_candidate("u1", "preference", "k", "v", source="user_explicit", confidence=None)
+        r = svc.propose_memory_candidate(
+            "u1", "preference", "k", "v", source="user_explicit", confidence=None
+        )
         assert r["success"] is True
         assert "invalid_confidence_defaulted" in r["candidate"]["governance_flags"]
 
     def test_records_capped_at_max(self, svc):
         for i in range(205):
-            svc.propose_memory_candidate("u1", "preference", f"key_{i}", f"val_{i}", source="user_explicit")
+            svc.propose_memory_candidate(
+                "u1", "preference", f"key_{i}", f"val_{i}", source="user_explicit"
+            )
         mem = svc._store.get_memory("u1")
         assert len(mem.memory_v2_records) <= 200
 
@@ -236,7 +248,11 @@ class TestConfirmMemoryCandidate:
         svc.propose_memory_candidate("u1", "preference", "k", "v", source="user_explicit")
         r = svc.confirm_memory_candidate("u1", "bad_memory_id")
         assert r["success"] is False
-        assert "不存在" in r["message"] or "not found" in r["message"].lower() or "记忆不存在" in r["message"]
+        assert (
+            "不存在" in r["message"]
+            or "not found" in r["message"].lower()
+            or "记忆不存在" in r["message"]
+        )
 
     def test_confirm_deleted_record(self, svc):
         prop = svc.propose_memory_candidate("u1", "preference", "k", "v", source="user_explicit")
@@ -266,27 +282,37 @@ class TestConfirmMemoryCandidate:
         assert r["success"] is False
 
     def test_confirm_with_correction(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
-        r = svc.confirm_memory_candidate("u1", mid, correction={"value": "green", "confidence": 0.9})
+        r = svc.confirm_memory_candidate(
+            "u1", mid, correction={"value": "green", "confidence": 0.9}
+        )
         assert r["success"] is True
         assert r["memory"]["value"] == "green"
 
     def test_confirm_updates_preference_for_preference_type(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         svc.confirm_memory_candidate("u1", mid)
         mem = svc._store.get_memory("u1")
         assert "color" in mem.preferences
 
     def test_confirm_empty_key_after_correction_fails(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         r = svc.confirm_memory_candidate("u1", mid, correction={"key": "   "})
         assert r["success"] is False
 
     def test_confirm_with_memory_type_correction(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         r = svc.confirm_memory_candidate("u1", mid, correction={"memory_type": "entity"})
         assert r["success"] is True
@@ -320,7 +346,9 @@ class TestSetMemoryV2Status:
         assert r["memory"]["deleted_reason"] == "outdated"
 
     def test_delete_preference_type_removes_from_preferences(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         svc.confirm_memory_candidate("u1", mid)
         # Set memory_id on preference so deletion removes it
@@ -332,7 +360,9 @@ class TestSetMemoryV2Status:
         assert "color" not in mem2.preferences
 
     def test_reject_preference_type_removes_from_preferences(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "lang", "en", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "lang", "en", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         svc.confirm_memory_candidate("u1", mid)
         mem = svc._store.get_memory("u1")
@@ -372,7 +402,9 @@ class TestCorrectMemory:
         assert "删除" in r["message"]
 
     def test_correct_key_update(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "old_key", "val", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "old_key", "val", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         r = svc.correct_memory("u1", mid, key="new_key")
         assert r["success"] is True
@@ -385,7 +417,9 @@ class TestCorrectMemory:
         assert r["success"] is False
 
     def test_correct_active_preference_updates_preferences(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         svc.confirm_memory_candidate("u1", mid)
         mem = svc._store.get_memory("u1")
@@ -397,7 +431,9 @@ class TestCorrectMemory:
         assert mem2.preferences["color"]["value"] == "red"
 
     def test_correct_active_preference_key_change_moves_pref(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "old_color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "old_color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         svc.confirm_memory_candidate("u1", mid)
         mem = svc._store.get_memory("u1")
@@ -422,7 +458,9 @@ class TestListAndSummary:
         assert len(records) >= 2
 
     def test_list_with_status_filter(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         svc.confirm_memory_candidate("u1", mid)
         active = svc.list_memories("u1", status="active")
@@ -455,7 +493,9 @@ class TestListAndSummary:
         assert "无已确认记忆" in result
 
     def test_format_memory_v2_with_active(self, svc):
-        prop = svc.propose_memory_candidate("u1", "preference", "color", "blue", source="user_explicit")
+        prop = svc.propose_memory_candidate(
+            "u1", "preference", "color", "blue", source="user_explicit"
+        )
         mid = prop["candidate"]["memory_id"]
         svc.confirm_memory_candidate("u1", mid)
         result = svc.format_memory_v2_for_prompt("u1")
@@ -735,7 +775,9 @@ class TestUserMemoryDataclass:
         assert ap2.intent == "i"
 
     def test_feedback_record_serialization(self):
-        fr = FeedbackRecord(timestamp="now", message="m", recognized_intent="i", user_feedback="confirmed")
+        fr = FeedbackRecord(
+            timestamp="now", message="m", recognized_intent="i", user_feedback="confirmed"
+        )
         d = fr.to_dict()
         fr2 = FeedbackRecord.from_dict(d)
         assert fr2.user_feedback == "confirmed"

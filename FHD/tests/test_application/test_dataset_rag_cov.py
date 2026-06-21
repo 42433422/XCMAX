@@ -56,7 +56,9 @@ def _make_embedder():
     return embedder
 
 
-def _make_svc(tmp_path: Path, *, workers: bool = False, embedder=None) -> DatasetRagApplicationService:
+def _make_svc(
+    tmp_path: Path, *, workers: bool = False, embedder=None
+) -> DatasetRagApplicationService:
     return DatasetRagApplicationService(
         embedder=embedder or _make_embedder(),
         allowed_roots=[tmp_path],
@@ -66,7 +68,11 @@ def _make_svc(tmp_path: Path, *, workers: bool = False, embedder=None) -> Datase
     )
 
 
-def _ingest(svc: DatasetRagApplicationService, dataset_id: str = "ds1", text: str = "hello world content here") -> dict:
+def _ingest(
+    svc: DatasetRagApplicationService,
+    dataset_id: str = "ds1",
+    text: str = "hello world content here",
+) -> dict:
     return svc.ingest_document(
         dataset_id=dataset_id,
         text=text,
@@ -103,25 +109,36 @@ class TestIngestDocument:
         txt = tmp_path / "doc.txt"
         txt.write_text("file content is here", encoding="utf-8")
         svc = _make_svc(tmp_path)
-        r = svc.ingest_document(dataset_id="ds", file_path=str(txt), chunk_strategy="fixed", chunk_size=50)
+        r = svc.ingest_document(
+            dataset_id="ds", file_path=str(txt), chunk_strategy="fixed", chunk_size=50
+        )
         assert r["success"] is True
 
     def test_access_context_write_denied(self, tmp_path):
         svc = _make_svc(tmp_path)
-        ctx = DatasetAccessContext(actor_id="u1", tenant_id="t1", permissions=frozenset(["dataset.read"]))
+        ctx = DatasetAccessContext(
+            actor_id="u1", tenant_id="t1", permissions=frozenset(["dataset.read"])
+        )
         r = svc.ingest_document(dataset_id="ds", text="hello", access_context=ctx)
         assert r["success"] is False
         assert "permission" in r.get("error_code", "")
 
     def test_version_explicit_int(self, tmp_path):
         svc = _make_svc(tmp_path)
-        r = svc.ingest_document(dataset_id="ds", text="v2 content", version=2, chunk_strategy="fixed")
+        r = svc.ingest_document(
+            dataset_id="ds", text="v2 content", version=2, chunk_strategy="fixed"
+        )
         assert r["success"] is True
         assert r["document"]["version"] == 2
 
     def test_version_label_override(self, tmp_path):
         svc = _make_svc(tmp_path)
-        r = svc.ingest_document(dataset_id="ds", text="content here x", version_label="release-1", chunk_strategy="fixed")
+        r = svc.ingest_document(
+            dataset_id="ds",
+            text="content here x",
+            version_label="release-1",
+            chunk_strategy="fixed",
+        )
         assert r["document"]["version_label"] == "release-1"
 
     def test_file_path_not_found_returns_error(self, tmp_path):
@@ -139,19 +156,28 @@ class TestIngestDocument:
 
     def test_access_context_as_dict(self, tmp_path):
         svc = _make_svc(tmp_path)
-        ctx = {"actor_id": "u1", "tenant_id": "t1", "permissions": ["dataset.write", "dataset.read"], "is_admin": False}
+        ctx = {
+            "actor_id": "u1",
+            "tenant_id": "t1",
+            "permissions": ["dataset.write", "dataset.read"],
+            "is_admin": False,
+        }
         r = svc.ingest_document(dataset_id="ds", text="hello from dict ctx", access_context=ctx)
         assert r["success"] is True
 
     def test_document_id_explicit(self, tmp_path):
         svc = _make_svc(tmp_path)
-        r = svc.ingest_document(dataset_id="ds", text="explicit id doc", document_id="doc_custom_001")
+        r = svc.ingest_document(
+            dataset_id="ds", text="explicit id doc", document_id="doc_custom_001"
+        )
         assert r["document"]["document_id"] == "doc_custom_001"
 
     def test_semantic_chunking_branch(self, tmp_path):
         """Branch where chunk_strategy == 'semantic'."""
         svc = _make_svc(tmp_path)
-        r = svc.ingest_document(dataset_id="ds", text="long content " * 20, chunk_strategy="semantic")
+        r = svc.ingest_document(
+            dataset_id="ds", text="long content " * 20, chunk_strategy="semantic"
+        )
         assert r["success"] is True
 
 
@@ -187,8 +213,9 @@ class TestDeleteDocument:
         ingest = svc.ingest_document(dataset_id="ds", text="secret data", tenant_id="tenant_a")
         doc_id = ingest["document"]["document_id"]
         ctx = DatasetAccessContext(
-            actor_id="u", tenant_id="tenant_b",
-            permissions=frozenset(["dataset.write", "dataset.read"])
+            actor_id="u",
+            tenant_id="tenant_b",
+            permissions=frozenset(["dataset.write", "dataset.read"]),
         )
         r = svc.delete_document("ds", doc_id, access_context=ctx)
         assert r["success"] is False
@@ -229,15 +256,43 @@ class TestDiffVersions:
 
     def test_diff_same_content(self, tmp_path):
         svc = _make_svc(tmp_path)
-        svc.ingest_document(dataset_id="ds", text="same content text", source="doc.txt", chunk_strategy="fixed", chunk_size=200, version=1)
-        svc.ingest_document(dataset_id="ds", text="same content text", source="doc.txt", chunk_strategy="fixed", chunk_size=200, version=2)
+        svc.ingest_document(
+            dataset_id="ds",
+            text="same content text",
+            source="doc.txt",
+            chunk_strategy="fixed",
+            chunk_size=200,
+            version=1,
+        )
+        svc.ingest_document(
+            dataset_id="ds",
+            text="same content text",
+            source="doc.txt",
+            chunk_strategy="fixed",
+            chunk_size=200,
+            version=2,
+        )
         r = svc.diff_versions(dataset_id="ds", source="doc.txt", from_version=1, to_version=2)
         assert r["success"] is True
 
     def test_diff_different_content(self, tmp_path):
         svc = _make_svc(tmp_path)
-        svc.ingest_document(dataset_id="ds", text="version one content text here", source="doc.txt", chunk_strategy="fixed", chunk_size=200, version=1)
-        svc.ingest_document(dataset_id="ds", text="version two content text different", source="doc.txt", chunk_strategy="fixed", chunk_size=200, version=2)
+        svc.ingest_document(
+            dataset_id="ds",
+            text="version one content text here",
+            source="doc.txt",
+            chunk_strategy="fixed",
+            chunk_size=200,
+            version=1,
+        )
+        svc.ingest_document(
+            dataset_id="ds",
+            text="version two content text different",
+            source="doc.txt",
+            chunk_strategy="fixed",
+            chunk_size=200,
+            version=2,
+        )
         r = svc.diff_versions(dataset_id="ds", source="doc.txt", from_version=1, to_version=2)
         assert r["success"] is True
         assert r["changed"] is True
@@ -263,13 +318,29 @@ class TestRollback:
     def test_rollback_access_denied(self, tmp_path):
         svc = _make_svc(tmp_path)
         ctx = DatasetAccessContext(actor_id="u", tenant_id="t", permissions=frozenset())
-        r = svc.rollback_document_version(dataset_id="ds", source="x", target_version=1, access_context=ctx)
+        r = svc.rollback_document_version(
+            dataset_id="ds", source="x", target_version=1, access_context=ctx
+        )
         assert r["success"] is False
 
     def test_rollback_success(self, tmp_path):
         svc = _make_svc(tmp_path)
-        svc.ingest_document(dataset_id="ds", text="original version text", source="doc.txt", chunk_strategy="fixed", chunk_size=200, version=1)
-        svc.ingest_document(dataset_id="ds", text="updated version text different content", source="doc.txt", chunk_strategy="fixed", chunk_size=200, version=2)
+        svc.ingest_document(
+            dataset_id="ds",
+            text="original version text",
+            source="doc.txt",
+            chunk_strategy="fixed",
+            chunk_size=200,
+            version=1,
+        )
+        svc.ingest_document(
+            dataset_id="ds",
+            text="updated version text different content",
+            source="doc.txt",
+            chunk_strategy="fixed",
+            chunk_size=200,
+            version=2,
+        )
         r = svc.rollback_document_version(dataset_id="ds", source="doc.txt", target_version=1)
         assert r["success"] is True
 
@@ -309,7 +380,9 @@ class TestStartRebuildIndex:
     def test_rebuild_with_metadata_filter(self, tmp_path):
         svc = _make_svc(tmp_path)
         _ingest(svc, "ds")
-        r = svc.start_rebuild_index(dataset_id="ds", background=False, metadata_filter={"source": "inline"})
+        r = svc.start_rebuild_index(
+            dataset_id="ds", background=False, metadata_filter={"source": "inline"}
+        )
         assert r["success"] is True
 
 
@@ -360,6 +433,7 @@ class TestCancelRebuildJob:
         # Manually put a job in running state
         with svc._lock:
             from app.application.dataset_rag_app_service import _DatasetState, _utc_now_iso
+
             state = svc._datasets["ds"]
             job = DatasetRebuildJob(job_id="running_job", dataset_id="ds", status="running")
             state.rebuild_jobs["running_job"] = job
@@ -400,7 +474,9 @@ class TestGetRebuildJob:
         # start rebuild for t_a
         start = svc.start_rebuild_index(dataset_id="ds", tenant_id="t_a", background=True)
         job_id = start["job"]["job_id"]
-        ctx = DatasetAccessContext(actor_id="u", tenant_id="t_b", permissions=frozenset(["dataset.read"]))
+        ctx = DatasetAccessContext(
+            actor_id="u", tenant_id="t_b", permissions=frozenset(["dataset.read"])
+        )
         r = svc.get_rebuild_job("ds", job_id, access_context=ctx)
         assert r["success"] is False
 
@@ -486,7 +562,13 @@ class TestQuery:
 
     def test_query_with_version_filter(self, tmp_path):
         svc = _make_svc(tmp_path)
-        svc.ingest_document(dataset_id="ds", text="version one content policy", source="doc.txt", version=1, chunk_strategy="fixed")
+        svc.ingest_document(
+            dataset_id="ds",
+            text="version one content policy",
+            source="doc.txt",
+            version=1,
+            chunk_strategy="fixed",
+        )
         r = svc.query(dataset_id="ds", query="policy", version="latest")
         assert r["success"] is True
 
@@ -501,7 +583,11 @@ class TestQuery:
         mock_backend = MagicMock()
         mock_backend.replace_dataset.return_value = 0
         mock_backend.query.side_effect = OSError("db down")
-        mock_backend.status.return_value = {"backend": "mock", "persistent": False, "chunk_count": 0}
+        mock_backend.status.return_value = {
+            "backend": "mock",
+            "persistent": False,
+            "chunk_count": 0,
+        }
         svc = DatasetRagApplicationService(
             embedder=_make_embedder(),
             allowed_roots=[tmp_path],
@@ -578,20 +664,30 @@ class TestDrainRebuildQueue:
 class TestResolveTenantForAccess:
     def test_no_context_no_tenant_returns_default(self):
         tenant, denied = _resolve_tenant_for_access(
-            None, "", required_permission="dataset.read", default_without_context="default", dataset_id="ds"
+            None,
+            "",
+            required_permission="dataset.read",
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == "default"
 
     def test_no_context_with_requested_tenant(self):
         tenant, denied = _resolve_tenant_for_access(
-            None, "my_tenant", required_permission="dataset.read", default_without_context="default", dataset_id="ds"
+            None,
+            "my_tenant",
+            required_permission="dataset.read",
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert tenant == "my_tenant"
         assert denied is None
 
     def test_context_no_actor_tenant_denied(self):
-        ctx = DatasetAccessContext(actor_id="u", tenant_id="", permissions=frozenset(["dataset.read"]))
+        ctx = DatasetAccessContext(
+            actor_id="u", tenant_id="", permissions=frozenset(["dataset.read"])
+        )
         tenant, denied = _resolve_tenant_for_access(
             ctx, "", required_permission="dataset.read", default_without_context="", dataset_id="ds"
         )
@@ -600,15 +696,25 @@ class TestResolveTenantForAccess:
     def test_context_admin_uses_requested(self):
         ctx = DatasetAccessContext(actor_id="u", tenant_id="t_admin", is_admin=True)
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "t_requested", required_permission="dataset.write", default_without_context="", dataset_id="ds"
+            ctx,
+            "t_requested",
+            required_permission="dataset.write",
+            default_without_context="",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == "t_requested"
 
     def test_context_tenant_mismatch_denied(self):
-        ctx = DatasetAccessContext(actor_id="u", tenant_id="t1", permissions=frozenset(["dataset.write"]))
+        ctx = DatasetAccessContext(
+            actor_id="u", tenant_id="t1", permissions=frozenset(["dataset.write"])
+        )
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "t2", required_permission="dataset.write", default_without_context="", dataset_id="ds"
+            ctx,
+            "t2",
+            required_permission="dataset.write",
+            default_without_context="",
+            dataset_id="ds",
         )
         assert denied is not None
 
@@ -636,22 +742,30 @@ class TestEnsureTenantAllowed:
         assert r is None
 
     def test_actor_no_tenant_denied(self):
-        ctx = DatasetAccessContext(actor_id="u", tenant_id="", permissions=frozenset(["dataset.write"]))
+        ctx = DatasetAccessContext(
+            actor_id="u", tenant_id="", permissions=frozenset(["dataset.write"])
+        )
         r = _ensure_tenant_allowed(ctx, "t1", dataset_id="ds", operation="op")
         assert r is not None
 
     def test_target_no_tenant_denied(self):
-        ctx = DatasetAccessContext(actor_id="u", tenant_id="t1", permissions=frozenset(["dataset.write"]))
+        ctx = DatasetAccessContext(
+            actor_id="u", tenant_id="t1", permissions=frozenset(["dataset.write"])
+        )
         r = _ensure_tenant_allowed(ctx, "", dataset_id="ds", operation="op")
         assert r is not None
 
     def test_tenant_mismatch_denied(self):
-        ctx = DatasetAccessContext(actor_id="u", tenant_id="t1", permissions=frozenset(["dataset.write"]))
+        ctx = DatasetAccessContext(
+            actor_id="u", tenant_id="t1", permissions=frozenset(["dataset.write"])
+        )
         r = _ensure_tenant_allowed(ctx, "t2", dataset_id="ds", operation="op")
         assert r is not None
 
     def test_same_tenant_allowed(self):
-        ctx = DatasetAccessContext(actor_id="u", tenant_id="t1", permissions=frozenset(["dataset.write"]))
+        ctx = DatasetAccessContext(
+            actor_id="u", tenant_id="t1", permissions=frozenset(["dataset.write"])
+        )
         r = _ensure_tenant_allowed(ctx, "t1", dataset_id="ds", operation="op")
         assert r is None
 
@@ -727,7 +841,14 @@ class TestHasDatasetPermission:
 
 class TestFilterChunks:
     def _chunk(self, **kw) -> RetrievedChunk:
-        defaults = {"text": "t", "score": 1.0, "source": "s", "chunk_index": 0, "char_start": 0, "char_end": 1}
+        defaults = {
+            "text": "t",
+            "score": 1.0,
+            "source": "s",
+            "chunk_index": 0,
+            "char_start": 0,
+            "char_end": 1,
+        }
         defaults.update(kw)
         return RetrievedChunk(**defaults)
 
@@ -769,7 +890,9 @@ class TestFilterChunks:
     def test_metadata_filter_dict_value(self):
         c1 = self._chunk(metadata={"nested": {"k": "v"}})
         c2 = self._chunk(metadata={"nested": {"k": "x"}})
-        result = _filter_chunks([c1, c2], tenant_id="", version="", metadata_filter={"nested": {"k": "v"}})
+        result = _filter_chunks(
+            [c1, c2], tenant_id="", version="", metadata_filter={"nested": {"k": "v"}}
+        )
         assert len(result) == 1
 
 
@@ -780,7 +903,9 @@ class TestFilterChunks:
 
 class TestRerankChunks:
     def _chunk(self, text, score=1.0) -> RetrievedChunk:
-        return RetrievedChunk(text=text, score=score, source="s", chunk_index=0, char_start=0, char_end=len(text))
+        return RetrievedChunk(
+            text=text, score=score, source="s", chunk_index=0, char_start=0, char_end=len(text)
+        )
 
     def test_rerank_empty_query_terms(self):
         chunks = [self._chunk("hello world")]
@@ -794,7 +919,14 @@ class TestRerankChunks:
         assert result[0].text == c1.text
 
     def test_rerank_already_has_rerank_in_source(self):
-        chunk = RetrievedChunk(text="hello world policy", score=1.0, source="s+rerank", chunk_index=0, char_start=0, char_end=5)
+        chunk = RetrievedChunk(
+            text="hello world policy",
+            score=1.0,
+            source="s+rerank",
+            chunk_index=0,
+            char_start=0,
+            char_end=5,
+        )
         result = _rerank_chunks("hello", [chunk], top_k=5)
         # source should not double-append rerank
         assert "+rerank" in result[0].source
@@ -955,8 +1087,15 @@ def test_singleton_reset(tmp_path):
     reset_dataset_rag_app_service_for_tests()
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
-    with patch("app.application.dataset_rag_app_service._default_storage_path", return_value=tmp_path / "s.json"), patch(
-        "app.application.dataset_rag_app_service._build_dataset_vector_index_backend", return_value=None
+    with (
+        patch(
+            "app.application.dataset_rag_app_service._default_storage_path",
+            return_value=tmp_path / "s.json",
+        ),
+        patch(
+            "app.application.dataset_rag_app_service._build_dataset_vector_index_backend",
+            return_value=None,
+        ),
     ):
         svc1 = get_dataset_rag_app_service()
         svc2 = get_dataset_rag_app_service()
@@ -998,9 +1137,13 @@ def test_rebuild_job_from_dict_defaults():
 
 def test_chunk_to_dict_public_hides_underscore():
     chunk = RetrievedChunk(
-        text="hello", score=1.0, source="s", chunk_index=0,
-        char_start=0, char_end=5,
-        metadata={"_embedding": [0.1], "public_key": "v"}
+        text="hello",
+        score=1.0,
+        source="s",
+        chunk_index=0,
+        char_start=0,
+        char_end=5,
+        metadata={"_embedding": [0.1], "public_key": "v"},
     )
     d = _chunk_to_dict(chunk, public=True)
     assert "_embedding" not in d["metadata"]
@@ -1023,7 +1166,9 @@ def test_deterministic_answer_empty_chunks():
 
 
 def test_deterministic_answer_long_excerpt():
-    chunk = RetrievedChunk(text="x" * 400, score=1.0, source="s", chunk_index=0, char_start=0, char_end=400)
+    chunk = RetrievedChunk(
+        text="x" * 400, score=1.0, source="s", chunk_index=0, char_start=0, char_end=400
+    )
     result = _deterministic_answer("q", [chunk])
     assert "..." in result
 
@@ -1035,5 +1180,13 @@ def test_tokenize_for_rerank():
 
 
 def test_metadata_matches_dict_value_not_dict_actual():
-    chunk = RetrievedChunk(text="t", score=1.0, source="s", chunk_index=0, char_start=0, char_end=1, metadata={"nested": "not_a_dict"})
+    chunk = RetrievedChunk(
+        text="t",
+        score=1.0,
+        source="s",
+        chunk_index=0,
+        char_start=0,
+        char_end=1,
+        metadata={"nested": "not_a_dict"},
+    )
     assert _metadata_matches(chunk, {"nested": {"k": "v"}}) is False

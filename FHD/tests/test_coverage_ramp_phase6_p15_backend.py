@@ -3781,7 +3781,9 @@ class TestCCHttpGetJson:
             mock_client.__aenter__.return_value = mock_client
             mock_client.get.side_effect = httpx.RequestError("network")
             mock_client_cls.return_value = mock_client
-            with patch("app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch(
+                "app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock
+            ):
                 with pytest.raises(HTTPException) as exc_info:
                     await cc._http_get_json("https://x.com/api")
                 assert exc_info.value.status_code == 502
@@ -3814,7 +3816,9 @@ class TestCCHttpGetJson:
         mock_client.get.return_value = mock_resp
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            with patch("app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch(
+                "app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock
+            ):
                 with pytest.raises(HTTPException) as exc_info:
                     await cc._http_get_json("https://x.com/api")
                 assert exc_info.value.status_code == 502
@@ -3836,7 +3840,9 @@ class TestCCHttpGetJson:
         mock_client.get.side_effect = [err_resp, ok_resp]
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            with patch("app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch(
+                "app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock
+            ):
                 result = await cc._http_get_json("https://x.com/api")
                 assert result == {"items": [], "total": 0}
             assert mock_client.get.call_count == 2
@@ -3853,7 +3859,9 @@ class TestCCHttpGetJson:
         mock_client.get.side_effect = [httpx.RequestError("transient"), ok_resp]
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            with patch("app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch(
+                "app.infrastructure.mods.catalog_client.asyncio.sleep", new_callable=AsyncMock
+            ):
                 result = await cc._http_get_json("https://x.com/api")
                 assert result == {"ok": True}
             assert mock_client.get.call_count == 2

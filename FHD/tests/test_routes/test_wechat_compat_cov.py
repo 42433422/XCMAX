@@ -96,9 +96,7 @@ def _write_wechat_decrypt_dir(
     enc_key_hex = "aa" * 32  # value irrelevant; sqlite3.connect is mocked downstream
 
     if keys_format == "dict":
-        keys: dict | list = {
-            os.path.join("session", "session.db"): {"enc_key": enc_key_hex}
-        }
+        keys: dict | list = {os.path.join("session", "session.db"): {"enc_key": enc_key_hex}}
     elif keys_format == "list_with_enc_key":
         keys = [{"enc_key": enc_key_hex, "path": os.path.join("session", "session.db")}]
     elif keys_format == "list_nested":
@@ -178,8 +176,9 @@ class TestStripKeyMetadata:
 
     def _run(self, tmp_dir, client, real_db_path):
         fake_connect = _sqlite_connect_interceptor(real_db_path, tmp_dir)
-        with patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}), patch(
-            "sqlite3.connect", side_effect=fake_connect
+        with (
+            patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}),
+            patch("sqlite3.connect", side_effect=fake_connect),
         ):
             return client.get("/wechat_contacts/work_mode_feed")
 
@@ -282,8 +281,9 @@ class TestGetKeyInfoViaRoute:
 
     def _run(self, tmp_dir, client, real_db_path):
         fake_connect = _sqlite_connect_interceptor(real_db_path, tmp_dir)
-        with patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}), patch(
-            "sqlite3.connect", side_effect=fake_connect
+        with (
+            patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}),
+            patch("sqlite3.connect", side_effect=fake_connect),
         ):
             return client.get("/wechat_contacts/work_mode_feed")
 
@@ -328,8 +328,8 @@ class TestFullDecryptPartialPage:
         raw_db_path = os.path.join(tmp_dir, "raw_db", "session", "session.db")
         total_pages = 2
         fake_total_size = _PAGE_SZ * total_pages
-        page1 = b"\xAA" * _PAGE_SZ
-        page2_partial = b"\xBB" * partial_len
+        page1 = b"\xaa" * _PAGE_SZ
+        page2_partial = b"\xbb" * partial_len
 
         # Mock AES so decrypt_page doesn't need pycryptodome
         fake_cipher = MagicMock()
@@ -369,7 +369,12 @@ class TestFullDecryptPartialPage:
 
         with (
             patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}),
-            patch("os.path.getsize", side_effect=lambda p: fake_total_size if str(p) == raw_db_path else os.stat(p).st_size),
+            patch(
+                "os.path.getsize",
+                side_effect=lambda p: (
+                    fake_total_size if str(p) == raw_db_path else os.stat(p).st_size
+                ),
+            ),
             patch("builtins.open", side_effect=_fake_open),
             patch.dict(
                 "sys.modules",
@@ -414,8 +419,9 @@ class TestWorkModeFeedMainBody:
         if real_db_path is None:
             real_db_path = _make_session_db("hello")
         fake_connect = _sqlite_connect_interceptor(real_db_path, tmp_dir)
-        with patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}), patch(
-            "sqlite3.connect", side_effect=fake_connect
+        with (
+            patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}),
+            patch("sqlite3.connect", side_effect=fake_connect),
         ):
             resp = client.get("/wechat_contacts/work_mode_feed")
         return resp, real_db_path
@@ -433,7 +439,10 @@ class TestWorkModeFeedMainBody:
         """Branch [193, 194]: decrypted_dir relative → os.path.join prepend."""
         tmp_dir = str(tmp_path)
         _write_wechat_decrypt_dir(
-            tmp_dir, keys_format="list_with_enc_key", session_db_exists=True, decrypted_dir_abs=False
+            tmp_dir,
+            keys_format="list_with_enc_key",
+            session_db_exists=True,
+            decrypted_dir_abs=False,
         )
         real_db = _make_session_db("rel path")
         try:
@@ -529,9 +538,11 @@ class TestZstdAndSummaryBranches:
             zstd_ctx = patch.dict("sys.modules", {"zstandard": None})
 
         try:
-            with patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}), patch(
-                "sqlite3.connect", side_effect=fake_connect
-            ), zstd_ctx:
+            with (
+                patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}),
+                patch("sqlite3.connect", side_effect=fake_connect),
+                zstd_ctx,
+            ):
                 resp = client.get("/wechat_contacts/work_mode_feed")
             return resp
         finally:
@@ -595,8 +606,9 @@ class TestSessionRowsLoopEarlyExit:
         empty_db = _make_session_db("ignored", last_timestamp=0)
         fake_connect = _sqlite_connect_interceptor(empty_db, tmp_dir)
         try:
-            with patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}), patch(
-                "sqlite3.connect", side_effect=fake_connect
+            with (
+                patch.dict(os.environ, {"WECHAT_DECRYPT_PATH": tmp_dir}),
+                patch("sqlite3.connect", side_effect=fake_connect),
             ):
                 resp = client.get("/wechat_contacts/work_mode_feed")
             data = resp.json()

@@ -22,6 +22,7 @@ from app.db.validators import (
 # Helper: extract the inner validator functions from a _register_* closure
 # ---------------------------------------------------------------------------
 
+
 def _extract_validators(register_fn):
     """
     Call register_fn with a dummy class to collect all @validates closures
@@ -37,8 +38,10 @@ def _extract_validators(register_fn):
 
     class _FakeValidates:
         """Stub for the @validates decorator: captures (field, fn)."""
+
         def __init__(self, *fields):
             self.fields = fields
+
         def __call__(self, fn):
             for f in self.fields:
                 collected[f] = fn

@@ -76,9 +76,11 @@ def test_start_run_auto_execute_false_skips_execution(mock_exec_cls, mock_budget
     orch, repo, executor = _make_orchestrator()
 
     plan = _make_plan()
-    with patch.object(orch, "_plan", return_value=plan), patch.object(
-        orch, "_apply_plan"
-    ), patch.object(orch, "_execute_ready_steps") as mock_exec_steps:
+    with (
+        patch.object(orch, "_plan", return_value=plan),
+        patch.object(orch, "_apply_plan"),
+        patch.object(orch, "_execute_ready_steps") as mock_exec_steps,
+    ):
         orch.start_run(user_id="u1", message="msg", auto_execute=False)
         mock_exec_steps.assert_not_called()
 
@@ -93,12 +95,11 @@ def test_start_run_from_plan_auto_execute_false(mock_budget):
     """auto_execute=False in start_run_from_plan skips _execute_ready_steps (line 100)."""
     orch, repo, executor = _make_orchestrator()
     plan = _make_plan()
-    with patch.object(orch, "_apply_plan"), patch.object(
-        orch, "_execute_ready_steps"
-    ) as mock_exec_steps:
-        orch.start_run_from_plan(
-            user_id="u1", message="msg", plan=plan, auto_execute=False
-        )
+    with (
+        patch.object(orch, "_apply_plan"),
+        patch.object(orch, "_execute_ready_steps") as mock_exec_steps,
+    ):
+        orch.start_run_from_plan(user_id="u1", message="msg", plan=plan, auto_execute=False)
         mock_exec_steps.assert_not_called()
 
 
@@ -146,8 +147,13 @@ def test_apply_plan_empty_nodes_sets_blocked():
     run = _make_run()
     plan = _make_plan(nodes=[])
 
-    with patch("app.application.agent_orchestrator.orchestrator.get_tool_action_spec", return_value=None), \
-         patch("app.application.agent_orchestrator.orchestrator.ingest_artifact_to_dataset"):
+    with (
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_tool_action_spec",
+            return_value=None,
+        ),
+        patch("app.application.agent_orchestrator.orchestrator.ingest_artifact_to_dataset"),
+    ):
         orch._apply_plan(run, plan)
 
     assert run.status == "blocked"
@@ -213,9 +219,17 @@ def test_execute_ready_steps_skips_completed_step():
     run.metadata["cost_units_total"] = 0
     run.metadata["ai_cost_units_total"] = 0
 
-    with patch("app.application.agent_orchestrator.orchestrator.budget_exceeded_payload", return_value=None), \
-         patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"), \
-         patch("app.application.agent_orchestrator.orchestrator.get_tool_action_spec", return_value=None):
+    with (
+        patch(
+            "app.application.agent_orchestrator.orchestrator.budget_exceeded_payload",
+            return_value=None,
+        ),
+        patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_tool_action_spec",
+            return_value=None,
+        ),
+    ):
         orch._execute_ready_steps(run, runtime_context={})
 
     assert run.status == "completed"
@@ -235,9 +249,17 @@ def test_execute_ready_steps_blocks_on_unmet_dependency():
     run.metadata["cost_units_total"] = 0
     run.metadata["ai_cost_units_total"] = 0
 
-    with patch("app.application.agent_orchestrator.orchestrator.budget_exceeded_payload", return_value=None), \
-         patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"), \
-         patch("app.application.agent_orchestrator.orchestrator.get_tool_action_spec", return_value=None):
+    with (
+        patch(
+            "app.application.agent_orchestrator.orchestrator.budget_exceeded_payload",
+            return_value=None,
+        ),
+        patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_tool_action_spec",
+            return_value=None,
+        ),
+    ):
         orch._execute_ready_steps(run, runtime_context={})
 
     assert run.status == "blocked"
@@ -253,9 +275,7 @@ def test_record_tool_usage_entry_zero_cost_units_skips_billing():
     """cost_units<=0 sets usage_ledger to 'not_required' and returns True (lines 500-501)."""
     orch, _, _ = _make_orchestrator()
     run = _make_run()
-    tool_call = ToolCall(
-        step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=0
-    )
+    tool_call = ToolCall(step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=0)
     result = orch._record_tool_usage_entry(run, tool_call)
     assert result is True
     assert tool_call.metadata["usage_ledger"]["status"] == "not_required"
@@ -270,9 +290,7 @@ def test_record_tool_usage_entry_already_set_returns_true():
     """If usage_ledger is already a dict, return True immediately (lines 503-504)."""
     orch, _, _ = _make_orchestrator()
     run = _make_run()
-    tool_call = ToolCall(
-        step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=5
-    )
+    tool_call = ToolCall(step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=5)
     tool_call.metadata["usage_ledger"] = {"status": "recorded", "usage_id": "uid_1"}
     result = orch._record_tool_usage_entry(run, tool_call)
     assert result is True
@@ -287,9 +305,7 @@ def test_record_tool_usage_entry_wallet_debit_set_in_metadata():
     """When wallet_debit is truthy dict, it is stored in tool_call.metadata (lines 552-554)."""
     orch, _, _ = _make_orchestrator()
     run = _make_run()
-    tool_call = ToolCall(
-        step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=3
-    )
+    tool_call = ToolCall(step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=3)
     wallet_debit_data = {"amount": 3, "status": "debited"}
     fake_entry = {
         "usage_id": "uid_1",
@@ -318,9 +334,7 @@ def test_record_tool_usage_entry_insufficient_balance_returns_false():
     """insufficient_balance billing_status marks run failed and returns False (lines 580-581)."""
     orch, _, _ = _make_orchestrator()
     run = _make_run()
-    tool_call = ToolCall(
-        step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=5
-    )
+    tool_call = ToolCall(step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=5)
     fake_entry = {
         "usage_id": "uid_1",
         "usage_key": "key_1",
@@ -348,9 +362,7 @@ def test_record_tool_usage_refund_empty_refund_returns_early():
     """When refund entry is empty dict, method returns early (lines 626-627)."""
     orch, _, _ = _make_orchestrator()
     run = _make_run()
-    tool_call = ToolCall(
-        step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=5
-    )
+    tool_call = ToolCall(step_id="s1", node_id="n1", tool_id="tool_a", action="run", cost_units=5)
     tool_call.metadata["usage_ledger"] = {"usage_key": "key_1", "status": "recorded"}
     fake_entry = {"refund": {}}
     billing_mod = MagicMock()
@@ -433,11 +445,7 @@ def test_prepare_repair_or_retry_limit_exceeded_returns_false():
     orch, _, _ = _make_orchestrator()
     run = _make_run()
     run.metadata["plan"] = {
-        "metadata": {
-            "repair_overrides": {
-                "n1": {"max_attempts": 1, "params": {"k": "v"}}
-            }
-        }
+        "metadata": {"repair_overrides": {"n1": {"max_attempts": 1, "params": {"k": "v"}}}}
     }
     step = _make_step(node_id="n1", risk="low", idempotent=True)
     step.output = {"error_code": "some_error"}
@@ -481,15 +489,19 @@ def test_prepare_llm_repair_or_retry_request_fails_returns_false():
     step = _make_step(risk="low", idempotent=True)
     step.max_repair_attempts = 2
 
-    with patch(
-        "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-        return_value=True,
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
-        return_value=2,
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-        side_effect=RuntimeError("LLM timeout"),
+    with (
+        patch(
+            "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
+            return_value=2,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
+            side_effect=RuntimeError("LLM timeout"),
+        ),
     ):
         result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
 
@@ -512,16 +524,21 @@ def test_prepare_llm_repair_params_patch_empty_returns_false():
 
     advice = {"success": True, "params_patch": {}, "llm_call": None}
 
-    with patch(
-        "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-        return_value=True,
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
-        return_value=2,
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-        return_value=advice,
-    ), patch.object(orch, "_record_repair_llm_call", return_value=True):
+    with (
+        patch(
+            "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
+            return_value=2,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
+            return_value=advice,
+        ),
+        patch.object(orch, "_record_repair_llm_call", return_value=True),
+    ):
         result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
 
     assert result is False
@@ -543,20 +560,24 @@ def test_prepare_llm_repair_validation_fails_returns_false():
     advice = {"success": True, "params_patch": {"b": 2}, "llm_call": None}
     bad_validation = MagicMock(ok=False, error_code="invalid_param", message="bad param")
 
-    with patch(
-        "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-        return_value=True,
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
-        return_value=2,
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-        return_value=advice,
-    ), patch.object(
-        orch, "_record_repair_llm_call", return_value=True
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.validate_tool_call",
-        return_value=bad_validation,
+    with (
+        patch(
+            "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
+            return_value=2,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
+            return_value=advice,
+        ),
+        patch.object(orch, "_record_repair_llm_call", return_value=True),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.validate_tool_call",
+            return_value=bad_validation,
+        ),
     ):
         result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
 
@@ -582,20 +603,24 @@ def test_prepare_llm_repair_params_unchanged_returns_false():
     advice = {"success": True, "params_patch": {"a": 1}, "llm_call": None}
     good_validation = MagicMock(ok=True)
 
-    with patch(
-        "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-        return_value=True,
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
-        return_value=2,
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-        return_value=advice,
-    ), patch.object(
-        orch, "_record_repair_llm_call", return_value=True
-    ), patch(
-        "app.application.agent_orchestrator.orchestrator.validate_tool_call",
-        return_value=good_validation,
+    with (
+        patch(
+            "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
+            return_value=2,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
+            return_value=advice,
+        ),
+        patch.object(orch, "_record_repair_llm_call", return_value=True),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.validate_tool_call",
+            return_value=good_validation,
+        ),
     ):
         result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
 
@@ -651,8 +676,13 @@ def test_record_repair_llm_call_failed_status_returns_false():
     )
     advice = {"llm_call": llm_call}
 
-    with patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"), \
-         patch("app.application.agent_orchestrator.orchestrator.get_tool_action_spec", return_value=None):
+    with (
+        patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_tool_action_spec",
+            return_value=None,
+        ),
+    ):
         result = orch._record_repair_llm_call(run, step, advice)
 
     assert result is False
@@ -680,8 +710,13 @@ def test_refresh_llm_metadata_with_llm_calls():
     )
     run.llm_calls.append(call)
 
-    with patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"), \
-         patch("app.application.agent_orchestrator.orchestrator.get_tool_action_spec", return_value=None):
+    with (
+        patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_tool_action_spec",
+            return_value=None,
+        ),
+    ):
         orch._refresh_llm_metadata(run)
 
     assert run.metadata["llm_provider"] == "openai"

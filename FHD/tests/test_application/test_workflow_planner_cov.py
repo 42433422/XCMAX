@@ -333,7 +333,11 @@ class TestFilterToolRegistryForProfile:
                 "availability": "shared",
                 "actions": {
                     "pro_act": {"availability": "pro_only", "risk": "low", "idempotent": True},
-                    "normal_act": {"availability": "normal_only", "risk": "low", "idempotent": True},
+                    "normal_act": {
+                        "availability": "normal_only",
+                        "risk": "low",
+                        "idempotent": True,
+                    },
                     "shared_act": {"availability": "shared", "risk": "low", "idempotent": True},
                 },
             },
@@ -529,9 +533,7 @@ class TestFallbackPlan:
 
     def test_fallback_business_db_write(self) -> None:
         planner = self._make_planner()
-        result = planner._fallback_plan(
-            "pid", "新增客户ABC公司到数据库写入", _SAMPLE_REGISTRY
-        )
+        result = planner._fallback_plan("pid", "新增客户ABC公司到数据库写入", _SAMPLE_REGISTRY)
         # Should route to business_db_write or fallback query
         assert result is not None
         assert result.plan_id == "pid"
@@ -626,9 +628,7 @@ class TestPlanWithLLM:
     def _mock_response(self, payload: dict[str, Any]) -> MagicMock:
         resp = MagicMock()
         resp.status_code = 200
-        resp.json.return_value = {
-            "choices": [{"message": {"content": json.dumps(payload)}}]
-        }
+        resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
         return resp
 
     def test_returns_none_when_no_api_key(self) -> None:

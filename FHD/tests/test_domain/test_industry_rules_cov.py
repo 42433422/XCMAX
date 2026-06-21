@@ -36,6 +36,7 @@ from app.domain.services.industry_rules import (
 # _is_empty
 # ---------------------------------------------------------------------------
 
+
 class TestIsEmpty:
     def test_none_is_empty(self):
         assert _is_empty(None) is True
@@ -59,6 +60,7 @@ class TestIsEmpty:
 # ---------------------------------------------------------------------------
 # _to_number
 # ---------------------------------------------------------------------------
+
 
 class TestToNumber:
     def test_none_returns_zero(self):
@@ -84,6 +86,7 @@ class TestToNumber:
 # ---------------------------------------------------------------------------
 # _parse_date
 # ---------------------------------------------------------------------------
+
 
 class TestParseDate:
     def test_none_returns_none(self):
@@ -115,6 +118,7 @@ class TestParseDate:
 # ---------------------------------------------------------------------------
 # _validate_one_of
 # ---------------------------------------------------------------------------
+
 
 class TestValidateOneOf:
     def test_empty_value_skips(self):
@@ -150,6 +154,7 @@ class TestValidateOneOf:
 # ---------------------------------------------------------------------------
 # _validate_range
 # ---------------------------------------------------------------------------
+
 
 class TestValidateRange:
     def test_empty_value_skips(self):
@@ -192,6 +197,7 @@ class TestValidateRange:
 # _validate_regex
 # ---------------------------------------------------------------------------
 
+
 class TestValidateRegex:
     def test_empty_value_skips(self):
         assert _validate_regex(None, r"\d+") is None
@@ -226,6 +232,7 @@ class TestValidateRegex:
 # _validate_not_expired
 # ---------------------------------------------------------------------------
 
+
 class TestValidateNotExpired:
     def test_empty_value_skips(self):
         assert _validate_not_expired(None, None) is None
@@ -252,6 +259,7 @@ class TestValidateNotExpired:
 # ---------------------------------------------------------------------------
 # Operator functions
 # ---------------------------------------------------------------------------
+
 
 class TestOperators:
     def test_op_mul_empty(self):
@@ -284,6 +292,7 @@ class TestOperators:
 # register_validator / register_derivation
 # ---------------------------------------------------------------------------
 
+
 class TestRegistration:
     def test_register_validator_adds_to_registry(self):
         fn = lambda v, p: None
@@ -297,7 +306,9 @@ class TestRegistration:
 
     def test_registered_validator_used_in_validate(self):
         register_validator("must_be_positive", lambda v, p: None if float(v) > 0 else "必须为正数")
-        schema = {"fields": [{"key": "x", "label": "X值", "validators": [{"type": "must_be_positive"}]}]}
+        schema = {
+            "fields": [{"key": "x", "label": "X值", "validators": [{"type": "must_be_positive"}]}]
+        }
         assert validate_subsystem_record("k", {"x": 5}, schema=schema) == []
         errs = validate_subsystem_record("k", {"x": -1}, schema=schema)
         assert errs and "正数" in errs[0].message
@@ -312,6 +323,7 @@ class TestRegistration:
 # ---------------------------------------------------------------------------
 # _resolve_schema (tested indirectly via validate / compute)
 # ---------------------------------------------------------------------------
+
 
 class TestResolveSchema:
     def test_dict_schema_returned_directly(self):
@@ -333,6 +345,7 @@ class TestResolveSchema:
     def test_none_schema_import_raises_recoverable_returns_empty(self):
         # When the lazy import itself raises ImportError (a RECOVERABLE_ERROR), schema → {}
         import builtins
+
         real_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -357,6 +370,7 @@ class TestResolveSchema:
 # ---------------------------------------------------------------------------
 # validate_subsystem_record — edge branches
 # ---------------------------------------------------------------------------
+
 
 class TestValidateSubsystemRecord:
     def test_empty_schema_returns_no_errors(self):
@@ -448,6 +462,7 @@ class TestValidateSubsystemRecord:
 # compute_subsystem_derived — edge branches
 # ---------------------------------------------------------------------------
 
+
 class TestComputeSubsystemDerived:
     def test_empty_schema_returns_record_unchanged(self):
         rec = {"a": 1}
@@ -525,6 +540,7 @@ class TestComputeSubsystemDerived:
 # FieldError
 # ---------------------------------------------------------------------------
 
+
 class TestFieldError:
     def test_to_dict(self):
         e = FieldError("myfield", "我的字段", "必须不为空")
@@ -540,6 +556,7 @@ class TestFieldError:
 # ---------------------------------------------------------------------------
 # Integration: validate + compute together
 # ---------------------------------------------------------------------------
+
 
 class TestIntegration:
     def test_validate_then_compute_full_pipeline(self):

@@ -41,6 +41,7 @@ def _clean_caches():
 # _auth_header — lines 78-82
 # ===========================================================================
 
+
 class TestAuthHeader:
     def test_strips_authorization_prefix(self):
         result = ma._auth_header("Authorization: mysecret")
@@ -66,6 +67,7 @@ class TestAuthHeader:
 # ===========================================================================
 # save_session_market_token — lines 100-105
 # ===========================================================================
+
 
 class TestSaveSessionMarketToken:
     def test_skips_empty_session_id(self):
@@ -115,6 +117,7 @@ class TestSaveSessionMarketToken:
 # clear_session_market_token — lines 100-105
 # ===========================================================================
 
+
 class TestClearSessionMarketToken:
     def test_clears_in_memory(self):
         ma._MARKET_SESSION_TOKENS["sid5"] = "tok5"
@@ -158,6 +161,7 @@ class TestClearSessionMarketToken:
 # _proxy_error_http_status — lines 262-266
 # ===========================================================================
 
+
 class TestProxyErrorHttpStatus:
     def test_returns_none_for_non_error_payload(self):
         assert ma._proxy_error_http_status({}) is None
@@ -178,6 +182,7 @@ class TestProxyErrorHttpStatus:
 # ===========================================================================
 # _error_message — lines 372-391
 # ===========================================================================
+
 
 class TestErrorMessage:
     def test_rate_limit_message(self):
@@ -215,6 +220,7 @@ class TestErrorMessage:
 # _market_http_timeout / _market_http_retries / _account_overview_cache_ttl
 # ===========================================================================
 
+
 class TestEnvHelpers:
     def test_timeout_invalid_falls_back(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_HTTP_TIMEOUT", "not_a_number")
@@ -236,6 +242,7 @@ class TestEnvHelpers:
 # ===========================================================================
 # _proxy_json — retry / exception branches (lines 456-498)
 # ===========================================================================
+
 
 class TestProxyJson:
     @pytest.mark.asyncio
@@ -337,6 +344,7 @@ class TestProxyJson:
 # _token_from_auth_response / _refresh_token_from_auth_response (lines 536-623)
 # ===========================================================================
 
+
 class TestTokenExtraction:
     def test_token_from_data_nested(self):
         payload = {"data": {"access_token": "tok_inner"}}
@@ -389,6 +397,7 @@ class TestTokenExtraction:
 # _user_blob_from_market_payload — lines 615-640
 # ===========================================================================
 
+
 class TestUserBlobFromMarketPayload:
     def test_top_level_user_dict(self):
         payload = {"user": {"id": 1, "username": "alice"}}
@@ -421,6 +430,7 @@ class TestUserBlobFromMarketPayload:
 # ===========================================================================
 # fetch_market_membership_tier — lines 536-551
 # ===========================================================================
+
 
 class TestFetchMarketMembershipTier:
     @pytest.mark.asyncio
@@ -457,13 +467,18 @@ class TestFetchMarketMembershipTier:
 # market_register route — lines 859-888
 # ===========================================================================
 
+
 class TestMarketRegisterRoute:
     def test_missing_fields_returns_400(self):
         resp = _client.post("/api/market/register", json={"username": "u"})
         assert resp.status_code == 400
 
     def test_register_failure_returns_400(self):
-        with patch.object(ma, "register_market_user", new=AsyncMock(return_value={"success": False, "message": "already exists"})):
+        with patch.object(
+            ma,
+            "register_market_user",
+            new=AsyncMock(return_value={"success": False, "message": "already exists"}),
+        ):
             resp = _client.post(
                 "/api/market/register",
                 json={"username": "u", "password": "p123", "email": "u@test.com"},
@@ -472,9 +487,19 @@ class TestMarketRegisterRoute:
         assert "already exists" in resp.json()["message"]
 
     def test_register_success(self):
-        with patch.object(ma, "register_market_user", new=AsyncMock(return_value={
-            "success": True, "token": "tk", "refresh_token": "", "market_base_url": "http://x", "raw": {}
-        })):
+        with patch.object(
+            ma,
+            "register_market_user",
+            new=AsyncMock(
+                return_value={
+                    "success": True,
+                    "token": "tk",
+                    "refresh_token": "",
+                    "market_base_url": "http://x",
+                    "raw": {},
+                }
+            ),
+        ):
             with patch.object(ma, "bind_market_auth_to_session", return_value=("tk", "")):
                 resp = _client.post(
                     "/api/market/register",
@@ -488,26 +513,29 @@ class TestMarketRegisterRoute:
 # market_login route — lines 891-918
 # ===========================================================================
 
+
 class TestMarketLoginRoute:
     def test_missing_credentials_returns_400(self):
         resp = _client.post("/api/market/login", json={})
         assert resp.status_code == 400
 
     def test_login_failure_returns_403(self):
-        with patch.object(ma, "login_market_with_password", new=AsyncMock(return_value={
-            "success": False, "message": "bad creds"
-        })):
+        with patch.object(
+            ma,
+            "login_market_with_password",
+            new=AsyncMock(return_value={"success": False, "message": "bad creds"}),
+        ):
             resp = _client.post("/api/market/login", json={"username": "u", "password": "p"})
         assert resp.status_code == 403
 
     def test_login_success(self):
-        with patch.object(ma, "login_market_with_password", new=AsyncMock(return_value={
-            "success": True, "token": "jwt", "raw": {}
-        })):
+        with patch.object(
+            ma,
+            "login_market_with_password",
+            new=AsyncMock(return_value={"success": True, "token": "jwt", "raw": {}}),
+        ):
             with patch.object(ma, "bind_market_auth_to_session", return_value=("jwt", "")):
-                resp = _client.post(
-                    "/api/market/login", json={"username": "u", "password": "p"}
-                )
+                resp = _client.post("/api/market/login", json={"username": "u", "password": "p"})
         assert resp.status_code == 200
         assert resp.json()["data"]["token"] == "jwt"
 
@@ -515,6 +543,7 @@ class TestMarketLoginRoute:
 # ===========================================================================
 # market_account_sync — lines 1191-1216
 # ===========================================================================
+
 
 class TestMarketAccountSync:
     def test_missing_authorization_returns_400(self):
@@ -545,17 +574,28 @@ class TestMarketAccountSync:
 # market_account_overview — lines 1255-1346
 # ===========================================================================
 
+
 class TestMarketAccountOverview:
     def test_no_authorization_returns_401(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="")
+        ):
             resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 401
 
     def test_degraded_on_proxy_json_response(self):
         jr = JSONResponse({"message": "down"}, status_code=503)
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=jr)):
-                with patch.object(ma, "_legacy_account_overview", new=AsyncMock(return_value={"success": True, "user": {}, "wallet": {}, "membership": {}})):
+                with patch.object(
+                    ma,
+                    "_legacy_account_overview",
+                    new=AsyncMock(
+                        return_value={"success": True, "user": {}, "wallet": {}, "membership": {}}
+                    ),
+                ):
                     resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         data = resp.json()["data"]
@@ -563,25 +603,47 @@ class TestMarketAccountOverview:
 
     def test_cache_hit_returns_cached(self):
         import time as _time
+
         key = ma._overview_cache_key("Bearer cached_tok")
-        ma._ACCOUNT_OVERVIEW_CACHE[key] = (_time.monotonic(), {"user": {"id": 9}, "wallet": {}, "membership": {}})
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer cached_tok")):
+        ma._ACCOUNT_OVERVIEW_CACHE[key] = (
+            _time.monotonic(),
+            {"user": {"id": 9}, "wallet": {}, "membership": {}},
+        )
+        with patch.object(
+            ma,
+            "_authorization_from_request_resolved",
+            new=AsyncMock(return_value="Bearer cached_tok"),
+        ):
             resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         assert resp.json()["data"]["user"]["id"] == 9
 
     def test_refresh_flag_bypasses_cache(self):
         import time as _time
+
         key = ma._overview_cache_key("Bearer cached_tok2")
-        ma._ACCOUNT_OVERVIEW_CACHE[key] = (_time.monotonic(), {"user": {"id": 99}, "wallet": {}, "membership": {}})
+        ma._ACCOUNT_OVERVIEW_CACHE[key] = (
+            _time.monotonic(),
+            {"user": {"id": 99}, "wallet": {}, "membership": {}},
+        )
         good_payload = {"user": {"id": 1}, "wallet": {"balance": 10}, "membership": {"tier": "vip"}}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer cached_tok2")):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"data": good_payload})):
+        with patch.object(
+            ma,
+            "_authorization_from_request_resolved",
+            new=AsyncMock(return_value="Bearer cached_tok2"),
+        ):
+            with patch.object(
+                ma, "_proxy_json", new=AsyncMock(return_value={"data": good_payload})
+            ):
                 resp = _client.post("/api/market/account-overview", json={"refresh": True})
         assert resp.status_code == 200
 
     def test_exception_returns_degraded(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(side_effect=RuntimeError("boom"))):
+        with patch.object(
+            ma,
+            "_authorization_from_request_resolved",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ):
             resp = _client.post("/api/market/account-overview", json={})
         # Recoverable errors degrade gracefully
         assert resp.status_code == 200
@@ -589,9 +651,13 @@ class TestMarketAccountOverview:
     def test_proxy_error_dict_falls_back_to_legacy(self):
         proxy_err = {"__proxy_error__": True, "status_code": 502, "payload": {}}
         good_legacy = {"success": True, "user": {"id": 7}, "wallet": {}, "membership": {}}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=proxy_err)):
-                with patch.object(ma, "_legacy_account_overview", new=AsyncMock(return_value=good_legacy)):
+                with patch.object(
+                    ma, "_legacy_account_overview", new=AsyncMock(return_value=good_legacy)
+                ):
                     resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
 
@@ -599,6 +665,7 @@ class TestMarketAccountOverview:
 # ===========================================================================
 # _normalize_market_auth_payload — lines 946-995
 # ===========================================================================
+
 
 class TestNormalizeMarketAuthPayload:
     @pytest.mark.asyncio
@@ -647,6 +714,7 @@ class TestNormalizeMarketAuthPayload:
 # resolve_valid_market_access_token — lines 686-714
 # ===========================================================================
 
+
 class TestResolveValidMarketAccessToken:
     @pytest.mark.asyncio
     async def test_empty_session_returns_empty(self):
@@ -656,28 +724,47 @@ class TestResolveValidMarketAccessToken:
     @pytest.mark.asyncio
     async def test_demo_token_skips_me(self):
         ma._MARKET_SESSION_TOKENS["demo_sid"] = "demo_token_123"
-        with patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=True):
+        with patch(
+            "app.application.surface_audit_demo_account.is_local_demo_market_token",
+            return_value=True,
+        ):
             result = await ma.resolve_valid_market_access_token("demo_sid")
         assert result == "demo_token_123"
 
     @pytest.mark.asyncio
     async def test_401_triggers_refresh(self):
         ma._MARKET_SESSION_TOKENS["sid_e"] = "expired"
-        with patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=False):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-                "__proxy_error__": True, "status_code": 401, "payload": {}
-            })):
-                with patch.object(ma, "refresh_session_market_token", new=AsyncMock(return_value="newtoken")):
+        with patch(
+            "app.application.surface_audit_demo_account.is_local_demo_market_token",
+            return_value=False,
+        ):
+            with patch.object(
+                ma,
+                "_proxy_json",
+                new=AsyncMock(
+                    return_value={"__proxy_error__": True, "status_code": 401, "payload": {}}
+                ),
+            ):
+                with patch.object(
+                    ma, "refresh_session_market_token", new=AsyncMock(return_value="newtoken")
+                ):
                     result = await ma.resolve_valid_market_access_token("sid_e")
         assert result == "newtoken"
 
     @pytest.mark.asyncio
     async def test_other_proxy_error_returns_local_token(self):
         ma._MARKET_SESSION_TOKENS["sid_f"] = "local_tok"
-        with patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=False):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-                "__proxy_error__": True, "status_code": 502, "payload": {}
-            })):
+        with patch(
+            "app.application.surface_audit_demo_account.is_local_demo_market_token",
+            return_value=False,
+        ):
+            with patch.object(
+                ma,
+                "_proxy_json",
+                new=AsyncMock(
+                    return_value={"__proxy_error__": True, "status_code": 502, "payload": {}}
+                ),
+            ):
                 result = await ma.resolve_valid_market_access_token("sid_f")
         assert result == "local_tok"
 
@@ -685,7 +772,10 @@ class TestResolveValidMarketAccessToken:
     async def test_json_response_returns_local_token(self):
         ma._MARKET_SESSION_TOKENS["sid_g"] = "local_tok2"
         jr = JSONResponse({"error": "network"}, status_code=503)
-        with patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=False):
+        with patch(
+            "app.application.surface_audit_demo_account.is_local_demo_market_token",
+            return_value=False,
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=jr)):
                 result = await ma.resolve_valid_market_access_token("sid_g")
         assert result == "local_tok2"
@@ -695,6 +785,7 @@ class TestResolveValidMarketAccessToken:
 # market_payment_orders — lines 1600-1626
 # ===========================================================================
 
+
 class TestMarketPaymentOrders:
     def test_with_status_filter(self):
         with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"orders": []})):
@@ -702,9 +793,13 @@ class TestMarketPaymentOrders:
         assert resp.status_code == 200
 
     def test_proxy_error_returns_error_code(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 502, "payload": {}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={"__proxy_error__": True, "status_code": 502, "payload": {}}
+            ),
+        ):
             resp = _client.get("/api/market/payment/orders")
         assert resp.status_code == 502
 
@@ -712,6 +807,7 @@ class TestMarketPaymentOrders:
 # ===========================================================================
 # market_status route — lines 1671-1689
 # ===========================================================================
+
 
 class TestMarketStatus:
     def test_market_reachable(self):
@@ -721,9 +817,13 @@ class TestMarketStatus:
         assert resp.json()["data"]["reachable"] is True
 
     def test_market_unreachable_proxy_error(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 502, "payload": {}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={"__proxy_error__": True, "status_code": 502, "payload": {}}
+            ),
+        ):
             resp = _client.get("/api/market/status")
         assert resp.status_code == 200
         assert resp.json()["data"]["reachable"] is False
@@ -739,28 +839,55 @@ class TestMarketStatus:
 # market_dev_create_account — lines 1692-1744
 # ===========================================================================
 
+
 class TestMarketDevCreateAccount:
     def test_short_password_returns_400(self):
         resp = _client.post("/api/market/dev-create-account", json={"password": "abc"})
         assert resp.status_code == 400
 
     def test_register_conflict_falls_back_to_login(self):
-        with patch.object(ma, "_register_without_verification", new=AsyncMock(
-            return_value={"__proxy_error__": True, "status_code": 409, "payload": {"detail": "用户已存在"}}
-        )):
+        with patch.object(
+            ma,
+            "_register_without_verification",
+            new=AsyncMock(
+                return_value={
+                    "__proxy_error__": True,
+                    "status_code": 409,
+                    "payload": {"detail": "用户已存在"},
+                }
+            ),
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"token": "logintok"})):
-                with patch.object(ma, "_proxy_json", new=AsyncMock(side_effect=[
-                    {"token": "logintok"},
-                    {"ok": True},
-                ])):
-                    with patch.object(ma, "_register_without_verification", new=AsyncMock(
-                        return_value={"__proxy_error__": True, "status_code": 409, "payload": {}}
-                    )):
+                with patch.object(
+                    ma,
+                    "_proxy_json",
+                    new=AsyncMock(
+                        side_effect=[
+                            {"token": "logintok"},
+                            {"ok": True},
+                        ]
+                    ),
+                ):
+                    with patch.object(
+                        ma,
+                        "_register_without_verification",
+                        new=AsyncMock(
+                            return_value={
+                                "__proxy_error__": True,
+                                "status_code": 409,
+                                "payload": {},
+                            }
+                        ),
+                    ):
                         # Complex to orchestrate—just test the error path below
                         pass
 
     def test_no_token_after_register_returns_502(self):
-        with patch.object(ma, "_register_without_verification", new=AsyncMock(return_value={"no_token_here": True})):
+        with patch.object(
+            ma,
+            "_register_without_verification",
+            new=AsyncMock(return_value={"no_token_here": True}),
+        ):
             resp = _client.post(
                 "/api/market/dev-create-account",
                 json={"username": "devuser", "password": "abc123", "email": "dev@test.com"},
@@ -772,17 +899,16 @@ class TestMarketDevCreateAccount:
 # _checkout_sign_body_from_request — lines 1515-1535
 # ===========================================================================
 
+
 class TestCheckoutSignBodyFromRequest:
     def test_plan_id_extracted(self):
         result = ma._checkout_sign_body_from_request({"plan_id": "p1"})
         assert result["plan_id"] == "p1"
 
     def test_wallet_recharge_true(self):
-        result = ma._checkout_sign_body_from_request({
-            "wallet_recharge": True,
-            "total_amount": "99.5",
-            "subject": "充值"
-        })
+        result = ma._checkout_sign_body_from_request(
+            {"wallet_recharge": True, "total_amount": "99.5", "subject": "充值"}
+        )
         assert result["wallet_recharge"] is True
         assert result["total_amount"] == 99.5
 
@@ -791,10 +917,12 @@ class TestCheckoutSignBodyFromRequest:
         assert result["wallet_recharge"] is True
 
     def test_wallet_recharge_invalid_amount(self):
-        result = ma._checkout_sign_body_from_request({
-            "wallet_recharge": True,
-            "total_amount": "notanumber",
-        })
+        result = ma._checkout_sign_body_from_request(
+            {
+                "wallet_recharge": True,
+                "total_amount": "notanumber",
+            }
+        )
         assert result["total_amount"] == 0.0
 
     def test_out_trade_no_passed_through(self):
@@ -809,6 +937,7 @@ class TestCheckoutSignBodyFromRequest:
 # ===========================================================================
 # send_market_phone_code — lines 1127-1146
 # ===========================================================================
+
 
 class TestSendMarketPhoneCode:
     @pytest.mark.asyncio
@@ -837,12 +966,20 @@ class TestSendMarketPhoneCode:
         assert resp.status_code == 400
 
     def test_route_success(self):
-        with patch.object(ma, "send_market_phone_code", new=AsyncMock(return_value={"success": True, "message": "ok"})):
+        with patch.object(
+            ma,
+            "send_market_phone_code",
+            new=AsyncMock(return_value={"success": True, "message": "ok"}),
+        ):
             resp = _client.post("/api/market/send-phone-code", json={"phone": "13800000000"})
         assert resp.status_code == 200
 
     def test_route_failure_uses_status_code(self):
-        with patch.object(ma, "send_market_phone_code", new=AsyncMock(return_value={"success": False, "message": "fail", "status_code": 503})):
+        with patch.object(
+            ma,
+            "send_market_phone_code",
+            new=AsyncMock(return_value={"success": False, "message": "fail", "status_code": 503}),
+        ):
             resp = _client.post("/api/market/send-phone-code", json={"phone": "13800000000"})
         assert resp.status_code == 503
 
@@ -850,6 +987,7 @@ class TestSendMarketPhoneCode:
 # ===========================================================================
 # _normalize_bearer_token
 # ===========================================================================
+
 
 class TestNormalizeBearerToken:
     def test_strips_bearer_prefix(self):
@@ -866,6 +1004,7 @@ class TestNormalizeBearerToken:
 # _degraded_account_overview
 # ===========================================================================
 
+
 class TestDegradedAccountOverview:
     def test_returns_degraded_structure(self):
         result = ma._degraded_account_overview("test error")
@@ -878,6 +1017,7 @@ class TestDegradedAccountOverview:
 # ===========================================================================
 # _merge_live_overview_fields
 # ===========================================================================
+
 
 class TestMergeLiveOverviewFields:
     def test_merges_wallet(self):
@@ -900,6 +1040,7 @@ class TestMergeLiveOverviewFields:
 # _bootstrap_overview_needs_live_merge
 # ===========================================================================
 
+
 class TestBootstrapOverviewNeedsLiveMerge:
     def test_none_returns_true(self):
         assert ma._bootstrap_overview_needs_live_merge(None) is True
@@ -920,6 +1061,7 @@ class TestBootstrapOverviewNeedsLiveMerge:
 # send_market_reset_password_code / reset_market_password_with_code
 # ===========================================================================
 
+
 class TestPasswordReset:
     @pytest.mark.asyncio
     async def test_invalid_email(self):
@@ -935,9 +1077,17 @@ class TestPasswordReset:
 
     @pytest.mark.asyncio
     async def test_proxy_error_returns_failure(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 400, "payload": {"detail": "error"}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={
+                    "__proxy_error__": True,
+                    "status_code": 400,
+                    "payload": {"detail": "error"},
+                }
+            ),
+        ):
             result = await ma.send_market_reset_password_code("u@x.com")
         assert result["success"] is False
 
@@ -965,15 +1115,23 @@ class TestPasswordReset:
 
     @pytest.mark.asyncio
     async def test_reset_proxy_error(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 400, "payload": {}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={"__proxy_error__": True, "status_code": 400, "payload": {}}
+            ),
+        ):
             result = await ma.reset_market_password_with_code("u@x.com", "123456", "newpassword")
         assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_reset_success_false_payload(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"success": False, "message": "wrong code"})):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(return_value={"success": False, "message": "wrong code"}),
+        ):
             result = await ma.reset_market_password_with_code("u@x.com", "123456", "newpassword")
         assert result["success"] is False
 
@@ -1002,6 +1160,7 @@ class TestPasswordReset:
 # ===========================================================================
 # session_market_token — DB paths (lines 119-132)
 # ===========================================================================
+
 
 class TestSessionMarketToken:
     def test_empty_sid_returns_empty(self):
@@ -1057,6 +1216,7 @@ class TestSessionMarketToken:
 # session_market_refresh_token — DB paths (lines 135-155)
 # ===========================================================================
 
+
 class TestSessionMarketRefreshToken:
     def test_empty_sid_returns_empty(self):
         assert ma.session_market_refresh_token("") == ""
@@ -1110,12 +1270,15 @@ class TestSessionMarketRefreshToken:
 # latest_session_market_refresh_token (lines 158-177)
 # ===========================================================================
 
+
 class TestLatestSessionMarketRefreshToken:
     def test_returns_token_from_db(self):
         mock_row = MagicMock()
         mock_row.market_refresh_token = "latest_rf"
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_row]
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_row
+        ]
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
@@ -1129,7 +1292,10 @@ class TestLatestSessionMarketRefreshToken:
         mock_row2 = MagicMock()
         mock_row2.market_refresh_token = "second_rf"
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_row1, mock_row2]
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_row1,
+            mock_row2,
+        ]
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
@@ -1157,12 +1323,15 @@ class TestLatestSessionMarketRefreshToken:
 # latest_session_market_token (lines 180-205)
 # ===========================================================================
 
+
 class TestLatestSessionMarketToken:
     def test_returns_token_from_db(self):
         mock_row = MagicMock()
         mock_row.market_access_token = "latest_tok"
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_row]
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_row
+        ]
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
@@ -1186,7 +1355,10 @@ class TestLatestSessionMarketToken:
         mock_row2 = MagicMock()
         mock_row2.market_access_token = "second_tok"
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_row1, mock_row2]
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_row1,
+            mock_row2,
+        ]
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
@@ -1204,6 +1376,7 @@ class TestLatestSessionMarketToken:
 # market_session_handoff route (lines 229-316)
 # ===========================================================================
 
+
 class TestMarketSessionHandoff:
     def test_user_none_with_token_returns_success(self):
         with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None):
@@ -1220,43 +1393,75 @@ class TestMarketSessionHandoff:
 
     def test_user_present_with_valid_token_returns_success(self):
         mock_user = MagicMock()
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user):
-            with patch.object(ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="valid_tok")):
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
+        ):
+            with patch.object(
+                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="valid_tok")
+            ):
                 with patch.object(ma, "session_market_refresh_token", return_value="rt"):
-                    with patch("app.enterprise.mod_entitlements.sync_entitlements_for_session", new=AsyncMock()):
-                        resp = _client.get("/api/market/session-handoff", cookies={"session_id": "sid_abc"})
+                    with patch(
+                        "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                        new=AsyncMock(),
+                    ):
+                        resp = _client.get(
+                            "/api/market/session-handoff", cookies={"session_id": "sid_abc"}
+                        )
         assert resp.status_code == 200
         assert resp.json()["data"]["market_access_token"] == "valid_tok"
 
     def test_user_present_no_token_returns_404(self):
         mock_user = MagicMock()
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user):
-            with patch.object(ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="")):
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
+        ):
+            with patch.object(
+                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="")
+            ):
                 with patch.object(ma, "latest_session_market_token", return_value=""):
                     resp = _client.get("/api/market/session-handoff")
         assert resp.status_code == 404
 
     def test_user_present_tok_none_latest_fallback_resolved(self):
         mock_user = MagicMock()
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user):
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
+        ):
             # First call returns "" (no session token), second (after latest) also ""
-            with patch.object(ma, "resolve_valid_market_access_token", new=AsyncMock(side_effect=["", "resolved_tok"])):
+            with patch.object(
+                ma,
+                "resolve_valid_market_access_token",
+                new=AsyncMock(side_effect=["", "resolved_tok"]),
+            ):
                 with patch.object(ma, "latest_session_market_token", return_value="latest_raw"):
                     with patch.object(ma, "session_market_refresh_token", return_value=""):
-                        with patch.object(ma, "latest_session_market_refresh_token", return_value=""):
-                            with patch("app.enterprise.mod_entitlements.sync_entitlements_for_session", new=AsyncMock()):
+                        with patch.object(
+                            ma, "latest_session_market_refresh_token", return_value=""
+                        ):
+                            with patch(
+                                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                                new=AsyncMock(),
+                            ):
                                 resp = _client.get("/api/market/session-handoff")
         assert resp.status_code == 200
 
     def test_exception_with_fallback_token(self):
         ma._MARKET_SESSION_TOKENS["fallback_sid"] = "fallback_tok"
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", side_effect=RuntimeError("boom")):
-            resp = _client.get("/api/market/session-handoff", cookies={"session_id": "fallback_sid"})
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            side_effect=RuntimeError("boom"),
+        ):
+            resp = _client.get(
+                "/api/market/session-handoff", cookies={"session_id": "fallback_sid"}
+            )
         assert resp.status_code == 200
         assert "market_access_token" in resp.json()["data"]
 
     def test_exception_no_fallback_token_returns_502(self):
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", side_effect=RuntimeError("boom")):
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            side_effect=RuntimeError("boom"),
+        ):
             with patch.object(ma, "session_market_token", return_value=""):
                 with patch.object(ma, "latest_session_market_token", return_value=""):
                     resp = _client.get("/api/market/session-handoff")
@@ -1264,22 +1469,40 @@ class TestMarketSessionHandoff:
 
     def test_user_present_with_refresh_token_in_response(self):
         mock_user = MagicMock()
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user):
-            with patch.object(ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="tok_val")):
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
+        ):
+            with patch.object(
+                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="tok_val")
+            ):
                 with patch.object(ma, "session_market_refresh_token", return_value="rf_val"):
-                    with patch("app.enterprise.mod_entitlements.sync_entitlements_for_session", new=AsyncMock()):
-                        resp = _client.get("/api/market/session-handoff", cookies={"session_id": "s1"})
+                    with patch(
+                        "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                        new=AsyncMock(),
+                    ):
+                        resp = _client.get(
+                            "/api/market/session-handoff", cookies={"session_id": "s1"}
+                        )
         assert resp.status_code == 200
         assert resp.json()["data"]["market_refresh_token"] == "rf_val"
 
     def test_entitlements_exception_still_returns_ok(self):
         mock_user = MagicMock()
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user):
-            with patch.object(ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="tok_val")):
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
+        ):
+            with patch.object(
+                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="tok_val")
+            ):
                 with patch.object(ma, "session_market_refresh_token", return_value=""):
                     with patch.object(ma, "latest_session_market_refresh_token", return_value=""):
-                        with patch("app.enterprise.mod_entitlements.sync_entitlements_for_session", new=AsyncMock(side_effect=RuntimeError("ent_fail"))):
-                            resp = _client.get("/api/market/session-handoff", cookies={"session_id": "s2"})
+                        with patch(
+                            "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                            new=AsyncMock(side_effect=RuntimeError("ent_fail")),
+                        ):
+                            resp = _client.get(
+                                "/api/market/session-handoff", cookies={"session_id": "s2"}
+                            )
         assert resp.status_code == 200
 
 
@@ -1287,9 +1510,11 @@ class TestMarketSessionHandoff:
 # _authorization_from_request (lines 319-340)
 # ===========================================================================
 
+
 class TestAuthorizationFromRequest:
     def test_session_token_wins(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
         req = FR(scope)
         ma._MARKET_SESSION_TOKENS["csid"] = "session_tok"
@@ -1299,6 +1524,7 @@ class TestAuthorizationFromRequest:
 
     def test_latest_token_second_priority(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
         req = FR(scope)
         with patch.object(ma, "session_id_from_request", return_value="no_such_sid"):
@@ -1308,6 +1534,7 @@ class TestAuthorizationFromRequest:
 
     def test_body_token_third_priority(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
         req = FR(scope)
         with patch.object(ma, "session_id_from_request", return_value="no_sid"):
@@ -1318,6 +1545,7 @@ class TestAuthorizationFromRequest:
 
     def test_header_token_last_resort(self):
         from fastapi import Request as FR
+
         scope = {
             "type": "http",
             "method": "POST",
@@ -1333,6 +1561,7 @@ class TestAuthorizationFromRequest:
 
     def test_returns_empty_when_no_token(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
         req = FR(scope)
         with patch.object(ma, "session_id_from_request", return_value="no_sid"):
@@ -1346,14 +1575,18 @@ class TestAuthorizationFromRequest:
 # _authorization_from_request_resolved (lines 343-353)
 # ===========================================================================
 
+
 class TestAuthorizationFromRequestResolved:
     @pytest.mark.asyncio
     async def test_resolved_returns_auth_header(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
         req = FR(scope)
         with patch.object(ma, "session_market_token", return_value="sess_tok"):
-            with patch.object(ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="new_tok")):
+            with patch.object(
+                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="new_tok")
+            ):
                 with patch.object(ma, "session_id_from_request", return_value="some_sid"):
                     result = await ma._authorization_from_request_resolved(req, {})
         assert result == "Bearer new_tok"
@@ -1361,6 +1594,7 @@ class TestAuthorizationFromRequestResolved:
     @pytest.mark.asyncio
     async def test_no_session_token_falls_back(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
         req = FR(scope)
         with patch.object(ma, "session_market_token", return_value=""):
@@ -1373,13 +1607,18 @@ class TestAuthorizationFromRequestResolved:
     @pytest.mark.asyncio
     async def test_resolved_empty_falls_through(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
         req = FR(scope)
         with patch.object(ma, "session_market_token", return_value="sess_tok"):
             with patch.object(ma, "latest_session_market_token", return_value=""):
-                with patch.object(ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="")):
+                with patch.object(
+                    ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="")
+                ):
                     with patch.object(ma, "session_id_from_request", return_value="s"):
-                        with patch.object(ma, "_authorization_from_request", return_value="fallback_auth"):
+                        with patch.object(
+                            ma, "_authorization_from_request", return_value="fallback_auth"
+                        ):
                             result = await ma._authorization_from_request_resolved(req, {})
         assert result == "fallback_auth"
 
@@ -1387,6 +1626,7 @@ class TestAuthorizationFromRequestResolved:
 # ===========================================================================
 # _body_snippet (lines 356-367)
 # ===========================================================================
+
 
 class TestBodySnippet:
     def test_dict_payload(self):
@@ -1415,6 +1655,7 @@ class TestBodySnippet:
 # ===========================================================================
 # _proxy_json retry paths (lines 456-498) — multiple retries
 # ===========================================================================
+
 
 class TestProxyJsonRetries:
     @pytest.mark.asyncio
@@ -1471,6 +1712,7 @@ class TestProxyJsonRetries:
 # refresh_session_market_token (lines 663-683)
 # ===========================================================================
 
+
 class TestRefreshSessionMarketToken:
     @pytest.mark.asyncio
     async def test_no_refresh_token_returns_empty(self):
@@ -1497,7 +1739,11 @@ class TestRefreshSessionMarketToken:
     @pytest.mark.asyncio
     async def test_success_saves_and_returns_token(self):
         ma._MARKET_SESSION_REFRESH_TOKENS["rf_sid3"] = "old_rf3"
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"token": "new_tok", "refresh_token": "new_rf"})):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(return_value={"token": "new_tok", "refresh_token": "new_rf"}),
+        ):
             with patch.object(ma, "save_session_market_token") as mock_save:
                 result = await ma.refresh_session_market_token("rf_sid3")
         assert result == "new_tok"
@@ -1515,6 +1761,7 @@ class TestRefreshSessionMarketToken:
 # register_market_user (lines 813-856) — verification branches
 # ===========================================================================
 
+
 class TestRegisterMarketUser:
     @pytest.mark.asyncio
     async def test_json_response_returns_unavailable(self):
@@ -1526,9 +1773,17 @@ class TestRegisterMarketUser:
 
     @pytest.mark.asyncio
     async def test_proxy_error_no_verification_required_returns_failure(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 400, "payload": {"detail": "already exists"}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={
+                    "__proxy_error__": True,
+                    "status_code": 400,
+                    "payload": {"detail": "already exists"},
+                }
+            ),
+        ):
             result = await ma.register_market_user("u", "p123", "u@x.com")
         assert result["success"] is False
 
@@ -1536,23 +1791,45 @@ class TestRegisterMarketUser:
     async def test_proxy_error_verification_required_fallback_succeeds(self):
         good = {"token": "reg_tok", "refresh_token": "reg_rf"}
         responses = [
-            {"__proxy_error__": True, "status_code": 400, "payload": {"detail": "verification code required"}},
+            {
+                "__proxy_error__": True,
+                "status_code": 400,
+                "payload": {"detail": "verification code required"},
+            },
             good,
         ]
         with patch.object(ma, "_proxy_json", new=AsyncMock(side_effect=responses)):
-            with patch.object(ma, "_register_without_verification", new=AsyncMock(return_value=good)):
+            with patch.object(
+                ma, "_register_without_verification", new=AsyncMock(return_value=good)
+            ):
                 result = await ma.register_market_user("u", "p123", "u@x.com")
         assert result["success"] is True
         assert result["token"] == "reg_tok"
 
     @pytest.mark.asyncio
     async def test_proxy_error_verification_required_fallback_also_fails(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 400, "payload": {"detail": "need verification code"}
-        })):
-            with patch.object(ma, "_register_without_verification", new=AsyncMock(return_value={
-                "__proxy_error__": True, "status_code": 400, "payload": {"detail": "still failed"}
-            })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={
+                    "__proxy_error__": True,
+                    "status_code": 400,
+                    "payload": {"detail": "need verification code"},
+                }
+            ),
+        ):
+            with patch.object(
+                ma,
+                "_register_without_verification",
+                new=AsyncMock(
+                    return_value={
+                        "__proxy_error__": True,
+                        "status_code": 400,
+                        "payload": {"detail": "still failed"},
+                    }
+                ),
+            ):
                 result = await ma.register_market_user("u", "p123", "u@x.com")
         assert result["success"] is False
 
@@ -1560,10 +1837,20 @@ class TestRegisterMarketUser:
     async def test_proxy_error_verification_fallback_success_status_200(self):
         """Covers the else: status_code = 200 branch."""
         good = {"token": "fallback_tok"}
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 400, "payload": {"detail": "code required"}
-        })):
-            with patch.object(ma, "_register_without_verification", new=AsyncMock(return_value=good)):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={
+                    "__proxy_error__": True,
+                    "status_code": 400,
+                    "payload": {"detail": "code required"},
+                }
+            ),
+        ):
+            with patch.object(
+                ma, "_register_without_verification", new=AsyncMock(return_value=good)
+            ):
                 result = await ma.register_market_user("u", "p123", "u@x.com")
         assert result["success"] is True
 
@@ -1579,11 +1866,21 @@ class TestRegisterMarketUser:
 # login_market_with_password (lines 998-1022) — demo shim paths
 # ===========================================================================
 
+
 class TestLoginMarketWithPassword:
     @pytest.mark.asyncio
     async def test_demo_login_local_base_returns_demo_payload(self):
-        demo_shim = {"token": "demo_tok", "refresh_token": "", "is_enterprise": True, "is_market_admin": False, "raw": {}}
-        with patch("app.application.surface_audit_demo_account.try_local_demo_market_login", return_value=demo_shim):
+        demo_shim = {
+            "token": "demo_tok",
+            "refresh_token": "",
+            "is_enterprise": True,
+            "is_market_admin": False,
+            "raw": {},
+        }
+        with patch(
+            "app.application.surface_audit_demo_account.try_local_demo_market_login",
+            return_value=demo_shim,
+        ):
             with patch.object(ma, "_is_local_market_base", return_value=True):
                 result = await ma.login_market_with_password("demouser", "demopass")
         assert result["success"] is True
@@ -1591,9 +1888,18 @@ class TestLoginMarketWithPassword:
 
     @pytest.mark.asyncio
     async def test_demo_shim_fallback_on_json_response_error(self):
-        demo_shim = {"token": "demo_tok2", "refresh_token": "", "is_enterprise": False, "is_market_admin": False, "raw": {}}
+        demo_shim = {
+            "token": "demo_tok2",
+            "refresh_token": "",
+            "is_enterprise": False,
+            "is_market_admin": False,
+            "raw": {},
+        }
         jr = JSONResponse({"error": "net"}, status_code=502)
-        with patch("app.application.surface_audit_demo_account.try_local_demo_market_login", return_value=demo_shim):
+        with patch(
+            "app.application.surface_audit_demo_account.try_local_demo_market_login",
+            return_value=demo_shim,
+        ):
             with patch.object(ma, "_is_local_market_base", return_value=True):
                 with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=jr)):
                     result = await ma.login_market_with_password("user", "pass")
@@ -1602,21 +1908,45 @@ class TestLoginMarketWithPassword:
 
     @pytest.mark.asyncio
     async def test_no_demo_shim_normal_login(self):
-        with patch("app.application.surface_audit_demo_account.try_local_demo_market_login", return_value=None):
+        with patch(
+            "app.application.surface_audit_demo_account.try_local_demo_market_login",
+            return_value=None,
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"token": "real_tok"})):
-                with patch.object(ma, "_normalize_market_auth_payload", new=AsyncMock(return_value={"success": True, "token": "real_tok"})):
+                with patch.object(
+                    ma,
+                    "_normalize_market_auth_payload",
+                    new=AsyncMock(return_value={"success": True, "token": "real_tok"}),
+                ):
                     result = await ma.login_market_with_password("user", "pass")
         assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_demo_shim_fallback_on_failure_result(self):
-        demo_shim = {"token": "demo_tok3", "refresh_token": "", "is_enterprise": False, "is_market_admin": False, "raw": {}}
-        with patch("app.application.surface_audit_demo_account.try_local_demo_market_login", return_value=demo_shim):
+        demo_shim = {
+            "token": "demo_tok3",
+            "refresh_token": "",
+            "is_enterprise": False,
+            "is_market_admin": False,
+            "raw": {},
+        }
+        with patch(
+            "app.application.surface_audit_demo_account.try_local_demo_market_login",
+            return_value=demo_shim,
+        ):
             with patch.object(ma, "_is_local_market_base", return_value=True):
                 with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"dummy": True})):
-                    with patch.object(ma, "_normalize_market_auth_payload", new=AsyncMock(
-                        return_value={"success": False, "status_code": 401, "message": "bad creds"}
-                    )):
+                    with patch.object(
+                        ma,
+                        "_normalize_market_auth_payload",
+                        new=AsyncMock(
+                            return_value={
+                                "success": False,
+                                "status_code": 401,
+                                "message": "bad creds",
+                            }
+                        ),
+                    ):
                         result = await ma.login_market_with_password("user", "pass")
         assert result["success"] is True
 
@@ -1624,7 +1954,10 @@ class TestLoginMarketWithPassword:
     async def test_json_response_no_demo_shim_normalizes(self):
         jr = JSONResponse({"message": "bad"}, status_code=401)
         jr.body = json.dumps({"message": "bad"}).encode()
-        with patch("app.application.surface_audit_demo_account.try_local_demo_market_login", return_value=None):
+        with patch(
+            "app.application.surface_audit_demo_account.try_local_demo_market_login",
+            return_value=None,
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=jr)):
                 result = await ma.login_market_with_password("user", "pass")
         assert result["success"] is False
@@ -1634,11 +1967,16 @@ class TestLoginMarketWithPassword:
 # login_market_with_phone_code (lines 1025-1033)
 # ===========================================================================
 
+
 class TestLoginMarketWithPhoneCode:
     @pytest.mark.asyncio
     async def test_normalizes_payload(self):
         with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"token": "phone_tok"})):
-            with patch.object(ma, "_normalize_market_auth_payload", new=AsyncMock(return_value={"success": True, "token": "phone_tok"})):
+            with patch.object(
+                ma,
+                "_normalize_market_auth_payload",
+                new=AsyncMock(return_value={"success": True, "token": "phone_tok"}),
+            ):
                 result = await ma.login_market_with_phone_code("13800000000", "123456")
         assert result["success"] is True
 
@@ -1646,6 +1984,7 @@ class TestLoginMarketWithPhoneCode:
 # ===========================================================================
 # login_market_for_oidc_profile (lines 1053-1124)
 # ===========================================================================
+
 
 class TestLoginMarketForOidcProfile:
     @pytest.mark.asyncio
@@ -1658,7 +1997,11 @@ class TestLoginMarketForOidcProfile:
     async def test_oidc_token_valid_me_returns_success(self):
         me_payload = {"user": {"id": 1, "username": "oidcuser"}, "is_enterprise": False}
         with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=me_payload)):
-            with patch.object(ma, "_market_identity_from_payloads", return_value=(False, False, {"id": 1, "username": "oidcuser"})):
+            with patch.object(
+                ma,
+                "_market_identity_from_payloads",
+                return_value=(False, False, {"id": 1, "username": "oidcuser"}),
+            ):
                 result = await ma.login_market_for_oidc_profile(
                     {"preferred_username": "oidcuser", "email": "oidc@x.com", "sub": "sub123"},
                     oidc_access_token="Bearer oidc_tok",
@@ -1688,7 +2031,11 @@ class TestLoginMarketForOidcProfile:
 
     @pytest.mark.asyncio
     async def test_internal_key_sso_proxy_error(self):
-        proxy_error = {"__proxy_error__": True, "status_code": 403, "payload": {"detail": "forbidden"}}
+        proxy_error = {
+            "__proxy_error__": True,
+            "status_code": 403,
+            "payload": {"detail": "forbidden"},
+        }
         with patch.object(ma, "_market_internal_api_key", return_value="ikey"):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=proxy_error)):
                 result = await ma.login_market_for_oidc_profile(
@@ -1701,7 +2048,11 @@ class TestLoginMarketForOidcProfile:
         good_payload = {"token": "sso_tok"}
         with patch.object(ma, "_market_internal_api_key", return_value="ikey"):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=good_payload)):
-                with patch.object(ma, "_normalize_market_auth_payload", new=AsyncMock(return_value={"success": True, "token": "sso_tok"})):
+                with patch.object(
+                    ma,
+                    "_normalize_market_auth_payload",
+                    new=AsyncMock(return_value={"success": True, "token": "sso_tok"}),
+                ):
                     result = await ma.login_market_for_oidc_profile(
                         {"preferred_username": "ssouser", "email": "sso@x.com"},
                     )
@@ -1711,7 +2062,11 @@ class TestLoginMarketForOidcProfile:
     async def test_oidc_token_valid_me_with_user_blob_update(self):
         me_payload = {"id": 5, "username": "direct_user"}
         with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=me_payload)):
-            with patch.object(ma, "_market_identity_from_payloads", return_value=(False, False, {"id": 5, "username": "direct_user"})):
+            with patch.object(
+                ma,
+                "_market_identity_from_payloads",
+                return_value=(False, False, {"id": 5, "username": "direct_user"}),
+            ):
                 result = await ma.login_market_for_oidc_profile(
                     {"preferred_username": "direct_user", "email": "d@x.com"},
                     oidc_access_token="raw_oidc_tok",
@@ -1723,9 +2078,12 @@ class TestLoginMarketForOidcProfile:
 # _looks_like_verification_required (line 717-719)
 # ===========================================================================
 
+
 class TestLooksLikeVerificationRequired:
     def test_verification_code_match(self):
-        assert ma._looks_like_verification_required({"detail": "verification code required"}) is True
+        assert (
+            ma._looks_like_verification_required({"detail": "verification code required"}) is True
+        )
 
     def test_no_match(self):
         assert ma._looks_like_verification_required({"detail": "already registered"}) is False
@@ -1737,6 +2095,7 @@ class TestLooksLikeVerificationRequired:
 # ===========================================================================
 # _register_without_verification (lines 722-737)
 # ===========================================================================
+
 
 class TestRegisterWithoutVerification:
     @pytest.mark.asyncio
@@ -1760,48 +2119,67 @@ class TestRegisterWithoutVerification:
 # _market_llm_catalog_impl (lines 1349-1388) — all branches
 # ===========================================================================
 
+
 class TestMarketLlmCatalogImpl:
     def test_post_no_auth_returns_401(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="")
+        ):
             resp = _client.post("/api/market/llm-catalog", json={})
         assert resp.status_code == 401
 
     def test_get_no_auth_returns_401(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="")
+        ):
             resp = _client.get("/api/market/llm-catalog")
         assert resp.status_code == 401
 
     def test_json_response_passthrough(self):
         jr = JSONResponse({"error": "down"}, status_code=503)
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=jr)):
                 resp = _client.post("/api/market/llm-catalog", json={})
         assert resp.status_code == 503
 
     def test_proxy_error_returns_degraded(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-                "__proxy_error__": True, "status_code": 502, "payload": {}
-            })):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
+            with patch.object(
+                ma,
+                "_proxy_json",
+                new=AsyncMock(
+                    return_value={"__proxy_error__": True, "status_code": 502, "payload": {}}
+                ),
+            ):
                 resp = _client.post("/api/market/llm-catalog", json={})
         assert resp.status_code == 200
         assert resp.json()["data"]["degraded"] is True
 
     def test_non_dict_returns_degraded(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value="not a dict")):
                 resp = _client.post("/api/market/llm-catalog", json={})
         assert resp.status_code == 200
         assert resp.json()["data"]["degraded"] is True
 
     def test_success_with_refresh_flag(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"providers": []})):
                 resp = _client.post("/api/market/llm-catalog", json={"refresh": True})
         assert resp.status_code == 200
 
     def test_get_with_refresh_param(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"providers": []})):
                 resp = _client.get("/api/market/llm-catalog?refresh=true")
         assert resp.status_code == 200
@@ -1810,6 +2188,7 @@ class TestMarketLlmCatalogImpl:
 # ===========================================================================
 # _legacy_account_overview (lines 1403-1458)
 # ===========================================================================
+
 
 class TestLegacyAccountOverview:
     @pytest.mark.asyncio
@@ -1903,15 +2282,26 @@ class TestLegacyAccountOverview:
 # market_account_overview additional branches (lines 1255-1346)
 # ===========================================================================
 
+
 class TestMarketAccountOverviewBranches:
     def test_stale_cache_evicted_and_fresh_fetched(self):
         import time as _time
+
         key = ma._overview_cache_key("Bearer stale_tok")
         # Store a very old cache entry
-        ma._ACCOUNT_OVERVIEW_CACHE[key] = (_time.monotonic() - 10000, {"user": {"id": 42}, "wallet": {}, "membership": {}})
+        ma._ACCOUNT_OVERVIEW_CACHE[key] = (
+            _time.monotonic() - 10000,
+            {"user": {"id": 42}, "wallet": {}, "membership": {}},
+        )
         good_payload = {"user": {"id": 1}, "wallet": {"balance": 10}, "membership": {"tier": "vip"}}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer stale_tok")):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"data": good_payload})):
+        with patch.object(
+            ma,
+            "_authorization_from_request_resolved",
+            new=AsyncMock(return_value="Bearer stale_tok"),
+        ):
+            with patch.object(
+                ma, "_proxy_json", new=AsyncMock(return_value={"data": good_payload})
+            ):
                 resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         # The stale data should be replaced by fresh data
@@ -1919,7 +2309,9 @@ class TestMarketAccountOverviewBranches:
 
     def test_bootstrap_payload_without_data_key_uses_full_payload(self):
         good_payload = {"user": {"id": 5}, "wallet": {}, "membership": {}}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=good_payload)):
                 resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
@@ -1927,9 +2319,13 @@ class TestMarketAccountOverviewBranches:
     def test_bootstrap_needs_live_merge_live_proxy_error(self):
         incomplete_payload = {"user": {}}  # missing wallet and membership
         live_error = {"__proxy_error__": True, "status_code": 502, "payload": {}}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=incomplete_payload)):
-                with patch.object(ma, "_legacy_account_overview", new=AsyncMock(return_value=live_error)):
+                with patch.object(
+                    ma, "_legacy_account_overview", new=AsyncMock(return_value=live_error)
+                ):
                     resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         # sync_warning should be set
@@ -1939,27 +2335,43 @@ class TestMarketAccountOverviewBranches:
     def test_data_none_legacy_proxy_error_uses_payload_err(self):
         proxy_err = {"__proxy_error__": True, "status_code": 502, "payload": {"detail": "bad"}}
         legacy_err = {"__proxy_error__": True, "status_code": 503, "payload": {}}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=proxy_err)):
-                with patch.object(ma, "_legacy_account_overview", new=AsyncMock(return_value=legacy_err)):
+                with patch.object(
+                    ma, "_legacy_account_overview", new=AsyncMock(return_value=legacy_err)
+                ):
                     resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         assert resp.json()["data"]["degraded"] is True
 
     def test_data_none_neither_proxy_err_uses_generic(self):
         """Payload not a JSONResponse, not a proxy_error dict, and data is None → generic err."""
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             # Return a non-dict, non-JSONResponse to trigger data = None path
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=None)):
-                with patch.object(ma, "_legacy_account_overview", new=AsyncMock(return_value={"__proxy_error__": True, "status_code": 502, "payload": {}})):
+                with patch.object(
+                    ma,
+                    "_legacy_account_overview",
+                    new=AsyncMock(
+                        return_value={"__proxy_error__": True, "status_code": 502, "payload": {}}
+                    ),
+                ):
                     resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         assert resp.json()["data"]["degraded"] is True
 
     def test_inner_exception_returns_degraded(self):
         """RECOVERABLE_ERRORS inside try block returns degraded."""
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(side_effect=RuntimeError("inner boom"))):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
+            with patch.object(
+                ma, "_proxy_json", new=AsyncMock(side_effect=RuntimeError("inner boom"))
+            ):
                 resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         assert resp.json()["data"]["degraded"] is True
@@ -1968,9 +2380,13 @@ class TestMarketAccountOverviewBranches:
         """sync_warning is added to data only if not already present."""
         jr = JSONResponse({"message": "service_error"}, status_code=503)
         good_legacy = {"success": True, "user": {}, "wallet": {}, "membership": {}}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=jr)):
-                with patch.object(ma, "_legacy_account_overview", new=AsyncMock(return_value=good_legacy)):
+                with patch.object(
+                    ma, "_legacy_account_overview", new=AsyncMock(return_value=good_legacy)
+                ):
                     resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
 
@@ -1979,11 +2395,16 @@ class TestMarketAccountOverviewBranches:
 # market_payment_plans / checkout / direct_checkout (lines 1469-1597)
 # ===========================================================================
 
+
 class TestMarketPaymentRoutes:
     def test_payment_plans_proxy_error(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 502, "payload": {}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={"__proxy_error__": True, "status_code": 502, "payload": {}}
+            ),
+        ):
             resp = _client.get("/api/market/payment/plans")
         assert resp.status_code == 502
 
@@ -1993,9 +2414,13 @@ class TestMarketPaymentRoutes:
         assert resp.status_code == 200
 
     def test_payment_checkout_proxy_error(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 400, "payload": {}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={"__proxy_error__": True, "status_code": 400, "payload": {}}
+            ),
+        ):
             resp = _client.post("/api/market/payment/checkout", json={})
         assert resp.status_code == 400
 
@@ -2005,30 +2430,44 @@ class TestMarketPaymentRoutes:
         assert resp.status_code == 200
 
     def test_direct_checkout_no_auth_returns_401(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="")
+        ):
             resp = _client.post("/api/market/payment/direct-checkout", json={})
         assert resp.status_code == 401
 
     def test_direct_checkout_sign_error_returns_error(self):
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-                "__proxy_error__": True, "status_code": 400, "payload": {}
-            })):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
+            with patch.object(
+                ma,
+                "_proxy_json",
+                new=AsyncMock(
+                    return_value={"__proxy_error__": True, "status_code": 400, "payload": {}}
+                ),
+            ):
                 resp = _client.post("/api/market/payment/direct-checkout", json={"plan_id": "p1"})
         assert resp.status_code == 400
 
     def test_direct_checkout_checkout_error(self):
         sign_ok = {"request_id": "rid", "signature": "sig", "timestamp": "ts"}
         checkout_err = {"__proxy_error__": True, "status_code": 402, "payload": {}}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(side_effect=[sign_ok, checkout_err])):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
+            with patch.object(
+                ma, "_proxy_json", new=AsyncMock(side_effect=[sign_ok, checkout_err])
+            ):
                 resp = _client.post("/api/market/payment/direct-checkout", json={"plan_id": "p1"})
         assert resp.status_code == 402
 
     def test_direct_checkout_success(self):
         sign_ok = {"request_id": "rid", "signature": "sig", "timestamp": "ts"}
         checkout_ok = {"order_id": "o1"}
-        with patch.object(ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")):
+        with patch.object(
+            ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(side_effect=[sign_ok, checkout_ok])):
                 resp = _client.post("/api/market/payment/direct-checkout", json={"plan_id": "p1"})
         assert resp.status_code == 200
@@ -2038,11 +2477,16 @@ class TestMarketPaymentRoutes:
 # market_payment_query (lines 1629-1647)
 # ===========================================================================
 
+
 class TestMarketPaymentQuery:
     def test_proxy_error_returns_error(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 404, "payload": {}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={"__proxy_error__": True, "status_code": 404, "payload": {}}
+            ),
+        ):
             resp = _client.get("/api/market/payment/query/OTN123")
         assert resp.status_code == 404
 
@@ -2057,11 +2501,16 @@ class TestMarketPaymentQuery:
 # market_wallet_overview (lines 1650-1668)
 # ===========================================================================
 
+
 class TestMarketWalletOverview:
     def test_proxy_error_returns_error(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 503, "payload": {}
-        })):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new=AsyncMock(
+                return_value={"__proxy_error__": True, "status_code": 503, "payload": {}}
+            ),
+        ):
             resp = _client.get("/api/market/wallet/overview")
         assert resp.status_code == 503
 
@@ -2075,9 +2524,11 @@ class TestMarketWalletOverview:
 # _market_auth_from_request (lines 1461-1466)
 # ===========================================================================
 
+
 class TestMarketAuthFromRequest:
     def test_session_token_returned(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "GET", "path": "/", "headers": []}
         req = FR(scope)
         ma._MARKET_SESSION_TOKENS["auth_sid"] = "session_tok"
@@ -2087,6 +2538,7 @@ class TestMarketAuthFromRequest:
 
     def test_header_returned_when_no_session_token(self):
         from fastapi import Request as FR
+
         scope = {
             "type": "http",
             "method": "GET",
@@ -2104,6 +2556,7 @@ class TestMarketAuthFromRequest:
 # market_dev_create_account additional branches (lines 1692-1744)
 # ===========================================================================
 
+
 class TestMarketDevCreateAccountBranches:
     def test_register_json_response_passthrough(self):
         jr = JSONResponse({"error": "down"}, status_code=503)
@@ -2112,9 +2565,17 @@ class TestMarketDevCreateAccountBranches:
         assert resp.status_code == 503
 
     def test_register_non_409_error_returns_error(self):
-        with patch.object(ma, "_register_without_verification", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 500, "payload": {"detail": "server error"}
-        })):
+        with patch.object(
+            ma,
+            "_register_without_verification",
+            new=AsyncMock(
+                return_value={
+                    "__proxy_error__": True,
+                    "status_code": 500,
+                    "payload": {"detail": "server error"},
+                }
+            ),
+        ):
             resp = _client.post(
                 "/api/market/dev-create-account",
                 json={"username": "u", "password": "abc123", "email": "u@x.com"},
@@ -2122,12 +2583,16 @@ class TestMarketDevCreateAccountBranches:
         assert resp.status_code == 500
 
     def test_register_409_falls_back_to_login_success(self):
-        with patch.object(ma, "_register_without_verification", new=AsyncMock(return_value={
-            "__proxy_error__": True, "status_code": 409, "payload": {}
-        })):
+        with patch.object(
+            ma,
+            "_register_without_verification",
+            new=AsyncMock(
+                return_value={"__proxy_error__": True, "status_code": 409, "payload": {}}
+            ),
+        ):
             login_responses = [
                 {"token": "login_tok"},  # POST /api/auth/login
-                {"overview": "ok"},       # GET /api/account/bootstrap
+                {"overview": "ok"},  # GET /api/account/bootstrap
             ]
             with patch.object(ma, "_proxy_json", new=AsyncMock(side_effect=login_responses)):
                 resp = _client.post(
@@ -2138,10 +2603,16 @@ class TestMarketDevCreateAccountBranches:
         assert resp.json()["data"]["token"] == "login_tok"
 
     def test_register_success_overview_proxy_error(self):
-        with patch.object(ma, "_register_without_verification", new=AsyncMock(return_value={"token": "new_tok"})):
-            with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={
-                "__proxy_error__": True, "status_code": 502, "payload": {}
-            })):
+        with patch.object(
+            ma, "_register_without_verification", new=AsyncMock(return_value={"token": "new_tok"})
+        ):
+            with patch.object(
+                ma,
+                "_proxy_json",
+                new=AsyncMock(
+                    return_value={"__proxy_error__": True, "status_code": 502, "payload": {}}
+                ),
+            ):
                 resp = _client.post(
                     "/api/market/dev-create-account",
                     json={"username": "u", "password": "abc123", "email": "u@x.com"},
@@ -2150,7 +2621,9 @@ class TestMarketDevCreateAccountBranches:
         assert resp.json()["data"]["overview_ok"] is False
 
     def test_register_success_overview_ok(self):
-        with patch.object(ma, "_register_without_verification", new=AsyncMock(return_value={"token": "fresh_tok"})):
+        with patch.object(
+            ma, "_register_without_verification", new=AsyncMock(return_value={"token": "fresh_tok"})
+        ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"user": {"id": 1}})):
                 resp = _client.post(
                     "/api/market/dev-create-account",
@@ -2164,17 +2637,20 @@ class TestMarketDevCreateAccountBranches:
 # _checkout_sign_body_from_request — metadata key
 # ===========================================================================
 
+
 class TestCheckoutSignBodyMetadata:
     def test_metadata_passed_through(self):
         result = ma._checkout_sign_body_from_request({"metadata": {"order": "ref"}})
         assert result["metadata"] == {"order": "ref"}
 
     def test_wallet_recharge_invalid_amount_defaults_to_zero(self):
-        result = ma._checkout_sign_body_from_request({
-            "wallet_recharge": "on",
-            "total_amount": None,
-            "subject": "",
-        })
+        result = ma._checkout_sign_body_from_request(
+            {
+                "wallet_recharge": "on",
+                "total_amount": None,
+                "subject": "",
+            }
+        )
         assert result["total_amount"] == 0.0
         assert result["subject"] == "钱包充值"
 
@@ -2182,6 +2658,7 @@ class TestCheckoutSignBodyMetadata:
 # ===========================================================================
 # market_membership_plans (lines 554-564)
 # ===========================================================================
+
 
 class TestMarketMembershipPlans:
     def test_proxy_error_returns_empty_plans(self):
@@ -2207,6 +2684,7 @@ class TestMarketMembershipPlans:
 # market_login_with_phone_code_route (lines 1161-1188)
 # ===========================================================================
 
+
 class TestMarketLoginWithPhoneCodeRoute:
     def test_missing_phone_or_code_returns_400(self):
         resp = _client.post("/api/market/login-with-phone-code", json={"phone": "13800000000"})
@@ -2217,9 +2695,18 @@ class TestMarketLoginWithPhoneCodeRoute:
         assert resp.status_code == 400
 
     def test_failure_returns_error(self):
-        with patch.object(ma, "login_market_with_phone_code", new=AsyncMock(return_value={
-            "success": False, "message": "bad code", "status_code": 401, "error_code": "MARKET_AUTH_FAILED"
-        })):
+        with patch.object(
+            ma,
+            "login_market_with_phone_code",
+            new=AsyncMock(
+                return_value={
+                    "success": False,
+                    "message": "bad code",
+                    "status_code": 401,
+                    "error_code": "MARKET_AUTH_FAILED",
+                }
+            ),
+        ):
             resp = _client.post(
                 "/api/market/login-with-phone-code",
                 json={"phone": "13800000000", "code": "123456"},
@@ -2227,9 +2714,18 @@ class TestMarketLoginWithPhoneCodeRoute:
         assert resp.status_code == 401
 
     def test_success(self):
-        with patch.object(ma, "login_market_with_phone_code", new=AsyncMock(return_value={
-            "success": True, "token": "phone_jwt", "refresh_token": "phone_rf", "market_base_url": "http://x"
-        })):
+        with patch.object(
+            ma,
+            "login_market_with_phone_code",
+            new=AsyncMock(
+                return_value={
+                    "success": True,
+                    "token": "phone_jwt",
+                    "refresh_token": "phone_rf",
+                    "market_base_url": "http://x",
+                }
+            ),
+        ):
             resp = _client.post(
                 "/api/market/login-with-phone-code",
                 json={"phone": "13800000000", "code": "123456"},
@@ -2238,9 +2734,18 @@ class TestMarketLoginWithPhoneCodeRoute:
         assert resp.json()["data"]["token"] == "phone_jwt"
 
     def test_failure_status_code_clamps_to_401(self):
-        with patch.object(ma, "login_market_with_phone_code", new=AsyncMock(return_value={
-            "success": False, "message": "bad", "status_code": 200, "error_code": "FAIL"
-        })):
+        with patch.object(
+            ma,
+            "login_market_with_phone_code",
+            new=AsyncMock(
+                return_value={
+                    "success": False,
+                    "message": "bad",
+                    "status_code": 200,
+                    "error_code": "FAIL",
+                }
+            ),
+        ):
             resp = _client.post(
                 "/api/market/login-with-phone-code",
                 json={"phone": "13800000000", "code": "999"},
@@ -2251,6 +2756,7 @@ class TestMarketLoginWithPhoneCodeRoute:
 # ===========================================================================
 # _is_local_market_base
 # ===========================================================================
+
 
 class TestIsLocalMarketBase:
     def test_localhost_is_local(self):
@@ -2267,9 +2773,16 @@ class TestIsLocalMarketBase:
 # _demo_market_login_payload (lines 926-943)
 # ===========================================================================
 
+
 class TestDemoMarketLoginPayload:
     def test_generates_user_dict_when_missing(self):
-        shim = {"token": "demo_tok", "refresh_token": "", "is_enterprise": True, "is_market_admin": False, "raw": {}}
+        shim = {
+            "token": "demo_tok",
+            "refresh_token": "",
+            "is_enterprise": True,
+            "is_market_admin": False,
+            "raw": {},
+        }
         result = ma._demo_market_login_payload(shim, market_base_url="http://127.0.0.1:8765")
         assert result["success"] is True
         assert isinstance(result["raw"]["user"], dict)
@@ -2290,6 +2803,7 @@ class TestDemoMarketLoginPayload:
 # ===========================================================================
 # _market_identity_from_payloads (lines 643-660)
 # ===========================================================================
+
 
 class TestMarketIdentityFromPayloads:
     def test_skips_proxy_error_payloads(self):
@@ -2315,20 +2829,25 @@ class TestMarketIdentityFromPayloads:
 # bind_market_auth_to_session (lines 47-56)
 # ===========================================================================
 
+
 class TestBindMarketAuthToSession:
     def test_token_saves_to_session(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "GET", "path": "/", "headers": []}
         req = FR(scope)
         with patch.object(ma, "session_id_from_request", return_value="bind_sid"):
             with patch.object(ma, "save_session_market_token") as mock_save:
-                token, refresh = ma.bind_market_auth_to_session(req, {"token": "bind_tok", "refresh_token": "bind_rf"})
+                token, refresh = ma.bind_market_auth_to_session(
+                    req, {"token": "bind_tok", "refresh_token": "bind_rf"}
+                )
         assert token == "bind_tok"
         assert refresh == "bind_rf"
         mock_save.assert_called_once()
 
     def test_empty_token_skips_save(self):
         from fastapi import Request as FR
+
         scope = {"type": "http", "method": "GET", "path": "/", "headers": []}
         req = FR(scope)
         with patch.object(ma, "save_session_market_token") as mock_save:
@@ -2340,6 +2859,7 @@ class TestBindMarketAuthToSession:
 # ===========================================================================
 # _normalize_market_auth_payload — extra branches
 # ===========================================================================
+
 
 class TestNormalizeMarketAuthPayloadExtra:
     @pytest.mark.asyncio

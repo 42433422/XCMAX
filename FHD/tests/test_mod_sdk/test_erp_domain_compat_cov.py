@@ -27,6 +27,7 @@ from app.mod_sdk.erp_domain_compat import (
 # _truthy_env
 # ---------------------------------------------------------------------------
 
+
 class TestTruthyEnv:
     def test_value_1(self, monkeypatch):
         monkeypatch.setenv("_TEST_FLAG", "1")
@@ -133,6 +134,7 @@ class TestResolveModDir:
 # _read_manifest
 # ---------------------------------------------------------------------------
 
+
 class TestReadManifest:
     def test_no_mod_dir(self):
         with patch("app.mod_sdk.erp_domain_compat._resolve_mod_dir", return_value=None):
@@ -154,6 +156,7 @@ class TestReadManifest:
 # ---------------------------------------------------------------------------
 # is_erp_domain_mod_installed
 # ---------------------------------------------------------------------------
+
 
 class TestIsErpDomainModInstalled:
     def test_mods_disabled(self):
@@ -197,6 +200,7 @@ class TestIsErpDomainModInstalled:
 # is_erp_domain_via_mod_enabled
 # ---------------------------------------------------------------------------
 
+
 class TestIsErpDomainViaModEnabled:
     def test_disabled_env(self, monkeypatch):
         monkeypatch.setenv("XCAGI_DISABLE_ERP_DOMAIN_MOD", "1")
@@ -218,7 +222,10 @@ class TestIsErpDomainViaModEnabled:
         monkeypatch.delenv("XCAGI_ERP_DOMAIN_VIA_MOD", raising=False)
         with (
             patch("app.mod_sdk.erp_domain_compat.is_erp_domain_mod_installed", return_value=True),
-            patch("app.mod_sdk.erp_domain_compat._read_manifest", return_value={"config": {"erp_domain_facade": True}}),
+            patch(
+                "app.mod_sdk.erp_domain_compat._read_manifest",
+                return_value={"config": {"erp_domain_facade": True}},
+            ),
         ):
             assert is_erp_domain_via_mod_enabled() is True
 
@@ -227,9 +234,10 @@ class TestIsErpDomainViaModEnabled:
         monkeypatch.delenv("XCAGI_ERP_DOMAIN_VIA_MOD", raising=False)
         with (
             patch("app.mod_sdk.erp_domain_compat.is_erp_domain_mod_installed", return_value=True),
-            patch("app.mod_sdk.erp_domain_compat._read_manifest", return_value={
-                "config": {"erp_domains": {"facade_enabled": True}}
-            }),
+            patch(
+                "app.mod_sdk.erp_domain_compat._read_manifest",
+                return_value={"config": {"erp_domains": {"facade_enabled": True}}},
+            ),
         ):
             assert is_erp_domain_via_mod_enabled() is True
 
@@ -255,6 +263,7 @@ class TestIsErpDomainViaModEnabled:
 # ---------------------------------------------------------------------------
 # load_erp_domains_config
 # ---------------------------------------------------------------------------
+
 
 class TestLoadErpDomainsConfig:
     def test_no_mod_dir(self):
@@ -287,10 +296,13 @@ class TestLoadErpDomainsConfig:
 # list_erp_domains_registry
 # ---------------------------------------------------------------------------
 
+
 class TestListErpDomainsRegistry:
     def test_host_api_path_no_mod(self):
         with (
-            patch("app.mod_sdk.erp_domain_compat.is_erp_domain_via_mod_enabled", return_value=False),
+            patch(
+                "app.mod_sdk.erp_domain_compat.is_erp_domain_via_mod_enabled", return_value=False
+            ),
             patch("app.mod_sdk.erp_domain_compat._mod_handler_domains", return_value=set()),
         ):
             result = list_erp_domains_registry()
@@ -322,6 +334,7 @@ class TestListErpDomainsRegistry:
 # ---------------------------------------------------------------------------
 # resolve_host_api_path
 # ---------------------------------------------------------------------------
+
 
 class TestResolveHostApiPath:
     def test_facade_path_mapped(self):

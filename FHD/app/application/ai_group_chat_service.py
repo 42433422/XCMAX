@@ -701,7 +701,14 @@ class AiGroupChatService:
                 service = CodexSuperEmployeeService()
             else:
                 service = ClaudeSuperEmployeeService()
-            result = service.invoke(user_id=int(user_id), message=prompt, context={})
+            # 群聊场景强制走 CLI 直答（mode=chat），避免 transcript 里包含
+            # "修改/测试/调用"等 _TASK_MARKERS 词被误判为任务走派工流程，
+            # 导致本机无 Para 时只返回"思考中..."而永远等不到答案。
+            result = service.invoke(
+                user_id=int(user_id),
+                message=prompt,
+                context={"mode": "chat"},
+            )
             assistant = result.get("assistant_message") or {}
             body = str(assistant.get("body") or "").strip()
             if body:

@@ -31,7 +31,9 @@ class TestLoadLegacyShipmentDocumentGenerator:
     def test_raises_import_error_when_no_dir(self, tmp_path):
         """No AI助手 directory anywhere → ImportError raised."""
         with (
-            patch("app.utils.path_utils.get_resource_path", return_value=str(tmp_path / "nonexistent")),
+            patch(
+                "app.utils.path_utils.get_resource_path", return_value=str(tmp_path / "nonexistent")
+            ),
             patch("os.path.isdir", return_value=False),
             patch("os.path.exists", return_value=False),
         ):
@@ -41,7 +43,9 @@ class TestLoadLegacyShipmentDocumentGenerator:
     def test_raises_when_get_resource_path_fails(self, tmp_path):
         """get_resource_path raises → fallback dirs used, still no dir → ImportError."""
         with (
-            patch("app.utils.path_utils.get_resource_path", side_effect=RuntimeError("no resource")),
+            patch(
+                "app.utils.path_utils.get_resource_path", side_effect=RuntimeError("no resource")
+            ),
             patch("os.path.isdir", return_value=False),
             patch("os.path.exists", return_value=False),
         ):
@@ -53,10 +57,7 @@ class TestLoadLegacyShipmentDocumentGenerator:
         legacy_dir = tmp_path / "AI助手"
         legacy_dir.mkdir()
         doc_py = legacy_dir / "shipment_document.py"
-        doc_py.write_text(
-            "class ShipmentDocumentGenerator: pass\n"
-            "class PurchaseUnitInfo: pass\n"
-        )
+        doc_py.write_text("class ShipmentDocumentGenerator: pass\nclass PurchaseUnitInfo: pass\n")
 
         with (
             patch("app.utils.path_utils.get_resource_path", return_value=str(legacy_dir)),
@@ -77,12 +78,10 @@ class TestLoadLegacyShipmentDocumentGenerator:
         legacy_dir = tmp_path / "AI助手"
         legacy_dir.mkdir()
         doc_py = legacy_dir / "shipment_document.py"
-        doc_py.write_text(
-            "class ShipmentDocumentGenerator: pass\n"
-            "class PurchaseUnitInfo: pass\n"
-        )
+        doc_py.write_text("class ShipmentDocumentGenerator: pass\nclass PurchaseUnitInfo: pass\n")
 
         import builtins
+
         original_import = builtins.__import__
 
         call_count = 0
@@ -116,6 +115,7 @@ class TestLoadLegacyShipmentDocumentGenerator:
         legacy_dir.mkdir()
 
         import builtins
+
         original_import = builtins.__import__
 
         def fail_import(name, *args, **kwargs):

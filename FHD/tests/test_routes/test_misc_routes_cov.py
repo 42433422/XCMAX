@@ -24,6 +24,7 @@ from app.fastapi_routes.domains.misc.routes import (
 # TestClient fixture
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def client():
     app = FastAPI()
@@ -35,22 +36,31 @@ def client():
 # 1. fhd_db_write_token_verify (lines 32-35)
 # ===========================================================================
 
+
 class TestDbWriteTokenVerify:
     def test_no_expected_always_valid(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.configured_db_write_token", return_value=""):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.configured_db_write_token", return_value=""
+        ):
             r = client.post("/fhd/db-write-token/verify", json={"token": "any"})
         assert r.status_code == 200
         assert r.json()["valid"] is True
         assert r.json()["write_token_required"] is False
 
     def test_correct_token_valid(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.configured_db_write_token", return_value="secret"):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.configured_db_write_token",
+            return_value="secret",
+        ):
             r = client.post("/fhd/db-write-token/verify", json={"token": "secret"})
         assert r.json()["valid"] is True
         assert r.json()["write_token_required"] is True
 
     def test_wrong_token_invalid(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.configured_db_write_token", return_value="secret"):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.configured_db_write_token",
+            return_value="secret",
+        ):
             r = client.post("/fhd/db-write-token/verify", json={"token": "bad"})
         assert r.json()["valid"] is False
 
@@ -59,9 +69,12 @@ class TestDbWriteTokenVerify:
 # 2. fhd_db_read_token_verify (lines 38-57)
 # ===========================================================================
 
+
 class TestDbReadTokenVerify:
     def test_no_expected_always_valid(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.effective_db_read_token", return_value=""):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.effective_db_read_token", return_value=""
+        ):
             r = client.post("/fhd/db-read-token/verify", json={"token": "any"})
         assert r.status_code == 200
         data = r.json()
@@ -69,7 +82,9 @@ class TestDbReadTokenVerify:
         assert data["read_token_required"] is False
 
     def test_correct_read_token(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.effective_db_read_token", return_value="tok"):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.effective_db_read_token", return_value="tok"
+        ):
             with patch(
                 "app.fastapi_routes.domains.conversation.helpers._touch_chat_db_read_grace",
                 return_value=300,
@@ -78,7 +93,9 @@ class TestDbReadTokenVerify:
         assert r.json()["valid"] is True
 
     def test_wrong_read_token(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.effective_db_read_token", return_value="tok"):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.effective_db_read_token", return_value="tok"
+        ):
             r = client.post("/fhd/db-read-token/verify", json={"token": "wrong"})
         assert r.json()["valid"] is False
         assert r.json()["grace_seconds"] == 0
@@ -87,6 +104,7 @@ class TestDbReadTokenVerify:
 # ===========================================================================
 # 3. _test_db_toggle_from_body (lines 70-92)
 # ===========================================================================
+
 
 class TestTestDbToggleFromBody:
     def test_bool_true(self):
@@ -122,6 +140,7 @@ class TestTestDbToggleFromBody:
 # ===========================================================================
 # 4. _compat_current_db_display_label (lines 95-106)
 # ===========================================================================
+
 
 class TestCompatCurrentDbDisplayLabel:
     def test_postgresql_with_db_and_host(self):
@@ -170,6 +189,7 @@ class TestCompatCurrentDbDisplayLabel:
 # 5. system_test_db_status (lines 109-124)
 # ===========================================================================
 
+
 class TestSystemTestDbStatus:
     def test_status_returns_mode(self, client: TestClient):
         db_info = {"mode": "production", "backend": "sqlite", "current_db_name": "db.sqlite"}
@@ -190,32 +210,55 @@ class TestSystemTestDbStatus:
 # 6. system_test_db_enable (lines 127-152)
 # ===========================================================================
 
+
 class TestSystemTestDbEnable:
     def test_enable_with_explicit_true(self, client: TestClient):
         db_info = {"mode": "test", "backend": "sqlite", "current_db_name": "test.db"}
-        with patch("app.fastapi_routes.domains.misc.routes.switch_to_test_mode", return_value={"success": True}):
-            with patch("app.fastapi_routes.domains.misc.routes.get_db_status", return_value=db_info):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.switch_to_test_mode",
+            return_value={"success": True},
+        ):
+            with patch(
+                "app.fastapi_routes.domains.misc.routes.get_db_status", return_value=db_info
+            ):
                 r = client.post("/system/test-db/enable", json={"enabled": True})
         assert r.status_code == 200
 
     def test_enable_with_false_switches_production(self, client: TestClient):
         db_info = {"mode": "production", "backend": "sqlite", "current_db_name": "prod.db"}
-        with patch("app.fastapi_routes.domains.misc.routes.switch_to_production_mode", return_value={"success": True}):
-            with patch("app.fastapi_routes.domains.misc.routes.get_db_status", return_value=db_info):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.switch_to_production_mode",
+            return_value={"success": True},
+        ):
+            with patch(
+                "app.fastapi_routes.domains.misc.routes.get_db_status", return_value=db_info
+            ):
                 r = client.post("/system/test-db/enable", json={"enabled": False})
         assert r.status_code == 200
 
     def test_enable_with_no_body_uses_resolve_mode(self, client: TestClient):
         db_info = {"mode": "production", "backend": "sqlite", "current_db_name": "prod.db"}
-        with patch("app.fastapi_routes.domains.misc.routes.resolve_mode", return_value="production"):
-            with patch("app.fastapi_routes.domains.misc.routes.switch_to_test_mode", return_value={"success": True}):
-                with patch("app.fastapi_routes.domains.misc.routes.get_db_status", return_value=db_info):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.resolve_mode", return_value="production"
+        ):
+            with patch(
+                "app.fastapi_routes.domains.misc.routes.switch_to_test_mode",
+                return_value={"success": True},
+            ):
+                with patch(
+                    "app.fastapi_routes.domains.misc.routes.get_db_status", return_value=db_info
+                ):
                     r = client.post("/system/test-db/enable")
         assert r.status_code == 200
 
     def test_enable_error_returns_400(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.switch_to_test_mode", return_value={"error": "fail", "message": "db error"}):
-            with patch("app.fastapi_routes.domains.misc.routes.resolve_mode", return_value="production"):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.switch_to_test_mode",
+            return_value={"error": "fail", "message": "db error"},
+        ):
+            with patch(
+                "app.fastapi_routes.domains.misc.routes.resolve_mode", return_value="production"
+            ):
                 r = client.post("/system/test-db/enable", json={"enabled": True})
         assert r.status_code == 400
 
@@ -224,11 +267,17 @@ class TestSystemTestDbEnable:
 # 7. system_test_db_disable (lines 155-161)
 # ===========================================================================
 
+
 class TestSystemTestDbDisable:
     def test_disable_switches_production(self, client: TestClient):
         db_info = {"mode": "production", "backend": "sqlite", "current_db_name": "prod.db"}
-        with patch("app.fastapi_routes.domains.misc.routes.switch_to_production_mode", return_value={"success": True}):
-            with patch("app.fastapi_routes.domains.misc.routes.get_db_status", return_value=db_info):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.switch_to_production_mode",
+            return_value={"success": True},
+        ):
+            with patch(
+                "app.fastapi_routes.domains.misc.routes.get_db_status", return_value=db_info
+            ):
                 r = client.post("/system/test-db/disable")
         assert r.status_code == 200
 
@@ -236,6 +285,7 @@ class TestSystemTestDbDisable:
 # ===========================================================================
 # 8. _resolve_user_id_int (lines 481-493)
 # ===========================================================================
+
 
 class TestResolveUserIdInt:
     def test_from_header_x_user_id(self):
@@ -267,6 +317,7 @@ class TestResolveUserIdInt:
 # ===========================================================================
 # 9. _memory_v2_agent_output (lines 189-207)
 # ===========================================================================
+
 
 class TestMemoryV2AgentOutput:
     def test_output_from_final_output_node_outputs(self):
@@ -317,6 +368,7 @@ class TestMemoryV2AgentOutput:
 # 10. Preferences routes
 # ===========================================================================
 
+
 class TestPreferences:
     def test_get_preferences(self, client: TestClient):
         r = client.get("/preferences?user_id=user1")
@@ -335,21 +387,30 @@ class TestPreferences:
 # 11. Tools / Tool-categories routes
 # ===========================================================================
 
+
 class TestToolsRoutes:
     def test_compat_tools_list_no_role(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.get_tools_payload", return_value={"tools": []}):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.get_tools_payload", return_value={"tools": []}
+        ):
             r = client.get("/tools")
         assert r.status_code == 200
 
     def test_compat_tools_list_with_role_filter(self, client: TestClient):
         tools = [{"name": "t1", "roles": ["admin"]}, {"name": "t2", "roles": ["user"]}]
-        with patch("app.fastapi_routes.domains.misc.routes.get_tools_payload", return_value={"tools": tools}):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.get_tools_payload",
+            return_value={"tools": tools},
+        ):
             r = client.get("/tools?role=admin")
         assert r.status_code == 200
         data = r.json()
         assert all("admin" in t.get("roles", []) for t in data.get("tools", []))
 
     def test_tool_categories(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.misc.routes.get_tool_categories_payload", return_value={"categories": []}):
+        with patch(
+            "app.fastapi_routes.domains.misc.routes.get_tool_categories_payload",
+            return_value={"categories": []},
+        ):
             r = client.get("/tool-categories")
         assert r.status_code == 200

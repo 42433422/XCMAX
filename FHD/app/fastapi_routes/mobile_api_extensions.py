@@ -1306,7 +1306,9 @@ def _mobile_group_uid(request: Request, user) -> int:
 def _mobile_group_mode(request: Request) -> str:
     """从 session 判定群聊模式：admin（6 部门 + 上岗员工）或 enterprise（4 部门 + 上架/未上架）。"""
     meta = _mobile_session_meta(request) or {}
-    return "admin" if str(meta.get("account_kind") or "").strip().lower() == "admin" else "enterprise"
+    return (
+        "admin" if str(meta.get("account_kind") or "").strip().lower() == "admin" else "enterprise"
+    )
 
 
 @extension_router.get("/ai-groups")
@@ -1344,7 +1346,9 @@ async def mobile_ai_groups_create(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).create_group(user_id=uid, name=body.name)
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).create_group(
+            user_id=uid, name=body.name
+        )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
         return JSONResponse(
@@ -1374,7 +1378,9 @@ async def mobile_ai_group_messages(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        messages = AiGroupChatService(mode=_mobile_group_mode(request)).get_messages(user_id=uid, group_id=group_id, limit=limit)
+        messages = AiGroupChatService(mode=_mobile_group_mode(request)).get_messages(
+            user_id=uid, group_id=group_id, limit=limit
+        )
         return format_mobile_response(data={"messages": messages})
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_ai_group_messages")
@@ -1483,7 +1489,9 @@ async def mobile_ai_group_remove_member(
 
 
 @extension_router.put("/ai-groups/{group_id}/pin")
-async def mobile_ai_group_toggle_pin(request: Request, group_id: str, user=Depends(get_mobile_user)):
+async def mobile_ai_group_toggle_pin(
+    request: Request, group_id: str, user=Depends(get_mobile_user)
+):
     """切换群聊置顶状态。"""
     _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
@@ -1510,7 +1518,9 @@ async def mobile_ai_group_toggle_pin(request: Request, group_id: str, user=Depen
 
 
 @extension_router.post("/ai-groups/{group_id}/mark-unread")
-async def mobile_ai_group_mark_unread(request: Request, group_id: str, user=Depends(get_mobile_user)):
+async def mobile_ai_group_mark_unread(
+    request: Request, group_id: str, user=Depends(get_mobile_user)
+):
     """标为未读（显示小红点）。"""
     _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
@@ -1564,7 +1574,9 @@ async def mobile_ai_group_mark_read(request: Request, group_id: str, user=Depend
 
 
 @extension_router.put("/ai-groups/{group_id}/followed")
-async def mobile_ai_group_toggle_followed(request: Request, group_id: str, user=Depends(get_mobile_user)):
+async def mobile_ai_group_toggle_followed(
+    request: Request, group_id: str, user=Depends(get_mobile_user)
+):
     """切换是否关注（不再关注则不显示未读）。"""
     _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
@@ -1591,7 +1603,9 @@ async def mobile_ai_group_toggle_followed(request: Request, group_id: str, user=
 
 
 @extension_router.put("/ai-groups/{group_id}/hidden")
-async def mobile_ai_group_toggle_hidden(request: Request, group_id: str, user=Depends(get_mobile_user)):
+async def mobile_ai_group_toggle_hidden(
+    request: Request, group_id: str, user=Depends(get_mobile_user)
+):
     """切换是否隐藏（不显示/恢复显示该聊天）。"""
     _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
@@ -1639,6 +1653,142 @@ async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(g
         )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_ai_group_delete")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+# ── 会话状态管理（非群聊的个人 AI 会话） ──
+
+
+def _conversation_state_uid(user: Any) -> int:
+    uid = int(getattr(user, "id", 0) or 0)
+    return uid if uid > 0 else 0
+
+
+@extension_router.put("/conversations/{conversation_id}/pin")
+async def mobile_conversation_toggle_pin(conversation_id: str, user=Depends(get_mobile_user)):
+    uid = _conversation_state_uid(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        from app.application.conversation_state_service import ConversationStateService
+
+        return format_mobile_response(
+            data=ConversationStateService().toggle_pinned(
+                user_id=uid, conversation_id=conversation_id
+            )
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_conversation_toggle_pin")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.post("/conversations/{conversation_id}/mark-unread")
+async def mobile_conversation_mark_unread(conversation_id: str, user=Depends(get_mobile_user)):
+    uid = _conversation_state_uid(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        from app.application.conversation_state_service import ConversationStateService
+
+        return format_mobile_response(
+            data=ConversationStateService().mark_unread(
+                user_id=uid, conversation_id=conversation_id
+            )
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_conversation_mark_unread")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.post("/conversations/{conversation_id}/mark-read")
+async def mobile_conversation_mark_read(conversation_id: str, user=Depends(get_mobile_user)):
+    uid = _conversation_state_uid(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        from app.application.conversation_state_service import ConversationStateService
+
+        return format_mobile_response(
+            data=ConversationStateService().mark_read(user_id=uid, conversation_id=conversation_id)
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_conversation_mark_read")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.put("/conversations/{conversation_id}/followed")
+async def mobile_conversation_toggle_followed(conversation_id: str, user=Depends(get_mobile_user)):
+    uid = _conversation_state_uid(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        from app.application.conversation_state_service import ConversationStateService
+
+        return format_mobile_response(
+            data=ConversationStateService().toggle_followed(
+                user_id=uid, conversation_id=conversation_id
+            )
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_conversation_toggle_followed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.put("/conversations/{conversation_id}/hidden")
+async def mobile_conversation_toggle_hidden(conversation_id: str, user=Depends(get_mobile_user)):
+    uid = _conversation_state_uid(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        from app.application.conversation_state_service import ConversationStateService
+
+        return format_mobile_response(
+            data=ConversationStateService().toggle_hidden(
+                user_id=uid, conversation_id=conversation_id
+            )
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_conversation_toggle_hidden")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.delete("/conversations/{conversation_id}")
+async def mobile_conversation_delete(conversation_id: str, user=Depends(get_mobile_user)):
+    uid = _conversation_state_uid(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        from app.application.conversation_state_service import ConversationStateService
+
+        return format_mobile_response(
+            data=ConversationStateService().delete(user_id=uid, conversation_id=conversation_id)
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_conversation_delete")
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500), status_code=500
         )

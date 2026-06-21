@@ -41,24 +41,28 @@ class TestUserMemoryProperties:
     def _prefs_dict(self, m):
         """Replicate UserMemory.preferences_dict logic."""
         from typing import Any, cast
+
         if m.preferences:
             return cast("dict[str, Any]", json.loads(m.preferences))
         return {}
 
     def _actions_list(self, m):
         from typing import Any, cast
+
         if m.frequent_actions:
             return cast("list[dict[str, Any]]", json.loads(m.frequent_actions))
         return []
 
     def _contexts_list(self, m):
         from typing import Any, cast
+
         if m.historical_contexts:
             return cast("list[dict[str, Any]]", json.loads(m.historical_contexts))
         return []
 
     def _feedback_list(self, m):
         from typing import Any, cast
+
         if m.feedback_history:
             return cast("list[dict[str, Any]]", json.loads(m.feedback_history))
         return []
@@ -168,7 +172,11 @@ class TestUserMemoryProperties:
     # update_from_dict — frequent_actions branch
     def test_update_frequent_actions_list(self):
         m = self._make_memory(max_actions=2)
-        actions = [{"action": "a", "count": 3}, {"action": "b", "count": 1}, {"action": "c", "count": 5}]
+        actions = [
+            {"action": "a", "count": 3},
+            {"action": "b", "count": 1},
+            {"action": "c", "count": 5},
+        ]
         self._update_from_dict(m, {"frequent_actions": actions})
         result = json.loads(m.frequent_actions)
         assert len(result) == 2

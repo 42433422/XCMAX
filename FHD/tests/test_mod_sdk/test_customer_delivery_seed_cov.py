@@ -368,11 +368,18 @@ class TestInstallCustomerDeliverySeedPackage:
             ),
             patch(
                 "app.mod_sdk.customer_delivery_seed.delivery_seed_package_for_mod",
-                return_value={"pkg_id": "pkg-123", "version": "1.0.0", "apply": "", "artifact": "seed.zip"},
+                return_value={
+                    "pkg_id": "pkg-123",
+                    "version": "1.0.0",
+                    "apply": "",
+                    "artifact": "seed.zip",
+                },
             ),
             patch(
                 "app.mod_sdk.customer_delivery_seed.catalog_download_to",
-                new=AsyncMock(side_effect=lambda url, dest: zip_path.replace(dest) if False else None),
+                new=AsyncMock(
+                    side_effect=lambda url, dest: zip_path.replace(dest) if False else None
+                ),
             ) as mock_download,
             patch(
                 "app.mod_sdk.customer_delivery_seed.get_desktop_data_dir",
@@ -385,7 +392,9 @@ class TestInstallCustomerDeliverySeedPackage:
         ):
             # catalog_download_to is AsyncMock that does nothing (zip stays empty but extract is mocked)
             mock_download.side_effect = None
-            result = await install_customer_delivery_seed_package(mod_id="some-mod", industry_id="ind1")
+            result = await install_customer_delivery_seed_package(
+                mod_id="some-mod", industry_id="ind1"
+            )
 
         assert result["success"] is True
         assert result["applied"] is False
@@ -408,7 +417,12 @@ class TestInstallCustomerDeliverySeedPackage:
             ),
             patch(
                 "app.mod_sdk.customer_delivery_seed.delivery_seed_package_for_mod",
-                return_value={"pkg_id": "pkg-x", "version": "2.0.0", "apply": "sunbird_roster", "artifact": None},
+                return_value={
+                    "pkg_id": "pkg-x",
+                    "version": "2.0.0",
+                    "apply": "sunbird_roster",
+                    "artifact": None,
+                },
             ),
             patch(
                 "app.mod_sdk.customer_delivery_seed.catalog_download_to",
@@ -450,7 +464,12 @@ class TestInstallCustomerDeliverySeedPackage:
             ),
             patch(
                 "app.mod_sdk.customer_delivery_seed.delivery_seed_package_for_mod",
-                return_value={"pkg_id": "pkg-x", "version": "2.0.0", "apply": "sunbird_roster", "artifact": None},
+                return_value={
+                    "pkg_id": "pkg-x",
+                    "version": "2.0.0",
+                    "apply": "sunbird_roster",
+                    "artifact": None,
+                },
             ),
             patch(
                 "app.mod_sdk.customer_delivery_seed.catalog_download_to",

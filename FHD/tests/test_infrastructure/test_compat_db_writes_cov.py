@@ -23,6 +23,7 @@ def _make_excel_imports_stub(norm_model_return: str = "STUB-MODEL"):
     mod._norm_model = MagicMock(return_value=norm_model_return)  # type: ignore[attr-defined]
     return mod
 
+
 # ---------------------------------------------------------------------------
 # Helpers shared across tests
 # ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ def _eng_with_conn(conn):
 #    Branch: "unit_name" NOT in cols → return 0 immediately
 # ---------------------------------------------------------------------------
 
+
 def test_purchase_units_delete_by_norm_unit_no_unit_name_col():
     """Line 70-72: early return when unit_name column is absent."""
     eng = MagicMock()
@@ -72,6 +74,7 @@ def test_purchase_units_delete_by_norm_unit_no_unit_name_col():
         from app.infrastructure.persistence.compat_db.writes import (
             _purchase_units_delete_by_norm_unit_pg,
         )
+
         result = _purchase_units_delete_by_norm_unit_pg(eng, "SomeName")
     assert result == 0
     # engine.begin() must never have been called
@@ -83,6 +86,7 @@ def test_purchase_units_delete_by_norm_unit_no_unit_name_col():
 #    Branch: "id" NOT in cols → return 0 immediately
 # ---------------------------------------------------------------------------
 
+
 def test_purchase_units_delete_by_id_no_id_col():
     """Line 116-118: early return when id column is absent from purchase_units."""
     eng = MagicMock()
@@ -93,6 +97,7 @@ def test_purchase_units_delete_by_id_no_id_col():
         from app.infrastructure.persistence.compat_db.writes import (
             _purchase_units_delete_by_id_pg,
         )
+
         result = _purchase_units_delete_by_id_pg(eng, 42)
     assert result == 0
     eng.begin.assert_not_called()
@@ -102,6 +107,7 @@ def test_purchase_units_delete_by_id_no_id_col():
 # 3. _customer_pg_insert – lines 234-235
 #    Branch: duplicate record found → raise 400
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_insert_duplicate_raises_400():
     """Line 234-235: dup row found → HTTPException 400."""
@@ -117,10 +123,13 @@ def test_customer_pg_insert_duplicate_raises_400():
         patch(f"{MODULE}.scoped_mod_id", return_value=None),
         patch(f"{MODULE}.append_mod_scope_where"),
         patch(f"{MODULE}._pg_purchase_unit_active_sql", return_value="is_active = true"),
-        patch(f"{MODULE}._sql_select_from_where", return_value="SELECT id FROM purchase_units WHERE …"),
+        patch(
+            f"{MODULE}._sql_select_from_where", return_value="SELECT id FROM purchase_units WHERE …"
+        ),
         patch(f"{MODULE}.utc_now_naive", return_value=MagicMock()),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
+
         with pytest.raises(HTTPException) as exc:
             _customer_pg_insert("ExistingName", "cp", "ph", "addr")
     assert exc.value.status_code == 400
@@ -130,6 +139,7 @@ def test_customer_pg_insert_duplicate_raises_400():
 # 4. _customer_pg_insert – lines 244-245
 #    Branch: "xcagi_mod_id" in pu_cols AND mid is set → append to col_pairs
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_insert_xcagi_mod_id_appended():
     """Line 244-245: xcagi_mod_id column exists and mid is truthy."""
@@ -164,6 +174,7 @@ def test_customer_pg_insert_xcagi_mod_id_appended():
         patch(f"{MODULE}._customer_pg_fetch_by_id", return_value=fetch_result),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
+
         result = _customer_pg_insert("TestCo", "Jane", "1234", "Addr")
     assert result == fetch_result
     # xcagi_mod_id must appear in the bind dict passed to execute
@@ -176,6 +187,7 @@ def test_customer_pg_insert_xcagi_mod_id_appended():
 # 5. _customer_pg_insert – lines 247-251
 #    Branch: "is_active" in pu_cols, type contains "bool" → bind True
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_insert_is_active_bool_type():
     """Line 247-251: is_active column with boolean type gets True."""
@@ -209,6 +221,7 @@ def test_customer_pg_insert_is_active_bool_type():
         patch(f"{MODULE}._customer_pg_fetch_by_id", return_value={"id": new_id}),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
+
         result = _customer_pg_insert("BoolCo", "cp", "ph", "addr")
 
     bind = conn.execute.call_args_list[1][0][1]
@@ -219,6 +232,7 @@ def test_customer_pg_insert_is_active_bool_type():
 # 6. _customer_pg_insert – lines 251-254
 #    Branch: "is_active" in pu_cols, type does NOT contain "bool" → bind 1
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_insert_is_active_non_bool_type():
     """Line 251-254: is_active column with INTEGER type gets 1."""
@@ -252,6 +266,7 @@ def test_customer_pg_insert_is_active_non_bool_type():
         patch(f"{MODULE}._customer_pg_fetch_by_id", return_value={"id": new_id}),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
+
         _customer_pg_insert("IntCo", "cp", "ph", "addr")
 
     bind = conn.execute.call_args_list[1][0][1]
@@ -263,9 +278,11 @@ def test_customer_pg_insert_is_active_non_bool_type():
 #    Branch: "created_at" in pu_cols → bind["ca"] set to now
 # ---------------------------------------------------------------------------
 
+
 def test_customer_pg_insert_created_at_appended():
     """Line 254-257: created_at column causes ca to be included in bind."""
     import datetime
+
     now_val = datetime.datetime(2024, 1, 1, 0, 0, 0)
     new_id = 57
     conn = MagicMock()
@@ -295,6 +312,7 @@ def test_customer_pg_insert_created_at_appended():
         patch(f"{MODULE}._customer_pg_fetch_by_id", return_value={"id": new_id}),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
+
         _customer_pg_insert("DateCo", "cp", "ph", "addr")
 
     bind = conn.execute.call_args_list[1][0][1]
@@ -305,6 +323,7 @@ def test_customer_pg_insert_created_at_appended():
 # 8. _customer_pg_update – lines 289-290
 #    Branch: prev is None → raise 404
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_update_prev_none_raises_404():
     """Line 289-290: no existing record → HTTPException 404."""
@@ -327,6 +346,7 @@ def test_customer_pg_update_prev_none_raises_404():
         patch(f"{MODULE}.utc_now_naive", return_value=MagicMock()),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_update
+
         with pytest.raises(HTTPException) as exc:
             _customer_pg_update(99, "NewName", "cp", "ph", "addr")
     assert exc.value.status_code == 404
@@ -336,6 +356,7 @@ def test_customer_pg_update_prev_none_raises_404():
 # 9. _customer_pg_update – lines 303-304
 #    Branch: clash exists → raise 400
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_update_clash_raises_400():
     """Line 303-304: another record has same unit_name → HTTPException 400."""
@@ -364,6 +385,7 @@ def test_customer_pg_update_clash_raises_400():
         patch(f"{MODULE}.utc_now_naive", return_value=MagicMock()),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_update
+
         with pytest.raises(HTTPException) as exc:
             _customer_pg_update(10, "ClashName", "cp", "ph", "addr")
     assert exc.value.status_code == 400
@@ -374,10 +396,11 @@ def test_customer_pg_update_clash_raises_400():
 #     Branch: "updated_at" in pu_cols → UPDATE includes updated_at
 # ---------------------------------------------------------------------------
 
+
 def test_customer_pg_update_with_updated_at_col():
     """Line 314-315: updated_at column present → SQL includes :ua."""
     prev_row = MagicMock()
-    prev_row.__getitem__ = lambda s, k: ("SameName" if k == "unit_name" else 1)
+    prev_row.__getitem__ = lambda s, k: "SameName" if k == "unit_name" else 1
 
     conn = MagicMock()
     prev_res = MagicMock()
@@ -405,6 +428,7 @@ def test_customer_pg_update_with_updated_at_col():
         patch(f"{MODULE}._customer_pg_fetch_by_id", return_value={"id": 1}),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_update
+
         _customer_pg_update(1, "SameName", "cp", "ph", "addr")
 
     # Third execute call should have :ua in the SQL
@@ -418,10 +442,11 @@ def test_customer_pg_update_with_updated_at_col():
 #     Branch: "updated_at" NOT in pu_cols → UPDATE without :ua
 # ---------------------------------------------------------------------------
 
+
 def test_customer_pg_update_without_updated_at_col():
     """Line 314-325: updated_at column absent → shorter UPDATE SQL."""
     prev_row = MagicMock()
-    prev_row.__getitem__ = lambda s, k: ("SameName" if k == "unit_name" else 1)
+    prev_row.__getitem__ = lambda s, k: "SameName" if k == "unit_name" else 1
 
     conn = MagicMock()
     prev_res = MagicMock()
@@ -449,6 +474,7 @@ def test_customer_pg_update_without_updated_at_col():
         patch(f"{MODULE}._customer_pg_fetch_by_id", return_value={"id": 1}),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_update
+
         _customer_pg_update(1, "SameName", "cp", "ph", "addr")
 
     third_call = conn.execute.call_args_list[2]
@@ -461,10 +487,11 @@ def test_customer_pg_update_without_updated_at_col():
 #     Branch: old_name != new name → _products_unit_replace_pg called
 # ---------------------------------------------------------------------------
 
+
 def test_customer_pg_update_name_changed_triggers_unit_replace():
     """Line 333-334: name change → _products_unit_replace_pg is called."""
     prev_row = MagicMock()
-    prev_row.__getitem__ = lambda s, k: ("OldName" if k == "unit_name" else 1)
+    prev_row.__getitem__ = lambda s, k: "OldName" if k == "unit_name" else 1
 
     conn = MagicMock()
     prev_res = MagicMock()
@@ -489,6 +516,7 @@ def test_customer_pg_update_name_changed_triggers_unit_replace():
         patch(f"{MODULE}._products_unit_replace_pg") as mock_replace,
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_update
+
         _customer_pg_update(1, "NewName", "cp", "ph", "addr")
 
     mock_replace.assert_called_once_with(eng, "OldName", "NewName")
@@ -499,10 +527,11 @@ def test_customer_pg_update_name_changed_triggers_unit_replace():
 #     Branch: old_name == new name → _products_unit_replace_pg NOT called
 # ---------------------------------------------------------------------------
 
+
 def test_customer_pg_update_name_same_no_unit_replace():
     """Line 333-335: unchanged name → _products_unit_replace_pg not called."""
     prev_row = MagicMock()
-    prev_row.__getitem__ = lambda s, k: ("SameName" if k == "unit_name" else 1)
+    prev_row.__getitem__ = lambda s, k: "SameName" if k == "unit_name" else 1
 
     conn = MagicMock()
     prev_res = MagicMock()
@@ -527,6 +556,7 @@ def test_customer_pg_update_name_same_no_unit_replace():
         patch(f"{MODULE}._products_unit_replace_pg") as mock_replace,
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_update
+
         _customer_pg_update(1, "SameName", "cp", "ph", "addr")
 
     mock_replace.assert_not_called()
@@ -536,6 +566,7 @@ def test_customer_pg_update_name_same_no_unit_replace():
 # 14. _customer_pg_delete_anywhere – line 381-382
 #     Branch: "purchase_units" NOT in table names → skip first block
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_delete_anywhere_no_purchase_units_table():
     """Line 381-382: purchase_units absent → resolved via customers fallback."""
@@ -557,6 +588,7 @@ def test_customer_pg_delete_anywhere_no_purchase_units_table():
         patch(f"{MODULE}._customers_delete_by_norm_name_pg", return_value=0),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_delete_anywhere
+
         # Should succeed without raising
         _customer_pg_delete_anywhere(42)
 
@@ -565,6 +597,7 @@ def test_customer_pg_delete_anywhere_no_purchase_units_table():
 # 15. _customer_pg_delete_anywhere – lines 393-394
 #     Branch: r (purchase_units row) exists → resolved_name set from it
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_delete_anywhere_resolved_from_purchase_units():
     """Line 393-394: purchase_units row found → resolved_name taken from r[0]."""
@@ -593,6 +626,7 @@ def test_customer_pg_delete_anywhere_resolved_from_purchase_units():
         patch(f"{MODULE}._customers_delete_by_id_pg", return_value=0),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_delete_anywhere
+
         _customer_pg_delete_anywhere(5)
 
     # _products_delete_by_unit_pg must have been called with "ResolvedCo"
@@ -605,6 +639,7 @@ def test_customer_pg_delete_anywhere_resolved_from_purchase_units():
 # 16. _customer_pg_delete_anywhere – lines 393-396
 #     Branch: r is None in purchase_units query → try customers table
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_delete_anywhere_no_pu_row_fallback_customers():
     """Line 393-396: purchase_units row not found → customers table queried."""
@@ -634,6 +669,7 @@ def test_customer_pg_delete_anywhere_no_pu_row_fallback_customers():
         patch(f"{MODULE}._customers_delete_by_id_pg", return_value=0),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_delete_anywhere
+
         _customer_pg_delete_anywhere(7)
 
     mock_csel.assert_called_once()
@@ -643,6 +679,7 @@ def test_customer_pg_delete_anywhere_no_pu_row_fallback_customers():
 # 17. _customer_pg_delete_anywhere – line 420 (n_prod==n_pu==n_cu==0)
 #     Branch: nothing deleted → raise 404
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_delete_anywhere_nothing_deleted_raises_404():
     """Line 420: all delete counts zero → HTTPException 404."""
@@ -661,6 +698,7 @@ def test_customer_pg_delete_anywhere_nothing_deleted_raises_404():
         patch(f"{MODULE}._customers_delete_by_id_pg", return_value=0),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_delete_anywhere
+
         with pytest.raises(HTTPException) as exc:
             _customer_pg_delete_anywhere(999)
     assert exc.value.status_code == 404
@@ -670,6 +708,7 @@ def test_customer_pg_delete_anywhere_nothing_deleted_raises_404():
 # 18. products_pg_update_row – lines 456-460
 #     Branch: "specification" NOT in col_names → no spec in sets
 # ---------------------------------------------------------------------------
+
 
 def test_products_pg_update_row_no_specification_col():
     """Line 456-460: specification column absent → not added to sets."""
@@ -688,6 +727,7 @@ def test_products_pg_update_row_no_specification_col():
         patch(f"{MODULE}.products_update_or_delete_mod_and", return_value=""),
     ):
         from app.infrastructure.persistence.compat_db.writes import products_pg_update_row
+
         products_pg_update_row(
             1,
             {"name": "Widget", "model_number": "W-1"},
@@ -704,6 +744,7 @@ def test_products_pg_update_row_no_specification_col():
 # 19. products_pg_update_row – lines 490-493
 #     Branch: is_active is not None → added to sets
 # ---------------------------------------------------------------------------
+
 
 def test_products_pg_update_row_is_active_not_none():
     """Line 490-493: parse_is_active returns non-None → is_active added to UPDATE."""
@@ -722,6 +763,7 @@ def test_products_pg_update_row_is_active_not_none():
         patch(f"{MODULE}.products_update_or_delete_mod_and", return_value=""),
     ):
         from app.infrastructure.persistence.compat_db.writes import products_pg_update_row
+
         products_pg_update_row(
             1,
             {"name": "Widget", "model_number": "W-1", "is_active": True},
@@ -738,6 +780,7 @@ def test_products_pg_update_row_is_active_not_none():
 # 20. products_pg_update_row – lines 495-496
 #     Branch: sets is empty → raise 400 (edge case: only is_active col, parse returns None)
 # ---------------------------------------------------------------------------
+
 
 def test_products_pg_update_row_empty_sets_raises_400():
     """Line 495-496: sets empty after building → HTTPException 400."""
@@ -782,6 +825,7 @@ def test_products_pg_update_row_empty_sets_raises_400():
         patch(f"{MODULE}.products_update_or_delete_mod_and", return_value=""),
     ):
         from app.infrastructure.persistence.compat_db.writes import products_pg_update_row
+
         # Normal call — doesn't hit the empty sets branch; that's fine, the branch
         # is defensive dead code reachable only if col_names is mutated externally.
         products_pg_update_row(
@@ -797,6 +841,7 @@ def test_products_pg_update_row_empty_sets_raises_400():
 # 21. products_pg_insert_row – lines 528-529
 #     Branch: model_number is empty → _norm_model called
 # ---------------------------------------------------------------------------
+
 
 def test_products_pg_insert_row_empty_model_number_calls_norm_model():
     """Line 528-529: empty model_number → _norm_model invoked."""
@@ -819,6 +864,7 @@ def test_products_pg_insert_row_empty_model_number_calls_norm_model():
             patch(f"{MODULE}._sql_insert_returning", return_value="INSERT …"),
         ):
             from app.infrastructure.persistence.compat_db.writes import products_pg_insert_row
+
             new_id = products_pg_insert_row(
                 {"name": "Widget", "model_number": ""},  # empty model_number
                 parse_price=lambda v: None,
@@ -833,6 +879,7 @@ def test_products_pg_insert_row_empty_model_number_calls_norm_model():
 # 22. products_pg_insert_row – lines 556-558
 #     Branch: "xcagi_mod_id" in col_names AND mid is set → appended to icols
 # ---------------------------------------------------------------------------
+
 
 def test_products_pg_insert_row_xcagi_mod_id_appended():
     """Line 556-558: xcagi_mod_id column present and mid truthy → in INSERT."""
@@ -854,6 +901,7 @@ def test_products_pg_insert_row_xcagi_mod_id_appended():
             patch(f"{MODULE}._sql_insert_returning", return_value="INSERT …"),
         ):
             from app.infrastructure.persistence.compat_db.writes import products_pg_insert_row
+
             products_pg_insert_row(
                 {"name": "Widget", "model_number": "W-2"},
                 parse_price=lambda v: None,
@@ -871,6 +919,7 @@ def test_products_pg_insert_row_xcagi_mod_id_appended():
 # 23. products_pg_insert_row – lines 558-559
 #     Branch: icols is empty → raise 500
 # ---------------------------------------------------------------------------
+
 
 def test_products_pg_insert_row_icols_empty_raises_500():
     """Line 558-559: no columns resolved → HTTPException 500."""
@@ -924,6 +973,7 @@ def test_products_pg_insert_row_icols_empty_raises_500():
             # We mark this test as a documentation test; the defensive branch is verified by
             # the two-phase col_names scenario above.
             from app.infrastructure.persistence.compat_db.writes import products_pg_insert_row  # noqa
+
             conn3 = MagicMock()
             res3 = MagicMock()
             res3.scalar_one.return_value = 1
@@ -942,6 +992,7 @@ def test_products_pg_insert_row_icols_empty_raises_500():
 # 24. products_pg_batch_delete_rows – lines 561-562
 #     Branch: pid is None → skipped.append(str(raw))
 # ---------------------------------------------------------------------------
+
 
 def test_products_pg_batch_delete_rows_none_pid_skipped():
     """Line 561-562: _product_parse_id returns None → raw added to skipped."""
@@ -964,6 +1015,7 @@ def test_products_pg_batch_delete_rows_none_pid_skipped():
         ),
     ):
         from app.infrastructure.persistence.compat_db.writes import products_pg_batch_delete_rows
+
         deleted, skipped = products_pg_batch_delete_rows(["bad-id", "also-bad"])
 
     assert deleted == 0
@@ -974,6 +1026,7 @@ def test_products_pg_batch_delete_rows_none_pid_skipped():
 # 25. _customer_pg_delete_anywhere – lines 402-409
 #     Branch: resolved_name still None → _customer_find_by_id consulted
 # ---------------------------------------------------------------------------
+
 
 def test_customer_pg_delete_anywhere_fallback_to_find_by_id():
     """Lines 402-409: resolved_name None after PU+customers → _customer_find_by_id used."""
@@ -1004,6 +1057,7 @@ def test_customer_pg_delete_anywhere_fallback_to_find_by_id():
         patch(f"{MODULE}._customers_delete_by_id_pg", return_value=0),
     ):
         from app.infrastructure.persistence.compat_db.writes import _customer_pg_delete_anywhere
+
         _customer_pg_delete_anywhere(8)
 
     mock_find.assert_called_once_with(8)

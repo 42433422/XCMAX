@@ -18,10 +18,12 @@ import pytest
 # helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_manager():
     """Return a fresh ModManager with a fake mods_root (no FS calls)."""
     with patch("app.infrastructure.mods.mod_manager._default_mods_root", return_value="/fake/mods"):
         from app.infrastructure.mods.mod_manager import ModManager
+
         mm = ModManager.__new__(ModManager)
         mm.mods_root = "/fake/mods"
         mm._loaded_mods = []
@@ -39,6 +41,7 @@ def _get_manager():
 # import_mod_backend_py
 # ---------------------------------------------------------------------------
 
+
 class TestImportModBackendPy:
     def test_returns_cached_module(self, tmp_path):
         """If module is already in sys.modules, return it immediately."""
@@ -49,7 +52,10 @@ class TestImportModBackendPy:
         import hashlib
 
         from app.infrastructure.mods.mod_manager import import_mod_backend_py
-        digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[:16]
+
+        digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[
+            :16
+        ]
         safe = "mymod"
         spec_name = f"_xcagi_mod_{safe}_{digest}_entry"
         sentinel = MagicMock()
@@ -62,6 +68,7 @@ class TestImportModBackendPy:
 
     def test_raises_file_not_found_for_missing_stem(self, tmp_path):
         from app.infrastructure.mods.mod_manager import import_mod_backend_py
+
         mod_path = str(tmp_path / "mymod")
         os.makedirs(os.path.join(mod_path, "backend"), exist_ok=True)
         with pytest.raises(FileNotFoundError):
@@ -74,6 +81,7 @@ class TestImportModBackendPy:
         py = os.path.join(backend, "entry.py")
         open(py, "w").close()
         from app.infrastructure.mods.mod_manager import import_mod_backend_py
+
         with patch("importlib.util.spec_from_file_location", return_value=None):
             with pytest.raises(ImportError):
                 import_mod_backend_py(mod_path, "mymod", "entry")
@@ -83,12 +91,15 @@ class TestImportModBackendPy:
 # _invoke_mod_init_hook
 # ---------------------------------------------------------------------------
 
+
 class TestInvokeModInitHook:
     def test_no_params_calls_directly(self):
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
+
         fn = MagicMock()
         fn.__wrapped__ = None
         import inspect
+
         fn.__signature__ = inspect.Signature([])
         _invoke_mod_init_hook(fn)
         fn.assert_called_once_with()
@@ -97,22 +108,29 @@ class TestInvokeModInitHook:
         import inspect
 
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
+
         calls = []
+
         def fn(app):
             calls.append(app)
+
         _invoke_mod_init_hook(fn, mod_id="mymod")
         assert calls == [None]
 
     def test_with_mod_id_param_passes_mod_id(self):
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
+
         calls = []
+
         def fn(mod_id):
             calls.append(mod_id)
+
         _invoke_mod_init_hook(fn, mod_id="testmod")
         assert calls == ["testmod"]
 
     def test_type_error_sig_calls_directly(self):
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
+
         fn = MagicMock()
         with patch("inspect.signature", side_effect=TypeError("no sig")):
             _invoke_mod_init_hook(fn, mod_id="m")
@@ -123,20 +141,24 @@ class TestInvokeModInitHook:
 # ModManager._all_mods_roots / all_mods_roots
 # ---------------------------------------------------------------------------
 
+
 class TestAllModsRoots:
     def test_includes_primary_when_exists(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _all_mods_roots
+
         result = _all_mods_roots(str(tmp_path))
         assert str(tmp_path) in result
 
     def test_excludes_nonexistent_primary(self):
         from app.infrastructure.mods.mod_manager import _all_mods_roots
+
         result = _all_mods_roots("/definitely/does/not/exist")
         # primary not in result (it's not a dir)
         assert "/definitely/does/not/exist" not in result
 
     def test_includes_env_root_when_set(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _all_mods_roots
+
         env_path = tmp_path / "extra_mods"
         env_path.mkdir()
         with patch.dict(os.environ, {"XCAGI_MODS_ROOT": str(env_path)}):
@@ -145,6 +167,7 @@ class TestAllModsRoots:
 
     def test_deduplicates_roots(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _all_mods_roots
+
         with patch.dict(os.environ, {"XCAGI_MODS_ROOT": str(tmp_path)}):
             result = _all_mods_roots(str(tmp_path))
         assert result.count(str(tmp_path)) == 1
@@ -153,6 +176,7 @@ class TestAllModsRoots:
 # ---------------------------------------------------------------------------
 # ModManager.resolve_mod_directory
 # ---------------------------------------------------------------------------
+
 
 class TestResolveModDirectory:
     def test_returns_none_for_empty_mod_id(self):
@@ -189,7 +213,9 @@ class TestResolveModDirectory:
         (canonical_dir / "manifest.json").touch()
         with (
             patch.object(mm, "_refresh_mods_root_if_needed"),
-            patch("app.mod_sdk.industry_mod_aliases.canonical_mod_id", return_value="mymod-canonical"),
+            patch(
+                "app.mod_sdk.industry_mod_aliases.canonical_mod_id", return_value="mymod-canonical"
+            ),
             patch("app.mod_sdk.industry_mod_aliases.legacy_mod_ids_for", return_value=[]),
         ):
             result = mm.resolve_mod_directory("mymod-alias")
@@ -199,6 +225,7 @@ class TestResolveModDirectory:
 # ---------------------------------------------------------------------------
 # ModManager.scan_mods
 # ---------------------------------------------------------------------------
+
 
 class TestScanMods:
     def test_returns_from_cache_when_fp_matches(self):
@@ -246,6 +273,7 @@ class TestScanMods:
 # ModManager.get_mod_routes
 # ---------------------------------------------------------------------------
 
+
 class TestGetRoutes:
     def test_empty_when_no_mods(self):
         mm = _get_manager()
@@ -264,8 +292,11 @@ class TestGetRoutes:
         with (
             patch.object(mm, "_refresh_mods_root_if_needed"),
             patch.object(mm, "scan_mods", return_value=[m]),
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                  return_value=True, create=True),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+                create=True,
+            ),
         ):
             result = mm.get_routes()
         assert result == []
@@ -278,8 +309,11 @@ class TestGetRoutes:
         with (
             patch.object(mm, "_refresh_mods_root_if_needed"),
             patch.object(mm, "scan_mods", return_value=[m]),
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                  return_value=True, create=True),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+                create=True,
+            ),
         ):
             result = mm.get_routes()
         assert result == [{"mod_id": "mymod", "routes_path": "dist/routes.js"}]
@@ -292,8 +326,11 @@ class TestGetRoutes:
         with (
             patch.object(mm, "_refresh_mods_root_if_needed"),
             patch.object(mm, "scan_mods", return_value=[m]),
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                  return_value=False, create=True),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=False,
+                create=True,
+            ),
         ):
             result = mm.get_routes()
         assert result == []
@@ -302,6 +339,7 @@ class TestGetRoutes:
 # ---------------------------------------------------------------------------
 # ModManager.load_all_mods
 # ---------------------------------------------------------------------------
+
 
 class TestLoadAllMods:
     def test_returns_empty_when_no_mods(self):
@@ -319,8 +357,11 @@ class TestLoadAllMods:
         with (
             patch.object(mm, "scan_mods", return_value=[m]),
             patch("app.infrastructure.mods.mod_manager.validate_dependencies", return_value=False),
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                  return_value=True, create=True),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+                create=True,
+            ),
         ):
             result = mm.load_all_mods()
         assert "mymod" not in result
@@ -333,8 +374,11 @@ class TestLoadAllMods:
         m.dependencies = []
         with (
             patch.object(mm, "scan_mods", return_value=[m]),
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                  return_value=False, create=True),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=False,
+                create=True,
+            ),
         ):
             result = mm.load_all_mods()
         assert "secretmod" not in result
@@ -348,8 +392,11 @@ class TestLoadAllMods:
         with (
             patch.object(mm, "scan_mods", return_value=[m]),
             patch.object(mm, "load_mod", return_value=True),
-            patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                  return_value=True, create=True),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+                create=True,
+            ),
         ):
             result = mm.load_all_mods()
         assert "mymod" in result
@@ -358,6 +405,7 @@ class TestLoadAllMods:
 # ---------------------------------------------------------------------------
 # ModManager.validate_mod_package
 # ---------------------------------------------------------------------------
+
 
 class TestValidateModPackage:
     def test_returns_false_when_file_missing(self, tmp_path):
@@ -376,12 +424,15 @@ class TestValidateModPackage:
 
     def test_returns_false_when_manifest_has_no_id(self, tmp_path):
         import zipfile
+
         zf = tmp_path / "test.xcmod"
         with zipfile.ZipFile(zf, "w") as z:
             z.writestr("manifest.json", '{"name": "test", "version": "1.0"}')
         mm = _get_manager()
-        with patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   return_value=(str(tmp_path), {"name": "test", "version": "1.0"})):
+        with patch(
+            "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+            return_value=(str(tmp_path), {"name": "test", "version": "1.0"}),
+        ):
             ok, msg, info = mm.validate_mod_package(str(zf))
         assert not ok
         assert "id" in msg
@@ -391,9 +442,11 @@ class TestValidateModPackage:
 # get_mod_manager singleton
 # ---------------------------------------------------------------------------
 
+
 class TestGetModManagerSingleton:
     def test_returns_same_instance(self):
         from app.infrastructure.mods import mod_manager as mm_mod
+
         orig = mm_mod._mod_manager
         try:
             mm_mod._mod_manager = None
@@ -407,6 +460,7 @@ class TestGetModManagerSingleton:
 # ---------------------------------------------------------------------------
 # load_mod_routes
 # ---------------------------------------------------------------------------
+
 
 class TestLoadModRoutes:
     def test_calls_register_for_loaded_mods(self):
@@ -426,6 +480,7 @@ class TestLoadModRoutes:
         ):
             mock_reg.return_value.list_mods.return_value = [meta]
             from app.infrastructure.mods.mod_manager import load_mod_routes
+
             load_mod_routes(mock_app, mm)
 
     def test_no_double_registration_for_same_id(self):
@@ -439,13 +494,16 @@ class TestLoadModRoutes:
         with (
             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg,
             patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"),
-            patch("app.infrastructure.mods.mod_manager._register_single_mod_http_routes",
-                  side_effect=lambda a, m, mid: register_calls.append(mid)),
+            patch(
+                "app.infrastructure.mods.mod_manager._register_single_mod_http_routes",
+                side_effect=lambda a, m, mid: register_calls.append(mid),
+            ),
             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last", create=True),
         ):
             mock_reg.return_value.list_mods.return_value = [meta]
             from app.infrastructure.mods.mod_manager import load_mod_routes
+
             load_mod_routes(mock_app, mm)
         assert register_calls.count("mymod") == 1
 
@@ -454,9 +512,11 @@ class TestLoadModRoutes:
 # register_employee_pack_routes
 # ---------------------------------------------------------------------------
 
+
 class TestRegisterEmployeePackRoutes:
     def test_returns_false_for_empty_pack_id(self, tmp_path):
         from app.infrastructure.mods.mod_manager import register_employee_pack_routes
+
         mm = _get_manager()
         mm.mods_root = str(tmp_path)
         with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False):
@@ -465,6 +525,7 @@ class TestRegisterEmployeePackRoutes:
 
     def test_returns_false_when_mods_disabled(self, tmp_path):
         from app.infrastructure.mods.mod_manager import register_employee_pack_routes
+
         mm = _get_manager()
         with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True):
             result = register_employee_pack_routes(MagicMock(), mm, "emp1")
@@ -472,6 +533,7 @@ class TestRegisterEmployeePackRoutes:
 
     def test_returns_false_when_manifest_missing(self, tmp_path):
         from app.infrastructure.mods.mod_manager import register_employee_pack_routes
+
         mm = _get_manager()
         mm.mods_root = str(tmp_path)
         with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False):
@@ -480,6 +542,7 @@ class TestRegisterEmployeePackRoutes:
 
     def test_already_registered_returns_true_without_reregistering(self, tmp_path):
         from app.infrastructure.mods import mod_manager as mm_mod
+
         mm = _get_manager()
         mm.mods_root = str(tmp_path)
         orig = set(mm_mod._employee_pack_routes_registered)
@@ -497,9 +560,11 @@ class TestRegisterEmployeePackRoutes:
 # mount_on_disk_primary_client_mods
 # ---------------------------------------------------------------------------
 
+
 class TestMountOnDiskPrimaryClientMods:
     def test_returns_empty_when_mods_disabled(self):
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
+
         with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True):
             result = mount_on_disk_primary_client_mods()
         assert result == []
@@ -508,6 +573,7 @@ class TestMountOnDiskPrimaryClientMods:
         import types
 
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
+
         _fake_amb = types.ModuleType("app.enterprise.account_mod_binding")
         _fake_amb.SUNBIRD_CLIENT_MOD_ID = ""
         with (
@@ -521,6 +587,7 @@ class TestMountOnDiskPrimaryClientMods:
         import types
 
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
+
         _fake_amb = types.ModuleType("app.enterprise.account_mod_binding")
         _fake_amb.SUNBIRD_CLIENT_MOD_ID = "sunbird"
         mm = _get_manager()
@@ -539,9 +606,11 @@ class TestMountOnDiskPrimaryClientMods:
 # _default_mods_root fallback paths
 # ---------------------------------------------------------------------------
 
+
 class TestDefaultModsRoot:
     def test_returns_string(self):
         from app.infrastructure.mods.mod_manager import _default_mods_root
+
         with (
             patch("os.path.isdir", return_value=False),
             patch("os.getcwd", return_value="/tmp"),

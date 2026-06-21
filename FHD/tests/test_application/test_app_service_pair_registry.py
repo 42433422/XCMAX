@@ -1,4 +1,5 @@
 """Tests for app.application.app_service_pair_registry."""
+
 from __future__ import annotations
 
 import pytest

@@ -142,6 +142,7 @@ def client():
 #    Lines 128-129
 # ===========================================================================
 
+
 def test_trace_control_result_early_return_run_id():
     """If payload from generate_api_key already has run_id, tracing is skipped."""
     with _all_mocks(
@@ -171,6 +172,7 @@ def test_trace_control_result_early_return_agent_run_id():
 #    Lines 220-221
 # ===========================================================================
 
+
 def test_invoke_args_non_dict_defaults_to_empty():
     """When args is a list (not dict) the route must default args to {}."""
     with _all_mocks():
@@ -189,6 +191,7 @@ def test_invoke_args_non_dict_defaults_to_empty():
 # 3. aiopen_invoke – run_id set vs not set
 #    Lines 237-240
 # ===========================================================================
+
 
 def test_invoke_run_id_present_in_response():
     """run_id returned by _trace_aiopen_tool_call must be embedded in the payload."""
@@ -224,6 +227,7 @@ def test_invoke_run_id_empty_not_in_response():
 #    Lines 263-264
 # ===========================================================================
 
+
 def test_mcp_get_incoming_session_id_echoed():
     """MCP GET with existing Mcp-Session-Id header must echo it back."""
     with _all_mocks():
@@ -240,6 +244,7 @@ def test_mcp_get_incoming_session_id_echoed():
 # 5. _handle_mcp_message tools/call – run_id non-empty → set _meta
 #    Lines 331-333
 # ===========================================================================
+
 
 def test_mcp_post_tools_call_run_id_in_meta():
     """tools/call with successful tracing must embed _meta.run_id in result."""
@@ -286,6 +291,7 @@ def test_mcp_post_tools_call_no_run_id_no_meta():
 #    Lines 337-338
 # ===========================================================================
 
+
 def test_mcp_post_notification_unknown_method_returns_202(client):
     """A JSON-RPC message with no 'id' and unknown method is a notification → 202."""
     resp = client.post(
@@ -302,6 +308,7 @@ def test_mcp_post_notification_unknown_method_returns_202(client):
 #    Lines 359-360
 # ===========================================================================
 
+
 def test_mcp_get_unauthorized():
     """GET /api/aiopen/mcp with bad key must return 401."""
     with _all_mocks(verify_api_key=False):
@@ -315,6 +322,7 @@ def test_mcp_get_unauthorized():
 # 8. aiopen_mcp POST – body is not a dict, but params must default to {}
 #    Lines 382-383 (body not a dict → params={})
 # ===========================================================================
+
 
 def test_mcp_post_body_none_params_defaults(client):
     """A null JSON body is neither dict nor list → parse error 400."""
@@ -331,6 +339,7 @@ def test_mcp_post_body_none_params_defaults(client):
 # 9. aiopen_mcp POST – body is a list (batch)
 #    Lines 388-389
 # ===========================================================================
+
 
 def test_mcp_post_batch_list():
     """Body as a JSON array triggers the batch path and returns all responses."""
@@ -356,6 +365,7 @@ def test_mcp_post_batch_list():
 #     Lines 390-391
 # ===========================================================================
 
+
 def test_mcp_post_batch_item_not_dict_skipped(client):
     """Non-dict items inside a batch array must be silently skipped."""
     batch = [
@@ -380,6 +390,7 @@ def test_mcp_post_batch_item_not_dict_skipped(client):
 #     Lines 397-390 / 399-400
 # ===========================================================================
 
+
 def test_mcp_post_batch_all_notifications_returns_202(client):
     """Batch where every item is a notification (no id, method=notifications/*) → 202."""
     batch = [
@@ -398,6 +409,7 @@ def test_mcp_post_batch_all_notifications_returns_202(client):
 # 12. batch – initialize inside list sets is_initialize / protocol_version
 #     Lines 393-396
 # ===========================================================================
+
 
 def test_mcp_post_batch_initialize_sets_new_session():
     """initialize inside batch must flip is_initialize and return Mcp-Session-Id."""
@@ -428,6 +440,7 @@ def test_mcp_post_batch_initialize_sets_new_session():
 #     Lines 399-400 / 407-408
 # ===========================================================================
 
+
 def test_mcp_post_body_string_parse_error(client):
     """Sending a bare JSON string (not object, not array) → 400 parse error."""
     resp = client.post(
@@ -455,6 +468,7 @@ def test_mcp_post_body_number_parse_error(client):
 #     Lines 407-408
 # ===========================================================================
 
+
 def test_mcp_post_dict_body_notification_returns_202(client):
     """Dict body that is a notification (no id, method=notifications/*) → 202."""
     resp = client.post(
@@ -469,6 +483,7 @@ def test_mcp_post_dict_body_notification_returns_202(client):
 # 15. aiopen_keys_revoke – key empty → 400
 #     Lines 449-450
 # ===========================================================================
+
 
 def test_keys_revoke_empty_key_returns_400(client):
     """DELETE /api/aiopen/keys with missing key field → 400."""
@@ -488,6 +503,7 @@ def test_keys_revoke_whitespace_key_returns_400(client):
 #     Lines 491-492
 # ===========================================================================
 
+
 def test_whitelist_empty_path_returns_400(client):
     """POST /api/aiopen/whitelist with no path → 400."""
     resp = client.post("/api/aiopen/whitelist", json={"enabled": True})
@@ -505,6 +521,7 @@ def test_whitelist_whitespace_path_returns_400(client):
 # 17. aiopen_config – base_url empty → 400
 #     Lines 505-506
 # ===========================================================================
+
 
 def test_config_empty_base_url_returns_400(client):
     """POST /api/aiopen/config with no base_url → 400."""
@@ -525,6 +542,7 @@ def test_config_base_url_accepted(client):
 #     Lines 531-532
 # ===========================================================================
 
+
 def test_openclaw_chat_empty_message_returns_400(client):
     """POST /api/aiopen/openclaw/chat with empty message → 400."""
     resp = client.post("/api/aiopen/openclaw/chat", json={})
@@ -542,6 +560,7 @@ def test_openclaw_chat_whitespace_message_returns_400(client):
 # 19. aiopen_openclaw_chat – proxy returns status != 200 → JSONResponse
 #     Lines 547-549
 # ===========================================================================
+
 
 def test_openclaw_chat_proxy_non_200_returns_json_response():
     """When openclaw_chat_proxy returns status=503, route must return JSONResponse."""
@@ -573,6 +592,7 @@ def test_openclaw_chat_proxy_200_returns_dict():
 # 20. aiopen_screen_ws – session_id empty → auto-generate
 #     Lines 561-562
 # ===========================================================================
+
 
 def test_ws_autogenerate_session_id():
     """WS without session_id query-param must auto-generate a session_id."""
@@ -609,6 +629,7 @@ def test_ws_provided_session_id_used():
 #     Lines 572-569 / 572-573
 # ===========================================================================
 
+
 def test_ws_recoverable_error_during_receive():
     """A ValueError (in RECOVERABLE_ERRORS) during receive must not crash the server."""
     hub = MagicMock()
@@ -631,6 +652,7 @@ def test_ws_recoverable_error_during_receive():
 # 22. _safe_aiopen_control_payload – raw_key non-empty → key_preview set
 #     Lines 114-116
 # ===========================================================================
+
 
 def test_safe_control_payload_key_preview():
     """_safe_aiopen_control_payload must set key_preview (first 16 chars) when key present."""

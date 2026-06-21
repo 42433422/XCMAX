@@ -64,7 +64,9 @@ def test_provision_trial_user_not_found():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = None
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         result = provision_trial_for_user(user_id=99, username="nobody")
 
     assert result is None
@@ -76,7 +78,9 @@ def test_provision_trial_user_already_has_tenant():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, existing_tenant]
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         result = provision_trial_for_user(user_id=5, username="alice")
 
     assert result == 42
@@ -100,7 +104,9 @@ def test_provision_trial_user_tenant_id_but_tenant_missing():
 
     db.add.side_effect = _assign_pk
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         with patch("app.application.tenant_subscription_app_service.trial_days", return_value=7):
             result = provision_trial_for_user(user_id=5, username="bob")
 
@@ -113,9 +119,9 @@ def test_provision_trial_code_collision():
 
     collision_tenant = MagicMock()
     call_results = [
-        user,          # User lookup
+        user,  # User lookup
         collision_tenant,  # code 'bob' collides
-        None,          # code 'bob-1' is free
+        None,  # code 'bob-1' is free
     ]
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = call_results
@@ -125,7 +131,9 @@ def test_provision_trial_code_collision():
 
     db.add.side_effect = _assign_pk
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         with patch("app.application.tenant_subscription_app_service.trial_days", return_value=7):
             result = provision_trial_for_user(user_id=5, username="bob")
 
@@ -143,7 +151,9 @@ def test_provision_trial_neuro_notify_error_suppressed():
 
     db.add.side_effect = _assign_pk
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         with patch("app.application.tenant_subscription_app_service.trial_days", return_value=7):
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_tenant_changed",
@@ -169,7 +179,9 @@ def test_sync_tenant_display_name_user_not_found():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = None
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         result = sync_tenant_display_name(user_id=99, company_brand="Acme")
 
     assert result == "Acme"
@@ -180,7 +192,9 @@ def test_sync_tenant_display_name_user_has_no_tenant():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = user
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         result = sync_tenant_display_name(user_id=1, company_brand="Acme")
 
     assert result == "Acme"
@@ -191,7 +205,9 @@ def test_sync_tenant_display_name_tenant_missing():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, None]
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         result = sync_tenant_display_name(user_id=1, company_brand="Acme")
 
     assert result == "Acme"
@@ -205,7 +221,9 @@ def test_sync_tenant_display_name_same_name_no_update():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         result = sync_tenant_display_name(user_id=1, company_brand="Acme")
 
     db.commit.assert_not_called()
@@ -219,7 +237,9 @@ def test_sync_tenant_display_name_updates_and_notifies():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         with patch(
             "app.neuro_bus.application_neuro_bridge.neuro_notify_tenant_changed"
         ) as mock_notify:
@@ -239,7 +259,9 @@ def test_subscription_status_user_not_found():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = None
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         status = subscription_status_for_user(999)
 
     assert status["active"] is False
@@ -251,7 +273,9 @@ def test_subscription_status_superadmin():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = user
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         status = subscription_status_for_user(1)
 
     assert status["active"] is True
@@ -265,8 +289,12 @@ def test_subscription_status_paid_plan():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
-        with patch("app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=True):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
+        with patch(
+            "app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=True
+        ):
             status = subscription_status_for_user(1)
 
     assert status["active"] is True
@@ -280,8 +308,12 @@ def test_subscription_status_active_trial():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
-        with patch("app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=False):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
+        with patch(
+            "app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=False
+        ):
             status = subscription_status_for_user(1)
 
     assert status["active"] is True
@@ -296,8 +328,12 @@ def test_subscription_status_trial_expired():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
-        with patch("app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=False):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
+        with patch(
+            "app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=False
+        ):
             status = subscription_status_for_user(1)
 
     assert status["active"] is False
@@ -309,7 +345,9 @@ def test_subscription_status_no_tenant():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = user
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         status = subscription_status_for_user(1)
 
     assert status["active"] is False
@@ -323,7 +361,9 @@ def test_subscription_status_no_tenant():
 
 
 def test_apply_paid_plan_to_tenant_invalid_plan():
-    with patch("app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=False):
+    with patch(
+        "app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=False
+    ):
         result = apply_paid_plan_to_tenant(tenant_id=1, plan_id="free")
     assert result is False
 
@@ -332,8 +372,12 @@ def test_apply_paid_plan_to_tenant_not_found():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = None
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
-        with patch("app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=True):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
+        with patch(
+            "app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=True
+        ):
             result = apply_paid_plan_to_tenant(tenant_id=999, plan_id="saas-pro")
 
     assert result is False
@@ -346,8 +390,12 @@ def test_apply_paid_plan_to_tenant_success():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = tenant
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
-        with patch("app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=True):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
+        with patch(
+            "app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=True
+        ):
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_tenant_changed"
             ) as mock_notify:
@@ -367,7 +415,9 @@ def test_apply_paid_plan_for_user_user_not_found():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = None
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         result = apply_paid_plan_for_user(user_id=99, plan_id="saas-pro")
 
     assert result is False
@@ -378,7 +428,9 @@ def test_apply_paid_plan_for_user_no_tenant():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = user
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         result = apply_paid_plan_for_user(user_id=1, plan_id="saas-pro")
 
     assert result is False
@@ -389,7 +441,9 @@ def test_apply_paid_plan_for_user_delegates_to_tenant():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = user
 
-    with patch("app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)):
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
         with patch(
             "app.application.tenant_subscription_app_service.apply_paid_plan_to_tenant",
             return_value=True,

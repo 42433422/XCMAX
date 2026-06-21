@@ -23,6 +23,7 @@ from app.domain.context.session_context import (
 
 # ─────────────── detected_excel_header_row_1based ───────────────
 
+
 class TestDetectedHeaderRow:
     """Covers all branches in the header-row detection logic (lines 25-110)."""
 
@@ -95,9 +96,7 @@ class TestDetectedHeaderRow:
         # When preferred "B" doesn't match in sheets/all_sheets, the code falls
         # through to the top-level fallback which DOES return sheets[0].
         # So this test verifies the fallback path fires (returns sheets[0] value).
-        ea = {
-            "sheets": [{"sheet_name": "A", "grid_preview": {"header_row_index": 2}}]
-        }
+        ea = {"sheets": [{"sheet_name": "A", "grid_preview": {"header_row_index": 2}}]}
         result = detected_excel_header_row_1based(ea, preferred_sheet_name="B")
         # Falls back to sheets[0] which has header_row_index=2
         assert result == 2
@@ -204,6 +203,7 @@ class TestDetectedHeaderRow:
 
 # ─────────────── enrich_excel_tool_arguments ────────────────────
 
+
 class TestEnrichExcelToolArgs:
     def test_none_context(self):
         assert enrich_excel_tool_arguments("excel_analysis", {"a": 1}, None) == {"a": 1}
@@ -229,7 +229,9 @@ class TestEnrichExcelToolArgs:
 
     def test_does_not_overwrite_different_basename_file_path(self):
         ctx = {"excel_analysis": {"file_path": "/uploads/file_a.xlsx"}}
-        out = enrich_excel_tool_arguments("excel_analysis", {"file_path": "/local/file_b.xlsx"}, ctx)
+        out = enrich_excel_tool_arguments(
+            "excel_analysis", {"file_path": "/local/file_b.xlsx"}, ctx
+        )
         # different basenames → not overwritten
         assert out["file_path"] == "/local/file_b.xlsx"
 
@@ -303,6 +305,7 @@ class TestEnrichExcelToolArgs:
 
 # ─────────────── _excel_analysis_from_runtime ───────────────────
 
+
 class TestExcelAnalysisFromRuntime:
     def test_none_returns_none(self):
         assert _excel_analysis_from_runtime(None) is None
@@ -332,6 +335,7 @@ class TestExcelAnalysisFromRuntime:
 
 
 # ─────────────── enrich_template_preview_arguments ──────────────
+
 
 class TestEnrichTemplatePreviewArgs:
     def test_none_context(self):
@@ -442,6 +446,7 @@ class TestEnrichTemplatePreviewArgs:
 
 # ─────────────── _sanitize_untrusted_context_line ───────────────
 
+
 class TestSanitize:
     def test_removes_control_chars(self):
         out = _sanitize_untrusted_context_line("a\x00\x01\x08b", 100)
@@ -468,6 +473,7 @@ class TestSanitize:
 
 
 # ─────────────── format_recent_messages_excerpt_for_llm ─────────
+
 
 class TestFormatRecentMessages:
     def test_none_returns_none(self):
@@ -499,12 +505,7 @@ class TestFormatRecentMessages:
         assert "[assistant] hello" in out
 
     def test_last_six_only(self):
-        ctx = {
-            "recent_messages": [
-                {"role": "user", "content": f"msg{i}"}
-                for i in range(10)
-            ]
-        }
+        ctx = {"recent_messages": [{"role": "user", "content": f"msg{i}"} for i in range(10)]}
         out = format_recent_messages_excerpt_for_llm(ctx)
         assert out is not None
         # Only last 6 messages included
@@ -512,6 +513,7 @@ class TestFormatRecentMessages:
 
 
 # ─────────────── format_runtime_context_for_llm ─────────────────
+
 
 class TestFormatRuntimeContextForLlm:
     def test_none_returns_none(self):
@@ -573,7 +575,7 @@ class TestFormatRuntimeContextForLlm:
     def test_fallback_call_example_when_no_sheet(self):
         ctx = {"excel_analysis": {"file_path": "/x.xlsx"}}
         out = format_runtime_context_for_llm(ctx)
-        assert '调用示例' in out
+        assert "调用示例" in out
 
     def test_linked_grid_preview(self):
         ctx = {
@@ -659,6 +661,7 @@ class TestFormatRuntimeContextForLlm:
 
 
 # ─────────────── _format_kitten_runtime_for_llm ─────────────────
+
 
 class TestFormatKittenRuntime:
     def test_none_returns_none(self):
@@ -755,7 +758,10 @@ class TestFormatKittenRuntime:
         ctx = {
             "kitten_analyzer": True,
             "kitten_web_search": True,
-            "web_search_results": ["oops", {"title": "Real", "url": "http://r.com", "snippet": "s"}],
+            "web_search_results": [
+                "oops",
+                {"title": "Real", "url": "http://r.com", "snippet": "s"},
+            ],
         }
         out = _format_kitten_runtime_for_llm(ctx)
         assert "Real" in out
@@ -773,6 +779,7 @@ class TestFormatKittenRuntime:
 
 
 # ─────────────── format_excel_analysis_for_llm ──────────────────
+
 
 class TestFormatExcelAnalysisForLlm:
     def test_none_returns_none(self):
@@ -795,11 +802,7 @@ class TestFormatExcelAnalysisForLlm:
         assert "/server/data.xlsx" in out
 
     def test_file_path_from_preview_data(self):
-        ctx = {
-            "excel_analysis": {
-                "preview_data": {"file_path": "/preview/data.xlsx"}
-            }
-        }
+        ctx = {"excel_analysis": {"preview_data": {"file_path": "/preview/data.xlsx"}}}
         out = format_excel_analysis_for_llm(ctx)
         assert "/preview/data.xlsx" in out
 
@@ -897,6 +900,7 @@ class TestFormatExcelAnalysisForLlm:
 
 # ─────────────── merge_system_prompt ────────────────────────────
 
+
 class TestMergeSystemPrompt:
     def test_none_context_no_base(self):
         assert merge_system_prompt(None, None) is None
@@ -936,6 +940,7 @@ class TestMergeSystemPrompt:
 
 # ─────────────── planner_workflow_interrupt_reply ────────────────
 
+
 class TestPlannerWorkflowInterruptReply:
     def test_pause_message(self):
         out = planner_workflow_interrupt_reply("暂停流程")
@@ -968,6 +973,7 @@ class TestPlannerWorkflowInterruptReply:
 
 
 # ─────────────── runtime_context_after_workflow_interrupt ────────
+
 
 class TestRuntimeContextAfterWorkflowInterrupt:
     def test_none_returns_empty(self):

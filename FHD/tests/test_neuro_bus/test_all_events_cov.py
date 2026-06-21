@@ -22,7 +22,6 @@ def _call_post_init(ev):
         type(ev).__post_init__(ev)
 
 
-
 # ---------------------------------------------------------------------------
 # order_events
 # ---------------------------------------------------------------------------
@@ -81,7 +80,9 @@ class TestOrderEvents:
             _call_post_init(ev)
 
     def test_order_shipped_ok(self):
-        ev = _make(OrderShippedEvent, {"order_id": "1", "shipment_id": "s1", "tracking_number": "T1"})
+        ev = _make(
+            OrderShippedEvent, {"order_id": "1", "shipment_id": "s1", "tracking_number": "T1"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "order.shipped"
 
@@ -121,7 +122,10 @@ class TestOrderEvents:
             _call_post_init(ev)
 
     def test_order_status_changed_ok(self):
-        ev = _make(OrderStatusChangedEvent, {"order_id": "1", "old_status": "pending", "new_status": "paid"})
+        ev = _make(
+            OrderStatusChangedEvent,
+            {"order_id": "1", "old_status": "pending", "new_status": "paid"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "order.status_changed"
 
@@ -147,12 +151,15 @@ from app.neuro_bus.events.wechat_events import (
 
 class TestWechatEvents:
     def test_message_received_ok(self):
-        ev = _make(WeChatMessageReceivedEvent, {
+        ev = _make(
+            WeChatMessageReceivedEvent,
+            {
                 "message_id": "m1",
                 "from_user": "u1",
                 "message_type": "text",
                 "content": "hi",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "wechat.message_received"
 
@@ -162,12 +169,15 @@ class TestWechatEvents:
             _call_post_init(ev)
 
     def test_message_sent_ok(self):
-        ev = _make(WeChatMessageSentEvent, {
+        ev = _make(
+            WeChatMessageSentEvent,
+            {
                 "message_id": "m1",
                 "to_user": "u1",
                 "message_type": "text",
                 "status": "ok",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "wechat.message_sent"
 
@@ -177,7 +187,9 @@ class TestWechatEvents:
             _call_post_init(ev)
 
     def test_contact_added_ok(self):
-        ev = _make(WeChatContactAddedEvent, {"contact_id": "c1", "contact_name": "n1", "source": "s"})
+        ev = _make(
+            WeChatContactAddedEvent, {"contact_id": "c1", "contact_name": "n1", "source": "s"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "wechat.contact_added"
 
@@ -197,12 +209,15 @@ class TestWechatEvents:
             _call_post_init(ev)
 
     def test_task_created_ok(self):
-        ev = _make(WeChatTaskCreatedEvent, {
+        ev = _make(
+            WeChatTaskCreatedEvent,
+            {
                 "task_id": "t1",
                 "task_type": "send",
                 "target_contacts": [],
                 "content": "hi",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "wechat.task_created"
 
@@ -212,7 +227,9 @@ class TestWechatEvents:
             _call_post_init(ev)
 
     def test_task_completed_ok(self):
-        ev = _make(WeChatTaskCompletedEvent, {"task_id": "t1", "success_count": 1, "failed_count": 0})
+        ev = _make(
+            WeChatTaskCompletedEvent, {"task_id": "t1", "success_count": 1, "failed_count": 0}
+        )
         _call_post_init(ev)
         assert ev.event_type == "wechat.task_completed"
 
@@ -222,7 +239,10 @@ class TestWechatEvents:
             _call_post_init(ev)
 
     def test_login_status_changed_ok(self):
-        ev = _make(WeChatLoginStatusChangedEvent, {"account_id": "a1", "old_status": "offline", "new_status": "online"})
+        ev = _make(
+            WeChatLoginStatusChangedEvent,
+            {"account_id": "a1", "old_status": "offline", "new_status": "online"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "wechat.login_status_changed"
 
@@ -249,7 +269,9 @@ from app.neuro_bus.events.auth_events import (
 
 class TestAuthEvents:
     def test_user_login_ok(self):
-        ev = _make(UserLoginEvent, {"user_id": "1", "login_method": "password", "ip_address": "127.0.0.1"})
+        ev = _make(
+            UserLoginEvent, {"user_id": "1", "login_method": "password", "ip_address": "127.0.0.1"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "auth.user_login"
 
@@ -269,7 +291,9 @@ class TestAuthEvents:
             _call_post_init(ev)
 
     def test_user_registered_ok(self):
-        ev = _make(UserRegisteredEvent, {"user_id": "1", "username": "u", "registration_source": "web"})
+        ev = _make(
+            UserRegisteredEvent, {"user_id": "1", "username": "u", "registration_source": "web"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "auth.user_registered"
 
@@ -289,7 +313,10 @@ class TestAuthEvents:
             _call_post_init(ev)
 
     def test_permission_granted_ok(self):
-        ev = _make(UserPermissionGrantedEvent, {"user_id": "1", "permission": "read", "granted_by": "admin"})
+        ev = _make(
+            UserPermissionGrantedEvent,
+            {"user_id": "1", "permission": "read", "granted_by": "admin"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "auth.permission_granted"
 
@@ -299,7 +326,10 @@ class TestAuthEvents:
             _call_post_init(ev)
 
     def test_permission_revoked_ok(self):
-        ev = _make(UserPermissionRevokedEvent, {"user_id": "1", "permission": "read", "revoked_by": "admin"})
+        ev = _make(
+            UserPermissionRevokedEvent,
+            {"user_id": "1", "permission": "read", "revoked_by": "admin"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "auth.permission_revoked"
 
@@ -309,7 +339,9 @@ class TestAuthEvents:
             _call_post_init(ev)
 
     def test_login_failed_ok(self):
-        ev = _make(LoginFailedEvent, {"username": "u", "reason": "bad_pass", "ip_address": "127.0.0.1"})
+        ev = _make(
+            LoginFailedEvent, {"username": "u", "reason": "bad_pass", "ip_address": "127.0.0.1"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "auth.login_failed"
 
@@ -344,12 +376,15 @@ from app.neuro_bus.events.payment_events import (
 
 class TestPaymentEvents:
     def test_payment_created_ok(self):
-        ev = _make(PaymentCreatedEvent, {
+        ev = _make(
+            PaymentCreatedEvent,
+            {
                 "payment_id": "p1",
                 "order_id": "o1",
                 "amount": 100,
                 "payment_method": "card",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "payment.created"
 
@@ -359,7 +394,9 @@ class TestPaymentEvents:
             _call_post_init(ev)
 
     def test_payment_completed_ok(self):
-        ev = _make(PaymentCompletedEvent, {"payment_id": "p1", "transaction_id": "t1", "paid_amount": 100})
+        ev = _make(
+            PaymentCompletedEvent, {"payment_id": "p1", "transaction_id": "t1", "paid_amount": 100}
+        )
         _call_post_init(ev)
         assert ev.event_type == "payment.completed"
 
@@ -369,7 +406,9 @@ class TestPaymentEvents:
             _call_post_init(ev)
 
     def test_payment_failed_ok(self):
-        ev = _make(PaymentFailedEvent, {"payment_id": "p1", "error_code": "E01", "error_message": "fail"})
+        ev = _make(
+            PaymentFailedEvent, {"payment_id": "p1", "error_code": "E01", "error_message": "fail"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "payment.failed"
 
@@ -379,12 +418,15 @@ class TestPaymentEvents:
             _call_post_init(ev)
 
     def test_payment_refunded_ok(self):
-        ev = _make(PaymentRefundedEvent, {
+        ev = _make(
+            PaymentRefundedEvent,
+            {
                 "payment_id": "p1",
                 "refund_id": "r1",
                 "refund_amount": 50,
                 "reason": "customer",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "payment.refunded"
 
@@ -394,7 +436,10 @@ class TestPaymentEvents:
             _call_post_init(ev)
 
     def test_payment_method_changed_ok(self):
-        ev = _make(PaymentMethodChangedEvent, {"payment_id": "p1", "old_method": "card", "new_method": "cash"})
+        ev = _make(
+            PaymentMethodChangedEvent,
+            {"payment_id": "p1", "old_method": "card", "new_method": "cash"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "payment.method_changed"
 
@@ -404,11 +449,14 @@ class TestPaymentEvents:
             _call_post_init(ev)
 
     def test_payment_notification_sent_ok(self):
-        ev = _make(PaymentNotificationSentEvent, {
+        ev = _make(
+            PaymentNotificationSentEvent,
+            {
                 "payment_id": "p1",
                 "notification_type": "email",
                 "recipient": "a@b.com",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "payment.notification_sent"
 
@@ -433,12 +481,15 @@ from app.neuro_bus.events.inventory_events import (
 
 class TestInventoryEvents:
     def test_stock_changed_ok(self):
-        ev = _make(InventoryStockChangedEvent, {
+        ev = _make(
+            InventoryStockChangedEvent,
+            {
                 "product_id": "p1",
                 "warehouse_id": "w1",
                 "quantity_delta": -1,
                 "reason": "sale",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "inventory.stock_changed"
 
@@ -448,7 +499,9 @@ class TestInventoryEvents:
             _call_post_init(ev)
 
     def test_low_stock_alert_ok(self):
-        ev = _make(InventoryLowStockAlertEvent, {"product_id": "p1", "current_stock": 2, "threshold": 5})
+        ev = _make(
+            InventoryLowStockAlertEvent, {"product_id": "p1", "current_stock": 2, "threshold": 5}
+        )
         _call_post_init(ev)
         assert ev.event_type == "inventory.low_stock_alert"
 
@@ -458,12 +511,15 @@ class TestInventoryEvents:
             _call_post_init(ev)
 
     def test_stock_in_ok(self):
-        ev = _make(InventoryStockInEvent, {
+        ev = _make(
+            InventoryStockInEvent,
+            {
                 "product_id": "p1",
                 "warehouse_id": "w1",
                 "quantity": 10,
                 "batch_no": "B001",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "inventory.stock_in"
 
@@ -473,12 +529,15 @@ class TestInventoryEvents:
             _call_post_init(ev)
 
     def test_stock_out_ok(self):
-        ev = _make(InventoryStockOutEvent, {
+        ev = _make(
+            InventoryStockOutEvent,
+            {
                 "product_id": "p1",
                 "warehouse_id": "w1",
                 "quantity": 5,
                 "reference_id": "ref1",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "inventory.stock_out"
 
@@ -488,12 +547,15 @@ class TestInventoryEvents:
             _call_post_init(ev)
 
     def test_transfer_ok(self):
-        ev = _make(InventoryTransferEvent, {
+        ev = _make(
+            InventoryTransferEvent,
+            {
                 "product_id": "p1",
                 "from_warehouse": "w1",
                 "to_warehouse": "w2",
                 "quantity": 3,
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "inventory.transfer"
 
@@ -503,7 +565,10 @@ class TestInventoryEvents:
             _call_post_init(ev)
 
     def test_check_completed_ok(self):
-        ev = _make(InventoryCheckCompletedEvent, {"warehouse_id": "w1", "check_date": "2026-01-01", "differences": []})
+        ev = _make(
+            InventoryCheckCompletedEvent,
+            {"warehouse_id": "w1", "check_date": "2026-01-01", "differences": []},
+        )
         _call_post_init(ev)
         assert ev.event_type == "inventory.check_completed"
 
@@ -528,7 +593,9 @@ from app.neuro_bus.events.conversation_events import (
 
 class TestConversationEvents:
     def test_created_ok(self):
-        ev = _make(ConversationCreatedEvent, {"conversation_id": "c1", "user_id": "u1", "channel": "web"})
+        ev = _make(
+            ConversationCreatedEvent, {"conversation_id": "c1", "user_id": "u1", "channel": "web"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "conversation.created"
 
@@ -538,12 +605,15 @@ class TestConversationEvents:
             _call_post_init(ev)
 
     def test_message_added_ok(self):
-        ev = _make(ConversationMessageAddedEvent, {
+        ev = _make(
+            ConversationMessageAddedEvent,
+            {
                 "conversation_id": "c1",
                 "message_id": "m1",
                 "sender_type": "user",
                 "content": "hello",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "conversation.message_added"
 
@@ -553,7 +623,10 @@ class TestConversationEvents:
             _call_post_init(ev)
 
     def test_ended_ok(self):
-        ev = _make(ConversationEndedEvent, {"conversation_id": "c1", "reason": "timeout", "duration_seconds": 30})
+        ev = _make(
+            ConversationEndedEvent,
+            {"conversation_id": "c1", "reason": "timeout", "duration_seconds": 30},
+        )
         _call_post_init(ev)
         assert ev.event_type == "conversation.ended"
 
@@ -563,7 +636,10 @@ class TestConversationEvents:
             _call_post_init(ev)
 
     def test_assigned_ok(self):
-        ev = _make(ConversationAssignedEvent, {"conversation_id": "c1", "assigned_to": "agent1", "assigned_by": "auto"})
+        ev = _make(
+            ConversationAssignedEvent,
+            {"conversation_id": "c1", "assigned_to": "agent1", "assigned_by": "auto"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "conversation.assigned"
 
@@ -573,7 +649,9 @@ class TestConversationEvents:
             _call_post_init(ev)
 
     def test_tagged_ok(self):
-        ev = _make(ConversationTaggedEvent, {"conversation_id": "c1", "tags": ["vip"], "tagged_by": "u1"})
+        ev = _make(
+            ConversationTaggedEvent, {"conversation_id": "c1", "tags": ["vip"], "tagged_by": "u1"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "conversation.tagged"
 
@@ -583,11 +661,14 @@ class TestConversationEvents:
             _call_post_init(ev)
 
     def test_exported_ok(self):
-        ev = _make(ConversationExportedEvent, {
+        ev = _make(
+            ConversationExportedEvent,
+            {
                 "conversation_id": "c1",
                 "export_format": "pdf",
                 "file_path": "/tmp/out.pdf",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "conversation.exported"
 
@@ -612,12 +693,15 @@ from app.neuro_bus.events.print_events import (
 
 class TestPrintEvents:
     def test_job_submitted_ok(self):
-        ev = _make(PrintJobSubmittedEvent, {
+        ev = _make(
+            PrintJobSubmittedEvent,
+            {
                 "job_id": "j1",
                 "document_id": "d1",
                 "printer_id": "p1",
                 "copies": 1,
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "print.job_submitted"
 
@@ -647,7 +731,9 @@ class TestPrintEvents:
             _call_post_init(ev)
 
     def test_job_failed_ok(self):
-        ev = _make(PrintJobFailedEvent, {"job_id": "j1", "error_code": "E01", "error_message": "fail"})
+        ev = _make(
+            PrintJobFailedEvent, {"job_id": "j1", "error_code": "E01", "error_message": "fail"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "print.job_failed"
 
@@ -657,7 +743,10 @@ class TestPrintEvents:
             _call_post_init(ev)
 
     def test_printer_status_changed_ok(self):
-        ev = _make(PrinterStatusChangedEvent, {"printer_id": "p1", "old_status": "idle", "new_status": "busy"})
+        ev = _make(
+            PrinterStatusChangedEvent,
+            {"printer_id": "p1", "old_status": "idle", "new_status": "busy"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "print.printer_status_changed"
 
@@ -667,12 +756,15 @@ class TestPrintEvents:
             _call_post_init(ev)
 
     def test_label_print_request_ok(self):
-        ev = _make(LabelPrintRequestEvent, {
+        ev = _make(
+            LabelPrintRequestEvent,
+            {
                 "label_id": "l1",
                 "product_id": "p1",
                 "quantity": 5,
                 "printer_id": "pr1",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "print.label_requested"
 
@@ -697,7 +789,10 @@ from app.neuro_bus.events.ocr_events import (
 
 class TestOcrEvents:
     def test_task_submitted_ok(self):
-        ev = _make(OCRTaskSubmittedEvent, {"task_id": "t1", "image_url": "http://img.jpg", "ocr_type": "general"})
+        ev = _make(
+            OCRTaskSubmittedEvent,
+            {"task_id": "t1", "image_url": "http://img.jpg", "ocr_type": "general"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "ocr.task_submitted"
 
@@ -727,7 +822,9 @@ class TestOcrEvents:
             _call_post_init(ev)
 
     def test_task_failed_ok(self):
-        ev = _make(OCRTaskFailedEvent, {"task_id": "t1", "error_code": "E01", "error_message": "fail"})
+        ev = _make(
+            OCRTaskFailedEvent, {"task_id": "t1", "error_code": "E01", "error_message": "fail"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "ocr.task_failed"
 
@@ -737,12 +834,15 @@ class TestOcrEvents:
             _call_post_init(ev)
 
     def test_result_validated_ok(self):
-        ev = _make(OCRResultValidatedEvent, {
+        ev = _make(
+            OCRResultValidatedEvent,
+            {
                 "task_id": "t1",
                 "validated_by": "u1",
                 "is_correct": True,
                 "corrections": [],
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "ocr.result_validated"
 
@@ -752,12 +852,15 @@ class TestOcrEvents:
             _call_post_init(ev)
 
     def test_batch_completed_ok(self):
-        ev = _make(OCRBatchProcessingCompletedEvent, {
+        ev = _make(
+            OCRBatchProcessingCompletedEvent,
+            {
                 "batch_id": "b1",
                 "total_count": 10,
                 "success_count": 8,
                 "failed_count": 2,
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "ocr.batch_completed"
 
@@ -782,11 +885,14 @@ from app.neuro_bus.events.material_events import (
 
 class TestMaterialEvents:
     def test_created_ok(self):
-        ev = _make(MaterialCreatedEvent, {
+        ev = _make(
+            MaterialCreatedEvent,
+            {
                 "material_id": "m1",
                 "material_name": "钢板",
                 "material_code": "MC001",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "material.created"
 
@@ -806,12 +912,15 @@ class TestMaterialEvents:
             _call_post_init(ev)
 
     def test_stock_in_ok(self):
-        ev = _make(MaterialStockInEvent, {
+        ev = _make(
+            MaterialStockInEvent,
+            {
                 "material_id": "m1",
                 "warehouse_id": "w1",
                 "quantity": 100,
                 "batch_no": "B01",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "material.stock_in"
 
@@ -821,12 +930,15 @@ class TestMaterialEvents:
             _call_post_init(ev)
 
     def test_stock_out_ok(self):
-        ev = _make(MaterialStockOutEvent, {
+        ev = _make(
+            MaterialStockOutEvent,
+            {
                 "material_id": "m1",
                 "warehouse_id": "w1",
                 "quantity": 10,
                 "usage_purpose": "production",
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "material.stock_out"
 
@@ -836,7 +948,10 @@ class TestMaterialEvents:
             _call_post_init(ev)
 
     def test_low_stock_alert_ok(self):
-        ev = _make(MaterialLowStockAlertEvent, {"material_id": "m1", "current_stock": 2, "safety_stock": 10})
+        ev = _make(
+            MaterialLowStockAlertEvent,
+            {"material_id": "m1", "current_stock": 2, "safety_stock": 10},
+        )
         _call_post_init(ev)
         assert ev.event_type == "material.low_stock_alert"
 
@@ -846,7 +961,10 @@ class TestMaterialEvents:
             _call_post_init(ev)
 
     def test_supplier_changed_ok(self):
-        ev = _make(MaterialSupplierChangedEvent, {"material_id": "m1", "old_supplier": "s1", "new_supplier": "s2"})
+        ev = _make(
+            MaterialSupplierChangedEvent,
+            {"material_id": "m1", "old_supplier": "s1", "new_supplier": "s2"},
+        )
         _call_post_init(ev)
         assert ev.event_type == "material.supplier_changed"
 
@@ -871,12 +989,15 @@ from app.neuro_bus.events.ai_events import (
 
 class TestAIEvents:
     def test_intent_recognized_ok(self):
-        ev = _make(AIIntentRecognizedEvent, {
+        ev = _make(
+            AIIntentRecognizedEvent,
+            {
                 "session_id": "s1",
                 "user_message": "hello",
                 "intent": "greet",
                 "confidence": 0.9,
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "ai.intent_recognized"
 
@@ -886,7 +1007,10 @@ class TestAIEvents:
             _call_post_init(ev)
 
     def test_response_generated_ok(self):
-        ev = _make(AIResponseGeneratedEvent, {"session_id": "s1", "response": "hi", "generation_time_ms": 100})
+        ev = _make(
+            AIResponseGeneratedEvent,
+            {"session_id": "s1", "response": "hi", "generation_time_ms": 100},
+        )
         _call_post_init(ev)
         assert ev.event_type == "ai.response_generated"
 
@@ -896,7 +1020,9 @@ class TestAIEvents:
             _call_post_init(ev)
 
     def test_conversation_started_ok(self):
-        ev = _make(AIConversationStartedEvent, {"session_id": "s1", "user_id": "u1", "channel": "web"})
+        ev = _make(
+            AIConversationStartedEvent, {"session_id": "s1", "user_id": "u1", "channel": "web"}
+        )
         _call_post_init(ev)
         assert ev.event_type == "ai.conversation_started"
 
@@ -906,7 +1032,10 @@ class TestAIEvents:
             _call_post_init(ev)
 
     def test_conversation_ended_ok(self):
-        ev = _make(AIConversationEndedEvent, {"session_id": "s1", "total_messages": 5, "duration_seconds": 60})
+        ev = _make(
+            AIConversationEndedEvent,
+            {"session_id": "s1", "total_messages": 5, "duration_seconds": 60},
+        )
         _call_post_init(ev)
         assert ev.event_type == "ai.conversation_ended"
 
@@ -916,12 +1045,15 @@ class TestAIEvents:
             _call_post_init(ev)
 
     def test_feedback_received_ok(self):
-        ev = _make(AIFeedbackReceivedEvent, {
+        ev = _make(
+            AIFeedbackReceivedEvent,
+            {
                 "session_id": "s1",
                 "message_id": "m1",
                 "feedback_type": "like",
                 "rating": 5,
-            })
+            },
+        )
         _call_post_init(ev)
         assert ev.event_type == "ai.feedback_received"
 
@@ -1042,7 +1174,9 @@ from app.neuro_bus.events.customer_events import (
 
 class TestCustomerEvents:
     def test_registered_ok(self):
-        ev = _make(CustomerRegisteredEvent, {"customer_id": "c1", "contact_info": {"name": "Zhang"}})
+        ev = _make(
+            CustomerRegisteredEvent, {"customer_id": "c1", "contact_info": {"name": "Zhang"}}
+        )
         _call_post_init(ev)
         assert ev.event_type == "customer.registered"
 
@@ -1092,7 +1226,10 @@ class TestCustomerEvents:
             _call_post_init(ev)
 
     def test_credit_limit_changed_ok(self):
-        ev = _make(CustomerCreditLimitChangedEvent, {"customer_id": "c1", "old_limit": 1000, "new_limit": 2000})
+        ev = _make(
+            CustomerCreditLimitChangedEvent,
+            {"customer_id": "c1", "old_limit": 1000, "new_limit": 2000},
+        )
         _call_post_init(ev)
         assert ev.event_type == "customer.credit_limit_changed"
 

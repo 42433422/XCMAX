@@ -28,6 +28,7 @@ from app.application.super_employee_service import (
 
 # ─────────────────────────── helpers ────────────────────────────
 
+
 def _make_svc(tmp_path: Path, profile=CODEX_PROFILE, **kwargs) -> SuperEmployeeService:
     """Build a service with isolated storage and outbox disabled by default."""
     return SuperEmployeeService(profile=profile, storage_root=tmp_path, **kwargs)
@@ -40,17 +41,20 @@ def _null_runner(cmd, **kw):
 def _stdout_runner(stdout: str):
     def _run(cmd, **kw):
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
     return _run
 
 
 def _error_runner(exc):
     def _run(cmd, **kw):
         raise exc
+
     return _run
 
 
 def _fake_http_factory(status: int = 200, body: dict | None = None, exc=None):
     """Return a context-manager–compatible mock httpx.Client factory."""
+
     def factory():
         client = MagicMock(spec=httpx.Client)
         client.__enter__ = lambda s: s
@@ -69,10 +73,12 @@ def _fake_http_factory(status: int = 200, body: dict | None = None, exc=None):
             client.get.return_value = resp
             client.request.return_value = resp
         return client
+
     return factory
 
 
 # ─────────────── module-level helpers ───────────────────────────
+
 
 class TestModuleHelpers:
     def test_coerce_list_with_list(self):
@@ -95,6 +101,7 @@ class TestModuleHelpers:
 
 
 # ─────────────── list_messages ──────────────────────────────────
+
 
 class TestListMessages:
     def test_empty_file_returns_empty(self, tmp_path):
@@ -129,6 +136,7 @@ class TestListMessages:
 
 # ─────────────── invoke — direct / CLI branch ───────────────────
 
+
 class TestInvokeDirect:
     def test_empty_message_raises(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -158,7 +166,10 @@ class TestInvokeDirect:
         svc = _make_svc(tmp_path)
         with patch.object(svc, "_cli_path", return_value=""):
             result = svc.invoke(user_id=1, message="你能做什么", context={"mode": "chat"})
-        assert "派工" in result["assistant_message"]["body"] or "任务" in result["assistant_message"]["body"]
+        assert (
+            "派工" in result["assistant_message"]["body"]
+            or "任务" in result["assistant_message"]["body"]
+        )
 
     def test_direct_greeting_reply(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -188,6 +199,7 @@ class TestInvokeDirect:
 
 
 # ─────────────── invoke — dispatch path ─────────────────────────
+
 
 class TestInvokeDispatch:
     def test_outbox_mode_writes_file(self, tmp_path, monkeypatch):
@@ -255,6 +267,7 @@ class TestInvokeDispatch:
 
 
 # ─────────────── _dispatch_to_para ──────────────────────────────
+
 
 class TestDispatchToPara:
     def test_disabled_url_returns_none_reason(self, tmp_path, monkeypatch):
@@ -328,14 +341,13 @@ class TestDispatchToPara:
             return client
 
         svc = _make_svc(tmp_path, http_client_factory=factory)
-        result, reason = svc._dispatch_to_para(
-            {"request_id": "r1", "created_at": "t"}
-        )
+        result, reason = svc._dispatch_to_para({"request_id": "r1", "created_at": "t"})
         assert result is not None
         assert result["queued"] is True
 
 
 # ─────────────── _select_para_devices ───────────────────────────
+
 
 class TestSelectParaDevices:
     def _svc(self, tmp_path):
@@ -350,7 +362,11 @@ class TestSelectParaDevices:
     def test_excludes_not_installed_tool(self, tmp_path):
         svc = self._svc(tmp_path)
         devices = [
-            {"id": "d1", "status": "online", "tools": [{"toolName": "codex", "status": "not_installed"}]}
+            {
+                "id": "d1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "not_installed"}],
+            }
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["all"]})
         assert result == []
@@ -382,8 +398,18 @@ class TestSelectParaDevices:
     def test_target_filter_by_name(self, tmp_path):
         svc = self._svc(tmp_path)
         devices = [
-            {"id": "d1", "name": "worker1", "status": "online", "capabilities": {"codex_cli": True}},
-            {"id": "d2", "name": "worker2", "status": "online", "capabilities": {"codex_cli": True}},
+            {
+                "id": "d1",
+                "name": "worker1",
+                "status": "online",
+                "capabilities": {"codex_cli": True},
+            },
+            {
+                "id": "d2",
+                "name": "worker2",
+                "status": "online",
+                "capabilities": {"codex_cli": True},
+            },
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["worker1"]})
         assert len(result) == 1
@@ -392,8 +418,18 @@ class TestSelectParaDevices:
     def test_prefers_non_primary_workers(self, tmp_path):
         svc = self._svc(tmp_path)
         devices = [
-            {"id": "primary", "status": "online", "isPrimary": True, "capabilities": {"codex_cli": True}},
-            {"id": "worker", "status": "online", "isPrimary": False, "capabilities": {"codex_cli": True}},
+            {
+                "id": "primary",
+                "status": "online",
+                "isPrimary": True,
+                "capabilities": {"codex_cli": True},
+            },
+            {
+                "id": "worker",
+                "status": "online",
+                "isPrimary": False,
+                "capabilities": {"codex_cli": True},
+            },
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["all"]})
         assert result[0]["id"] == "worker"
@@ -416,6 +452,7 @@ class TestSelectParaDevices:
 
 
 # ─────────────── _ensure_para_device ────────────────────────────
+
 
 class TestEnsureParaDevice:
     def test_already_correct_tool_returns_device(self, tmp_path):
@@ -453,6 +490,7 @@ class TestEnsureParaDevice:
 
 
 # ─────────────── _para_token ────────────────────────────────────
+
 
 class TestParaToken:
     def test_env_token_returned_directly(self, tmp_path, monkeypatch):
@@ -507,6 +545,7 @@ class TestParaToken:
 
 # ─────────────── _para_api_url ──────────────────────────────────
 
+
 class TestParaApiUrl:
     def test_disabled_values(self, tmp_path, monkeypatch):
         # The function checks value.lower() in {"", "0", "false", "off", "none", "disabled"}
@@ -535,6 +574,7 @@ class TestParaApiUrl:
 
 # ─────────────── _max_para_devices ──────────────────────────────
 
+
 class TestMaxParaDevices:
     def test_default_is_three(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -558,6 +598,7 @@ class TestMaxParaDevices:
 
 
 # ─────────────── _cli_reply_body ────────────────────────────────
+
 
 class TestCliReplyBody:
     def test_cli_disabled_env_returns_empty(self, tmp_path, monkeypatch):
@@ -631,13 +672,16 @@ class TestCliReplyBody:
         cli = tmp_path / "claude"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
-        svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE, cli_runner=_stdout_runner("claude answer"))
+        svc = _make_svc(
+            tmp_path, profile=CLAUDE_PROFILE, cli_runner=_stdout_runner("claude answer")
+        )
         with patch.object(svc, "_cli_path", return_value=str(cli)):
             result = svc._cli_reply_body("hi", {})
         assert "claude answer" in result
 
 
 # ─────────────── _clean_cli_stdout ──────────────────────────────
+
 
 class TestCleanCliStdout:
     def test_filters_tool_name_line(self, tmp_path):
@@ -660,6 +704,7 @@ class TestCleanCliStdout:
 
 
 # ─────────────── _dispatch_reply ────────────────────────────────
+
 
 class TestDispatchReply:
     def test_para_accepted(self, tmp_path):
@@ -712,6 +757,7 @@ class TestDispatchReply:
 
 # ─────────────── _should_reply_with_cli ─────────────────────────
 
+
 class TestShouldReplyWithCli:
     def test_chat_mode_true(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -744,6 +790,7 @@ class TestShouldReplyWithCli:
 
 # ─────────────── _upgrade_legacy_dispatcher_row ─────────────────
 
+
 class TestUpgradeLegacyDispatcherRow:
     def test_already_dispatcher_skips(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -762,7 +809,10 @@ class TestUpgradeLegacyDispatcherRow:
 
     def test_upgrades_dispatcher_row(self, tmp_path):
         svc = _make_svc(tmp_path)
-        row = {"role": "assistant", "body": "已接入排比 Para/Codex 多设备调度器，任务已派发到 1 台设备。任务 ID：abc-123"}
+        row = {
+            "role": "assistant",
+            "body": "已接入排比 Para/Codex 多设备调度器，任务已派发到 1 台设备。任务 ID：abc-123",
+        }
         changed = svc._upgrade_legacy_dispatcher_row(row)
         assert changed is True
         assert row["role"] == "system"
@@ -778,6 +828,7 @@ class TestUpgradeLegacyDispatcherRow:
 
 
 # ─────────────── _para_task_status_reply ────────────────────────
+
 
 class TestParaTaskStatusReply:
     def _svc(self, tmp_path):
@@ -845,6 +896,7 @@ class TestParaTaskStatusReply:
 
 # ─────────────── _result_body ───────────────────────────────────
 
+
 class TestResultBody:
     def _svc(self, tmp_path):
         return _make_svc(tmp_path)
@@ -904,6 +956,7 @@ class TestResultBody:
 
 # ─────────────── _para_prompt / _para_subtask_title ─────────────
 
+
 class TestParaPromptAndSubtask:
     def _svc(self, tmp_path):
         return _make_svc(tmp_path)
@@ -937,6 +990,7 @@ class TestParaPromptAndSubtask:
 
 
 # ─────────────── _json_response / _error_message ────────────────
+
 
 class TestJsonResponseAndError:
     def test_valid_json(self, tmp_path):
@@ -979,6 +1033,7 @@ class TestJsonResponseAndError:
 
 # ─────────────── _dedupe_log_tail ───────────────────────────────
 
+
 class TestDedupeLogTail:
     def _svc(self, tmp_path):
         return _make_svc(tmp_path)
@@ -1010,6 +1065,7 @@ class TestDedupeLogTail:
 
 
 # ─────────────── _build_dispatch_request ────────────────────────
+
 
 class TestBuildDispatchRequest:
     def test_mobile_source(self, tmp_path):
@@ -1060,6 +1116,7 @@ class TestBuildDispatchRequest:
 
 # ─────────────── _cli_workspace / _cli_timeout ──────────────────
 
+
 class TestCliWorkspaceAndTimeout:
     def test_valid_workspace_in_context(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -1093,6 +1150,7 @@ class TestCliWorkspaceAndTimeout:
 
 
 # ─────────────── _sync_para_task_updates ────────────────────────
+
 
 class TestSyncParaTaskUpdates:
     def test_skips_when_already_in_terminal_with_result(self, tmp_path):
@@ -1164,6 +1222,7 @@ class TestSyncParaTaskUpdates:
 
 # ─────────────── _message_row / _public_message ─────────────────
 
+
 class TestMessageRowAndPublic:
     def test_message_row_basic(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -1196,10 +1255,19 @@ class TestMessageRowAndPublic:
 
     def test_public_message_all_fields(self, tmp_path):
         svc = _make_svc(tmp_path)
-        row = {"id": "x", "role": "assistant", "body": "b", "created_at": "t",
-               "status": "s", "dispatch_request_id": "r", "kind": "k",
-               "task_id": "tid", "task_status": "ts", "subtask_id": "sid",
-               "device_name": "dn"}
+        row = {
+            "id": "x",
+            "role": "assistant",
+            "body": "b",
+            "created_at": "t",
+            "status": "s",
+            "dispatch_request_id": "r",
+            "kind": "k",
+            "task_id": "tid",
+            "task_status": "ts",
+            "subtask_id": "sid",
+            "device_name": "dn",
+        }
         pub = svc._public_message(row)
         assert pub["task_id"] == "tid"
         assert pub["device_name"] == "dn"

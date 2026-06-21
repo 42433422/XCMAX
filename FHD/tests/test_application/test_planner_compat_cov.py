@@ -34,6 +34,7 @@ _RECOVERABLE = (
     ArithmeticError,
 )
 
+
 def _build_stubs() -> dict:
     tier_mod = MagicMock()
     tier_mod.assert_p2_elevated_claim_or_raise = MagicMock()
@@ -46,7 +47,9 @@ def _build_stubs() -> dict:
 
     chat_trace_mod = MagicMock()
     chat_trace_mod.attach_chat_trace_run = MagicMock(side_effect=lambda p, **kw: p)
-    chat_trace_mod.finalize_legacy_chat_run = MagicMock(return_value={"success": True, "finalized": True})
+    chat_trace_mod.finalize_legacy_chat_run = MagicMock(
+        return_value={"success": True, "finalized": True}
+    )
     chat_trace_mod.start_legacy_chat_run = MagicMock(return_value=MagicMock(run_id="run-001"))
 
     helpers_mod = MagicMock()
@@ -59,7 +62,9 @@ def _build_stubs() -> dict:
     helpers_mod._xcagi_chat_http_exc = MagicMock(
         side_effect=lambda e: fastapi.HTTPException(status_code=500, detail=str(e))
     )
-    helpers_mod._xcagi_chat_timeout_error_payload = MagicMock(return_value={"success": False, "timeout": True})
+    helpers_mod._xcagi_chat_timeout_error_payload = MagicMock(
+        return_value={"success": False, "timeout": True}
+    )
     helpers_mod._xcagi_chat_timeout_seconds = MagicMock(return_value=30)
     helpers_mod._xcagi_compat_reply_payload = MagicMock(
         side_effect=lambda r, **kw: {"success": True, "response": r}
@@ -148,6 +153,7 @@ MOD = "app.application.planner_compat_service"
 # Test helpers
 # ---------------------------------------------------------------------------
 
+
 def _req(**headers) -> MagicMock:
     req = MagicMock()
     req.headers = headers
@@ -194,6 +200,7 @@ def _batch_body(**kw) -> MagicMock:
 # 1. _derive_industry_from_session — sid is None/empty → "通用"  [63→65]
 # ===========================================================================
 
+
 def test_derive_industry_sid_none():
     helpers_mod = MagicMock()
     helpers_mod._session_id_from_request = MagicMock(return_value=None)
@@ -234,6 +241,7 @@ def test_derive_industry_sid_empty_string():
 # 2. _derive_industry_from_session — account_kind == "admin" → "管理端"  [67→68]
 # ===========================================================================
 
+
 def test_derive_industry_admin_kind():
     helpers_mod = MagicMock()
     helpers_mod._session_id_from_request = MagicMock(return_value="sess-123")
@@ -255,6 +263,7 @@ def test_derive_industry_admin_kind():
 # ===========================================================================
 # 3. _derive_industry_from_session — local_user_id found, row has industry  [71→72, 77→78]
 # ===========================================================================
+
 
 def test_derive_industry_user_has_industry():
     helpers_mod = MagicMock()
@@ -296,6 +305,7 @@ def test_derive_industry_user_has_industry():
 # 4. _derive_industry_from_session — local_user_id present but row is None  [77→81]
 # ===========================================================================
 
+
 def test_derive_industry_user_no_row():
     helpers_mod = MagicMock()
     helpers_mod._session_id_from_request = MagicMock(return_value="sess-abc")
@@ -335,6 +345,7 @@ def test_derive_industry_user_no_row():
 # 5. _legacy_requires_token_payload — legacy_tool_records truthy  [110→111]
 # ===========================================================================
 
+
 def test_legacy_requires_token_payload_with_records():
     parsed = {
         "requires_token": True,
@@ -367,6 +378,7 @@ def test_legacy_requires_token_payload_no_records():
 # 6. execute_compat_chat — ok_read=True AND message requires token  [187→188]
 # ===========================================================================
 
+
 async def test_execute_compat_chat_db_read_authorized():
     req = _req()
     body = _body(message="查询客户数据", mode=None)
@@ -374,11 +386,17 @@ async def test_execute_compat_chat_db_read_authorized():
     with (
         patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(_pcs, "_message_requires_db_read_token", return_value=True),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({"x": 1}, [])),
+        patch.object(
+            _pcs, "_merge_runtime_context_with_message_paths", return_value=({"x": 1}, [])
+        ),
         patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
         patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
         patch.object(_pcs, "run_agent_chat", return_value={"success": True, "message": "ok"}),
-        patch.object(_pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True, "r": r}),
+        patch.object(
+            _pcs,
+            "_xcagi_compat_reply_payload",
+            side_effect=lambda r, **kw: {"success": True, "r": r},
+        ),
         patch.object(_pcs, "finalize_legacy_chat_run", return_value={"success": True}),
         patch.object(_pcs, "start_legacy_chat_run", return_value=MagicMock(run_id="r1")),
         patch.object(_pcs, "attach_chat_trace_run", side_effect=lambda p, **kw: p),
@@ -403,6 +421,7 @@ async def test_execute_compat_chat_db_read_authorized():
 # 7. execute_compat_chat — requires_token True AND pre_run not None  [250→260]
 # ===========================================================================
 
+
 async def test_execute_compat_chat_requires_token_with_prerun():
     req = _req()
     body = _body(message="ask llm")
@@ -411,9 +430,16 @@ async def test_execute_compat_chat_requires_token_with_prerun():
     finalize_mock = MagicMock(return_value={"success": True, "finalized": True})
 
     with (
-        patch.object(_pcs, "run_agent_chat", return_value={
-            "requires_token": True, "token_name": "t", "token_description": "d", "message": "m"
-        }),
+        patch.object(
+            _pcs,
+            "run_agent_chat",
+            return_value={
+                "requires_token": True,
+                "token_name": "t",
+                "token_description": "d",
+                "message": "m",
+            },
+        ),
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
         patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
@@ -441,6 +467,7 @@ async def test_execute_compat_chat_requires_token_with_prerun():
 # 8. execute_compat_chat — TimeoutError AND pre_run not None  [272→282]
 # ===========================================================================
 
+
 async def test_execute_compat_chat_timeout_with_prerun():
     req = _req()
     body = _body(message="slow request")
@@ -462,8 +489,14 @@ async def test_execute_compat_chat_timeout_with_prerun():
         patch.object(_pcs, "set_llm_mode"),
         patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
-        patch.object(_pcs, "_xcagi_chat_timeout_error_payload", return_value={"success": False, "timeout": True}),
-        patch(_pcs.__name__ + ".asyncio.wait_for", side_effect=TimeoutError("timeout")) if False else patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timeout")),
+        patch.object(
+            _pcs,
+            "_xcagi_chat_timeout_error_payload",
+            return_value={"success": False, "timeout": True},
+        ),
+        patch(_pcs.__name__ + ".asyncio.wait_for", side_effect=TimeoutError("timeout"))
+        if False
+        else patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timeout")),
     ):
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
@@ -477,6 +510,7 @@ async def test_execute_compat_chat_timeout_with_prerun():
 # ===========================================================================
 # 9. execute_compat_chat — TimeoutError AND pre_run is None  [282 branch]
 # ===========================================================================
+
 
 async def test_execute_compat_chat_timeout_without_prerun():
     req = _req()
@@ -498,7 +532,11 @@ async def test_execute_compat_chat_timeout_without_prerun():
         patch.object(_pcs, "set_llm_mode"),
         patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
-        patch.object(_pcs, "_xcagi_chat_timeout_error_payload", return_value={"success": False, "timeout": True}),
+        patch.object(
+            _pcs,
+            "_xcagi_chat_timeout_error_payload",
+            return_value={"success": False, "timeout": True},
+        ),
         patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timeout")),
     ):
         kitten_mod = MagicMock()
@@ -513,6 +551,7 @@ async def test_execute_compat_chat_timeout_without_prerun():
 # ===========================================================================
 # 10. execute_compat_chat — RECOVERABLE_ERRORS AND pre_run not None  [290→306]
 # ===========================================================================
+
 
 async def test_execute_compat_chat_recoverable_error_with_prerun():
     req = _req()
@@ -536,7 +575,11 @@ async def test_execute_compat_chat_recoverable_error_with_prerun():
         patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(_pcs.asyncio, "wait_for", side_effect=ValueError("bad value")),
-        patch.object(_pcs, "_xcagi_chat_http_exc", side_effect=lambda e: fastapi.HTTPException(status_code=500, detail=str(e))),
+        patch.object(
+            _pcs,
+            "_xcagi_chat_http_exc",
+            side_effect=lambda e: fastapi.HTTPException(status_code=500, detail=str(e)),
+        ),
     ):
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
@@ -551,6 +594,7 @@ async def test_execute_compat_chat_recoverable_error_with_prerun():
 # ===========================================================================
 # 11. execute_compat_chat — final path with pre_run  [308→318]
 # ===========================================================================
+
 
 async def test_execute_compat_chat_final_with_prerun():
     req = _req()
@@ -574,7 +618,11 @@ async def test_execute_compat_chat_final_with_prerun():
         patch.object(_pcs, "set_llm_mode"),
         patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
-        patch.object(_pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True, "r": r}),
+        patch.object(
+            _pcs,
+            "_xcagi_compat_reply_payload",
+            side_effect=lambda r, **kw: {"success": True, "r": r},
+        ),
     ):
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
@@ -589,6 +637,7 @@ async def test_execute_compat_chat_final_with_prerun():
 # ===========================================================================
 # 12. execute_compat_chat — mode "online" triggers set_llm_mode  [143→144 / 336→337]
 # ===========================================================================
+
 
 async def test_execute_compat_chat_mode_online():
     req = _req()
@@ -612,7 +661,9 @@ async def test_execute_compat_chat_mode_online():
         patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
         patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
-        patch.object(_pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}),
+        patch.object(
+            _pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}
+        ),
     ):
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
@@ -626,6 +677,7 @@ async def test_execute_compat_chat_mode_online():
 # ===========================================================================
 # Helper: common batch patches applied via patch.object
 # ===========================================================================
+
 
 def _batch_common_patches():
     return [
@@ -645,6 +697,7 @@ def _batch_common_patches():
 # 13. execute_compat_chat_batch — ok_read=True AND message requires token  [374→375]
 # ===========================================================================
 
+
 async def test_batch_db_read_authorized():
     req = _req()
     body = _batch_body(messages=["查询订单"])
@@ -655,7 +708,9 @@ async def test_batch_db_read_authorized():
         patch.object(_pcs, "run_agent_chat", return_value={"success": True, "message": "ok"}),
         patch.object(_pcs, "start_legacy_chat_run", return_value=MagicMock(run_id="r")),
         patch.object(_pcs, "finalize_legacy_chat_run", return_value={"success": True}),
-        patch.object(_pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}),
+        patch.object(
+            _pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}
+        ),
     ]
     with _nested(*patches):
         result = await execute_compat_chat_batch(req, body)
@@ -667,6 +722,7 @@ async def test_batch_db_read_authorized():
 # 14. execute_compat_chat_batch — vector_error is set  [392→393]
 # ===========================================================================
 
+
 async def test_batch_vector_error():
     req = _req()
     body = _batch_body(messages=["vector msg"])
@@ -674,8 +730,12 @@ async def test_batch_vector_error():
     patches = _batch_common_patches() + [
         patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value={"error": "index missing"}),
-        patch.object(_pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": False}),
+        patch.object(
+            _pcs, "_ensure_vector_index_if_needed", return_value={"error": "index missing"}
+        ),
+        patch.object(
+            _pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": False}
+        ),
         patch.object(_pcs, "attach_chat_trace_run", side_effect=lambda p, **kw: p),
     ]
     with _nested(*patches):
@@ -688,6 +748,7 @@ async def test_batch_vector_error():
 # 15. execute_compat_chat_batch — requires_token WITH pre_run  [436→437, 438→439]
 # ===========================================================================
 
+
 async def test_batch_requires_token_with_prerun():
     req = _req()
     body = _batch_body(messages=["need token"])
@@ -698,9 +759,16 @@ async def test_batch_requires_token_with_prerun():
     patches = _batch_common_patches() + [
         patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "run_agent_chat", return_value={
-            "requires_token": True, "token_name": "t", "token_description": "d", "message": "m"
-        }),
+        patch.object(
+            _pcs,
+            "run_agent_chat",
+            return_value={
+                "requires_token": True,
+                "token_name": "t",
+                "token_description": "d",
+                "message": "m",
+            },
+        ),
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
     ]
@@ -715,6 +783,7 @@ async def test_batch_requires_token_with_prerun():
 # 16. execute_compat_chat_batch — requires_token WITHOUT pre_run  [438→451]
 # ===========================================================================
 
+
 async def test_batch_requires_token_without_prerun():
     req = _req()
     body = _batch_body(messages=["no prerun token"])
@@ -724,9 +793,16 @@ async def test_batch_requires_token_without_prerun():
     patches = _batch_common_patches() + [
         patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "run_agent_chat", return_value={
-            "requires_token": True, "token_name": "t", "token_description": "d", "message": "m"
-        }),
+        patch.object(
+            _pcs,
+            "run_agent_chat",
+            return_value={
+                "requires_token": True,
+                "token_name": "t",
+                "token_description": "d",
+                "message": "m",
+            },
+        ),
         patch.object(_pcs, "start_legacy_chat_run", side_effect=RuntimeError("skip prerun")),
         patch.object(_pcs, "attach_chat_trace_run", attach_mock),
     ]
@@ -741,6 +817,7 @@ async def test_batch_requires_token_without_prerun():
 # 17. execute_compat_chat_batch — final path with pre_run  [465→478]
 # ===========================================================================
 
+
 async def test_batch_final_with_prerun():
     req = _req()
     body = _batch_body(messages=["final prerun msg"])
@@ -751,10 +828,14 @@ async def test_batch_final_with_prerun():
     patches = _batch_common_patches() + [
         patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "run_agent_chat", return_value={"success": True, "message": "batch reply"}),
+        patch.object(
+            _pcs, "run_agent_chat", return_value={"success": True, "message": "batch reply"}
+        ),
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}),
+        patch.object(
+            _pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}
+        ),
     ]
     with _nested(*patches):
         result = await execute_compat_chat_batch(req, body)
@@ -766,6 +847,7 @@ async def test_batch_final_with_prerun():
 # ===========================================================================
 # 18. execute_compat_chat_batch — final path WITHOUT pre_run  [478 branch]
 # ===========================================================================
+
 
 async def test_batch_final_without_prerun():
     req = _req()
@@ -779,7 +861,9 @@ async def test_batch_final_without_prerun():
         patch.object(_pcs, "run_agent_chat", return_value={"success": True, "message": "ok"}),
         patch.object(_pcs, "start_legacy_chat_run", side_effect=RuntimeError("no prerun")),
         patch.object(_pcs, "attach_chat_trace_run", attach_mock),
-        patch.object(_pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}),
+        patch.object(
+            _pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}
+        ),
     ]
     with _nested(*patches):
         result = await execute_compat_chat_batch(req, body)
@@ -791,6 +875,7 @@ async def test_batch_final_without_prerun():
 # ===========================================================================
 # 19. execute_compat_chat_batch — TimeoutError WITH pre_run  [489→502 (pre_run branch)]
 # ===========================================================================
+
 
 async def test_batch_timeout_with_prerun():
     req = _req()
@@ -804,7 +889,11 @@ async def test_batch_timeout_with_prerun():
         patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_xcagi_chat_timeout_error_payload", return_value={"success": False, "timeout": True}),
+        patch.object(
+            _pcs,
+            "_xcagi_chat_timeout_error_payload",
+            return_value={"success": False, "timeout": True},
+        ),
         patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timed out")),
     ]
     with _nested(*patches):
@@ -818,6 +907,7 @@ async def test_batch_timeout_with_prerun():
 # 20. execute_compat_chat_batch — TimeoutError WITHOUT pre_run  [502 else branch]
 # ===========================================================================
 
+
 async def test_batch_timeout_without_prerun():
     req = _req()
     body = _batch_body(messages=["timeout no prerun"])
@@ -829,7 +919,11 @@ async def test_batch_timeout_without_prerun():
         patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
         patch.object(_pcs, "start_legacy_chat_run", side_effect=RuntimeError("no prerun")),
         patch.object(_pcs, "attach_chat_trace_run", attach_mock),
-        patch.object(_pcs, "_xcagi_chat_timeout_error_payload", return_value={"success": False, "timeout": True}),
+        patch.object(
+            _pcs,
+            "_xcagi_chat_timeout_error_payload",
+            return_value={"success": False, "timeout": True},
+        ),
         patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timed out")),
     ]
     with _nested(*patches):
@@ -842,6 +936,7 @@ async def test_batch_timeout_without_prerun():
 # ===========================================================================
 # 21. execute_compat_chat_batch — RECOVERABLE_ERRORS WITH pre_run  [517→530]
 # ===========================================================================
+
 
 async def test_batch_recoverable_error_with_prerun():
     req = _req()
@@ -871,6 +966,7 @@ async def test_batch_recoverable_error_with_prerun():
 # 22. execute_compat_chat_batch — batch mode "offline"  [336→337]
 # ===========================================================================
 
+
 async def test_batch_mode_offline():
     req = _req()
     body = _batch_body(messages=["offline msg"], mode="offline")
@@ -885,7 +981,9 @@ async def test_batch_mode_offline():
         patch.object(_pcs, "run_agent_chat", return_value={"success": True, "message": "ok"}),
         patch.object(_pcs, "start_legacy_chat_run", return_value=MagicMock(run_id="r")),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}),
+        patch.object(
+            _pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}
+        ),
     ]
     with _nested(*patches):
         await execute_compat_chat_batch(req, body)
@@ -896,6 +994,7 @@ async def test_batch_mode_offline():
 # ===========================================================================
 # 23. compat_chat_stream_async — body.user_id None, header fallback  [565→566, 569→570]
 # ===========================================================================
+
 
 async def test_stream_user_id_from_header():
     req = _req()
@@ -927,6 +1026,7 @@ async def test_stream_user_id_from_header():
 # ===========================================================================
 # 24. compat_chat_stream_async — persona_svc not None, industry from ctx  [580→614, 587→614]
 # ===========================================================================
+
 
 async def test_stream_persona_industry_from_ctx():
     req = _req()
@@ -969,6 +1069,7 @@ async def test_stream_persona_industry_from_ctx():
 # ===========================================================================
 # 25. compat_chat_stream_async — industry not in ctx → derive from session  [593→595]
 # ===========================================================================
+
 
 async def test_stream_persona_industry_from_derive():
     req = _req()
@@ -1030,6 +1131,7 @@ from contextlib import ExitStack
 
 def _nested(*patches):
     """Return a context manager that enters all given patch objects."""
+
     class _Multi:
         def __enter__(self):
             self._stack = ExitStack()
