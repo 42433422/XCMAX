@@ -43,18 +43,23 @@ def _industries_dict_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _resolve_default_industry(config: Dict[str, Any]) -> str:
-    """default_industry 若为 null / 非字符串，回退到「涂料」。"""
+    """default_industry 若为 null / 非字符串，回退到「通用」。
+
+    统一兜底为「通用」，与 IndustryContextMiddleware / value_objects_industry /
+    前端 DEFAULT_INDUSTRY 一致，避免无请求上下文时串到「涂料」。
+    """
     v = config.get("default_industry")
     if isinstance(v, str) and v.strip():
         return v.strip()
-    return "涂料"
+    return "通用"
 
 
 @dataclass
 class UnitDefinition:
     """单位定义"""
-    name: str           # 显示名称：如"桶"、"件"
-    abbr: str          # 缩写：如"t"、"p"
+
+    name: str  # 显示名称：如"桶"、"件"
+    abbr: str  # 缩写：如"t"、"p"
     conversion_factor: float = 1.0  # 转换为标准单位的因子
     secondary_unit: Optional[str] = None  # 辅助单位
 
@@ -62,36 +67,40 @@ class UnitDefinition:
 @dataclass
 class QuantityFieldMapping:
     """数量字段映射"""
-    primary_field: str           # 主字段名：tins, pieces, boxes
-    secondary_field: str         # 辅助字段：kg, weight, cartons
-    spec_field: str             # 规格字段：spec_per_tin, spec_per_box
-    primary_label: str           # 主字段标签：桶数、件数
-    secondary_label: str         # 辅助字段标签：公斤、重量
-    spec_label: str              # 规格标签：规格、规格
+
+    primary_field: str  # 主字段名：tins, pieces, boxes
+    secondary_field: str  # 辅助字段：kg, weight, cartons
+    spec_field: str  # 规格字段：spec_per_tin, spec_per_box
+    primary_label: str  # 主字段标签：桶数、件数
+    secondary_label: str  # 辅助字段标签：公斤、重量
+    spec_label: str  # 规格标签：规格、规格
 
 
 @dataclass
 class ProductFieldMapping:
     """产品字段映射"""
-    name: str = "name"           # 产品名称字段
+
+    name: str = "name"  # 产品名称字段
     model: str = "model_number"  # 型号字段
-    category: str = "category"   # 分类字段
-    price: str = "price"         # 价格字段
-    unit: str = "unit"           # 单位字段
+    category: str = "category"  # 分类字段
+    price: str = "price"  # 价格字段
+    unit: str = "unit"  # 单位字段
 
 
 @dataclass
 class OrderTypeMapping:
     """单据类型映射"""
-    shipment: str = "发货单"     # 出库/销售单
-    receipt: str = "收货单"      # 采购/入库单
-    return_order: str = "退货单" # 退货单
-    transfer: str = "调拨单"     # 调拨单
+
+    shipment: str = "发货单"  # 出库/销售单
+    receipt: str = "收货单"  # 采购/入库单
+    return_order: str = "退货单"  # 退货单
+    transfer: str = "调拨单"  # 调拨单
 
 
 @dataclass
 class IndustryProfile:
     """行业配置Profile"""
+
     id: str
     name: str
     units: Dict[str, Any]
@@ -100,6 +109,9 @@ class IndustryProfile:
     order_types: Dict[str, str]
     intent_keywords: Dict[str, List[str]]
     print_config: Dict[str, Any]
+    # 子系统(菜单键)行业感知 schema：{menuKey: {label,visible,entity,fields[],rules}}
+    # 由各行业 Mod 的 manifest.industry.subsystems 声明，稀疏，缺省空 dict（向后兼容旧 Mod）。
+    subsystems: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, industry_id: str, data: Dict[str, Any]) -> "IndustryProfile":
@@ -112,6 +124,7 @@ class IndustryProfile:
             order_types=data.get("order_types", {}),
             intent_keywords=data.get("intent_keywords", {}),
             print_config=data.get("print_config", {}),
+            subsystems=data.get("subsystems", {}),
         )
 
 
@@ -126,7 +139,7 @@ def _load_config() -> Dict[str, Any]:
     current_mtime = CONFIG_FILE.stat().st_mtime
     if _industry_config is None or current_mtime > _config_mtime:
         try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 loaded = yaml.safe_load(f)
             if not isinstance(loaded, dict):
                 logger.error("行业配置 YAML 根节点不是字典，使用内置默认")
@@ -162,7 +175,7 @@ def _get_default_config() -> Dict[str, Any]:
                     "spec_label": "规格",
                     "conversion": {
                         "桶_to_kg": 20.0,  # 1桶 = 20kg
-                    }
+                    },
                 },
                 "quantity_fields": {
                     "primary_field": "tins",
@@ -170,30 +183,29 @@ def _get_default_config() -> Dict[str, Any]:
                     "spec_field": "spec_per_tin",
                     "primary_label": "桶数",
                     "secondary_label": "公斤",
-                    "spec_label": "规格"
+                    "spec_label": "规格",
                 },
                 "product_fields": {
                     "name": "产品名称",
                     "model": "型号",
                     "category": "产品类型",
                     "price": "单价",
-                    "unit": "单位"
+                    "unit": "单位",
                 },
-                "order_types": {
-                    "shipment": "发货单",
-                    "receipt": "收货单",
-                    "return": "退货单"
-                },
+                "order_types": {"shipment": "发货单", "receipt": "收货单", "return": "退货单"},
                 "intent_keywords": {
-                    "create_order": ["开发货单", "生成发货单", "做发货单", "开单", "打单", "做出货单"],
+                    "create_order": [
+                        "开发货单",
+                        "生成发货单",
+                        "做发货单",
+                        "开单",
+                        "打单",
+                        "做出货单",
+                    ],
                     "quantity_unit": "桶",
-                    "print_label": ["商标", "标签", "打印标签"]
+                    "print_label": ["商标", "标签", "打印标签"],
                 },
-                "print_config": {
-                    "printer_type": "TSC",
-                    "label_width": 60,
-                    "label_height": 40
-                }
+                "print_config": {"printer_type": "TSC", "label_width": 60, "label_height": 40},
             },
             "电商": {
                 "name": "电商/零售行业",
@@ -206,7 +218,7 @@ def _get_default_config() -> Dict[str, Any]:
                     "spec_label": "规格",
                     "conversion": {
                         "箱_to_件": 12.0,  # 1箱 = 12件
-                    }
+                    },
                 },
                 "quantity_fields": {
                     "primary_field": "pieces",
@@ -214,30 +226,22 @@ def _get_default_config() -> Dict[str, Any]:
                     "spec_field": "spec_per_box",
                     "primary_label": "件数",
                     "secondary_label": "箱数",
-                    "spec_label": "规格"
+                    "spec_label": "规格",
                 },
                 "product_fields": {
                     "name": "商品名称",
                     "model": "SKU",
                     "category": "分类",
                     "price": "售价",
-                    "unit": "单位"
+                    "unit": "单位",
                 },
-                "order_types": {
-                    "shipment": "销售单",
-                    "receipt": "采购单",
-                    "return": "退货单"
-                },
+                "order_types": {"shipment": "销售单", "receipt": "采购单", "return": "退货单"},
                 "intent_keywords": {
                     "create_order": ["开销售单", "创建订单", "下单", "开单"],
                     "quantity_unit": "件",
-                    "print_label": ["面单", "快递单", "标签"]
+                    "print_label": ["面单", "快递单", "标签"],
                 },
-                "print_config": {
-                    "printer_type": "PDF",
-                    "label_width": 100,
-                    "label_height": 50
-                }
+                "print_config": {"printer_type": "PDF", "label_width": 100, "label_height": 50},
             },
             "餐饮": {
                 "name": "餐饮/食品行业",
@@ -250,7 +254,7 @@ def _get_default_config() -> Dict[str, Any]:
                     "spec_label": "规格",
                     "conversion": {
                         "公斤_to_斤": 2.0,  # 1kg = 2斤
-                    }
+                    },
                 },
                 "quantity_fields": {
                     "primary_field": "jin",
@@ -258,32 +262,24 @@ def _get_default_config() -> Dict[str, Any]:
                     "spec_field": "spec_per_jin",
                     "primary_label": "斤数",
                     "secondary_label": "公斤",
-                    "spec_label": "规格"
+                    "spec_label": "规格",
                 },
                 "product_fields": {
                     "name": "食材名称",
                     "model": "编号",
                     "category": "类别",
                     "price": "单价",
-                    "unit": "单位"
+                    "unit": "单位",
                 },
-                "order_types": {
-                    "shipment": "领料单",
-                    "receipt": "采购单",
-                    "return": "退货单"
-                },
+                "order_types": {"shipment": "领料单", "receipt": "采购单", "return": "退货单"},
                 "intent_keywords": {
                     "create_order": ["开领料单", "领料", "申请食材"],
                     "quantity_unit": "斤",
-                    "print_label": ["标签", "食材标签"]
+                    "print_label": ["标签", "食材标签"],
                 },
-                "print_config": {
-                    "printer_type": "PDF",
-                    "label_width": 60,
-                    "label_height": 40
-                }
-            }
-        }
+                "print_config": {"printer_type": "PDF", "label_width": 60, "label_height": 40},
+            },
+        },
     }
 
 
@@ -308,9 +304,7 @@ def _resolve_mods_root_for_disk_scan() -> Optional[str]:
             return p
 
     here = os.path.abspath(__file__)
-    pkg_layout = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(here))), "mods"
-    )
+    pkg_layout = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(here))), "mods")
     if os.path.isdir(pkg_layout):
         return pkg_layout
 
@@ -368,9 +362,7 @@ def _disk_scan_industries_dict() -> Dict[str, Dict[str, Any]]:
             with open(manifest_path, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
         except Exception as e:
-            logger.debug(
-                "disk-scan industries: skip %s (manifest unreadable: %s)", entry, e
-            )
+            logger.debug("disk-scan industries: skip %s (manifest unreadable: %s)", entry, e)
             continue
         if not isinstance(manifest, dict):
             continue
@@ -459,9 +451,7 @@ def _mod_industries_dict() -> Dict[str, Dict[str, Any]]:
             continue
         if industry_id in out:
             # 多 Mod 声明同一行业时保留先到者（primary 已排前），忽略后续冲突
-            logger.debug(
-                "Mod %s 声明的行业 %s 已由先前 Mod 提供，忽略", mid, industry_id
-            )
+            logger.debug("Mod %s 声明的行业 %s 已由先前 Mod 提供，忽略", mid, industry_id)
             continue
         data = {k: v for k, v in ind.items() if k != "id"}
         out[industry_id] = data
@@ -622,9 +612,7 @@ def set_current_industry(industry_id: str) -> bool:
         DeprecationWarning,
         stacklevel=2,
     )
-    logger.debug(
-        "set_current_industry(%s) called but is now a no-op (readonly SSOT)", industry_id
-    )
+    logger.debug("set_current_industry(%s) called but is now a no-op (readonly SSOT)", industry_id)
     return True
 
 
@@ -662,6 +650,7 @@ def load_mod_config_overrides() -> Dict[str, Any]:
     """从已加载的 Mod 加载配置覆盖"""
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
+
         mod_manager = get_mod_manager()
         merged_overrides: Dict[str, Any] = {}
 
@@ -672,7 +661,7 @@ def load_mod_config_overrides() -> Dict[str, Any]:
             config_path = os.path.join(mod.mod_path, mod.config_overrides)
             if os.path.isfile(config_path):
                 try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
+                    with open(config_path, "r", encoding="utf-8") as f:
                         overrides = yaml.safe_load(f)
                     if isinstance(overrides, dict) and overrides:
                         merged_overrides.update(overrides)
@@ -723,7 +712,7 @@ def save_industry_config(config: Dict[str, Any]) -> bool:
     """保存行业配置到文件"""
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
         reload_industry_config()
         return True

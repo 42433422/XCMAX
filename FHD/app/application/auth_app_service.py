@@ -56,9 +56,16 @@ class AuthApplicationService:
     def __init__(self):
         self.session_manager = get_session_manager()
 
-    def login(self, username: str, password: str) -> dict[str, Any]:
+    def login(
+        self,
+        username: str,
+        password: str,
+        *,
+        totp_code: str | None = None,
+        enforce_mfa: bool = True,
+    ) -> dict[str, Any]:
         """登录方法，调用 authenticate"""
-        return self.authenticate(username, password)
+        return self.authenticate(username, password, totp_code=totp_code, enforce_mfa=enforce_mfa)
 
     def create_session_for_username(self, username: str) -> dict[str, Any]:
         """市场已验证身份后创建本地会话（手机验证码 / OIDC 等无本地密码场景）。"""
@@ -174,7 +181,14 @@ class AuthApplicationService:
                 "error_id": err_id,
             }
 
-    def authenticate(self, username: str, password: str) -> dict[str, Any]:
+    def authenticate(
+        self,
+        username: str,
+        password: str,
+        *,
+        totp_code: str | None = None,
+        enforce_mfa: bool = True,
+    ) -> dict[str, Any]:
         try:
             from app.db.init_db import ensure_runtime_auth_bootstrap
 
@@ -182,6 +196,14 @@ class AuthApplicationService:
         except RECOVERABLE_ERRORS as bootstrap_exc:
             logger.warning("登录前 auth 表自检跳过: %s", bootstrap_exc)
         try:
+            from app.application.account_security import (
+                is_locked,
+                lock_remaining_seconds,
+                register_failed_attempt,
+                reset_failed_attempts,
+                verify_totp,
+            )
+
             with get_db() as db:
                 user = db.query(User).filter(User.username == username).first()
 
@@ -191,9 +213,36 @@ class AuthApplicationService:
                 if not user.is_active:
                     return {"success": False, "message": "账户已被禁用"}
 
+                # 账户锁定：连续失败达阈值后临时锁定
+                if is_locked(user):
+                    mins = max(1, lock_remaining_seconds(user) // 60)
+                    return {
+                        "success": False,
+                        "locked": True,
+                        "message": f"账户因多次登录失败已锁定，请约 {mins} 分钟后重试",
+                    }
+
                 if not check_password_hash(user.password, password):
+                    locked_now = register_failed_attempt(user)
+                    db.commit()
+                    if locked_now:
+                        return {
+                            "success": False,
+                            "locked": True,
+                            "message": "连续登录失败次数过多，账户已临时锁定",
+                        }
                     return {"success": False, "message": "用户名或密码错误"}
 
+                # MFA：用户开启 MFA 时校验 TOTP（enforce_mfa=False 用于市场已验证场景）
+                if enforce_mfa and getattr(user, "mfa_enabled", False):
+                    if not verify_totp(getattr(user, "totp_secret", "") or "", totp_code or ""):
+                        return {
+                            "success": False,
+                            "mfa_required": True,
+                            "message": "请输入动态验证码（MFA）",
+                        }
+
+                reset_failed_attempts(user)
                 user.last_login = utc_now_naive()
                 session_result = self.session_manager.create_session_with_db(db, user.id)
                 if not session_result["success"]:

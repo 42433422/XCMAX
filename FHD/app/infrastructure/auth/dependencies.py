@@ -100,7 +100,16 @@ def resolve_session_user(request: Request) -> Any | None:
     sid = session_id_from_request(request)
     if not sid:
         return None
-    return get_session_service().validate_session(sid)
+    user = get_session_service().validate_session(sid)
+    if user is not None:
+        return user
+    # 增量无状态 JWT（XCAGI_WEB_JWT_AUTH=1 时）：Bearer 非有效 session 时尝试 web JWT 验签。
+    # 默认关 → 现有有状态 session 行为零变化。
+    try:
+        from app.security.web_jwt import resolve_user_from_web_jwt
+    except ImportError:
+        return None
+    return resolve_user_from_web_jwt(sid)
 
 
 def get_logged_in_user(request: Request) -> Any:
