@@ -162,6 +162,40 @@ class ShipmentRulesEngine:
 
         return priority
 
+    def validate_subsystem(
+        self,
+        menu_key: str,
+        record: dict[str, Any],
+        *,
+        schema: dict[str, Any] | None = None,
+    ) -> ShipmentValidationResult:
+        """按当前行业该子系统的字段 schema 校验记录。
+
+        委托 ``industry_rules.validate_subsystem_record``：规则全部由行业 profile 的
+        ``subsystems[menuKey]`` 数据驱动（required + 各字段 validators），不同行业自然走
+        不同校验，引擎无 ``if industry`` 分支。
+        """
+        from app.domain.services.industry_rules import validate_subsystem_record
+
+        result = ShipmentValidationResult()
+        for err in validate_subsystem_record(menu_key, record, schema=schema):
+            result.add_violation(err.field, err.message)
+        return result
+
+    def compute_subsystem_derived(
+        self,
+        menu_key: str,
+        record: dict[str, Any],
+        *,
+        schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """按当前行业该子系统的 ``rules`` 计算派生字段（委托 industry_rules）。"""
+        from app.domain.services.industry_rules import (
+            compute_subsystem_derived as _compute,
+        )
+
+        return _compute(menu_key, record, schema=schema)
+
 
 def get_shipment_rules_engine() -> ShipmentRulesEngine:
     """获取发货规则引擎实例"""
