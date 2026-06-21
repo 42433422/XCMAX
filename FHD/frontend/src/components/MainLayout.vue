@@ -278,6 +278,7 @@ const viewTitlesBase = {
   console: '模板库',
   settings: '系统设置',
   im: '信息',
+  'ai-groups': 'AI群聊',
   tools: '工具表',
   'other-tools': '员工视图',
   'employee-workflow': '员工工作台',

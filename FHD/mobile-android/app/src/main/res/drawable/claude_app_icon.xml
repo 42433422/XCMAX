@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 超级员工-Claude 头像：Claude 品牌橙底 + 奶白放射星芒（呼应 Anthropic Claude 标识）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 背景：Claude 品牌橙 -->
+    <path
+        android:fillColor="#D97757"
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z" />
+
+    <!-- 12 根放射星芒（奶白），围绕中心 (54,54) 旋转。 -->
+    <group android:pivotX="54" android:pivotY="54" android:rotation="0">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="30">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="60">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="90">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="120">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="150">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="180">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="210">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="240">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="270">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="300">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="330">
+        <path android:fillColor="#FAF9F5" android:pathData="M51,18 A3,3 0 0 1 57,18 L57,40 A3,3 0 0 1 51,40 Z" />
+    </group>
+</vector>

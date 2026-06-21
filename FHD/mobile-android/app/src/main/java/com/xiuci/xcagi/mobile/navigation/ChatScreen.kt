@@ -83,6 +83,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
@@ -96,10 +97,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 
-// ── IM 风格色值（精致调色）──
-// 深色主题适配：背景/文字/边框等使用 MaterialTheme.colorScheme，品牌色保留常量
-private val ImBubbleUser = Color(0xFF7AD04F)       // 用户消息绿（比微信更深一档）
-private val ImAvatarAi = Color(0xFF07C160)         // AI 头像绿（微信绿）
+// ── IM 风格色值 ──
+// 全部走主题：用户气泡/发送键/光标用 XcagiTheme.extra，背景/文字/边框用 MaterialTheme.colorScheme，
+// 明暗双主题对比度由主题令牌保证（见 Theme.kt 的 chatUserBubble / chatUserBubbleText / weChatOnline）。
 
 /** 聊天背景色（深色模式下用深蓝灰，浅色用微信灰） */
 @Composable
@@ -145,12 +145,16 @@ private fun parseEmployeeConversationRef(conversationId: String?): EmployeeConve
 internal fun isCodexConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CODEX
 
+internal fun isClaudeConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.CLAUDE
+
 internal fun chatAvatarFallback(
     conversationId: String?,
     hasEmployeeProfile: Boolean,
 ): AppAvatarFallback =
     when {
         isCodexConversation(conversationId) -> AppAvatarFallback.CODEX
+        isClaudeConversation(conversationId) -> AppAvatarFallback.CLAUDE
         hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
         else -> AppAvatarFallback.ASSISTANT
     }
@@ -198,37 +202,18 @@ fun ChatScreen(
     }
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
-    val employeeRef = remember(conversationId) {
-        parseEmployeeConversationRef(conversationId).also {
-            android.util.Log.d(
-                "ChatAvatar",
-                "convId=[$conversationId] parsedRef=${it?.modId}/${it?.employeeId} mods=${modInfos.size} emps=${employees.size}"
-            )
-        }
-    }
+    val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
     val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
+    val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
     val employeeProfile =
         remember(employeeRef, employees) {
-            employeeRef?.let { ref ->
-                employees.findEmployee(ref.modId, ref.employeeId).also {
-                    android.util.Log.d(
-                        "ChatAvatar",
-                        "findEmployee ${ref.modId}/${ref.employeeId} -> found=${it != null} " +
-                            "avatarUrl=${it?.avatarUrl} name=${it?.name}"
-                    )
-                    if (it == null && employees.isNotEmpty()) {
-                        android.util.Log.d(
-                            "ChatAvatar",
-                            "available keys: ${employees.take(5).joinToString { "${it.modId}/${it.employeeId}" }}"
-                        )
-                    }
-                }
-            }
+            employeeRef?.let { ref -> employees.findEmployee(ref.modId, ref.employeeId) }
         }
     val resolvedTitle =
         when {
             employeeProfile != null -> employeeProfile.name
             codexConversation -> "超级员工-Codex"
+            claudeConversation -> "超级员工-Claude"
             else -> conversationTitle
         }
     val aiAvatarFallback = chatAvatarFallback(conversationId, employeeProfile != null)
@@ -361,7 +346,6 @@ fun ChatScreen(
                 }
             }
 
-            // 消息区（空状态保持纯空白，仿微信）
             if (messages.isNotEmpty()) {
                 LazyColumn(
                     Modifier
@@ -386,6 +370,15 @@ fun ChatScreen(
                         )
                     }
                 }
+            } else {
+                ChatEmptyState(
+                    title = resolvedTitle,
+                    aiAvatarUrl = employeeProfile?.avatarUrl,
+                    aiAvatarFallback = aiAvatarFallback,
+                    suggestions = suggestions,
+                    onSuggestionClick = { prompt -> vm.sendChat(prompt, conversationId) },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
             }
         }
     }
@@ -531,7 +524,7 @@ private fun ImBubble(
                 bottomStart = 12.dp,
                 bottomEnd = 12.dp,
             ),
-            color = if (isUser) ImBubbleUser else MaterialTheme.colorScheme.surface,
+            color = if (isUser) XcagiTheme.extra.chatUserBubble else MaterialTheme.colorScheme.surface,
             shadowElevation = 1.dp,
             tonalElevation = 0.5.dp,
         ) {
@@ -541,7 +534,7 @@ private fun ImBubble(
                     fontSize = 15.sp,
                     lineHeight = 21.sp,
                 ),
-                color = if (isUser) MaterialTheme.colorScheme.onSurface else imTextPrimary(),
+                color = if (isUser) XcagiTheme.extra.chatUserBubbleText else imTextPrimary(),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             )
         }
@@ -577,6 +570,7 @@ private fun ImInputBar(
     onVoice: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
 ) {
+    val haptics = rememberHaptics()
     Surface(
         color = imBarBg(),
         modifier = modifier.fillMaxWidth(),
@@ -618,7 +612,7 @@ private fun ImInputBar(
                             color = imTextPrimary(),
                             fontSize = 15.sp,
                         ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(ImAvatarAi),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(XcagiTheme.extra.weChatOnline),
                         decorationBox = { inner ->
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                                 if (value.isEmpty()) {
@@ -643,7 +637,7 @@ private fun ImInputBar(
                 )
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = if (streaming) Color(0xFFFFE0E0) else ImAvatarAi,
+                    color = if (streaming) MaterialTheme.colorScheme.errorContainer else XcagiTheme.extra.weChatOnline,
                     modifier = Modifier
                         .size(38.dp)
                         .scale(scale)
@@ -654,7 +648,10 @@ private fun ImInputBar(
                                     awaitRelease()
                                     pressed = false
                                 },
-                                onTap = { if (streaming) onStop() else onSend() },
+                                onTap = {
+                                    if (streaming) { haptics.tap(); onStop() }
+                                    else { haptics.confirm(); onSend() }
+                                },
                             )
                         },
                 ) {
@@ -662,13 +659,84 @@ private fun ImInputBar(
                         Icon(
                             if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
                             contentDescription = if (streaming) "停止" else "发送",
-                            tint = if (streaming) Color(0xFFCC0000) else Color.White,
+                            tint = if (streaming) MaterialTheme.colorScheme.error else Color.White,
                             modifier = Modifier.size(20.dp),
                         )
                     }
                 }
             }
         }
+    }
+}
+
+// ══════════════════════════════════════════
+//  空状态：AI 头像 + 问候 + 建议气泡
+// ══════════════════════════════════════════
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChatEmptyState(
+    title: String,
+    aiAvatarUrl: String?,
+    aiAvatarFallback: AppAvatarFallback,
+    suggestions: List<ChatSuggestion>,
+    onSuggestionClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    Box(modifier, contentAlignment = Alignment.TopCenter) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 56.dp, start = Spacing.xl, end = Spacing.xl),
+        ) {
+            AppAvatar(
+                imageSource = aiAvatarUrl,
+                fallback = aiAvatarFallback,
+                size = 72.dp,
+                shape = RoundedCornerShape(20.dp),
+            )
+            Spacer(Modifier.height(Spacing.md))
+            Text(
+                "你好，我是 $title",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                color = imTextPrimary(),
+            )
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                "有什么我可以帮你的？",
+                style = MaterialTheme.typography.bodyMedium,
+                color = imTextSecondary(),
+            )
+            if (suggestions.isNotEmpty()) {
+                Spacer(Modifier.height(Spacing.lg))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    suggestions.forEach { s ->
+                        ChatSuggestionChip(
+                            label = s.label,
+                            onClick = { haptics.tap(); onSuggestionClick(s.prompt) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatSuggestionChip(label: String, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = XcagiTheme.extra.momentChipBg,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = XcagiTheme.extra.momentAccent,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        )
     }
 }
 

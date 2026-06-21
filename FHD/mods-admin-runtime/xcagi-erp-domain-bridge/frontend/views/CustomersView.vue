@@ -60,14 +60,14 @@
               <path stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none" d="M7 7l10 10M17 7L7 17"/>
             </svg>
           </button>
-          <button class="btn btn-primary" @click="openAddModal">+ 新建客户</button>
+          <button class="btn btn-primary" @click="openAddModal">+ 新建{{ entityName }}</button>
           <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="handleBatchDelete">批量删除 ({{ selectedIds.length }})</button>
         </div>
       </div>
       <div class="stat-cards">
         <div class="stat-card">
           <div class="number">{{ totalCustomers }}</div>
-          <div class="label">客户总数</div>
+          <div class="label">{{ entityName }}总数</div>
         </div>
       </div>
       <div class="card">
@@ -136,24 +136,24 @@
     <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>新建客户</h3>
+          <h3>新建{{ entityName }}</h3>
           <button class="btn btn-icon" @click="closeAddModal">×</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>客户名称 *</label>
+            <label>{{ fieldLabel('customer_name', '客户名称') }} *</label>
             <input type="text" v-model="addForm.customer_name" placeholder="请输入客户名称" />
           </div>
           <div class="form-group">
-            <label>联系人</label>
+            <label>{{ fieldLabel('contact_person', '联系人') }}</label>
             <input type="text" v-model="addForm.contact_person" placeholder="请输入联系人" />
           </div>
           <div class="form-group">
-            <label>电话</label>
+            <label>{{ fieldLabel('contact_phone', '电话') }}</label>
             <input type="text" v-model="addForm.contact_phone" placeholder="请输入联系电话" />
           </div>
           <div class="form-group">
-            <label>地址</label>
+            <label>{{ fieldLabel('address', '地址') }}</label>
             <input type="text" v-model="addForm.address" placeholder="请输入地址" />
           </div>
         </div>
@@ -167,24 +167,24 @@
     <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>编辑客户</h3>
+          <h3>编辑{{ entityName }}</h3>
           <button class="btn btn-icon" @click="closeEditModal">×</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>客户名称</label>
+            <label>{{ fieldLabel('customer_name', '客户名称') }}</label>
             <input type="text" v-model="editForm.customer_name" placeholder="请输入客户名称" />
           </div>
           <div class="form-group">
-            <label>联系人</label>
+            <label>{{ fieldLabel('contact_person', '联系人') }}</label>
             <input type="text" v-model="editForm.contact_person" placeholder="请输入联系人" />
           </div>
           <div class="form-group">
-            <label>电话</label>
+            <label>{{ fieldLabel('contact_phone', '电话') }}</label>
             <input type="text" v-model="editForm.contact_phone" placeholder="请输入联系电话" />
           </div>
           <div class="form-group">
-            <label>地址</label>
+            <label>{{ fieldLabel('address', '地址') }}</label>
             <input type="text" v-model="editForm.address" placeholder="请输入地址" />
           </div>
         </div>
@@ -198,7 +198,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import customersApi from '@/api/customers';
 import ordersApi from '@/api/orders';
 import templatePreviewApi from '@/api/templatePreview';
@@ -206,10 +206,18 @@ import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert } from '@/utils/appDialog';
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
+import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema';
 
 const pageNavTitle = useCoreNavLabel('customers');
 const productsNavLabel = useCoreNavLabel('products');
 const shipmentNavLabel = useCoreNavLabel('shipment-records');
+
+// 行业感知：customers 子系统的实体名与字段表头随行业变（客户/部门、联系人/主管、地址/上级部门）
+const customersSchema = useIndustryFieldSchema('customers');
+const entityName = computed(() => customersSchema.entity.value || '客户');
+function fieldLabel(key, fallback) {
+  return customersSchema.labelOf(key, fallback);
+}
 
 const customers = ref([]);
 const purchaseUnitOptions = ref([]);
@@ -238,12 +246,12 @@ const editForm = ref({
   address: ''
 });
 
-const columns = [
-  { key: 'customer_name', label: '客户名称' },
-  { key: 'contact_person', label: '联系人' },
-  { key: 'contact_phone', label: '电话' },
-  { key: 'address', label: '地址' }
-];
+const columns = computed(() => [
+  { key: 'customer_name', label: fieldLabel('customer_name', '客户名称') },
+  { key: 'contact_person', label: fieldLabel('contact_person', '联系人') },
+  { key: 'contact_phone', label: fieldLabel('contact_phone', '电话') },
+  { key: 'address', label: fieldLabel('address', '地址') }
+]);
 
 function normalizeUnitsPayload(data) {
   const list = data?.data || data?.units || [];

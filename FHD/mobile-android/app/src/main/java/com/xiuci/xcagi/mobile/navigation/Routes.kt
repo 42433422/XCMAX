@@ -51,6 +51,10 @@ object Routes {
     /** AI 员工列表页。列表只来自当前账号的企业端/管理端生态。 */
     const val AI_EMPLOYEES = "ai_employees"
     const val AI_CIRCLE = "ai_circle"
+    /** AI 群聊列表（默认 6 部门群 + 自定义群） */
+    const val AI_GROUPS = "ai_groups"
+    /** AI 群聊会话（当前群由 ViewModel.currentGroup 持有） */
+    const val AI_GROUP_CHAT = "ai_group_chat"
     const val AI_EMPLOYEE_PROFILE = "ai_employee/{modId}/{employeeId}"
     fun aiEmployeeProfile(modId: String, employeeId: String) = "ai_employee/$modId/$employeeId"
     /** 智慧分析（Kitten Analyzer） */

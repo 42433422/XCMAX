@@ -105,6 +105,30 @@ class TestButlerProfileInference:
         assert result.new_mbti_type != ""
         assert result.confidence > 0
 
+    def test_missing_jp_defaults_to_j_side(self, engine):
+        """缺失 mbti_jp 时回退到 DEFAULT_MBTI_JP=40（J 侧），不应翻转成 P。
+
+        回归测试：此前回退值硬编码为 60（P 侧），跨过 J/P 阈值 50，
+        会把派生型的第 4 位从 J 静默翻成 P。
+        """
+        from app.application.butler_identity_catalog import DEFAULT_MBTI_JP
+
+        # profile 完全不含 mbti_jp，强制走回退路径
+        profile = {
+            "mbti_ei": 65,
+            "mbti_sn": 60,
+            "mbti_tf": 70,
+            "mbti_type": "ENFJ",
+        }
+        # 中性对话：不含"列步骤/排期/计划…"等结构化关键词，jp 增量为 0
+        convs = [{"user_message": "hi"} for _ in range(MIN_INTERACTIONS_FOR_INFER)]
+        result = engine.infer(profile, convs)
+
+        assert DEFAULT_MBTI_JP == 40
+        assert result.mbti_jp_delta == 0  # 无结构化信号 → jp 不变
+        # 回退 jp=40 < 50 → 派生型第 4 位为 J
+        assert result.new_mbti_type[3] == "J"
+
     def test_interrupt_behavior_increases_ei(self, engine, default_profile):
         """打断/催促 → +E/I。"""
         convs = [

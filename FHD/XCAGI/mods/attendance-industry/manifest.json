@@ -66,6 +66,57 @@
       "printer_type": "PDF",
       "label_width": 80,
       "label_height": 50
+    },
+    "subsystems": {
+      "products": {
+        "label": "人员管理",
+        "entity": "人员",
+        "fields": [
+          { "key": "model_number", "label": "工号", "type": "text", "semantic": "model" },
+          { "key": "name", "label": "姓名", "type": "text", "required": true, "semantic": "entity_name" },
+          { "key": "specification", "label": "班次", "type": "enum", "semantic": "spec", "validators": [{ "type": "oneOf", "params": ["早", "中", "晚"] }] },
+          { "key": "price", "label": "时薪", "type": "number", "unit": "元", "semantic": "price" },
+          { "key": "unit", "label": "单位", "type": "text" }
+        ]
+      },
+      "customers": {
+        "label": "部门管理",
+        "entity": "部门",
+        "fields": [
+          { "key": "customer_name", "label": "部门名称", "type": "text", "required": true, "semantic": "entity_name" },
+          { "key": "contact_person", "label": "主管", "type": "text" },
+          { "key": "contact_phone", "label": "联系电话", "type": "text" },
+          { "key": "address", "label": "上级部门", "type": "text" }
+        ]
+      },
+      "orders": {
+        "label": "考勤单",
+        "entity": "考勤单",
+        "fields": [
+          { "key": "purchase_unit", "label": "部门", "type": "text", "semantic": "foreign_ref" },
+          { "key": "product_name", "label": "事项说明", "type": "text", "semantic": "entity_name" },
+          { "key": "model_number", "label": "关联编号", "type": "text", "semantic": "model" },
+          { "key": "quantity_tins", "label": "数量 (天/次)", "type": "number", "unit": "天", "semantic": "primary_qty" },
+          { "key": "tin_spec", "label": "班次", "type": "text", "semantic": "spec" },
+          { "key": "quantity_kg", "label": "工时 (小时)", "type": "number", "unit": "小时", "semantic": "secondary_qty" },
+          { "key": "unit_price", "label": "时薪", "type": "number", "unit": "元", "semantic": "price" },
+          { "key": "amount", "label": "金额", "type": "number", "unit": "元", "semantic": "derived" }
+        ]
+      },
+      "shipment-records": {
+        "label": "考勤记录",
+        "entity": "考勤记录",
+        "fields": [
+          { "key": "purchase_unit", "label": "部门", "type": "text", "semantic": "foreign_ref" },
+          { "key": "product_name", "label": "事项说明", "type": "text", "semantic": "entity_name" },
+          { "key": "model_number", "label": "关联编号", "type": "text", "semantic": "model" },
+          { "key": "quantity_kg", "label": "工时 (小时)", "type": "number", "unit": "小时", "semantic": "secondary_qty" },
+          { "key": "quantity_tins", "label": "数量 (天/次)", "type": "number", "unit": "天", "semantic": "primary_qty" },
+          { "key": "tin_spec", "label": "班次", "type": "text", "semantic": "spec" },
+          { "key": "unit_price", "label": "时薪", "type": "number", "semantic": "price" },
+          { "key": "amount", "label": "金额", "type": "number", "semantic": "derived" }
+        ]
+      }
     }
   },
   "ui_labels": {

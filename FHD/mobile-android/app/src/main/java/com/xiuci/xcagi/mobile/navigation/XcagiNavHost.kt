@@ -544,6 +544,22 @@ fun XcagiNavHost(
                             },
                     )
                 }
+                composable(Routes.AI_GROUPS) {
+                    AiGroupListScreen(
+                            vm = vm,
+                            onBack = { nav.popBackStack() },
+                            onOpenGroup = { group ->
+                                vm.openAiGroup(group)
+                                nav.navigate(Routes.AI_GROUP_CHAT)
+                            },
+                    )
+                }
+                composable(Routes.AI_GROUP_CHAT) {
+                    AiGroupChatScreen(
+                            vm = vm,
+                            onBack = { nav.popBackStack() },
+                    )
+                }
                 composable(
                         route = Routes.AI_EMPLOYEE_PROFILE,
                         arguments =
