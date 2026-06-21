@@ -77,3 +77,57 @@ def _demo_payment_enabled() -> bool:
 def is_saas_plan_id(plan_id: str) -> bool:
     pid = (plan_id or "").strip()
     return any(p.get("id") == pid for p in list_saas_plans())
+
+
+_BUDGET_ALIASES: dict[str, str] = {
+    "5 万以内": "5 万以内",
+    "under-50k": "5 万以内",
+    "5–20 万": "5–20 万",
+    "5-20 万": "5–20 万",
+    "50k-200k": "5–20 万",
+    "20–50 万": "20–50 万",
+    "20-50 万": "20–50 万",
+    "200k-500k": "20–50 万",
+    "50 万以上": "50 万以上",
+    "500k-plus": "50 万以上",
+}
+
+
+def normalize_budget_range(raw: str | None) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    return _BUDGET_ALIASES.get(s, s)
+
+
+def budget_permanent_map() -> dict[str, str]:
+    cfg = load_saas_plans_config()
+    raw = cfg.get("budget_permanent_map") or {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): str(v) for k, v in raw.items() if k and v}
+
+
+def permanent_plan_id_for_budget(budget_range: str | None) -> str:
+    mapping = budget_permanent_map()
+    normalized = normalize_budget_range(budget_range)
+    if normalized and normalized in mapping:
+        return mapping[normalized]
+    return mapping.get("5 万以内") or "saas-permanent-starter"
+
+
+def permanent_plan_for_budget(budget_range: str | None) -> dict[str, Any] | None:
+    return plan_by_id(permanent_plan_id_for_budget(budget_range))
+
+
+def pricing_plans_for_budget(budget_range: str | None = None) -> list[dict[str, Any]]:
+    """定价页展示：30 天试用 + 预算档位对应的永久购买。"""
+    all_plans = list_saas_plans()
+    trial = [p for p in all_plans if p.get("id") == "saas-trial-30"]
+    perm_id = permanent_plan_id_for_budget(budget_range)
+    permanent = [p for p in all_plans if p.get("id") == perm_id]
+    return trial + permanent
+
+
+def is_permanent_saas_plan_id(plan_id: str) -> bool:
+    return (plan_id or "").strip().startswith("saas-permanent-")

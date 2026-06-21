@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 企业定价 · 预算档位永久购买（2026-06-21 · v10 线内迭代）
+
+- **feat(billing)**：`saas_plans.json` 按预算四档永久购买定价（¥49,999 / ¥199,999 / ¥499,999 / ¥999,999）+ 30 天试用 ¥99
+- **feat(api)**：`GET /api/model-payment/plans?budget_range=` 返回试用 + 对应永久套餐
+- **feat(frontend)**：定价页展示 `/永久` 单位并按 `budget_range` 加载套餐
+
 ### Windows/macOS 桌面打包统一（2026-06-17 · v10 线内迭代）
 
 - **fix(desktop)**：Electron 后端启动改为统一候选路径 + `electron-backend.log`；迁移流程复用 SKU Edition 环境；Windows 退出使用 `taskkill /T /F` 清理后端子进程
