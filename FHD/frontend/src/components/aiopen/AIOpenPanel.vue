@@ -310,8 +310,6 @@ const primaryBtnLabel = computed(() => {
   return '一键开启'
 })
 
-const aiOpenActive = computed(() => remoteControlEnabled.value)
-
 const friendlyTools = computed(() =>
   manifestTools.value.map((t) => ({
     name: t.name,

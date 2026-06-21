@@ -1,6 +1,4 @@
 from app.db.models.agent import AgentRunRecord
-from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
-from app.db.models.butler_profile import ButlerUserProfile
 from app.db.models.ai import (
     AIConversation,
     AIConversationSession,
@@ -8,6 +6,7 @@ from app.db.models.ai import (
     AIToolCategory,
     UserPreference,
 )
+from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.approval import (
     ApprovalDelegation,
     ApprovalFlow,
@@ -15,6 +14,7 @@ from app.db.models.approval import (
     ApprovalRecord,
     ApprovalRequest,
 )
+from app.db.models.butler_profile import ButlerUserProfile
 from app.db.models.customer import Customer
 from app.db.models.finance import FinancialTransaction
 from app.db.models.inventory import (

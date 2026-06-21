@@ -76,7 +76,7 @@ def _derive_industry_from_session(request: Request) -> str:
                 row = db.query(User.industry_id).filter(User.id == local_user_id).first()
                 if row and row[0]:
                     return str(row[0]).strip()
-    except Exception:
+    except Exception:  # noqa: BLE001  # 行业推断失败时记录并回退到默认行业
         logger.debug("derive_industry_from_session failed", exc_info=True)
     return "通用"
 
@@ -569,7 +569,7 @@ async def compat_chat_stream_async(
                 )
                 body.system_prompt = prompt
                 logger.info("persona_inject OK: prompt_len=%d", len(prompt))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # persona 注入失败时记录并继续，不阻断主流程
             logger.warning("persona_inject FAIL: %s", e, exc_info=True)
 
     tier = ai_tier or resolve_ai_tier(request)
