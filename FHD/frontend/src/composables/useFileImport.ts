@@ -116,9 +116,9 @@ export function useFileImport(): UseFileImportReturn {
   }
 
   async function uploadFile(
-    file: File | null, 
-    purpose: string = 'general', 
-    onProgress?: (percent: number, filename: string) => void
+    file: File | null,
+    purpose: string = 'general',
+    _onProgress?: (percent: number, filename: string) => void
   ): Promise<ApiResponse<unknown> | null> {
     if (!file) {
       setStatus('error', '请选择文件');

@@ -113,7 +113,7 @@ export function usePrintService() {
     labelPaths: string[],
     filePath: string,
     orderId?: number,
-    purchaseUnit?: string
+    _purchaseUnit?: string
   ): Promise<PrintSummary> {
     isPrinting.value = true
 
@@ -171,7 +171,7 @@ export function usePrintService() {
     summary: PrintSummary,
     labelCount: number,
     filePath?: string,
-    purchaseUnit?: string
+    _purchaseUnit?: string
   ): string {
     const parts = ['打印执行完成']
 

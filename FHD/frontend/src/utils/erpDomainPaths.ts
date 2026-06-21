@@ -125,6 +125,12 @@ function isIndustryShellModId(modId: string): boolean {
   return String(modId || '').trim().endsWith('-industry')
 }
 
+/** 该 mod 是否为可路由的客户 ERP mod（受保护客户 mod，且非行业壳 mod） */
+function isRoutableClientErpModId(modId: string): boolean {
+  const id = String(modId || '').trim()
+  return isProtectedClientModId(id) && !isIndustryShellModId(id)
+}
+
 function resolveErpBaseForClientMod(activeClient: string, installedModIds: string[]): string {
   const ids = installedModIds
   if (isIndustryShellModId(activeClient)) {

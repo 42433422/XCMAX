@@ -215,8 +215,9 @@ export function useChatMessages(sessionId: Ref<string>) {
       .filter((item) => Object.keys(item).length > 0)
     if (attachments.length) extras.attachments = attachments
 
-    if (row.contextSummary != null && String(row.contextSummary).trim()) {
-      extras.contextSummary = row.contextSummary
+    const contextSummary = asString(row.contextSummary).trim()
+    if (contextSummary) {
+      extras.contextSummary = contextSummary
     }
 
     return extras
