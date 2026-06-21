@@ -83,16 +83,59 @@ def run_archive_template_delete(
         return {"success": False, "message": "缺少模板 id"}, 400
 
     if template_id.startswith("fs:"):
-        filename = template_id.split(":", 1)[1].strip()
-        if not filename:
+        raw_filename = template_id.split(":", 1)[1].strip()
+        if not raw_filename:
             return {"success": False, "message": "模板文件名无效"}, 400
+
+        # 安全：合法的 fs: id 永远是「裸文件名」（来自 os.listdir，见
+        # template_store_impl.py:110/159）。任何含目录分隔符、".." 或绝对路径
+        # 的输入都属于路径遍历攻击（如 fs:/etc/passwd / fs:../../../etc/hosts），
+        # 因为 os.path.join 会丢弃前缀直接拼成绝对路径。一律拒绝。
+        filename = os.path.basename(raw_filename)
+        if (
+            not filename
+            or filename in (".", "..")
+            or filename != raw_filename
+            or os.path.isabs(raw_filename)
+            or "/" in raw_filename
+            or "\\" in raw_filename
+            or os.sep in raw_filename
+            or (os.altsep and os.altsep in raw_filename)
+        ):
+            return {"success": False, "message": "模板文件名无效"}, 400
+
         root = str(base_dir or get_base_dir())
+        # 受信任的模板根目录（与 fs 扫描目录一致）。删除目标的 realpath 必须
+        # 严格落在其中之一的 realpath 之内，避免符号链接逃逸。
+        allowed_roots = [
+            os.path.realpath(root),
+            os.path.realpath(os.path.join(root, "templates")),
+            os.path.realpath(os.path.join(root, "resources", "templates")),
+        ]
         candidates = [
             os.path.join(root, filename),
             os.path.join(root, "templates", filename),
             os.path.join(root, "resources", "templates", filename),
         ]
-        target_path = next((path for path in candidates if os.path.isfile(path)), None)
+
+        target_path = None
+        for path in candidates:
+            real_path = os.path.realpath(path)
+            real_dir = os.path.dirname(real_path)
+            # 必须直接位于某个受信任根目录下，且解析后的真实文件仍是常规文件
+            # （拒绝符号链接指向外部 / 拒绝越界路径）。
+            within_trusted = any(
+                real_dir == allowed or real_dir.startswith(allowed + os.sep)
+                for allowed in allowed_roots
+            )
+            if not within_trusted:
+                continue
+            if os.path.islink(path):
+                continue
+            if os.path.isfile(real_path) and os.path.isfile(path):
+                target_path = path
+                break
+
         if not target_path:
             return {"success": False, "message": f"模板文件不存在: {filename}"}, 404
         os.remove(target_path)
