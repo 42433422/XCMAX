@@ -73,7 +73,6 @@ export function buildEnterpriseModStack(plan: IndustryBaselinePlan): EnterpriseM
 export function isWorkflowCarrierModId(modId: string): boolean {
   const id = String(modId || '').trim()
   if (!id) return false
-  if (BUILTIN_WORKFLOW_CARRIER_MOD_IDS.has(id)) return true
   if (WORKFLOW_CARRIER_MOD_IDS.has(id)) return true
   if (id.startsWith('xcagi-workflow-employee-')) return true
   return false

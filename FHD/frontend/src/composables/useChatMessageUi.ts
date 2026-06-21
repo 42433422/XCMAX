@@ -81,7 +81,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
       })
     } catch {
       if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-    })
+    }
   }
 
   const latestAiMessageIndex = computed(() => {
