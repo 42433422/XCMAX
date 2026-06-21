@@ -274,6 +274,12 @@ constructor(
     val currentGroup: StateFlow<com.xiuci.xcagi.mobile.core.model.AiGroupDto?> = _currentGroup.asStateFlow()
     private val _groupSending = MutableStateFlow(false)
     val groupSending: StateFlow<Boolean> = _groupSending.asStateFlow()
+    // 群成员候选(普通员工 + 超级员工),来自后端 SSOT 候选端点。
+    private val _groupMemberCandidates =
+            MutableStateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupCandidateDto>>(emptyList())
+    val groupMemberCandidates:
+            StateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupCandidateDto>> =
+            _groupMemberCandidates.asStateFlow()
 
     private val _walletBalance = MutableStateFlow<WalletBalanceDto?>(null)
     val walletBalance: StateFlow<WalletBalanceDto?> = _walletBalance.asStateFlow()
@@ -653,6 +659,12 @@ constructor(
             viewModelScope.launch {
                 // 静默失败（消息页常驻加载，不打扰；个人版无权限时也不弹错）
                 repo.loadAiGroups().onSuccess { _aiGroups.value = it }
+            }
+
+    /** 拉取群成员候选(普通员工 + 超级员工)。静默失败,屏幕侧用 aiEmployeeProfiles() 兜底。 */
+    fun loadGroupMemberCandidates() =
+            viewModelScope.launch {
+                repo.loadGroupMemberCandidates().onSuccess { _groupMemberCandidates.value = it }
             }
 
     fun createAiGroup(name: String) =

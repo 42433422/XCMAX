@@ -19,6 +19,16 @@ class Haptics internal constructor(private val view: View) {
         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
     }
 
+    /** 点击：列表项 / 菜单项等普通点击（上下文点击，比 tap 略实）。 */
+    fun click() {
+        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+    }
+
+    /** 长按：唤起长按操作面板 / 菜单时的强反馈。 */
+    fun longClick() {
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+
     /** 确认：发送消息、提交等带「完成感」的动作（低版本回退到轻触）。 */
     fun confirm() {
         val constant =
