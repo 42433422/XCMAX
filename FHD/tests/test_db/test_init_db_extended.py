@@ -307,6 +307,8 @@ class TestSeedDefaultAdminUser:
                     role VARCHAR DEFAULT 'user',
                     is_active BOOLEAN DEFAULT TRUE,
                     mfa_enabled BOOLEAN DEFAULT FALSE,
+                    tier VARCHAR(32) NOT NULL DEFAULT 'personal',
+                    industry_id VARCHAR(32) NOT NULL DEFAULT '通用',
                     created_at TIMESTAMP
                 )
             """)
@@ -333,6 +335,8 @@ class TestSeedDefaultAdminUser:
                     role VARCHAR DEFAULT 'user',
                     is_active BOOLEAN DEFAULT TRUE,
                     mfa_enabled BOOLEAN DEFAULT FALSE,
+                    tier VARCHAR(32) NOT NULL DEFAULT 'personal',
+                    industry_id VARCHAR(32) NOT NULL DEFAULT '通用',
                     created_at TIMESTAMP
                 )
             """)
@@ -370,6 +374,8 @@ class TestSeedDefaultAdminUser:
                     role VARCHAR DEFAULT 'user',
                     is_active BOOLEAN DEFAULT TRUE,
                     mfa_enabled BOOLEAN DEFAULT FALSE,
+                    tier VARCHAR(32) NOT NULL DEFAULT 'personal',
+                    industry_id VARCHAR(32) NOT NULL DEFAULT '通用',
                     created_at TIMESTAMP
                 )
             """)
