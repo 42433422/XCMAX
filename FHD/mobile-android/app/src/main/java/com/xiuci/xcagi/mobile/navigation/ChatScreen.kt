@@ -91,7 +91,11 @@ import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 import com.xiuci.xcagi.mobile.core.speech.VoiceInputSheet
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
@@ -184,7 +188,7 @@ fun ChatScreen(
     var showVoiceSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // 录音权限请求
+    // 录音权限请求（仅 app 内识别器兜底路径用）
     val recordPermissionLauncher =
             rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
@@ -193,12 +197,48 @@ fun ChatScreen(
                 else vm.snack("需要麦克风权限才能使用语音输入")
             }
 
+    // 系统语音输入(ACTION_RECOGNIZE_SPEECH)：由系统语音引擎(如小米/讯飞)弹 UI 并回写转写。
+    // 这是「用手机自带语音」最兼容的方式——很多国产 ROM 没注册默认 RecognitionService，
+    // 程序化 SpeechRecognizer 用不了，但这个 Activity 意图能用。
+    val speechIntentLauncher =
+            rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val text = result.data
+                            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                            ?.firstOrNull()
+                            .orEmpty()
+                    if (text.isNotBlank()) {
+                        input = if (input.isBlank()) text else "$input $text"
+                    }
+                }
+            }
+
     fun startVoiceInput() {
-        val hasPermission =
-                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                        PackageManager.PERMISSION_GRANTED
-        if (hasPermission) showVoiceSheet = true
-        else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        val intent =
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(
+                            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                    )
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话…")
+                }
+        try {
+            speechIntentLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            // 无系统语音 UI → 回退到 app 内识别器(需录音权限)。
+            if (SpeechRecognizer.isRecognitionAvailable(context)) {
+                val hasPermission =
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                                PackageManager.PERMISSION_GRANTED
+                if (hasPermission) showVoiceSheet = true
+                else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else {
+                vm.snack("当前设备未提供语音输入")
+            }
+        }
     }
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
@@ -264,6 +304,15 @@ fun ChatScreen(
                 )
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 WeCellGroup {
+                    WeCell(
+                        title = "新建对话",
+                        subtitle = "清空当前对话，开始新的一轮",
+                        iconTint = XcagiTheme.extra.brandBlue,
+                        iconBg = MaterialTheme.colorScheme.primaryContainer,
+                        showArrow = true,
+                        showDivider = true,
+                        onClick = { showMoreSheet = false; vm.clearChat(); input = "" },
+                    )
                     WeCell(
                         title = "OCR 拍照识别",
                         iconTint = MaterialTheme.colorScheme.secondary,
@@ -371,14 +420,8 @@ fun ChatScreen(
                     }
                 }
             } else {
-                ChatEmptyState(
-                    title = resolvedTitle,
-                    aiAvatarUrl = employeeProfile?.avatarUrl,
-                    aiAvatarFallback = aiAvatarFallback,
-                    suggestions = suggestions,
-                    onSuggestionClick = { prompt -> vm.sendChat(prompt, conversationId) },
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
+                // 空状态保持纯空白，仿微信（不放建议气泡等功能按键）。
+                Spacer(Modifier.weight(1f).fillMaxWidth())
             }
         }
     }

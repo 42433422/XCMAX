@@ -30,6 +30,7 @@ from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _load_admin_duty_records,
     _load_market_ai_employee_profile_index,
     _mobile_request_user_id,
+    _mobile_session_meta,
     _require_mobile_admin,
     _require_mobile_admin_or_enterprise,
 )
@@ -1302,6 +1303,12 @@ def _mobile_group_uid(request: Request, user) -> int:
     return _mobile_request_user_id(request, user)
 
 
+def _mobile_group_mode(request: Request) -> str:
+    """从 session 判定群聊模式：admin（6 部门 + 上岗员工）或 enterprise（4 部门 + 上架/未上架）。"""
+    meta = _mobile_session_meta(request) or {}
+    return "admin" if str(meta.get("account_kind") or "").strip().lower() == "admin" else "enterprise"
+
+
 @extension_router.get("/ai-groups")
 async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user)):
     """列出当前用户的 AI 群聊（首次自动按 6 个部门种出 6 个群）。"""
@@ -1314,7 +1321,7 @@ async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user))
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        groups = AiGroupChatService().list_groups(user_id=uid)
+        groups = AiGroupChatService(mode=_mobile_group_mode(request)).list_groups(user_id=uid)
         return format_mobile_response(data={"groups": groups})
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_ai_groups_list")
@@ -1337,7 +1344,7 @@ async def mobile_ai_groups_create(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService().create_group(user_id=uid, name=body.name)
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).create_group(user_id=uid, name=body.name)
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
         return JSONResponse(
@@ -1367,7 +1374,7 @@ async def mobile_ai_group_messages(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        messages = AiGroupChatService().get_messages(user_id=uid, group_id=group_id, limit=limit)
+        messages = AiGroupChatService(mode=_mobile_group_mode(request)).get_messages(user_id=uid, group_id=group_id, limit=limit)
         return format_mobile_response(data={"messages": messages})
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_ai_group_messages")
@@ -1390,7 +1397,7 @@ async def mobile_ai_group_post(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        result = await AiGroupChatService().post_message(
+        result = await AiGroupChatService(mode=_mobile_group_mode(request)).post_message(
             user_id=uid,
             group_id=group_id,
             text=body.message,
@@ -1423,7 +1430,7 @@ async def mobile_ai_group_add_member(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService().add_member(
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).add_member(
             user_id=uid,
             group_id=group_id,
             member={
@@ -1460,7 +1467,7 @@ async def mobile_ai_group_remove_member(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService().remove_member(
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).remove_member(
             user_id=uid, group_id=group_id, employee_id=employee_id
         )
         return format_mobile_response(data={"group": group})
@@ -1470,6 +1477,168 @@ async def mobile_ai_group_remove_member(
         )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_ai_group_remove_member")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.put("/ai-groups/{group_id}/pin")
+async def mobile_ai_group_toggle_pin(request: Request, group_id: str, user=Depends(get_mobile_user)):
+    """切换群聊置顶状态。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_pinned(
+            user_id=uid, group_id=group_id
+        )
+        return format_mobile_response(data={"group": group})
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_toggle_pin")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.post("/ai-groups/{group_id}/mark-unread")
+async def mobile_ai_group_mark_unread(request: Request, group_id: str, user=Depends(get_mobile_user)):
+    """标为未读（显示小红点）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).mark_unread(
+            user_id=uid, group_id=group_id
+        )
+        return format_mobile_response(data={"group": group})
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_mark_unread")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.post("/ai-groups/{group_id}/mark-read")
+async def mobile_ai_group_mark_read(request: Request, group_id: str, user=Depends(get_mobile_user)):
+    """清除未读标记。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).mark_read(
+            user_id=uid, group_id=group_id
+        )
+        return format_mobile_response(data={"group": group})
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_mark_read")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.put("/ai-groups/{group_id}/followed")
+async def mobile_ai_group_toggle_followed(request: Request, group_id: str, user=Depends(get_mobile_user)):
+    """切换是否关注（不再关注则不显示未读）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_followed(
+            user_id=uid, group_id=group_id
+        )
+        return format_mobile_response(data={"group": group})
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_toggle_followed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.put("/ai-groups/{group_id}/hidden")
+async def mobile_ai_group_toggle_hidden(request: Request, group_id: str, user=Depends(get_mobile_user)):
+    """切换是否隐藏（不显示/恢复显示该聊天）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_hidden(
+            user_id=uid, group_id=group_id
+        )
+        return format_mobile_response(data={"group": group})
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_toggle_hidden")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.delete("/ai-groups/{group_id}")
+async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(get_mobile_user)):
+    """删除群聊。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        result = AiGroupChatService(mode=_mobile_group_mode(request)).delete_group(
+            user_id=uid, group_id=group_id
+        )
+        return format_mobile_response(data=result)
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_delete")
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500), status_code=500
         )

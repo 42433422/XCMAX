@@ -16,10 +16,10 @@ extraResources:
     to: backend
     filter:
       - "**/*"
-  - from: ../templates/vue-dist
-    to: frontend
-    filter:
-      - "**/*"
+  # 前端 vue-dist 已由 PyInstaller 内嵌进 backend/_internal/templates/vue-dist，
+  # 且运行时由后端 HTTP 提供(main.ts desktopInitialUrl→FastAPI mount)，
+  # 这里不再单独再打一份 frontend(原先重复 ~56MB)。main.ts:337 的 cache-hash
+  # 兜底会优雅降级到后端内嵌副本。切勿恢复成单独 frontend extraResource。
   - from: resources/product-sku.json
     to: product-sku.json
 publish:

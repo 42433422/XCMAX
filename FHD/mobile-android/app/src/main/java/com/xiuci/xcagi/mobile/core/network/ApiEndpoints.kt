@@ -85,6 +85,12 @@ object ApiEndpoints {
     const val AI_GROUP_MESSAGES = "$BASE/ai-groups/{groupId}/messages"
     const val AI_GROUP_MEMBERS = "$BASE/ai-groups/{groupId}/members"
     const val AI_GROUP_MEMBER = "$BASE/ai-groups/{groupId}/members/{employeeId}"
+    const val AI_GROUP_PIN = "$BASE/ai-groups/{groupId}/pin"
+    const val AI_GROUP_MARK_UNREAD = "$BASE/ai-groups/{groupId}/mark-unread"
+    const val AI_GROUP_MARK_READ = "$BASE/ai-groups/{groupId}/mark-read"
+    const val AI_GROUP_FOLLOWED = "$BASE/ai-groups/{groupId}/followed"
+    const val AI_GROUP_HIDDEN = "$BASE/ai-groups/{groupId}/hidden"
+    const val AI_GROUP_DELETE = "$BASE/ai-groups/{groupId}"
 
     // 钱包 / 余额
     const val WALLET_BALANCE = "$BASE/wallet/balance"

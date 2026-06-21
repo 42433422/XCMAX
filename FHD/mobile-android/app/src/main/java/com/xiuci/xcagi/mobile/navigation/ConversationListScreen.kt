@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,15 +25,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,7 +63,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.model.ConversationItem
 import com.xiuci.xcagi.mobile.model.ConversationType
 import com.xiuci.xcagi.mobile.model.PinnedIds
@@ -64,6 +70,7 @@ import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -82,8 +89,12 @@ fun ConversationListScreen(
         onOpenEmployees: () -> Unit,
         onOpenContacts: () -> Unit,
         onOpenDiscover: () -> Unit,
+        onStartGroupChat: () -> Unit = {},
+        onOpenGroups: () -> Unit = {},
+        onOpenGroup: (com.xiuci.xcagi.mobile.core.model.AiGroupDto) -> Unit = {},
 ) {
     val conversations by vm.conversations.collectAsState()
+    val aiGroups by vm.aiGroups.collectAsState()
     val displayName by vm.displayName.collectAsState()
     val avatarSource by vm.userAvatarSource.collectAsState()
     val accountKindLabel by vm.accountKindLabel.collectAsState()
@@ -91,9 +102,13 @@ fun ConversationListScreen(
     // 使用 rememberSaveable 保持 UI 状态：切 tab / 旋转屏幕后搜索词和筛选不丢失
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(ConversationFilter.ALL) }
+    // 群聊长按菜单
+    var longPressGroup by remember { mutableStateOf<com.xiuci.xcagi.mobile.core.model.AiGroupDto?>(null) }
+    val haptics = rememberHaptics()
     // 保持列表滚动位置：切 tab 回来后不回到顶部
     val listState = rememberLazyListState()
-    val isEnterprise = ProductSkuConfig.showsEnterpriseNav
+    // 企业态判定与 ViewModel 对齐：admin/admin_portal 账号在 personal flavor 上也需加载 AI 群聊
+    val isEnterprise by vm.isEnterpriseEffective.collectAsState()
     val hasEcosystemEmployees = conversations.any { it.type == ConversationType.AI_TASK }
     val employeeCount = conversations.count { it.type == ConversationType.AI_TASK }
     val unreadTotal = conversations.sumOf { it.unreadCount }
@@ -101,10 +116,38 @@ fun ConversationListScreen(
     // 首次进入：拉取一次（受 TTL 控制，5 分钟内不重复请求）
     LaunchedEffect(isEnterprise, accountKindLabel) { vm.loadConversations(isEnterprise) }
 
+    // AI 群聊（学微信：6 个部门群直接出现在消息页）。仅企业/管理端有群。
+    LaunchedEffect(isEnterprise) { if (isEnterprise) vm.loadAiGroups() }
+    val filteredGroups =
+            remember(searchQuery, aiGroups) {
+                if (searchQuery.isBlank()) aiGroups
+                else aiGroups.filter { it.name.contains(searchQuery, ignoreCase = true) }
+            }
+
+    // 长按群聊时的操作菜单
+    longPressGroup?.let { g ->
+        AlertDialog(
+            onDismissRequest = { longPressGroup = null },
+            title = { Text(g.name.ifBlank { "群聊操作" }) },
+            text = {
+                Column {
+                    TextButton(onClick = { vm.markGroupUnread(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text("标为未读") }
+                    TextButton(onClick = { vm.toggleGroupPin(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_pinned) "取消置顶" else "置顶聊天") }
+                    TextButton(onClick = { vm.toggleGroupFollowed(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_followed) "不再关注" else "恢复关注") }
+                    TextButton(onClick = { vm.toggleGroupHidden(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_hidden) "显示该聊天" else "不显示该聊天") }
+                    TextButton(onClick = { vm.deleteGroup(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text("删除该聊天", color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { longPressGroup = null }) { Text("关闭") } },
+        )
+    }
+
     // ON_RESUME 静默刷新：从其他页面返回时，若缓存过期则后台刷新（不显示 loading）
     // force=false → TTL 内不刷新；静默刷新不触发 refreshing 状态，用户无感知
     LifecycleResumeEffect(Unit) {
         vm.loadConversations(isEnterprise, force = false)
+        // 群也在恢复时重拉：抓住 token 新鲜的时机（admin 接口令牌过期时会 401 静默失败）。
+        if (isEnterprise) vm.loadAiGroups()
         onPauseOrDispose { }
     }
 
@@ -142,9 +185,8 @@ fun ConversationListScreen(
                         searchQuery = searchQuery,
                         onSearchChange = { searchQuery = it },
                         onClearSearch = { searchQuery = "" },
-                        selectedFilter = selectedFilter,
-                        unreadTotal = unreadTotal,
-                        onFilterChange = { selectedFilter = it },
+                        onStartGroupChat = onStartGroupChat,
+                        onOpenGroups = onOpenGroups,
                         onOpenEmployees = onOpenEmployees,
                         onOpenContacts = onOpenContacts,
                         onOpenDiscover = onOpenDiscover,
@@ -164,6 +206,19 @@ fun ConversationListScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
+                    // AI 群聊（6 个部门群，学微信直接出现在消息页）
+                    items(filteredGroups, key = { "group:${it.id}" }) { group ->
+                        GroupConversationRow(
+                            group = group,
+                            onClick = { onOpenGroup(group) },
+                            onLongClick = { haptics.longClick(); longPressGroup = group },
+                        )
+                        HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                thickness = 0.5.dp,
+                                modifier = Modifier.padding(start = 84.dp),
+                        )
+                    }
                     items(filtered, key = { it.id }) { item ->
                         ConversationCell(
                                 item = item,
@@ -240,9 +295,8 @@ private fun MessageHomeHeader(
         searchQuery: String,
         onSearchChange: (String) -> Unit,
         onClearSearch: () -> Unit,
-        selectedFilter: ConversationFilter,
-        unreadTotal: Int,
-        onFilterChange: (ConversationFilter) -> Unit,
+        onStartGroupChat: () -> Unit,
+        onOpenGroups: () -> Unit,
         onOpenEmployees: () -> Unit,
         onOpenContacts: () -> Unit,
         onOpenDiscover: () -> Unit,
@@ -252,6 +306,7 @@ private fun MessageHomeHeader(
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = Elevation.none,
     ) {
+        // 学微信：只留 身份行(含右上「+」菜单) + 搜索,去掉快捷操作行与筛选条,更干净。
         Column(
                 Modifier.fillMaxWidth()
                         .padding(start = Spacing.lg, end = Spacing.lg, top = 8.dp, bottom = 10.dp),
@@ -277,6 +332,14 @@ private fun MessageHomeHeader(
                             overflow = TextOverflow.Ellipsis,
                     )
                 }
+                HeaderPlusMenu(
+                        onStartGroupChat = onStartGroupChat,
+                        onOpenGroups = onOpenGroups,
+                        onOpenEmployees = onOpenEmployees,
+                        onOpenContacts = onOpenContacts,
+                        onOpenDiscover = onOpenDiscover,
+                        onOpenScan = onOpenScan,
+                )
             }
 
             Spacer(Modifier.height(Spacing.md))
@@ -287,23 +350,31 @@ private fun MessageHomeHeader(
                     onClear = onClearSearch,
                     modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+}
 
-            Spacer(Modifier.height(Spacing.md))
-
-            QuickActionRow(
-                    onOpenEmployees = onOpenEmployees,
-                    onOpenContacts = onOpenContacts,
-                    onOpenDiscover = onOpenDiscover,
-                    onOpenScan = onOpenScan,
-            )
-
-            Spacer(Modifier.height(Spacing.md))
-
-            ConversationFilterBar(
-                    selected = selectedFilter,
-                    unreadTotal = unreadTotal,
-                    onSelect = onFilterChange,
-            )
+/** 右上「+」菜单（微信式）：发起群聊 / 我的群聊 / 扫一扫 / AI员工 / 通讯录 / 交流圈。 */
+@Composable
+private fun HeaderPlusMenu(
+        onStartGroupChat: () -> Unit,
+        onOpenGroups: () -> Unit,
+        onOpenEmployees: () -> Unit,
+        onOpenContacts: () -> Unit,
+        onOpenDiscover: () -> Unit,
+        onOpenScan: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(Icons.Default.Add, contentDescription = "更多", tint = MaterialTheme.colorScheme.onSurface)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(text = { Text("发起群聊") }, onClick = { expanded = false; onStartGroupChat() })
+            DropdownMenuItem(text = { Text("扫一扫") }, onClick = { expanded = false; onOpenScan() })
+            DropdownMenuItem(text = { Text("AI员工") }, onClick = { expanded = false; onOpenEmployees() })
+            DropdownMenuItem(text = { Text("通讯录") }, onClick = { expanded = false; onOpenContacts() })
+            DropdownMenuItem(text = { Text("交流圈") }, onClick = { expanded = false; onOpenDiscover() })
         }
     }
 }

@@ -682,7 +682,7 @@ def _resolve_auth_bootstrap_engine(
 
 
 def _seed_default_admin_user(real_engine: Engine) -> None:
-    from sqlalchemy import text
+    from sqlalchemy import inspect, text
 
     from app.utils.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
@@ -699,19 +699,39 @@ def _seed_default_admin_user(real_engine: Engine) -> None:
         logger.warning("auth bootstrap: users 为空但未配置 ADMIN_USERNAME/ADMIN_PASSWORD，跳过种子")
         return
     hp = generate_password_hash(password)
+    available_columns = {column["name"] for column in inspect(real_engine).get_columns("users")}
+    seed_fields = [
+        ("username", ":username"),
+        ("password", ":password"),
+        ("display_name", ":display_name"),
+        ("email", ":email"),
+        ("role", ":role"),
+        ("is_active", ":is_active"),
+        ("mfa_enabled", ":mfa_enabled"),
+        ("tier", ":tier"),
+        ("industry_id", ":industry_id"),
+        ("failed_login_attempts", ":failed_login_attempts"),
+        ("email_verified", ":email_verified"),
+        ("created_at", ":now"),
+    ]
+    seed_fields = [field for field in seed_fields if field[0] in available_columns]
+    column_sql = ", ".join(name for name, _ in seed_fields)
+    value_sql = ", ".join(value for _, value in seed_fields)
     with real_engine.begin() as conn:
         conn.execute(
-            text(
-                """
-                INSERT INTO users (username, password, display_name, email, role, is_active, mfa_enabled, created_at)
-                VALUES (:username, :password, :display_name, :email, 'admin', TRUE, FALSE, :now)
-                """
-            ),
+            text(f"INSERT INTO users ({column_sql}) VALUES ({value_sql})"),
             {
                 "username": username,
                 "password": hp,
                 "display_name": display_name,
                 "email": f"{username}@local",
+                "role": "admin",
+                "is_active": True,
+                "mfa_enabled": False,
+                "tier": "admin",
+                "industry_id": "通用",
+                "failed_login_attempts": 0,
+                "email_verified": False,
                 "now": utc_now_naive(),
             },
         )

@@ -377,6 +377,24 @@ interface FhdApi {
         @Path("employeeId") employeeId: String,
     ): MobileEnvelope<AiGroupWrap>
 
+    @PUT(ApiEndpoints.AI_GROUP_PIN)
+    suspend fun toggleAiGroupPin(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @POST(ApiEndpoints.AI_GROUP_MARK_UNREAD)
+    suspend fun markAiGroupUnread(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @POST(ApiEndpoints.AI_GROUP_MARK_READ)
+    suspend fun markAiGroupRead(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @PUT(ApiEndpoints.AI_GROUP_FOLLOWED)
+    suspend fun toggleAiGroupFollowed(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @PUT(ApiEndpoints.AI_GROUP_HIDDEN)
+    suspend fun toggleAiGroupHidden(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @DELETE(ApiEndpoints.AI_GROUP_DELETE)
+    suspend fun deleteAiGroup(@Path("groupId") groupId: String): MobileEnvelope<Map<String, Any>>
+
     @GET(ApiEndpoints.WALLET_BALANCE)
     suspend fun mobileWalletBalance(): MobileEnvelope<WalletBalanceDto>
 }

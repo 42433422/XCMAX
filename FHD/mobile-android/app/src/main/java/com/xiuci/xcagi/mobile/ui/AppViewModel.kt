@@ -157,6 +157,16 @@ constructor(
     private fun isAdminAccountKind(kind: String): Boolean =
             kind.trim().lowercase() in setOf("admin", "admin_portal")
 
+    /**
+     * 企业态有效判定（与 conversations 构建逻辑一致）：
+     * 编译期企业 SKU 或运行时管理端账号命中其一即可。
+     * 用于消息页 AI 群聊加载等场景，避免 admin 账号在 personal flavor 上漏加载 6 个部门群。
+     */
+    val isEnterpriseEffective =
+            sessionStore.accountKindFlow
+                    .map { ProductSkuConfig.showsEnterpriseNav || isAdminAccountKind(it) }
+                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProductSkuConfig.showsEnterpriseNav)
+
     private val _marketAccess = MutableStateFlow("")
     val marketAccess: StateFlow<String> = _marketAccess.asStateFlow()
 
@@ -641,9 +651,8 @@ constructor(
 
     fun loadAiGroups() =
             viewModelScope.launch {
-                repo.loadAiGroups()
-                    .onSuccess { _aiGroups.value = it }
-                    .onFailure { snack("群聊列表加载失败", true) }
+                // 静默失败（消息页常驻加载，不打扰；个人版无权限时也不弹错）
+                repo.loadAiGroups().onSuccess { _aiGroups.value = it }
             }
 
     fun createAiGroup(name: String) =
@@ -652,6 +661,29 @@ constructor(
                     .onSuccess { loadAiGroups() }
                     .onFailure { snack(it.message ?: "建群失败", true) }
             }
+
+    /** 微信式发起群聊：建群 + 批量拉入所选 AI 成员,完成后回调新群(用于导航进群)。 */
+    fun createGroupWithMembers(
+        name: String,
+        members: List<com.xiuci.xcagi.mobile.core.model.AiGroupMemberDraft>,
+        onDone: (com.xiuci.xcagi.mobile.core.model.AiGroupDto?) -> Unit,
+    ) = viewModelScope.launch {
+        val created = repo.createAiGroup(name).getOrNull()
+        if (created == null) {
+            snack("建群失败", true)
+            onDone(null)
+            return@launch
+        }
+        var current = created
+        members.forEach { m ->
+            repo.addAiGroupMember(created.id, m.employeeId, m.modId, m.name, m.avatar, m.summary)
+                .getOrNull()?.let { current = it }
+        }
+        _currentGroup.value = current
+        _groupMessages.value = emptyList()
+        loadAiGroups()
+        onDone(current)
+    }
 
     /** 打开群聊：载入成员与历史消息。 */
     fun openAiGroup(group: com.xiuci.xcagi.mobile.core.model.AiGroupDto) {
@@ -719,6 +751,48 @@ constructor(
                 repo.removeAiGroupMember(groupId, employeeId)
                     .onSuccess { g -> g?.let { _currentGroup.value = it }; loadAiGroups() }
                     .onFailure { snack(it.message ?: "移除成员失败", true) }
+            }
+
+    fun toggleGroupPin(groupId: String) =
+            viewModelScope.launch {
+                repo.toggleAiGroupPin(groupId)
+                    .onSuccess { g -> g?.let { _currentGroup.value = it }; loadAiGroups() }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun markGroupUnread(groupId: String) =
+            viewModelScope.launch {
+                repo.markAiGroupUnread(groupId)
+                    .onSuccess { g -> g?.let { _currentGroup.value = it }; loadAiGroups() }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun markGroupRead(groupId: String) =
+            viewModelScope.launch {
+                repo.markAiGroupRead(groupId)
+                    .onSuccess { g -> g?.let { _currentGroup.value = it }; loadAiGroups() }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun toggleGroupFollowed(groupId: String) =
+            viewModelScope.launch {
+                repo.toggleAiGroupFollowed(groupId)
+                    .onSuccess { g -> g?.let { _currentGroup.value = it }; loadAiGroups() }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun toggleGroupHidden(groupId: String) =
+            viewModelScope.launch {
+                repo.toggleAiGroupHidden(groupId)
+                    .onSuccess { g -> g?.let { _currentGroup.value = it }; loadAiGroups() }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun deleteGroup(groupId: String) =
+            viewModelScope.launch {
+                repo.deleteAiGroup(groupId)
+                    .onSuccess { loadAiGroups() }
+                    .onFailure { snack(it.message ?: "删除失败", true) }
             }
 
     /** 拉取钱包余额（移动端"我"页面展示）。失败时保留旧值，不弹错误。成功后写入缓存。 */

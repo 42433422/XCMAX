@@ -55,6 +55,8 @@ object Routes {
     const val AI_GROUPS = "ai_groups"
     /** AI 群聊会话（当前群由 ViewModel.currentGroup 持有） */
     const val AI_GROUP_CHAT = "ai_group_chat"
+    /** 发起群聊（多选 AI 员工建群） */
+    const val AI_GROUP_CREATE = "ai_group_create"
     const val AI_EMPLOYEE_PROFILE = "ai_employee/{modId}/{employeeId}"
     fun aiEmployeeProfile(modId: String, employeeId: String) = "ai_employee/$modId/$employeeId"
     /** 智慧分析（Kitten Analyzer） */

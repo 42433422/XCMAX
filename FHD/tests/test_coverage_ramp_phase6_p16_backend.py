@@ -327,6 +327,10 @@ class TestInitDbAuthBootstrap:
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
             ).fetchall()
             assert len(tables) == 1
+            admin = conn.execute(
+                text("SELECT role, tier, industry_id FROM users WHERE username = 'admin'")
+            ).one()
+            assert admin == ("admin", "admin", "通用")
 
     def test_ensure_sqlite_auth_bootstrap_skips_non_sqlite(self, monkeypatch):
         from app.db.init_db import ensure_sqlite_auth_bootstrap

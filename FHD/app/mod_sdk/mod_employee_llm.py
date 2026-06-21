@@ -101,6 +101,47 @@ def _resolve_provider_override() -> dict[str, Any]:
     }
 
 
+# 自动故障转移候选 provider（按优先级）。主出口不可用时，自动改用其他已配置且可用的 provider。
+_FALLBACK_PROVIDERS: tuple[str, ...] = (
+    "mimo",
+    "openai",
+    "deepseek",
+    "qwen",
+    "moonshot",
+    "xcauto",
+    "xiuci",
+)
+
+
+def _resolve_fallback_overrides(exclude_provider: str = "") -> list[dict[str, Any]]:
+    """收集其它已配置的 OpenAI 兼容 provider，作为主出口失败时的自动切换候选。"""
+    exclude = (exclude_provider or "").strip().lower()
+    out: list[dict[str, Any]] = []
+    for prov in _FALLBACK_PROVIDERS:
+        if prov == exclude:
+            continue
+        key = os.environ.get(f"{prov.upper()}_API_KEY", "").strip()
+        base = os.environ.get(f"{prov.upper()}_BASE_URL", "").strip()
+        if not key or not base:
+            continue
+        model = (
+            os.environ.get(f"{prov.upper()}_MODEL", "").strip()
+            or os.environ.get("XCAGI_EMPLOYEE_LLM_MODEL", "").strip()
+        )
+        if not model:
+            continue
+        out.append(
+            {
+                "use_direct": True,
+                "api_key": key,
+                "chat_url": _chat_url_from_base_url(base.rstrip("/")),
+                "model": model,
+                "provider": prov,
+            }
+        )
+    return out
+
+
 async def _call_openai_compatible_chat(
     messages: list[dict[str, str]],
     *,
@@ -154,23 +195,37 @@ async def mod_employee_complete(
     if override.get("error"):
         return {"success": False, "content": "", "error": str(override["error"])[:500]}
 
+    # 直连候选：主 provider + 其他已配置 provider 作为自动故障转移。
+    # 主出口（如 api.b.ai）连不上/失败时，自动切换到下一个可用的（如 MIMO），不再直接报错。
+    direct_candidates: list[dict[str, Any]] = []
+    primary_provider = str(override.get("provider") or "")
     if override.get("use_direct"):
+        direct_candidates.append(override)
+    direct_candidates.extend(_resolve_fallback_overrides(exclude_provider=primary_provider))
+
+    for cand in direct_candidates:
         raw = await _call_openai_compatible_chat(
             messages,
-            api_key=str(override["api_key"]),
-            chat_url=str(override["chat_url"]),
-            model=str(override["model"]),
+            api_key=str(cand["api_key"]),
+            chat_url=str(cand["chat_url"]),
+            model=str(cand["model"]),
             max_tokens=max_tokens,
             temperature=temperature,
             response_format=response_format,
         )
-        if not raw:
-            return {
-                "success": False,
-                "content": "",
-                "error": "LLM 返回空（请检查密钥、BASE_URL 与网络）",
-            }
-        return _parse_chat_completions_response(raw)
+        if raw:
+            parsed = _parse_chat_completions_response(raw)
+            if parsed.get("success"):
+                if str(cand.get("provider") or "") != primary_provider:
+                    logger.warning(
+                        "mod_employee_complete: 主 LLM(%s) 不可用，已自动切换到 %s",
+                        primary_provider or "default",
+                        cand.get("provider"),
+                    )
+                return parsed
+    if direct_candidates:
+        logger.warning("mod_employee_complete: 所有直连 LLM 候选均失败，回退宿主通道")
+    # 全部直连候选失败 → 落到下方宿主 AIConversationService 通道。
 
     try:
         from app.services.ai_conversation_service import get_ai_conversation_service

@@ -131,6 +131,7 @@ CLAUDE_PROFILE = SuperEmployeeToolProfile(
     cli_binary="claude",
     cli_extra_candidates=(
         os.path.expanduser("~/.claude/local/claude"),
+        os.path.expanduser("~/.local/bin/claude"),
         "/opt/homebrew/bin/claude",
         "/usr/local/bin/claude",
     ),
