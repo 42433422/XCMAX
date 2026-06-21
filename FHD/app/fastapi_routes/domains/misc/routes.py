@@ -470,14 +470,6 @@ def compat_tool_categories_list() -> dict:
 # ========== Butler Profile（拟人 Persy 系统）==========
 
 
-def _butler_profile_service():
-    from app.db import SessionLocal
-    from app.services.butler_profile_service import ButlerProfileService
-
-    db = SessionLocal()
-    return ButlerProfileService(db)
-
-
 def _resolve_user_id_int(request: Request, body: dict | None = None) -> int:
     """从请求头或 body 解析用户 ID（整数）。默认 1。"""
     raw = (
@@ -494,21 +486,21 @@ def _resolve_user_id_int(request: Request, body: dict | None = None) -> int:
 
 
 def _persona_backed_profile_view(uid: int) -> dict:
-    """方案 B（桥接合并）：persona_profile 为单一真相源。
+    """人格视图的**唯一派生路径**：Persona-A → butler 视图（经 persona_butler_bridge）。
 
-    存在 persona 画像（用户已对话过）则派生 butler 视图，使 Settings UI 与对话流
-    展示同一人格；尚无画像时回退 butler 自身默认视图。响应形状与 ``to_public_dict``
-    严格一致，前端零改动。
+    有画像派生其画像；无画像（新用户）派生中性默认——两者走完全相同的桥逻辑。
+    **不再回退 butler 自身 ``get_profile_view``/``derive_mbti``**，确保 MBTI/四轴
+    只有桥这一处派生源（单一真相源 + 自动派生）。响应形状与 ``to_public_dict`` 一致。
     """
-    try:
-        from app.application.persona_butler_bridge import persona_view_for_user
+    from app.application.persona_butler_bridge import persona_default_view, persona_view_for_user
 
+    try:
         view = persona_view_for_user(uid)
         if view is not None:
             return view
     except Exception as exc:  # noqa: BLE001 - 桥接失败不应阻断 Settings 读取
-        logger.warning("persona 派生 butler 视图失败，回退 butler 默认: %s", exc)
-    return _butler_profile_service().get_profile_view(uid)
+        logger.warning("persona 画像读取失败，回退 persona 默认视图: %s", exc)
+    return persona_default_view(uid)
 
 
 @router.get("/butler/profile")

@@ -68,7 +68,7 @@ def persona_to_butler_view(profile: PersonaProfile, user_id: int) -> dict:
 def persona_view_for_user(user_id: int) -> dict | None:
     """读取 persona 画像（key=str(user_id)）并派生 butler 视图。
 
-    无画像（用户尚未对话过）时返回 ``None``，由调用方回退 butler 自身默认视图。
+    无画像（用户尚未对话过）时返回 ``None``，由调用方回退 :func:`persona_default_view`。
     仅供同步路由调用（内部用 ``asyncio.run`` 驱动 async 仓储）。
     """
     from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
@@ -78,3 +78,13 @@ def persona_view_for_user(user_id: int) -> dict | None:
     if profile is None:
         return None
     return persona_to_butler_view(profile, user_id)
+
+
+def persona_default_view(user_id: int) -> dict:
+    """无 persona 画像（新用户未对话）时的默认视图——**仍由本桥派生**。
+
+    构造中性 ``PersonaProfile``（四轴 0.5、通用行业冷启动身份「业务管家」）走与有画像
+    用户完全相同的派生逻辑，使「MBTI / 四轴」只有本桥这一处派生源，杜绝 butler 侧
+    ``derive_mbti`` 的第二套派生（单一真相源 + 自动派生）。
+    """
+    return persona_to_butler_view(PersonaProfile(user_id=str(user_id), industry="通用"), user_id)
