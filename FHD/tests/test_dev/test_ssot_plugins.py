@@ -3,6 +3,7 @@
 验证每个适配器能正确调用现有脚本并返回退出码。
 不 mock 现有脚本（真实集成），但用真实注册表。
 """
+
 from __future__ import annotations
 
 import sys

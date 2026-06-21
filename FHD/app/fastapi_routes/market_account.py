@@ -1056,9 +1056,7 @@ async def login_market_for_oidc_profile(
     if not internal_key:
         return {
             "success": False,
-            "message": (
-                "未配置 XCAGI_MARKET_INTERNAL_API_KEY，SSO 会话无法自动绑定修茈市场 token"
-            ),
+            "message": ("未配置 XCAGI_MARKET_INTERNAL_API_KEY，SSO 会话无法自动绑定修茈市场 token"),
             "market_base_url": market_base,
         }
 

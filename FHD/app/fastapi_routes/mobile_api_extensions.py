@@ -115,9 +115,7 @@ def _ai_circle_employee_profiles() -> dict[str, dict[str, str]]:
                 continue
             profiles[employee_id] = {
                 "name": str(
-                    employee.get("label")
-                    or employee.get("panel_title")
-                    or employee_id
+                    employee.get("label") or employee.get("panel_title") or employee_id
                 ).strip(),
                 "avatar": str(employee.get("market_avatar") or mod_avatar).strip(),
             }
@@ -1301,9 +1299,7 @@ async def mobile_ai_circle_add_comment(
 
     uid, name, _ = _ai_circle_user(user)
     try:
-        comment_id = add_comment(
-            post_id=post_id, user_id=uid, author_name=name, body=body.body
-        )
+        comment_id = add_comment(post_id=post_id, user_id=uid, author_name=name, body=body.body)
         return format_mobile_response(data={"id": comment_id}, message="评论成功")
     except ValueError as exc:
         return JSONResponse(
@@ -1380,26 +1376,50 @@ _CORE_NAV_ITEMS: list[dict[str, str]] = [
     {"key": "chat", "name": "智能对话", "icon": "fa-comments-o", "path": "/chat"},
     {"key": "im", "name": "信息", "icon": "fa-envelope-o", "path": "/im"},
     {"key": "ai-ecosystem", "name": "智能生态", "icon": "fa-sitemap", "path": "/ai-ecosystem"},
-    {"key": "employee-workflow", "name": "员工工作台", "icon": "fa-users", "path": "/employee-workflow"},
+    {
+        "key": "employee-workflow",
+        "name": "员工工作台",
+        "icon": "fa-users",
+        "path": "/employee-workflow",
+    },
     {"key": "products", "name": "业务对象", "icon": "fa-cubes", "path": "/products"},
     {"key": "customers", "name": "组织管理", "icon": "fa-users", "path": "/customers"},
     {"key": "orders", "name": "业务单据", "icon": "fa-file-text-o", "path": "/orders"},
-    {"key": "shipment-records", "name": "业务记录", "icon": "fa-industry", "path": "/shipment-records"},
+    {
+        "key": "shipment-records",
+        "name": "业务记录",
+        "icon": "fa-industry",
+        "path": "/shipment-records",
+    },
     {"key": "materials", "name": "资源库", "icon": "fa-archive", "path": "/materials"},
     {"key": "data-sources", "name": "数据来源", "icon": "fa-database", "path": "/data-sources"},
     {"key": "print", "name": "模板与打印", "icon": "fa-print", "path": "/print"},
     {"key": "settings", "name": "系统设置", "icon": "fa-cog", "path": "/settings"},
 ]
 
-_ADMIN_NAV_ITEM = {"key": "admin-entitlements", "name": "用户管理", "icon": "fa-shield", "path": "/admin-entitlements"}
+_ADMIN_NAV_ITEM = {
+    "key": "admin-entitlements",
+    "name": "用户管理",
+    "icon": "fa-shield",
+    "path": "/admin-entitlements",
+}
 
 # 角色 → 可见核心 key 白名单（None 表示全部可见）
 _ROLE_VISIBLE_KEYS: dict[str, set[str] | None] = {
     "admin": None,  # 全部
     "enterprise": {
-        "chat", "im", "ai-ecosystem", "employee-workflow",
-        "products", "customers", "orders", "shipment-records",
-        "materials", "data-sources", "print", "settings",
+        "chat",
+        "im",
+        "ai-ecosystem",
+        "employee-workflow",
+        "products",
+        "customers",
+        "orders",
+        "shipment-records",
+        "materials",
+        "data-sources",
+        "print",
+        "settings",
     },
     "personal": {"chat", "im", "ai-ecosystem", "settings"},
 }
@@ -1450,17 +1470,25 @@ async def mobile_nav_menu(user=Depends(get_mobile_user)):
                 menu_id = str(menu_entry.get("id") or menu_entry.get("key") or "").strip()
                 if not menu_id:
                     continue
-                menu_label = str(menu_entry.get("label") or menu_entry.get("name") or mod_name).strip()
-                menu_path = str(menu_entry.get("path") or menu_entry.get("url") or f"/mod/{mod_id}").strip()
-                menu_icon = str(menu_entry.get("icon") or menu_entry.get("iconClass") or "fa-cube").strip()
-                items.append({
-                    "key": f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id,
-                    "name": menu_label,
-                    "icon": menu_icon,
-                    "path": menu_path,
-                    "source": "mod",
-                    "mod_id": mod_id,
-                })
+                menu_label = str(
+                    menu_entry.get("label") or menu_entry.get("name") or mod_name
+                ).strip()
+                menu_path = str(
+                    menu_entry.get("path") or menu_entry.get("url") or f"/mod/{mod_id}"
+                ).strip()
+                menu_icon = str(
+                    menu_entry.get("icon") or menu_entry.get("iconClass") or "fa-cube"
+                ).strip()
+                items.append(
+                    {
+                        "key": f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id,
+                        "name": menu_label,
+                        "icon": menu_icon,
+                        "path": menu_path,
+                        "source": "mod",
+                        "mod_id": mod_id,
+                    }
+                )
     except OPERATIONAL_ERRORS as exc:
         logger.warning("nav-menu mod items failed: %s", exc)
 
@@ -1726,7 +1754,9 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         )
     try:
         oidc_session = await exchange_oidc_authorization(body.code)
-        profile = oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
+        profile = (
+            oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
+        )
     except OPERATIONAL_ERRORS as exc:
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=502),

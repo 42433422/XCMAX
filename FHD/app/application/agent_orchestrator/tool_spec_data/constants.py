@@ -25,9 +25,7 @@ TOOL_ACTION_COST_OVERRIDES: dict[tuple[str, str], int] = {
 # --- permissions ----------------------------------------------------------
 # tool_ids that derive permission as ``f"{tool_id}.{action}"`` (bare prefix)
 # instead of the generic ``f"tool.{tool_id}.{action}"`` fallback.
-PERMISSION_BARE_PREFIX_TOOLS: frozenset[str] = frozenset(
-    {"aiopen", "business_db", "employee"}
-)
+PERMISSION_BARE_PREFIX_TOOLS: frozenset[str] = frozenset({"aiopen", "business_db", "employee"})
 # dataset_rag: read-style actions -> dataset.read, everything else dataset.write
 DATASET_RAG_READ_ACTIONS: frozenset[str] = frozenset({"query", "diff_versions"})
 DATASET_RAG_READ_PERMISSION = "dataset.read"
@@ -39,8 +37,6 @@ PERMISSION_OVERRIDES: dict[str, str] = {
 
 # --- aiopen risk ----------------------------------------------------------
 # actions that are low-risk and idempotent; everything else is medium/non-idempotent.
-AIOPEN_LOW_RISK_ACTIONS: frozenset[str] = frozenset(
-    {"api_catalog", "ui_sessions", "ui_snapshot"}
-)
+AIOPEN_LOW_RISK_ACTIONS: frozenset[str] = frozenset({"api_catalog", "ui_sessions", "ui_snapshot"})
 AIOPEN_DEFAULT_RISK = "medium"
 AIOPEN_LOW_RISK = "low"

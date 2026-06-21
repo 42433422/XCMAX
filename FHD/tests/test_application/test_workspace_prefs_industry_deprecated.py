@@ -38,9 +38,7 @@ class TestSaveSelectedIndustryDeprecated:
             with patch(
                 "app.application.tenant_workspace_prefs.patch_workspace_prefs"
             ) as mock_patch:
-                prefs.save_selected_industry(
-                    "tenant:1", "涂料", industry_mod_id="mod-coating"
-                )
+                prefs.save_selected_industry("tenant:1", "涂料", industry_mod_id="mod-coating")
         # 不应调用 patch_workspace_prefs
         mock_patch.assert_not_called()
 
@@ -48,9 +46,7 @@ class TestSaveSelectedIndustryDeprecated:
         """save_selected_industry 不应触发底层 _save_workspace_prefs。"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            with patch(
-                "app.application.tenant_workspace_prefs._save_workspace_prefs"
-            ) as mock_save:
+            with patch("app.application.tenant_workspace_prefs._save_workspace_prefs") as mock_save:
                 prefs.save_selected_industry("session:1", "餐饮")
         mock_save.assert_not_called()
 

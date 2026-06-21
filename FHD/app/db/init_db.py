@@ -1420,7 +1420,9 @@ def ensure_user_profile_columns(
                     )
                 else:
                     conn.execute(
-                        text(f"ALTER TABLE users ADD COLUMN {name} {col_type} DEFAULT {default_sql}")
+                        text(
+                            f"ALTER TABLE users ADD COLUMN {name} {col_type} DEFAULT {default_sql}"
+                        )
                     )
         logger.info("users.tier/industry_id 已补齐")
     except RECOVERABLE_ERRORS as exc:
