@@ -299,9 +299,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 risk=risk,
                 permission=_special_permission(str(tool_id), normalized_action),
                 cost_units=_cost_units(str(tool_id), normalized_action, risk),
-                timeout_seconds=int(
-                    action_meta.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS
-                ),
+                timeout_seconds=int(action_meta.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                 retry=dict(action_meta.get("retry") or DEFAULT_RETRY),
                 idempotent=bool(action_meta.get("idempotent", False)),
                 required_params=required_params,

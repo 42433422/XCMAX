@@ -550,7 +550,11 @@ async def compat_chat_stream_async(
 
             svc = get_ai_conversation_service()
             persona_svc = getattr(svc, "persona_service", None)
-            logger.info("persona_inject check: has_persona=%s msg=%s", persona_svc is not None, body.message[:50])
+            logger.info(
+                "persona_inject check: has_persona=%s msg=%s",
+                persona_svc is not None,
+                body.message[:50],
+            )
             if persona_svc is not None:
                 user_id = body.user_id or "default-user"
                 ctx = body.context or {}

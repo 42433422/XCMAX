@@ -765,7 +765,9 @@ async def auth_oidc_callback(request: Request):
 
     try:
         oidc_session = await exchange_oidc_authorization(code)
-        profile = oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
+        profile = (
+            oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
+        )
     except INFRA_TRANSIENT as exc:
         logger.exception("OIDC exchange failed")
         return RedirectResponse(

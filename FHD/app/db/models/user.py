@@ -42,8 +42,15 @@ class User(Base):
     tenant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
 
     # 用户等级与行业（管理端可编辑，复用 industryPresets 行业 id）
-    tier: Mapped[str] = mapped_column(String(32), default="personal", nullable=False, comment="用户等级: personal|enterprise|admin")
-    industry_id: Mapped[str] = mapped_column(String(32), default="通用", nullable=False, comment="行业 id，引用 industryPresets")
+    tier: Mapped[str] = mapped_column(
+        String(32),
+        default="personal",
+        nullable=False,
+        comment="用户等级: personal|enterprise|admin",
+    )
+    industry_id: Mapped[str] = mapped_column(
+        String(32), default="通用", nullable=False, comment="行业 id，引用 industryPresets"
+    )
     # 用户已开通的行业 id 列表（admin 分配；SSOT，前端只读展示）
     entitled_industries: Mapped[Optional[list]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True, default=list

@@ -52,9 +52,7 @@ class TestGetCurrentIndustryFromRequestContext:
 
     def test_reads_from_request_state(self):
         """有请求上下文时，读取 request.state.industry_id。"""
-        fake_request = SimpleNamespace(
-            state=SimpleNamespace(industry_id="电商")
-        )
+        fake_request = SimpleNamespace(state=SimpleNamespace(industry_id="电商"))
         with patch(
             "app.infrastructure.request_context.get_current_request",
             return_value=fake_request,
@@ -74,9 +72,7 @@ class TestGetCurrentIndustryFromRequestContext:
 
     def test_falls_back_when_request_state_empty(self):
         """请求上下文存在但 industry_id 为空时，回退到原逻辑。"""
-        fake_request = SimpleNamespace(
-            state=SimpleNamespace(industry_id=None)
-        )
+        fake_request = SimpleNamespace(state=SimpleNamespace(industry_id=None))
         with patch(
             "app.infrastructure.request_context.get_current_request",
             return_value=fake_request,

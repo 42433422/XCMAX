@@ -108,8 +108,7 @@ class TestButlerProfileInference:
     def test_interrupt_behavior_increases_ei(self, engine, default_profile):
         """打断/催促 → +E/I。"""
         convs = [
-            {"user_message": "快点", "interrupted": True}
-            for _ in range(MIN_INTERACTIONS_FOR_INFER)
+            {"user_message": "快点", "interrupted": True} for _ in range(MIN_INTERACTIONS_FOR_INFER)
         ]
         result = engine.infer(default_profile, convs)
         assert result.mbti_ei_delta > 0
@@ -117,36 +116,26 @@ class TestButlerProfileInference:
 
     def test_why_question_increases_sn(self, engine, default_profile):
         """问为什么 → +S/N。"""
-        convs = [
-            {"user_message": "为什么要这样做？"}
-            for _ in range(MIN_INTERACTIONS_FOR_INFER)
-        ]
+        convs = [{"user_message": "为什么要这样做？"} for _ in range(MIN_INTERACTIONS_FOR_INFER)]
         result = engine.infer(default_profile, convs)
         assert result.mbti_sn_delta > 0
 
     def test_emotion_increases_tf(self, engine, default_profile):
         """情绪表达 → +T/F。"""
-        convs = [
-            {"user_message": "谢谢，太棒了"}
-            for _ in range(MIN_INTERACTIONS_FOR_INFER)
-        ]
+        convs = [{"user_message": "谢谢，太棒了"} for _ in range(MIN_INTERACTIONS_FOR_INFER)]
         result = engine.infer(default_profile, convs)
         assert result.mbti_tf_delta > 0
 
     def test_structure_request_increases_jp(self, engine, default_profile):
         """要求结构化 → +J/P。"""
-        convs = [
-            {"user_message": "请列步骤"}
-            for _ in range(MIN_INTERACTIONS_FOR_INFER)
-        ]
+        convs = [{"user_message": "请列步骤"} for _ in range(MIN_INTERACTIONS_FOR_INFER)]
         result = engine.infer(default_profile, convs)
         assert result.mbti_jp_delta > 0
 
     def test_correction_decreases_tf(self, engine, default_profile):
         """纠正 → -T/F（更理性）。"""
         convs = [
-            {"user_message": "不对", "corrected": True}
-            for _ in range(MIN_INTERACTIONS_FOR_INFER)
+            {"user_message": "不对", "corrected": True} for _ in range(MIN_INTERACTIONS_FOR_INFER)
         ]
         result = engine.infer(default_profile, convs)
         assert result.mbti_tf_delta < 0
@@ -215,7 +204,9 @@ class TestButlerProfileInference:
         }
         convs = [{"user_message": "hi"} for _ in range(MIN_INTERACTIONS_FOR_INFER)]
         # 推动向 E 方向，触发跨型
-        convs_e = [{"user_message": "快点", "interrupted": True} for _ in range(MIN_INTERACTIONS_FOR_INFER)]
+        convs_e = [
+            {"user_message": "快点", "interrupted": True} for _ in range(MIN_INTERACTIONS_FOR_INFER)
+        ]
         result = engine.infer(profile, convs_e, mod_hints=["发货"])
         if result.identity_changed:
             assert result.new_identity_primary == "发货管家"
