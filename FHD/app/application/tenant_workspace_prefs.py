@@ -134,11 +134,26 @@ def get_selected_industry_id(owner_id: str | None) -> str | None:
 def save_selected_industry(
     owner_id: str, industry_id: str, *, industry_mod_id: str = ""
 ) -> dict[str, Any]:
-    payload: dict[str, Any] = {"selected_industry_id": str(industry_id or "").strip()}
-    mid = str(industry_mod_id or "").strip()
-    if mid:
-        payload["industry_mod_id"] = mid
-    return patch_workspace_prefs(owner_id, payload)
+    """保存选中的行业 id（已废弃，no-op）。
+
+    行业上下文现由 IndustryContextMiddleware 每请求从 User.industry_id 注入，
+    不再持久化到 workspace_prefs。此函数保留仅为向后兼容，调用时发出
+    DeprecationWarning，不再写入存储，返回空 dict。
+    """
+    import warnings
+
+    warnings.warn(
+        "tenant_workspace_prefs.save_selected_industry is deprecated and is now a no-op; "
+        "industry context is injected per-request from User.industry_id.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.debug(
+        "save_selected_industry(owner=%s, industry=%s) called but is now a no-op (readonly SSOT)",
+        owner_id,
+        industry_id,
+    )
+    return {}
 
 
 __all__ = [

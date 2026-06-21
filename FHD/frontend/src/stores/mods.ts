@@ -446,31 +446,6 @@ export const useModsStore = defineStore('mods', () => {
     setActiveModId(preferred ? String(preferred.id || '').trim() : '');
   }
 
-  async function syncIndustryForActiveMod(): Promise<void> {
-    if (clientModsUiOff.value) return;
-    const mid = String(activeModId.value || '').trim();
-    if (!mid) return;
-    const mod = mods.value.find((m) => String(m.id || '').trim() === mid);
-    const industryId = String(mod?.industry?.id || '').trim();
-    if (!industryId) return;
-    try {
-      const { useIndustryStore } = await import('@/stores/industry');
-      const industryStore = useIndustryStore();
-      const current = String(industryStore.currentIndustryId || '').trim();
-      if (industryId === current) return;
-      const ok = await industryStore.switchIndustry(industryId);
-      if (!ok) {
-        console.warn(
-          '[mods] 同步行业失败',
-          industryId,
-          industryStore.error || '未知',
-        );
-      }
-    } catch (exc) {
-      console.warn('[mods] syncIndustryForActiveMod:', exc);
-    }
-  }
-
   /**
    * 企业版登录/会话：按 entitled_mod_ids 与宿主 client_primary_erp_mod_id 选定当前扩展。
    */
@@ -509,10 +484,8 @@ export const useModsStore = defineStore('mods', () => {
 
     if (next !== current) {
       setActiveModId(next);
-      await syncIndustryForActiveMod();
-    } else if (force) {
-      await syncIndustryForActiveMod();
     }
+    // SSOT 收敛后：行业由后端 User.industry_id 决定，不再调用 syncIndustryForActiveMod。
   }
 
   /**
@@ -521,8 +494,7 @@ export const useModsStore = defineStore('mods', () => {
    * 把 activeModId 拉回到与 server 行业匹配的 mod，导致选了 taiyangniao-pro
    * 后下次刷新被换成 sz-qsm-pro）。
    *
-   * 用户主动通过 onActiveModChange 切 mod 时，会先 setActiveModId(next)，
-   * 再调用 industryStore.switchIndustry——server 行业在那一刻就跟着走了，
+   * SSOT 收敛后：行业由后端 User.industry_id 决定，前端不再主动同步行业到 server，
    * 因此这里不需要"刷新对齐"。
    */
   async function syncActiveModWithServerIndustry(): Promise<void> {

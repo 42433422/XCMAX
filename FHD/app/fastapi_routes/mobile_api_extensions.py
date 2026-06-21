@@ -475,7 +475,7 @@ def _admin_duty_mod_item(
         "author": "XCAGI 管理端",
         "description": f"{len(employees)} 位管理端编制 AI 员工，来自本机 duty registry。",
         "primary": True,
-        "industry": {"id": "admin", "name": "管理端"},
+        "industry": {"id": "管理端", "name": "管理端"},
         "frontend_menu": [],
         "menu": [],
         "menu_overrides": [],

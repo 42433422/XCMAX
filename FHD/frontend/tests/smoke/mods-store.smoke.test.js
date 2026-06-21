@@ -21,7 +21,6 @@ vi.mock('@/stores/hostConfig', async (importOriginal) => {
 vi.mock('@/stores/industry', () => ({
   useIndustryStore: () => ({
     currentIndustryId: '',
-    switchIndustry: vi.fn(() => Promise.resolve(true)),
     error: null,
   }),
 }))
