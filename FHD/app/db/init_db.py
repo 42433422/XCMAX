@@ -937,6 +937,38 @@ def ensure_user_preferences_bootstrap(
         raise
 
 
+def ensure_neuro_event_log_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """补齐 neuro_event_log 表（NeuroBus 核心 app service 消费者的持久落地副作用）。"""
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.neuro_event_log import NeuroEventLog
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        insp = inspect(real_engine)
+        tables = set(insp.get_table_names() or [])
+        if "neuro_event_log" not in tables:
+            logger.info("缺少 neuro_event_log 表，正在通过 ORM 创建 …")
+            Base.metadata.create_all(
+                real_engine,
+                tables=[NeuroEventLog.__table__],
+                checkfirst=True,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_neuro_event_log_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
 def ensure_runtime_auth_bootstrap(
     engine: Engine | None = None,
     *,
@@ -975,9 +1007,19 @@ def ensure_runtime_auth_bootstrap(
             database_url=url,
             swallow_errors=swallow_errors,
         )
+        ensure_neuro_event_log_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
     else:
         ensure_postgresql_auth_bootstrap(engine, database_url=url)
         ensure_user_preferences_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_neuro_event_log_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,
