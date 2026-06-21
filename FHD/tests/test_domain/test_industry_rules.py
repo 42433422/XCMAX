@@ -25,9 +25,13 @@ ATTENDANCE = _subsystems(FHD / "XCAGI" / "mods" / "attendance-industry" / "manif
 # --- 校验：oneOf（考勤班次）------------------------------------------------
 def test_attendance_shift_oneof_rejects_invalid():
     schema = ATTENDANCE["products"]
-    ok = validate_subsystem_record("products", {"name": "张三", "specification": "早"}, schema=schema)
+    ok = validate_subsystem_record(
+        "products", {"name": "张三", "specification": "早"}, schema=schema
+    )
     assert ok == []
-    bad = validate_subsystem_record("products", {"name": "张三", "specification": "夜"}, schema=schema)
+    bad = validate_subsystem_record(
+        "products", {"name": "张三", "specification": "夜"}, schema=schema
+    )
     assert any(e.field == "specification" for e in bad)
     assert "之一" in bad[0].message
 
@@ -35,7 +39,9 @@ def test_attendance_shift_oneof_rejects_invalid():
 def test_coating_products_no_shift_constraint():
     """涂料 products 的 specification(规格) 是自由文本，同一引擎不报 oneOf——差异纯由数据。"""
     schema = COATING["products"]
-    errs = validate_subsystem_record("products", {"name": "白漆", "specification": "任意规格"}, schema=schema)
+    errs = validate_subsystem_record(
+        "products", {"name": "白漆", "specification": "任意规格"}, schema=schema
+    )
     assert errs == []
 
 
@@ -49,12 +55,19 @@ def test_required_field_missing():
 # --- 校验：not_expired（涂料保质期）----------------------------------------
 def test_coating_expire_date_not_expired():
     schema = COATING["products"]
-    assert validate_subsystem_record("products", {"name": "A", "expire_date": "2000-01-01"}, schema=schema), (
-        "过期日期应报错"
+    assert validate_subsystem_record(
+        "products", {"name": "A", "expire_date": "2000-01-01"}, schema=schema
+    ), "过期日期应报错"
+    assert (
+        validate_subsystem_record(
+            "products", {"name": "A", "expire_date": "2099-12-31"}, schema=schema
+        )
+        == []
     )
-    assert validate_subsystem_record("products", {"name": "A", "expire_date": "2099-12-31"}, schema=schema) == []
     # 空保质期跳过
-    assert validate_subsystem_record("products", {"name": "A", "expire_date": ""}, schema=schema) == []
+    assert (
+        validate_subsystem_record("products", {"name": "A", "expire_date": ""}, schema=schema) == []
+    )
 
 
 # --- 派生计算：涂料 orders 换算/金额 --------------------------------------
@@ -66,7 +79,7 @@ def test_coating_orders_derivation():
         schema=schema,
     )
     assert out["quantity_kg"] == 60.0  # 3 桶 × 20 规格
-    assert out["amount"] == 300.0      # 60 kg × 5 单价
+    assert out["amount"] == 300.0  # 60 kg × 5 单价
 
 
 def test_attendance_orders_no_rules_unchanged():

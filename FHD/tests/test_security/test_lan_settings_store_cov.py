@@ -19,14 +19,17 @@ import pytest
 # helpers
 # ---------------------------------------------------------------------------
 
+
 def _module():
     from app.security import lan_settings_store
+
     return lan_settings_store
 
 
 # ---------------------------------------------------------------------------
 # _resolve_repo_root
 # ---------------------------------------------------------------------------
+
 
 class TestResolveRepoRoot:
     def test_finds_repo_root_when_fastapi_and_xcagi_present(self, tmp_path):
@@ -60,6 +63,7 @@ class TestResolveRepoRoot:
 # _settings_path
 # ---------------------------------------------------------------------------
 
+
 class TestSettingsPath:
     def test_uses_env_override(self, tmp_path):
         override = str(tmp_path / "custom_settings.json")
@@ -85,40 +89,48 @@ class TestSettingsPath:
 # LanSettingsOverride.to_json
 # ---------------------------------------------------------------------------
 
+
 class TestLanSettingsOverrideToJson:
     def test_empty_override_produces_empty_dict(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride()
         assert obj.to_json() == {}
 
     def test_enabled_true(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride(enabled=True)
         assert obj.to_json() == {"enabled": True}
 
     def test_enabled_false_included(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride(enabled=False)
         assert obj.to_json()["enabled"] is False
 
     def test_license_secret_included(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride(license_secret="s3cr3t")
         assert obj.to_json()["license_secret"] == "s3cr3t"
 
     def test_admin_bootstrap_key_included(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride(admin_bootstrap_key="bootkey")
         assert obj.to_json()["admin_bootstrap_key"] == "bootkey"
 
     def test_allowed_cidrs_included(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride(allowed_cidrs=["10.0.0.0/8"])
         d = obj.to_json()
         assert d["allowed_cidrs"] == ["10.0.0.0/8"]
 
     def test_all_fields_included(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride(
             enabled=True,
             license_secret="sec",
@@ -133,57 +145,70 @@ class TestLanSettingsOverrideToJson:
 # LanSettingsOverride.from_json
 # ---------------------------------------------------------------------------
 
+
 class TestLanSettingsOverrideFromJson:
     def test_non_dict_returns_empty(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride.from_json("not_a_dict")
         assert obj.enabled is None
 
     def test_enabled_string_true(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         for val in ("true", "1", "yes", "on"):
             obj = LanSettingsOverride.from_json({"enabled": val})
             assert obj.enabled is True, f"failed for {val!r}"
 
     def test_enabled_string_false(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride.from_json({"enabled": "false"})
         assert obj.enabled is False
 
     def test_enabled_bool(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride.from_json({"enabled": True})
         assert obj.enabled is True
 
     def test_enabled_none_stays_none(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride.from_json({})
         assert obj.enabled is None
 
     def test_secret_coerced_to_str(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride.from_json({"license_secret": 12345})
         assert obj.license_secret == "12345"
 
     def test_bootstrap_coerced_to_str(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride.from_json({"admin_bootstrap_key": 99})
         assert obj.admin_bootstrap_key == "99"
 
     def test_allowed_cidrs_from_list(self):
         from app.security.lan_settings_store import LanSettingsOverride
-        obj = LanSettingsOverride.from_json({"allowed_cidrs": ["10.0.0.0/8", "  ", "192.168.1.0/24"]})
+
+        obj = LanSettingsOverride.from_json(
+            {"allowed_cidrs": ["10.0.0.0/8", "  ", "192.168.1.0/24"]}
+        )
         # empty string stripped out
         assert "10.0.0.0/8" in obj.allowed_cidrs
         assert "" not in obj.allowed_cidrs
 
     def test_allowed_cidrs_from_string(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride.from_json({"allowed_cidrs": "10.0.0.0/8, 192.168.0.0/16"})
         assert obj.allowed_cidrs == ["10.0.0.0/8", "192.168.0.0/16"]
 
     def test_allowed_cidrs_none_when_missing(self):
         from app.security.lan_settings_store import LanSettingsOverride
+
         obj = LanSettingsOverride.from_json({})
         assert obj.allowed_cidrs is None
 
@@ -191,6 +216,7 @@ class TestLanSettingsOverrideFromJson:
 # ---------------------------------------------------------------------------
 # load_overrides
 # ---------------------------------------------------------------------------
+
 
 class TestLoadOverrides:
     def test_returns_empty_when_file_missing(self, tmp_path):
@@ -242,11 +268,13 @@ class TestLoadOverrides:
 # save_overrides
 # ---------------------------------------------------------------------------
 
+
 class TestSaveOverrides:
     def test_save_creates_file(self, tmp_path):
         mod = _module()
         p = tmp_path / "data" / "lan_settings.json"
         from app.security.lan_settings_store import LanSettingsOverride
+
         update = LanSettingsOverride(enabled=True, license_secret="s")
         with patch.object(mod, "_settings_path", return_value=p):
             result = mod.save_overrides(update)
@@ -259,6 +287,7 @@ class TestSaveOverrides:
         p.parent.mkdir(parents=True)
         p.write_text(json.dumps({"enabled": True, "license_secret": "old"}), encoding="utf-8")
         from app.security.lan_settings_store import LanSettingsOverride
+
         update = LanSettingsOverride(license_secret="new")
         with patch.object(mod, "_settings_path", return_value=p):
             result = mod.save_overrides(update, merge=True)
@@ -271,6 +300,7 @@ class TestSaveOverrides:
         p.parent.mkdir(parents=True)
         p.write_text(json.dumps({"enabled": True, "license_secret": "old"}), encoding="utf-8")
         from app.security.lan_settings_store import LanSettingsOverride
+
         update = LanSettingsOverride(license_secret="new")
         with patch.object(mod, "_settings_path", return_value=p):
             result = mod.save_overrides(update, merge=False)
@@ -281,6 +311,7 @@ class TestSaveOverrides:
         mod = _module()
         p = tmp_path / "lan_settings.json"
         from app.security.lan_settings_store import LanSettingsOverride
+
         update = LanSettingsOverride(allowed_cidrs=["10.0.0.0/8", "  ", ""])
         with patch.object(mod, "_settings_path", return_value=p):
             result = mod.save_overrides(update)
@@ -292,6 +323,7 @@ class TestSaveOverrides:
         p.parent.mkdir(parents=True)
         p.write_text("{bad", encoding="utf-8")
         from app.security.lan_settings_store import LanSettingsOverride
+
         update = LanSettingsOverride(enabled=False)
         with patch.object(mod, "_settings_path", return_value=p):
             result = mod.save_overrides(update, merge=True)
@@ -303,6 +335,7 @@ class TestSaveOverrides:
         mod = _module()
         p = tmp_path / "lan_settings.json"
         from app.security.lan_settings_store import LanSettingsOverride
+
         update = LanSettingsOverride(enabled=True)
         with patch.object(mod, "_settings_path", return_value=p):
             with patch("os.replace") as mock_replace:
@@ -313,6 +346,7 @@ class TestSaveOverrides:
         mod = _module()
         p = tmp_path / "lan_settings.json"
         from app.security.lan_settings_store import LanSettingsOverride
+
         update = LanSettingsOverride(admin_bootstrap_key="mykey")
         with patch.object(mod, "_settings_path", return_value=p):
             result = mod.save_overrides(update)

@@ -38,6 +38,7 @@ from app.fastapi_routes.domains.conversation.helpers import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fake_request(headers: dict | None = None, client_host: str | None = None) -> MagicMock:
     req = MagicMock(spec=Request)
     req.headers = MagicMock()
@@ -54,6 +55,7 @@ def _fake_request(headers: dict | None = None, client_host: str | None = None) -
 # ===========================================================================
 # 1. _chat_request_subject — missing branches 249-250, 252-253
 # ===========================================================================
+
 
 class TestChatRequestSubjectBranches:
     def test_xff_multi_comma(self):
@@ -83,6 +85,7 @@ class TestChatRequestSubjectBranches:
 # 2. _chat_db_read_grace_seconds_left — branches 269-280
 # ===========================================================================
 
+
 class TestGraceSeconds:
     def test_grace_not_yet_set_returns_zero(self):
         req = _fake_request({}, client_host="192.0.0.1")
@@ -109,17 +112,26 @@ class TestGraceSeconds:
 # 3. _ensure_chat_db_read_authorized branches (lines 273-281)
 # ===========================================================================
 
+
 class TestEnsureChatDbReadAuthorized:
     def test_no_expected_token_always_ok(self):
         req = _fake_request({})
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value=""):
-            ok, payload = _ensure_chat_db_read_authorized(req, message="查询数据库", provided_token=None)
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="",
+        ):
+            ok, payload = _ensure_chat_db_read_authorized(
+                req, message="查询数据库", provided_token=None
+            )
         assert ok is True
         assert payload is None
 
     def test_message_not_db_intent_always_ok(self):
         req = _fake_request({})
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="secret"):
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="secret",
+        ):
             ok, payload = _ensure_chat_db_read_authorized(req, message="你好", provided_token=None)
         assert ok is True
         assert payload is None
@@ -127,23 +139,38 @@ class TestEnsureChatDbReadAuthorized:
     def test_grace_period_active_ok(self):
         req = _fake_request({}, client_host="192.1.0.1")
         _touch_chat_db_read_grace(req)
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="sec"):
-            ok, payload = _ensure_chat_db_read_authorized(req, message="查询数据库", provided_token=None)
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="sec",
+        ):
+            ok, payload = _ensure_chat_db_read_authorized(
+                req, message="查询数据库", provided_token=None
+            )
         assert ok is True
 
     def test_correct_token_grants_access(self):
         req = _fake_request({}, client_host="192.1.0.99")
         helpers._chat_db_read_grace_until.clear()
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="mytoken"):
-            ok, payload = _ensure_chat_db_read_authorized(req, message="查询数据库", provided_token="mytoken")
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="mytoken",
+        ):
+            ok, payload = _ensure_chat_db_read_authorized(
+                req, message="查询数据库", provided_token="mytoken"
+            )
         assert ok is True
         assert payload is None
 
     def test_wrong_token_returns_false(self):
         req = _fake_request({}, client_host="192.1.0.88")
         helpers._chat_db_read_grace_until.clear()
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="mytoken"):
-            ok, payload = _ensure_chat_db_read_authorized(req, message="查询数据库", provided_token="wrong")
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="mytoken",
+        ):
+            ok, payload = _ensure_chat_db_read_authorized(
+                req, message="查询数据库", provided_token="wrong"
+            )
         assert ok is False
         assert payload is not None
         assert payload.get("requires_token") is True
@@ -153,6 +180,7 @@ class TestEnsureChatDbReadAuthorized:
 # 4. _xcagi_chat_http_exc branches (lines 293-308)
 # ===========================================================================
 
+
 class TestXcagiChatHttpExc:
     def test_timeout_error(self):
         exc = _xcagi_chat_http_exc(TimeoutError("too slow"))
@@ -160,21 +188,27 @@ class TestXcagiChatHttpExc:
 
     def test_httpx_connect_error(self):
         import httpx
+
         exc = _xcagi_chat_http_exc(httpx.ConnectError("refused"))
         assert exc.status_code == 503
 
     def test_httpx_http_error(self):
         import httpx
-        exc = _xcagi_chat_http_exc(httpx.HTTPStatusError("bad", request=MagicMock(), response=MagicMock()))
+
+        exc = _xcagi_chat_http_exc(
+            httpx.HTTPStatusError("bad", request=MagicMock(), response=MagicMock())
+        )
         assert exc.status_code == 502
 
     def test_authentication_error(self):
         from openai import AuthenticationError
+
         exc = _xcagi_chat_http_exc(AuthenticationError("bad key", response=MagicMock(), body={}))
         assert exc.status_code == 401
 
     def test_rate_limit_error(self):
         from openai import RateLimitError
+
         exc = _xcagi_chat_http_exc(RateLimitError("rate", response=MagicMock(), body={}))
         assert exc.status_code == 429
 
@@ -199,6 +233,7 @@ class TestXcagiChatHttpExc:
 # 5. _xcagi_compat_reply_payload branches (lines 302-308)
 # ===========================================================================
 
+
 class TestXcagiCompatReplyPayload:
     def test_plain_str_reply(self):
         result = _xcagi_compat_reply_payload("hello world")
@@ -206,9 +241,7 @@ class TestXcagiCompatReplyPayload:
         assert result["response"] == "hello world"
 
     def test_dict_reply_with_thinking(self):
-        result = _xcagi_compat_reply_payload(
-            {"response": "ok", "thinking_steps": "step1\nstep2"}
-        )
+        result = _xcagi_compat_reply_payload({"response": "ok", "thinking_steps": "step1\nstep2"})
         assert result["success"] is True
         assert result["data"]["thinking_steps"] == "step1\nstep2"
 
@@ -234,9 +267,7 @@ class TestXcagiCompatReplyPayload:
             return_value={"foo": "bar"},
             create=True,
         ):
-            result = _xcagi_compat_reply_payload(
-                {"response": "done", "_tool_records": records}
-            )
+            result = _xcagi_compat_reply_payload({"response": "done", "_tool_records": records})
         assert result["success"] is True
 
     def test_reply_payload_with_runtime_context_update(self):
@@ -252,6 +283,7 @@ class TestXcagiCompatReplyPayload:
 # ===========================================================================
 # 6. _extract_excel_paths_from_message branches (lines 334-335)
 # ===========================================================================
+
 
 class TestExtractExcelPathsFromMessage:
     def test_no_excel_in_message(self):
@@ -272,6 +304,7 @@ class TestExtractExcelPathsFromMessage:
 # ===========================================================================
 # 7. _extract_excel_paths_from_context branches (lines 386-385, 391-394)
 # ===========================================================================
+
 
 class TestExtractExcelPathsFromContext:
     def test_single_excel_file_path(self):
@@ -306,6 +339,7 @@ class TestExtractExcelPathsFromContext:
 # 8. _merge_runtime_context_with_message_paths (lines 501-502, 512-516)
 # ===========================================================================
 
+
 class TestMergeRuntimeContextWithMessagePaths:
     def test_no_paths_returns_empty_list(self):
         ctx, found = _merge_runtime_context_with_message_paths(None, "no excel here")
@@ -327,6 +361,7 @@ class TestMergeRuntimeContextWithMessagePaths:
 # ===========================================================================
 # 9. _ensure_vector_index_if_needed (lines 549-551, 553-557)
 # ===========================================================================
+
 
 class TestEnsureVectorIndexIfNeeded:
     def test_not_vector_request_returns_none(self):
@@ -369,6 +404,7 @@ class TestEnsureVectorIndexIfNeeded:
 # 10. _thinking_steps_from_planner_stream_text / strip_planner_stream_markers
 # ===========================================================================
 
+
 class TestThinkingSteps:
     def test_empty_text_returns_none(self):
         assert _thinking_steps_from_planner_stream_text("") is None
@@ -410,6 +446,7 @@ class TestThinkingSteps:
 # ===========================================================================
 # 11. Timeout helpers branches (lines 677-704)
 # ===========================================================================
+
 
 class TestTimeoutHelpers:
     def test_default_timeout(self):

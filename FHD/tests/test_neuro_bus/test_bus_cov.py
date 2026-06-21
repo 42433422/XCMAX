@@ -166,9 +166,7 @@ class TestNeuroReliabilityWanted:
     def test_staging_default_true_when_no_env(self) -> None:
         os.environ.pop("XCAGI_TEST_REL_MISSING", None)
         with patch.dict(os.environ, {"FHD_ENV": "staging"}):
-            assert (
-                _neuro_reliability_wanted("XCAGI_TEST_REL_MISSING", staging_default=True) is True
-            )
+            assert _neuro_reliability_wanted("XCAGI_TEST_REL_MISSING", staging_default=True) is True
 
     def test_staging_default_false_outside_staging(self) -> None:
         os.environ.pop("XCAGI_TEST_REL_MISSING2", None)
@@ -185,9 +183,7 @@ class TestNeuroReliabilityWanted:
 
 class TestHandlerSubscription:
     def _make_sub(self, filter_fn: Callable | None = None) -> HandlerSubscription:
-        return HandlerSubscription(
-            event_type="test", handler=lambda e: None, filter_fn=filter_fn
-        )
+        return HandlerSubscription(event_type="test", handler=lambda e: None, filter_fn=filter_fn)
 
     def test_should_handle_no_filter(self) -> None:
         sub = self._make_sub()

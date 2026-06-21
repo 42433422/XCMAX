@@ -12,6 +12,7 @@ import pytest
 # DataAnalysisService
 # ---------------------------------------------------------------------------
 
+
 class TestDataAnalysisService:
     def _make_svc(self):
         from app.services.data_analysis_service import DataAnalysisService
@@ -143,6 +144,7 @@ class TestDataAnalysisService:
 # ---------------------------------------------------------------------------
 # OpenAICompatibleAdapter (llm_adapter)
 # ---------------------------------------------------------------------------
+
 
 class TestOpenAICompatibleAdapter:
     def _make_adapter(self, provider="deepseek", api_key="test-key"):

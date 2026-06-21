@@ -262,7 +262,9 @@ class TestBertIntentClassifierPredict:
 
         with (
             patch.object(svc_mod.torch, "softmax", return_value=mock_probs_tensor),
-            patch.object(svc_mod.torch, "max", return_value=(mock_confidence_val, mock_predicted_idx_val)),
+            patch.object(
+                svc_mod.torch, "max", return_value=(mock_confidence_val, mock_predicted_idx_val)
+            ),
             patch.object(svc_mod.torch, "no_grad", return_value=fake_no_grad()),
         ):
             result = clf.predict("something")

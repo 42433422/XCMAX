@@ -25,6 +25,7 @@ from starlette.testclient import TestClient
 # even when heavy infrastructure is absent.
 # ---------------------------------------------------------------------------
 
+
 def _ensure_stub(name: str, attrs: dict | None = None) -> types.ModuleType:
     if name in sys.modules:
         return sys.modules[name]
@@ -54,8 +55,16 @@ _op_errors_mod = _ensure_stub(
     "app.utils.operational_errors",
     {
         "RECOVERABLE_ERRORS": (
-            OSError, ValueError, RuntimeError, ImportError, KeyError,
-            AttributeError, TypeError, LookupError, ConnectionError, TimeoutError,
+            OSError,
+            ValueError,
+            RuntimeError,
+            ImportError,
+            KeyError,
+            AttributeError,
+            TypeError,
+            LookupError,
+            ConnectionError,
+            TimeoutError,
         ),
     },
 )
@@ -210,6 +219,7 @@ import app.fastapi_routes.mod_store_routes as _mod  # noqa: E402
 # Helpers for patching stub modules by direct attribute assignment
 # ---------------------------------------------------------------------------
 
+
 def _set_stub(module_name: str, attr: str, value: Any) -> Any:
     """Set an attribute on a stub module and return the old value."""
     mod = sys.modules[module_name]
@@ -222,6 +232,7 @@ def _set_stub(module_name: str, attr: str, value: Any) -> Any:
 # TestClient factory
 # ---------------------------------------------------------------------------
 
+
 def _make_client() -> TestClient:
     app = FastAPI()
     app.include_router(_mod.router)
@@ -231,6 +242,7 @@ def _make_client() -> TestClient:
 # ===========================================================================
 # 1. Pure-Python helper: _is_extension_row
 # ===========================================================================
+
 
 class TestIsExtensionRow:
     def test_empty_id_returns_false(self):
@@ -262,6 +274,7 @@ class TestIsExtensionRow:
 # 2. Pure-Python helper: _item_to_mod_info
 # ===========================================================================
 
+
 class TestItemToModInfo:
     def test_empty_fields_get_defaults(self):
         result = _mod._item_to_mod_info({})
@@ -272,7 +285,13 @@ class TestItemToModInfo:
         assert result["source"] == "local"
 
     def test_populated_fields_pass_through(self):
-        d = {"id": "foo", "name": "Foo Mod", "version": "2.3", "author": "Alice", "description": "Cool"}
+        d = {
+            "id": "foo",
+            "name": "Foo Mod",
+            "version": "2.3",
+            "author": "Alice",
+            "description": "Cool",
+        }
         result = _mod._item_to_mod_info(d)
         assert result["id"] == "foo"
         assert result["name"] == "Foo Mod"
@@ -284,6 +303,7 @@ class TestItemToModInfo:
 # ===========================================================================
 # 3. Pure-Python helper: _all_rows (RECOVERABLE_ERRORS path)
 # ===========================================================================
+
 
 class TestAllRows:
     def test_returns_empty_list_on_recoverable_error(self):
@@ -305,6 +325,7 @@ class TestAllRows:
 # 4. Pure-Python helper: _installed_by_id
 # ===========================================================================
 
+
 class TestInstalledById:
     def test_filters_to_installed_only(self):
         rows = [
@@ -322,6 +343,7 @@ class TestInstalledById:
 # 5. _remote_to_mod_info
 # ===========================================================================
 
+
 class TestRemoteToModInfo:
     def _call(self, d, installed_ids=None):
         return _mod._remote_to_mod_info(d, installed_ids or set())
@@ -336,7 +358,9 @@ class TestRemoteToModInfo:
 
     def test_store_collection_from_commerce(self):
         old = sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection
-        sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection = MagicMock(return_value="")
+        sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection = MagicMock(
+            return_value=""
+        )
         try:
             info = self._call({"id": "m1", "commerce": {"collection": "premium"}})
         finally:
@@ -345,7 +369,9 @@ class TestRemoteToModInfo:
 
     def test_store_collection_from_top_level(self):
         old = sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection
-        sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection = MagicMock(return_value="")
+        sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection = MagicMock(
+            return_value=""
+        )
         try:
             info = self._call({"id": "m1", "store_collection": "basic"})
         finally:
@@ -385,11 +411,30 @@ class TestRemoteToModInfo:
 # 6. _filter_rows
 # ===========================================================================
 
+
 class TestFilterRows:
     _ROWS = [
-        {"id": "a", "name": "Alpha", "description": "First", "author": "Alice", "is_installed": True},
-        {"id": "b", "name": "Beta", "description": "Second", "author": "Bob", "is_installed": False},
-        {"id": "c", "name": "Gamma", "description": "Third", "author": "Alice", "is_installed": True},
+        {
+            "id": "a",
+            "name": "Alpha",
+            "description": "First",
+            "author": "Alice",
+            "is_installed": True,
+        },
+        {
+            "id": "b",
+            "name": "Beta",
+            "description": "Second",
+            "author": "Bob",
+            "is_installed": False,
+        },
+        {
+            "id": "c",
+            "name": "Gamma",
+            "description": "Third",
+            "author": "Alice",
+            "is_installed": True,
+        },
     ]
 
     def test_no_filters_returns_all(self):
@@ -436,6 +481,7 @@ class TestFilterRows:
 # 7. _safe_text
 # ===========================================================================
 
+
 class TestSafeText:
     def test_none_returns_empty(self):
         assert _mod._safe_text(None) == ""
@@ -453,6 +499,7 @@ class TestSafeText:
 # ===========================================================================
 # 8. _split_package_file
 # ===========================================================================
+
 
 class TestSplitPackageFile:
     def test_with_colon(self):
@@ -474,6 +521,7 @@ class TestSplitPackageFile:
 # ===========================================================================
 # 9. _body_value (ASYNC)
 # ===========================================================================
+
 
 class TestBodyValue:
     def _sync(self, coro):
@@ -511,6 +559,7 @@ class TestBodyValue:
 # ===========================================================================
 # 10. _request_payload (ASYNC)
 # ===========================================================================
+
 
 class TestRequestPayload:
     def _sync(self, coro):
@@ -550,19 +599,20 @@ class TestRequestPayload:
 # 11. _map_market_catalog_page (ASYNC)
 # ===========================================================================
 
+
 class TestMapMarketCatalogPage:
     def _sync(self, coro):
         return asyncio.get_event_loop().run_until_complete(coro)
 
     def _setup(self, *, public=True, row_out=None):
-        sys.modules["app.application.mod_store_catalog_app"].is_public_catalog_row = (
-            MagicMock(return_value=public)
+        sys.modules["app.application.mod_store_catalog_app"].is_public_catalog_row = MagicMock(
+            return_value=public
         )
-        sys.modules["app.application.mod_store_catalog_app"].market_item_to_package_row = (
-            MagicMock(return_value=row_out or {"id": "p1", "commerce": {"collection": "coll"}})
+        sys.modules["app.application.mod_store_catalog_app"].market_item_to_package_row = MagicMock(
+            return_value=row_out or {"id": "p1", "commerce": {"collection": "coll"}}
         )
-        sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection = (
-            MagicMock(return_value="")
+        sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection = MagicMock(
+            return_value=""
         )
 
     def test_non_list_items_returns_empty(self):
@@ -584,17 +634,13 @@ class TestMapMarketCatalogPage:
     def test_total_as_int(self):
         self._setup()
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(
-                _mod._map_market_catalog_page({"items": [], "total": 42})
-            )
+            items, total = self._sync(_mod._map_market_catalog_page({"items": [], "total": 42}))
         assert total == 42
 
     def test_total_bad_type_falls_back_to_len(self):
         self._setup()
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(
-                _mod._map_market_catalog_page({"items": [], "total": "bad"})
-            )
+            items, total = self._sync(_mod._map_market_catalog_page({"items": [], "total": "bad"}))
         assert total == 0
 
     def test_is_public_catalog_row_false_branch(self):
@@ -635,6 +681,7 @@ class TestMapMarketCatalogPage:
 # 12. _inject_host_foundation_row
 # ===========================================================================
 
+
 class TestInjectHostFoundationRow:
     _HF_ID = "xcagi-host-foundation-employee"
 
@@ -643,46 +690,60 @@ class TestInjectHostFoundationRow:
 
     def test_already_present_early_return(self):
         """Branch: HF row already in available → early return, no insert."""
-        old_hidden = sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store
-        sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = (
-            MagicMock(return_value=False)
-        )
+        old_hidden = sys.modules[
+            "app.mod_sdk.host_foundation"
+        ].is_infrastructure_mod_hidden_from_store
+        sys.modules[
+            "app.mod_sdk.host_foundation"
+        ].is_infrastructure_mod_hidden_from_store = MagicMock(return_value=False)
         try:
             available = [{"id": self._HF_ID, "name": "Host Foundation"}]
             original_len = len(available)
             self._call(available)
             assert len(available) == original_len
         finally:
-            sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = old_hidden
+            sys.modules[
+                "app.mod_sdk.host_foundation"
+            ].is_infrastructure_mod_hidden_from_store = old_hidden
 
     def test_not_present_inserts_at_front(self):
-        old_hidden = sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store
+        old_hidden = sys.modules[
+            "app.mod_sdk.host_foundation"
+        ].is_infrastructure_mod_hidden_from_store
         old_installed = sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed
-        sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = (
-            MagicMock(return_value=False)
-        )
-        sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = (
-            MagicMock(return_value=False)
+        sys.modules[
+            "app.mod_sdk.host_foundation"
+        ].is_infrastructure_mod_hidden_from_store = MagicMock(return_value=False)
+        sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = MagicMock(
+            return_value=False
         )
         try:
             available = [{"id": "other-mod"}]
             self._call(available)
             assert available[0]["id"] == self._HF_ID
         finally:
-            sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = old_hidden
-            sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = old_installed
+            sys.modules[
+                "app.mod_sdk.host_foundation"
+            ].is_infrastructure_mod_hidden_from_store = old_hidden
+            sys.modules[
+                "app.mod_sdk.host_foundation"
+            ].is_host_foundation_pack_installed = old_installed
 
     def test_infrastructure_mod_hidden_without_public_listing_popped(self):
         """Branch: hidden infra mod without public_listing gets removed."""
+
         def _is_hidden(mid):
             return mid == "infra-hidden"
-        old_hidden = sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store
+
+        old_hidden = sys.modules[
+            "app.mod_sdk.host_foundation"
+        ].is_infrastructure_mod_hidden_from_store
         old_installed = sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed
-        sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = (
-            MagicMock(side_effect=_is_hidden)
-        )
-        sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = (
-            MagicMock(return_value=False)
+        sys.modules[
+            "app.mod_sdk.host_foundation"
+        ].is_infrastructure_mod_hidden_from_store = MagicMock(side_effect=_is_hidden)
+        sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = MagicMock(
+            return_value=False
         )
         try:
             available = [{"id": "infra-hidden", "public_listing": False}]
@@ -690,20 +751,28 @@ class TestInjectHostFoundationRow:
             ids = [r["id"] for r in available]
             assert "infra-hidden" not in ids
         finally:
-            sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = old_hidden
-            sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = old_installed
+            sys.modules[
+                "app.mod_sdk.host_foundation"
+            ].is_infrastructure_mod_hidden_from_store = old_hidden
+            sys.modules[
+                "app.mod_sdk.host_foundation"
+            ].is_host_foundation_pack_installed = old_installed
 
     def test_infrastructure_mod_with_public_listing_stays(self):
         """Branch: hidden infra mod WITH public_listing stays."""
+
         def _is_hidden(mid):
             return mid == "infra-listed"
-        old_hidden = sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store
+
+        old_hidden = sys.modules[
+            "app.mod_sdk.host_foundation"
+        ].is_infrastructure_mod_hidden_from_store
         old_installed = sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed
-        sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = (
-            MagicMock(side_effect=_is_hidden)
-        )
-        sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = (
-            MagicMock(return_value=False)
+        sys.modules[
+            "app.mod_sdk.host_foundation"
+        ].is_infrastructure_mod_hidden_from_store = MagicMock(side_effect=_is_hidden)
+        sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = MagicMock(
+            return_value=False
         )
         try:
             available = [{"id": "infra-listed", "public_listing": True}]
@@ -711,13 +780,18 @@ class TestInjectHostFoundationRow:
             ids = [r["id"] for r in available]
             assert "infra-listed" in ids
         finally:
-            sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = old_hidden
-            sys.modules["app.mod_sdk.host_foundation"].is_host_foundation_pack_installed = old_installed
+            sys.modules[
+                "app.mod_sdk.host_foundation"
+            ].is_infrastructure_mod_hidden_from_store = old_hidden
+            sys.modules[
+                "app.mod_sdk.host_foundation"
+            ].is_host_foundation_pack_installed = old_installed
 
 
 # ===========================================================================
 # Route tests via TestClient
 # ===========================================================================
+
 
 def _patch_combined_rows(available=None, installed=None):
     """Return a context manager patching _mod._combined_rows."""
@@ -729,6 +803,7 @@ def _patch_combined_rows(available=None, installed=None):
 # ===========================================================================
 # 13. GET /catalog
 # ===========================================================================
+
 
 class TestCatalogRoute:
     def test_returns_success_true(self):
@@ -760,10 +835,13 @@ class TestCatalogRoute:
 # 14. GET /market-catalog
 # ===========================================================================
 
+
 class TestMarketCatalogRoute:
     def test_returns_success(self):
         # fetch_market_catalog_page is imported directly into _mod at module level
-        with patch.object(_mod, "fetch_market_catalog_page", AsyncMock(return_value={"items": [], "total": 0})):
+        with patch.object(
+            _mod, "fetch_market_catalog_page", AsyncMock(return_value={"items": [], "total": 0})
+        ):
             with patch.object(_mod, "_map_market_catalog_page", AsyncMock(return_value=([], 0))):
                 with _make_client() as client:
                     resp = client.get("/market-catalog")
@@ -786,6 +864,7 @@ class TestMarketCatalogRoute:
 # ===========================================================================
 # 15. GET /search
 # ===========================================================================
+
 
 class TestSearchRoute:
     def test_no_params_returns_all(self):
@@ -847,6 +926,7 @@ class TestSearchRoute:
 # 16. GET /popular  and  GET /recent
 # ===========================================================================
 
+
 class TestPopularAndRecentRoutes:
     def test_popular_returns_sorted_by_downloads(self):
         rows = [
@@ -876,13 +956,22 @@ class TestPopularAndRecentRoutes:
 # 17. GET /mod/{mod_id}/details
 # ===========================================================================
 
+
 class TestModDetailsRoute:
     # catalog_get_json is imported directly into _mod at module level
     def test_remote_success(self):
-        mock = AsyncMock(side_effect=[
-            {"versions": [{"version": "1.2.0"}]},
-            {"id": "my-mod", "name": "My Mod", "version": "1.2.0", "author": "Author", "description": "Desc"},
-        ])
+        mock = AsyncMock(
+            side_effect=[
+                {"versions": [{"version": "1.2.0"}]},
+                {
+                    "id": "my-mod",
+                    "name": "My Mod",
+                    "version": "1.2.0",
+                    "author": "Author",
+                    "description": "Desc",
+                },
+            ]
+        )
         with patch.object(_mod, "catalog_get_json", mock):
             with _make_client() as client:
                 resp = client.get("/mod/my-mod/details")
@@ -891,9 +980,21 @@ class TestModDetailsRoute:
 
     def test_remote_404_fallback_to_local(self):
         from fastapi import HTTPException as FE
-        rows = [{"id": "local-mod", "name": "Local", "version": "1.0", "author": "A",
-                 "description": "D", "source": "local", "catalog_base_url": ""}]
-        with patch.object(_mod, "catalog_get_json", AsyncMock(side_effect=FE(status_code=404, detail="not found"))):
+
+        rows = [
+            {
+                "id": "local-mod",
+                "name": "Local",
+                "version": "1.0",
+                "author": "A",
+                "description": "D",
+                "source": "local",
+                "catalog_base_url": "",
+            }
+        ]
+        with patch.object(
+            _mod, "catalog_get_json", AsyncMock(side_effect=FE(status_code=404, detail="not found"))
+        ):
             with _patch_combined_rows(available=rows):
                 with _make_client() as client:
                     resp = client.get("/mod/local-mod/details")
@@ -902,7 +1003,10 @@ class TestModDetailsRoute:
 
     def test_full_404_when_not_found(self):
         from fastapi import HTTPException as FE
-        with patch.object(_mod, "catalog_get_json", AsyncMock(side_effect=FE(status_code=404, detail="not found"))):
+
+        with patch.object(
+            _mod, "catalog_get_json", AsyncMock(side_effect=FE(status_code=404, detail="not found"))
+        ):
             with _patch_combined_rows(available=[]):
                 with _make_client() as client:
                     resp = client.get("/mod/no-such-mod/details")
@@ -910,10 +1014,12 @@ class TestModDetailsRoute:
 
     def test_versions_list_with_string_entries(self):
         """Branch: versions[0] is a plain string, not a dict."""
-        mock = AsyncMock(side_effect=[
-            {"versions": ["1.5.0"]},
-            {"id": "m", "name": "M", "version": "1.5.0", "author": "A", "description": "D"},
-        ])
+        mock = AsyncMock(
+            side_effect=[
+                {"versions": ["1.5.0"]},
+                {"id": "m", "name": "M", "version": "1.5.0", "author": "A", "description": "D"},
+            ]
+        )
         with patch.object(_mod, "catalog_get_json", mock):
             with _make_client() as client:
                 resp = client.get("/mod/m/details")
@@ -924,6 +1030,7 @@ class TestModDetailsRoute:
 # ===========================================================================
 # 18. POST /upload
 # ===========================================================================
+
 
 class TestUploadRoute:
     def test_returns_not_implemented(self):
@@ -936,6 +1043,7 @@ class TestUploadRoute:
 # ===========================================================================
 # 19. POST /install
 # ===========================================================================
+
 
 class TestInstallRoute:
     def _patch_install(self):
@@ -969,6 +1077,7 @@ class TestInstallRoute:
 # 20. POST /install-industry-seed
 # ===========================================================================
 
+
 class TestInstallIndustrySeedRoute:
     def test_missing_industry_id_returns_400(self):
         with _make_client() as client:
@@ -977,8 +1086,8 @@ class TestInstallIndustrySeedRoute:
 
     def test_success(self):
         old = sys.modules["app.mod_sdk.industry_seed"].install_industry_seed_with_fallback
-        sys.modules["app.mod_sdk.industry_seed"].install_industry_seed_with_fallback = (
-            AsyncMock(return_value={"success": True, "message": "seeded"})
+        sys.modules["app.mod_sdk.industry_seed"].install_industry_seed_with_fallback = AsyncMock(
+            return_value={"success": True, "message": "seeded"}
         )
         try:
             with _make_client() as client:
@@ -992,6 +1101,7 @@ class TestInstallIndustrySeedRoute:
 # ===========================================================================
 # 21. POST /install-customer-delivery-seed
 # ===========================================================================
+
 
 class TestInstallCustomerDeliverySeedRoute:
     def test_missing_mod_id_returns_400(self):
@@ -1007,9 +1117,9 @@ class TestInstallCustomerDeliverySeedRoute:
 
     def _setup_delivery(self, result=None):
         result = result or {"success": True, "message": "done"}
-        sys.modules["app.mod_sdk.customer_delivery_seed"].install_customer_delivery_seed_package = (
-            AsyncMock(return_value=result)
-        )
+        sys.modules[
+            "app.mod_sdk.customer_delivery_seed"
+        ].install_customer_delivery_seed_package = AsyncMock(return_value=result)
 
     def test_entitlement_filter_active_and_entitled(self):
         self._setup_entitlements(active=True, entitled_ids={"mod-a"})
@@ -1046,11 +1156,12 @@ class TestInstallCustomerDeliverySeedRoute:
 # 22. POST /reload-employees
 # ===========================================================================
 
+
 class TestReloadEmployeesRoute:
     def test_returns_success(self):
         old = sys.modules["app.mod_sdk.employee_runtime"].refresh_employee_pack_runtime
-        sys.modules["app.mod_sdk.employee_runtime"].refresh_employee_pack_runtime = (
-            MagicMock(return_value={"refreshed": True})
+        sys.modules["app.mod_sdk.employee_runtime"].refresh_employee_pack_runtime = MagicMock(
+            return_value={"refreshed": True}
         )
         try:
             with _make_client() as client:
@@ -1065,6 +1176,7 @@ class TestReloadEmployeesRoute:
 # 23. POST /uninstall
 # ===========================================================================
 
+
 class TestUninstallRoute:
     def test_missing_mod_id_returns_400(self):
         with _make_client() as client:
@@ -1075,8 +1187,8 @@ class TestUninstallRoute:
         mm = MagicMock()
         mm.uninstall_mod.return_value = (True, "uninstalled")
         old = sys.modules["app.infrastructure.mods.mod_manager"].get_mod_manager
-        sys.modules["app.infrastructure.mods.mod_manager"].get_mod_manager = (
-            MagicMock(return_value=mm)
+        sys.modules["app.infrastructure.mods.mod_manager"].get_mod_manager = MagicMock(
+            return_value=mm
         )
         try:
             with _make_client() as client:
@@ -1090,6 +1202,7 @@ class TestUninstallRoute:
 # ===========================================================================
 # 24. POST /update
 # ===========================================================================
+
 
 class TestUpdateRoute:
     def test_calls_install_from_catalog(self):
@@ -1116,6 +1229,7 @@ class TestUpdateRoute:
 # 25. GET /validate, /updates, /dependencies
 # ===========================================================================
 
+
 class TestSimpleGetRoutes:
     def test_validate_returns_not_implemented(self):
         with _make_client() as client:
@@ -1140,6 +1254,7 @@ class TestSimpleGetRoutes:
 # 26. POST /mod/{mod_id}/rate
 # ===========================================================================
 
+
 class TestRateRoute:
     def test_returns_not_implemented(self):
         with _make_client() as client:
@@ -1151,6 +1266,7 @@ class TestRateRoute:
 # ===========================================================================
 # 27. GET /package/{path}/download  →  404
 # ===========================================================================
+
 
 class TestDownloadRoute:
     def test_returns_404(self):
@@ -1168,6 +1284,7 @@ class TestDownloadRoute:
 # 28. DELETE /package/{path}
 # ===========================================================================
 
+
 class TestDeletePackageRoute:
     def test_returns_not_implemented(self):
         with _make_client() as client:
@@ -1179,6 +1296,7 @@ class TestDeletePackageRoute:
 # ===========================================================================
 # 29. POST /index/rebuild
 # ===========================================================================
+
 
 class TestRebuildIndexRoute:
     def test_returns_message(self):
@@ -1192,6 +1310,7 @@ class TestRebuildIndexRoute:
 # ===========================================================================
 # 30. POST /install-host-foundation
 # ===========================================================================
+
 
 class TestInstallHostFoundationRoute:
     def test_success(self):
@@ -1226,23 +1345,24 @@ class TestInstallHostFoundationRoute:
 # 31. POST /bootstrap-edition-pack
 # ===========================================================================
 
+
 class TestBootstrapEditionPackRoute:
     def _set_resolve_edition(self, value="generic"):
         sys.modules["app.mod_sdk.edition_policy"].resolve_edition = MagicMock(return_value=value)
 
     def _set_assert_allowed(self, exc=None):
         if exc:
-            sys.modules["app.mod_sdk.product_skus"].assert_bootstrap_edition_allowed = (
-                MagicMock(side_effect=exc)
+            sys.modules["app.mod_sdk.product_skus"].assert_bootstrap_edition_allowed = MagicMock(
+                side_effect=exc
             )
         else:
-            sys.modules["app.mod_sdk.product_skus"].assert_bootstrap_edition_allowed = (
-                MagicMock(return_value=None)
+            sys.modules["app.mod_sdk.product_skus"].assert_bootstrap_edition_allowed = MagicMock(
+                return_value=None
             )
 
     def _set_bootstrap(self, data):
-        sys.modules["app.mod_sdk.edition_bootstrap"].bootstrap_edition_pack = (
-            AsyncMock(return_value=data)
+        sys.modules["app.mod_sdk.edition_bootstrap"].bootstrap_edition_pack = AsyncMock(
+            return_value=data
         )
 
     def test_invalid_edition_returns_400(self):
@@ -1264,20 +1384,22 @@ class TestBootstrapEditionPackRoute:
     def test_not_ready_with_failed_catalog_ids(self):
         self._set_resolve_edition("generic")
         self._set_assert_allowed()
-        self._set_bootstrap({
-            "ready": False,
-            "installed_count": 1,
-            "expected_count": 3,
-            "catalog": [
-                {"mod_id": "missing-a", "status": "catalog_failed"},
-                {"mod_id": "missing-b", "status": "missing"},
-                "not-a-dict",  # branch: skip non-dict rows
-            ],
-            "seed": [
-                {"mod_id": "seed-x", "status": "error"},
-                {"mod_id": "missing-a", "status": "error"},  # dup: not re-added
-            ],
-        })
+        self._set_bootstrap(
+            {
+                "ready": False,
+                "installed_count": 1,
+                "expected_count": 3,
+                "catalog": [
+                    {"mod_id": "missing-a", "status": "catalog_failed"},
+                    {"mod_id": "missing-b", "status": "missing"},
+                    "not-a-dict",  # branch: skip non-dict rows
+                ],
+                "seed": [
+                    {"mod_id": "seed-x", "status": "error"},
+                    {"mod_id": "missing-a", "status": "error"},  # dup: not re-added
+                ],
+            }
+        )
         with _make_client() as client:
             resp = client.post("/bootstrap-edition-pack?edition=generic")
         assert resp.status_code == 200
@@ -1298,13 +1420,15 @@ class TestBootstrapEditionPackRoute:
         """Branch: no failed_ids → hint is empty → msg has no trailing colon+hint."""
         self._set_resolve_edition("generic")
         self._set_assert_allowed()
-        self._set_bootstrap({
-            "ready": False,
-            "installed_count": 0,
-            "expected_count": 2,
-            "catalog": [],
-            "seed": [],
-        })
+        self._set_bootstrap(
+            {
+                "ready": False,
+                "installed_count": 0,
+                "expected_count": 2,
+                "catalog": [],
+                "seed": [],
+            }
+        )
         with _make_client() as client:
             resp = client.post("/bootstrap-edition-pack?edition=minimal")
         assert resp.status_code == 200
@@ -1316,13 +1440,15 @@ class TestBootstrapEditionPackRoute:
         """Branch: seed list contains non-dict entries → no AttributeError."""
         self._set_resolve_edition("generic")
         self._set_assert_allowed()
-        self._set_bootstrap({
-            "ready": False,
-            "installed_count": 0,
-            "expected_count": 1,
-            "catalog": [],
-            "seed": ["not-a-dict", None],
-        })
+        self._set_bootstrap(
+            {
+                "ready": False,
+                "installed_count": 0,
+                "expected_count": 1,
+                "catalog": [],
+                "seed": ["not-a-dict", None],
+            }
+        )
         with _make_client() as client:
             resp = client.post("/bootstrap-edition-pack?edition=generic")
         assert resp.status_code == 200
@@ -1331,6 +1457,7 @@ class TestBootstrapEditionPackRoute:
 # ===========================================================================
 # 32. POST /sync-modstore-library
 # ===========================================================================
+
 
 class TestSyncModstoreLibraryRoute:
     def _patch_sync(self, value):

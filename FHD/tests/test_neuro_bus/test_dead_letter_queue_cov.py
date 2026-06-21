@@ -211,9 +211,7 @@ class TestAlertSuppressor:
         """Branch [294→299]: within window → suppressed."""
         sup = AlertSuppressor(suppress_window=300.0, threshold=1)
         sup.record_and_check(DeadLetterReason.TIMEOUT, "ev.type5")  # fires first alert
-        should_alert, _ = sup.record_and_check(
-            DeadLetterReason.TIMEOUT, "ev.type5"
-        )  # suppressed
+        should_alert, _ = sup.record_and_check(DeadLetterReason.TIMEOUT, "ev.type5")  # suppressed
         assert should_alert is False
 
 
@@ -845,9 +843,7 @@ class TestTriageEntries:
     def test_memory_retriable_1095_1097(self) -> None:
         """Branch [1095+]: memory mode, retriable reason."""
         dlq = make_dlq()
-        dlq.enqueue(
-            make_event(), DeadLetterReason.RETRY_EXHAUSTED, "err", 3
-        )
+        dlq.enqueue(make_event(), DeadLetterReason.RETRY_EXHAUSTED, "err", 3)
         result = dlq.triage_entries()
         assert result["retriable"]
 
@@ -1037,9 +1033,7 @@ class TestNeuroBusDLQIntegration:
         dlq = make_dlq()
         integration = NeuroBusDLQIntegration(dlq=dlq)
         event = make_event()
-        eid = integration.handle_failure(
-            event, Exception("unknown"), retry_count=0
-        )
+        eid = integration.handle_failure(event, Exception("unknown"), retry_count=0)
         entry = dlq.dequeue(eid)
         assert entry is not None
         assert entry.reason == DeadLetterReason.UNRECOVERABLE

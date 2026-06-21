@@ -23,6 +23,7 @@ from app.fastapi_routes.domains.customer.routes import (
 # TestClient fixture
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def client():
     app = FastAPI()
@@ -34,6 +35,7 @@ def client():
 # ---------------------------------------------------------------------------
 # Helper stubs
 # ---------------------------------------------------------------------------
+
 
 def _make_run(status: str = "completed", run_id: str = "r1", error: str = "") -> MagicMock:
     run = MagicMock()
@@ -48,6 +50,7 @@ def _make_run(status: str = "completed", run_id: str = "r1", error: str = "") ->
 # ===========================================================================
 # 1. _agent_node_output (lines 42-60)
 # ===========================================================================
+
 
 class TestAgentNodeOutput:
     def test_from_final_output(self):
@@ -91,6 +94,7 @@ class TestAgentNodeOutput:
 # 2. _customers_agent_user_id (lines 63-70)
 # ===========================================================================
 
+
 class TestCustomersAgentUserId:
     def _req(self, headers: dict) -> MagicMock:
         req = MagicMock()
@@ -127,9 +131,13 @@ class TestCustomersAgentUserId:
 # 3. _execute_customers_route_action (lines 139-206)
 # ===========================================================================
 
+
 class TestExecuteCustomersRouteAction:
     def test_create_success(self):
-        with patch("app.fastapi_routes.domains.customer.routes._customer_pg_insert", return_value={"id": 1, "name": "A"}):
+        with patch(
+            "app.fastapi_routes.domains.customer.routes._customer_pg_insert",
+            return_value={"id": 1, "name": "A"},
+        ):
             result = _execute_customers_route_action("create", {"customer_name": "A"})
         assert result["success"] is True
         assert result["data"]["id"] == 1
@@ -140,7 +148,9 @@ class TestExecuteCustomersRouteAction:
         assert "不能为空" in result["message"]
 
     def test_update_success(self):
-        with patch("app.fastapi_routes.domains.customer.routes._customer_pg_update", return_value={"id": 5}):
+        with patch(
+            "app.fastapi_routes.domains.customer.routes._customer_pg_update", return_value={"id": 5}
+        ):
             result = _execute_customers_route_action("update", {"id": 5, "name": "B"})
         assert result["success"] is True
 
@@ -187,7 +197,11 @@ class TestExecuteCustomersRouteAction:
         def _raise_404(cid):
             if cid == 2:
                 raise HTTPException(status_code=404)
-        with patch("app.fastapi_routes.domains.customer.routes._customer_delete_unified", side_effect=_raise_404):
+
+        with patch(
+            "app.fastapi_routes.domains.customer.routes._customer_delete_unified",
+            side_effect=_raise_404,
+        ):
             result = _execute_customers_route_action("batch_delete", {"ids": [1, 2]})
         assert result["deleted"] == 1
         assert "2" in result["skipped"]
@@ -195,7 +209,11 @@ class TestExecuteCustomersRouteAction:
     def test_batch_delete_non_404_raises(self):
         def _raise_500(cid):
             raise HTTPException(status_code=500)
-        with patch("app.fastapi_routes.domains.customer.routes._customer_delete_unified", side_effect=_raise_500):
+
+        with patch(
+            "app.fastapi_routes.domains.customer.routes._customer_delete_unified",
+            side_effect=_raise_500,
+        ):
             with pytest.raises(HTTPException):
                 _execute_customers_route_action("batch_delete", {"ids": [1]})
 
@@ -215,6 +233,7 @@ _FACADE = "app.mod_sdk.erp_customers_facade"
 # 4. customers_get (GET /customers/{id}) (lines 338-354)
 # ===========================================================================
 
+
 class TestCustomersGetOne:
     def test_get_not_found_raises_404(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=False):
@@ -233,7 +252,9 @@ class TestCustomersGetOne:
 
     def test_get_via_service_enabled(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
-            with patch(f"{_FACADE}.customers_get", return_value={"success": True, "data": {"id": 2}}):
+            with patch(
+                f"{_FACADE}.customers_get", return_value={"success": True, "data": {"id": 2}}
+            ):
                 r = client.get("/customers/2")
         assert r.status_code == 200
 
@@ -242,12 +263,19 @@ class TestCustomersGetOne:
 # 5. customers_create (POST /customers) (lines 357-403)
 # ===========================================================================
 
+
 class TestCustomersCreate:
     def test_create_success(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=False):
             with patch(f"{_ROUTES}._customers_write_raise"):
-                with patch(f"{_ROUTES}._customer_body_name_contact", return_value=("TestCo", "p", "111", "addr")):
-                    with patch(f"{_ROUTES}._run_customers_agent", return_value={"success": True, "data": {"id": 1}}):
+                with patch(
+                    f"{_ROUTES}._customer_body_name_contact",
+                    return_value=("TestCo", "p", "111", "addr"),
+                ):
+                    with patch(
+                        f"{_ROUTES}._run_customers_agent",
+                        return_value={"success": True, "data": {"id": 1}},
+                    ):
                         with patch(f"{_ROUTES}.publish_simple_event"):
                             r = client.post("/customers", json={"name": "TestCo"})
         assert r.status_code == 200
@@ -270,6 +298,7 @@ class TestCustomersCreate:
 # 6. customers_delete (DELETE /customers/{id}) (lines 444-467)
 # ===========================================================================
 
+
 class TestCustomersDelete:
     def test_delete_via_service(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
@@ -286,7 +315,10 @@ class TestCustomersDelete:
 
     def test_delete_recoverable_error_fallthrough(self, client: TestClient):
         import httpx
-        with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", side_effect=httpx.ConnectError("err")):
+
+        with patch(
+            f"{_FACADE}.is_erp_customers_via_service_enabled", side_effect=httpx.ConnectError("err")
+        ):
             with patch(f"{_ROUTES}._customers_write_raise"):
                 with patch(f"{_ROUTES}._run_customers_agent", return_value={"success": True}):
                     r = client.delete("/customers/5")
@@ -296,6 +328,7 @@ class TestCustomersDelete:
 # ===========================================================================
 # 7. customers_update (PUT /customers/{id}) (lines 406-441)
 # ===========================================================================
+
 
 class TestCustomersUpdate:
     def test_update_no_name_400(self, client: TestClient):
@@ -316,6 +349,7 @@ class TestCustomersUpdate:
 # 8. customers_batch_delete (POST /customers/batch-delete) (lines 470-482)
 # ===========================================================================
 
+
 class TestCustomersBatchDelete:
     def test_batch_delete_empty_ids_raises_400(self, client: TestClient):
         with patch(f"{_ROUTES}._customers_write_raise"):
@@ -329,7 +363,9 @@ class TestCustomersBatchDelete:
 
     def test_batch_delete_success(self, client: TestClient):
         with patch(f"{_ROUTES}._customers_write_raise"):
-            with patch(f"{_ROUTES}._run_customers_agent", return_value={"success": True, "deleted": 2}):
+            with patch(
+                f"{_ROUTES}._run_customers_agent", return_value={"success": True, "deleted": 2}
+            ):
                 r = client.post("/customers/batch-delete", json={"ids": [1, 2]})
         assert r.status_code == 200
 
@@ -338,12 +374,26 @@ class TestCustomersBatchDelete:
 # 9. customers_import (POST /customers/import) (lines 485-502)
 # ===========================================================================
 
+
 class TestCustomersImport:
     def test_import_business_mod_blocked(self, client: TestClient):
         import io
+
         with patch(f"{_ROUTES}._customers_write_raise"):
-            with patch(f"{_ROUTES}._business_mod_json_block", return_value={"success": False, "message": "blocked"}):
-                r = client.post("/customers/import", files={"file": ("f.xlsx", io.BytesIO(b"data"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+            with patch(
+                f"{_ROUTES}._business_mod_json_block",
+                return_value={"success": False, "message": "blocked"},
+            ):
+                r = client.post(
+                    "/customers/import",
+                    files={
+                        "file": (
+                            "f.xlsx",
+                            io.BytesIO(b"data"),
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
+                    },
+                )
         assert r.status_code == 200
         assert r.json()["success"] is False
 
@@ -359,7 +409,16 @@ class TestCustomersImport:
         with patch(f"{_ROUTES}._customers_write_raise"):
             with patch(f"{_ROUTES}._business_mod_json_block", return_value=None):
                 with patch.dict(sys.modules, {"app.application.excel_imports": fake_excel}):
-                    r = client.post("/customers/import", files={"file": ("f.xlsx", io.BytesIO(b"data"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+                    r = client.post(
+                        "/customers/import",
+                        files={
+                            "file": (
+                                "f.xlsx",
+                                io.BytesIO(b"data"),
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            )
+                        },
+                    )
         assert r.status_code == 200
         assert r.json()["success"] is True
 
@@ -369,11 +428,23 @@ class TestCustomersImport:
         import types
 
         fake_excel = types.ModuleType("app.application.excel_imports")
-        fake_excel.run_customers_excel_import_bytes = lambda _: {"success": False, "message": "parse error"}  # type: ignore[attr-defined]
+        fake_excel.run_customers_excel_import_bytes = lambda _: {
+            "success": False,
+            "message": "parse error",
+        }  # type: ignore[attr-defined]
         with patch(f"{_ROUTES}._customers_write_raise"):
             with patch(f"{_ROUTES}._business_mod_json_block", return_value=None):
                 with patch.dict(sys.modules, {"app.application.excel_imports": fake_excel}):
-                    r = client.post("/customers/import", files={"file": ("f.xlsx", io.BytesIO(b"data"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+                    r = client.post(
+                        "/customers/import",
+                        files={
+                            "file": (
+                                "f.xlsx",
+                                io.BytesIO(b"data"),
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            )
+                        },
+                    )
         assert r.status_code == 400
 
 
@@ -381,12 +452,14 @@ class TestCustomersImport:
 # 10. customers_export_stub (GET /customers/export) (lines 505-511)
 # ===========================================================================
 
+
 class TestCustomersExportStub:
     def test_export_returns_501(self, client: TestClient):
         # /customers/export conflicts with /customers/{customer_id}
         # The route is registered but the path matches customer_id="export"
         # The route itself raises 501 when directly invoked as a function
         from app.fastapi_routes.domains.customer.routes import customers_export_stub
+
         with pytest.raises(HTTPException) as exc_info:
             customers_export_stub()
         assert exc_info.value.status_code == 501

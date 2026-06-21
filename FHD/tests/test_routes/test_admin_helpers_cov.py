@@ -209,9 +209,7 @@ class TestApplyMarketProfile:
 class TestLoadAdminDutyRecords:
     def test_no_file_returns_empty(self):
         """All paths are_file False → empty list returned."""
-        with patch.object(
-            ah, "_candidate_duty_registry_paths", return_value=[]
-        ):
+        with patch.object(ah, "_candidate_duty_registry_paths", return_value=[]):
             result = ah._load_admin_duty_records()
         assert result == []
 
@@ -221,12 +219,8 @@ class TestLoadAdminDutyRecords:
 
         mock_path = MagicMock(spec=Path)
         mock_path.is_file.return_value = True
-        mock_path.read_text.return_value = json.dumps(
-            {"packages": [{"id": "e1"}, {"id": "e2"}]}
-        )
-        with patch.object(
-            ah, "_candidate_duty_registry_paths", return_value=[mock_path]
-        ):
+        mock_path.read_text.return_value = json.dumps({"packages": [{"id": "e1"}, {"id": "e2"}]})
+        with patch.object(ah, "_candidate_duty_registry_paths", return_value=[mock_path]):
             result = ah._load_admin_duty_records()
         assert len(result) == 2
 
@@ -239,9 +233,7 @@ class TestLoadAdminDutyRecords:
         good = MagicMock(spec=Path)
         good.is_file.return_value = True
         good.read_text.return_value = json.dumps({"packages": [{"id": "e1"}]})
-        with patch.object(
-            ah, "_candidate_duty_registry_paths", return_value=[bad, good]
-        ):
+        with patch.object(ah, "_candidate_duty_registry_paths", return_value=[bad, good]):
             result = ah._load_admin_duty_records()
         assert len(result) == 1
 
@@ -252,9 +244,7 @@ class TestLoadAdminDutyRecords:
         bad = MagicMock(spec=Path)
         bad.is_file.return_value = True
         bad.read_text.side_effect = OSError("permission denied")
-        with patch.object(
-            ah, "_candidate_duty_registry_paths", return_value=[bad]
-        ):
+        with patch.object(ah, "_candidate_duty_registry_paths", return_value=[bad]):
             result = ah._load_admin_duty_records()
         assert result == []
 
@@ -265,9 +255,7 @@ class TestLoadAdminDutyRecords:
         bad = MagicMock(spec=Path)
         bad.is_file.return_value = True
         bad.read_text.return_value = "not valid json{"
-        with patch.object(
-            ah, "_candidate_duty_registry_paths", return_value=[bad]
-        ):
+        with patch.object(ah, "_candidate_duty_registry_paths", return_value=[bad]):
             result = ah._load_admin_duty_records()
         assert result == []
 
@@ -278,9 +266,7 @@ class TestLoadAdminDutyRecords:
         p = MagicMock(spec=Path)
         p.is_file.return_value = True
         p.read_text.return_value = json.dumps({"packages": "not_a_list"})
-        with patch.object(
-            ah, "_candidate_duty_registry_paths", return_value=[p]
-        ):
+        with patch.object(ah, "_candidate_duty_registry_paths", return_value=[p]):
             result = ah._load_admin_duty_records()
         assert result == []
 
@@ -290,12 +276,8 @@ class TestLoadAdminDutyRecords:
 
         p = MagicMock(spec=Path)
         p.is_file.return_value = True
-        p.read_text.return_value = json.dumps(
-            {"packages": [{"id": "ok"}, "bad", 42]}
-        )
-        with patch.object(
-            ah, "_candidate_duty_registry_paths", return_value=[p]
-        ):
+        p.read_text.return_value = json.dumps({"packages": [{"id": "ok"}, "bad", 42]})
+        with patch.object(ah, "_candidate_duty_registry_paths", return_value=[p]):
             result = ah._load_admin_duty_records()
         assert result == [{"id": "ok"}]
 
@@ -443,9 +425,7 @@ class TestEnrichWorkflowEmployees:
     def test_market_profiles_key_hit(self):
         """[280→281, 282→280(break)]: key found → profile applied."""
         emp = {"id": "e1", "label": "L", "name": "N", "panel_title": "PT"}
-        profiles = {
-            "e1": {"pkg_id": "P1", "name": "MarketName", "description": "d"}
-        }
+        profiles = {"e1": {"pkg_id": "P1", "name": "MarketName", "description": "d"}}
         result = ah._enrich_workflow_employees(
             "mod1", [emp], market_profiles=profiles, market_connected=True
         )
@@ -455,9 +435,7 @@ class TestEnrichWorkflowEmployees:
         """[280→284, 282→283(continue)]: key not found → profile stays None."""
         emp = {"id": "e1", "label": "L", "name": "N", "panel_title": "PT"}
         profiles = {"other_key": {"pkg_id": "P2"}}
-        result = ah._enrich_workflow_employees(
-            "mod1", [emp], market_profiles=profiles
-        )
+        result = ah._enrich_workflow_employees("mod1", [emp], market_profiles=profiles)
         assert result[0]["profile_source"] == "admin"
 
     def test_empty_market_profiles_dict(self):

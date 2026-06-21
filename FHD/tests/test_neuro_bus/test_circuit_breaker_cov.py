@@ -26,6 +26,7 @@ from app.neuro_bus.circuit_breaker import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_cb(
     failure_threshold: int = 5,
     success_threshold: int = 3,
@@ -64,6 +65,7 @@ def _make_cb(
 # Branch [151, 152]: stale buckets exist when get_stats is called
 # ---------------------------------------------------------------------------
 
+
 class TestRollingWindowCounterGetStats:
     def test_get_stats_evicts_stale_buckets(self):
         """L151→L152: while-loop body taken when a stale bucket exists at get_stats time."""
@@ -80,6 +82,7 @@ class TestRollingWindowCounterGetStats:
 # _transition_to — same-state early return
 # Branch [261, 262]: old_state == new_state → immediate return
 # ---------------------------------------------------------------------------
+
 
 class TestTransitionTo:
     def test_same_state_no_op(self):
@@ -106,6 +109,7 @@ class TestTransitionTo:
 # Branch [312, 324]: _last_failure_time is None → returns False
 # Branch [326, 333]: HALF_OPEN quota exceeded → returns False
 # ---------------------------------------------------------------------------
+
 
 class TestCanExecute:
     def test_open_no_auto_transition_returns_false(self):
@@ -147,6 +151,7 @@ class TestCanExecute:
 # Branch [359, -335]: CLOSED state and _failure_count == 0
 # ---------------------------------------------------------------------------
 
+
 class TestRecordSuccess:
     def test_closed_failure_count_zero_no_op(self):
         """L359→-335: CLOSED with _failure_count==0, the if-body is skipped."""
@@ -171,6 +176,7 @@ class TestRecordSuccess:
 # Branch [427, -364]: slow_call_rate < threshold → no open transition
 # Branch [427, 428]: slow_call_rate >= threshold → transition to OPEN
 # ---------------------------------------------------------------------------
+
 
 class TestRecordFailure:
     def test_open_state_records_failure_no_transition(self):
@@ -246,6 +252,7 @@ class TestRecordFailure:
 # Branch [453, 454]: HALF_OPEN, half_open_window also recorded
 # ---------------------------------------------------------------------------
 
+
 class TestRecordSlowCall:
     def test_closed_state_only_main_window_updated(self):
         """L453→-444: CLOSED state, half_open_window NOT updated."""
@@ -270,6 +277,7 @@ class TestRecordSlowCall:
 # Branch [464, -461]: guard prevents decrement below 0
 # ---------------------------------------------------------------------------
 
+
 class TestReleaseExecutionSlot:
     def test_release_when_zero_does_not_go_negative(self):
         """L464→-461: _concurrent_executions == 0, decrement skipped."""
@@ -286,6 +294,7 @@ class TestReleaseExecutionSlot:
 # Branch [491, 496]: thread finished but exc is not None
 # Branch [496, 500]: exc is None → success path
 # ---------------------------------------------------------------------------
+
 
 class TestCallFallbackSync:
     def test_fallback_none_raises_circuit_open(self):
@@ -312,6 +321,7 @@ class TestCallFallbackSync:
 
     def test_fallback_raises_exception_propagates(self):
         """L496→L497: fallback raises → exc[0] is not None → re-raises."""
+
         def bad_fallback():
             raise ValueError("fallback error")
 
@@ -334,6 +344,7 @@ class TestCallFallbackSync:
 # Branch [517, 521]: fallback returns non-coroutine (sync fallback in async context)
 # ---------------------------------------------------------------------------
 
+
 class TestCallFallbackAsync:
     async def test_fallback_none_raises_circuit_open(self):
         """L512→L513: no async fallback → CircuitBreakerOpen raised."""
@@ -350,6 +361,7 @@ class TestCallFallbackAsync:
 
     async def test_async_fallback_success(self):
         """Async coroutine fallback succeeds normally."""
+
         async def async_fb():
             return "async_ok"
 
@@ -360,6 +372,7 @@ class TestCallFallbackAsync:
 
     async def test_async_fallback_failure_increments_count(self):
         """Async fallback raises → fallback_failure_count incremented."""
+
         async def bad_fb():
             raise ValueError("async error")
 
@@ -376,6 +389,7 @@ class TestCallFallbackAsync:
 # Branch [569, 570]: slow_call in failure path
 # Branch [572, 573]: fallback after failure
 # ---------------------------------------------------------------------------
+
 
 class TestExecute:
     def test_open_with_fallback_calls_fallback(self):
@@ -431,6 +445,7 @@ class TestExecute:
 # Branch [620, 621/622]: fallback in failure path
 # ---------------------------------------------------------------------------
 
+
 class TestExecuteAsync:
     async def test_open_with_fallback_calls_fallback(self):
         """L602→L603: can_execute()=False and async fallback present."""
@@ -482,6 +497,7 @@ class TestExecuteAsync:
 # Branch [801, 819]: no breakers → loop body never entered
 # ---------------------------------------------------------------------------
 
+
 class TestGetPrometheusMetrics:
     def test_empty_manager_returns_header_only(self):
         """L801→L819: no breakers → for-loop body not taken, only headers output."""
@@ -505,10 +521,12 @@ class TestGetPrometheusMetrics:
 # Branch [828, 830]: singleton already exists → returns existing
 # ---------------------------------------------------------------------------
 
+
 class TestGetCircuitBreaker:
     def test_singleton_created_on_first_call(self):
         """L828→L829: _neuro_circuit_manager is None → creates new instance."""
         import app.neuro_bus.circuit_breaker as cb_module
+
         original = cb_module._neuro_circuit_manager
         try:
             cb_module._neuro_circuit_manager = None
@@ -520,6 +538,7 @@ class TestGetCircuitBreaker:
     def test_singleton_returned_on_subsequent_calls(self):
         """L828→L830: _neuro_circuit_manager already set → returns existing instance."""
         import app.neuro_bus.circuit_breaker as cb_module
+
         original = cb_module._neuro_circuit_manager
         try:
             fake_mgr = NeuroCircuitBreakerManager()

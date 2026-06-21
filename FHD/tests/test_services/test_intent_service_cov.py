@@ -60,8 +60,10 @@ class TestLoadIntentRuntimeRules:
                 _load_intent_runtime_rules,
                 _quick_intent_patterns,
             )
+
             _load_intent_runtime_rules()
             from app.services import intent_service as _mod
+
             assert any(p == r"\d+" for p, _ in _mod._quick_intent_patterns)
 
     def test_tuple_intent_patterns(self):
@@ -76,8 +78,10 @@ class TestLoadIntentRuntimeRules:
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
             from app.services.intent_service import _load_intent_runtime_rules
+
             _load_intent_runtime_rules()
             from app.services import intent_service as _mod
+
             assert any(p == r"abc" for p, _ in _mod._quick_intent_patterns)
 
     def test_invalid_pattern_item_skipped(self):
@@ -92,6 +96,7 @@ class TestLoadIntentRuntimeRules:
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
             from app.services.intent_service import _load_intent_runtime_rules
+
             _load_intent_runtime_rules()  # should not raise
 
     def test_dict_context_inherit_patterns(self):
@@ -106,8 +111,10 @@ class TestLoadIntentRuntimeRules:
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
             from app.services.intent_service import _load_intent_runtime_rules
+
             _load_intent_runtime_rules()
             from app.services import intent_service as _mod
+
             assert any(p == r"^再一份$" for p, _ in _mod._context_inherit_patterns)
 
     def test_invalid_context_inherit_item_skipped(self):
@@ -122,6 +129,7 @@ class TestLoadIntentRuntimeRules:
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
             from app.services.intent_service import _load_intent_runtime_rules
+
             _load_intent_runtime_rules()  # should not raise
 
 
@@ -205,7 +213,17 @@ class TestBasicIntentHelpers:
 class TestRecognizeIntentsImpl:
     """Lines 362-492: tool match, negation, hints, shipment special logic, slots."""
 
-    def _run(self, message, *, matches=None, hints=None, cached=None, reflex_type=None, triggered=False, resolve_unit=None):
+    def _run(
+        self,
+        message,
+        *,
+        matches=None,
+        hints=None,
+        cached=None,
+        reflex_type=None,
+        triggered=False,
+        resolve_unit=None,
+    ):
         from app.domain.neuro.reflex_arc import ReflexType
         from app.services.intent_service import recognize_intents
 
@@ -215,7 +233,7 @@ class TestRecognizeIntentsImpl:
         cache = _make_cache(cached)
 
         patches = [
-            patch("app.services.intent_service._reflex_arc") ,
+            patch("app.services.intent_service._reflex_arc"),
             patch("app.services.intent_service.get_rule_engine", return_value=engine),
             patch("app.services.intent_service._intent_cache", cache),
         ]
@@ -264,6 +282,7 @@ class TestRecognizeIntentsImpl:
         ):
             arc.process.return_value = rr
             from app.services.intent_service import recognize_intents
+
             result = recognize_intents("不要开发货单")
         assert result["is_negated"] is True
         assert result["tool_key"] is None
@@ -294,7 +313,12 @@ class TestRecognizeIntentsImpl:
 
     def test_upload_file_in_all_matched_tools_adds_hint(self):
         matches = [
-            {"id": "upload_file", "tool_key": "upload_file", "block_if_negated": False, "keywords": []}
+            {
+                "id": "upload_file",
+                "tool_key": "upload_file",
+                "block_if_negated": False,
+                "keywords": [],
+            }
         ]
         result = self._run("上传文件", matches=matches)
         assert "upload_file" in result["intent_hints"]
@@ -306,6 +330,7 @@ class TestRecognizeIntentsImpl:
         engine = _make_engine(matches, ["products"])
         cache = _make_cache(None)
         from app.domain.neuro.reflex_arc import ReflexType
+
         rr = _make_reflex(ReflexType.GREETING, False)
         with (
             patch("app.services.intent_service._reflex_arc") as arc,
@@ -314,6 +339,7 @@ class TestRecognizeIntentsImpl:
         ):
             arc.process.return_value = rr
             from app.services.intent_service import recognize_intents
+
             result = recognize_intents("查产品")
         assert result["intent_hints"].count("products") <= 1
 
@@ -357,6 +383,7 @@ class TestRecognizeIntentsImpl:
         unit_mock = MagicMock()
         unit_mock.unit_name = "七彩乐园"
         from app.domain.neuro.reflex_arc import ReflexType
+
         rr = _make_reflex(ReflexType.GREETING, False)
         engine = _make_engine([], [])
         cache = _make_cache(None)
@@ -371,11 +398,13 @@ class TestRecognizeIntentsImpl:
         ):
             arc.process.return_value = rr
             from app.services.intent_service import recognize_intents
+
             result = recognize_intents("七彩乐园的9803")
         assert result["slots"].get("unit_name") == "七彩乐园"
 
     def test_slot_unit_model_unresolved(self):
         from app.domain.neuro.reflex_arc import ReflexType
+
         rr = _make_reflex(ReflexType.GREETING, False)
         engine = _make_engine([], [])
         cache = _make_cache(None)
@@ -390,6 +419,7 @@ class TestRecognizeIntentsImpl:
         ):
             arc.process.return_value = rr
             from app.services.intent_service import recognize_intents
+
             result = recognize_intents("七彩乐园的9803")
         assert result["slots"].get("unit_name") == "七彩乐园"
 
@@ -398,6 +428,7 @@ class TestRecognizeIntentsImpl:
             {"id": "products", "tool_key": "products", "block_if_negated": False, "keywords": []}
         ]
         from app.domain.neuro.reflex_arc import ReflexType
+
         rr = _make_reflex(ReflexType.GREETING, False)
         engine = _make_engine(matches, [])
         cache = _make_cache(None)
@@ -408,14 +439,18 @@ class TestRecognizeIntentsImpl:
         ):
             arc.process.return_value = rr
             from app.services.intent_service import recognize_intents
+
             result = recognize_intents("查产品9803")
         assert result["slots"].get("keyword") is not None
 
     def test_recoverable_error_in_recognize_intents_returns_safe_default(self):
         from app.services.intent_service import recognize_intents
         from app.utils.operational_errors import RECOVERABLE_ERRORS
+
         exc_cls = RECOVERABLE_ERRORS[0] if isinstance(RECOVERABLE_ERRORS, tuple) else Exception
-        with patch("app.services.intent_service._recognize_intents_impl", side_effect=exc_cls("boom")):
+        with patch(
+            "app.services.intent_service._recognize_intents_impl", side_effect=exc_cls("boom")
+        ):
             result = recognize_intents("x")
         assert result["primary_intent"] is None
         assert result["is_likely_unclear"] is True
@@ -423,6 +458,7 @@ class TestRecognizeIntentsImpl:
     def test_reflex_basic_intents_recoverable_error_uses_fallback(self):
         from app.services.intent_service import recognize_intents
         from app.utils.operational_errors import RECOVERABLE_ERRORS
+
         exc_cls = RECOVERABLE_ERRORS[0] if isinstance(RECOVERABLE_ERRORS, tuple) else Exception
         engine = _make_engine([], [])
         cache = _make_cache(None)
@@ -446,6 +482,7 @@ class TestQuickRecognize:
 
     def test_empty_message_returns_fast_path(self):
         from app.services.intent_service import quick_recognize
+
         result = quick_recognize("")
         assert result["primary_intent"] is None
         assert result["fast_path"] is True
@@ -453,6 +490,7 @@ class TestQuickRecognize:
     def test_quick_command_exact_match(self):
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old = _mod._quick_command_map
         _mod._quick_command_map = {"开单": "shipment_generate"}
         try:
@@ -465,6 +503,7 @@ class TestQuickRecognize:
     def test_quick_pattern_match(self):
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old = _mod._quick_intent_patterns
         _mod._quick_intent_patterns = [(r"^\d+$", "products")]
         try:
@@ -477,6 +516,7 @@ class TestQuickRecognize:
     def test_append_keyword_with_pending_context(self):
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_kw = _mod._append_keywords
         _mod._append_keywords = ["再加"]
         ctx = {
@@ -496,6 +536,7 @@ class TestQuickRecognize:
     def test_append_keyword_without_pending_uses_last_intent(self):
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_kw = _mod._append_keywords
         _mod._append_keywords = ["再加"]
         ctx = {
@@ -512,6 +553,7 @@ class TestQuickRecognize:
     def test_context_inherit_repeat_last(self):
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old = _mod._context_inherit_patterns
         _mod._context_inherit_patterns = [(r"^再一份$", "repeat_last")]
         ctx = {"current_intent": "shipment_generate", "current_tool_key": "shipment_generate"}
@@ -525,6 +567,7 @@ class TestQuickRecognize:
     def test_pending_confirmation_fallback(self):
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_kw = _mod._append_keywords
         old_ci = _mod._context_inherit_patterns
         _mod._append_keywords = []
@@ -547,6 +590,7 @@ class TestQuickRecognize:
     def test_no_context_returns_empty(self):
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_cmd = _mod._quick_command_map
         old_pat = _mod._quick_intent_patterns
         _mod._quick_command_map = {}
@@ -568,26 +612,31 @@ class TestQuickRecognize:
 class TestQuickSlotExtraction:
     def test_shipment_generate_single_unit(self):
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("发货单七彩乐园3桶", "shipment_generate")
         assert slots.get("unit_name") is not None or "quantity" in slots or "spec" in slots
 
     def test_shipment_generate_multi_unit(self):
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("发货单七彩乐园和太阳鸟各5桶", "shipment_generate")
         assert isinstance(slots, dict)
 
     def test_products_keyword(self):
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("查9803产品", "products")
         assert slots.get("keyword") == "查9803产品"
 
     def test_customers_keyword(self):
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("查七彩乐园客户", "customers")
         assert slots.get("keyword") is not None
 
     def test_unknown_intent_empty_slots(self):
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("随便说说", "unknown_intent")
         assert slots == {}
 
@@ -609,6 +658,7 @@ class TestReloadIntentService:
             patch("app.services.intent_service._load_intent_runtime_rules"),
         ):
             from app.services.intent_service import reload_intent_service
+
             reload_intent_service()
         cache_mock.clear.assert_called_once()
 
@@ -621,31 +671,37 @@ class TestReloadIntentService:
 class TestExtractMultiUnitNames:
     def test_no_separator_single_name(self):
         from app.services.intent_service import _extract_multi_unit_names
+
         result = _extract_multi_unit_names("发货单七彩乐园3桶")
         assert isinstance(result, list)
 
     def test_with_separator(self):
         from app.services.intent_service import _extract_multi_unit_names
+
         result = _extract_multi_unit_names("发货单七彩乐园和太阳鸟")
         assert isinstance(result, list)
 
     def test_empty_msg(self):
         from app.services.intent_service import _extract_multi_unit_names
+
         result = _extract_multi_unit_names("")
         assert result == []
 
     def test_extract_name_before_quantity_with_match(self):
         from app.services.intent_service import _extract_name_before_quantity
+
         result = _extract_name_before_quantity("七彩乐园3桶", r"\d+[桶箱件个]")
         assert result == "七彩乐园"
 
     def test_extract_name_before_quantity_short_text(self):
         from app.services.intent_service import _extract_name_before_quantity
+
         result = _extract_name_before_quantity("太阳", r"\d+[桶箱件个]")
         assert result == "太阳"
 
     def test_extract_name_before_quantity_long_text_no_match(self):
         from app.services.intent_service import _extract_name_before_quantity
+
         # text > 10 chars with no quantity match -> regex can still extract up-to-10 chars
         # just verify return value is str or None (no exception)
         result = _extract_name_before_quantity("x" * 20, r"\d+[桶箱件个]")
@@ -654,6 +710,7 @@ class TestExtractMultiUnitNames:
     def test_extract_name_before_quantity_empty_part_skipped(self):
         """Part is empty after strip -> continue branch in _extract_multi_unit_names."""
         from app.services.intent_service import _extract_multi_unit_names
+
         # separator at start produces an empty first part
         result = _extract_multi_unit_names("和七彩乐园3桶")
         assert isinstance(result, list)
@@ -661,6 +718,7 @@ class TestExtractMultiUnitNames:
     def test_extract_multi_unit_names_no_name_found_with_sep(self):
         """has_any_sep=True but no valid names extracted -> falls through to single-name path."""
         from app.services.intent_service import _extract_multi_unit_names
+
         # single-char parts won't pass the 2-char minimum
         result = _extract_multi_unit_names("发货单甲和乙")
         assert isinstance(result, list)
@@ -668,6 +726,7 @@ class TestExtractMultiUnitNames:
     def test_extract_multi_unit_names_no_name_from_single_path(self):
         """Single-name path returns empty when name extraction fails."""
         from app.services.intent_service import _extract_multi_unit_names
+
         # digits-only after prefix strip won't match the 2-char non-digit rule
         result = _extract_multi_unit_names("发货单")
         assert result == []
@@ -675,6 +734,7 @@ class TestExtractMultiUnitNames:
     def test_extract_name_before_quantity_name_part_1_char(self):
         """name_part is 1 char (< 2) -> return None."""
         from app.services.intent_service import _extract_name_before_quantity
+
         # "甲" is 1 char; regex won't match ({2,10}) and len check fails
         result = _extract_name_before_quantity("甲", r"\d+[桶箱件个]")
         assert result is None
@@ -684,19 +744,23 @@ class TestExtractMultiUnitNames:
 # Additional tests for _normalize non-string branch (line 103)
 # ---------------------------------------------------------------------------
 
+
 class TestNormalize:
     def test_normalize_non_string_returns_empty(self):
         from app.services.intent_service import _normalize
+
         assert _normalize(None) == ""  # type: ignore[arg-type]
 
     def test_normalize_integer_returns_empty(self):
         from app.services.intent_service import _normalize
+
         assert _normalize(42) == ""  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
 # Additional tests for is_negation missing branches (lines 144, 146-150)
 # ---------------------------------------------------------------------------
+
 
 class TestIsNegationBranches:
     def test_denial_triggered_with_action_keywords_returns_true(self):
@@ -761,6 +825,7 @@ class TestIsNegationBranches:
 # Additional tests for is_help_request keyword fallback (lines 178-179)
 # ---------------------------------------------------------------------------
 
+
 class TestIsHelpRequestFallback:
     def test_is_help_via_keyword_fallback(self):
         """HELP not triggered -> falls back to keyword scan."""
@@ -785,6 +850,7 @@ class TestIsHelpRequestFallback:
 # ---------------------------------------------------------------------------
 # Additional tests for is_negation_intent (lines 193-199)
 # ---------------------------------------------------------------------------
+
 
 class TestIsNegationIntentBranches:
     def test_negation_intent_via_denial_reflex(self):
@@ -839,6 +905,7 @@ class TestIsNegationIntentBranches:
 # Additional tests for _load_intent_runtime_rules falsy pattern/action (line 70->62)
 # ---------------------------------------------------------------------------
 
+
 class TestLoadIntentRuntimeRulesEdgeCases:
     def test_pattern_or_intent_empty_not_appended(self):
         """if pattern and intent: is False when either is empty/None -> not appended."""
@@ -852,8 +919,10 @@ class TestLoadIntentRuntimeRulesEdgeCases:
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
             import app.services.intent_service as _mod
+
             _mod._quick_intent_patterns = []
             from app.services.intent_service import _load_intent_runtime_rules
+
             _load_intent_runtime_rules()
             # empty pattern should NOT be appended
             assert not any(p == "" for p, _ in _mod._quick_intent_patterns)
@@ -870,8 +939,10 @@ class TestLoadIntentRuntimeRulesEdgeCases:
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
             import app.services.intent_service as _mod
+
             _mod._context_inherit_patterns = []
             from app.services.intent_service import _load_intent_runtime_rules
+
             _load_intent_runtime_rules()
             assert len(_mod._context_inherit_patterns) == 0
 
@@ -887,14 +958,17 @@ class TestLoadIntentRuntimeRulesEdgeCases:
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
             from app.services.intent_service import _load_intent_runtime_rules
+
             _load_intent_runtime_rules()
             import app.services.intent_service as _mod
+
             assert any(p == r"^同样$" for p, _ in _mod._context_inherit_patterns)
 
 
 # ---------------------------------------------------------------------------
 # get_tool_key_with_negation_check (lines 500-501)
 # ---------------------------------------------------------------------------
+
 
 class TestGetToolKeyWithNegationCheck:
     def test_returns_tool_key(self):
@@ -936,6 +1010,7 @@ class TestGetToolKeyWithNegationCheck:
 # ---------------------------------------------------------------------------
 # Additional _recognize_intents_impl branches
 # ---------------------------------------------------------------------------
+
 
 class TestRecognizeIntentsImplExtra:
     """Targets remaining uncovered branches in _recognize_intents_impl."""
@@ -1033,8 +1108,12 @@ class TestRecognizeIntentsImplExtra:
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
         matches = [
-            {"id": "shipment_generate", "tool_key": "shipment_generate",
-             "block_if_negated": False, "keywords": []}
+            {
+                "id": "shipment_generate",
+                "tool_key": "shipment_generate",
+                "block_if_negated": False,
+                "keywords": [],
+            }
         ]
         engine = _make_engine(matches, [])
         cache = _make_cache(None)
@@ -1059,8 +1138,12 @@ class TestRecognizeIntentsImplExtra:
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
         matches = [
-            {"id": "upload_file", "tool_key": "upload_file",
-             "block_if_negated": False, "keywords": []}
+            {
+                "id": "upload_file",
+                "tool_key": "upload_file",
+                "block_if_negated": False,
+                "keywords": [],
+            }
         ]
         engine = _make_engine(matches, [])
         cache = _make_cache(None)
@@ -1080,8 +1163,12 @@ class TestRecognizeIntentsImplExtra:
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
         matches = [
-            {"id": "shipment_template", "tool_key": "shipment_template",
-             "block_if_negated": False, "keywords": []}
+            {
+                "id": "shipment_template",
+                "tool_key": "shipment_template",
+                "block_if_negated": False,
+                "keywords": [],
+            }
         ]
         engine = _make_engine(matches, ["template_query"])  # hint engine returns template_query
         cache = _make_cache(None)
@@ -1101,8 +1188,7 @@ class TestRecognizeIntentsImplExtra:
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
         matches = [
-            {"id": "products", "tool_key": "products",
-             "block_if_negated": False, "keywords": []}
+            {"id": "products", "tool_key": "products", "block_if_negated": False, "keywords": []}
         ]
         engine = _make_engine(matches, [])
         cache = _make_cache(None)
@@ -1122,8 +1208,12 @@ class TestRecognizeIntentsImplExtra:
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
         matches = [
-            {"id": "shipment_generate", "tool_key": "shipment_generate",
-             "block_if_negated": False, "keywords": []}
+            {
+                "id": "shipment_generate",
+                "tool_key": "shipment_generate",
+                "block_if_negated": False,
+                "keywords": [],
+            }
         ]
         engine = _make_engine(matches, [])
         cache = _make_cache(None)
@@ -1143,6 +1233,7 @@ class TestRecognizeIntentsImplExtra:
 # Additional quick_recognize branches
 # ---------------------------------------------------------------------------
 
+
 class TestQuickRecognizeExtra:
     """Targets remaining uncovered branches in quick_recognize."""
 
@@ -1150,6 +1241,7 @@ class TestQuickRecognizeExtra:
         """Command map loop iterates but doesn't match -> falls through."""
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_cmd = _mod._quick_command_map
         old_pat = _mod._quick_intent_patterns
         _mod._quick_command_map = {"开单": "shipment_generate"}
@@ -1165,6 +1257,7 @@ class TestQuickRecognizeExtra:
         """Pattern loop iterates but doesn't match -> falls through."""
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_cmd = _mod._quick_command_map
         old_pat = _mod._quick_intent_patterns
         _mod._quick_command_map = {}
@@ -1180,6 +1273,7 @@ class TestQuickRecognizeExtra:
         """Append keyword loop: keyword not in msg -> inner if not entered."""
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_kw = _mod._append_keywords
         old_ci = _mod._context_inherit_patterns
         _mod._append_keywords = ["再加"]
@@ -1200,6 +1294,7 @@ class TestQuickRecognizeExtra:
         """Pattern matches but action != 'repeat_last' -> inner block skipped."""
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_kw = _mod._append_keywords
         old_ci = _mod._context_inherit_patterns
         _mod._append_keywords = []
@@ -1217,6 +1312,7 @@ class TestQuickRecognizeExtra:
         """Pattern matches repeat_last but no last_intent/tool -> not returned."""
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_kw = _mod._append_keywords
         old_ci = _mod._context_inherit_patterns
         _mod._append_keywords = []
@@ -1234,6 +1330,7 @@ class TestQuickRecognizeExtra:
         """pending_confirmation exists but has no intent/tool_key -> not returned."""
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_kw = _mod._append_keywords
         old_ci = _mod._context_inherit_patterns
         _mod._append_keywords = []
@@ -1257,6 +1354,7 @@ class TestQuickRecognizeExtra:
         """Append kw matches but both pending=None and last_intent=None -> no early return."""
         import app.services.intent_service as _mod
         from app.services.intent_service import quick_recognize
+
         old_kw = _mod._append_keywords
         old_ci = _mod._context_inherit_patterns
         _mod._append_keywords = ["再加"]
@@ -1274,10 +1372,12 @@ class TestQuickRecognizeExtra:
 # Additional quick_slot_extraction branches (lines 643-665)
 # ---------------------------------------------------------------------------
 
+
 class TestQuickSlotExtractionExtra:
     def test_shipment_no_unit_names_extracted(self):
         """unit_names empty -> unit_name not set in slots."""
         from app.services.intent_service import quick_slot_extraction
+
         # A message that won't produce extractable unit names
         slots = quick_slot_extraction("生成", "shipment_generate")
         assert "unit_name" not in slots
@@ -1285,6 +1385,7 @@ class TestQuickSlotExtractionExtra:
     def test_shipment_multi_unit(self):
         """len(unit_names) > 1 -> slots['unit_name'] is a list."""
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("发货单七彩乐园和太阳鸟各5桶", "shipment_generate")
         if "unit_name" in slots:
             assert isinstance(slots["unit_name"], list)
@@ -1292,6 +1393,7 @@ class TestQuickSlotExtractionExtra:
     def test_shipment_with_quantity_no_spec_no_model(self):
         """quantity matched, no spec, no model -> only quantity in slots."""
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("3桶", "shipment_generate")
         if "quantity" in slots:
             assert "3桶" in slots["quantity"]
@@ -1299,6 +1401,7 @@ class TestQuickSlotExtractionExtra:
     def test_shipment_with_spec_no_quantity(self):
         """spec matched -> spec set in slots."""
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("七彩规格25", "shipment_generate")
         if "spec" in slots:
             assert slots["spec"] == "25"
@@ -1306,6 +1409,7 @@ class TestQuickSlotExtractionExtra:
     def test_shipment_with_model(self):
         """型号 matched -> model_number set."""
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("型号9803", "shipment_generate")
         if "model_number" in slots:
             assert slots["model_number"] == "9803"
@@ -1313,11 +1417,13 @@ class TestQuickSlotExtractionExtra:
     def test_products_with_empty_msg(self):
         """products intent but empty msg -> keyword NOT set (line 662 branch)."""
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("", "products")
         assert "keyword" not in slots
 
     def test_customers_with_empty_msg(self):
         """customers intent but empty msg -> keyword NOT set."""
         from app.services.intent_service import quick_slot_extraction
+
         slots = quick_slot_extraction("", "customers")
         assert "keyword" not in slots

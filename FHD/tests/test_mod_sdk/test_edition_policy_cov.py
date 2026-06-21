@@ -24,6 +24,7 @@ from app.mod_sdk.edition_policy import (
 # resolve_edition
 # ---------------------------------------------------------------------------
 
+
 class TestResolveEdition:
     def test_explicit_minimal(self, monkeypatch):
         monkeypatch.setenv("XCAGI_EDITION", "minimal")
@@ -66,6 +67,7 @@ class TestResolveEdition:
 # should_register_host_legacy_routes
 # ---------------------------------------------------------------------------
 
+
 class TestShouldRegisterLegacyRoutes:
     def test_flag_0(self, monkeypatch):
         monkeypatch.setenv("XCAGI_REGISTER_LEGACY_ROUTES", "0")
@@ -92,7 +94,9 @@ class TestShouldRegisterLegacyRoutes:
         monkeypatch.delenv("XCAGI_EDITION", raising=False)
         monkeypatch.delenv("XCAGI_MINIMAL_EDITION", raising=False)
         monkeypatch.delenv("XCAGI_GENERIC_EDITION", raising=False)
-        with patch("app.mod_sdk.host_profile.edition_legacy_routes_enabled", return_value=True) as mock_fn:
+        with patch(
+            "app.mod_sdk.host_profile.edition_legacy_routes_enabled", return_value=True
+        ) as mock_fn:
             result = should_register_host_legacy_routes()
         assert result is True
 
@@ -101,9 +105,12 @@ class TestShouldRegisterLegacyRoutes:
 # edition_mod_ids
 # ---------------------------------------------------------------------------
 
+
 class TestEditionModIds:
     def test_sku_mods_take_precedence(self):
-        with patch("app.mod_sdk.edition_policy.bundled_mod_ids_for_sku", return_value=("mod-a", "mod-b")):
+        with patch(
+            "app.mod_sdk.edition_policy.bundled_mod_ids_for_sku", return_value=("mod-a", "mod-b")
+        ):
             result = edition_mod_ids()
         assert result == ("mod-a", "mod-b")
 
@@ -112,6 +119,7 @@ class TestEditionModIds:
         with patch("app.mod_sdk.edition_policy.bundled_mod_ids_for_sku", return_value=()):
             result = edition_mod_ids()
         from app.mod_sdk.platform_shell import MINIMAL_HOST_MOD_IDS
+
         assert result == MINIMAL_HOST_MOD_IDS
 
     def test_generic_edition(self, monkeypatch):
@@ -119,6 +127,7 @@ class TestEditionModIds:
         with patch("app.mod_sdk.edition_policy.bundled_mod_ids_for_sku", return_value=()):
             result = edition_mod_ids()
         from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS
+
         assert result == GENERIC_HOST_MOD_IDS
 
     def test_full_edition(self, monkeypatch):
@@ -126,6 +135,7 @@ class TestEditionModIds:
         with patch("app.mod_sdk.edition_policy.bundled_mod_ids_for_sku", return_value=()):
             result = edition_mod_ids()
         from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
+
         assert set(MINIMAL_HOST_MOD_IDS).issubset(set(result))
         assert set(GENERIC_HOST_MOD_IDS).issubset(set(result))
 
@@ -133,12 +143,14 @@ class TestEditionModIds:
         with patch("app.mod_sdk.edition_policy.bundled_mod_ids_for_sku", return_value=()):
             result = edition_mod_ids("minimal")
         from app.mod_sdk.platform_shell import MINIMAL_HOST_MOD_IDS
+
         assert result == MINIMAL_HOST_MOD_IDS
 
 
 # ---------------------------------------------------------------------------
 # configure_edition_defaults
 # ---------------------------------------------------------------------------
+
 
 class TestConfigureEditionDefaults:
     def test_sku_triggers_configure(self, monkeypatch):
@@ -193,6 +205,7 @@ class TestConfigureEditionDefaults:
 # bundled_mods_dir
 # ---------------------------------------------------------------------------
 
+
 class TestBundledModsDir:
     def test_env_bundled_mods_dir(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(tmp_path))
@@ -237,6 +250,7 @@ class TestBundledModsDir:
 # _extra_mod_seed_roots
 # ---------------------------------------------------------------------------
 
+
 class TestExtraModSeedRoots:
     def test_env_paths_added(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCAGI_EXTRA_SEED_MODS_DIR", str(tmp_path))
@@ -254,6 +268,7 @@ class TestExtraModSeedRoots:
 # ---------------------------------------------------------------------------
 # _resolve_mod_seed_source
 # ---------------------------------------------------------------------------
+
 
 class TestResolveModSeedSource:
     def test_found_in_primary(self, tmp_path):

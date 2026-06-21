@@ -126,8 +126,9 @@ class TestResolveMobileRelayUser:
         """branch [174,182] not taken — uid > 0 and not prefer_admin: returns early."""
         u = _user(uid=5, role="user")
         pub = {"id": 5, "username": "u5"}
-        with patch.object(m, "_mobile_user_identity", return_value=(5, "u5")), patch.object(
-            m, "_mobile_user_public_dict", return_value=pub
+        with (
+            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
+            patch.object(m, "_mobile_user_public_dict", return_value=pub),
         ):
             result = m._resolve_mobile_relay_user(u, prefer_admin=False)
         assert result["id"] == 5
@@ -139,9 +140,7 @@ class TestResolveMobileRelayUser:
         mock_row.id = 10
         pub = {"id": 10, "username": "admin"}
         mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_row
-        )
+        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
         with (
             patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
             patch.object(m, "_mobile_user_public_dict", return_value=pub),
@@ -158,9 +157,7 @@ class TestResolveMobileRelayUser:
         pub = {"id": 99, "username": "admin99"}
         mock_db = _ctx_db(MagicMock())
         # first query (admin) returns row
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_row
-        )
+        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
         with (
             patch.object(m, "_mobile_user_identity", return_value=(0, "")),
             patch.object(m, "_mobile_user_public_dict", return_value=pub),
@@ -231,9 +228,7 @@ class TestResolveMobileRelayUser:
         mock_row.id = 3
         pub = {"id": 3, "username": "x"}
         mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_row
-        )
+        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
         mock_db.expunge = MagicMock()
 
         with (
@@ -366,9 +361,17 @@ class TestMobileModItems:
             "workflow_employees": [{"id": "e1", "label": "Alice"}],
         }
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item", return_value=None),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item",
+                return_value=None,
+            ),
         ):
             result = m._mobile_mod_items()
         assert any(i["id"] == "m1" for i in result)
@@ -391,9 +394,17 @@ class TestMobileModItems:
             icon="",
         )
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item", return_value=None),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item",
+                return_value=None,
+            ),
         ):
             result = m._mobile_mod_items()
         assert any(i["id"] == "m2" for i in result)
@@ -402,9 +413,17 @@ class TestMobileModItems:
         """branch [402,item not appended]: mid empty → skip."""
         mod = {"id": "", "name": "NoId"}
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item", return_value=None),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item",
+                return_value=None,
+            ),
         ):
             result = m._mobile_mod_items()
         assert result == []
@@ -415,8 +434,12 @@ class TestMobileModItems:
         upsert_mock = MagicMock()
 
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=err_class("boom")),
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item", upsert_mock),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=err_class("boom")
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item", upsert_mock
+            ),
         ):
             result = m._mobile_mod_items()
         upsert_mock.assert_called_once()
@@ -433,10 +456,19 @@ class TestAdminEmployeeItems:
         """branch [432,433] not taken: market_profiles=None."""
         raw = {"id": "emp1", "name": "Bob"}
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._load_admin_duty_records", return_value=[raw]),
-            patch("app.fastapi_routes.mobile_api_extensions._compact_text", side_effect=lambda x: x or ""),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
+                return_value=[raw],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._compact_text",
+                side_effect=lambda x: x or "",
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._apply_market_profile"),
-            patch("app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys",
+                return_value=[],
+            ),
         ):
             result = m._admin_employee_items(market_profiles=None)
         assert any(i["id"] == "emp1" for i in result)
@@ -446,8 +478,14 @@ class TestAdminEmployeeItems:
         raw = {"id": "emp2", "name": "Carol"}
         profiles = {"key1": {"market_avatar": "http://x/c.png"}}
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._load_admin_duty_records", return_value=[raw]),
-            patch("app.fastapi_routes.mobile_api_extensions._compact_text", side_effect=lambda x: x or ""),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
+                return_value=[raw],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._compact_text",
+                side_effect=lambda x: x or "",
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._apply_market_profile"),
             patch(
                 "app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys",
@@ -462,8 +500,14 @@ class TestAdminEmployeeItems:
         raw = {"id": "emp3", "name": "Dave"}
         profiles = {"other_key": {"data": 1}}
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._load_admin_duty_records", return_value=[raw]),
-            patch("app.fastapi_routes.mobile_api_extensions._compact_text", side_effect=lambda x: x or ""),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
+                return_value=[raw],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._compact_text",
+                side_effect=lambda x: x or "",
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._apply_market_profile"),
             patch(
                 "app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys",
@@ -552,7 +596,9 @@ class TestMobilePairingIssue:
         with (
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
-            patch("app.fastapi_routes.mobile_api_extensions.issue_pairing_nonce", return_value=payload),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions.issue_pairing_nonce", return_value=payload
+            ),
             patch.object(m, "_enrich_pairing_payload", return_value=dict(payload)),
             patch.object(m, "_register_desktop_relay_for_pairing", return_value=relay),
         ):
@@ -578,7 +624,9 @@ class TestMobilePairingIssue:
         with (
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
-            patch("app.fastapi_routes.mobile_api_extensions.issue_pairing_nonce", return_value=payload),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions.issue_pairing_nonce", return_value=payload
+            ),
             patch.object(m, "_enrich_pairing_payload", return_value=dict(payload)),
             patch.object(m, "_register_desktop_relay_for_pairing", return_value=relay),
         ):
@@ -596,7 +644,9 @@ class TestMobilePairingIssue:
         with (
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
-            patch("app.fastapi_routes.mobile_api_extensions.issue_pairing_nonce", return_value=payload),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions.issue_pairing_nonce", return_value=payload
+            ),
             patch.object(m, "_enrich_pairing_payload", return_value=dict(payload)),
             patch.object(m, "_register_desktop_relay_for_pairing", return_value=None),
         ):
@@ -707,9 +757,7 @@ class TestMobileServiceBridgeRequestRespond:
     async def test_user_none(self, m):
         """branch [873,874]: user is None → 401."""
         body = SimpleNamespace(status="resolved", response="ok", responded_by="admin")
-        result = await m.mobile_service_bridge_request_respond(
-            request_id=1, body=body, user=None
-        )
+        result = await m.mobile_service_bridge_request_respond(request_id=1, body=body, user=None)
         assert result.status_code == 401
 
     @pytest.mark.asyncio
@@ -918,7 +966,10 @@ class TestMobileAdminEmployees:
         """branch [1118,1119]: _require_mobile_admin returns err → return err."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_admin_employees(request=MagicMock(), user=_user())
         assert result.status_code == 403
 
@@ -926,8 +977,14 @@ class TestMobileAdminEmployees:
     async def test_success(self, m):
         """branch [1118,1120]: err is None → proceed."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._load_market_ai_employee_profile_index", new=AsyncMock(return_value=({}, False, ""))),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._load_market_ai_employee_profile_index",
+                new=AsyncMock(return_value=({}, False, "")),
+            ),
             patch.object(m, "_admin_employee_items", return_value=[]),
         ):
             result = await m.mobile_admin_employees(request=MagicMock(), user=_user())
@@ -945,14 +1002,20 @@ class TestMobileAdminFeatures:
         """branch [1136,1137]: err is not None."""
         err_resp = MagicMock()
         err_resp.status_code = 401
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_admin_features(request=MagicMock(), user=None)
         assert result.status_code == 401
 
     @pytest.mark.asyncio
     async def test_success(self, m):
         """branch [1136,1138]: err is None → return features."""
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin", return_value=({}, None)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            return_value=({}, None),
+        ):
             result = await m.mobile_admin_features(request=MagicMock(), user=_user())
         assert result is not None
 
@@ -968,7 +1031,10 @@ class TestMobileAdminCodexSuperEmployeeMessages:
         """branch [1172,1173]: _require_mobile_admin_or_enterprise → err."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_admin_codex_super_employee_messages(
                 request=MagicMock(), limit=80, user=_user()
             )
@@ -978,8 +1044,13 @@ class TestMobileAdminCodexSuperEmployeeMessages:
     async def test_uid_zero(self, m):
         """branch [1175,1176]: uid <= 0 → 401."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0
+            ),
         ):
             result = await m.mobile_admin_codex_super_employee_messages(
                 request=MagicMock(), limit=80, user=_user()
@@ -991,8 +1062,13 @@ class TestMobileAdminCodexSuperEmployeeMessages:
         """branch [1183,1184]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
+            ),
             patch("app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService") as svc_cls,
         ):
             svc_cls.return_value.list_messages.side_effect = err_class("fail")
@@ -1020,7 +1096,10 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         """branch [1198,1199]: err from _require_mobile_admin_or_enterprise."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_admin_codex_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
             )
@@ -1030,8 +1109,13 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
     async def test_uid_zero(self, m):
         """branch [1202,1203]: uid <= 0 → 401."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0
+            ),
         ):
             result = await m.mobile_admin_codex_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
@@ -1042,8 +1126,13 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
     async def test_value_error(self, m):
         """branch [1219,1220]: ValueError from invoke → 400."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
+            ),
             patch("app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService") as svc_cls,
         ):
             svc_cls.return_value.invoke.side_effect = ValueError("bad input")
@@ -1057,8 +1146,13 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         """branch [1224,1225]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
+            ),
             patch("app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService") as svc_cls,
         ):
             svc_cls.return_value.invoke.side_effect = err_class("fail")
@@ -1079,7 +1173,10 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
         """branch [1240,1241]: err not None."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_admin_claude_super_employee_messages(
                 request=MagicMock(), limit=80, user=_user()
             )
@@ -1089,8 +1186,13 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
     async def test_uid_zero(self, m):
         """branch [1243,1244]: uid <= 0 → 401."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0
+            ),
         ):
             result = await m.mobile_admin_claude_super_employee_messages(
                 request=MagicMock(), limit=80, user=_user()
@@ -1102,8 +1204,13 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
         """branch [1251,1252]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
+            ),
             patch("app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService") as svc_cls,
         ):
             svc_cls.return_value.list_messages.side_effect = err_class("fail")
@@ -1131,7 +1238,10 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         """branch [1267,1268]: err not None."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_admin_claude_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
             )
@@ -1141,8 +1251,13 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
     async def test_uid_zero(self, m):
         """branch [1270,1271]: uid <= 0 → 401."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0
+            ),
         ):
             result = await m.mobile_admin_claude_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
@@ -1153,8 +1268,13 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
     async def test_value_error(self, m):
         """branch [1287,1288]: ValueError → 400."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
+            ),
             patch("app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService") as svc_cls,
         ):
             svc_cls.return_value.invoke.side_effect = ValueError("bad")
@@ -1168,8 +1288,13 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         """branch [1292,1293]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
+            ),
             patch("app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService") as svc_cls,
         ):
             svc_cls.return_value.invoke.side_effect = err_class("fail")
@@ -1198,7 +1323,10 @@ class TestMobileAiGroupsList:
         """branch [1311,1312]: err from _require_mobile_admin_or_enterprise."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_ai_groups_list(request=MagicMock(), user=_user())
         assert result.status_code == 403
 
@@ -1206,7 +1334,10 @@ class TestMobileAiGroupsList:
     async def test_uid_zero(self, m):
         """branch [1314,1315]: uid <= 0 → 401."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
         ):
             result = await m.mobile_ai_groups_list(request=MagicMock(), user=_user())
@@ -1217,7 +1348,10 @@ class TestMobileAiGroupsList:
         """branch [1321,1322]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=5),
             patch("app.fastapi_routes.mobile_api_extensions.AiGroupChatService") as svc_cls,
         ):
@@ -1232,7 +1366,10 @@ class TestMobileAiGroupsCreate:
         """branch [1334,1335]: err not None."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_ai_groups_create(
                 request=MagicMock(), body=SimpleNamespace(name="g1"), user=_user()
             )
@@ -1242,7 +1379,10 @@ class TestMobileAiGroupsCreate:
     async def test_uid_zero(self, m):
         """branch [1337,1338]: uid <= 0 → 401."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
         ):
             result = await m.mobile_ai_groups_create(
@@ -1254,7 +1394,10 @@ class TestMobileAiGroupsCreate:
     async def test_value_error(self, m):
         """branch [1344,1345]: ValueError → 400."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=5),
             patch("app.fastapi_routes.mobile_api_extensions.AiGroupChatService") as svc_cls,
         ):
@@ -1271,7 +1414,10 @@ class TestMobileAiGroupMessages:
         """branch [1364,1365]: err not None."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_ai_group_messages(
                 request=MagicMock(), group_id="g1", limit=100, user=_user()
             )
@@ -1281,7 +1427,10 @@ class TestMobileAiGroupMessages:
     async def test_uid_zero(self, m):
         """branch [1367,1368]: uid <= 0 → 401."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
         ):
             result = await m.mobile_ai_group_messages(
@@ -1297,7 +1446,10 @@ class TestMobileAiGroupPost:
         err_resp = MagicMock()
         err_resp.status_code = 403
         body = SimpleNamespace(message="hi", sender_name=None, mentions=[])
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_ai_group_post(
                 request=MagicMock(), group_id="g1", body=body, user=_user()
             )
@@ -1308,7 +1460,10 @@ class TestMobileAiGroupPost:
         """branch [1390,1391]: uid <= 0 → 401."""
         body = SimpleNamespace(message="hi", sender_name=None, mentions=[])
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
         ):
             result = await m.mobile_ai_group_post(
@@ -1323,8 +1478,13 @@ class TestMobileAiGroupAddMember:
         """branch [1420,1421]: err not None."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        body = SimpleNamespace(employee_id="e1", mod_id="m1", name="Alice", avatar=None, summary=None)
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        body = SimpleNamespace(
+            employee_id="e1", mod_id="m1", name="Alice", avatar=None, summary=None
+        )
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_ai_group_add_member(
                 request=MagicMock(), group_id="g1", body=body, user=_user()
             )
@@ -1333,9 +1493,14 @@ class TestMobileAiGroupAddMember:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1423,1424]: uid <= 0 → 401."""
-        body = SimpleNamespace(employee_id="e1", mod_id="m1", name="Alice", avatar=None, summary=None)
+        body = SimpleNamespace(
+            employee_id="e1", mod_id="m1", name="Alice", avatar=None, summary=None
+        )
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
         ):
             result = await m.mobile_ai_group_add_member(
@@ -1350,7 +1515,10 @@ class TestMobileAiGroupRemoveMember:
         """branch [1457,1458]: err not None."""
         err_resp = MagicMock()
         err_resp.status_code = 403
-        with patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=(None, err_resp)):
+        with patch(
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            return_value=(None, err_resp),
+        ):
             result = await m.mobile_ai_group_remove_member(
                 request=MagicMock(), group_id="g1", employee_id="e1", user=_user()
             )
@@ -1360,7 +1528,10 @@ class TestMobileAiGroupRemoveMember:
     async def test_uid_zero(self, m):
         """branch [1460,1461]: uid <= 0 → 401."""
         with (
-            patch("app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise", return_value=({}, None)),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
         ):
             result = await m.mobile_ai_group_remove_member(
@@ -1409,7 +1580,9 @@ class TestMobileAiCircleCreatePost:
         body = SimpleNamespace(body="hello")
         with (
             patch.object(m, "_ai_circle_user", return_value=(1, "Bob", None)),
-            patch("app.application.ai_circle_service.create_user_post", side_effect=ValueError("bad")),
+            patch(
+                "app.application.ai_circle_service.create_user_post", side_effect=ValueError("bad")
+            ),
         ):
             result = await m.mobile_ai_circle_create_post(body=body, user=_user())
         assert result.status_code == 400
@@ -1427,7 +1600,10 @@ class TestMobileAiCircleToggleLike:
         """branch [1538,1539]: LookupError → 404."""
         with (
             patch.object(m, "_ai_circle_user", return_value=(1, "u", None)),
-            patch("app.application.ai_circle_service.toggle_like", side_effect=LookupError("not found")),
+            patch(
+                "app.application.ai_circle_service.toggle_like",
+                side_effect=LookupError("not found"),
+            ),
         ):
             result = await m.mobile_ai_circle_toggle_like(post_id=99, user=_user())
         assert result.status_code == 404
@@ -1502,7 +1678,9 @@ class TestMobileNavMenu:
         mod = {
             "id": "testmod",
             "name": "Test Mod",
-            "frontend_menu": [{"id": "entry1", "label": "Entry", "path": "/entry1", "icon": "fa-cube"}],
+            "frontend_menu": [
+                {"id": "entry1", "label": "Entry", "path": "/entry1", "icon": "fa-cube"}
+            ],
         }
         with patch.object(m, "_mobile_mod_items", return_value=[mod]):
             result = await m.mobile_nav_menu(user=u)
@@ -1569,7 +1747,7 @@ class TestMobileAuthOidcExchangePayloadKey:
             "user": {"id": 7},
             "account_kind": "enterprise",
             "market_access_token": "mkt_tok",  # present + not None → copied
-            "market_refresh_token": None,       # present + None → NOT copied
+            "market_refresh_token": None,  # present + None → NOT copied
         }
         fake_tokens = {"access_token": "jwt", "refresh_token": "rjwt"}
 
@@ -1581,12 +1759,23 @@ class TestMobileAuthOidcExchangePayloadKey:
         auth_svc.authenticate_oidc_user.return_value = fake_auth
 
         with (
-            patch("app.infrastructure.auth.oidc_provider.verify_oidc_state", return_value=(True, None)),
-            patch("app.infrastructure.auth.oidc_provider.exchange_oidc_authorization", new=AsyncMock(return_value=fake_session)),
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state", return_value=(True, None)
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(return_value=fake_session),
+            ),
             patch("app.application.auth_app_service.get_auth_app_service", return_value=auth_svc),
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
-            patch("app.application.session_account_meta.normalize_account_kind", return_value="enterprise"),
-            patch("app.application.enterprise_login_flow.finalize_auth_after_oidc", new=AsyncMock(return_value=fake_payload)),
+            patch(
+                "app.application.session_account_meta.normalize_account_kind",
+                return_value="enterprise",
+            ),
+            patch(
+                "app.application.enterprise_login_flow.finalize_auth_after_oidc",
+                new=AsyncMock(return_value=fake_payload),
+            ),
             patch("app.security.mobile_jwt.issue_mobile_tokens", return_value=fake_tokens),
         ):
             result = await m.mobile_auth_oidc_exchange(body=body)
@@ -1632,10 +1821,16 @@ class TestMobileWalletBalance:
 
         with (
             patch("app.security.mobile_jwt.verify_mobile_jwt", return_value=fake_payload),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="mkt_token"),
+            patch(
+                "app.fastapi_routes.market_account.session_market_token", return_value="mkt_token"
+            ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
-            patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer mkt_token"),
-            patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value=wallet)),
+            patch(
+                "app.fastapi_routes.market_account._auth_header", return_value="Bearer mkt_token"
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value=wallet)
+            ),
         ):
             result = await m.mobile_wallet_balance(
                 request=self._req("Bearer valid_jwt"), user=_user()
@@ -1647,11 +1842,17 @@ class TestMobileWalletBalance:
         """branch [2184,2188]: verify returns None → session_id_from_request."""
         with (
             patch("app.security.mobile_jwt.verify_mobile_jwt", return_value=None),
-            patch("app.infrastructure.auth.dependencies.session_id_from_request", return_value="req_sess"),
+            patch(
+                "app.infrastructure.auth.dependencies.session_id_from_request",
+                return_value="req_sess",
+            ),
             patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
-            patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value={"__proxy_error__": True, "payload": "err"})),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new=AsyncMock(return_value={"__proxy_error__": True, "payload": "err"}),
+            ),
         ):
             result = await m.mobile_wallet_balance(
                 request=self._req("Bearer bad_jwt"), user=_user()
@@ -1678,9 +1879,7 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer jwt"), user=_user()
-            )
+            result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1706,9 +1905,7 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer jwt"), user=_user()
-            )
+            result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1734,9 +1931,7 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer jwt"), user=_user()
-            )
+            result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1758,9 +1953,7 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer jwt"), user=_user()
-            )
+            result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1786,9 +1979,7 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer jwt"), user=_user()
-            )
+            result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1814,9 +2005,7 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer jwt"), user=_user()
-            )
+            result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1825,13 +2014,19 @@ class TestMobileWalletBalance:
         with (
             patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s_x"}),
             patch("app.fastapi_routes.market_account.session_market_token", return_value=""),
-            patch("app.fastapi_routes.market_account.latest_session_market_token", return_value="fallback_tok"),
-            patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer fallback_tok"),
-            patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value={"__proxy_error__": True})),
+            patch(
+                "app.fastapi_routes.market_account.latest_session_market_token",
+                return_value="fallback_tok",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._auth_header", return_value="Bearer fallback_tok"
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new=AsyncMock(return_value={"__proxy_error__": True}),
+            ),
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer jwt"), user=_user()
-            )
+            result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1857,7 +2052,5 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer jwt"), user=_user()
-            )
+            result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None

@@ -43,6 +43,7 @@ MOD = "app.application.agent_orchestrator.multimodal_planner"
 # Helper factory
 # ---------------------------------------------------------------------------
 
+
 def _make_artifact(
     artifact_type: str = "pdf_document",
     name: str = "doc.pdf",
@@ -70,6 +71,7 @@ def _make_artifact(
 # ===========================================================================
 # _coerce_bool
 # ===========================================================================
+
 
 class TestCoerceBool:
     def test_none_returns_default_true(self) -> None:
@@ -103,6 +105,7 @@ class TestCoerceBool:
 # _coerce_int
 # ===========================================================================
 
+
 class TestCoerceInt:
     def test_valid_int(self) -> None:
         assert _coerce_int(7, default=0) == 7
@@ -123,6 +126,7 @@ class TestCoerceInt:
 # ===========================================================================
 # _coerce_record_list
 # ===========================================================================
+
 
 class TestCoerceRecordList:
     def test_non_list_string_returns_empty(self) -> None:
@@ -147,6 +151,7 @@ class TestCoerceRecordList:
 # ===========================================================================
 # _guess_attachment_artifact_type
 # ===========================================================================
+
 
 class TestGuessAttachmentArtifactType:
     def test_pdf_by_extension(self) -> None:
@@ -203,6 +208,7 @@ class TestGuessAttachmentArtifactType:
 # _iter_attachment_payloads
 # ===========================================================================
 
+
 class TestIterAttachmentPayloads:
     def test_empty_context(self) -> None:
         assert _iter_attachment_payloads({}) == []
@@ -235,6 +241,7 @@ class TestIterAttachmentPayloads:
 # ===========================================================================
 # _artifact_from_attachment
 # ===========================================================================
+
 
 class TestArtifactFromAttachment:
     def test_item_with_artifact_type_key(self) -> None:
@@ -317,9 +324,11 @@ class TestArtifactFromAttachment:
 # _collect_artifacts
 # ===========================================================================
 
+
 class TestCollectArtifacts:
     def test_import_error_from_chat_trace_falls_back_gracefully(self) -> None:
         import builtins
+
         real_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -393,6 +402,7 @@ class TestCollectArtifacts:
 # _resolve_dataset_id
 # ===========================================================================
 
+
 class TestResolveDatasetId:
     def test_context_dataset_id_wins(self) -> None:
         art = _make_artifact()
@@ -423,6 +433,7 @@ class TestResolveDatasetId:
 # _resolve_tenant_id
 # ===========================================================================
 
+
 class TestResolveTenantId:
     def test_context_tenant_id_wins(self) -> None:
         assert _resolve_tenant_id("u1", {"tenant_id": "t-abc"}, []) == "t-abc"
@@ -450,6 +461,7 @@ class TestResolveTenantId:
 # ===========================================================================
 # _resolve_query
 # ===========================================================================
+
 
 class TestResolveQuery:
     def test_context_dataset_query_wins(self) -> None:
@@ -481,6 +493,7 @@ class TestResolveQuery:
 # ===========================================================================
 # _looks_like_excel_import_intent
 # ===========================================================================
+
 
 class TestLooksLikeExcelImportIntent:
     def test_context_excel_import_true(self) -> None:
@@ -518,6 +531,7 @@ class TestLooksLikeExcelImportIntent:
 # _has_document_export_artifact
 # ===========================================================================
 
+
 class TestHasDocumentExportArtifact:
     def test_pdf_document_type(self) -> None:
         art = _make_artifact(artifact_type="pdf_document")
@@ -542,6 +556,7 @@ class TestHasDocumentExportArtifact:
 # ===========================================================================
 # _looks_like_document_export_intent
 # ===========================================================================
+
 
 class TestLooksLikeDocumentExportIntent:
     def test_context_document_export_true(self) -> None:
@@ -583,6 +598,7 @@ class TestLooksLikeDocumentExportIntent:
 # _resolve_document_output_format
 # ===========================================================================
 
+
 class TestResolveDocumentOutputFormat:
     def test_context_output_format_docx(self) -> None:
         assert _resolve_document_output_format("", {"output_format": "docx"}) == "docx"
@@ -615,6 +631,7 @@ class TestResolveDocumentOutputFormat:
 # ===========================================================================
 # _artifact_text_preview
 # ===========================================================================
+
 
 class TestArtifactTextPreview:
     def test_metadata_text_returned(self) -> None:
@@ -659,6 +676,7 @@ class TestArtifactTextPreview:
 # ===========================================================================
 # _build_document_export_request
 # ===========================================================================
+
 
 class TestBuildDocumentExportRequest:
     def test_explicit_context_document_request(self) -> None:
@@ -724,6 +742,7 @@ class TestBuildDocumentExportRequest:
 # _resolve_excel_import_records
 # ===========================================================================
 
+
 class TestResolveExcelImportRecords:
     def test_context_excel_import_records_used(self) -> None:
         records = [{"row": 1}, {"row": 2}]
@@ -737,7 +756,9 @@ class TestResolveExcelImportRecords:
 
     def test_excel_analysis_candidate_tried(self) -> None:
         ctx = {"excel_analysis": {"sheet": "Sheet1"}}
-        with patch.object(_planner, "_extract_excel_records_with_existing_parser", return_value=[{"a": 1}]) as mock_fn:
+        with patch.object(
+            _planner, "_extract_excel_records_with_existing_parser", return_value=[{"a": 1}]
+        ) as mock_fn:
             result = _resolve_excel_import_records(ctx, [], "msg")
         assert result == [{"a": 1}]
         mock_fn.assert_called_once()
@@ -748,7 +769,9 @@ class TestResolveExcelImportRecords:
             name="data.xlsx",
             preview={"preview_data": {"col": "A"}, "record_count": 5},
         )
-        with patch.object(_planner, "_extract_excel_records_with_existing_parser", return_value=[{"b": 2}]):
+        with patch.object(
+            _planner, "_extract_excel_records_with_existing_parser", return_value=[{"b": 2}]
+        ):
             result = _resolve_excel_import_records({}, [art], "")
         assert result == [{"b": 2}]
 
@@ -768,7 +791,9 @@ class TestResolveExcelImportRecords:
 
     def test_excel_file_artifact_type_accepted(self) -> None:
         art = _make_artifact(artifact_type="excel_file", preview={"preview_data": {"col": "B"}})
-        with patch.object(_planner, "_extract_excel_records_with_existing_parser", return_value=[{"c": 3}]):
+        with patch.object(
+            _planner, "_extract_excel_records_with_existing_parser", return_value=[{"c": 3}]
+        ):
             result = _resolve_excel_import_records({}, [art], "")
         assert result == [{"c": 3}]
 
@@ -781,6 +806,7 @@ class TestResolveExcelImportRecords:
 # ===========================================================================
 # _extract_excel_records_with_existing_parser
 # ===========================================================================
+
 
 class TestExtractExcelRecordsWithExistingParser:
     """_extract_excel_records_with_existing_parser does `from app.application import get_ai_chat_app_service`
@@ -828,17 +854,23 @@ class TestExtractExcelRecordsWithExistingParser:
         assert result == [{"row": 1}]
 
     def test_attribute_error_returns_empty(self) -> None:
-        with patch.object(self._APP_APP_MOD, "get_ai_chat_app_service", side_effect=AttributeError("no attr")):
+        with patch.object(
+            self._APP_APP_MOD, "get_ai_chat_app_service", side_effect=AttributeError("no attr")
+        ):
             result = _extract_excel_records_with_existing_parser({}, {}, "")
         assert result == []
 
     def test_type_error_returns_empty(self) -> None:
-        with patch.object(self._APP_APP_MOD, "get_ai_chat_app_service", side_effect=TypeError("type error")):
+        with patch.object(
+            self._APP_APP_MOD, "get_ai_chat_app_service", side_effect=TypeError("type error")
+        ):
             result = _extract_excel_records_with_existing_parser({}, {}, "")
         assert result == []
 
     def test_value_error_returns_empty(self) -> None:
-        with patch.object(self._APP_APP_MOD, "get_ai_chat_app_service", side_effect=ValueError("val error")):
+        with patch.object(
+            self._APP_APP_MOD, "get_ai_chat_app_service", side_effect=ValueError("val error")
+        ):
             result = _extract_excel_records_with_existing_parser({}, {}, "")
         assert result == []
 
@@ -846,6 +878,7 @@ class TestExtractExcelRecordsWithExistingParser:
 # ===========================================================================
 # build_multimodal_autonomous_plan  (top-level planner)
 # ===========================================================================
+
 
 class TestBuildMultimodalAutonomousPlan:
     """All tests mock _collect_artifacts to supply controlled artifacts."""
@@ -1046,9 +1079,7 @@ class TestBuildMultimodalAutonomousPlan:
     def test_plan_id_prefix_rag(self) -> None:
         art = _make_artifact(artifact_type="document_file")
         with self._patch_collect([art]):
-            result = build_multimodal_autonomous_plan(
-                user_id="u1", message="q", runtime_context={}
-            )
+            result = build_multimodal_autonomous_plan(user_id="u1", message="q", runtime_context={})
         assert result is not None
         assert result.plan_id.startswith("plan_multimodal_")
 
@@ -1093,8 +1124,6 @@ class TestBuildMultimodalAutonomousPlan:
     def test_artifact_types_in_rag_metadata(self) -> None:
         art = _make_artifact(artifact_type="document_file")
         with self._patch_collect([art]):
-            result = build_multimodal_autonomous_plan(
-                user_id="u1", message="q", runtime_context={}
-            )
+            result = build_multimodal_autonomous_plan(user_id="u1", message="q", runtime_context={})
         assert result is not None
         assert "document_file" in result.metadata["artifact_types"]

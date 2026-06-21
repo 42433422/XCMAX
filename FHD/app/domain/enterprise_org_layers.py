@@ -71,10 +71,15 @@ _KW_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         "execution",
     ),
     (
-        re.compile(r"微信|wechat|消息|触点|客服|沟通|contacts|考勤|attendance|人事|排班|出勤|taiyangniao|太阳鸟"),
+        re.compile(
+            r"微信|wechat|消息|触点|客服|沟通|contacts|考勤|attendance|人事|排班|出勤|taiyangniao|太阳鸟"
+        ),
         "service",
     ),
-    (re.compile(r"编排|路由|orchestr|router|监控|自治|管理|workflow_auto|automator|dispatcher"), "management"),
+    (
+        re.compile(r"编排|路由|orchestr|router|监控|自治|管理|workflow_auto|automator|dispatcher"),
+        "management",
+    ),
 )
 
 
@@ -115,7 +120,10 @@ def resolve_enterprise_org_layer(
 
 def enterprise_departments() -> dict[str, dict[str, str]]:
     """返回 4 部门字典（与 ``load_departments()`` 结构对齐）。"""
-    return {layer["id"]: {"label": layer["label"], "desc": layer["desc"]} for layer in ENTERPRISE_ORG_LAYERS}
+    return {
+        layer["id"]: {"label": layer["label"], "desc": layer["desc"]}
+        for layer in ENTERPRISE_ORG_LAYERS
+    }
 
 
 def enterprise_org_layer_label(layer_id: str) -> str:

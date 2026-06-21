@@ -10,6 +10,7 @@ import pytest
 # TaskContextService
 # ---------------------------------------------------------------------------
 
+
 class TestTaskContextService:
     def _make(self):
         from app.utils.task_context import TaskContextService
@@ -109,6 +110,7 @@ class TestTaskContextService:
 # ---------------------------------------------------------------------------
 # mobile_api utilities
 # ---------------------------------------------------------------------------
+
 
 class TestFormatMobileResponse:
     def test_defaults(self):

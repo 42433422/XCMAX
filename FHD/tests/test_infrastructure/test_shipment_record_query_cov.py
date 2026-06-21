@@ -47,9 +47,7 @@ def _shipment_inspect_mock() -> MagicMock:
 def _make_db_with_table(*, table_exists: bool = True) -> MagicMock:
     mock_db = MagicMock()
     inspector = MagicMock()
-    inspector.get_table_names.return_value = (
-        ["shipment_records"] if table_exists else ["other"]
-    )
+    inspector.get_table_names.return_value = ["shipment_records"] if table_exists else ["other"]
     return mock_db, inspector
 
 
@@ -540,8 +538,8 @@ class TestGetShipmentRecordsMissingBranches:
         def _all_side_effect():
             call_count[0] += 1
             if call_count[0] == 1:
-                return []   # records_exact → empty
-            return [rec]    # records_strip_exact → has items
+                return []  # records_exact → empty
+            return [rec]  # records_strip_exact → has items
 
         mock_q.filter.return_value = mock_q
         mock_q.order_by.return_value.limit.return_value.all.side_effect = _all_side_effect
@@ -565,8 +563,8 @@ class TestGetShipmentRecordsMissingBranches:
         def _all_side_effect():
             call_count[0] += 1
             if call_count[0] <= 2:
-                return []   # records_exact and records_strip_exact both empty
-            return []       # distinct candidates → none
+                return []  # records_exact and records_strip_exact both empty
+            return []  # distinct candidates → none
 
         mock_q.order_by.return_value.limit.return_value.all.side_effect = _all_side_effect
         mock_q.distinct.return_value.all.return_value = []  # no candidates
@@ -604,8 +602,8 @@ class TestGetShipmentRecordsMissingBranches:
         def _main_all():
             main_call[0] += 1
             if main_call[0] <= 2:
-                return []   # exact and strip_exact both empty
-            return [rec]    # final candidate-filtered query
+                return []  # exact and strip_exact both empty
+            return [rec]  # final candidate-filtered query
 
         main_q.order_by.return_value.limit.return_value.all.side_effect = _main_all
 
@@ -630,9 +628,7 @@ class TestGetShipmentRecordsMissingBranches:
             r.unit_name = canonical
             return r
 
-        p1, p2, p3 = self._base_patches(
-            mock_db, inspector_m, resolve_side_effect=_resolve
-        )
+        p1, p2, p3 = self._base_patches(mock_db, inspector_m, resolve_side_effect=_resolve)
         with p1, p2, p3:
             result = svc.get_shipment_records(unit_name=canonical)
         # result may be [] or [rec] depending on call ordering of sa_inspect;
@@ -662,8 +658,8 @@ class TestGetShipmentRecordsMissingBranches:
         def _all():
             all_call[0] += 1
             if all_call[0] <= 2:
-                return []   # exact + strip_exact both empty
-            return [rec]    # final candidate-filtered query
+                return []  # exact + strip_exact both empty
+            return [rec]  # final candidate-filtered query
 
         mock_q.order_by.return_value.limit.return_value.all.side_effect = _all
 
@@ -678,9 +674,7 @@ class TestGetShipmentRecordsMissingBranches:
                 return r
             return None
 
-        p1, p2, p3 = self._base_patches(
-            mock_db, inspector_m, resolve_side_effect=_resolve
-        )
+        p1, p2, p3 = self._base_patches(mock_db, inspector_m, resolve_side_effect=_resolve)
         with p1, p2, p3:
             result = svc.get_shipment_records(unit_name=canonical)
         assert isinstance(result, list)
@@ -739,9 +733,7 @@ class TestGetShipmentRecordsMissingBranches:
             resolve_calls[0] += 1
             return None
 
-        p1, p2, p3 = self._base_patches(
-            mock_db, inspector_m, resolve_side_effect=_resolve
-        )
+        p1, p2, p3 = self._base_patches(mock_db, inspector_m, resolve_side_effect=_resolve)
         with p1, p2, p3:
             result = svc.get_shipment_records(unit_name="something")
         # resolve should be called only twice: once for unit_name, once for "DupUnit"
@@ -774,9 +766,7 @@ class TestGetShipmentRecordsMissingBranches:
             r.unit_name = "TotallyDifferent"
             return r
 
-        p1, p2, p3 = self._base_patches(
-            mock_db, inspector_m, resolve_side_effect=_resolve
-        )
+        p1, p2, p3 = self._base_patches(mock_db, inspector_m, resolve_side_effect=_resolve)
         with p1, p2, p3:
             result = svc.get_shipment_records(unit_name="TargetUnit")
         assert result == []

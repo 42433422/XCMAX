@@ -186,7 +186,9 @@ class TestOrderItemUpdatedEvent:
 
 class TestOrderStatusChangedEvent:
     def test_valid(self):
-        ev = _make(OrderStatusChangedEvent, {"order_id": "1", "old_status": "draft", "new_status": "paid"})
+        ev = _make(
+            OrderStatusChangedEvent, {"order_id": "1", "old_status": "draft", "new_status": "paid"}
+        )
         _call_post_init(ev)
 
     def test_missing_order_id(self):
@@ -223,21 +225,32 @@ from app.neuro_bus.events.wechat_events import (
 class TestWeChatMessageReceivedEvent:
     # required: message_id, from_user, message_type, content
     def test_valid(self):
-        ev = _make(WeChatMessageReceivedEvent, {"message_id": "m1", "from_user": "u1", "message_type": "text", "content": "hi"})
+        ev = _make(
+            WeChatMessageReceivedEvent,
+            {"message_id": "m1", "from_user": "u1", "message_type": "text", "content": "hi"},
+        )
         _call_post_init(ev)
 
     def test_missing_message_id(self):
-        ev = _make(WeChatMessageReceivedEvent, {"from_user": "u1", "message_type": "text", "content": "hi"})
+        ev = _make(
+            WeChatMessageReceivedEvent, {"from_user": "u1", "message_type": "text", "content": "hi"}
+        )
         with pytest.raises(ValueError, match="message_id"):
             _call_post_init(ev)
 
     def test_missing_from_user(self):
-        ev = _make(WeChatMessageReceivedEvent, {"message_id": "m1", "message_type": "text", "content": "hi"})
+        ev = _make(
+            WeChatMessageReceivedEvent,
+            {"message_id": "m1", "message_type": "text", "content": "hi"},
+        )
         with pytest.raises(ValueError, match="from_user"):
             _call_post_init(ev)
 
     def test_missing_content(self):
-        ev = _make(WeChatMessageReceivedEvent, {"message_id": "m1", "from_user": "u1", "message_type": "text"})
+        ev = _make(
+            WeChatMessageReceivedEvent,
+            {"message_id": "m1", "from_user": "u1", "message_type": "text"},
+        )
         with pytest.raises(ValueError, match="content"):
             _call_post_init(ev)
 
@@ -245,16 +258,23 @@ class TestWeChatMessageReceivedEvent:
 class TestWeChatMessageSentEvent:
     # required: message_id, to_user, message_type, status
     def test_valid(self):
-        ev = _make(WeChatMessageSentEvent, {"message_id": "m1", "to_user": "u1", "message_type": "text", "status": "ok"})
+        ev = _make(
+            WeChatMessageSentEvent,
+            {"message_id": "m1", "to_user": "u1", "message_type": "text", "status": "ok"},
+        )
         _call_post_init(ev)
 
     def test_missing_message_id(self):
-        ev = _make(WeChatMessageSentEvent, {"to_user": "u1", "message_type": "text", "status": "ok"})
+        ev = _make(
+            WeChatMessageSentEvent, {"to_user": "u1", "message_type": "text", "status": "ok"}
+        )
         with pytest.raises(ValueError, match="message_id"):
             _call_post_init(ev)
 
     def test_missing_to_user(self):
-        ev = _make(WeChatMessageSentEvent, {"message_id": "m1", "message_type": "text", "status": "ok"})
+        ev = _make(
+            WeChatMessageSentEvent, {"message_id": "m1", "message_type": "text", "status": "ok"}
+        )
         with pytest.raises(ValueError, match="to_user"):
             _call_post_init(ev)
 
@@ -262,7 +282,9 @@ class TestWeChatMessageSentEvent:
 class TestWeChatContactAddedEvent:
     # required: contact_id, contact_name, source
     def test_valid(self):
-        ev = _make(WeChatContactAddedEvent, {"contact_id": "c", "contact_name": "Alice", "source": "scan"})
+        ev = _make(
+            WeChatContactAddedEvent, {"contact_id": "c", "contact_name": "Alice", "source": "scan"}
+        )
         _call_post_init(ev)
 
     def test_missing_contact_id(self):
@@ -296,7 +318,10 @@ class TestWeChatContactUpdatedEvent:
 class TestWeChatLoginStatusChangedEvent:
     # required: account_id, old_status, new_status
     def test_valid(self):
-        ev = _make(WeChatLoginStatusChangedEvent, {"account_id": "a1", "old_status": "offline", "new_status": "online"})
+        ev = _make(
+            WeChatLoginStatusChangedEvent,
+            {"account_id": "a1", "old_status": "offline", "new_status": "online"},
+        )
         _call_post_init(ev)
 
     def test_missing_account_id(self):
@@ -318,21 +343,32 @@ class TestWeChatLoginStatusChangedEvent:
 class TestWeChatTaskCreatedEvent:
     # required: task_id, task_type, target_contacts, content
     def test_valid(self):
-        ev = _make(WeChatTaskCreatedEvent, {"task_id": "t1", "task_type": "broadcast", "target_contacts": [], "content": "msg"})
+        ev = _make(
+            WeChatTaskCreatedEvent,
+            {"task_id": "t1", "task_type": "broadcast", "target_contacts": [], "content": "msg"},
+        )
         _call_post_init(ev)
 
     def test_missing_task_id(self):
-        ev = _make(WeChatTaskCreatedEvent, {"task_type": "broadcast", "target_contacts": [], "content": "msg"})
+        ev = _make(
+            WeChatTaskCreatedEvent,
+            {"task_type": "broadcast", "target_contacts": [], "content": "msg"},
+        )
         with pytest.raises(ValueError, match="task_id"):
             _call_post_init(ev)
 
     def test_missing_task_type(self):
-        ev = _make(WeChatTaskCreatedEvent, {"task_id": "t1", "target_contacts": [], "content": "msg"})
+        ev = _make(
+            WeChatTaskCreatedEvent, {"task_id": "t1", "target_contacts": [], "content": "msg"}
+        )
         with pytest.raises(ValueError, match="task_type"):
             _call_post_init(ev)
 
     def test_missing_content(self):
-        ev = _make(WeChatTaskCreatedEvent, {"task_id": "t1", "task_type": "broadcast", "target_contacts": []})
+        ev = _make(
+            WeChatTaskCreatedEvent,
+            {"task_id": "t1", "task_type": "broadcast", "target_contacts": []},
+        )
         with pytest.raises(ValueError, match="content"):
             _call_post_init(ev)
 
@@ -340,7 +376,9 @@ class TestWeChatTaskCreatedEvent:
 class TestWeChatTaskCompletedEvent:
     # required: task_id, success_count, failed_count
     def test_valid(self):
-        ev = _make(WeChatTaskCompletedEvent, {"task_id": "t1", "success_count": 3, "failed_count": 0})
+        ev = _make(
+            WeChatTaskCompletedEvent, {"task_id": "t1", "success_count": 3, "failed_count": 0}
+        )
         _call_post_init(ev)
 
     def test_missing_task_id(self):
@@ -378,7 +416,9 @@ from app.neuro_bus.events.auth_events import (
 class TestUserLoginEvent:
     # required: user_id, login_method, ip_address
     def test_valid(self):
-        ev = _make(UserLoginEvent, {"user_id": "u1", "login_method": "password", "ip_address": "1.2.3.4"})
+        ev = _make(
+            UserLoginEvent, {"user_id": "u1", "login_method": "password", "ip_address": "1.2.3.4"}
+        )
         _call_post_init(ev)
 
     def test_missing_user_id(self):
@@ -412,7 +452,10 @@ class TestUserLogoutEvent:
 class TestUserRegisteredEvent:
     # required: user_id, username, registration_source
     def test_valid(self):
-        ev = _make(UserRegisteredEvent, {"user_id": "u1", "username": "alice", "registration_source": "web"})
+        ev = _make(
+            UserRegisteredEvent,
+            {"user_id": "u1", "username": "alice", "registration_source": "web"},
+        )
         _call_post_init(ev)
 
     def test_missing_user_id(self):
@@ -446,7 +489,10 @@ class TestUserPasswordChangedEvent:
 class TestUserPermissionGrantedEvent:
     # required: user_id, permission, granted_by
     def test_valid(self):
-        ev = _make(UserPermissionGrantedEvent, {"user_id": "u1", "permission": "admin", "granted_by": "root"})
+        ev = _make(
+            UserPermissionGrantedEvent,
+            {"user_id": "u1", "permission": "admin", "granted_by": "root"},
+        )
         _call_post_init(ev)
 
     def test_missing_user_id(self):
@@ -468,7 +514,10 @@ class TestUserPermissionGrantedEvent:
 class TestUserPermissionRevokedEvent:
     # required: user_id, permission, revoked_by
     def test_valid(self):
-        ev = _make(UserPermissionRevokedEvent, {"user_id": "u1", "permission": "admin", "revoked_by": "root"})
+        ev = _make(
+            UserPermissionRevokedEvent,
+            {"user_id": "u1", "permission": "admin", "revoked_by": "root"},
+        )
         _call_post_init(ev)
 
     def test_missing_user_id(self):
@@ -490,7 +539,9 @@ class TestUserPermissionRevokedEvent:
 class TestLoginFailedEvent:
     # required: username, reason, ip_address
     def test_valid(self):
-        ev = _make(LoginFailedEvent, {"username": "alice", "reason": "bad_pw", "ip_address": "1.2.3.4"})
+        ev = _make(
+            LoginFailedEvent, {"username": "alice", "reason": "bad_pw", "ip_address": "1.2.3.4"}
+        )
         _call_post_init(ev)
 
     def test_missing_username(self):

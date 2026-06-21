@@ -31,6 +31,7 @@ from app.services.mobile_relay_desktop_client import (
 # _relay_base_url
 # ---------------------------------------------------------------------------
 
+
 class TestRelayBaseUrl:
     def test_default_url(self, monkeypatch):
         monkeypatch.delenv("XCAGI_RELAY_BASE_URL", raising=False)
@@ -60,6 +61,7 @@ class TestRelayBaseUrl:
 # _api_url
 # ---------------------------------------------------------------------------
 
+
 class TestApiUrl:
     def test_with_base_url(self):
         url = _api_url("/api/test", "https://relay.example.com")
@@ -74,6 +76,7 @@ class TestApiUrl:
 # ---------------------------------------------------------------------------
 # _read_config
 # ---------------------------------------------------------------------------
+
 
 class TestReadConfig:
     def test_file_not_exists(self, tmp_path, monkeypatch):
@@ -103,6 +106,7 @@ class TestReadConfig:
 # ---------------------------------------------------------------------------
 # _public_payload_from_config
 # ---------------------------------------------------------------------------
+
 
 class TestPublicPayloadFromConfig:
     def test_empty_config(self):
@@ -161,6 +165,7 @@ class TestPublicPayloadFromConfig:
 # cached_desktop_relay_payload
 # ---------------------------------------------------------------------------
 
+
 class TestCachedDesktopRelayPayload:
     def test_no_config(self, tmp_path, monkeypatch):
         monkeypatch.setattr(_module, "_CONFIG_FILE", tmp_path / "missing.json")
@@ -181,6 +186,7 @@ class TestCachedDesktopRelayPayload:
 # ---------------------------------------------------------------------------
 # start_desktop_relay_poller
 # ---------------------------------------------------------------------------
+
 
 class TestStartPoller:
     def test_no_config_returns_false(self, tmp_path, monkeypatch):
@@ -219,6 +225,7 @@ class TestStartPoller:
 # stop_desktop_relay_poller
 # ---------------------------------------------------------------------------
 
+
 class TestStopPoller:
     def test_sets_stop_event(self):
         _module._STOP_EVENT.clear()
@@ -229,6 +236,7 @@ class TestStopPoller:
 # ---------------------------------------------------------------------------
 # _terminal_codex_message
 # ---------------------------------------------------------------------------
+
 
 class TestTerminalCodexMessage:
     def test_no_messages(self):
@@ -243,13 +251,16 @@ class TestTerminalCodexMessage:
         assert _terminal_codex_message([msg], request_id="", task_id="") is None
 
     def test_request_id_mismatch(self):
-        msg = {"role": "assistant", "kind": "codex_result", "body": "hi",
-               "dispatch_request_id": "req-other"}
+        msg = {
+            "role": "assistant",
+            "kind": "codex_result",
+            "body": "hi",
+            "dispatch_request_id": "req-other",
+        }
         assert _terminal_codex_message([msg], request_id="req-1", task_id="") is None
 
     def test_task_id_mismatch(self):
-        msg = {"role": "assistant", "kind": "codex_direct", "body": "hi",
-               "task_id": "task-other"}
+        msg = {"role": "assistant", "kind": "codex_direct", "body": "hi", "task_id": "task-other"}
         assert _terminal_codex_message([msg], request_id="", task_id="task-1") is None
 
     def test_no_body_skipped(self):
@@ -257,14 +268,24 @@ class TestTerminalCodexMessage:
         assert _terminal_codex_message([msg], request_id="", task_id="") is None
 
     def test_matching_message_returned(self):
-        msg = {"role": "assistant", "kind": "codex_result", "body": "result!",
-               "dispatch_request_id": "req-1", "task_id": "task-1"}
+        msg = {
+            "role": "assistant",
+            "kind": "codex_result",
+            "body": "result!",
+            "dispatch_request_id": "req-1",
+            "task_id": "task-1",
+        }
         result = _terminal_codex_message([msg], request_id="req-1", task_id="task-1")
         assert result is msg
 
     def test_empty_request_and_task_id(self):
-        msg = {"role": "assistant", "kind": "codex_direct", "body": "ok",
-               "dispatch_request_id": "", "task_id": ""}
+        msg = {
+            "role": "assistant",
+            "kind": "codex_direct",
+            "body": "ok",
+            "dispatch_request_id": "",
+            "task_id": "",
+        }
         result = _terminal_codex_message([msg], request_id="", task_id="")
         assert result is msg
 
@@ -272,6 +293,7 @@ class TestTerminalCodexMessage:
 # ---------------------------------------------------------------------------
 # _execute_task
 # ---------------------------------------------------------------------------
+
 
 class TestExecuteTask:
     def test_no_message_returns_error(self):
@@ -293,7 +315,10 @@ class TestExecuteTask:
         }
         mock_svc = MagicMock()
         mock_svc.invoke.return_value = {"dispatch": {"status": "completed"}}
-        with patch("app.services.mobile_relay_desktop_client.CodexSuperEmployeeService", return_value=mock_svc):
+        with patch(
+            "app.services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            return_value=mock_svc,
+        ):
             result = _execute_task(task)
         assert result.get("ok") is True
         assert result.get("_relay_status") == "completed"
@@ -305,7 +330,10 @@ class TestExecuteTask:
         }
         mock_svc = MagicMock()
         mock_svc.invoke.return_value = {"dispatch": {"accepted": False, "reason": "busy"}}
-        with patch("app.services.mobile_relay_desktop_client.CodexSuperEmployeeService", return_value=mock_svc):
+        with patch(
+            "app.services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            return_value=mock_svc,
+        ):
             result = _execute_task(task)
         assert "error" in result
         assert result.get("_relay_status") == "blocked"
@@ -323,8 +351,17 @@ class TestExecuteTask:
         mock_svc.list_messages.return_value = []
 
         with (
-            patch("app.services.mobile_relay_desktop_client.CodexSuperEmployeeService", return_value=mock_svc),
-            patch.dict(os.environ, {"XCAGI_RELAY_CODEX_WAIT_TIMEOUT_SEC": "0", "XCAGI_RELAY_CODEX_WAIT_INTERVAL_SEC": "0.01"}),
+            patch(
+                "app.services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+                return_value=mock_svc,
+            ),
+            patch.dict(
+                os.environ,
+                {
+                    "XCAGI_RELAY_CODEX_WAIT_TIMEOUT_SEC": "0",
+                    "XCAGI_RELAY_CODEX_WAIT_INTERVAL_SEC": "0.01",
+                },
+            ),
         ):
             result = _execute_task(task)
         assert result.get("_relay_status") == "blocked"
@@ -348,6 +385,7 @@ class TestExecuteTask:
 # _poll_once
 # ---------------------------------------------------------------------------
 
+
 class TestPollOnce:
     def test_no_relay_id_returns_early(self, tmp_path, monkeypatch):
         monkeypatch.setattr(_module, "_CONFIG_FILE", tmp_path / "empty.json")
@@ -357,12 +395,19 @@ class TestPollOnce:
     def test_404_returns_early(self, tmp_path, monkeypatch):
         cfg_file = tmp_path / "relay.json"
         cfg_file.write_text(
-            json.dumps({"relay_id": "r1", "desktop_token": "tok", "relay_base_url": "https://x.example.com"}),
+            json.dumps(
+                {
+                    "relay_id": "r1",
+                    "desktop_token": "tok",
+                    "relay_base_url": "https://x.example.com",
+                }
+            ),
             encoding="utf-8",
         )
         monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
 
         import httpx
+
         mock_resp = MagicMock()
         mock_resp.status_code = 404
 
@@ -379,19 +424,22 @@ class TestPollOnce:
 # register_desktop_relay
 # ---------------------------------------------------------------------------
 
+
 class TestRegisterDesktopRelay:
     def test_http_error_with_cached_payload(self, tmp_path, monkeypatch):
         """Branch: httpx raises, but cached config exists -> returns cached + starts poller."""
         future_exp = int(time.time()) + 9999
         cfg_file = tmp_path / "relay.json"
         cfg_file.write_text(
-            json.dumps({"relay_id": "r1", "pairing_code": "p1", "exp": future_exp,
-                        "desktop_token": "tok"}),
+            json.dumps(
+                {"relay_id": "r1", "pairing_code": "p1", "exp": future_exp, "desktop_token": "tok"}
+            ),
             encoding="utf-8",
         )
         monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
 
         import httpx
+
         with patch("httpx.Client") as mock_cls:
             mock_c = MagicMock()
             mock_c.__enter__ = lambda s: mock_c
@@ -407,6 +455,7 @@ class TestRegisterDesktopRelay:
         monkeypatch.setattr(_module, "_CONFIG_FILE", tmp_path / "missing.json")
 
         import httpx
+
         with patch("httpx.Client") as mock_cls:
             mock_c = MagicMock()
             mock_c.__enter__ = lambda s: mock_c
@@ -425,6 +474,7 @@ class TestRegisterDesktopRelay:
         mock_resp.json.return_value = {"data": {"relay_id": "r1"}}  # no desktop_token
 
         import httpx
+
         with patch("httpx.Client") as mock_cls:
             mock_c = MagicMock()
             mock_c.__enter__ = lambda s: mock_c

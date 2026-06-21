@@ -41,12 +41,12 @@ class BehaviorFeatures:
     """从对话行为中提取的特征。"""
 
     turn_count: int = 0
-    interrupt_count: int = 0          # 用户打断/催促次数
-    correction_count: int = 0         # 用户纠正 butler 次数
-    why_question_count: int = 0       # 用户问"为什么"/"如果"次数
-    emotion_expression_count: int = 0 # 用户表达情绪/感谢次数
+    interrupt_count: int = 0  # 用户打断/催促次数
+    correction_count: int = 0  # 用户纠正 butler 次数
+    why_question_count: int = 0  # 用户问"为什么"/"如果"次数
+    emotion_expression_count: int = 0  # 用户表达情绪/感谢次数
     structure_request_count: int = 0  # 用户要求"列步骤"/"排期"次数
-    avg_message_length: float = 0.0   # 用户平均消息长度
+    avg_message_length: float = 0.0  # 用户平均消息长度
     total_messages: int = 0
 
     @classmethod
@@ -151,7 +151,9 @@ class ButlerProfileInference:
         new_jp = _clamp(current_jp + result.mbti_jp_delta)
 
         new_type = derive_mbti_type(new_ei, new_sn, new_tf, new_jp)
-        old_type = current_profile.get("mbti_type") or derive_mbti_type(current_ei, current_sn, current_tf, current_jp)
+        old_type = current_profile.get("mbti_type") or derive_mbti_type(
+            current_ei, current_sn, current_tf, current_jp
+        )
 
         result.new_mbti_type = new_type
 
@@ -160,7 +162,9 @@ class ButlerProfileInference:
             result.identity_changed = True
             result.new_identity_primary = pick_primary_identity(new_type, mod_hints)
             result.new_identity_composite = result.new_identity_primary
-            result.reasons.append(f"MBTI 型变化 {old_type}→{new_type}，身份重选为 {result.new_identity_primary}")
+            result.reasons.append(
+                f"MBTI 型变化 {old_type}→{new_type}，身份重选为 {result.new_identity_primary}"
+            )
         else:
             result.reasons.append(f"MBTI 型保持 {new_type}，身份不变")
 
@@ -194,7 +198,9 @@ class ButlerProfileInference:
         if features.structure_request_count > 0:
             delta = min(MAX_DELTA, features.structure_request_count * 2)
             result.mbti_jp_delta += delta
-            result.reasons.append(f"要求结构化 {features.structure_request_count} 次 → J/P +{delta}")
+            result.reasons.append(
+                f"要求结构化 {features.structure_request_count} 次 → J/P +{delta}"
+            )
 
         # 纠正 → +T（思考，更理性）
         if features.correction_count > 0:
@@ -245,7 +251,9 @@ def apply_inference(
 
     if result.identity_changed and result.new_identity_primary:
         update_kwargs["identity_primary"] = result.new_identity_primary
-        update_kwargs["identity_composite"] = result.new_identity_composite or result.new_identity_primary
+        update_kwargs["identity_composite"] = (
+            result.new_identity_composite or result.new_identity_primary
+        )
 
     service.update_profile(user_id, **update_kwargs)
     logger.info(

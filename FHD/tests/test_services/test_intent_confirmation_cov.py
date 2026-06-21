@@ -152,50 +152,62 @@ class TestIntentConfirmationServiceCheckAndBuild:
         assert result["status"] == "unclear"
 
     def test_final_intent_takes_priority(self):
-        result = self.svc.check_and_build_prompt({
-            "final_intent": "materials",
-            "primary_intent": "something_else",
-            "slots": {},
-        })
+        result = self.svc.check_and_build_prompt(
+            {
+                "final_intent": "materials",
+                "primary_intent": "something_else",
+                "slots": {},
+            }
+        )
         # "materials" has no required slots -> complete
         assert result["status"] == "complete"
         assert result["intent"] == "materials"
 
     def test_primary_intent_fallback(self):
-        result = self.svc.check_and_build_prompt({
-            "primary_intent": "materials",
-            "slots": {},
-        })
+        result = self.svc.check_and_build_prompt(
+            {
+                "primary_intent": "materials",
+                "slots": {},
+            }
+        )
         assert result["status"] == "complete"
 
     def test_tool_key_fallback(self):
-        result = self.svc.check_and_build_prompt({
-            "tool_key": "materials",
-            "slots": {},
-        })
+        result = self.svc.check_and_build_prompt(
+            {
+                "tool_key": "materials",
+                "slots": {},
+            }
+        )
         assert result["status"] == "complete"
 
     def test_deepseek_intent_fallback(self):
-        result = self.svc.check_and_build_prompt({
-            "deepseek_intent": "materials",
-            "slots": {},
-        })
+        result = self.svc.check_and_build_prompt(
+            {
+                "deepseek_intent": "materials",
+                "slots": {},
+            }
+        )
         assert result["status"] == "complete"
 
     def test_missing_slots_status(self):
-        result = self.svc.check_and_build_prompt({
-            "final_intent": "shipment_generate",
-            "slots": {},
-        })
+        result = self.svc.check_and_build_prompt(
+            {
+                "final_intent": "shipment_generate",
+                "slots": {},
+            }
+        )
         assert result["status"] == "missing_slots"
         assert "unit_name" in result["missing_slots"]
         assert result["question"]
 
     def test_complete_with_all_slots(self):
-        result = self.svc.check_and_build_prompt({
-            "final_intent": "shipment_generate",
-            "slots": {"unit_name": "Acme"},
-        })
+        result = self.svc.check_and_build_prompt(
+            {
+                "final_intent": "shipment_generate",
+                "slots": {"unit_name": "Acme"},
+            }
+        )
         assert result["status"] == "complete"
         assert result["question"] is None
         assert result["pending_data"]["missing_slots"] == []

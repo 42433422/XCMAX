@@ -16,6 +16,7 @@ from app.services.tools_execution.order_parser import _parse_order_text
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _ok(result: dict) -> bool:
     return result.get("success") is True
 
@@ -27,6 +28,7 @@ def _fail(result: dict) -> bool:
 # ===========================================================================
 # 1. Slot-mode path: model + spec + qty all present → success
 # ===========================================================================
+
 
 class TestSlotModeTriggerSuccess:
     """Lines 75-214: slot-mode with complete fields → single-product success."""
@@ -70,6 +72,7 @@ class TestSlotModeTriggerSuccess:
 # 2. slot_spec from secondary regex branches (lines 84-97)
 # ===========================================================================
 
+
 class TestSpecFallbackBranches:
     """Branches when primary spec regex fails and we fall to numeric / CN branches."""
 
@@ -95,6 +98,7 @@ class TestSpecFallbackBranches:
 # 3. Missing-prompt path (lines 131-144, 149-150)
 # ===========================================================================
 
+
 class TestMissingPromptPath:
     """Slot-mode triggered but at least one field is missing → missing_prompt."""
 
@@ -117,6 +121,7 @@ class TestMissingPromptPath:
 # 4. Slot-unit cleanup path — trailing digit removal (lines 157-163)
 # ===========================================================================
 
+
 class TestSlotUnitTrailingDigitCleanup:
     """If unit name ends with qty digits, strip them (lines 157–163)."""
 
@@ -129,6 +134,7 @@ class TestSlotUnitTrailingDigitCleanup:
 # ===========================================================================
 # 5. Multi-product pattern (lines 220-257)
 # ===========================================================================
+
 
 class TestMultiProductPattern:
     """'N桶 MODEL 规格 S' repeated ≥2 times in text."""
@@ -153,6 +159,7 @@ class TestMultiProductPattern:
 # ===========================================================================
 # 6. Regex patterns loop (lines 260-334): 箱/件/公斤/kg branches
 # ===========================================================================
+
 
 class TestPatternsLoop:
     """The four pattern alternatives covering unit measures."""
@@ -207,6 +214,7 @@ class TestPatternsLoop:
 # 7. No-container-qty branch + missing-bucket message (lines 336-354)
 # ===========================================================================
 
+
 class TestNoContainerQtyBranch:
     """If no 桶/箱/件/公斤/kg → try unit+model+spec without qty."""
 
@@ -222,6 +230,7 @@ class TestNoContainerQtyBranch:
 # ===========================================================================
 # 8. AI fallback path (lines 356-432): env var absent + with DEEPSEEK_API_KEY
 # ===========================================================================
+
 
 class TestAIFallbackPath:
     """When no pattern matches and DEEPSEEK_API_KEY is absent, skip AI."""
@@ -334,6 +343,7 @@ class TestAIFallbackPath:
 # 9. Fallback split path (lines 435-448)
 # ===========================================================================
 
+
 class TestFinalFallbackSplit:
     """Last resort: split text and use first token as unit."""
 
@@ -354,6 +364,7 @@ class TestFinalFallbackSplit:
 # 10. Exception handling outer try/except (line 455-457)
 # ===========================================================================
 
+
 class TestOuterExceptionCatch:
     """RECOVERABLE_ERRORS raised inside parsing → caught and returned as failure."""
 
@@ -372,6 +383,7 @@ class TestOuterExceptionCatch:
 # ===========================================================================
 # 11. Empty / blank text → early return (line 49)
 # ===========================================================================
+
 
 class TestEmptyText:
     """Empty string or whitespace-only → 缺少内容 error."""
@@ -396,6 +408,7 @@ class TestEmptyText:
 # ===========================================================================
 # 12. spec fallback branches (lines 84-97): m_spec_qty fails
 # ===========================================================================
+
 
 class TestSpecFallbackBranchesMore:
     """Force the secondary spec parsing branches."""
@@ -441,6 +454,7 @@ class TestSpecFallbackBranchesMore:
 # 13. parse_cn_number returns None for qty in m_qty branch (line 106->109)
 # ===========================================================================
 
+
 class TestQtyParseNone:
     """Branch where m_qty matches but parse_cn_number returns None → slot_qty_tins stays None."""
 
@@ -466,6 +480,7 @@ class TestQtyParseNone:
 # ===========================================================================
 # 14. slot_unit extraction fallback paths (lines 131-150)
 # ===========================================================================
+
 
 class TestSlotUnitFallbackPaths:
     """Various unit-extraction fallback branches."""
@@ -501,6 +516,7 @@ class TestSlotUnitFallbackPaths:
 # ===========================================================================
 # 15. TypeError/ValueError in slot_qty_tins int() conversion (lines 155-156)
 # ===========================================================================
+
 
 class TestSlotQtyTypeError:
     """If slot_qty_tins is some weird type, int() raises TypeError → qt = None."""
@@ -538,6 +554,7 @@ class TestSlotQtyTypeError:
 # 16. slot_unit trailing-digit strip — branches 157->165 and 162->165
 # ===========================================================================
 
+
 class TestSlotUnitTrailingDigitBranches:
     """Branch 157->165: unit does NOT end with tail digits → no strip."""
 
@@ -556,6 +573,7 @@ class TestSlotUnitTrailingDigitBranches:
 # ===========================================================================
 # 17. multi-product loop edge cases (lines 226->222, 236->259, 256->259)
 # ===========================================================================
+
 
 class TestMultiProductEdgeCases:
     """Edge cases in multi-product parsing."""
@@ -594,6 +612,7 @@ class TestMultiProductEdgeCases:
 # 18. patterns loop: len(groups) < 3 guard (line 270->266)
 # ===========================================================================
 
+
 class TestPatternGroupsGuard:
     """If pattern match has fewer than 3 groups, skip iteration (branch 270->266)."""
 
@@ -617,7 +636,9 @@ class TestPatternGroupsGuard:
                     return fake_match
             return real_search(pattern, string, *args, **kwargs)
 
-        with _patch("app.services.tools_execution.order_parser.re.search", side_effect=_stubbed_search):
+        with _patch(
+            "app.services.tools_execution.order_parser.re.search", side_effect=_stubbed_search
+        ):
             r = _parse_order_text("客户V 5桶 AB-03 规格10")
         assert "success" in r
 
@@ -625,6 +646,7 @@ class TestPatternGroupsGuard:
 # ===========================================================================
 # 19. Chinese digit quantity in kg pattern (lines 285-286)
 # ===========================================================================
+
 
 class TestCnQtyKgPattern:
     """Chinese digit quantity with 公斤 that is NOT a plain digit (normalize path)."""
@@ -655,6 +677,7 @@ class TestCnQtyKgPattern:
 # 20. Empty model_number in patterns loop (line 313)
 # ===========================================================================
 
+
 class TestEmptyModelInPatternsLoop:
     """normalize_model_number_token returns empty string → failure message."""
 
@@ -669,7 +692,9 @@ class TestEmptyModelInPatternsLoop:
         # Use text WITHOUT slot-mode keywords (no 规格 at end, no 型号/编号/共)
         # Pattern 2 matches: ^([^\d]+?)(\d+|...)\s*桶\s*(.+)$
         # group(2) is 'AB-99', normalize_model_number_token returns "" → failure
-        with _patch.object(_mod, "normalize_model_number_token", side_effect=_stubbed_normalize_model):
+        with _patch.object(
+            _mod, "normalize_model_number_token", side_effect=_stubbed_normalize_model
+        ):
             r = _parse_order_text("客户Y 5桶 AB-99")
         assert _fail(r)
         assert "型号" in r.get("message", "")
@@ -678,6 +703,7 @@ class TestEmptyModelInPatternsLoop:
 # ===========================================================================
 # 21. Exception in patterns loop try/except (lines 320-321)
 # ===========================================================================
+
 
 class TestPatternLoopException:
     """Generic exception in the patterns-loop try block → 解析数字失败."""
@@ -702,6 +728,7 @@ class TestPatternLoopException:
 # ===========================================================================
 # 22. No-container-qty branch (lines 340-351): various sub-conditions
 # ===========================================================================
+
 
 class TestNoContainerQtyBranchDetails:
     """Detailed sub-branches within the no-container-qty path."""
@@ -734,6 +761,7 @@ class TestNoContainerQtyBranchDetails:
 # ===========================================================================
 # 23. AI path: all fields present → success return (line 419->435)
 # ===========================================================================
+
 
 class TestAIFullSuccessReturn:
     """AI returns all four fields → success dict with products."""
@@ -814,12 +842,14 @@ class TestAIFullSuccessReturn:
 # 24. Spec-regex fallback branches (lines 84-97): force m_spec_qty to fail
 # ===========================================================================
 
+
 class TestSpecRegexFallback:
     """Patch re.search so m_spec_qty returns None, exposing branches at lines 84-97."""
 
     def _patch_m_spec_qty_to_none(self):
         """Return a context manager that makes the m_spec_qty call return None."""
         import re as _re
+
         original = _re.search
 
         def _stubbed(pattern, string, *args, **kwargs):
@@ -861,8 +891,10 @@ class TestSpecRegexFallback:
     def test_spec_qty_group2_present_but_parse_none(self):
         """m_spec_qty matches with group(2) but parse_cn_number returns None → slot_qty unchanged."""
         import re as _re
+
         original_parse = _parse_order_text.__module__
         from app.services.tools_execution import order_parser as _mod
+
         orig = _mod.parse_cn_number
 
         call_n = [0]
@@ -885,11 +917,13 @@ class TestSpecRegexFallback:
 # 25. Branch 77->79: m_spec_qty group(1) parse returns None → slot_spec stays None
 # ===========================================================================
 
+
 class TestSpecQtyGroup1ParseNone:
     """parse_cn_number returns None for the spec token (group 1) → slot_spec=None."""
 
     def test_spec_group1_parse_none(self):
         from app.services.tools_execution import order_parser as _mod
+
         orig = _mod.parse_cn_number
         call_n = [0]
 
@@ -909,12 +943,14 @@ class TestSpecQtyGroup1ParseNone:
 # 26. Branch 155-156: TypeError in int(slot_qty_tins) — non-numeric slot_qty
 # ===========================================================================
 
+
 class TestSlotQtyIntConversionError:
     """slot_qty_tins set to a non-numeric value → int() raises TypeError → qt=None."""
 
     def test_slot_qty_int_type_error(self):
         """Inject a string for slot_qty_tins to trigger TypeError in int() at line 154."""
         from app.services.tools_execution import order_parser as _mod
+
         orig = _mod.parse_cn_number
 
         call_n = [0]
@@ -936,6 +972,7 @@ class TestSlotQtyIntConversionError:
 # 27. Branch 157->165: slot_unit does NOT end with tail digits → no strip
 # ===========================================================================
 
+
 class TestSlotUnitNoTrailingStrip:
     """Unit name ends with different chars → condition fails → slot_unit unchanged."""
 
@@ -951,6 +988,7 @@ class TestSlotUnitNoTrailingStrip:
 # ===========================================================================
 # 28. Branch 162->165: pref has no Chinese/alpha chars → no strip
 # ===========================================================================
+
 
 class TestSlotUnitPrefixNoChinese:
     """Prefix before the trailing digit has no Chinese/alpha chars → branch 162->165."""
@@ -984,6 +1022,7 @@ class TestSlotUnitPrefixNoChinese:
 # 29. Branch 226->222, 236->259: multi-product with empty model skips product append
 # ===========================================================================
 
+
 class TestMultiProductEmptyModelBranch:
     """If model is empty in multi-product loop, product is not appended → products=[].
 
@@ -1011,7 +1050,9 @@ class TestMultiProductEmptyModelBranch:
                 return iter([fake_match_1, fake_match_2])
             return original_finditer(pattern, string, *args, **kwargs)
 
-        with patch("app.services.tools_execution.order_parser.re.finditer", side_effect=_stubbed_finditer):
+        with patch(
+            "app.services.tools_execution.order_parser.re.finditer", side_effect=_stubbed_finditer
+        ):
             r = _parse_order_text("客户ZZ 3桶 AB-1 规格10 2桶 CD-2 规格20")
         # products=[] → fall through to patterns/AI/fallback
         assert "success" in r
@@ -1020,6 +1061,7 @@ class TestMultiProductEmptyModelBranch:
 # ===========================================================================
 # 30. Branch 256->259: multi-product unit_candidate empty even with products
 # ===========================================================================
+
 
 class TestMultiProductUnitCandidateEmpty:
     """If prefix_text and text.split()[0] both yield empty unit → no success return from multi-product path."""
@@ -1044,6 +1086,7 @@ class TestMultiProductUnitCandidateEmpty:
 # ===========================================================================
 # 31. Branch 270->266: len(groups) < 3 guard in patterns loop
 # ===========================================================================
+
 
 class TestPatternGroupsLessThan3:
     """Fake a re.search match with only 2 groups to trigger the len(groups) < 3 guard."""
@@ -1072,6 +1115,7 @@ class TestPatternGroupsLessThan3:
 # 32. Branch 285-286: exception in Chinese qty for kg pattern → quantity=1
 # ===========================================================================
 
+
 class TestCnQtyKgException:
     """normalize_chinese_digits returns '' for qty → float('') raises → except → quantity=1."""
 
@@ -1093,6 +1137,7 @@ class TestCnQtyKgException:
 # ===========================================================================
 # 33. Branch 340-351: no-container path sub-branches
 # ===========================================================================
+
 
 class TestNoContainerSubBranches:
     """Detailed sub-branches within the no-container-qty path (lines 340-351)."""

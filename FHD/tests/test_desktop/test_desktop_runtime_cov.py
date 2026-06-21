@@ -19,6 +19,7 @@ import pytest
 # migrate.py
 # ---------------------------------------------------------------------------
 
+
 class TestBackupDatabase:
     def test_no_db_returns_none(self, tmp_path):
         from app.desktop_runtime.migrate import backup_database
@@ -208,6 +209,7 @@ class TestMigrateMain:
 # support_bundle.py
 # ---------------------------------------------------------------------------
 
+
 class TestTailBytes:
     def test_file_not_exists(self, tmp_path):
         from app.desktop_runtime.support_bundle import _tail_bytes
@@ -343,6 +345,7 @@ class TestBuildSupportBundleZip:
 # ---------------------------------------------------------------------------
 # model_downloader.py
 # ---------------------------------------------------------------------------
+
 
 class TestModelAsset:
     def test_frozen_dataclass(self):

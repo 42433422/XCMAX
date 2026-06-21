@@ -108,9 +108,10 @@ class TestRunDispatch:
         """agentic_loop=False → _run_batch is called, not _run_agentic_loop."""
         engine = _make_engine({"success": True})
         plan = _plan([_node()])
-        with patch.object(engine, "_run_batch", wraps=engine._run_batch) as mock_batch, patch.object(
-            engine, "_run_agentic_loop"
-        ) as mock_agentic:
+        with (
+            patch.object(engine, "_run_batch", wraps=engine._run_batch) as mock_batch,
+            patch.object(engine, "_run_agentic_loop") as mock_agentic,
+        ):
             engine.run(plan)
         mock_batch.assert_called_once()
         mock_agentic.assert_not_called()
@@ -119,9 +120,10 @@ class TestRunDispatch:
         """agentic_loop=True but tool_registry=None → _run_batch."""
         engine = _make_engine({"success": True})
         plan = _plan([_node()])
-        with patch.object(engine, "_run_batch", wraps=engine._run_batch) as mock_batch, patch.object(
-            engine, "_run_agentic_loop"
-        ) as mock_agentic:
+        with (
+            patch.object(engine, "_run_batch", wraps=engine._run_batch) as mock_batch,
+            patch.object(engine, "_run_agentic_loop") as mock_agentic,
+        ):
             engine.run(plan, agentic_loop=True, tool_registry=None)
         mock_batch.assert_called_once()
         mock_agentic.assert_not_called()
@@ -243,9 +245,10 @@ class TestAgenticLoopDoneBranch:
             "reasoning": "keep going",
         }
 
-        with patch.object(engine, "_llm_decide_next_step", return_value=always_execute), patch(
-            "app.application.workflow.engine.logger"
-        ) as mock_logger:
+        with (
+            patch.object(engine, "_llm_decide_next_step", return_value=always_execute),
+            patch("app.application.workflow.engine.logger") as mock_logger,
+        ):
             result = engine._run_agentic_loop(
                 plan=plan,
                 runtime_context={"message": "loop"},
@@ -277,7 +280,9 @@ class TestLlmDecideNextStep:
         """Lines 267-268: empty api_key → return None."""
         engine, ai_svc = self._engine_with_mocked_ai(api_key="")
 
-        with patch("app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc):
+        with patch(
+            "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
+        ):
             result = engine._llm_decide_next_step(
                 user_message="hi",
                 tool_registry={},
@@ -292,20 +297,20 @@ class TestLlmDecideNextStep:
         engine, ai_svc = self._engine_with_mocked_ai()
 
         # We need the HTTP call to succeed and return a sensible JSON.
-        llm_body = {
-            "choices": [{"message": {"content": '{"action": "done"}'}}]
-        }
+        llm_body = {"choices": [{"message": {"content": '{"action": "done"}'}}]}
         fake_resp = _fake_http_response(200, llm_body)
         history = [{"role": "done"}]
 
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client"
-        ) as mock_client_fn, patch(
-            "app.application.workflow.engine.default_chat_completions_url",
-            return_value="http://fake/v1/chat",
-            create=True,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
+            ),
+            patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn,
+            patch(
+                "app.application.workflow.engine.default_chat_completions_url",
+                return_value="http://fake/v1/chat",
+                create=True,
+            ),
         ):
             # Patch the import inside the function.
             mock_http = MagicMock()
@@ -341,9 +346,12 @@ class TestLlmDecideNextStep:
             }
         ]
 
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
-        ), patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn:
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
+            ),
+            patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn,
+        ):
             mock_http = MagicMock()
             mock_http.post.return_value = fake_resp
             mock_client_fn.return_value = mock_http
@@ -368,9 +376,12 @@ class TestLlmDecideNextStep:
         fake_resp = _fake_http_response(200, llm_body)
         history = [{"role": "system", "content": "Tool failed: timeout"}]
 
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
-        ), patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn:
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
+            ),
+            patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn,
+        ):
             mock_http = MagicMock()
             mock_http.post.return_value = fake_resp
             mock_client_fn.return_value = mock_http
@@ -395,9 +406,12 @@ class TestLlmDecideNextStep:
         fake_resp = _fake_http_response(200, llm_body)
         ctx = {"excel_analysis": {"file_path": "/tmp/data.xlsx"}}
 
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
-        ), patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn:
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
+            ),
+            patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn,
+        ):
             mock_http = MagicMock()
             mock_http.post.return_value = fake_resp
             mock_client_fn.return_value = mock_http
@@ -422,9 +436,12 @@ class TestLlmDecideNextStep:
         fake_resp = _fake_http_response(200, llm_body)
         ctx = {"excel_analysis": "not a dict value"}
 
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
-        ), patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn:
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
+            ),
+            patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn,
+        ):
             mock_http = MagicMock()
             mock_http.post.return_value = fake_resp
             mock_client_fn.return_value = mock_http
@@ -447,9 +464,12 @@ class TestLlmDecideNextStep:
         engine, ai_svc = self._engine_with_mocked_ai()
         fake_resp = _fake_http_response(status_code=500)
 
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
-        ), patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn:
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service", return_value=ai_svc
+            ),
+            patch("app.application.workflow.engine._get_sync_http_client") as mock_client_fn,
+        ):
             mock_http = MagicMock()
             mock_http.post.return_value = fake_resp
             mock_client_fn.return_value = mock_http
@@ -588,9 +608,7 @@ class TestHasNonEmptyParamBranches:
         assert WorkflowEngine._has_non_empty_param({"k": "hello"}, ("k",)) is True
 
     def test_multiple_keys_first_match_wins(self):
-        assert (
-            WorkflowEngine._has_non_empty_param({"a": None, "b": "found"}, ("a", "b")) is True
-        )
+        assert WorkflowEngine._has_non_empty_param({"a": None, "b": "found"}, ("a", "b")) is True
 
 
 # ---------------------------------------------------------------------------

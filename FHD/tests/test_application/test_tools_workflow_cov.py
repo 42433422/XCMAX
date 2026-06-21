@@ -18,9 +18,11 @@ import pytest
 # _parse_excel_header_row_1based
 # ---------------------------------------------------------------------------
 
+
 class TestParseExcelHeaderRow1based:
     def _call(self, args):
         from app.application.tools.workflow import _parse_excel_header_row_1based
+
         return _parse_excel_header_row_1based(args)
 
     def test_returns_none_when_missing(self):
@@ -46,9 +48,11 @@ class TestParseExcelHeaderRow1based:
 # _excel_cell_as_clean_str
 # ---------------------------------------------------------------------------
 
+
 class TestExcelCellAsCleanStr:
     def _call(self, val):
         from app.application.tools.workflow import _excel_cell_as_clean_str
+
         return _excel_cell_as_clean_str(val)
 
     def test_none_returns_empty(self):
@@ -83,9 +87,11 @@ class TestExcelCellAsCleanStr:
 # _excel_cell_as_float
 # ---------------------------------------------------------------------------
 
+
 class TestExcelCellAsFloat:
     def _call(self, val, default=0.0):
         from app.application.tools.workflow import _excel_cell_as_float
+
         return _excel_cell_as_float(val, default)
 
     def test_none_returns_default(self):
@@ -111,9 +117,11 @@ class TestExcelCellAsFloat:
 # _looks_like_contract_or_footer_line
 # ---------------------------------------------------------------------------
 
+
 class TestLooksLikeContractOrFooterLine:
     def _call(self, name):
         from app.application.tools.workflow import _looks_like_contract_or_footer_line
+
         return _looks_like_contract_or_footer_line(name)
 
     def test_short_name_is_not_footer(self):
@@ -136,14 +144,19 @@ class TestLooksLikeContractOrFooterLine:
 # get_workflow_tool_registry (cache invalidation)
 # ---------------------------------------------------------------------------
 
+
 class TestGetWorkflowToolRegistry:
     def test_returns_list_of_dicts(self):
         with (
             patch("app.application.tools.workflow._base_registry", return_value=[]),
-            patch("app.application.tools.workflow.build_employee_pack_tool_definitions",
-                  return_value=[], create=True),
+            patch(
+                "app.application.tools.workflow.build_employee_pack_tool_definitions",
+                return_value=[],
+                create=True,
+            ),
         ):
             import app.application.tools.workflow as wf
+
             wf._workflow_tool_registry_cache = None
             wf._workflow_registry_cache_ver = None
             result = wf.get_workflow_tool_registry()
@@ -151,6 +164,7 @@ class TestGetWorkflowToolRegistry:
 
     def test_cache_returned_on_second_call(self):
         import app.application.tools.workflow as wf
+
         wf._workflow_tool_registry_cache = [{"type": "function"}]
         wf._workflow_tool_registry_bulk_token_present = True
         wf._workflow_registry_cache_ver = wf._WORKFLOW_REG_VER
@@ -159,25 +173,33 @@ class TestGetWorkflowToolRegistry:
 
     def test_employee_tools_merged(self):
         import app.application.tools.workflow as wf
+
         wf._workflow_tool_registry_cache = None
         wf._workflow_registry_cache_ver = None
         emp = [{"type": "function", "function": {"name": "emp_tool"}}]
         with (
             patch("app.application.tools.workflow._base_registry", return_value=[]),
-            patch("app.mod_sdk.employee_tool_registry.build_employee_pack_tool_definitions",
-                  return_value=emp, create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.build_employee_pack_tool_definitions",
+                return_value=emp,
+                create=True,
+            ),
         ):
             result = wf.get_workflow_tool_registry()
         assert any(t.get("function", {}).get("name") == "emp_tool" for t in result)
 
     def test_employee_tools_error_swallowed(self):
         import app.application.tools.workflow as wf
+
         wf._workflow_tool_registry_cache = None
         wf._workflow_registry_cache_ver = None
         with (
             patch("app.application.tools.workflow._base_registry", return_value=[]),
-            patch("app.mod_sdk.employee_tool_registry.build_employee_pack_tool_definitions",
-                  side_effect=ImportError("no mod_sdk"), create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.build_employee_pack_tool_definitions",
+                side_effect=ImportError("no mod_sdk"),
+                create=True,
+            ),
         ):
             result = wf.get_workflow_tool_registry()
         assert isinstance(result, list)
@@ -187,18 +209,30 @@ class TestGetWorkflowToolRegistry:
 # execute_workflow_tool
 # ---------------------------------------------------------------------------
 
+
 class TestExecuteWorkflowTool:
     def _call(self, name, args, workspace_root=None, db_write_token=None):
         from app.application.tools.workflow import execute_workflow_tool
+
         return execute_workflow_tool(name, args, workspace_root, db_write_token=db_write_token)
 
     def test_json_string_args_parsed(self):
         with (
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False, create=True),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                  return_value=(None, None), create=True),
-            patch("app.application.employee_pack_runner.try_execute_employee_planner_tool",
-                  return_value=None, create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=False,
+                create=True,
+            ),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+                create=True,
+            ),
+            patch(
+                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                return_value=None,
+                create=True,
+            ),
         ):
             result = self._call("excel_chart_recommend", '{"file_path": "x.xlsx"}')
         data = json.loads(result)
@@ -206,11 +240,21 @@ class TestExecuteWorkflowTool:
 
     def test_malformed_json_string_defaults_to_empty(self):
         with (
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False, create=True),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                  return_value=(None, None), create=True),
-            patch("app.application.employee_pack_runner.try_execute_employee_planner_tool",
-                  return_value=None, create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=False,
+                create=True,
+            ),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+                create=True,
+            ),
+            patch(
+                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                return_value=None,
+                create=True,
+            ),
         ):
             result = self._call("excel_chart_recommend", "{not valid")
         data = json.loads(result)
@@ -218,18 +262,32 @@ class TestExecuteWorkflowTool:
 
     def test_employee_tool_dispatched(self):
         with (
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=True, create=True),
-            patch("app.mod_sdk.employee_tool_registry.execute_employee_tool",
-                  return_value='{"ok": true}', create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=True,
+                create=True,
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.execute_employee_tool",
+                return_value='{"ok": true}',
+                create=True,
+            ),
         ):
             result = self._call("my_emp_tool", {})
         assert result == '{"ok": true}'
 
     def test_native_planner_tool_returned(self):
         with (
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False, create=True),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                  return_value=('{"native": 1}', None), create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=False,
+                create=True,
+            ),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=('{"native": 1}', None),
+                create=True,
+            ),
         ):
             result = self._call("some_native", {})
         assert "native" in result
@@ -238,13 +296,25 @@ class TestExecuteWorkflowTool:
         """excel_analysis name hits handle_excel_analysis."""
         (tmp_path / "data.xlsx").touch()
         with (
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False, create=True),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                  return_value=(None, None), create=True),
-            patch("app.application.employee_pack_runner.try_execute_employee_planner_tool",
-                  return_value=None, create=True),
-            patch("app.application.tools.workflow.handle_excel_analysis",
-                  return_value={"success": False, "error": "mocked"}),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=False,
+                create=True,
+            ),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+                create=True,
+            ),
+            patch(
+                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                return_value=None,
+                create=True,
+            ),
+            patch(
+                "app.application.tools.workflow.handle_excel_analysis",
+                return_value={"success": False, "error": "mocked"},
+            ),
         ):
             result = self._call("excel_analysis", {"file_path": "data.xlsx"})
         data = json.loads(result)
@@ -252,11 +322,21 @@ class TestExecuteWorkflowTool:
 
     def test_excel_chart_recommend(self):
         with (
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False, create=True),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                  return_value=(None, None), create=True),
-            patch("app.application.employee_pack_runner.try_execute_employee_planner_tool",
-                  return_value=None, create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=False,
+                create=True,
+            ),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+                create=True,
+            ),
+            patch(
+                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                return_value=None,
+                create=True,
+            ),
         ):
             result = self._call("excel_chart_recommend", {})
         data = json.loads(result)
@@ -264,12 +344,21 @@ class TestExecuteWorkflowTool:
 
     def test_employee_tool_registry_error_swallowed(self):
         with (
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool",
-                  side_effect=ImportError("no"), create=True),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                  return_value=(None, None), create=True),
-            patch("app.application.employee_pack_runner.try_execute_employee_planner_tool",
-                  return_value=None, create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                side_effect=ImportError("no"),
+                create=True,
+            ),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+                create=True,
+            ),
+            patch(
+                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                return_value=None,
+                create=True,
+            ),
         ):
             result = self._call("excel_chart_recommend", {})
         data = json.loads(result)
@@ -277,11 +366,21 @@ class TestExecuteWorkflowTool:
 
     def test_template_preview_dispatched(self):
         with (
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False, create=True),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                  return_value=(None, None), create=True),
-            patch("app.services.tools_workflow_registered.execute_registered_workflow_tool",
-                  return_value={"result": "ok"}, create=True),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=False,
+                create=True,
+            ),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+                create=True,
+            ),
+            patch(
+                "app.services.tools_workflow_registered.execute_registered_workflow_tool",
+                return_value={"result": "ok"},
+                create=True,
+            ),
         ):
             result = self._call("template_preview", {"action": "view"})
         data = json.loads(result)
@@ -292,9 +391,11 @@ class TestExecuteWorkflowTool:
 # _infer_product_field_mapping
 # ---------------------------------------------------------------------------
 
+
 class TestInferProductFieldMapping:
     def _call(self, cols, hint=None):
         from app.application.tools.workflow import _infer_product_field_mapping
+
         return _infer_product_field_mapping(cols, price_column_hint=hint)
 
     def test_finds_model_number_by_bianma(self):
@@ -331,41 +432,56 @@ class TestInferProductFieldMapping:
 # _import_customers_preview_or_execute (preview mode)
 # ---------------------------------------------------------------------------
 
+
 class TestImportCustomersPreview:
     def _make_df(self):
-        return pd.DataFrame([
-            {"客户名称": "甲公司", "联系人": "张三", "电话": "13800000001", "地址": "北京"},
-            {"客户名称": "乙公司", "联系人": "李四", "电话": "13900000002", "地址": "上海"},
-        ])
+        return pd.DataFrame(
+            [
+                {"客户名称": "甲公司", "联系人": "张三", "电话": "13800000001", "地址": "北京"},
+                {"客户名称": "乙公司", "联系人": "李四", "电话": "13900000002", "地址": "上海"},
+            ]
+        )
 
     def test_preview_mode_returns_preview_true(self):
         from app.application.tools.workflow import _import_customers_preview_or_execute
+
         df = self._make_df()
-        result = json.loads(_import_customers_preview_or_execute(df, list(df.columns), False, len(df)))
+        result = json.loads(
+            _import_customers_preview_or_execute(df, list(df.columns), False, len(df))
+        )
         assert result["preview"] is True
         assert result["import_type"] == "customers"
 
     def test_no_customer_name_col_records_empty(self):
         from app.application.tools.workflow import _import_customers_preview_or_execute
+
         df = pd.DataFrame([{"col1": "v1"}])
         result = json.loads(_import_customers_preview_or_execute(df, list(df.columns), False, 1))
         assert result["row_count"] == 0
 
     def test_confirm_true_calls_customer_service(self):
         from app.application.tools.workflow import _import_customers_preview_or_execute
+
         df = self._make_df()
         mock_svc = MagicMock()
         mock_svc.create.return_value = {"success": True}
         with patch("app.bootstrap.get_customer_app_service", return_value=mock_svc, create=True):
-            result = json.loads(_import_customers_preview_or_execute(df, list(df.columns), True, len(df)))
+            result = json.loads(
+                _import_customers_preview_or_execute(df, list(df.columns), True, len(df))
+            )
         assert result["success"] is True
         assert result["imported"] == 2
 
     def test_confirm_true_service_error_swallowed(self):
         from app.application.tools.workflow import _import_customers_preview_or_execute
+
         df = self._make_df()
-        with patch("app.bootstrap.get_customer_app_service", side_effect=OSError("db"), create=True):
-            result = json.loads(_import_customers_preview_or_execute(df, list(df.columns), True, len(df)))
+        with patch(
+            "app.bootstrap.get_customer_app_service", side_effect=OSError("db"), create=True
+        ):
+            result = json.loads(
+                _import_customers_preview_or_execute(df, list(df.columns), True, len(df))
+            )
         assert result["success"] is False
 
 
@@ -373,14 +489,18 @@ class TestImportCustomersPreview:
 # _import_products_preview_or_execute (preview mode)
 # ---------------------------------------------------------------------------
 
+
 class TestImportProductsPreview:
     def _make_df(self):
-        return pd.DataFrame([
-            {"产品名称": "铝板", "型号": "A100", "单价": 10.0, "数量": 5},
-        ])
+        return pd.DataFrame(
+            [
+                {"产品名称": "铝板", "型号": "A100", "单价": 10.0, "数量": 5},
+            ]
+        )
 
     def test_preview_returns_field_mapping(self):
         from app.application.tools.workflow import _import_products_preview_or_execute
+
         df = self._make_df()
         result = json.loads(
             _import_products_preview_or_execute(df, list(df.columns), "", False, len(df))
@@ -389,10 +509,13 @@ class TestImportProductsPreview:
 
     def test_skips_clause_like_rows(self):
         from app.application.tools.workflow import _import_products_preview_or_execute
-        df = pd.DataFrame([
-            {"产品名称": "铝板A100规格", "型号": "A100", "单价": 10.0, "数量": 5},
-            {"产品名称": "含税价格声明条款内容", "型号": "", "单价": 0.0, "数量": 0},
-        ])
+
+        df = pd.DataFrame(
+            [
+                {"产品名称": "铝板A100规格", "型号": "A100", "单价": 10.0, "数量": 5},
+                {"产品名称": "含税价格声明条款内容", "型号": "", "单价": 0.0, "数量": 0},
+            ]
+        )
         result = json.loads(
             _import_products_preview_or_execute(df, list(df.columns), "客户A", False, len(df))
         )
@@ -401,6 +524,7 @@ class TestImportProductsPreview:
 
     def test_confirm_calls_products_service(self):
         from app.application.tools.workflow import _import_products_preview_or_execute
+
         df = self._make_df()
         mock_svc = MagicMock()
         mock_svc.batch_add_products.return_value = {"success_count": 1, "failed_count": 0}
@@ -409,8 +533,16 @@ class TestImportProductsPreview:
         mock_find_pu = MagicMock(return_value=MagicMock())  # unit already exists
         with (
             patch("app.bootstrap.get_products_service", return_value=mock_svc, create=True),
-            patch("app.bootstrap.get_customer_app_service", return_value=mock_customer_svc, create=True),
-            patch("app.services.unified_query_service.find_purchase_unit", return_value=mock_find_pu(), create=True),
+            patch(
+                "app.bootstrap.get_customer_app_service",
+                return_value=mock_customer_svc,
+                create=True,
+            ),
+            patch(
+                "app.services.unified_query_service.find_purchase_unit",
+                return_value=mock_find_pu(),
+                create=True,
+            ),
         ):
             result = json.loads(
                 _import_products_preview_or_execute(df, list(df.columns), "客A", True, len(df))

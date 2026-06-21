@@ -4,6 +4,7 @@ Goal: 85%+ branch coverage (file at 53.9% prior).
 All external side-effects (subprocess, httpx, filesystem, heavy imports)
 are patched via unittest.mock so the suite runs offline and deterministically.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -624,7 +625,9 @@ class TestInfraTools:
         assert r["ok"] is True
 
     async def test_disk_usage(self):
-        with patch.object(module, "_run_cmd", AsyncMock(return_value={**_GOOD_RUN, "stdout": "Filesystem..."})):
+        with patch.object(
+            module, "_run_cmd", AsyncMock(return_value={**_GOOD_RUN, "stdout": "Filesystem..."})
+        ):
             r = await tool_disk_usage({}, {})
         assert r["ok"] is True
 
@@ -646,7 +649,9 @@ class TestInfraTools:
     async def test_tail_logs_reads_file(self, tmp_path):
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
-        (log_dir / "app.log").write_text("\n".join(f"line{i}" for i in range(200)), encoding="utf-8")
+        (log_dir / "app.log").write_text(
+            "\n".join(f"line{i}" for i in range(200)), encoding="utf-8"
+        )
         with patch.object(module, "_FHD_ROOT", tmp_path):
             r = await tool_tail_logs({"lines": 10}, {})
         assert r["ok"] is True
@@ -672,9 +677,7 @@ class TestInfraTools:
         assert len(r["lines"]) == 2
 
     async def test_performance_status(self):
-        with patch.object(
-            module, "_api_call", AsyncMock(return_value={"ok": True, "status": 200})
-        ):
+        with patch.object(module, "_api_call", AsyncMock(return_value={"ok": True, "status": 200})):
             r = await tool_performance_status({}, {})
         assert r["ok"] is True
 
@@ -756,9 +759,7 @@ class TestModTools:
         data = {
             "id": "good_emp",
             "artifact": "employee_pack",
-            "employee_config_v2": {
-                "cognition": {"agent": {"system_prompt": "You are an agent."}}
-            },
+            "employee_config_v2": {"cognition": {"agent": {"system_prompt": "You are an agent."}}},
         }
         (emp_dir / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
         with patch.object(module, "_EMPLOYEES_DIR", tmp_path):
@@ -806,9 +807,7 @@ class TestModTools:
         assert any("system_prompt" in i for i in r["issues"])
 
     async def test_duty_graph_health(self):
-        with patch.object(
-            module, "_api_call", AsyncMock(return_value={"ok": True, "status": 200})
-        ):
+        with patch.object(module, "_api_call", AsyncMock(return_value={"ok": True, "status": 200})):
             r = await tool_duty_graph_health({}, {})
         assert r["ok"] is True
 
@@ -831,7 +830,9 @@ class TestDocTools:
         (docs_dir / "README.md").write_text("# Test", encoding="utf-8")
         with patch.object(module, "_FHD_ROOT", tmp_path / "FHD"):
             # patch parent so docs_dir matches
-            with patch.object(module._FHD_ROOT, "parent", new_callable=lambda: property(lambda self: tmp_path)):
+            with patch.object(
+                module._FHD_ROOT, "parent", new_callable=lambda: property(lambda self: tmp_path)
+            ):
                 r = await tool_list_docs({}, {})
         # Just check it returns ok
         assert r["ok"] is True
@@ -932,9 +933,7 @@ class TestPlatformTools:
             "areas": {
                 "platform": {
                     "ids": ["emp-a", "emp-b"],
-                    "subzones": {
-                        "sub1": {"ids": ["emp-c"]}
-                    },
+                    "subzones": {"sub1": {"ids": ["emp-c"]}},
                 }
             },
             "departments": {},
@@ -1424,7 +1423,9 @@ class TestReadLlmEnvConfig:
 
     async def test_with_env_file(self, tmp_path):
         env_path = tmp_path / ".env"
-        env_path.write_text("OPENAI_API_KEY=sk-test12345678\nXCAGI_LLM_PROVIDER=openai\n", encoding="utf-8")
+        env_path.write_text(
+            "OPENAI_API_KEY=sk-test12345678\nXCAGI_LLM_PROVIDER=openai\n", encoding="utf-8"
+        )
         with patch.object(module, "_FHD_ROOT", tmp_path):
             r = await tool_read_llm_env_config({}, {})
         assert r["ok"] is True
@@ -1456,7 +1457,10 @@ class TestListConfiguredProviders:
         assert r["ok"] is True
 
     async def test_with_openai_key(self):
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test12345678", "OPENAI_BASE_URL": "https://api.openai.com/v1"}):
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-test12345678", "OPENAI_BASE_URL": "https://api.openai.com/v1"},
+        ):
             r = await tool_list_configured_providers({}, {})
         assert r["ok"] is True
         providers = {p["provider"] for p in r["providers"]}
@@ -1520,7 +1524,10 @@ class TestTestLlmKeyHealth:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-abcdefgh12345", "OPENAI_BASE_URL": "https://api.openai.com/v1"}):
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-abcdefgh12345", "OPENAI_BASE_URL": "https://api.openai.com/v1"},
+        ):
             with patch.object(module, "httpx") as mock_httpx:
                 mock_httpx.AsyncClient.return_value = mock_client
                 r = await tool_test_llm_key_health({"provider": "openai"}, {})
@@ -1639,8 +1646,26 @@ class TestQueryLocalTokenUsage:
 
     async def test_filters_non_model_call_entries(self):
         mock_entries = [
-            {"entry_type": "tool_call", "model": "x", "prompt_tokens": 999, "completion_tokens": 999, "total_tokens": 999, "cost_units": 0},
-            {"entry_type": "model_call", "provider": "p", "model": "m", "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost_units": 0, "run_id": "", "user_id": "", "created_at": ""},
+            {
+                "entry_type": "tool_call",
+                "model": "x",
+                "prompt_tokens": 999,
+                "completion_tokens": 999,
+                "total_tokens": 999,
+                "cost_units": 0,
+            },
+            {
+                "entry_type": "model_call",
+                "provider": "p",
+                "model": "m",
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "cost_units": 0,
+                "run_id": "",
+                "user_id": "",
+                "created_at": "",
+            },
         ]
         mock_billing = MagicMock()
         mock_billing.list_model_usage_entries = MagicMock(return_value=mock_entries)
@@ -1761,7 +1786,10 @@ class TestHandleSpecialized:
             with patch.object(module, "_code_write_tools", return_value=frozenset({"write_file"})):
                 r = await handle_specialized(
                     "fhd-core-maintainer",
-                    {"tool": "write_file", "params": {"confirm": True, "path": "x", "content": "y"}},
+                    {
+                        "tool": "write_file",
+                        "params": {"confirm": True, "path": "x", "content": "y"},
+                    },
                     {},
                 )
         assert r["ok"] is False
@@ -1794,7 +1822,10 @@ class TestHandleSpecialized:
             with patch.object(module, "_code_write_tools", return_value=frozenset({"write_file"})):
                 r = await handle_specialized(
                     "fhd-core-maintainer",
-                    {"tool": "write_file", "params": {"confirm": True, "path": "x", "content": "y"}},
+                    {
+                        "tool": "write_file",
+                        "params": {"confirm": True, "path": "x", "content": "y"},
+                    },
                     {},
                 )
         assert r["ok"] is False

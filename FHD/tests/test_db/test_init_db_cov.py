@@ -27,6 +27,7 @@ import app.db as _app_db_module
 # helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_engine(dialect_name: str = "sqlite") -> MagicMock:
     """Build a fully-featured mock SQLAlchemy engine."""
     eng = MagicMock()
@@ -65,9 +66,11 @@ def _make_inspector(tables: list[str], col_map: dict[str, list[str]] | None = No
 # refresh_config_database_urls
 # ---------------------------------------------------------------------------
 
+
 class TestRefreshConfigDatabaseUrls:
     def test_noop_when_none(self):
         from app.db.init_db import refresh_config_database_urls
+
         refresh_config_database_urls(None)  # must not raise
 
     def test_sets_database_url_from_env(self):
@@ -99,15 +102,18 @@ class TestRefreshConfigDatabaseUrls:
 # ensure_runtime_database_environment
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureRuntimeDatabaseEnvironment:
     def test_non_desktop_returns_env_url(self):
         from app.db.init_db import ensure_runtime_database_environment
+
         with patch.dict(os.environ, {"XCAGI_DESKTOP_MODE": "", "DATABASE_URL": "postgresql://x"}):
             url = ensure_runtime_database_environment()
         assert url == "postgresql://x"
 
     def test_desktop_mode_sets_sqlite_url(self, tmp_path):
         from app.db.init_db import ensure_runtime_database_environment
+
         with (
             patch.dict(os.environ, {"XCAGI_DESKTOP_MODE": "1"}, clear=False),
             patch("app.db.init_db._desktop_data_root", return_value=tmp_path),
@@ -118,6 +124,7 @@ class TestEnsureRuntimeDatabaseEnvironment:
 
     def test_desktop_mode_truthy_values(self, tmp_path):
         from app.db.init_db import ensure_runtime_database_environment
+
         for val in ("1", "true", "yes", "on"):
             with (
                 patch.dict(os.environ, {"XCAGI_DESKTOP_MODE": val}, clear=False),
@@ -132,11 +139,15 @@ class TestEnsureRuntimeDatabaseEnvironment:
 # _resolve_auth_bootstrap_engine
 # ---------------------------------------------------------------------------
 
+
 class TestResolveAuthBootstrapEngine:
     def test_returns_none_when_all_fail(self):
         from app.db.init_db import _resolve_auth_bootstrap_engine
+
         with (
-            patch.object(_app_db_module, "_create_engine_for_url", side_effect=ImportError, create=True),
+            patch.object(
+                _app_db_module, "_create_engine_for_url", side_effect=ImportError, create=True
+            ),
             patch.object(_app_db_module, "_get_engine", side_effect=RuntimeError, create=True),
         ):
             result = _resolve_auth_bootstrap_engine()
@@ -144,6 +155,7 @@ class TestResolveAuthBootstrapEngine:
 
     def test_uses_database_url_arg(self):
         from app.db.init_db import _resolve_auth_bootstrap_engine
+
         eng = _make_mock_engine()
         with patch.object(_app_db_module, "_create_engine_for_url", return_value=eng, create=True):
             result = _resolve_auth_bootstrap_engine(database_url="sqlite:///x")
@@ -153,6 +165,7 @@ class TestResolveAuthBootstrapEngine:
         from sqlalchemy import create_engine
 
         from app.db.init_db import _resolve_auth_bootstrap_engine
+
         # Need a real Engine object so isinstance(engine, _Engine) check passes
         real_eng = create_engine("sqlite:///:memory:")
         result = _resolve_auth_bootstrap_engine(engine=real_eng)
@@ -160,9 +173,12 @@ class TestResolveAuthBootstrapEngine:
 
     def test_falls_back_to_get_engine(self):
         from app.db.init_db import _resolve_auth_bootstrap_engine
+
         eng = _make_mock_engine()
         with (
-            patch.object(_app_db_module, "_create_engine_for_url", side_effect=Exception, create=True),
+            patch.object(
+                _app_db_module, "_create_engine_for_url", side_effect=Exception, create=True
+            ),
             patch.object(_app_db_module, "_get_engine", return_value=eng, create=True),
         ):
             result = _resolve_auth_bootstrap_engine()
@@ -173,35 +189,46 @@ class TestResolveAuthBootstrapEngine:
 # ensure_sqlite_rbac_bootstrap
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureSqliteRbacBootstrap:
     def test_skips_non_sqlite_engine(self):
         from app.db.init_db import ensure_sqlite_rbac_bootstrap
+
         eng = _make_mock_engine("postgresql")
         with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng):
             ensure_sqlite_rbac_bootstrap(engine=eng)  # should return early
 
     def test_skips_when_engine_none(self):
         from app.db.init_db import ensure_sqlite_rbac_bootstrap
+
         with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=None):
             ensure_sqlite_rbac_bootstrap()  # must not raise
 
     def test_swallows_errors_when_flag_true(self):
         from app.db.init_db import ensure_sqlite_rbac_bootstrap
+
         eng = _make_mock_engine("sqlite")
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
             patch("app.db.init_db._seed_sqlite_rbac_defaults", side_effect=RuntimeError("boom")),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["permissions", "roles", "role_permissions"])),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["permissions", "roles", "role_permissions"]),
+            ),
         ):
             ensure_sqlite_rbac_bootstrap(engine=eng, swallow_errors=True)  # must not raise
 
     def test_raises_when_flag_false(self):
         from app.db.init_db import ensure_sqlite_rbac_bootstrap
+
         eng = _make_mock_engine("sqlite")
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
             patch("app.db.init_db._seed_sqlite_rbac_defaults", side_effect=RuntimeError("boom")),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["permissions", "roles", "role_permissions"])),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["permissions", "roles", "role_permissions"]),
+            ),
         ):
             with pytest.raises(RuntimeError):
                 ensure_sqlite_rbac_bootstrap(engine=eng, swallow_errors=False)
@@ -211,9 +238,11 @@ class TestEnsureSqliteRbacBootstrap:
 # ensure_sessions_market_access_token_column
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureSessionsMarketAccessTokenColumn:
     def test_skips_when_sessions_table_missing(self):
         from app.db.init_db import ensure_sessions_market_access_token_column
+
         eng = _make_mock_engine()
         with (
             _patch_engine(eng),
@@ -223,18 +252,21 @@ class TestEnsureSessionsMarketAccessTokenColumn:
 
     def test_skips_when_column_already_present(self):
         from app.db.init_db import ensure_sessions_market_access_token_column
+
         eng = _make_mock_engine()
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(
-                ["sessions"], {"sessions": ["market_access_token"]}
-            )),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["sessions"], {"sessions": ["market_access_token"]}),
+            ),
         ):
             ensure_sessions_market_access_token_column(database_url="sqlite:///x")
         eng.begin.assert_not_called()
 
     def test_adds_column_on_postgresql(self):
         from app.db.init_db import ensure_sessions_market_access_token_column
+
         eng = _make_mock_engine("postgresql")
         # First call: column missing (trigger ALTER). Second call: column present (verify passes).
         insp_before = _make_inspector(["sessions"], {"sessions": []})
@@ -248,6 +280,7 @@ class TestEnsureSessionsMarketAccessTokenColumn:
 
     def test_adds_column_on_sqlite(self):
         from app.db.init_db import ensure_sessions_market_access_token_column
+
         eng = _make_mock_engine("sqlite")
         insp_before = _make_inspector(["sessions"], {"sessions": []})
         insp_after = _make_inspector(["sessions"], {"sessions": ["market_access_token"]})
@@ -263,9 +296,11 @@ class TestEnsureSessionsMarketAccessTokenColumn:
 # ensure_sessions_enterprise_entitlement_columns
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureSessionsEnterpriseEntitlementColumns:
     def test_skips_when_sessions_missing(self):
         from app.db.init_db import ensure_sessions_enterprise_entitlement_columns
+
         eng = _make_mock_engine()
         with (
             _patch_engine(eng),
@@ -275,20 +310,26 @@ class TestEnsureSessionsEnterpriseEntitlementColumns:
 
     def test_adds_columns_sqlite(self):
         from app.db.init_db import ensure_sessions_enterprise_entitlement_columns
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": []})),
+            patch(
+                "sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": []})
+            ),
         ):
             ensure_sessions_enterprise_entitlement_columns(database_url="sqlite:///x")
         eng.begin.assert_called()
 
     def test_adds_columns_postgresql(self):
         from app.db.init_db import ensure_sessions_enterprise_entitlement_columns
+
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": []})),
+            patch(
+                "sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": []})
+            ),
         ):
             ensure_sessions_enterprise_entitlement_columns(database_url="postgresql://x")
         eng.begin.assert_called()
@@ -298,9 +339,11 @@ class TestEnsureSessionsEnterpriseEntitlementColumns:
 # ensure_user_profile_columns
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureUserProfileColumns:
     def test_skips_when_users_table_missing(self):
         from app.db.init_db import ensure_user_profile_columns
+
         eng = _make_mock_engine()
         with (
             _patch_engine(eng),
@@ -310,6 +353,7 @@ class TestEnsureUserProfileColumns:
 
     def test_adds_columns_sqlite(self):
         from app.db.init_db import ensure_user_profile_columns
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
@@ -320,6 +364,7 @@ class TestEnsureUserProfileColumns:
 
     def test_adds_columns_postgresql_jsonb(self):
         from app.db.init_db import ensure_user_profile_columns
+
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
@@ -330,12 +375,24 @@ class TestEnsureUserProfileColumns:
 
     def test_skips_existing_columns(self):
         from app.db.init_db import ensure_user_profile_columns
-        existing_cols = ["tier", "industry_id", "account_tier", "budget_range",
-                         "entitled_industries", "failed_login_attempts", "locked_until", "email_verified"]
+
+        existing_cols = [
+            "tier",
+            "industry_id",
+            "account_tier",
+            "budget_range",
+            "entitled_industries",
+            "failed_login_attempts",
+            "locked_until",
+            "email_verified",
+        ]
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["users"], {"users": existing_cols})),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["users"], {"users": existing_cols}),
+            ),
         ):
             ensure_user_profile_columns(database_url="sqlite:///x")
         conn_mock = eng.begin.return_value.__enter__.return_value
@@ -346,23 +403,32 @@ class TestEnsureUserProfileColumns:
 # ensure_business_tenant_id_columns
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureBusinessTenantIdColumns:
     def test_adds_tenant_id_to_products_sqlite(self):
         from app.db.init_db import ensure_business_tenant_id_columns
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["products"], {"products": ["id", "name"]})),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["products"], {"products": ["id", "name"]}),
+            ),
         ):
             ensure_business_tenant_id_columns(database_url="sqlite:///x")
         eng.begin.assert_called()
 
     def test_skips_existing_tenant_id(self):
         from app.db.init_db import ensure_business_tenant_id_columns
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["products"], {"products": ["tenant_id"]})),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["products"], {"products": ["tenant_id"]}),
+            ),
         ):
             ensure_business_tenant_id_columns(database_url="sqlite:///x")
         conn_mock = eng.begin.return_value.__enter__.return_value
@@ -370,16 +436,21 @@ class TestEnsureBusinessTenantIdColumns:
 
     def test_adds_tenant_id_postgresql(self):
         from app.db.init_db import ensure_business_tenant_id_columns
+
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["products"], {"products": ["id"]})),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["products"], {"products": ["id"]}),
+            ),
         ):
             ensure_business_tenant_id_columns(database_url="postgresql://x")
         eng.begin.assert_called()
 
     def test_swallows_recoverable_error(self):
         from app.db.init_db import ensure_business_tenant_id_columns
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
@@ -392,9 +463,11 @@ class TestEnsureBusinessTenantIdColumns:
 # ensure_users_tenant_id_column
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureUsersTenantIdColumn:
     def test_skips_when_users_missing(self):
         from app.db.init_db import ensure_users_tenant_id_column
+
         eng = _make_mock_engine()
         with (
             _patch_engine(eng),
@@ -404,10 +477,14 @@ class TestEnsureUsersTenantIdColumn:
 
     def test_skips_when_column_exists(self):
         from app.db.init_db import ensure_users_tenant_id_column
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["users"], {"users": ["tenant_id"]})),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["users"], {"users": ["tenant_id"]}),
+            ),
         ):
             ensure_users_tenant_id_column(database_url="sqlite:///x")
         conn_mock = eng.begin.return_value.__enter__.return_value
@@ -415,6 +492,7 @@ class TestEnsureUsersTenantIdColumn:
 
     def test_adds_column_sqlite(self):
         from app.db.init_db import ensure_users_tenant_id_column
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
@@ -425,6 +503,7 @@ class TestEnsureUsersTenantIdColumn:
 
     def test_adds_column_postgresql(self):
         from app.db.init_db import ensure_users_tenant_id_column
+
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
@@ -438,41 +517,52 @@ class TestEnsureUsersTenantIdColumn:
 # init_approval_tables
 # ---------------------------------------------------------------------------
 
+
 class TestInitApprovalTables:
     def test_adds_business_type_column_postgresql(self):
         from app.db.init_db import init_approval_tables
+
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
             patch("app.db.base.Base.metadata.create_all"),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(
-                ["approval_flows"], {"approval_flows": ["id", "name"]}
-            )),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(
+                    ["approval_flows"], {"approval_flows": ["id", "name"]}
+                ),
+            ),
         ):
             init_approval_tables(eng)
         eng.begin.assert_called()
 
     def test_adds_business_type_column_sqlite(self):
         from app.db.init_db import init_approval_tables
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
             patch("app.db.base.Base.metadata.create_all"),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(
-                ["approval_flows"], {"approval_flows": []}
-            )),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["approval_flows"], {"approval_flows": []}),
+            ),
         ):
             init_approval_tables(eng)
 
     def test_skips_column_if_already_present(self):
         from app.db.init_db import init_approval_tables
+
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
             patch("app.db.base.Base.metadata.create_all"),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(
-                ["approval_flows"], {"approval_flows": ["business_type"]}
-            )),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(
+                    ["approval_flows"], {"approval_flows": ["business_type"]}
+                ),
+            ),
         ):
             init_approval_tables(eng)
         conn_mock = eng.begin.return_value.__enter__.return_value
@@ -480,13 +570,15 @@ class TestInitApprovalTables:
 
     def test_create_all_error_continues_to_alter(self):
         from app.db.init_db import init_approval_tables
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
             patch("app.db.base.Base.metadata.create_all", side_effect=OSError("fail")),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(
-                ["approval_flows"], {"approval_flows": []}
-            )),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["approval_flows"], {"approval_flows": []}),
+            ),
         ):
             init_approval_tables(eng)  # must not raise
 
@@ -495,9 +587,11 @@ class TestInitApprovalTables:
 # init_template_tables_for_engine
 # ---------------------------------------------------------------------------
 
+
 class TestInitTemplateTablesForEngine:
     def test_skips_non_postgresql(self):
         from app.db.init_db import init_template_tables_for_engine
+
         eng = _make_mock_engine("sqlite")
         with patch("sqlalchemy.inspect", return_value=_make_inspector([])):
             init_template_tables_for_engine(eng)
@@ -505,6 +599,7 @@ class TestInitTemplateTablesForEngine:
 
     def test_creates_tables_when_missing_postgresql(self):
         from app.db.init_db import init_template_tables_for_engine
+
         eng = _make_mock_engine("postgresql")
         with patch("sqlalchemy.inspect", return_value=_make_inspector([])):
             init_template_tables_for_engine(eng)
@@ -512,8 +607,11 @@ class TestInitTemplateTablesForEngine:
 
     def test_skips_existing_tables(self):
         from app.db.init_db import init_template_tables_for_engine
+
         eng = _make_mock_engine("postgresql")
-        with patch("sqlalchemy.inspect", return_value=_make_inspector(["templates", "template_usage_log"])):
+        with patch(
+            "sqlalchemy.inspect", return_value=_make_inspector(["templates", "template_usage_log"])
+        ):
             init_template_tables_for_engine(eng)
         # execute called for CREATE INDEX only (2 indexes)
         conn_mock = eng.begin.return_value.__enter__.return_value
@@ -524,9 +622,11 @@ class TestInitTemplateTablesForEngine:
 # _iter_seed_dirs
 # ---------------------------------------------------------------------------
 
+
 class TestIterSeedDirs:
     def test_yields_resource_and_base(self):
         from app.db.init_db import _iter_seed_dirs
+
         with (
             patch("app.db.init_db.get_resource_path", return_value="/r/db_seed"),
             patch("app.db.init_db.get_base_dir", return_value="/base"),
@@ -537,6 +637,7 @@ class TestIterSeedDirs:
 
     def test_includes_meipass_when_present(self, monkeypatch):
         from app.db.init_db import _iter_seed_dirs
+
         monkeypatch.setattr(sys, "_MEIPASS", "/meipass", raising=False)
         with (
             patch("app.db.init_db.get_resource_path", return_value="/r"),
@@ -549,6 +650,7 @@ class TestIterSeedDirs:
         if hasattr(sys, "_MEIPASS"):
             monkeypatch.delattr(sys, "_MEIPASS")
         from app.db.init_db import _iter_seed_dirs
+
         with (
             patch("app.db.init_db.get_resource_path", return_value="/r"),
             patch("app.db.init_db.get_base_dir", return_value="/b"),
@@ -561,9 +663,11 @@ class TestIterSeedDirs:
 # ensure_sessions_account_meta_columns
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureSessionsAccountMetaColumns:
     def test_skips_when_sessions_missing(self):
         from app.db.init_db import ensure_sessions_account_meta_columns
+
         eng = _make_mock_engine()
         with (
             _patch_engine(eng),
@@ -573,33 +677,50 @@ class TestEnsureSessionsAccountMetaColumns:
 
     def test_adds_columns_sqlite(self):
         from app.db.init_db import ensure_sessions_account_meta_columns
+
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": []})),
+            patch(
+                "sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": []})
+            ),
         ):
             ensure_sessions_account_meta_columns(database_url="sqlite:///x")
         eng.begin.assert_called()
 
     def test_adds_columns_postgresql(self):
         from app.db.init_db import ensure_sessions_account_meta_columns
+
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": []})),
+            patch(
+                "sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": []})
+            ),
         ):
             ensure_sessions_account_meta_columns(database_url="postgresql://x")
         eng.begin.assert_called()
 
     def test_skips_existing_columns(self):
         from app.db.init_db import ensure_sessions_account_meta_columns
-        existing = ["account_kind", "company_brand", "market_is_admin",
-                    "market_is_enterprise", "impersonating_market_user_id",
-                    "impersonating_username", "tenant_id", "market_membership_tier"]
+
+        existing = [
+            "account_kind",
+            "company_brand",
+            "market_is_admin",
+            "market_is_enterprise",
+            "impersonating_market_user_id",
+            "impersonating_username",
+            "tenant_id",
+            "market_membership_tier",
+        ]
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("sqlalchemy.inspect", return_value=_make_inspector(["sessions"], {"sessions": existing})),
+            patch(
+                "sqlalchemy.inspect",
+                return_value=_make_inspector(["sessions"], {"sessions": existing}),
+            ),
         ):
             ensure_sessions_account_meta_columns(database_url="sqlite:///x")
         conn_mock = eng.begin.return_value.__enter__.return_value

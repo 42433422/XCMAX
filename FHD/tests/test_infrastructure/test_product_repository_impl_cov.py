@@ -18,6 +18,7 @@ from app.infrastructure.persistence.product_repository_impl import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_product(**kw):
     p = MagicMock()
     p.__dict__ = {
@@ -52,6 +53,7 @@ def repo():
 # ---------------------------------------------------------------------------
 # _api_scalar
 # ---------------------------------------------------------------------------
+
 
 class TestApiScalar:
     def test_none_returns_none(self, repo):
@@ -94,6 +96,7 @@ class TestApiScalar:
 # find_all — missing branches
 # ---------------------------------------------------------------------------
 
+
 class TestFindAllBranches:
     def _make_db(self, has_products_table=True, has_bind=True, products=None):
         # Use a simple object so __dict__ assignment works cleanly
@@ -134,8 +137,14 @@ class TestFindAllBranches:
         """Branch: 'products' not in table_names -> return empty."""
         db, mock_insp = self._make_db(has_products_table=False, has_bind=True)
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=mock_insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect",
+                return_value=mock_insp,
+            ),
         ):
             result = repo.find_all()
         assert result["success"] is True
@@ -144,16 +153,23 @@ class TestFindAllBranches:
 
     def test_find_all_empty_db_dict(self, repo):
         """Branch: db.__dict__ == {} (no bind key) -> table_names = []."""
+
         class _EmptyDB:
             # __dict__ will only have __class__ etc, no 'bind'
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
 
         db = _EmptyDB()
         db.query = MagicMock()
 
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
         ):
             result = repo.find_all()
         assert result["success"] is True
@@ -161,10 +177,15 @@ class TestFindAllBranches:
 
     def test_find_all_bind_none_fallback(self, repo):
         """Branch: bind is None (falsy) -> table_names = ['products']."""
+
         class _NoneBindDB:
             bind = None
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
 
         db = _NoneBindDB()
         query_mock = MagicMock()
@@ -176,7 +197,10 @@ class TestFindAllBranches:
         query_mock.all.return_value = []
         db.query = MagicMock(return_value=query_mock)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)):
+        with patch(
+            "app.infrastructure.persistence.product_repository_impl.get_db",
+            return_value=_db_ctx(db),
+        ):
             result = repo.find_all()
         assert result["success"] is True
 
@@ -184,8 +208,14 @@ class TestFindAllBranches:
         """Branch: unit_name is set -> filter applied."""
         db, mock_insp = self._make_db()
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=mock_insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect",
+                return_value=mock_insp,
+            ),
         ):
             result = repo.find_all(unit_name="个")
         assert result["success"] is True
@@ -194,8 +224,14 @@ class TestFindAllBranches:
         """Branch: model_number set -> normalized filter."""
         db, mock_insp = self._make_db()
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=mock_insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect",
+                return_value=mock_insp,
+            ),
         ):
             result = repo.find_all(model_number="M-001 A")
         assert result["success"] is True
@@ -204,8 +240,14 @@ class TestFindAllBranches:
         """Branch: model_token becomes empty string after normalize -> no filter."""
         db, mock_insp = self._make_db()
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=mock_insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect",
+                return_value=mock_insp,
+            ),
         ):
             result = repo.find_all(model_number="- -")
         assert result["success"] is True
@@ -214,8 +256,14 @@ class TestFindAllBranches:
         """Branch: keyword -> 1 segment path."""
         db, mock_insp = self._make_db()
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=mock_insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect",
+                return_value=mock_insp,
+            ),
         ):
             result = repo.find_all(keyword="apple")
         assert result["success"] is True
@@ -224,8 +272,14 @@ class TestFindAllBranches:
         """Branch: keyword -> multiple segments path."""
         db, mock_insp = self._make_db()
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=mock_insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect",
+                return_value=mock_insp,
+            ),
         ):
             result = repo.find_all(keyword="苹果 apple 001")
         assert result["success"] is True
@@ -234,15 +288,24 @@ class TestFindAllBranches:
         """Branch: keyword has no alphanum/CJK segments -> uses keyword_text itself."""
         db, mock_insp = self._make_db()
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=mock_insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect",
+                return_value=mock_insp,
+            ),
         ):
             result = repo.find_all(keyword="   ")
         assert result["success"] is True
 
     def test_find_all_exception_returns_failure(self, repo):
         """Branch: outer exception -> return failure dict."""
-        with patch("app.infrastructure.persistence.product_repository_impl.get_db", side_effect=RuntimeError("db down")):
+        with patch(
+            "app.infrastructure.persistence.product_repository_impl.get_db",
+            side_effect=RuntimeError("db down"),
+        ):
             result = repo.find_all()
         assert result["success"] is False
 
@@ -254,8 +317,12 @@ class TestFindAllBranches:
         class _GetTableNamesDB:
             def __init__(self):
                 self.bind = bind
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
 
         db = _GetTableNamesDB()
         query_mock = MagicMock()
@@ -267,7 +334,10 @@ class TestFindAllBranches:
         query_mock.all.return_value = []
         db.query = MagicMock(return_value=query_mock)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)):
+        with patch(
+            "app.infrastructure.persistence.product_repository_impl.get_db",
+            return_value=_db_ctx(db),
+        ):
             result = repo.find_all()
         assert result["success"] is True
 
@@ -275,6 +345,7 @@ class TestFindAllBranches:
 # ---------------------------------------------------------------------------
 # find_product_units — missing branches
 # ---------------------------------------------------------------------------
+
 
 class TestFindProductUnits:
     def test_purchase_units_authoritative_returns_early(self, repo):
@@ -284,14 +355,20 @@ class TestFindProductUnits:
         cs.get_bind.return_value = bind
         tinsp = MagicMock()
         tinsp.get_table_names.return_value = ["purchase_units"]
-        cs.query.return_value.filter.return_value.filter.return_value.distinct.return_value.all.return_value = [("个",), ("套",)]
+        cs.query.return_value.filter.return_value.filter.return_value.distinct.return_value.all.return_value = [
+            ("个",),
+            ("套",),
+        ]
 
         with (
             patch("app.application.customer_app_service.get_customers_session", return_value=cs),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=tinsp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect", return_value=tinsp
+            ),
         ):
             # Also patch inside the function's import resolution
             import app.application.customer_app_service as _cs_mod
+
             orig = getattr(_cs_mod, "get_customers_session", None)
             try:
                 _cs_mod.get_customers_session = lambda: cs
@@ -303,22 +380,41 @@ class TestFindProductUnits:
 
     def test_fallback_to_products_unit(self, repo):
         """Branch: no purchase_units -> falls back to products.unit."""
+
         class _FakeDB:
             def __init__(self):
                 self.bind = MagicMock()
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
 
         db = _FakeDB()
         insp = MagicMock()
         insp.get_table_names.return_value = ["products"]
         db.query = MagicMock()
-        db.query.return_value.distinct.return_value.all.return_value = [("箱",), ("米",), ("个",), ("专属包装",)]
+        db.query.return_value.distinct.return_value.all.return_value = [
+            ("箱",),
+            ("米",),
+            ("个",),
+            ("专属包装",),
+        ]
 
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_customers_session", side_effect=Exception("nope"), create=True),
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_customers_session",
+                side_effect=Exception("nope"),
+                create=True,
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp
+            ),
         ):
             result = repo.find_product_units()
         # trivial units (箱, 米, 个) filtered out; non-trivial kept
@@ -327,11 +423,16 @@ class TestFindProductUnits:
 
     def test_add_label_trivial_unit_skipped(self, repo):
         """Branch: from_products=True + trivial measure unit -> skip."""
+
         class _FakeDB:
             def __init__(self):
                 self.bind = MagicMock()
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
 
         db = _FakeDB()
         insp = MagicMock()
@@ -340,8 +441,13 @@ class TestFindProductUnits:
         db.query.return_value.distinct.return_value.all.return_value = [("千克",), ("独家包装",)]
 
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp
+            ),
         ):
             result = repo.find_product_units()
         assert "千克" not in result
@@ -352,13 +458,18 @@ class TestFindProductUnits:
 # export_to_excel — missing branches
 # ---------------------------------------------------------------------------
 
+
 class TestExportToExcel:
     def _make_fake_db(self, table_names, products=None):
         class _FakeDB:
             def __init__(self):
                 self.bind = MagicMock()
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
 
         db = _FakeDB()
         db.query = MagicMock()
@@ -375,8 +486,13 @@ class TestExportToExcel:
         insp.get_table_names.return_value = tnames
 
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp
+            ),
         ):
             result = repo.export_to_excel()
         assert result["success"] is False
@@ -394,8 +510,13 @@ class TestExportToExcel:
         insp.get_table_names.return_value = ["products"]
 
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp
+            ),
             patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
         ):
             result = repo.export_to_excel(unit_name="个", keyword="Test")
@@ -420,11 +541,19 @@ class TestExportToExcel:
         }
 
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp
+            ),
             patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch("app.application.get_template_app_service", return_value=mock_svc),
-            patch("app.utils.template_export_utils.fill_workbook_from_template", return_value=Workbook()),
+            patch(
+                "app.utils.template_export_utils.fill_workbook_from_template",
+                return_value=Workbook(),
+            ),
         ):
             result = repo.export_to_excel(template_id="42")
         assert result["success"] is True
@@ -439,8 +568,13 @@ class TestExportToExcel:
         mock_svc.get_templates.return_value = {"templates": []}
 
         with (
-            patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)),
-            patch("app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_db_ctx(db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect", return_value=insp
+            ),
             patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch("app.application.get_template_app_service", return_value=mock_svc),
         ):
@@ -449,7 +583,10 @@ class TestExportToExcel:
 
     def test_export_exception_returns_failure(self, repo):
         """Branch: exception during export -> failure dict."""
-        with patch("app.infrastructure.persistence.product_repository_impl.get_db", side_effect=OSError("disk error")):
+        with patch(
+            "app.infrastructure.persistence.product_repository_impl.get_db",
+            side_effect=OSError("disk error"),
+        ):
             result = repo.export_to_excel()
         assert result["success"] is False
         assert result["file_path"] is None
@@ -458,6 +595,7 @@ class TestExportToExcel:
 # ---------------------------------------------------------------------------
 # batch_create — missing branches
 # ---------------------------------------------------------------------------
+
 
 class TestBatchCreate:
     def test_empty_list(self, repo):
@@ -470,6 +608,9 @@ class TestBatchCreate:
         db.bulk_insert_mappings.return_value = None
         db.commit.return_value = None
 
-        with patch("app.infrastructure.persistence.product_repository_impl.get_db", return_value=_db_ctx(db)):
+        with patch(
+            "app.infrastructure.persistence.product_repository_impl.get_db",
+            return_value=_db_ctx(db),
+        ):
             result = repo.batch_create([{"name": ""}, {"name": "ValidProd"}])
         assert result["failed_count"] >= 1

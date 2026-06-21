@@ -1,4 +1,5 @@
 """SSOT 框架全量集成测：ssot check 跑所有 enabled 域。"""
+
 from __future__ import annotations
 
 import sys

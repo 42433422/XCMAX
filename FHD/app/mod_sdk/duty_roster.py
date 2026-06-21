@@ -91,7 +91,9 @@ def _candidate_duty_registry_paths() -> list[Path]:
             Path.cwd() / "成都修茈科技有限公司" / "MODstore_deploy",
         ]
     )
-    return [root / "modstore_server" / "catalog_data" / "duty_employee_registry.json" for root in roots]
+    return [
+        root / "modstore_server" / "catalog_data" / "duty_employee_registry.json" for root in roots
+    ]
 
 
 def load_duty_employee_records() -> list[dict[str, Any]]:

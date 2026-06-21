@@ -74,9 +74,19 @@ from app.services.skills.label_template_generator.label_template_generator impor
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_block(text: str, x_center: int, y_center: int, cell_col: int = 0, cell_row: int = 0,
-                left: int = 0, top: int = 0, width: int = 100, height: int = 30,
-                conf: float = 0.9) -> dict:
+
+def _make_block(
+    text: str,
+    x_center: int,
+    y_center: int,
+    cell_col: int = 0,
+    cell_row: int = 0,
+    left: int = 0,
+    top: int = 0,
+    width: int = 100,
+    height: int = 30,
+    conf: float = 0.9,
+) -> dict:
     return {
         "text": text,
         "center": (x_center, y_center),
@@ -92,9 +102,16 @@ def _make_block(text: str, x_center: int, y_center: int, cell_col: int = 0, cell
     }
 
 
-def _make_block_raw(text: str, x_center: int, y_center: int,
-                    left: int = 0, top: int = 0, width: int = 100, height: int = 30,
-                    conf: float = 0.9) -> dict:
+def _make_block_raw(
+    text: str,
+    x_center: int,
+    y_center: int,
+    left: int = 0,
+    top: int = 0,
+    width: int = 100,
+    height: int = 30,
+    conf: float = 0.9,
+) -> dict:
     """Block without pre-assigned cell_row/cell_col (they will be computed from grid lines)."""
     return {
         "text": text,
@@ -111,6 +128,7 @@ def _make_block_raw(text: str, x_center: int, y_center: int,
 # ---------------------------------------------------------------------------
 # 1. _pair_fields_by_grid
 # ---------------------------------------------------------------------------
+
 
 class TestPairFieldsByGridCovGaps:
     """Branches not covered by the existing test files."""
@@ -141,7 +159,7 @@ class TestPairFieldsByGridCovGaps:
         v_lines = [0, 100, 200, 300]
 
         # Both blocks in the same row; their centers determine which grid cell
-        block_a = _make_block_raw("品名", 50, 50, left=5, top=5)    # col 0
+        block_a = _make_block_raw("品名", 50, 50, left=5, top=5)  # col 0
         block_b = _make_block_raw("VALUE", 150, 50, left=105, top=5)  # col 1
 
         # merged: row 0, cols 0-1
@@ -165,7 +183,7 @@ class TestPairFieldsByGridCovGaps:
         v_lines = [0, 100, 200, 300]
 
         # block_a at col 0 (normal), block_b at col 1 which is inside a merged range
-        block_a = _make_block_raw("颜色", 50, 50, left=5, top=5)    # col 0
+        block_a = _make_block_raw("颜色", 50, 50, left=5, top=5)  # col 0
         block_b = _make_block_raw("红色", 150, 50, left=105, top=5)  # col 1
 
         # merged covers row 0, cols 1-2  (block_b is start_col of this range)
@@ -188,7 +206,7 @@ class TestPairFieldsByGridCovGaps:
         v_lines = [0, 100, 200, 300]
 
         # block_a at col 0, block_b at col 2 (gap at col 1)
-        block_a = _make_block_raw("货号", 50, 50, left=5, top=5)     # col 0
+        block_a = _make_block_raw("货号", 50, 50, left=5, top=5)  # col 0
         block_b = _make_block_raw("1635", 250, 50, left=205, top=5)  # col 2
 
         result = _pair_fields_by_grid([block_a, block_b], h_lines, v_lines, [])
@@ -233,7 +251,7 @@ class TestPairFieldsByGridCovGaps:
         h_lines = [0, 100]
         v_lines = [0, 100, 200]
 
-        block_a = _make_block_raw("码段", 50, 50, left=5, top=5, conf=0.8)    # col 0
+        block_a = _make_block_raw("码段", 50, 50, left=5, top=5, conf=0.8)  # col 0
         block_b = _make_block_raw("00001", 150, 50, left=105, top=5, conf=0.9)  # col 1
 
         result = _pair_fields_by_grid([block_a, block_b], h_lines, v_lines, [])
@@ -262,6 +280,7 @@ class TestPairFieldsByGridCovGaps:
 # ---------------------------------------------------------------------------
 # 2. _identify_fields
 # ---------------------------------------------------------------------------
+
 
 class TestIdentifyFieldsCovGaps:
     """Branches in _identify_fields not fully exercised by prior test files."""
@@ -360,6 +379,7 @@ class TestIdentifyFieldsCovGaps:
 # 3. _analyze_colors - consistent vs inconsistent
 # ---------------------------------------------------------------------------
 
+
 class TestAnalyzeColorsCovGaps:
     """Pixel-level consistency branch."""
 
@@ -385,6 +405,7 @@ class TestAnalyzeColorsCovGaps:
 # ---------------------------------------------------------------------------
 # 4. _estimate_sections - exact boundary
 # ---------------------------------------------------------------------------
+
 
 class TestEstimateSectionsBoundaryExact:
     """Test the exact boundary values for each branch."""
@@ -425,6 +446,7 @@ class TestEstimateSectionsBoundaryExact:
 # 5. _estimate_font_sizes - exact boundary
 # ---------------------------------------------------------------------------
 
+
 class TestEstimateFontSizesBoundaryExact:
     """Test the exact width boundary values."""
 
@@ -457,6 +479,7 @@ class TestEstimateFontSizesBoundaryExact:
 # 6. LabelTemplateGeneratorSkill.execute branches
 # ---------------------------------------------------------------------------
 
+
 def _make_good_analysis():
     return {
         "success": True,
@@ -464,14 +487,17 @@ def _make_good_analysis():
         "format": "PNG",
         "mode": "RGB",
         "size": {"width": 800, "height": 500},
-        "colors": {"background": "#ffffff", "border": "#000000", "text": "#000000",
-                   "is_consistent_background": True},
+        "colors": {
+            "background": "#ffffff",
+            "border": "#000000",
+            "text": "#000000",
+            "is_consistent_background": True,
+        },
         "sections": [],
     }
 
 
 class TestSkillExecuteCovGaps:
-
     def test_execute_enable_ocr_false_skips_ocr(self, tmp_path):
         """enable_ocr=False → ocr_result is None; basic code generated."""
         img = Image.new("RGB", (800, 500), "white")
@@ -532,10 +558,7 @@ class TestSkillExecuteCovGaps:
         img.save(img_path)
 
         skill = LabelTemplateGeneratorSkill()
-        _module_path = (
-            "app.services.skills.label_template_generator"
-            ".label_template_generator.open"
-        )
+        _module_path = "app.services.skills.label_template_generator.label_template_generator.open"
         with patch(_module_path, side_effect=OSError("disk full")):
             result = skill.execute(img_path, output_file="/nonexistent/out.py", enable_ocr=False)
 
@@ -554,8 +577,8 @@ class TestSkillExecuteCovGaps:
 # 7. get_label_template_generator_skill singleton
 # ---------------------------------------------------------------------------
 
-class TestGetSkillSingleton:
 
+class TestGetSkillSingleton:
     def test_second_call_returns_same_object(self):
         """Two successive calls must return the identical Python object."""
         # Reset the module-level singleton so the test is deterministic
@@ -589,8 +612,8 @@ class TestGetSkillSingleton:
 # 8. _extract_fields_by_pattern
 # ---------------------------------------------------------------------------
 
-class TestExtractFieldsByPattern:
 
+class TestExtractFieldsByPattern:
     def test_always_returns_exactly_seven_items(self):
         result = _extract_fields_by_pattern("any_path.png")
         assert len(result) == 7
@@ -614,8 +637,8 @@ class TestExtractFieldsByPattern:
 # 9. generate_template_code - analysis fails path
 # ---------------------------------------------------------------------------
 
-class TestGenerateTemplateCodeFailure:
 
+class TestGenerateTemplateCodeFailure:
     def test_analysis_failure_returns_error_comment(self, tmp_path):
         """When analyze_image fails, generate_template_code returns '# Error:...'."""
         code = generate_template_code("/nonexistent/image.png")
@@ -649,11 +672,16 @@ class TestGenerateTemplateCodeFailure:
 # 10. _generate_code_with_fields - different field types
 # ---------------------------------------------------------------------------
 
-class TestGenerateCodeWithFields:
 
+class TestGenerateCodeWithFields:
     def _fields(self):
         return [
-            {"label": "品名", "value": "运动鞋", "field_key": "product_name", "type": "fixed_label"},
+            {
+                "label": "品名",
+                "value": "运动鞋",
+                "field_key": "product_name",
+                "type": "fixed_label",
+            },
             {"label": "批次", "value": "A001", "field_key": "批次", "type": "dynamic"},
         ]
 
@@ -703,8 +731,8 @@ class TestGenerateCodeWithFields:
 # 11. _generate_basic_code
 # ---------------------------------------------------------------------------
 
-class TestGenerateBasicCode:
 
+class TestGenerateBasicCode:
     def test_basic_code_contains_class_name(self, tmp_path):
         img = Image.new("RGB", (600, 400), "white")
         img_path = str(tmp_path / "img.png")
@@ -743,19 +771,19 @@ class TestGenerateBasicCode:
 # 12. analyze_image - RECOVERABLE_ERRORS handler (lines 57-59)
 # ---------------------------------------------------------------------------
 
+
 class TestAnalyzeImageRecoverableErrors:
     """RECOVERABLE_ERRORS branch in analyze_image (non-FileNotFoundError exceptions)."""
 
     def test_pil_open_raises_oserror_returns_failure(self):
         """If Image.open raises OSError (in RECOVERABLE_ERRORS), returns success=False."""
         from unittest.mock import patch as _patch
-        _target = (
-            "app.services.skills.label_template_generator"
-            ".label_template_generator.Image.open"
-        )
+
+        _target = "app.services.skills.label_template_generator.label_template_generator.Image.open"
         from app.services.skills.label_template_generator.label_template_generator import (
             analyze_image,
         )
+
         with _patch(_target, side_effect=OSError("corrupt image")):
             result = analyze_image("some_path.png")
         assert result["success"] is False
@@ -763,13 +791,11 @@ class TestAnalyzeImageRecoverableErrors:
 
     def test_pil_open_raises_valueerror_returns_failure(self):
         """ValueError (DATA_SHAPE → RECOVERABLE_ERRORS) → success=False."""
-        _target = (
-            "app.services.skills.label_template_generator"
-            ".label_template_generator.Image.open"
-        )
+        _target = "app.services.skills.label_template_generator.label_template_generator.Image.open"
         from app.services.skills.label_template_generator.label_template_generator import (
             analyze_image,
         )
+
         with patch(_target, side_effect=ValueError("bad value")):
             result = analyze_image("some_path.png")
         assert result["success"] is False
@@ -779,6 +805,7 @@ class TestAnalyzeImageRecoverableErrors:
         from app.services.skills.label_template_generator.label_template_generator import (
             analyze_image,
         )
+
         result = analyze_image("/this/path/does/not/exist.png")
         assert result["success"] is False
         assert "不存在" in result["message"]
@@ -787,6 +814,7 @@ class TestAnalyzeImageRecoverableErrors:
 # ---------------------------------------------------------------------------
 # 13. extract_text_with_ocr - ImportError, RECOVERABLE_ERRORS, and success paths
 # ---------------------------------------------------------------------------
+
 
 class TestExtractTextWithOcr:
     """Branches in extract_text_with_ocr using mocked cv2 / numpy / OCR.
@@ -797,10 +825,7 @@ class TestExtractTextWithOcr:
     against real numpy arrays, covering the inner branches.
     """
 
-    _MODULE = (
-        "app.services.skills.label_template_generator"
-        ".label_template_generator"
-    )
+    _MODULE = "app.services.skills.label_template_generator.label_template_generator"
 
     @staticmethod
     def _build_cv2_mock_with_real_arrays(h: int, w: int, black_rows=None, black_cols=None):
@@ -819,10 +844,10 @@ class TestExtractTextWithOcr:
         binary = np.zeros((h, w), dtype=np.uint8)
         if black_rows:
             for r in black_rows:
-                binary[r, :] = 255   # full horizontal line
+                binary[r, :] = 255  # full horizontal line
         if black_cols:
             for c in black_cols:
-                binary[:, c] = 255   # full vertical line
+                binary[:, c] = 255  # full vertical line
 
         cv2_mock.cvtColor.return_value = gray
         cv2_mock.threshold.return_value = (0, binary)
@@ -833,6 +858,7 @@ class TestExtractTextWithOcr:
     def test_import_error_returns_failure_with_fallback_fields(self, tmp_path):
         """When cv2 / numpy is missing (ImportError), returns success=False with fallback_fields."""
         import sys
+
         img = Image.new("RGB", (100, 100), "white")
         img_path = str(tmp_path / "img.png")
         img.save(img_path)
@@ -856,6 +882,7 @@ class TestExtractTextWithOcr:
     def test_recoverable_error_returns_failure_with_fallback_fields(self, tmp_path):
         """When Image.open raises OSError inside extract_text_with_ocr → failure + fallback."""
         import sys
+
         img = Image.new("RGB", (100, 100), "white")
         img_path = str(tmp_path / "img.png")
         img.save(img_path)
@@ -983,7 +1010,8 @@ class TestExtractTextWithOcr:
 
         # Paint rows at y=0 and y=15 and cols at x=0 and x=10 as black grid lines
         cv2_mock = self._build_cv2_mock_with_real_arrays(
-            H, W,
+            H,
+            W,
             black_rows=[0, 15],
             black_cols=[0, 10],
         )
@@ -1049,9 +1077,10 @@ class TestExtractTextWithOcr:
         # Two adjacent rows at y=10 and y=12 (distance=2 < threshold=5) → merge
         # Also two adjacent rows at y=30 and y=32 → merge
         cv2_mock = self._build_cv2_mock_with_real_arrays(
-            H, W,
-            black_rows=[10, 12, 30, 32],   # pairs that will be merged
-            black_cols=[10, 12, 30, 32],   # same for cols
+            H,
+            W,
+            black_rows=[10, 12, 30, 32],  # pairs that will be merged
+            black_cols=[10, 12, 30, 32],  # same for cols
         )
 
         mock_ocr_svc = MagicMock()
@@ -1090,7 +1119,7 @@ class TestExtractTextWithOcr:
         # so the 'else' branch fires when we hit position 12 (current_length=12 > 0)
         gray = np.zeros((H, W), dtype=np.uint8)
         binary = np.zeros((H, W), dtype=np.uint8)
-        binary[0, :12] = 255   # 12 black pixels (> W*0.5=10) → detected as line
+        binary[0, :12] = 255  # 12 black pixels (> W*0.5=10) → detected as line
 
         cv2_mock = MagicMock()
         cv2_mock.cvtColor.return_value = gray
@@ -1142,7 +1171,7 @@ class TestExtractTextWithOcr:
         binary[:, 40] = 255
         binary[:, 59] = 255
         # Remove most of col 20's pixels in row range 0..30 to make it partial
-        binary[5:30, 20] = 0   # only rows 0..4 remain black (5 out of 30 → <50%)
+        binary[5:30, 20] = 0  # only rows 0..4 remain black (5 out of 30 → <50%)
 
         cv2_mock = MagicMock()
         cv2_mock.cvtColor.return_value = gray
@@ -1180,6 +1209,7 @@ class TestExtractTextWithOcr:
 # 14. _pair_fields_by_grid find_cell — loop-break branches
 # ---------------------------------------------------------------------------
 
+
 class TestFindCellBreakBranches:
     """Ensure find_cell hits the 'break' in both the row and col loops.
 
@@ -1207,7 +1237,7 @@ class TestFindCellBreakBranches:
         h_lines = [0, 50, 100]
         v_lines = [0, 50, 100]
 
-        block_a = _make_block_raw("颜色", x_center=25, y_center=25, left=5, top=5)   # row 0, col 0
+        block_a = _make_block_raw("颜色", x_center=25, y_center=25, left=5, top=5)  # row 0, col 0
         block_b = _make_block_raw("红色", x_center=75, y_center=75, left=55, top=55)  # row 1, col 1
 
         result = _pair_fields_by_grid([block_a, block_b], h_lines, v_lines, [])
@@ -1229,6 +1259,7 @@ class TestFindCellBreakBranches:
 # ---------------------------------------------------------------------------
 # 15. _classify_field — label ending in 价 (line 580)
 # ---------------------------------------------------------------------------
+
 
 class TestClassifyFieldJiaSuffix:
     """_classify_field's 'elif label.endswith(价)' branch."""
@@ -1268,6 +1299,7 @@ class TestClassifyFieldJiaSuffix:
 # 16. _analyze_colors — exception path (lines 769-770)
 # ---------------------------------------------------------------------------
 
+
 class TestAnalyzeColorsExceptionPath:
     """The bare 'except Exception' in _analyze_colors returns default fallback dict."""
 
@@ -1303,6 +1335,7 @@ class TestAnalyzeColorsExceptionPath:
 # ---------------------------------------------------------------------------
 # 17. generate_template_code — OCR success path (lines 842-844)
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateTemplateCodeOcrSuccess:
     """When ocr_result has success=True, _generate_code_with_fields is called."""
@@ -1347,6 +1380,7 @@ class TestGenerateTemplateCodeOcrSuccess:
 # 18. LabelTemplateGeneratorSkill.execute — ocr success log + outer error handler
 # ---------------------------------------------------------------------------
 
+
 class TestSkillExecuteAdditionalBranches:
     """Cover the OCR-success logger call (line 1350) and outer RECOVERABLE_ERRORS (1366-1368)."""
 
@@ -1387,8 +1421,7 @@ class TestSkillExecuteAdditionalBranches:
         skill = LabelTemplateGeneratorSkill()
 
         _patch_analyze = (
-            "app.services.skills.label_template_generator"
-            ".label_template_generator.analyze_image"
+            "app.services.skills.label_template_generator.label_template_generator.analyze_image"
         )
         with patch(_patch_analyze, side_effect=RuntimeError("unexpected crash")):
             result = skill.execute("/some/image.png")
@@ -1401,8 +1434,7 @@ class TestSkillExecuteAdditionalBranches:
         skill = LabelTemplateGeneratorSkill()
 
         _patch_analyze = (
-            "app.services.skills.label_template_generator"
-            ".label_template_generator.analyze_image"
+            "app.services.skills.label_template_generator.label_template_generator.analyze_image"
         )
         with patch(_patch_analyze, side_effect=ValueError("bad data")):
             result = skill.execute("/some/image.png")
@@ -1413,6 +1445,7 @@ class TestSkillExecuteAdditionalBranches:
 # ---------------------------------------------------------------------------
 # 19. LabelTemplateGeneratorSkill.get_skill_info (line 1372)
 # ---------------------------------------------------------------------------
+
 
 class TestGetSkillInfo:
     """LabelTemplateGeneratorSkill.get_skill_info returns expected structure."""

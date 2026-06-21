@@ -190,7 +190,11 @@ class TestApiCallErrorBranches:
 class TestQualityToolStringArgs:
     @pytest.mark.asyncio
     async def test_run_pytest_args_as_string(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "ok", "stderr": "", "ok": True}) as mock_cmd:
+        with patch.object(
+            est,
+            "_run_cmd",
+            return_value={"returncode": 0, "stdout": "ok", "stderr": "", "ok": True},
+        ) as mock_cmd:
             result = await tool_run_pytest({"args": "tests/ -q --tb=short"}, {})
         assert result["ok"] is True
         # 确认 args 被 split 成列表
@@ -200,14 +204,18 @@ class TestQualityToolStringArgs:
 
     @pytest.mark.asyncio
     async def test_run_pytest_extra_env_as_dict(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "", "ok": True}) as mock_cmd:
+        with patch.object(
+            est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "", "ok": True}
+        ) as mock_cmd:
             await tool_run_pytest({"env": {"MY_VAR": "1"}}, {})
         call_kw = mock_cmd.call_args.kwargs
         assert call_kw["env"].get("MY_VAR") == "1"
 
     @pytest.mark.asyncio
     async def test_run_ruff_check_targets_as_string(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "", "ok": True}) as mock_cmd:
+        with patch.object(
+            est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "", "ok": True}
+        ) as mock_cmd:
             result = await tool_run_ruff_check({"targets": "app/ tests/"}, {})
         assert result["ok"] is True
         cmd_args = mock_cmd.call_args.args[0]
@@ -216,7 +224,11 @@ class TestQualityToolStringArgs:
 
     @pytest.mark.asyncio
     async def test_run_ruff_format_targets_as_string(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 1, "stdout": "diff", "stderr": "", "ok": False}) as mock_cmd:
+        with patch.object(
+            est,
+            "_run_cmd",
+            return_value={"returncode": 1, "stdout": "diff", "stderr": "", "ok": False},
+        ) as mock_cmd:
             result = await tool_run_ruff_format({"targets": "app/"}, {})
         assert result["ok"] is True  # _ok wrapper always returns ok=True for summary
         cmd_args = mock_cmd.call_args.args[0]
@@ -224,7 +236,11 @@ class TestQualityToolStringArgs:
 
     @pytest.mark.asyncio
     async def test_run_mypy_targets_as_string(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "Success", "stderr": "", "ok": True}) as mock_cmd:
+        with patch.object(
+            est,
+            "_run_cmd",
+            return_value={"returncode": 0, "stdout": "Success", "stderr": "", "ok": True},
+        ) as mock_cmd:
             result = await tool_run_mypy({"targets": "app/ tests/"}, {})
         assert result["ok"] is True
         cmd_args = mock_cmd.call_args.args[0]
@@ -234,7 +250,9 @@ class TestQualityToolStringArgs:
     @pytest.mark.asyncio
     async def test_run_pytest_default_args(self):
         """无参数时使用默认 args。"""
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "", "ok": True}) as mock_cmd:
+        with patch.object(
+            est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "", "ok": True}
+        ) as mock_cmd:
             await tool_run_pytest({}, {})
         cmd_args = mock_cmd.call_args.args[0]
         assert "tests/" in cmd_args
@@ -248,7 +266,11 @@ class TestQualityToolStringArgs:
 class TestGitDiffBranches:
     @pytest.mark.asyncio
     async def test_git_diff_with_ref(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "diff", "stderr": "", "ok": True}) as mock_cmd:
+        with patch.object(
+            est,
+            "_run_cmd",
+            return_value={"returncode": 0, "stdout": "diff", "stderr": "", "ok": True},
+        ) as mock_cmd:
             r = await tool_git_diff({"ref": "HEAD~1"}, {})
         assert r["ok"] is True
         cmd = mock_cmd.call_args.args[0]
@@ -256,14 +278,20 @@ class TestGitDiffBranches:
 
     @pytest.mark.asyncio
     async def test_git_diff_with_stat(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "stat", "stderr": "", "ok": True}) as mock_cmd:
+        with patch.object(
+            est,
+            "_run_cmd",
+            return_value={"returncode": 0, "stdout": "stat", "stderr": "", "ok": True},
+        ) as mock_cmd:
             r = await tool_git_diff({"stat": True}, {})
         cmd = mock_cmd.call_args.args[0]
         assert "--stat" in cmd
 
     @pytest.mark.asyncio
     async def test_git_diff_no_ref_no_stat(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "", "ok": True}) as mock_cmd:
+        with patch.object(
+            est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "", "ok": True}
+        ) as mock_cmd:
             await tool_git_diff({}, {})
         cmd = mock_cmd.call_args.args[0]
         assert "--stat" not in cmd
@@ -290,7 +318,11 @@ class TestTriggerGhWorkflow:
 
     @pytest.mark.asyncio
     async def test_success_with_ref(self):
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "ok", "stderr": "", "ok": True}):
+        with patch.object(
+            est,
+            "_run_cmd",
+            return_value={"returncode": 0, "stdout": "ok", "stderr": "", "ok": True},
+        ):
             r = await tool_trigger_gh_workflow(
                 {"confirm": True, "workflow": "ci.yml", "ref": "develop"}, {}
             )
@@ -314,7 +346,11 @@ class TestNginxTest:
     @pytest.mark.asyncio
     async def test_nginx_found_runs(self):
         with patch("shutil.which", return_value="/usr/sbin/nginx"):
-            with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "", "stderr": "ok", "ok": True}):
+            with patch.object(
+                est,
+                "_run_cmd",
+                return_value={"returncode": 0, "stdout": "", "stderr": "ok", "ok": True},
+            ):
                 r = await tool_nginx_test({}, {})
         assert r["syntax_valid"] is True
 
@@ -386,8 +422,14 @@ class TestSandboxPython:
     @pytest.mark.asyncio
     async def test_forbidden_import_with_confirm(self):
         """有 confirm=true 时跳过危险检查，直接执行。"""
-        with patch.object(est, "_run_cmd", return_value={"returncode": 0, "stdout": "/tmp", "stderr": "", "ok": True}):
-            r = await tool_sandbox_python({"code": "import os; print(os.getcwd())", "confirm": True}, {})
+        with patch.object(
+            est,
+            "_run_cmd",
+            return_value={"returncode": 0, "stdout": "/tmp", "stderr": "", "ok": True},
+        ):
+            r = await tool_sandbox_python(
+                {"code": "import os; print(os.getcwd())", "confirm": True}, {}
+            )
         assert r["ok"] is True
 
 
@@ -478,7 +520,11 @@ class TestPatchFile:
     async def test_patch_check_fails(self, tmp_path):
         f = tmp_path / "f.py"
         f.write_text("print(1)\n")
-        with patch.object(est, "_run_cmd", return_value={"returncode": 1, "stdout": "", "stderr": "bad patch", "ok": False}):
+        with patch.object(
+            est,
+            "_run_cmd",
+            return_value={"returncode": 1, "stdout": "", "stderr": "bad patch", "ok": False},
+        ):
             r = await tool_patch_file(
                 {"confirm": True, "path": "f.py", "patch": "--- a\n+++ b\n@@ -1 +1 @@\n-x\n+y\n"},
                 {"workspace_root": str(tmp_path)},
@@ -570,9 +616,7 @@ class TestValidateEmployeePackBranches:
 
         emp_dir = tmp_path / "_employees" / "wp"
         emp_dir.mkdir(parents=True)
-        (emp_dir / "manifest.json").write_text(
-            json.dumps({"artifact": "wrong_type", "id": "wp"})
-        )
+        (emp_dir / "manifest.json").write_text(json.dumps({"artifact": "wrong_type", "id": "wp"}))
         with patch.object(est, "_EMPLOYEES_DIR", tmp_path / "_employees"):
             r = await tool_validate_employee_pack({"pack_id": "wp"}, {})
         assert r["ok"] is True
@@ -600,11 +644,13 @@ class TestValidateEmployeePackBranches:
         emp_dir = tmp_path / "_employees" / "wp3"
         emp_dir.mkdir(parents=True)
         (emp_dir / "manifest.json").write_text(
-            json.dumps({
-                "artifact": "employee_pack",
-                "id": "wp3",
-                "employee_config_v2": {"cognition": {"agent": {}}},  # no system_prompt
-            })
+            json.dumps(
+                {
+                    "artifact": "employee_pack",
+                    "id": "wp3",
+                    "employee_config_v2": {"cognition": {"agent": {}}},  # no system_prompt
+                }
+            )
         )
         with patch.object(est, "_EMPLOYEES_DIR", tmp_path / "_employees"):
             r = await tool_validate_employee_pack({"pack_id": "wp3"}, {})
