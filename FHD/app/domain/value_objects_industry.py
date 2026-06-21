@@ -35,7 +35,8 @@ def get_current_industry() -> str:
 
         return _cfg_current()
     except RECOVERABLE_ERRORS:
-        return "涂料"
+        # 统一兜底为「通用」，与 IndustryContextMiddleware / 前端 DEFAULT_INDUSTRY 一致
+        return "通用"
 
 
 def get_current_industry_config() -> dict[str, Any]:
@@ -104,6 +105,29 @@ def get_spec_field_name() -> str:
     return fields.get("spec_field", "spec_per_tin")
 
 
+def get_current_subsystem_schema(menu_key: str) -> dict[str, Any]:
+    """获取当前行业下某子系统(菜单键)的行业感知 schema 描述符。
+
+    读取当前行业 profile 的 ``subsystems[menu_key]``，形如
+    ``{label, visible, entity, fields: [{key, label, type, ...}], rules}``。
+    这是后端 mapper/校验/单据生成读取「该行业该子系统有哪些字段/语义/规则」的 SSOT 门面。
+    无声明时返回空 dict（调用方据此回退默认字段/标签，向后兼容旧 Mod）。
+    """
+    industry_id = get_current_industry()
+    try:
+        from resources.config.industry_config import get_industry_profile
+
+        profile = get_industry_profile(industry_id)
+        subsystems = getattr(profile, "subsystems", None)
+        if isinstance(subsystems, dict):
+            schema = subsystems.get(menu_key)
+            if isinstance(schema, dict):
+                return schema
+    except RECOVERABLE_ERRORS:
+        pass
+    return {}
+
+
 def reload_config():
     """重新加载配置（委托给 industry_config）。"""
     try:
@@ -118,6 +142,7 @@ __all__ = [
     "get_current_industry",
     "get_current_industry_config",
     "get_current_industry_fields",
+    "get_current_subsystem_schema",
     "get_primary_field_name",
     "get_secondary_field_name",
     "get_spec_field_name",

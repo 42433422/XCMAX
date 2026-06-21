@@ -43,9 +43,7 @@ class TestGetCurrentIndustryFromRequestContext:
 
     def test_reads_from_request_state(self):
         """有请求上下文时，读取 request.state.industry_id。"""
-        fake_request = SimpleNamespace(
-            state=SimpleNamespace(industry_id="电商")
-        )
+        fake_request = SimpleNamespace(state=SimpleNamespace(industry_id="电商"))
         with patch(
             "app.infrastructure.request_context.get_current_request",
             return_value=fake_request,
@@ -54,26 +52,30 @@ class TestGetCurrentIndustryFromRequestContext:
 
     def test_falls_back_to_industry_config_when_no_request(self):
         """无请求上下文时，回退到 industry_config.get_current_industry()。"""
-        with patch(
-            "app.infrastructure.request_context.get_current_request",
-            return_value=None,
-        ), patch(
-            "resources.config.industry_config.get_current_industry",
-            return_value="涂料",
+        with (
+            patch(
+                "app.infrastructure.request_context.get_current_request",
+                return_value=None,
+            ),
+            patch(
+                "resources.config.industry_config.get_current_industry",
+                return_value="涂料",
+            ),
         ):
             assert voi.get_current_industry() == "涂料"
 
     def test_falls_back_when_request_state_empty(self):
         """请求上下文存在但 industry_id 为空时，回退到 industry_config。"""
-        fake_request = SimpleNamespace(
-            state=SimpleNamespace(industry_id=None)
-        )
-        with patch(
-            "app.infrastructure.request_context.get_current_request",
-            return_value=fake_request,
-        ), patch(
-            "resources.config.industry_config.get_current_industry",
-            return_value="涂料",
+        fake_request = SimpleNamespace(state=SimpleNamespace(industry_id=None))
+        with (
+            patch(
+                "app.infrastructure.request_context.get_current_request",
+                return_value=fake_request,
+            ),
+            patch(
+                "resources.config.industry_config.get_current_industry",
+                return_value="涂料",
+            ),
         ):
             assert voi.get_current_industry() == "涂料"
 
@@ -87,15 +89,19 @@ class TestOnDemandLoading:
             units={"primary": "件", "secondary": "箱"},
             quantity_fields={"primary_field": "pieces"},
         )
-        with patch(
-            "app.infrastructure.request_context.get_current_request",
-            return_value=None,
-        ), patch(
-            "resources.config.industry_config.get_current_industry",
-            return_value="电商",
-        ), patch(
-            "resources.config.industry_config.get_industry_profile",
-            return_value=fake_profile,
+        with (
+            patch(
+                "app.infrastructure.request_context.get_current_request",
+                return_value=None,
+            ),
+            patch(
+                "resources.config.industry_config.get_current_industry",
+                return_value="电商",
+            ),
+            patch(
+                "resources.config.industry_config.get_industry_profile",
+                return_value=fake_profile,
+            ),
         ):
             config = voi.get_current_industry_config()
             assert config == {"primary": "件", "secondary": "箱"}
@@ -106,27 +112,38 @@ class TestOnDemandLoading:
             units={},
             quantity_fields={"primary_field": "pieces", "secondary_field": "cartons"},
         )
-        with patch(
-            "app.infrastructure.request_context.get_current_request",
-            return_value=None,
-        ), patch(
-            "resources.config.industry_config.get_current_industry",
-            return_value="电商",
-        ), patch(
-            "resources.config.industry_config.get_industry_profile",
-            return_value=fake_profile,
+        with (
+            patch(
+                "app.infrastructure.request_context.get_current_request",
+                return_value=None,
+            ),
+            patch(
+                "resources.config.industry_config.get_current_industry",
+                return_value="电商",
+            ),
+            patch(
+                "resources.config.industry_config.get_industry_profile",
+                return_value=fake_profile,
+            ),
         ):
             fields = voi.get_current_industry_fields()
             assert fields == {"primary_field": "pieces", "secondary_field": "cartons"}
 
     def test_get_current_industry_config_fallback_on_error(self):
-        """industry_config 异常时回退到内置涂料默认单位。"""
-        with patch(
-            "app.infrastructure.request_context.get_current_request",
-            return_value=None,
-        ), patch(
-            "resources.config.industry_config.get_current_industry",
-            side_effect=RuntimeError("boom"),
+        """行业档案加载异常时回退到内置默认单位（get_industry_profile 抛错路径）。"""
+        with (
+            patch(
+                "app.infrastructure.request_context.get_current_request",
+                return_value=None,
+            ),
+            patch(
+                "resources.config.industry_config.get_current_industry",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                "resources.config.industry_config.get_industry_profile",
+                side_effect=RuntimeError("boom"),
+            ),
         ):
             config = voi.get_current_industry_config()
             assert config["primary"] == "桶"
@@ -140,17 +157,25 @@ class TestFieldHelpers:
         """get_primary_field_name 返回当前行业的 primary_field。"""
         fake_profile = SimpleNamespace(
             units={},
-            quantity_fields={"primary_field": "pieces", "secondary_field": "cartons", "spec_field": "spec_per_box"},
+            quantity_fields={
+                "primary_field": "pieces",
+                "secondary_field": "cartons",
+                "spec_field": "spec_per_box",
+            },
         )
-        with patch(
-            "app.infrastructure.request_context.get_current_request",
-            return_value=None,
-        ), patch(
-            "resources.config.industry_config.get_current_industry",
-            return_value="电商",
-        ), patch(
-            "resources.config.industry_config.get_industry_profile",
-            return_value=fake_profile,
+        with (
+            patch(
+                "app.infrastructure.request_context.get_current_request",
+                return_value=None,
+            ),
+            patch(
+                "resources.config.industry_config.get_current_industry",
+                return_value="电商",
+            ),
+            patch(
+                "resources.config.industry_config.get_industry_profile",
+                return_value=fake_profile,
+            ),
         ):
             assert voi.get_primary_field_name() == "pieces"
             assert voi.get_secondary_field_name() == "cartons"

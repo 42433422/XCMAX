@@ -526,6 +526,44 @@ async def _proxy_json(
     return payload
 
 
+async def fetch_market_membership_tier(market_token: str) -> str | None:
+    """登录后从修茈市场拉取当前用户会员等级 tier（free/vip/vip_plus/svip1..8）。
+
+    市场登录响应不含会员等级，需单独调 ``GET /api/payment/my-plan``。
+    任何失败均返回 None（不阻断登录）。
+    """
+    token = (market_token or "").strip()
+    if not token:
+        return None
+    try:
+        data = await _proxy_json(
+            "GET", "/api/payment/my-plan", authorization=token, return_error_payload=True
+        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("fetch_market_membership_tier 调用失败", exc_info=True)
+        return None
+    if not isinstance(data, dict) or data.get("__proxy_error__"):
+        return None
+    membership = data.get("membership")
+    if isinstance(membership, dict):
+        tier = str(membership.get("tier") or "").strip()
+        return tier or None
+    return None
+
+
+@router.get("/membership-plans")
+async def market_membership_plans():
+    """会员套餐列表（代理市场公开接口 ``GET /api/payment/plans``）。
+
+    供 ModelPaymentView 读取，替代前端硬编码；市场不可达时返回空列表，前端用本地 FALLBACK。
+    """
+    data = await _proxy_json("GET", "/api/payment/plans", return_error_payload=True)
+    if isinstance(data, dict) and not data.get("__proxy_error__"):
+        plans = data.get("plans")
+        return {"success": True, "data": {"plans": plans if isinstance(plans, list) else []}}
+    return {"success": True, "data": {"plans": []}}
+
+
 def _token_from_auth_response(payload: Any) -> str:
     """Extract access JWT from market ``POST /api/auth/login`` JSON (several response shapes)."""
     if not isinstance(payload, dict):
@@ -1056,9 +1094,7 @@ async def login_market_for_oidc_profile(
     if not internal_key:
         return {
             "success": False,
-            "message": (
-                "未配置 XCAGI_MARKET_INTERNAL_API_KEY，SSO 会话无法自动绑定修茈市场 token"
-            ),
+            "message": ("未配置 XCAGI_MARKET_INTERNAL_API_KEY，SSO 会话无法自动绑定修茈市场 token"),
             "market_base_url": market_base,
         }
 

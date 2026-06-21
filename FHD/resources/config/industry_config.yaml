@@ -49,14 +49,60 @@ industries:
     description: "批发、分销、渠道与客户管理"
     units:
       primary: "件"
+      secondary: "箱"
       primary_label: "件数"
+      secondary_label: "箱数"
+      spec_label: "规格"
+      conversion:
+        箱_to_件: 12.0
+
+    quantity_fields:
+      primary_field: "pieces"
+      secondary_field: "cartons"
+      spec_field: "spec_per_box"
+      primary_label: "件数"
+      secondary_label: "箱数"
+      spec_label: "规格"
+
     product_fields:
       name: "商品名称"
       model: "规格"
+      category: "分类"
+      price: "批发价"
+      unit: "单位"
+
     order_types:
       shipment: "销售单"
       receipt: "采购单"
       return: "退货单"
+
+    intent_keywords:
+      create_order:
+        - "开销售单"
+        - "开单"
+        - "下单"
+        - "做销售单"
+        - "批发开单"
+      quantity_unit: "件"
+      print_label:
+        - "标签"
+        - "打印标签"
+        - "出库标签"
+      product:
+        - "商品"
+        - "货品"
+        - "产品"
+        - "商品列表"
+      customer:
+        - "客户"
+        - "经销商"
+        - "渠道"
+        - "客户列表"
+
+    print_config:
+      printer_type: "PDF"
+      label_width: 100
+      label_height: 50
 
   涂料:
     name: "涂料/油漆行业"
