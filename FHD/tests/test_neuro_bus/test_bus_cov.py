@@ -743,10 +743,6 @@ class TestSummarizeWithDomainHandlers:
 class TestRegisteredDomainsException:
     def test_returns_empty_list_on_import_error(self) -> None:
         bus = _make_bus()
-        with patch("app.neuro_bus.bus.NeuroBus.registered_domains", new_callable=lambda: property(
-            lambda self: _registered_domains_raising(self)
-        )):
-            pass
         # Directly patch get_domain_registry import to raise
         with patch.dict("sys.modules", {"app.neuro_bus.domains.base": None}):
             result = bus.registered_domains
@@ -1247,7 +1243,7 @@ class TestPriorityEventQueueDuplicateExhausted:
             """Event that always returns the same ID even after remint."""
 
             def __init__(self) -> None:
-                from app.neuro_bus.events.base import EventMetadata, EventPriority
+                from app.neuro_bus.events.base import EventPriority
 
                 self.metadata = EventMetadata()
                 self.metadata.event_id = "fixed-id"

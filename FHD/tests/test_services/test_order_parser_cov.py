@@ -419,6 +419,7 @@ class TestSpecFallbackBranchesMore:
         # Trigger branch where group(2) is present but parse_cn_number returns None
         # Use a token that matches qty_token_pattern but parse_cn_number can't handle
         from unittest.mock import patch as _patch
+
         from app.services.tools_execution import order_parser as _mod
 
         original = _mod.parse_cn_number
@@ -445,6 +446,7 @@ class TestQtyParseNone:
 
     def test_qty_parse_none_stays_none(self):
         from unittest.mock import patch as _patch
+
         from app.services.tools_execution import order_parser as _mod
 
         original = _mod.parse_cn_number
@@ -505,6 +507,7 @@ class TestSlotQtyTypeError:
 
     def test_qty_type_error_branch(self):
         from unittest.mock import patch as _patch
+
         from app.services.tools_execution import order_parser as _mod
 
         original_parse = _mod.parse_cn_number
@@ -568,6 +571,7 @@ class TestMultiProductEdgeCases:
     def test_multi_product_qty_parse_gives_none(self):
         # qty is None → uses 1 as default
         from unittest.mock import patch as _patch
+
         from app.services.tools_execution import order_parser as _mod
 
         original = _mod.parse_cn_number
@@ -596,7 +600,8 @@ class TestPatternGroupsGuard:
     def test_less_than_3_groups_skips(self):
         # All four built-in patterns have >= 3 groups, so we need to patch re.search
         # to return a match with only 2 groups to trigger the guard.
-        from unittest.mock import patch as _patch, MagicMock
+        from unittest.mock import MagicMock
+        from unittest.mock import patch as _patch
 
         fake_match = MagicMock()
         fake_match.groups.return_value = ("unit_only", "5")  # 2 groups < 3
@@ -635,6 +640,7 @@ class TestCnQtyKgPattern:
         # normalize_chinese_digits returns non-digit → float(digits) would fail,
         # falls to float(token) which also fails → quantity = 1
         from unittest.mock import patch as _patch
+
         from app.services.tools_execution import order_parser as _mod
 
         def _stubbed_normalize(token):
@@ -654,6 +660,7 @@ class TestEmptyModelInPatternsLoop:
 
     def test_empty_model_returns_failure(self):
         from unittest.mock import patch as _patch
+
         from app.services.tools_execution import order_parser as _mod
 
         def _stubbed_normalize_model(token):
@@ -677,6 +684,7 @@ class TestPatternLoopException:
 
     def test_exception_in_patterns_loop(self):
         from unittest.mock import patch as _patch
+
         from app.services.tools_execution import order_parser as _mod
 
         def _stubbed_normalize_qty(token):

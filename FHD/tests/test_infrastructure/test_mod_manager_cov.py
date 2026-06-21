@@ -506,6 +506,7 @@ class TestMountOnDiskPrimaryClientMods:
 
     def test_returns_empty_when_sunbird_mod_id_empty(self):
         import types
+
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
         _fake_amb = types.ModuleType("app.enterprise.account_mod_binding")
         _fake_amb.SUNBIRD_CLIENT_MOD_ID = ""
@@ -518,6 +519,7 @@ class TestMountOnDiskPrimaryClientMods:
 
     def test_returns_mod_id_when_already_loaded(self, tmp_path):
         import types
+
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
         _fake_amb = types.ModuleType("app.enterprise.account_mod_binding")
         _fake_amb.SUNBIRD_CLIENT_MOD_ID = "sunbird"

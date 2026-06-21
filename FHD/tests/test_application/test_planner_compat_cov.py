@@ -124,6 +124,7 @@ _spec.loader.exec_module(_pcs)
 # Replace temporary stubs with real packages so other test files aren't broken.
 import importlib as _importlib
 import types as _types
+
 for _k in _installed_stubs:
     sys.modules.pop(_k, None)  # must remove stub first; import_module returns cached value
     try:
