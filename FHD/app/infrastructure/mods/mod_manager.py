@@ -1230,14 +1230,11 @@ def _restore_entitlements_from_session_id(session_id: str | None) -> None:
             uname, get_cached_entitled_client_mod_ids() or set()
         )
         if cached:
-            try:
-                set_session_entitlements(entitled_client_mod_ids=cached)
-            except TypeError:
-                set_session_entitlements(
-                    market_user_id=market_user_id,
-                    market_username=uname or market_username,
-                    entitled_client_mod_ids=cached,
-                )
+            set_session_entitlements(
+                market_user_id=market_user_id,
+                market_username=uname or market_username,
+                entitled_client_mod_ids=cached,
+            )
     except RECOVERABLE_ERRORS:
         logger.debug("restore entitlements from session failed", exc_info=True)
 
@@ -1258,26 +1255,8 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
             return True
     except RECOVERABLE_ERRORS:
         pass
-    try:
-        from app.enterprise.account_mod_binding import (
-            SUNBIRD_CLIENT_MOD_ID,
-            is_sunbird_local_username,
-        )
-        from app.enterprise.mod_entitlements import _session_username_for_entitlements
-        from app.mod_sdk.industry_mod_aliases import canonical_mod_id
-
-        sunbird_mid = str(SUNBIRD_CLIENT_MOD_ID or "").strip()
-        canonical = canonical_mod_id(mid)
-        if sunbird_mid and canonical == sunbird_mid:
-            if session_id and is_sunbird_local_username(
-                _session_username_for_entitlements(session_id)
-            ):
-                return True
-            mm = get_mod_manager()
-            if mm.resolve_mod_directory(mid) or mm.resolve_mod_directory(sunbird_mid):
-                return True
-    except RECOVERABLE_ERRORS:
-        pass
+    # SUNBIRD 等客户定制 Mod 现已是普通企业账号，完全由服务端 entitlement 决定可见性。
+    # 不再因磁盘目录存在或已废弃的本地用户名判断而放行——否则未授权账号也能挂载客户包。
     return False
 
 
@@ -1320,25 +1299,10 @@ def mount_on_disk_primary_client_mods(mod_manager: ModManager | None = None) -> 
 
     通用安装包会在不同账号之间复用本机目录，客户定制包必须由会话 entitlement
     决定是否可见/可挂载；登录后通过 ensure_mod_api_ready 按需加载。
-    """
-    if is_mods_disabled():
-        return []
-    try:
-        from app.enterprise.account_mod_binding import SUNBIRD_CLIENT_MOD_ID
 
-        mid = str(SUNBIRD_CLIENT_MOD_ID or "").strip()
-        if not mid:
-            return []
-        mm = mod_manager or get_mod_manager()
-        if not mm.resolve_mod_directory(mid):
-            return []
-        loaded = list(getattr(mm, "_loaded_mods", []) or [])
-        if mid in loaded:
-            return [mid]
-        if mm.load_mod(mid):
-            return [mid]
-    except RECOVERABLE_ERRORS:
-        logger.debug("mount primary client mod skipped", exc_info=True)
+    因此本函数不再根据磁盘目录主动 load_mod，始终返回空列表，仅保留为兼容
+    旧调用点的占位（load_mod_routes 等仍会调用它）。
+    """
     return []
 
 

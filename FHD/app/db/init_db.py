@@ -700,11 +700,20 @@ def _seed_default_admin_user(real_engine: Engine) -> None:
         return
     hp = generate_password_hash(password)
     with real_engine.begin() as conn:
+        # 注意：User 模型新增的 tier / industry_id 为 NOT NULL（仅有 Python 端 default，
+        # 无 SQL 服务端默认），原生 INSERT 必须显式提供，否则空库播种管理员会触发
+        # NOT NULL constraint failed: users.tier。
         conn.execute(
             text(
                 """
-                INSERT INTO users (username, password, display_name, email, role, is_active, mfa_enabled, created_at)
-                VALUES (:username, :password, :display_name, :email, 'admin', TRUE, FALSE, :now)
+                INSERT INTO users (
+                    username, password, display_name, email, role,
+                    is_active, mfa_enabled, tier, industry_id, created_at
+                )
+                VALUES (
+                    :username, :password, :display_name, :email, 'admin',
+                    TRUE, FALSE, 'admin', :industry_id, :now
+                )
                 """
             ),
             {
@@ -712,6 +721,7 @@ def _seed_default_admin_user(real_engine: Engine) -> None:
                 "password": hp,
                 "display_name": display_name,
                 "email": f"{username}@local",
+                "industry_id": "通用",
                 "now": utc_now_naive(),
             },
         )
@@ -1019,6 +1029,9 @@ def ensure_postgresql_auth_bootstrap(
                             email VARCHAR DEFAULT '',
                             role VARCHAR DEFAULT 'user',
                             is_active BOOLEAN DEFAULT TRUE,
+                            mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                            tier VARCHAR(32) NOT NULL DEFAULT 'personal',
+                            industry_id VARCHAR(32) NOT NULL DEFAULT '通用',
                             created_by BIGINT REFERENCES users(id),
                             created_at TIMESTAMP,
                             last_login TIMESTAMP,
