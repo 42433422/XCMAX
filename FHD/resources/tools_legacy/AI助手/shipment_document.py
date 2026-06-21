@@ -320,7 +320,7 @@ class ShipmentDocumentGenerator:
                 try:
                     cell = worksheet.cell(row=row, column=col)
                     cell.value = None
-                except:
+                except Exception:
                     pass
     
     def _fill_from_template(
@@ -488,7 +488,7 @@ class ShipmentDocumentGenerator:
                 try:
                     cell = worksheet.cell(row=row, column=col)
                     cell.border = thin_border
-                except:
+                except Exception:
                     pass
     
     def _get_purchase_unit_info(self, unit_name: str) -> PurchaseUnitInfo:

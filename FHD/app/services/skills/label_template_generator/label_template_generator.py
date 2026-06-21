@@ -766,7 +766,7 @@ def _analyze_colors(img: Image.Image) -> dict[str, Any]:
             "border": "#000000",
             "text": "#000000",
         }
-    except:
+    except Exception:
         return {
             "background": "#FFFFFF",
             "is_consistent_background": True,
@@ -931,7 +931,7 @@ class {class_name}:
         for font_path in font_paths:
             try:
                 return ImageFont.truetype(font_path, size)
-            except:
+            except Exception:
                 continue
         
         return ImageFont.load_default()
@@ -1203,7 +1203,7 @@ class {class_name}:
         for font_path in font_paths:
             try:
                 return ImageFont.truetype(font_path, size)
-            except:
+            except Exception:
                 continue
         
         return ImageFont.load_default()

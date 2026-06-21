@@ -16,6 +16,7 @@ resources/config/industry_config.py::_mod_industries_dict 与
 app/infrastructure/mods/manifest.py::ModMetadata.industry。
 """
 
+import json
 import logging
 from typing import Any
 
