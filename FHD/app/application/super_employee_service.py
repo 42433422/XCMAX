@@ -241,6 +241,37 @@ class SuperEmployeeService:
             context=ctx,
         )
         dispatch = self._dispatch(dispatch_request)
+        # 派工不可用兜底：dispatch 未被接受时，若本机装有该工具 CLI 则直接 CLI 直答，
+        # 把原本的"已排队/调度器不可用"红字升级为可用回答。
+        # 派工成功路径(accepted is True)完全不走这里；云端无 CLI 时 _cli_reply_body 返回空，自动跳过。
+        if dispatch.get("accepted") is not True:
+            fallback_body = self._cli_reply_body(text, ctx)
+            if fallback_body:
+                assistant_msg = self._message_row(
+                    user_id=int(user_id),
+                    role="assistant",
+                    body=fallback_body,
+                    created_at=_utc_now(),
+                    request_id=request_id,
+                    status="completed",
+                    extra={"kind": self._p.direct_kind},
+                )
+                self._append_messages([user_msg, assistant_msg])
+                return {
+                    "employee": {
+                        "id": self._p.employee_id,
+                        "name": self._p.employee_name,
+                        "device_scope": "all_devices",
+                    },
+                    "dispatch": {
+                        **dispatch,
+                        "status": "completed",
+                        "fallback": f"{self._p.tool_name}_cli",
+                    },
+                    "message": self._public_message(user_msg),
+                    "assistant_message": self._public_message(assistant_msg),
+                    "messages": self.list_messages(user_id=int(user_id)),
+                }
         dispatcher_msg = self._message_row(
             user_id=int(user_id),
             role="system",

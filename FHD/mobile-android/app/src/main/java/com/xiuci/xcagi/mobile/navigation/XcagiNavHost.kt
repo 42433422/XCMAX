@@ -89,6 +89,7 @@ import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.connectivity.NetworkMonitor
 import com.xiuci.xcagi.mobile.core.media.SoundHelper
 import com.xiuci.xcagi.mobile.core.model.ListItem
+import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.core.work.LanProbeWorker
 import com.xiuci.xcagi.mobile.feature.legal.LegalConsentScreen
 import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
@@ -450,6 +451,12 @@ fun XcagiNavHost(
                                     restoreState = true
                                 }
                             },
+                            onStartGroupChat = { nav.navigate(Routes.AI_GROUP_CREATE) },
+                            onOpenGroups = { nav.navigate(Routes.AI_GROUPS) },
+                            onOpenGroup = { group ->
+                                vm.openAiGroup(group)
+                                nav.navigate(Routes.AI_GROUP_CHAT)
+                            },
                     )
                 }
                 // AI 对话 — 小C助理，走 /api/ai/chat/stream（与桌面端智能对话一致）
@@ -488,10 +495,18 @@ fun XcagiNavHost(
                         popExitTransition = { slideOutHorizontally(tween(300)) { it } },
                 ) { backStackEntry ->
                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
+                    val pinnedPartnerKind = when (conversationId) {
+                        PinnedIds.CODEX -> FixedPartnerKinds.CODEX
+                        PinnedIds.CLAUDE -> FixedPartnerKinds.CLAUDE
+                        else -> null
+                    }
                     ChatScreen(
                             vm,
                             conversationId = conversationId,
                             onBack = { nav.popBackStack() },
+                            onOpenProfile = pinnedPartnerKind?.let { kind ->
+                                { nav.navigate(Routes.fixedPartnerProfile(kind)) }
+                            },
                             onOpenMod = { id ->
                                 vm.requestModOpen(
                                         id,
@@ -560,6 +575,17 @@ fun XcagiNavHost(
                             onBack = { nav.popBackStack() },
                     )
                 }
+                composable(Routes.AI_GROUP_CREATE) {
+                    AiGroupCreateScreen(
+                            vm = vm,
+                            onBack = { nav.popBackStack() },
+                            onCreated = {
+                                nav.navigate(Routes.AI_GROUP_CHAT) {
+                                    popUpTo(Routes.AI_GROUP_CREATE) { inclusive = true }
+                                }
+                            },
+                    )
+                }
                 composable(
                         route = Routes.AI_EMPLOYEE_PROFILE,
                         arguments =
@@ -593,10 +619,13 @@ fun XcagiNavHost(
                             vm = vm,
                             partnerKind = partnerKind,
                             onBack = { nav.popBackStack() },
+                            onOpenCircle = { nav.navigate(Routes.AI_CIRCLE) },
                             onOpenChat = {
                                 val target =
                                         when (partnerKind) {
                                             FixedPartnerKinds.CUSTOMER_SERVICE -> Routes.CS_CHAT
+                                            FixedPartnerKinds.CODEX -> Routes.conversationChat(PinnedIds.CODEX)
+                                            FixedPartnerKinds.CLAUDE -> Routes.conversationChat(PinnedIds.CLAUDE)
                                             else -> Routes.AI_CHAT
                                         }
                                 nav.navigate(target) { launchSingleTop = true }
