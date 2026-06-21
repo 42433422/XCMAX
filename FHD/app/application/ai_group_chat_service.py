@@ -122,6 +122,7 @@ def _default_duty_employee_loader() -> list[dict[str, Any]]:
                 }
             )
         if employees:
+            _append_super_employees(employees)
             return employees
 
     # 回退：duty_roster 编制 ID × list_all_mods() 员工定义
