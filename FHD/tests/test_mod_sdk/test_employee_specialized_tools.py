@@ -237,7 +237,9 @@ async def test_api_call_exception_branch(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_pytest_default_args_and_env(monkeypatch):
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "5 passed", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "5 passed", "stderr": "", "ok": True}
+    )
     r = await est.tool_run_pytest({}, {})
     call = fake.calls[0]
     # 默认 args 注入 pytest 命令
@@ -254,9 +256,7 @@ async def test_run_pytest_default_args_and_env(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_pytest_string_args_split_and_custom_env(monkeypatch):
     fake = _install_run_cmd(monkeypatch)
-    await est.tool_run_pytest(
-        {"args": "tests/foo -x", "env": {"EXTRA": "1"}, "timeout": 30}, {}
-    )
+    await est.tool_run_pytest({"args": "tests/foo -x", "env": {"EXTRA": "1"}, "timeout": 30}, {})
     call = fake.calls[0]
     assert call["args"][-2:] == ["tests/foo", "-x"]
     assert call["env"]["EXTRA"] == "1"
@@ -266,7 +266,9 @@ async def test_run_pytest_string_args_split_and_custom_env(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_pytest_failure_branch(monkeypatch):
-    _install_run_cmd(monkeypatch, {"returncode": 1, "stdout": "1 failed", "stderr": "err", "ok": False})
+    _install_run_cmd(
+        monkeypatch, {"returncode": 1, "stdout": "1 failed", "stderr": "err", "ok": False}
+    )
     r = await est.tool_run_pytest({}, {})
     assert r["passed"] is False
     assert r["returncode"] == 1
@@ -315,7 +317,9 @@ async def test_run_mypy_default_and_timeout(monkeypatch):
     ],
 )
 async def test_script_running_quality_tools(monkeypatch, tool, script_substr):
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "out", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "out", "stderr": "", "ok": True}
+    )
     r = await tool({}, {})
     # 第一个 arg 是 python，第二个是脚本路径
     script_arg = fake.calls[0]["args"][1]
@@ -331,7 +335,9 @@ async def test_script_running_quality_tools(monkeypatch, tool, script_substr):
 
 @pytest.mark.asyncio
 async def test_git_status_parses_changes(monkeypatch):
-    _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": " M a.py\n?? b.py\n\n", "stderr": "", "ok": True})
+    _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": " M a.py\n?? b.py\n\n", "stderr": "", "ok": True}
+    )
     r = await est.tool_git_status({}, {})
     assert r["files"] == [" M a.py", "?? b.py"]
     assert r["clean"] is False
@@ -347,7 +353,9 @@ async def test_git_status_clean(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_git_log_n_param(monkeypatch):
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "a c1\nb c2\n", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "a c1\nb c2\n", "stderr": "", "ok": True}
+    )
     r = await est.tool_git_log({"n": 5}, {})
     assert fake.calls[0]["args"] == ["git", "log", "--oneline", "-5"]
     assert r["commits"] == ["a c1", "b c2"]
@@ -355,7 +363,9 @@ async def test_git_log_n_param(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_git_diff_with_ref_and_stat(monkeypatch):
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "diffbody", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "diffbody", "stderr": "", "ok": True}
+    )
     r = await est.tool_git_diff({"ref": "HEAD~1", "stat": True}, {})
     assert fake.calls[0]["args"] == ["git", "diff", "HEAD~1", "--stat"]
     assert r["diff"] == "diffbody"
@@ -392,7 +402,9 @@ async def test_pack_release_requires_confirm(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_pack_release_confirmed_runs_bash(monkeypatch):
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "packed", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "packed", "stderr": "", "ok": True}
+    )
     r = await est.tool_pack_release({"confirm": True}, {})
     assert fake.calls[0]["args"][0] == "bash"
     assert "fhd-pack-release.sh" in fake.calls[0]["args"][1]
@@ -445,7 +457,9 @@ async def test_nginx_test_not_installed(monkeypatch):
 @pytest.mark.asyncio
 async def test_nginx_test_installed_runs(monkeypatch):
     monkeypatch.setattr(est.shutil, "which", lambda _: "/usr/bin/nginx")
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "ok", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "ok", "stderr": "", "ok": True}
+    )
     r = await est.tool_nginx_test({}, {})
     assert fake.calls[0]["args"] == ["/usr/bin/nginx", "-t"]
     assert r["syntax_valid"] is True
@@ -482,7 +496,9 @@ async def test_api_health_param_overrides_ctx(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_disk_usage(monkeypatch):
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "Filesystem ...", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "Filesystem ...", "stderr": "", "ok": True}
+    )
     r = await est.tool_disk_usage({}, {})
     assert fake.calls[0]["args"][:2] == ["df", "-h"]
     assert "Filesystem" in r["output"]
@@ -578,9 +594,7 @@ async def test_validate_employee_pack_valid(monkeypatch, tmp_path):
             {
                 "id": pid,
                 "artifact": "employee_pack",
-                "employee_config_v2": {
-                    "cognition": {"agent": {"system_prompt": "you are good"}}
-                },
+                "employee_config_v2": {"cognition": {"agent": {"system_prompt": "you are good"}}},
             }
         )
     )
@@ -864,7 +878,9 @@ async def test_sandbox_python_forbidden_without_confirm(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sandbox_python_forbidden_with_confirm_runs(monkeypatch):
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "1\n", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "1\n", "stderr": "", "ok": True}
+    )
     r = await est.tool_sandbox_python({"code": "import os\nprint(1)", "confirm": True}, {})
     assert r["passed"] is True
     # 沙箱环境变量注入
@@ -874,7 +890,9 @@ async def test_sandbox_python_forbidden_with_confirm_runs(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sandbox_python_safe_code_runs(monkeypatch):
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "42\n", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "42\n", "stderr": "", "ok": True}
+    )
     r = await est.tool_sandbox_python({"code": "print(40 + 2)"}, {})
     assert r["passed"] is True
     assert fake.calls[0]["args"][:2] == [est._PYTHON, "-c"]
@@ -888,7 +906,12 @@ async def test_sandbox_python_safe_code_runs(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "tool,script", [(est.tool_frontend_lint, "lint"), (est.tool_frontend_typecheck, "type-check"), (est.tool_frontend_test, "test")]
+    "tool,script",
+    [
+        (est.tool_frontend_lint, "lint"),
+        (est.tool_frontend_typecheck, "type-check"),
+        (est.tool_frontend_test, "test"),
+    ],
 )
 async def test_frontend_no_package_json(monkeypatch, tmp_path, tool, script):
     monkeypatch.setattr(est, "_FHD_ROOT", tmp_path)  # 无 frontend/package.json
@@ -914,7 +937,9 @@ async def test_frontend_test_runs_npm(monkeypatch, tmp_path):
     (fe / "package.json").write_text("{}")
     monkeypatch.setattr(est, "_FHD_ROOT", tmp_path)
     monkeypatch.setattr(est.shutil, "which", lambda _: "/usr/bin/npm")
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "ok", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "ok", "stderr": "", "ok": True}
+    )
     r = await est.tool_frontend_test({}, {})
     assert fake.calls[0]["args"] == ["/usr/bin/npm", "run", "test"]
     assert str(fake.calls[0]["cwd"]) == str(fe)
@@ -947,7 +972,9 @@ async def test_android_gradle_runs(monkeypatch, tmp_path):
     android.mkdir()
     (android / "gradlew").write_text("#!/bin/sh")
     monkeypatch.setattr(est, "_FHD_ROOT", tmp_path)
-    fake = _install_run_cmd(monkeypatch, {"returncode": 0, "stdout": "tasks", "stderr": "", "ok": True})
+    fake = _install_run_cmd(
+        monkeypatch, {"returncode": 0, "stdout": "tasks", "stderr": "", "ok": True}
+    )
     r = await est.tool_android_gradle_build({"confirm": True}, {})
     assert fake.calls[0]["args"][0] == "bash"
     assert "gradlew" in fake.calls[0]["args"][1]
@@ -1398,7 +1425,9 @@ async def test_query_provider_usage_non_json_body(monkeypatch):
     for k in est._LLM_ENV_KEYS:
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-d")
-    _install_httpx(monkeypatch, lambda m, u, kw: _FakeResp(200, raise_json=True, text="plain text body"))
+    _install_httpx(
+        monkeypatch, lambda m, u, kw: _FakeResp(200, raise_json=True, text="plain text body")
+    )
     r = await est.tool_query_provider_usage({"provider": "deepseek"}, {})
     finding = r["findings"][0]
     # 非 dict/list → 转字符串
@@ -1612,7 +1641,12 @@ async def test_handle_specialized_tool_execution_exception(monkeypatch):
 async def test_handle_specialized_write_gate_blocks(monkeypatch):
     # fhd-core-maintainer 允许 write_file（代码修改工具）→ 走 gate
     async def fake_gate(employee_id, tool_name, params, ctx):
-        return {"ok": False, "reason": "scope violation", "pending_approval": True, "approval_request_ids": ["a1"]}
+        return {
+            "ok": False,
+            "reason": "scope violation",
+            "pending_approval": True,
+            "approval_request_ids": ["a1"],
+        }
 
     monkeypatch.setattr(est, "_check_write_gate", fake_gate)
     r = await est.handle_specialized(
@@ -1779,6 +1813,7 @@ async def test_query_cursor_usage_cli_error_branch(monkeypatch, tmp_path):
 
     def fake_run(cmd, **k):
         if cmd and cmd[0] == "security":
+
             class _P:
                 returncode = 1
                 stdout = ""
@@ -1814,7 +1849,11 @@ async def test_query_codex_usage_parses_sessions_and_config(monkeypatch, tmp_pat
                 json.dumps(
                     {
                         "type": "session_meta",
-                        "payload": {"model": "gpt-5", "cwd": "/x", "timestamp": "2026-06-20T00:00:00Z"},
+                        "payload": {
+                            "model": "gpt-5",
+                            "cwd": "/x",
+                            "timestamp": "2026-06-20T00:00:00Z",
+                        },
                     }
                 ),
                 json.dumps(
@@ -1865,7 +1904,10 @@ async def test_query_codex_usage_date_filter_excludes_old(monkeypatch, tmp_path)
         "\n".join(
             [
                 json.dumps(
-                    {"type": "session_meta", "payload": {"model": "m", "timestamp": "2000-01-01T00:00:00Z"}}
+                    {
+                        "type": "session_meta",
+                        "payload": {"model": "m", "timestamp": "2000-01-01T00:00:00Z"},
+                    }
                 ),
                 json.dumps(
                     {
@@ -2048,7 +2090,13 @@ async def test_query_trae_usage_state_vscdb(monkeypatch, tmp_path):
 
     monkeypatch.setenv("HOME", str(tmp_path))
     state_db = (
-        tmp_path / "Library" / "Application Support" / "Trae CN" / "User" / "globalStorage" / "state.vscdb"
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "Trae CN"
+        / "User"
+        / "globalStorage"
+        / "state.vscdb"
     )
     state_db.parent.mkdir(parents=True)
     conn = sqlite3.connect(str(state_db))
@@ -2114,7 +2162,13 @@ async def test_query_trae_usage_state_db_exception(monkeypatch, tmp_path):
     """state.vscdb 损坏（非 sqlite）→ local_state error 分支。"""
     monkeypatch.setenv("HOME", str(tmp_path))
     state_db = (
-        tmp_path / "Library" / "Application Support" / "Trae CN" / "User" / "globalStorage" / "state.vscdb"
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "Trae CN"
+        / "User"
+        / "globalStorage"
+        / "state.vscdb"
     )
     state_db.parent.mkdir(parents=True)
     state_db.write_text("not a sqlite file")
@@ -2176,9 +2230,33 @@ async def test_read_file_truncation_flag(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_query_local_token_usage_group_by_provider(monkeypatch):
     entries = [
-        {"entry_type": "model_call", "provider": "b.ai", "model": "m1", "total_tokens": 10, "prompt_tokens": 6, "completion_tokens": 4, "cost_units": 1},
-        {"entry_type": "model_call", "provider": "b.ai", "model": "m2", "total_tokens": 20, "prompt_tokens": 12, "completion_tokens": 8, "cost_units": 2},
-        {"entry_type": "model_call", "provider": "openai", "model": "m3", "total_tokens": 5, "prompt_tokens": 3, "completion_tokens": 2, "cost_units": 0},
+        {
+            "entry_type": "model_call",
+            "provider": "b.ai",
+            "model": "m1",
+            "total_tokens": 10,
+            "prompt_tokens": 6,
+            "completion_tokens": 4,
+            "cost_units": 1,
+        },
+        {
+            "entry_type": "model_call",
+            "provider": "b.ai",
+            "model": "m2",
+            "total_tokens": 20,
+            "prompt_tokens": 12,
+            "completion_tokens": 8,
+            "cost_units": 2,
+        },
+        {
+            "entry_type": "model_call",
+            "provider": "openai",
+            "model": "m3",
+            "total_tokens": 5,
+            "prompt_tokens": 3,
+            "completion_tokens": 2,
+            "cost_units": 0,
+        },
     ]
     import app.infrastructure.billing.model_usage as mu
 

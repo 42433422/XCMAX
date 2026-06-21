@@ -254,9 +254,7 @@ def test_open_no_auto_transition_when_disabled(clock):
 
 
 def test_half_open_to_closed_on_success_threshold(clock):
-    cfg = CircuitBreakerConfig(
-        failure_threshold=1, timeout_seconds=30.0, success_threshold=2
-    )
+    cfg = CircuitBreakerConfig(failure_threshold=1, timeout_seconds=30.0, success_threshold=2)
     cb = CircuitBreaker("svc", cfg)
     cb.record_failure()  # OPEN
     clock.advance(31.0)
@@ -302,9 +300,7 @@ def test_record_success_closed_no_prior_failures(clock):
 
 
 def test_half_open_limits_probe_calls(clock):
-    cfg = CircuitBreakerConfig(
-        failure_threshold=1, timeout_seconds=30.0, half_open_max_calls=2
-    )
+    cfg = CircuitBreakerConfig(failure_threshold=1, timeout_seconds=30.0, half_open_max_calls=2)
     cb = CircuitBreaker("svc", cfg)
     cb.record_failure()
     clock.advance(31.0)
@@ -423,9 +419,7 @@ def test_execute_records_slow_call(clock):
 
 
 def test_execute_slow_call_on_failure(clock):
-    cfg = CircuitBreakerConfig(
-        failure_threshold=10, slow_call_duration_threshold=0.5
-    )
+    cfg = CircuitBreakerConfig(failure_threshold=10, slow_call_duration_threshold=0.5)
     cb = CircuitBreaker("svc", cfg)
 
     def slow_fail():

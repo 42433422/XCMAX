@@ -470,9 +470,7 @@ def test_replay_gradual_error_threshold_pauses(monkeypatch):
         dlq.enqueue(make_event("new"), DeadLetterReason.UNRECOVERABLE, "again", 0)
 
     dlq.on_replay(reenqueue)
-    report = dlq.replay_gradual(
-        stages=[0.5, 1.0], stage_interval=0.0, error_threshold=3
-    )
+    report = dlq.replay_gradual(stages=[0.5, 1.0], stage_interval=0.0, error_threshold=3)
     assert report["paused"] is True
     assert "error_threshold_exceeded" in report["pause_reason"]
     # 触发后熔断暂停标志被置位
