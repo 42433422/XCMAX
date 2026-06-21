@@ -1709,9 +1709,12 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
 async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
     """Android Custom Tabs OIDC 回调换 mobile JWT。"""
     from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import finalize_enterprise_login
+    from app.application.enterprise_login_flow import finalize_auth_after_oidc
     from app.application.session_account_meta import normalize_account_kind
-    from app.infrastructure.auth.oidc_provider import exchange_code_for_userinfo, verify_oidc_state
+    from app.infrastructure.auth.oidc_provider import (
+        exchange_oidc_authorization,
+        verify_oidc_state,
+    )
     from app.mod_sdk.product_skus import resolve_product_sku
     from app.security.mobile_jwt import issue_mobile_tokens
 
@@ -1722,7 +1725,8 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
             status_code=400,
         )
     try:
-        profile = await exchange_code_for_userinfo(body.code)
+        oidc_session = await exchange_oidc_authorization(body.code)
+        profile = oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
     except OPERATIONAL_ERRORS as exc:
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=502),
@@ -1746,14 +1750,12 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
     )
     username = str((auth_result.get("user") or {}).get("username") or "")
     session_id = auth_result.get("session_id")
-    payload = await finalize_enterprise_login(
-        result=auth_result,
-        session_id=str(session_id) if session_id else None,
-        market_result={"success": False},
+    payload = await finalize_auth_after_oidc(
+        auth_result=auth_result,
+        oidc_profile=profile,
+        oidc_access_token=str(oidc_session.get("access_token") or ""),
         account_kind=account_kind,
-        username=username,
         sku=sku,
-        skip_market_sync=True,
     )
     user_raw = payload.get("user") or {}
     tokens = issue_mobile_tokens(
@@ -1762,14 +1764,22 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         account_kind=str(payload.get("account_kind") or account_kind),
         username=username,
     )
-    return format_mobile_response(
-        data={
-            "user": user_raw,
-            "session_id": session_id,
-            "account_kind": payload.get("account_kind") or account_kind,
-            **tokens,
-        },
-    )
+    data: dict[str, Any] = {
+        "user": user_raw,
+        "session_id": session_id,
+        "account_kind": payload.get("account_kind") or account_kind,
+        **tokens,
+    }
+    for key in (
+        "market_access_token",
+        "market_refresh_token",
+        "company_brand",
+        "market_is_admin",
+        "market_is_enterprise",
+    ):
+        if key in payload and payload[key] is not None:
+            data[key] = payload[key]
+    return format_mobile_response(data=data)
 
 
 # ── 专属客服接口（企业版手机端） ──

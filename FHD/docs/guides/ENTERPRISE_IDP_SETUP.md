@@ -40,16 +40,19 @@ SAML（可选）：`XCAGI_SAML_*` 见 [`DEPLOYMENT.md`](../DEPLOYMENT.md)。
 
 失败时回调 **302** 至 `/login?oidc_error=<code>&oidc_message=<msg>`。
 
+SSO 成功后 FHD 会通过 MODstore 内部接口 `POST /api/auth/internal/sso-issue-token`（Header `X-Internal-Api-Key: $XCAGI_MARKET_INTERNAL_API_KEY`）自动签发市场 JWT 并写入会话；FHD 与 MODstore 须配置 **相同** 密钥。
+
 ## 4. 验收（M4-W3）
 
 - [ ] Keycloak 测试 Realm 跑通上述流程
 - [ ] 新用户 JIT 创建后可访问 ERP（权限按默认 role）
 - [ ] `GET /api/auth/oidc/status` 返回 `enabled: true`
 - [ ] 未启用时登录页不显示 SSO 按钮
+- [ ] SSO 登录后 `GET /api/market/session-handoff` 可返回 `market_access_token`（需 `XCAGI_MARKET_INTERNAL_API_KEY`）
 
 ## 5. 相关代码
 
-- SSO-only 会话可不绑市场 JWT；市场能力后续 `POST /api/market/account-sync`。
+- SSO-only 会话通过内部桥接自动绑定市场 JWT；见 `login_market_for_oidc_profile`。
 - OIDC Provider：[`app/infrastructure/auth/oidc_provider.py`](../../app/infrastructure/auth/oidc_provider.py)
 - 路由：[`app/fastapi_routes/domains/auth/routes.py`](../../app/fastapi_routes/domains/auth/routes.py)
 - 前端：[`frontend/src/views/LoginView.vue`](../../frontend/src/views/LoginView.vue)

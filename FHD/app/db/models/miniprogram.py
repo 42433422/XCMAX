@@ -1,4 +1,4 @@
-"""微信小程序 CRM 相关 ORM 模型（与 alembic xcagi_v5_miniprogram 对齐）。"""
+"""微信小程序 CRM 相关 ORM 模型（历史表结构；小程序产品已下线，勿新增业务）。"""
 
 from __future__ import annotations
 

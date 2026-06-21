@@ -1,1 +1,0 @@
-.history-item{display:flex;align-items:center;}history-item image{width:120rpx;height:120rpx;border-radius:8rpx;margin-right:20rpx;}.info{flex:1;display:flex;flex-direction:column;gap:8rpx;}info text:first-child{font-size:28rpx;}.time{font-size:22rpx;color:#999;}

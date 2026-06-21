@@ -164,6 +164,69 @@ def get_user_by_id(user_id: int) -> Optional[User]:
         return user
 
 
+def find_user_for_sso_identity(
+    *,
+    username: str = "",
+    email: str = "",
+    oidc_sub: str = "",
+) -> Optional[User]:
+    """按 SSO 声明查找市场用户（username 优先，其次 email）。"""
+    _ = oidc_sub  # 预留 IdP sub 映射字段
+    sf = get_session_factory()
+    with sf() as session:
+        uname = (username or "").strip()
+        if uname:
+            user = session.query(User).filter(User.username == uname).first()
+            if user is not None and getattr(user, "deleted_at", None) is None:
+                session.expunge(user)
+                return user
+        email_clean = (email or "").strip().lower()
+        if email_clean:
+            user = session.query(User).filter(func.lower(User.email) == email_clean).first()
+            if user is not None and getattr(user, "deleted_at", None) is None:
+                session.expunge(user)
+                return user
+    return None
+
+
+def issue_market_tokens_for_sso_identity(
+    *,
+    username: str = "",
+    email: str = "",
+    oidc_sub: str = "",
+    display_name: str = "",
+    jit_provision: bool = True,
+) -> dict[str, Any]:
+    """FHD OIDC 回调经内部 API 换取 MODstore JWT；无用户时可 JIT 注册。"""
+    user = find_user_for_sso_identity(username=username, email=email, oidc_sub=oidc_sub)
+    if user is None and jit_provision:
+        uname = (username or "").strip()
+        if not uname and email:
+            uname = email.split("@", 1)[0].strip()
+        if not uname:
+            raise ValueError("无法解析 SSO 用户名")
+        pwd = secrets.token_urlsafe(32)
+        user = register_user(uname, pwd, email or "")
+        _ = display_name
+    if user is None:
+        raise ValueError("未找到对应的市场账号")
+    is_admin = bool(getattr(user, "is_admin", False))
+    access = create_access_token(user.id, user.username, is_admin=is_admin)
+    refresh = create_refresh_token(user.id, user.username)
+    return {
+        "access_token": access,
+        "token": access,
+        "refresh_token": refresh,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": getattr(user, "email", None),
+            "is_admin": is_admin,
+            "is_enterprise": bool(getattr(user, "is_enterprise", False)),
+        },
+    }
+
+
 # ----- Personal Access Token (PAT) -----------------------------------------
 
 PAT_PREFIX = "pat_"

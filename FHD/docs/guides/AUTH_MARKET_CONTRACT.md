@@ -59,7 +59,7 @@ Body 任选：`token`、`authorization`，或 Header `Authorization: Bearer …`
 
 - `GET /api/auth/oidc/status` → `{ enabled }`
 - `GET /api/auth/oidc/start` → 302 IdP
-- `GET /api/auth/oidc/callback` → JIT 用户 + Cookie；SSO 会话可无市场密码（市场 token 后续 `account-sync`）
+- `GET /api/auth/oidc/callback` → JIT 用户 + Cookie + **自动桥接 MODstore JWT**（`POST /api/auth/internal/sso-issue-token`，需 FHD/MODstore 共用 `XCAGI_MARKET_INTERNAL_API_KEY`）
 - Android `POST /api/mobile/v1/auth/oidc/exchange` — body `{ code, state }`
 
 ### 租户字段
@@ -95,8 +95,8 @@ Body 任选：`token`、`authorization`，或 Header `Authorization: Bearer …`
 
 ## `/api/auth/refresh` 归属
 
-- **小程序 JWT**：`POST /api/auth/refresh`（`mp_auth.refresh_access_token`），body `refresh_token`。
-- **FHD Web Cookie 会话**：不走此接口；重新 `session-handoff` 或重新登录。
+- **FHD Web Cookie 会话**：不走 refresh 接口；重新 `session-handoff` 或重新登录。
+- 历史微信小程序 JWT 路由已下线，勿再接入。
 
 ## 部署
 
