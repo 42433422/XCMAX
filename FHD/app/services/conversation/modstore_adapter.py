@@ -230,6 +230,7 @@ class ModstorePlatformAdapter:
         if not auth_token and (session_id or request):
             try:
                 from app.fastapi_routes.market_account import (
+                    _user_id_from_session,
                     latest_session_market_token,
                     session_id_from_request,
                     session_market_token,
@@ -256,7 +257,9 @@ class ModstorePlatformAdapter:
                 else:
                     logger.warning("无法获取有效的Session ID")
                 if not auth_token:
-                    latest_token = latest_session_market_token()
+                    # 多用户环境按 user_id 过滤，防止 fallback 串号
+                    fallback_user_id = _user_id_from_session(effective_session_id)
+                    latest_token = latest_session_market_token(user_id=fallback_user_id)
                     if latest_token:
                         auth_token = latest_token
                         logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")

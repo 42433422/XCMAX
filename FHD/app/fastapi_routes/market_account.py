@@ -177,25 +177,26 @@ def latest_session_market_refresh_token() -> str:
     return ""
 
 
-def latest_session_market_token() -> str:
+def latest_session_market_token(user_id: int | None = None) -> str:
     """Desktop fallback: use the newest persisted market token when browser cookies are unavailable.
 
     LAN/IP access can miss the ``session_id`` cookie even though the local single-user desktop
     session has a freshly persisted market token from login. Prefer that over stale localStorage
     tokens sent by the SPA.
+
+    多用户环境必须传 ``user_id`` 以避免串号：若不传则返回全局最新 token（仅适用于
+    单用户桌面模式）。云后端/多用户场景下，调用方应传入当前登录用户的 ``user_id``，
+    本函数将只返回该用户绑定的市场 token，防止 A 用户拿到 B 用户的市场凭证。
     """
     try:
         from app.db.models.user import Session as UserSession
         from app.db.session import get_db
 
         with get_db() as db:
-            rows = (
-                db.query(UserSession)
-                .filter(UserSession.market_access_token.isnot(None))
-                .order_by(UserSession.created_at.desc())
-                .limit(10)
-                .all()
-            )
+            query = db.query(UserSession).filter(UserSession.market_access_token.isnot(None))
+            if user_id is not None:
+                query = query.filter(UserSession.user_id == user_id)
+            rows = query.order_by(UserSession.created_at.desc()).limit(10).all()
             for row in rows:
                 tok = str(getattr(row, "market_access_token", "") or "").strip()
                 if tok:
@@ -203,6 +204,26 @@ def latest_session_market_token() -> str:
     except RECOVERABLE_ERRORS:
         logger.exception("latest_session_market_token: DB read failed")
     return ""
+
+
+def _user_id_from_session(session_id: str) -> int | None:
+    """从 session_id 反查 user_id，用于多用户环境下的 market token fallback 隔离。
+
+    返回 None 表示查不到（如 session 不存在或 DB 不可用），调用方应保持原 fallback 行为。
+    """
+    sid = (session_id or "").strip()
+    if not sid:
+        return None
+    try:
+        from app.db.models.user import Session as UserSession
+        from app.db.session import get_db
+
+        with get_db() as db:
+            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
+            return getattr(row, "user_id", None) if row is not None else None
+    except RECOVERABLE_ERRORS:
+        logger.exception("_user_id_from_session: DB read failed for sid=%s", sid[:8])
+        return None
 
 
 def _normalize_bearer_token(raw: str) -> str:
@@ -260,7 +281,9 @@ async def market_session_handoff(request: Request):
         sid = session_id_from_request(request)
         tok = await resolve_valid_market_access_token(sid)
         if not tok:
-            tok = _normalize_bearer_token(latest_session_market_token())
+            tok = _normalize_bearer_token(
+                latest_session_market_token(user_id=getattr(user, "id", None))
+            )
             if tok:
                 tok = await resolve_valid_market_access_token(sid)
         if not tok:
@@ -326,7 +349,15 @@ def _authorization_from_request(request: Request, body: dict[str, Any]) -> str:
     session_auth = _auth_header(session_market_token(session_id_from_request(request)))
     if session_auth:
         return session_auth
-    latest_auth = _auth_header(latest_session_market_token())
+    # 多用户环境按当前登录 user_id 过滤，防止串号
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        current_user = resolve_session_user(request)
+        user_id = getattr(current_user, "id", None) if current_user else None
+    except RECOVERABLE_ERRORS:
+        user_id = None
+    latest_auth = _auth_header(latest_session_market_token(user_id=user_id))
     if latest_auth:
         return latest_auth
     auth = _auth_header(str(body.get("authorization") or body.get("token") or ""))
@@ -343,8 +374,16 @@ def _authorization_from_request(request: Request, body: dict[str, Any]) -> str:
 async def _authorization_from_request_resolved(request: Request, body: dict[str, Any]) -> str:
     """Like ``_authorization_from_request`` but refreshes expired session-bound market JWTs."""
     sid = session_id_from_request(request)
+    # 多用户环境按当前登录 user_id 过滤，防止串号
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        current_user = resolve_session_user(request)
+        user_id = getattr(current_user, "id", None) if current_user else None
+    except RECOVERABLE_ERRORS:
+        user_id = None
     session_tok = _normalize_bearer_token(
-        session_market_token(sid) or latest_session_market_token()
+        session_market_token(sid) or latest_session_market_token(user_id=user_id)
     )
     if session_tok:
         resolved = await resolve_valid_market_access_token(sid)
@@ -688,7 +727,11 @@ async def resolve_valid_market_access_token(session_id: str) -> str:
     from app.application.surface_audit_demo_account import is_local_demo_market_token
 
     sid = (session_id or "").strip()
-    tok = _normalize_bearer_token(session_market_token(sid) or latest_session_market_token())
+    # 多用户环境：从 session_id 反查 user_id，防止 fallback 串号
+    user_id = _user_id_from_session(sid)
+    tok = _normalize_bearer_token(
+        session_market_token(sid) or latest_session_market_token(user_id=user_id)
+    )
     if not tok:
         return ""
     if is_local_demo_market_token(tok):
