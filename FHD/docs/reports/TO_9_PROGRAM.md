@@ -1,6 +1,6 @@
 # XCMAX「提升到 9/10」作战计划（TO-9 PROGRAM）
 
-> **SSOT**：本文件是"从约 6/10 提升到 9/10"的唯一执行台账。证据来自一次多代理穷尽式审计 +
+> **唯一执行台账**：本文件是"从约 6/10 提升到 9/10"的唯一台账。证据来自一次多代理穷尽式审计 +
 > 对安全漏洞的对抗式验证（2026-06-21）。所有"已实测"的数字均来自 `FHD/.venv`（Py3.11，CI 等价依赖）
 > 与前端 node18 实跑，**不引用任何过期/退役口径**（见 [CLAIMED_VS_ACTUAL.md](../CLAIMED_VS_ACTUAL.md)）。
 >
@@ -95,8 +95,8 @@
 | ID | 任务 | 状态 | 工时 | 验收 |
 |---|---|---|---|---|
 | — | 取消跟踪 `.pytest_products.db` + 根 `.gitignore` 补 `*.pytest_products.db` | ✅ | — | `git ls-files` 命中数 0 |
-| C1 | mypy 在已清零严格子集（schemas/middleware/domain.shipment/domain.persona/http，实测 EXIT=0）变阻断门禁，全量保持 advisory | 🔭 | 1.5h | `mypy <5目录> --follow-imports=silent` EXIT=0；改 SSOT 源后跑 publish |
-| C2 | SSOT workflow **内容**同步做成真门禁（publish 后 `git diff --exit-code`），先修当前已存在的 dist/deploy 漂移 | 🔭 | 1.5h | publish 后工作树为空 |
+| C1 | mypy 在已清零严格子集（schemas/middleware/domain.shipment/domain.persona/http，实测 EXIT=0）变阻断门禁，全量保持 advisory | 🔭 | 1.5h | `mypy <5目录> --follow-imports=silent` EXIT=0；改源后跑 publish |
+| C2 | workflow **内容**同步做成真门禁（publish 后 `git diff --exit-code`），先修当前已存在的 dist/deploy 漂移 | 🔭 | 1.5h | publish 后工作树为空 |
 | C3 | 补前端 codecov 上报；有 token 时上报失败可感知（无 token 降级不阻断） | 🔭 | 2h | `npm run test:coverage` 产出 lcov |
 | C4 | scoped mutation smoke 接入主流水线（PR 即跑，continue-on-error 起步） | 🔭 ⚠️ | 2.5h | 依赖 T1；作用域锁 app/di |
 
