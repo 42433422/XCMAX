@@ -1427,7 +1427,7 @@ def ensure_user_profile_columns(
         logger.warning("users.tier/industry_id 兼容补列失败: %s", exc)
 
 
-def init_im_tables(engine: Engine) -> None:
+def init_im_tables(engine: Engine | None = None, *, database_url: str | None = None) -> None:
     """在主库上创建企业内部 IM V0 表（im_conversations / members / messages）。"""
     if engine is None:
         if database_url:
