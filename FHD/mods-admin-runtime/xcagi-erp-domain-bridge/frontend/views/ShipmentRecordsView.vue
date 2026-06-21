@@ -120,15 +120,14 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ordersApi from '@/api/orders';
 import templatePreviewApi from '@/api/templatePreview';
 import { appAlert, appConfirm } from '@/utils/appDialog';
-import { useIndustryStore } from '@/stores/industry';
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
-import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults';
+import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema';
 
-const industryStore = useIndustryStore();
+// 行业感知子系统 schema：'shipment-records' 子系统的字段表头/单位标签由当前行业 profile 驱动，
+// 取代原先散落的 currentIndustryId === '考勤' ? ... : ... 硬编码三元。
+const srSchema = useIndustryFieldSchema('shipment-records');
 const recordsNavTitle = useCoreNavLabel('shipment-records');
-const unitFieldLabel = computed(() =>
-  String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID) === '考勤' ? '部门' : '购买单位',
-);
+const unitFieldLabel = computed(() => srSchema.labelOf('purchase_unit', '购买单位'));
 const pageHeading = computed(() => `${recordsNavTitle.value}管理`);
 
 const loading = ref(false);
@@ -167,22 +166,32 @@ const exportButtonTitle = computed(() => {
   return `按已选模板导出当前${unitFieldLabel.value}（支持状态筛选）${recordsNavTitle.value} Excel`;
 });
 
-// 固定列顺序 + 友好表头，避免动态 Object.keys 导致列错位
-const colLabels = computed(() => ({
+// 系统字段表头（行业无关）
+const SYSTEM_COL_LABELS = {
   id: 'ID',
-  purchase_unit: unitFieldLabel.value,
-  product_name: String(industryStore.currentIndustryId || '') === '考勤' ? '事项说明' : '产品名称',
-  model_number: String(industryStore.currentIndustryId || '') === '考勤' ? '关联编号' : '型号',
-  quantity_kg: '数量 (KG)',
-  quantity_tins: String(industryStore.currentIndustryId || '') === '考勤' ? '数量 (天/次)' : '数量 (桶)',
-  tin_spec: '规格',
-  unit_price: '单价',
-  amount: '金额',
   status: '状态',
   created_at: '创建时间',
   updated_at: '更新时间',
   printed_at: '打印时间',
   printer_name: '打印机',
+};
+// 业务字段默认表头（涂料口径）——当行业未声明 subsystems schema 时回退，保证行为不变
+const FALLBACK_BIZ_COL_LABELS = {
+  purchase_unit: '购买单位',
+  product_name: '产品名称',
+  model_number: '型号',
+  quantity_kg: '数量 (KG)',
+  quantity_tins: '数量 (桶)',
+  tin_spec: '规格',
+  unit_price: '单价',
+  amount: '金额',
+};
+// 固定列顺序 + 友好表头，避免动态 Object.keys 导致列错位；
+// 业务字段表头由当前行业 schema 覆盖（涂料→桶/规格、考勤→部门/事项说明/天·次），数据驱动。
+const colLabels = computed(() => ({
+  ...SYSTEM_COL_LABELS,
+  ...FALLBACK_BIZ_COL_LABELS,
+  ...srSchema.labels.value,
 }));
 
 function unitOptionLabel(unit) {
