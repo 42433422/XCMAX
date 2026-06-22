@@ -1,3 +1,4 @@
+# CI SSOT: standalone workflow (no FHD source) — edit here directly, do not regenerate.
 name: FHD Alembic SSOT
 
 # Enforces that Alembic — not create_all + ensure_* — is (becoming) the single
@@ -6,9 +7,8 @@ name: FHD Alembic SSOT
 #   2. ssot-parity     — `alembic upgrade head` from an EMPTY db must succeed and
 #                        reproduce the ORM models (`alembic check` clean).
 #
-# NOTE: This file is a standalone workflow (NOT generated from
-# FHD/.github/workflows/ via publish_ci_workflows_to_root.py — that publisher is
-# currently missing from the repo). Edit it here directly.
+# NOTE: This is a standalone workflow. No corresponding FHD/.github/workflows/
+# source exists; it lives directly in .github/workflows/ and is not regenerated.
 
 on:
   pull_request:
