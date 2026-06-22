@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 from fastapi import FastAPI
 
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.legacy.routes.legacy_compat import register_legacy_compat_routes
 
 
@@ -30,7 +31,10 @@ def legacy_app() -> FastAPI:
 
 
 def _paths(app: FastAPI) -> set[str]:
-    return {getattr(r, "path", "") for r in app.routes if getattr(r, "path", "")}
+    # FastAPI 0.138+ 用 _IncludedRouter 懒包装 include_router 的子路由，实际路径不再
+    # 直接挂在 app.routes 上；iter_effective_routes 会展开这些包装（与本测试上游 CI
+    # 设置的 XCAGI_SKIP_LEGACY_COMPAT_ROUTES 无关——本测试直接调用 register 函数）。
+    return {r.path for r in iter_effective_routes(app.routes) if r.path}
 
 
 # (router_name, expected_path_prefix_or_substring)

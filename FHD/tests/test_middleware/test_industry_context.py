@@ -49,9 +49,7 @@ async def test_authenticated_user_injects_industry_id():
     req = _make_request()
     fake_user = SimpleNamespace(id=1, tier="personal", industry_id="涂料")
 
-    with patch(
-        "app.middleware.industry_context.get_current_user", return_value=fake_user
-    ):
+    with patch("app.middleware.industry_context.get_current_user", return_value=fake_user):
         resp = await mw.dispatch(req, _call_next)
 
     assert resp.status_code == 200
@@ -76,9 +74,7 @@ async def test_admin_user_injects_admin_industry():
     req = _make_request()
     fake_admin = SimpleNamespace(id=2, tier="admin", industry_id="通用")
 
-    with patch(
-        "app.middleware.industry_context.get_current_user", return_value=fake_admin
-    ):
+    with patch("app.middleware.industry_context.get_current_user", return_value=fake_admin):
         resp = await mw.dispatch(req, _call_next)
 
     assert resp.status_code == 200
@@ -105,9 +101,7 @@ async def test_user_with_empty_industry_id_falls_back_to_general():
     req = _make_request()
     fake_user = SimpleNamespace(id=3, tier="personal", industry_id="")
 
-    with patch(
-        "app.middleware.industry_context.get_current_user", return_value=fake_user
-    ):
+    with patch("app.middleware.industry_context.get_current_user", return_value=fake_user):
         resp = await mw.dispatch(req, _call_next)
 
     assert resp.status_code == 200

@@ -166,7 +166,10 @@ class TestDefaults:
 
     def test_default_mbti_is_ENFJ(self):
         """新用户默认 ENFJ（管家型）。"""
-        assert derive_mbti_type(DEFAULT_MBTI_EI, DEFAULT_MBTI_SN, DEFAULT_MBTI_TF, DEFAULT_MBTI_JP) == "ENFJ"
+        assert (
+            derive_mbti_type(DEFAULT_MBTI_EI, DEFAULT_MBTI_SN, DEFAULT_MBTI_TF, DEFAULT_MBTI_JP)
+            == "ENFJ"
+        )
 
     def test_default_axes_are_balanced(self):
         """默认四轴应在中等偏上范围。"""

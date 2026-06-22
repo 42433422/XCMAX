@@ -64,22 +64,26 @@ class TestSetIndustryAdminOnly:
     def test_admin_user_gets_200(self, client: TestClient):
         """admin 用户（tier=admin）应返回 200。"""
         fake_admin = _make_user(tier="admin")
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user",
-            return_value=fake_admin,
-        ), patch(
-            "resources.config.industry_config.set_current_industry",
-            return_value=True,
-        ), patch(
-            "resources.config.industry_config.get_industry_profile",
-            return_value=SimpleNamespace(
-                name="涂料",
-                units={},
-                quantity_fields={},
-                product_fields={},
-                order_types={},
-                intent_keywords={},
-                print_config={},
+        with (
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=fake_admin,
+            ),
+            patch(
+                "resources.config.industry_config.set_current_industry",
+                return_value=True,
+            ),
+            patch(
+                "resources.config.industry_config.get_industry_profile",
+                return_value=SimpleNamespace(
+                    name="涂料",
+                    units={},
+                    quantity_fields={},
+                    product_fields={},
+                    order_types={},
+                    intent_keywords={},
+                    print_config={},
+                ),
             ),
         ):
             resp = client.post("/api/system/industry", json={"industry_id": "涂料"})

@@ -74,7 +74,9 @@ def test_zip_slip_relative_and_absolute_members_stay_inside(tmp_path):
 
     # 3) 外部哨兵目录在解压后保持不变（深层遍历未命中）。
     after_outside = _snapshot_files(str(outside_dir))
-    assert after_outside == before_outside, f"外部目录被写入了文件: {after_outside - before_outside}"
+    assert after_outside == before_outside, (
+        f"外部目录被写入了文件: {after_outside - before_outside}"
+    )
 
 
 def test_absolute_member_lands_inside_target(tmp_path):

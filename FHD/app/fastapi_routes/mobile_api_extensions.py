@@ -33,6 +33,12 @@ from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _require_mobile_admin,
     _require_mobile_admin_or_enterprise,
 )
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _index_market_ai_employee_profiles as _index_market_ai_employee_profiles,
+)
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _mobile_session_meta as _mobile_session_meta,
+)
 from app.fastapi_routes.mobile_extensions.constants import (
     ADMIN_MOBILE_FEATURES,
 )
@@ -70,6 +76,9 @@ from app.fastapi_routes.mobile_extensions.models import (
     SyncAckBody,
     SyncPullBody,
     SyncPushBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    SyncPushItem as SyncPushItem,
 )
 from app.fastapi_routes.mobile_extensions.pairing_helpers import (
     _enrich_pairing_payload,

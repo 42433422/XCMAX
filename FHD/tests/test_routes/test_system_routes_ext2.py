@@ -27,6 +27,7 @@ from app.fastapi_routes.system_routes import (
     router,
     set_industry_endpoint,
 )
+from app.infrastructure.auth.dependencies import require_admin_user
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -56,6 +57,13 @@ def _make_profile(
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
+    # POST /api/system/industry 现在受 require_admin_user 门禁保护（仅管理端账号可
+    # 切换行业）。这里注入一个管理端用户，使测试得以验证端点内部的业务逻辑分支
+    # （行业切换 / 工作区偏好保存 / 企业授权过滤 / mod 去激活），而非每个用例都被
+    # 401/403 拦在门外。需要验证「企业账号未开通行业」的用例仍会触发端点内部 403。
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        id=1, username="admin", tier="admin"
+    )
     return TestClient(app, raise_server_exceptions=False)
 
 

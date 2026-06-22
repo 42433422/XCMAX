@@ -6,6 +6,7 @@
 - sync() --apply 写盘（用 monkeypatch 指向 tmp_path）
 - 复用 verify_version_anchors.ANCHORS 保持一致
 """
+
 import sys
 from pathlib import Path
 

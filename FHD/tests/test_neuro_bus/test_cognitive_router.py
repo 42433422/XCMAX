@@ -73,6 +73,7 @@ class TestCognitiveRouterRoute:
 
     def test_route_returns_none_in_shadow_mode(self, clean_env, tmp_path):
         """shadow 模式：记录决策到日志但不路由，返回 None。"""
+        pytest.importorskip("torch")  # MLP 策略需 torch；CI 未装 ml 依赖时跳过
         log_path = tmp_path / "log.jsonl"
         clean_env.setenv("XCAGI_ROUTING_LOG_PATH", str(log_path))
         clean_env.setenv("XCAGI_ROUTING_POLICY_ENABLED", "shadow")
@@ -88,6 +89,7 @@ class TestCognitiveRouterRoute:
 
     def test_route_returns_decision_in_full_mode(self, clean_env, tmp_path):
         """full 模式 + canary_ratio=1.0：返回 RoutingDecision，MLP 决策生效。"""
+        pytest.importorskip("torch")  # MLP 策略需 torch；CI 未装 ml 依赖时跳过
         log_path = tmp_path / "log.jsonl"
         clean_env.setenv("XCAGI_ROUTING_LOG_PATH", str(log_path))
         clean_env.setenv("XCAGI_ROUTING_POLICY_ENABLED", "full")
