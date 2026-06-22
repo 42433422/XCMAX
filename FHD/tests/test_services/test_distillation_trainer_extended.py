@@ -549,12 +549,18 @@ class TestDistillationTrainerEvaluateEdgeCases:
             "attention_mask": torch.tensor([[1, 1]]),
             "labels": torch.tensor([0]),
         }
-        mock_loader = MagicMock()
-        # Use .return_value on the existing magic method mocks (not replacing them),
-        # so Python's type-level dunder lookup finds the right MagicMock method.
-        mock_loader.__iter__.return_value = iter([batch1, batch2])
-        mock_loader.__len__.return_value = 2
-        trainer.val_loader = mock_loader
+
+        class _FakeLoader:
+            def __init__(self, batches):
+                self._batches = batches
+
+            def __iter__(self):
+                return iter(self._batches)
+
+            def __len__(self):
+                return len(self._batches)
+
+        trainer.val_loader = _FakeLoader([batch1, batch2])
 
         with patch("app.services.distillation_trainer.accuracy_score", return_value=1.0):
             result = trainer.evaluate()
