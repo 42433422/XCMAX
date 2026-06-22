@@ -55,6 +55,20 @@ from .wechat_contact_app_service import (
 )
 from .wechat_task_app_service import WechatTaskApplicationService, get_wechat_task_app_service
 
+# 下列子模块被 pytest monkeypatch.setattr 的属性遍历路径引用；
+# 必须在包层面显式导入，否则 pytest 9.x 在 getattr 找不到时走 importlib
+# 回退路径会从错误的起点继续遍历，导致 AttributeError。
+from . import (  # noqa: E402
+    ai_chat_helpers,
+    employee_pack_runner,
+    excel_template_http_app_service,
+    facades,
+    ocr_app_service,
+    print_app_service,
+    session_account_meta,
+    xcmax_sync_app,
+)
+
 __all__ = [
     "AIChatApplicationService",
     "get_ai_chat_app_service",
