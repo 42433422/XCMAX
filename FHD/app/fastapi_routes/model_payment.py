@@ -10,7 +10,11 @@ from fastapi import APIRouter, Body, Header, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.errors import ErrorCode, PaymentError
-from app.infrastructure.billing.saas_plans import list_saas_plans, plan_by_id
+from app.infrastructure.billing.saas_plans import (
+    list_saas_plans,
+    plan_by_id,
+    pricing_plans_for_budget,
+)
 from app.infrastructure.payment import alipay as mp_ali
 from app.infrastructure.payment import order_store as mp_orders
 from app.infrastructure.payment.payment_sot import (
@@ -76,13 +80,16 @@ def _plan_by_id(plan_id: str) -> dict[str, Any] | None:
 
 
 @router.get("/plans")
-def get_plans():
+def get_plans(budget_range: str = ""):
+    budget = (budget_range or "").strip()
+    saas_plans = pricing_plans_for_budget(budget if budget else None)
     return JSONResponse(
         {
             "success": True,
             "data": {
-                "plans": _all_plans(),
+                "plans": list(_DEMO_PLANS) + saas_plans,
                 "integration": _integration_flags(),
+                "budget_range": budget or None,
             },
         }
     )
