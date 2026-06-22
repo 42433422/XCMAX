@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+import app.mod_sdk.edition_bootstrap  # force real module load before stub injection in other test files
 from app.mod_sdk.edition_policy import (
     configure_edition_defaults,
     resolve_edition,
@@ -13,8 +14,6 @@ from app.mod_sdk.edition_policy import (
     should_register_host_legacy_routes,
 )
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
-
-import app.mod_sdk.edition_bootstrap  # force real module load before stub injection in other test files
 
 
 @pytest.fixture(autouse=True)
