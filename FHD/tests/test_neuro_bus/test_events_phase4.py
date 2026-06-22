@@ -138,19 +138,29 @@ class TestProductEventHandlers:
             register_product_handler("product.unknown_type", lambda e: None)
 
 
-def test_import_domain_event_modules_for_coverage() -> None:
-    """导入各域事件模块以覆盖类定义与注册表。"""
-    import app.neuro_bus.events.ai_events  # noqa: F401
-    import app.neuro_bus.events.auth_events  # noqa: F401
-    import app.neuro_bus.events.conversation_events  # noqa: F401
-    import app.neuro_bus.events.customer_events  # noqa: F401
-    import app.neuro_bus.events.inventory_events  # noqa: F401
-    import app.neuro_bus.events.material_events  # noqa: F401
-    import app.neuro_bus.events.ocr_events  # noqa: F401
-    import app.neuro_bus.events.order_events  # noqa: F401
-    import app.neuro_bus.events.payment_events  # noqa: F401
-    import app.neuro_bus.events.print_events  # noqa: F401
-    import app.neuro_bus.events.shipment_events  # noqa: F401
-    import app.neuro_bus.events.wechat_events  # noqa: F401
+def test_domain_event_classes_have_expected_event_types() -> None:
+    """各域事件类应是 NeuroEvent 子类，且 event_type 带正确的域前缀。"""
+    from app.neuro_bus.events import (
+        inventory_events,
+        order_events,
+        payment_events,
+        shipment_events,
+    )
+    from app.neuro_bus.events.base import NeuroEvent
 
-    assert True
+    # Representative event classes from four domains, with their expected
+    # event_type prefix. This verifies the class definitions are real and
+    # correctly wired (not merely that the module imported).
+    cases = [
+        (order_events.OrderSubmittedEvent, "order.", "order.submitted"),
+        (payment_events.PaymentCompletedEvent, "payment.", "payment.completed"),
+        (inventory_events.InventoryStockInEvent, "inventory.", "inventory.stock_in"),
+        (shipment_events.ShipmentCreatedEvent, "shipment.", "shipment.created"),
+    ]
+    for cls, prefix, exact in cases:
+        assert issubclass(cls, NeuroEvent), f"{cls.__name__} 不是 NeuroEvent 子类"
+        event_type = cls.event_type
+        assert isinstance(event_type, str) and event_type
+        assert event_type.startswith(prefix), f"{cls.__name__}.event_type={event_type!r}"
+        if exact is not None:
+            assert event_type == exact

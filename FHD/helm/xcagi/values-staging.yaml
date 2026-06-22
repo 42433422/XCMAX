@@ -1,9 +1,16 @@
 global:
   namespace: xcagi-staging
 
+# Let the chart create the target namespace (mirrors deploy_k8s_staging.sh 00-namespace.yaml).
+# Set to false if installing with `helm install --namespace ... --create-namespace`.
+createNamespace: true
+
 api:
-  image: xcagi/fhd-api:staging
   replicas: 1
+  image:
+    repository: xcagi-fhd-api
+    tag: staging
+    pullPolicy: Never
 
 monitoring:
   enabled: true

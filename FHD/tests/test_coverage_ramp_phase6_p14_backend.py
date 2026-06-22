@@ -1097,24 +1097,29 @@ class TestAddIntentFeedback:
         self, conversation_service: _ConversationHost
     ) -> None:
         conversation_service.user_memory.add_feedback.side_effect = RuntimeError("db down")
-        # Should not raise
-        conversation_service.add_intent_feedback(
+        # RuntimeError is in RECOVERABLE_ERRORS: swallowed, returns None, but the
+        # inner boundary call must have been attempted exactly once.
+        result = conversation_service.add_intent_feedback(
             user_id="u1",
             message="hello",
             recognized_intent="greeting",
             feedback="confirmed",
         )
+        assert result is None
+        conversation_service.user_memory.add_feedback.assert_called_once()
 
     def test_add_intent_feedback_swallows_value_error(
         self, conversation_service: _ConversationHost
     ) -> None:
         conversation_service.user_memory.add_feedback.side_effect = ValueError("bad input")
-        conversation_service.add_intent_feedback(
+        result = conversation_service.add_intent_feedback(
             user_id="u1",
             message="hello",
             recognized_intent="greeting",
             feedback="confirmed",
         )
+        assert result is None
+        conversation_service.user_memory.add_feedback.assert_called_once()
 
 
 class TestRecordUserAction:
@@ -1144,17 +1149,21 @@ class TestRecordUserAction:
         self, conversation_service: _ConversationHost
     ) -> None:
         conversation_service.user_memory.record_action.side_effect = RuntimeError("db down")
-        conversation_service.record_user_action(
+        result = conversation_service.record_user_action(
             user_id="u1", intent="greeting", slots={}, message="hello"
         )
+        assert result is None
+        conversation_service.user_memory.record_action.assert_called_once()
 
     def test_record_user_action_swallows_oserror(
         self, conversation_service: _ConversationHost
     ) -> None:
         conversation_service.user_memory.record_action.side_effect = OSError("io err")
-        conversation_service.record_user_action(
+        result = conversation_service.record_user_action(
             user_id="u1", intent="greeting", slots={}, message="hello"
         )
+        assert result is None
+        conversation_service.user_memory.record_action.assert_called_once()
 
     def test_record_user_action_empty_slots(self, conversation_service: _ConversationHost) -> None:
         conversation_service.record_user_action(
@@ -2366,23 +2375,21 @@ class TestInvokeModInitHook:
         assert called == ["with_kwargs"]
 
     def test_invalid_signature_falls_back_to_no_kwargs(self) -> None:
-        called = []
+        calls = []
 
         class CallableWithBadSig:
+            # A non-Signature value here makes inspect.signature raise TypeError,
+            # forcing _invoke_mod_init_hook into its no-kwargs fallback.
+            __signature__ = "not-a-signature"
+
             def __call__(self, *args, **kwargs):
-                called.append("called")
+                calls.append((args, kwargs))
 
-            def __signature__(self):
-                raise TypeError("bad sig")
-
-        # inspect.signature may raise TypeError for some objects
-        class WeirdCallable:
-            def __call__(self):
-                called.append("weird")
-
-        # Use a builtin which raises TypeError on inspect.signature
-        _invoke_mod_init_hook(print, mod_id="m1")  # print has complex sig
-        # Should not raise
+        fn = CallableWithBadSig()
+        _invoke_mod_init_hook(fn, mod_id="m1")
+        # Fallback must call the target exactly once with no args/kwargs
+        # (mod_id is NOT forwarded because the signature could not be inspected).
+        assert calls == [((), {})]
 
     def test_var_positional_ignored(self) -> None:
         called = []
@@ -2410,8 +2417,10 @@ class TestRegisterModHooks:
         from app.infrastructure.mods.manifest import ModMetadata
 
         metadata = ModMetadata(id="m1", name="M1", version="1.0.0", mod_path="/mods/m1")
-        # Should not raise
-        _register_mod_hooks("m1", metadata)
+        # No hooks declared -> returns before importing/subscribing anything.
+        with patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe:
+            _register_mod_hooks("m1", metadata)
+        mock_subscribe.assert_not_called()
 
     def test_empty_mod_path_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
         from app.infrastructure.mods.manifest import ModMetadata
@@ -2824,32 +2833,44 @@ class TestModManagerEnsureModsLoaded:
     ) -> None:
         monkeypatch.setenv("XCAGI_DISABLE_MODS", "1")
         mm = ModManager(mods_root=str(tmp_path))
-        mm.ensure_mods_loaded(MagicMock())
-        # Should not raise
+        with patch.object(mm, "load_all_mods") as mock_load:
+            mm.ensure_mods_loaded(MagicMock())
+        # Mods disabled -> never reaches load_all_mods.
+        mock_load.assert_not_called()
 
     def test_already_loaded_returns_early(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "list_loaded_mods", return_value=[MagicMock()]):
+        # list_loaded_mods() non-empty -> early return before load_all_mods.
+        with (
+            patch.object(mm, "list_loaded_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as mock_load,
+        ):
             mm.ensure_mods_loaded(MagicMock())
-        # Should not attempt to scan
+        mock_load.assert_not_called()
 
     def test_no_discovered_mods_returns_early(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
         with (
             patch.object(mm, "list_loaded_mods", return_value=[]),
             patch.object(mm, "scan_mods", return_value=[]),
+            patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
+        # No manifests on disk -> early return before load_all_mods.
+        mock_load.assert_not_called()
 
     def test_throttled_after_recent_attempt(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        mm._last_ensure_at = 999999999.0  # far future
+        mm._last_ensure_at = 999999999.0  # far future -> (now - last) < 1.5s window
         mm._ensure_attempts = 1
         with (
             patch.object(mm, "list_loaded_mods", return_value=[]),
             patch.object(mm, "scan_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
+        # Throttle window not elapsed -> skip load_all_mods.
+        mock_load.assert_not_called()
 
     def test_max_attempts_reached(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
@@ -2857,8 +2878,11 @@ class TestModManagerEnsureModsLoaded:
         with (
             patch.object(mm, "list_loaded_mods", return_value=[]),
             patch.object(mm, "scan_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
+        # _ensure_attempts >= 20 -> give up, no load_all_mods.
+        mock_load.assert_not_called()
 
 
 class TestLoadModBlueprints:
@@ -2867,8 +2891,12 @@ class TestLoadModBlueprints:
     def test_load_mod_blueprints_is_noop(self, tmp_path: Path) -> None:
         from app.infrastructure.mods.mod_manager import load_mod_blueprints
 
-        # Should not raise
-        load_mod_blueprints(MagicMock(), ModManager(mods_root=str(tmp_path)))
+        app = MagicMock()
+        result = load_mod_blueprints(app, ModManager(mods_root=str(tmp_path)))
+        # Documented no-op: returns None and mounts nothing on the app.
+        assert result is None
+        app.include_router.assert_not_called()
+        app.add_api_route.assert_not_called()
 
 
 class TestGetModManager:
@@ -2940,18 +2968,36 @@ class TestLoadEmployeePackRoutes:
     """Cover load_employee_pack_routes branches."""
 
     def test_no_employees_dir_returns(self, tmp_path: Path) -> None:
+        from app.infrastructure.mods import mod_manager as mm_mod
         from app.infrastructure.mods.mod_manager import load_employee_pack_routes
 
         mm = ModManager(mods_root=str(tmp_path))
-        # Should not raise
-        load_employee_pack_routes(MagicMock(), mm)
+        # No mods/_employees dir -> returns without registering any pack routes.
+        with patch.object(mm_mod, "register_employee_pack_routes") as mock_reg:
+            load_employee_pack_routes(MagicMock(), mm)
+        mock_reg.assert_not_called()
 
     def test_mods_disabled_returns(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.infrastructure.mods import mod_manager as mm_mod
         from app.infrastructure.mods.mod_manager import load_employee_pack_routes
 
         monkeypatch.setenv("XCAGI_DISABLE_MODS", "1")
+        # Even if a valid employee pack exists on disk, disabled mods -> no registration.
+        emp_root = tmp_path / "_employees" / "pack1"
+        emp_root.mkdir(parents=True)
+        (emp_root / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "id": "pack1",
+                    "artifact": "employee_pack",
+                    "backend": {"entry": "main"},
+                }
+            )
+        )
         mm = ModManager(mods_root=str(tmp_path))
-        load_employee_pack_routes(MagicMock(), mm)
+        with patch.object(mm_mod, "register_employee_pack_routes") as mock_reg:
+            load_employee_pack_routes(MagicMock(), mm)
+        mock_reg.assert_not_called()
 
 
 class TestEnsureModApiReady:

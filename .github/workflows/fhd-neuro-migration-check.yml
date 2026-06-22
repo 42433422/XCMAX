@@ -35,36 +35,27 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     
     - name: Run migration detection
-      run: |
-        python scripts/detect_migration_status.py
-      continue-on-error: true
-    
+      id: detect
+      # detect_migration_status.py scans the real tree and writes the rates to
+      # $GITHUB_OUTPUT (service_rate / app_rate / routes_rate). Pure stdlib, so it
+      # must succeed — no continue-on-error masking a fake fallback anymore.
+      run: python scripts/detect_migration_status.py
+
     - name: Check migration thresholds
       run: |
-        # 这里可以添加阈值检查逻辑
-        # 例如：如果迁移率低于 10%，发出警告
-        
         echo "检查迁移阈值..."
-        
-        # 读取报告中的百分比
-        # 这是一个简化示例，实际应该解析报告文件
-        
         SERVICE_THRESHOLD=10
         APP_THRESHOLD=20
-        
-        # 获取实际的迁移率（这里使用占位符）
-        SERVICE_RATE=7.8
-        APP_RATE=0
-        
+        # REAL measured rates from the detection step (was hardcoded 7.8 / 0).
+        SERVICE_RATE="${{ steps.detect.outputs.service_rate }}"
+        APP_RATE="${{ steps.detect.outputs.app_rate }}"
         echo "Services 层迁移率: ${SERVICE_RATE}% (阈值: ${SERVICE_THRESHOLD}%)"
         echo "Application 层迁移率: ${APP_RATE}% (阈值: ${APP_THRESHOLD}%)"
-        
         if (( $(echo "$SERVICE_RATE < $SERVICE_THRESHOLD" | bc -l) )); then
-          echo "::warning::Services 层迁移率低于阈值 ${SERVICE_THRESHOLD}%"
+          echo "::warning::Services 层迁移率 ${SERVICE_RATE}% 低于阈值 ${SERVICE_THRESHOLD}%"
         fi
-        
         if (( $(echo "$APP_RATE < $APP_THRESHOLD" | bc -l) )); then
-          echo "::warning::Application 层迁移率低于阈值 ${APP_THRESHOLD}%"
+          echo "::warning::Application 层迁移率 ${APP_RATE}% 低于阈值 ${APP_THRESHOLD}%"
         fi
       continue-on-error: true
     
@@ -146,12 +137,19 @@ jobs:
       with:
         ref: main
     
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Compute migration rate
+      id: detect
+      run: python scripts/detect_migration_status.py
+
     - name: Update migration badge
       run: |
-        # 生成迁移进度徽章
-        SERVICE_RATE=7.8
-        
-        # 根据迁移率设置颜色
+        # REAL measured rate (was hardcoded 7.8).
+        SERVICE_RATE="${{ steps.detect.outputs.service_rate }}"
         if (( $(echo "$SERVICE_RATE >= 80" | bc -l) )); then
           COLOR=brightgreen
         elif (( $(echo "$SERVICE_RATE >= 50" | bc -l) )); then
@@ -161,7 +159,5 @@ jobs:
         else
           COLOR=red
         fi
-        
-        # 这里可以更新 README 中的徽章链接
         echo "迁移进度: ${SERVICE_RATE}%"
         echo "徽章颜色: ${COLOR}"

@@ -241,6 +241,10 @@ _compare_convert_output.xlsx
 # Removed mods snapshot (restored from git; may contain large zips)
 _archived_removed_mods/
 
+# detect_migration_status.py 运行产物(CI artifact,勿提交)
+migration_metrics.json
+migration_status_report.txt
+
 # mutmut 3.x 变异测试沙箱与缓存（运行时生成约80M，勿提交）
 mutants/
 .mutmut-cache

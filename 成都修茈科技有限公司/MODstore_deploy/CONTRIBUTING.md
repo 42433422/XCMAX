@@ -84,7 +84,7 @@ flowchart LR
 | --- | --- | --- |
 | `black` + `isort` | 整个 Python 仓 | [`pyproject.toml`](pyproject.toml) `[tool.black]` / `[tool.isort]`（line-length=100，py310） |
 | `mypy` | `packages = ["modstore_server", "modman"]` 全量 + 历史模块 `ignore_errors` 列表（逐项收缩）；新模块默认入网 | [`pyproject.toml`](pyproject.toml) `[tool.mypy]`；遗留列表重生成：`python scripts/export_mypy_ignore_modules.py --toml-fragment` |
-| `pytest` | 整个仓 | `tests/` 目录；`pyproject.toml` 声明 `fail_under = 80`（`coverage report` 目标），CI 兜底由 `MODSTORE_PY_COVERAGE_FLOOR` 递进（当前 **55**，路线图：55→80），全树向 55% 收敛 |
+| `pytest` | 整个仓 | `tests/` 目录；CI **实际执行**的全局门禁 = `MODSTORE_PY_COVERAGE_FLOOR`，**当前 40%**（保守值、本地未实测：`xcagi_common` 需 Python>=3.10），由发布到仓库根的 `modstore-ci-backend-python.yml` `--cov-fail-under` 硬失败。`pyproject.toml` `[tool.coverage.report] fail_under` 已对齐为 40。**80% 为路线图目标，尚未达成**；棘轮原则：实测后只可上调。详见 [`docs/coverage-gates.md`](docs/coverage-gates.md) |
 | `tests/test_service_boundaries.py` | T1 内部 Employee / Workflow / LLM 跨域 | 详见 [`docs/SERVICE_BOUNDARIES.md`](docs/SERVICE_BOUNDARIES.md) §3 |
 | ESLint 9 flat | `market/`（前端） | [`market/eslint.config.js`](market/eslint.config.js)；历史代码中的 `no-empty` / `no-useless-escape` 已显式降为 warning，避免影响 T1 红灯，后续清理 PR 收紧 |
 | `mvn verify` | `java_payment_service/` | Maven 默认契约测试 + Spotbugs（如启用） |

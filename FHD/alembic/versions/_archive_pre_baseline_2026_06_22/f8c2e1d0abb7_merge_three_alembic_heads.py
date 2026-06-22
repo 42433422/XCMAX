@@ -1,11 +1,17 @@
 """merge_three_alembic_heads
 
 Revision ID: f8c2e1d0abb7
-Revises: c4a9f8e1d2b3, merge_customers_to_products, xcagi_v5_miniprogram
+Revises: c4a9f8e1d2b3, merge_customers_to_products
 Create Date: 2026-04-19
 
-Unifies three independent Alembic heads into a single lineage so
+Unifies the independent Alembic heads into a single lineage so
 `alembic upgrade head` is deterministic and downgrades can target one head.
+
+NOTE (2026-06-22): the third parent ``xcagi_v5_miniprogram`` was removed from
+this merge. That revision was never authored (the WeChat mini-program feature
+was decommissioned in commit eba145afc) yet was still referenced here, which
+left a dangling ``down_revision`` that broke ``alembic`` revision-map loading
+entirely. Only the two parents that actually exist remain.
 
 Operational note: ``alembic_version`` must hold only branch tip revision IDs.
 If both an ancestor and its descendant are stamped (e.g. ``f0c2a8e1_templates``
@@ -19,7 +25,6 @@ revision: str = "f8c2e1d0abb7"
 down_revision: Union[str, Sequence[str], None] = (
     "c4a9f8e1d2b3",
     "merge_customers_to_products",
-    "xcagi_v5_miniprogram",
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
