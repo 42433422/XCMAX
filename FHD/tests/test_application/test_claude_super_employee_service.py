@@ -30,6 +30,13 @@ def test_claude_super_employee_invoke_writes_outbox_when_dispatch_not_configured
     monkeypatch.delenv("MODSTORE_PARA_DELEGATE_WEBHOOK", raising=False)
 
     svc = ClaudeSuperEmployeeService(storage_root=tmp_path)
+    # Isolate the local CLI: when dispatch is not accepted, invoke() falls back to a
+    # local Claude CLI reply if one is installed, which rewrites status queued->completed.
+    # That CLI-present fallback's status=completed semantics for an un-dispatched task is
+    # the known #35 bug recorded in TO_9_PROGRAM §8.1; we deliberately disable the CLI
+    # here so this test verifies the intended "dispatch not configured -> outbox -> queued"
+    # contract deterministically on any machine (CI without a CLI, or a dev box with one).
+    monkeypatch.setattr(svc, "_cli_reply_body", lambda text, context: "")
     result = svc.invoke(user_id=1, message="修复登录问题", context={"source": "test"})
 
     dispatch = result["dispatch"]

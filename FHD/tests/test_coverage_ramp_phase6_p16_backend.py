@@ -533,19 +533,27 @@ class TestInitDbRuntimeAuthBootstrap:
             lambda: "postgresql://user:pass@host/db",
         )
         monkeypatch.setattr("app.fastapi_app.sqlite_paths.is_sqlite_url", lambda url: False)
-        called = {"pg": 0, "prefs": 0}
+        called = {"pg": 0, "prefs": 0, "neuro": 0}
 
+        # Mock every bootstrap helper the postgres branch calls so no real
+        # PostgreSQL connection (port 5432) is attempted; the branch fans out to
+        # ensure_postgresql_auth_bootstrap + ensure_user_preferences_bootstrap +
+        # ensure_neuro_event_log_bootstrap.
         def fake_pg(engine, *, database_url=None):
             called["pg"] += 1
 
         def fake_prefs(engine, *, database_url=None, swallow_errors=True):
             called["prefs"] += 1
 
+        def fake_neuro(engine, *, database_url=None, swallow_errors=True):
+            called["neuro"] += 1
+
         monkeypatch.setattr("app.db.init_db.ensure_postgresql_auth_bootstrap", fake_pg)
         monkeypatch.setattr("app.db.init_db.ensure_user_preferences_bootstrap", fake_prefs)
+        monkeypatch.setattr("app.db.init_db.ensure_neuro_event_log_bootstrap", fake_neuro)
 
         ensure_runtime_auth_bootstrap()
-        assert called == {"pg": 1, "prefs": 1}
+        assert called == {"pg": 1, "prefs": 1, "neuro": 1}
 
 
 class TestInitDbSessionsColumns:
@@ -1916,13 +1924,12 @@ class TestCustomerRepositorySave:
 
         mock_db.add.side_effect = fake_add
 
-        # Use a Mock contact_info to provide .person/.phone/.address attributes
-        # (the real ContactInfo value object uses .name, but the repository
-        # source code calls .person — a pre-existing bug we work around here).
-        contact_info = SimpleNamespace(person="John", phone="123", address="St")
+        # Real ContactInfo value object: fields are name/phone/address, with
+        # address being an Address value object (or None). address=None exercises
+        # the empty-address branch in save_customer.
+        contact_info = ContactInfo(name="John", phone="123", address=None)
         customer = Customer(customer_name="Acme", contact_info=contact_info)
 
-        # Patch customer_to_domain to avoid the broken ContactInfo(person=...) call
         with (
             patch("app.infrastructure.repositories.customer_repository_impl.get_db") as gdb,
             patch(
@@ -1939,6 +1946,7 @@ class TestCustomerRepositorySave:
 
     def test_save_customer_existing_updates(self, monkeypatch):
         from app.domain.customer.entities import Customer
+        from app.domain.value_objects import Address
         from app.infrastructure.repositories.customer_repository_impl import (
             SQLAlchemyCustomerRepository,
         )
@@ -1961,7 +1969,11 @@ class TestCustomerRepositorySave:
         mock_query.first.return_value = existing
         mock_db.query.return_value = mock_query
 
-        contact_info = SimpleNamespace(person="New", phone="111", address="NewAddr")
+        # Real ContactInfo with an Address value object exercises the
+        # contact.address.to_full_string() branch in save_customer.
+        contact_info = ContactInfo(
+            name="New", phone="111", address=Address(province="广东", city="深圳")
+        )
         customer = Customer(customer_name="Acme", contact_info=contact_info)
 
         with (
@@ -1978,6 +1990,7 @@ class TestCustomerRepositorySave:
         assert result is customer
         assert existing.contact_person == "New"
         assert existing.contact_phone == "111"
+        assert existing.address == "广东深圳"
 
 
 class TestCustomerRepositoryFind:
