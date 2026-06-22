@@ -57,6 +57,7 @@
 [giant-file] app/infrastructure/billing/model_usage.py
 [giant-file] app/infrastructure/documents/price_list_export.py
 [giant-file] app/infrastructure/mods/mod_manager.py
+[giant-file] app/infrastructure/mods/package.py
 [giant-file] app/infrastructure/payment/alipay.py
 [giant-file] app/infrastructure/persistence/compat_db/writes.py
 [giant-file] app/infrastructure/persistence/product_repository_impl.py

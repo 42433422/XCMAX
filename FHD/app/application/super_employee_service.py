@@ -991,6 +991,14 @@ class SuperEmployeeService:
         cli_path = self._cli_path()
         if not cli_path:
             return ""
+        # 口袋 Claude Code：claude 生产路径走"持久会话续接 + 隔离工作区"——有上下文、能动手、
+        # 体验接近直接和 Claude Code 交互。codex / 测试注入仍走原"闲聊 or dev-loop"逻辑。
+        if (
+            self._p.cli_stream_json
+            and self._cli_runner is subprocess.run
+            and self._conversation_mode_enabled()
+        ):
+            return self._run_conversation_turn(cli_path, text, context)
         base_cwd = self._cli_workspace(context)
         # 闲聊→只答不改；开发任务→生产环境走 coding→view→push 闭环(隔离 worktree)，
         # 测试注入或显式关闭(_DEV_LOOP=0)时退回"只改不推"的简单路径。
@@ -999,6 +1007,187 @@ class SuperEmployeeService:
         if self._cli_runner is not subprocess.run or not self._dev_loop_enabled():
             return self._run_cli_once(cli_path, self._cli_work_prompt(text, base_cwd), base_cwd)
         return self._run_dev_task_loop(cli_path, text, base_cwd)
+
+    # ===== 口袋 Claude Code：持久会话续接 + 隔离工作区 =====
+
+    def _conversation_mode_enabled(self) -> bool:
+        raw = (
+            str(
+                os.environ.get(f"{self._p.env_tool_prefix}_CONVERSATION")
+                or os.environ.get("XCMAX_CLAUDE_CONVERSATION")
+                or "1"
+            )
+            .strip()
+            .lower()
+        )
+        return raw not in {"0", "false", "off", "disabled"}
+
+    def _session_store_path(self) -> Path:
+        return Path(get_app_data_dir()) / self._p.storage_subdir / "cli_sessions.json"
+
+    def _session_get(self, key: str) -> dict[str, Any]:
+        try:
+            data = json.loads(self._session_store_path().read_text(encoding="utf-8"))
+            rec = data.get(key) if isinstance(data, dict) else None
+            return rec if isinstance(rec, dict) else {}
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _session_set(self, key: str, value: dict[str, Any]) -> None:
+        p = self._session_store_path()
+        try:
+            data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+            if not isinstance(data, dict):
+                data = {}
+        except Exception:  # noqa: BLE001
+            data = {}
+        data[key] = value
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            logger.warning("写 session store 失败", exc_info=True)
+
+    def _session_key(self, context: dict[str, Any]) -> str:
+        """会话键：手机端是单一 pinned 会话，按工具名即可隔离 claude/codex 各自一条续接会话。"""
+        conv = str((context or {}).get("conversation_id") or "").strip()
+        return f"{self._p.tool_name}:{conv}" if conv else self._p.tool_name
+
+    def _ensure_session_workspace(self, key: str) -> tuple[str | None, str | None]:
+        """持久隔离工作区：同一会话复用一个 git worktree（不碰 live checkout、不破坏运行中的 FHD）。"""
+        rec = self._session_get(key)
+        wt = str(rec.get("workspace") or "")
+        branch = str(rec.get("branch") or "")
+        if wt and Path(wt).exists():
+            return wt, branch
+        base = self._cli_workspace({})
+        if not self._is_git_repo(base):
+            return None, None
+        slug = re.sub(r"[^a-z0-9]+", "-", key.lower()).strip("-") or "session"
+        if not branch:
+            branch = f"super-employee/{self._p.tool_name}/{slug}"
+        wt = str(Path(get_app_data_dir()) / self._p.storage_subdir / f"ws-{slug}")
+        try:
+            self._git(base, "worktree", "remove", "--force", wt, timeout=30)
+        except Exception:  # noqa: BLE001
+            pass
+        has_branch = (
+            self._git(base, "rev-parse", "--verify", "--quiet", branch, timeout=15).returncode == 0
+        )
+        if has_branch:
+            r = self._git(base, "worktree", "add", "--force", wt, branch, timeout=180)
+        else:
+            r = self._git(base, "worktree", "add", "-b", branch, wt, "HEAD", timeout=180)
+        if r.returncode != 0:
+            logger.warning("会话工作区创建失败: %s", (r.stderr or r.stdout)[:200])
+            return None, None
+        rec["workspace"] = wt
+        rec["branch"] = branch
+        self._session_set(key, rec)
+        return wt, branch
+
+    def _conversation_prompt(self, text: str, cwd: str, resuming: bool) -> str:
+        if resuming:
+            # 续接：claude 已有完整上下文 + 身份，直接发用户原话（像和同事接着聊）。
+            return text.strip()
+        return (
+            f"你是 XCMAX 内的{self._p.employee_name}，像 Claude Code 一样在项目工作区里工作："
+            "可以读取/创建/修改文件、运行命令、用 git；用户让你改代码就直接动手，不要只解释。"
+            "但普通对话直接回应即可、不要主动遍历整个项目（需要改代码时再读相关文件）；"
+            "保持上下文连续，像和同事聊天那样自然。"
+            f"\n\n工作区：{cwd}\n\n用户：{text.strip()}"
+        )
+
+    def _parse_stream_json_full(self, out: str) -> tuple[str, str]:
+        """从 stream-json 取 (最终回复, session_id)。session_id 取最后出现的(result 事件含)。"""
+        text = self._parse_claude_stream_json(out)
+        sid = ""
+        for line in out.splitlines():
+            s = line.strip()
+            if not s.startswith("{"):
+                continue
+            try:
+                ev = json.loads(s)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(ev, dict) and ev.get("session_id"):
+                sid = str(ev.get("session_id") or "")
+        return text, sid
+
+    def _conversation_perm(self) -> str:
+        # 默认 acceptEdits：可对话+读写改文件(覆盖大部分 Claude Code 用法)，但不自动跑任意命令，
+        # 避免在工程根误伤运行中的 FHD。要全自动(跑命令/git)可 env 切 bypassPermissions。
+        return (
+            os.environ.get("DEVFLEET_CLAUDE_PERMISSION_MODE") or "acceptEdits"
+        ).strip() or "acceptEdits"
+
+    def _conversation_cmd(
+        self, cli_path: str, prompt: str, resume_session_id: str | None
+    ) -> list[str]:
+        cmd = [
+            cli_path,
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            self._conversation_perm(),
+        ]
+        if resume_session_id:
+            cmd += ["--resume", resume_session_id]
+        cmd.append(prompt)
+        return cmd
+
+    def _run_conversation_turn(self, cli_path: str, text: str, context: dict[str, Any]) -> str:
+        key = self._session_key(context)
+        # 像 Claude Code 一样直接在工程根工作：零额外磁盘(不建 536M/会话的 worktree)、
+        # 改动你审了再落地(底部 git 键)。上下文靠 claude session 续接，不靠工作区隔离。
+        cwd = self._cli_workspace(context)
+        rec = self._session_get(key)
+        session_id = str(rec.get("session_id") or "").strip()
+        idle_timeout = self._cli_idle_timeout_seconds()
+        hard_cap = self._cli_hard_cap_seconds()
+
+        def _run(prompt: str, resume: str | None) -> tuple[int, str, str, str]:
+            cmd = self._conversation_cmd(cli_path, prompt, resume)
+            return self._run_cli_idle(cmd, cwd, idle_timeout, hard_cap)
+
+        try:
+            returncode, stdout, stderr, killed = _run(
+                self._conversation_prompt(text, cwd, bool(session_id)),
+                session_id or None,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+        body, new_sid = self._parse_stream_json_full(stdout)
+        # resume 失效(会话被清/找不到)兜底：清掉 session_id，按新会话重来一次。
+        if session_id and not body and not killed:
+            low = (stderr + stdout).lower()
+            if "no conversation" in low or "session" in low or returncode != 0:
+                rec["session_id"] = ""
+                self._session_set(key, rec)
+                try:
+                    returncode, stdout, stderr, killed = _run(
+                        self._conversation_prompt(text, cwd, False), None
+                    )
+                    body, new_sid = self._parse_stream_json_full(stdout)
+                except (OSError, subprocess.SubprocessError):
+                    pass
+        if killed.startswith("idle"):
+            return f"{self._p.display_tool} 静默 {idle_timeout:g} 秒判定卡住已结束，请重试。"
+        if killed.startswith("hardcap"):
+            return f"{self._p.display_tool} 运行超过上限 {hard_cap:g} 秒已停止，请把任务拆小。"
+        if new_sid and new_sid != session_id:
+            rec["session_id"] = new_sid
+            self._session_set(key, rec)
+        if body:
+            return body
+        if returncode != 0:
+            return (
+                f"{self._p.display_tool} 本次返回失败（code {returncode}）："
+                f"{(stderr.strip() or stdout.strip())[:400]}"
+            )
+        return ""
 
     def _run_cli_once(self, cli_path: str, prompt: str, cwd: str) -> str:
         """运行一次 CLI 取最终回复文本（coding/闲聊共用；含测试注入与 idle-timeout 两路）。"""
