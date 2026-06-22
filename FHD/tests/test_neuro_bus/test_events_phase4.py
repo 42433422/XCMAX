@@ -159,7 +159,7 @@ def test_domain_event_classes_have_expected_event_types() -> None:
     ]
     for cls, prefix, exact in cases:
         assert issubclass(cls, NeuroEvent), f"{cls.__name__} 不是 NeuroEvent 子类"
-        event_type = getattr(cls, "event_type")
+        event_type = cls.event_type
         assert isinstance(event_type, str) and event_type
         assert event_type.startswith(prefix), f"{cls.__name__}.event_type={event_type!r}"
         if exact is not None:
