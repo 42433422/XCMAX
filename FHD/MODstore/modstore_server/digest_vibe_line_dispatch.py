@@ -32,12 +32,13 @@ SIX_LINE_TO_DISPATCH: Dict[str, str] = {
     "ops_partner": DISPATCH_PW,
 }
 
-# 移动 / App 发布岗位：无论它们在六线图里以 primary 还是 support 出现，
+# 移动 / App 发布岗位：无论它们在编制图里以何种角色出现，
 # 双清单里属于这些岗位的条目一律归入 P-App 移动发布线。
 APP_LANE_EMPLOYEE_IDS: frozenset[str] = frozenset(
     {
         "mobile-android-release-officer",
         "mobile-ios-release-officer",
+        "mobile-harmony-release-officer",
     }
 )
 
@@ -54,13 +55,29 @@ _SECTION_RE = re.compile(
 
 
 def _six_line_map_path() -> Path:
+    """定位 six_line_employee_map.json（已降级为面板数据；运行时派生不再依赖它）。
+
+    历史 bug：曾固定拼 ``<FHD>/FHD/config/...``（双 FHD）导致永不命中。改为多候选探测。
+    """
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[3] / "six_line_employee_map.json",  # 仓库根（实际位置）
+        here.parents[2] / "config" / "six_line_employee_map.json",  # FHD/config
+    ]
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = Path(repo_root())
+        candidates[:0] = [
+            root / "six_line_employee_map.json",
+            root / "FHD" / "config" / "six_line_employee_map.json",
+        ]
     except Exception:
-        root = Path(__file__).resolve().parents[2]
-    return root / "FHD" / "config" / "six_line_employee_map.json"
+        pass
+    for c in candidates:
+        if c.is_file():
+            return c
+    return candidates[0]
 
 
 def load_six_line_employee_map() -> Dict[str, Any]:
@@ -74,9 +91,36 @@ def load_six_line_employee_map() -> Dict[str, Any]:
         return {"lines": {}}
 
 
-def build_employee_dispatch_map(six_line_map: Optional[Dict[str, Any]] = None) -> Dict[str, set[str]]:
-    """员工 ID → 其作为主责出现时所属的三产线集合。"""
-    doc = six_line_map if six_line_map is not None else load_six_line_employee_map()
+def _apply_app_lane(out: Dict[str, set[str]]) -> Dict[str, set[str]]:
+    # 移动发布岗位强制归入 P-App（覆盖部门映射可能给到的 P-S/P-W）。
+    for eid in APP_LANE_EMPLOYEE_IDS:
+        out[eid] = {DISPATCH_APP}
+    return dict(out)
+
+
+def _dispatch_map_from_roster_ssot() -> Dict[str, set[str]]:
+    """从 roster SSOT（config/duty_roster.json，经 duty_roster 加载）派生 员工→产线。"""
+    from modstore_server.duty_roster import SIX_LINE_DEPARTMENTS
+
+    out: Dict[str, set[str]] = defaultdict(set)
+    for dept_key, dept in (SIX_LINE_DEPARTMENTS or {}).items():
+        if not isinstance(dept, dict):
+            continue
+        dispatch = SIX_LINE_TO_DISPATCH.get(str(dept.get("five_line_id") or dept_key))
+        if not dispatch:
+            continue
+        for sub in (dept.get("subzones") or {}).values():
+            if not isinstance(sub, dict):
+                continue
+            for eid in sub.get("ids") or []:
+                eid_s = str(eid).strip()
+                if eid_s:
+                    out[eid_s].add(dispatch)
+    return _apply_app_lane(out)
+
+
+def _dispatch_map_from_six_line_doc(doc: Dict[str, Any]) -> Dict[str, set[str]]:
+    """从显式 six_line 文档（lines/steps/primary）派生——向后兼容旧调用/部署测试。"""
     out: Dict[str, set[str]] = defaultdict(set)
     for line_key, block in (doc.get("lines") or {}).items():
         dispatch = SIX_LINE_TO_DISPATCH.get(str(line_key))
@@ -89,10 +133,20 @@ def build_employee_dispatch_map(six_line_map: Optional[Dict[str, Any]] = None) -
                 eid_s = str(eid).strip()
                 if eid_s:
                     out[eid_s].add(dispatch)
-    # 移动发布岗位强制归入 P-App（覆盖部门映射可能给到的 P-S/P-W）。
-    for eid in APP_LANE_EMPLOYEE_IDS:
-        out[eid] = {DISPATCH_APP}
-    return dict(out)
+    return _apply_app_lane(out)
+
+
+def build_employee_dispatch_map(six_line_map: Optional[Dict[str, Any]] = None) -> Dict[str, set[str]]:
+    """员工 ID → 所属产线集合。
+
+    **单一真相源 = roster SSOT**（``config/duty_roster.json`` 的 6 部门编制）：默认按
+    员工所属六线部门经 :data:`SIX_LINE_TO_DISPATCH` 派生产线，不再依赖独立维护的
+    ``six_line_employee_map.json``（该文件已降级为面板可视化数据）。
+    仅当显式传入 ``six_line_map`` 时按其 lines/steps/primary 解析（向后兼容）。
+    """
+    if six_line_map is not None:
+        return _dispatch_map_from_six_line_doc(six_line_map)
+    return _dispatch_map_from_roster_ssot()
 
 
 def pick_dispatch_line(
