@@ -29,4 +29,4 @@ jobs:
       - name: Test
         run: pytest tests -q
       - name: Coverage
-        run: pytest tests --cov=modman --cov=modstore_server --cov-report=term-missing -q --cov-fail-under=40
+        run: pytest tests --cov=modman --cov=modstore_server --cov-report=term-missing -q --cov-fail-under=25

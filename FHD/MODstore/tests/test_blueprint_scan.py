@@ -24,6 +24,21 @@ def test_scan_empty_file(tmp_path: Path) -> None:
     assert scan_flask_route_decorators(p) == []
 
 
+def test_scan_surface_bundle_missing_returns_error() -> None:
+    """extension_surface.json 不存在时 load 函数返回 schema_version=0 的错误字典。"""
+    from unittest.mock import patch
+
+    from modman.surface_bundle import load_bundled_extension_surface
+
+    load_bundled_extension_surface.cache_clear()
+    with patch("modman.surface_bundle.bundled_extension_surface_path") as mock_p:
+        mock_p.return_value = Path("/nonexistent/__test_surface__.json")
+        result = load_bundled_extension_surface()
+    load_bundled_extension_surface.cache_clear()
+    assert result["schema_version"] == 0
+    assert "error" in result
+
+
 def test_scan_surface_bundle_loads() -> None:
     from modman.surface_bundle import bundled_extension_surface_path, load_bundled_extension_surface
 
