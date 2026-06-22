@@ -523,20 +523,25 @@ class TestDistillationTrainerEvaluateEdgeCases:
     @pytest.mark.skipif(not torch_available, reason="torch not available")
     def test_evaluate_multiple_batches(self):
         """evaluate should handle multiple batches correctly."""
+        import types
+
         import torch
 
         trainer = DistillationTrainer(device="cpu")
-        mock_model = MagicMock()
 
-        batch1_output = MagicMock()
-        batch1_output.loss = torch.tensor(0.3)
-        batch1_output.logits = torch.tensor([[0.9, 0.1], [0.2, 0.8]])
+        # Use SimpleNamespace instead of MagicMock so .loss/.logits are real tensors,
+        # not auto-generated child mocks whose attribute access is unreliable in CI.
+        batch1_ns = types.SimpleNamespace(
+            loss=torch.tensor(0.3),
+            logits=torch.tensor([[0.9, 0.1], [0.2, 0.8]]),
+        )
+        batch2_ns = types.SimpleNamespace(
+            loss=torch.tensor(0.5),
+            logits=torch.tensor([[0.7, 0.3]]),
+        )
 
-        batch2_output = MagicMock()
-        batch2_output.loss = torch.tensor(0.5)
-        batch2_output.logits = torch.tensor([[0.7, 0.3]])
-
-        mock_model.side_effect = [batch1_output, batch2_output]
+        _outputs = iter([batch1_ns, batch2_ns])
+        mock_model = MagicMock(side_effect=lambda **kw: next(_outputs))
         trainer.model = mock_model
 
         batch1 = {
