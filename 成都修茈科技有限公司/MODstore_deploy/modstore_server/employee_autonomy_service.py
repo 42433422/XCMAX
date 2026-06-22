@@ -859,6 +859,53 @@ class _PlatformBenchLlmClient:
         return str(out.get("content") or "")
 
 
+# 进化引擎只应对「prompt 可修」的失败做 prompt 优化。配额/限流/鉴权/缺 key 等基建类失败
+# 不是 prompt 问题，refine prompt 救不回来——2026-06 生产实测显示：LLM 配额耗尽
+# （403 配额不足: llm_calls）时，员工执行 99.6% 失败，进化引擎把这些误当 prompt 问题
+# 每天瞎改 2000+ 次 prompt 空转。这里在统计「触发进化的失败」时排除这些基建类错误。
+_EVOLUTION_INFRA_FAILURE_MARKERS: Tuple[str, ...] = (
+    "配额",
+    "quota",
+    "llm_calls",
+    "429",
+    "rate limit",
+    "rate_limit",
+    "missing api key",
+    "未配置",
+)
+
+
+def _evolution_failure_candidates(
+    session, *, cutoff, min_failures: int, limit: int
+) -> List[Tuple[str, int]]:
+    """近窗口内 prompt-可修失败 ≥ ``min_failures`` 的员工 ``(employee_id, fail_count)``。
+
+    排除 ``_EVOLUTION_INFRA_FAILURE_MARKERS`` 命中的基建/配额类失败——这些不是 prompt 问题，
+    若计入会导致配额耗尽时进化引擎空转（见上方说明）。
+    """
+    err_col = func.coalesce(EmployeeExecutionMetric.error, "")
+    query = session.query(
+        EmployeeExecutionMetric.employee_id,
+        func.count(EmployeeExecutionMetric.id).label("fail_count"),
+    ).filter(
+        EmployeeExecutionMetric.created_at >= cutoff,
+        EmployeeExecutionMetric.status != "success",
+    )
+    for marker in _EVOLUTION_INFRA_FAILURE_MARKERS:
+        query = query.filter(~err_col.ilike(f"%{marker}%"))
+    rows = (
+        query.group_by(EmployeeExecutionMetric.employee_id)
+        .order_by(func.count(EmployeeExecutionMetric.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        (str(r[0] or "").strip(), int(r[1] or 0))
+        for r in rows
+        if str(r[0] or "").strip() and int(r[1] or 0) >= min_failures
+    ]
+
+
 def run_employee_evolution_scan(
     *,
     lookback_hours: int = 24,
@@ -875,26 +922,10 @@ def run_employee_evolution_scan(
 
     sf = get_session_factory()
     with sf() as session:
-        # 仅关心最近窗口中失败较多的员工
-        rows = (
-            session.query(
-                EmployeeExecutionMetric.employee_id,
-                func.count(EmployeeExecutionMetric.id).label("fail_count"),
-            )
-            .filter(
-                EmployeeExecutionMetric.created_at >= cutoff,
-                EmployeeExecutionMetric.status != "success",
-            )
-            .group_by(EmployeeExecutionMetric.employee_id)
-            .order_by(func.count(EmployeeExecutionMetric.id).desc())
-            .limit(lim)
-            .all()
+        # 仅关心最近窗口中「prompt 可修」失败较多的员工（排除配额/限流/缺 key 等基建失败）
+        candidates = _evolution_failure_candidates(
+            session, cutoff=cutoff, min_failures=min_failures, limit=lim
         )
-        candidates = [
-            (str(r[0] or "").strip(), int(r[1] or 0))
-            for r in rows
-            if str(r[0] or "").strip() and int(r[1] or 0) >= min_failures
-        ]
     if not candidates:
         return {"ok": True, "enabled": True, "processed": 0, "created": 0}
 
