@@ -1,14 +1,17 @@
-"""VULN-1 纵深防御：MOD 验签 fail-open 的可选收紧开关回归测试。
+"""VULN-1：MOD 验签 fail-closed 收紧开关回归测试（核心修复后）。
 
-``ModPackage._verify_package_signature`` 在未配置 ``XCAGI_MOD_PUBLIC_KEY``（无法
-做密码学验签）时，默认仅校验内容哈希后放行——这是历史行为，必须保持不变以免破坏
-现有安装。本次新增运维开关 ``XCAGI_REQUIRE_SIGNED_MODS``：
+历史的 fail-open 路径（"未配置公钥 + 签名非空 + 哈希匹配 -> return True"）已被
+核心修复删除：验签现在始终用 *打包内置* 的受信公钥做真实 Ed25519 验签，伪造的
+非空签名会被密码学验签拒绝（详见 test_mod_ed25519_signing.py）。
 
-* 未设 / "0" / "false" -> 放行（行为不变，返回 True）
+本文件聚焦运维开关 ``XCAGI_REQUIRE_SIGNED_MODS`` 在 *真正未签名*（signature
+字段为空）的 MOD 上的行为：
+
+* 未设 / "0" / "false" -> 不破坏安装（内容哈希仍校验，但缺签名时放行/返回 False）
 * "1" / "true"        -> fail-closed，抛 ModSignatureError
 
-为命中"未配置公钥但签名非空"的放行分支，需构造一个 content_hash 与解压目录实际
-哈希一致、且 signature 字段非空的包（绕过空签名提前返回 False 的逻辑）。
+为命中"未签名"分支，构造一个 content_hash 与 zip 成员实际哈希一致、且 signature
+字段为空字符串的包。
 """
 
 from __future__ import annotations
@@ -22,32 +25,30 @@ import pytest
 from app.infrastructure.mods.package import (
     ModPackage,
     ModSignatureError,
-    compute_directory_hash,
+    compute_members_hash,
 )
 
 
-def _build_pkg_with_matching_hash(tmp_path) -> tuple[str, str]:
-    """构造一个内容哈希匹配、签名非空、但无对应公钥的 MOD 包。
+def _build_unsigned_pkg_with_matching_hash(tmp_path) -> tuple[str, str]:
+    """构造一个内容哈希匹配、但 *未携带签名*（signature="" ）的 MOD 包。
+
+    内容哈希基于 zip 成员（排除 META-INF/）计算，确保验签端重算结果一致，从而
+    走到"哈希通过但缺签名"的分支，专门测 XCAGI_REQUIRE_SIGNED_MODS 行为。
 
     Returns: (package_path, extracted_target_dir)
     """
-    mod_dir = tmp_path / "src_mod"
-    mod_dir.mkdir()
     manifest = {"id": "optreq-test", "version": "1.0.0"}
-    (mod_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    (mod_dir / "code.py").write_text("pass", encoding="utf-8")
+    members = [
+        ("manifest.json", json.dumps(manifest).encode("utf-8")),
+        ("code.py", b"pass"),
+    ]
+    content_hash = compute_members_hash(members)
 
-    # 先解压到目标目录，再按解压目录真实内容算哈希，保证 stored_hash == computed_hash。
     target_dir = str(tmp_path / "extracted")
     os.makedirs(target_dir, exist_ok=True)
-
-    # 直接写入解压目录的内容（与包内一致）。
-    for name in ("manifest.json", "code.py"):
-        dst = os.path.join(target_dir, name)
-        with open(os.path.join(str(mod_dir), name), "rb") as src, open(dst, "wb") as out:
-            out.write(src.read())
-
-    content_hash = compute_directory_hash(target_dir)
+    for name, content in members:
+        with open(os.path.join(target_dir, name), "wb") as out:
+            out.write(content)
 
     package_path = str(tmp_path / "pkg" / "optreq-test-1.0.0.xcmod")
     os.makedirs(os.path.dirname(package_path), exist_ok=True)
@@ -56,48 +57,52 @@ def _build_pkg_with_matching_hash(tmp_path) -> tuple[str, str]:
         "algorithm": "sha256",
         "content_hash": content_hash,
         "timestamp": "2026-01-01T00:00:00Z",
-        # 非空签名 -> 跳过空签名提前返回 False 的分支，进入哈希/验签流程。
-        "signature": "ZmFrZS1iYXNlNjQtc2lnbmF0dXJl",
+        # 空签名 -> 真正未签名，命中 require-signed 收紧分支。
+        "signature": "",
     }
     with zipfile.ZipFile(package_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("manifest.json", json.dumps(manifest))
-        zf.writestr("code.py", "pass")
+        for name, content in members:
+            zf.writestr(name, content)
         zf.writestr("META-INF/signature.json", json.dumps(sig))
 
     return package_path, target_dir
 
 
-def test_default_env_allows_unverified_mod(tmp_path, monkeypatch):
-    """默认环境（无公钥、未设开关）下，未验签的 MOD 仍放行——行为不变。"""
+def test_default_env_allows_unsigned_mod(tmp_path, monkeypatch):
+    """默认环境（未设开关）下，未签名（哈希通过）的 MOD 不破坏安装。
+
+    核心修复后：缺签名时不再 fail-open 地 return True，而是 return False（表示
+    "未通过密码学验签"），但默认不 raise，调用方据此保持历史的不破坏安装行为。
+    """
     monkeypatch.delenv("XCAGI_MOD_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("XCAGI_REQUIRE_SIGNED_MODS", raising=False)
 
-    package_path, target_dir = _build_pkg_with_matching_hash(tmp_path)
+    package_path, target_dir = _build_unsigned_pkg_with_matching_hash(tmp_path)
 
     with zipfile.ZipFile(package_path, "r") as zf:
         result = ModPackage._verify_package_signature(target_dir, zf)
-    assert result is True
+    assert result is False
 
 
 def test_require_signed_false_still_allows(tmp_path, monkeypatch):
-    """XCAGI_REQUIRE_SIGNED_MODS=0 显式关闭时仍放行。"""
+    """XCAGI_REQUIRE_SIGNED_MODS=0 显式关闭时，未签名 MOD 不 raise。"""
     monkeypatch.delenv("XCAGI_MOD_PUBLIC_KEY", raising=False)
     monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", "0")
 
-    package_path, target_dir = _build_pkg_with_matching_hash(tmp_path)
+    package_path, target_dir = _build_unsigned_pkg_with_matching_hash(tmp_path)
 
     with zipfile.ZipFile(package_path, "r") as zf:
         result = ModPackage._verify_package_signature(target_dir, zf)
-    assert result is True
+    assert result is False
 
 
 @pytest.mark.parametrize("flag", ["1", "true", "TRUE", "yes", "on"])
-def test_require_signed_without_pubkey_raises(tmp_path, monkeypatch, flag):
-    """XCAGI_REQUIRE_SIGNED_MODS 为真且无公钥时 fail-closed，抛 ModSignatureError。"""
+def test_require_signed_unsigned_raises(tmp_path, monkeypatch, flag):
+    """XCAGI_REQUIRE_SIGNED_MODS 为真且 MOD 未签名时 fail-closed，抛 ModSignatureError。"""
     monkeypatch.delenv("XCAGI_MOD_PUBLIC_KEY", raising=False)
     monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", flag)
 
-    package_path, target_dir = _build_pkg_with_matching_hash(tmp_path)
+    package_path, target_dir = _build_unsigned_pkg_with_matching_hash(tmp_path)
 
     with zipfile.ZipFile(package_path, "r") as zf:
         with pytest.raises(ModSignatureError):

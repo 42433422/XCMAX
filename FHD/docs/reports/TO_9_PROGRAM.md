@@ -127,13 +127,15 @@
 | ID | 漏洞 | 裁决 | 状态 | 工时 | 说明 |
 |---|---|---|---|---|---|
 | VULN-3 | 模板删除路径遍历（`fs:/etc/passwd` 删任意文件，可远程未鉴权触达） | ✅ 确认真实 | ✅ 已修 | — | basename+realpath 包含校验，合法裸文件名删除不受影响；回归测试 6 项绿 |
-| VULN-1 | Mod 后端 RCE（签名校验 fail-open + 无沙盒） | ✅ 确认真实 | ⚠️ 部分缓解 | — | 本批次：加 `XCAGI_REQUIRE_SIGNED_MODS` 可选 fail-closed 开关（默认行为不变）+ 响亮告警 |
+| VULN-1 | Mod 后端 RCE（签名校验 fail-open + 无沙盒） | ✅ 确认真实 | ✅ 核心已修(S1-core) | — | 真 Ed25519 签名/验签 + 受信公钥随应用打包（消除 fail-open 根因）+ fail-closed + 删除伪验证；剩 S1-rollout(去 verify_signature=False+翻开关) 与 S1-sandbox（见下） |
 | VULN-2 | Mod 解压 Zip-Slip | ❌ 已被缓解（CPython extractall sanitize，对抗 PoC 证伪） | ✅ 加防回归测试 | — | `test_zip_slip_safe.py` 文档化 |
 | VULN-4 | 上传删除路径遍历 | ❌ 已被缓解（单段路由 + uvicorn 先解码 → 404，对抗 PoC 证伪） | 🔭 纵深防御 | 1h | 加 secure_filename 一致性硬化（非可达漏洞） |
-| S1 | **VULN-1 完整修复**（签名管线落地 + 受信公钥随应用打包 + 去掉调用方 `verify_signature=False` + Mod 后端最小权限沙盒 + 安装端点鉴权） | — | 🔭 ⚠️ | 大 | **旗舰安全工程**；须与签名发布流程一起上线，否则会让所有安装失败 |
-| S2 | 修签名管线自指哈希 bug（`signature.json` 被计入 `content_hash` 形成自指环，致真实包验签必 mismatch） | — | 🔭 | 2h | 阻塞 S1 的前置 |
+| S1-core | **VULN-1 安全核心：真 Ed25519 签名/验签 + 受信公钥随应用打包 + fail-closed + 删除伪验证** | — | ✅ 已修(sec-mod-signing PR) | — | `trusted_keys.py` 内置受信公钥（不再依赖运行时 env=去掉 fail-open 根因）；`_verify_package_signature` 重算 hash(排除 META-INF)+Ed25519 验签，篡改/错误密钥/未签名+开关 一律 raise；签名 CLI `scripts/dev/sign_mod_package.py`；私钥不入库。测试 (a)-(g) 31 passed + 回归 471 passed |
+| S1-rollout | VULN-1 收尾：①签名发布流程产出已签名包 → ②去掉调用方 `mod_store_routes.py:434/442` 的 `verify_signature=False` → ③翻开 `XCAGI_REQUIRE_SIGNED_MODS` 默认 fail-closed | — | 🔭 ⚠️ | 中 | **须先有签名发布产物**再翻开，否则未签名包安装失败；S1-core 已让这条路径真实可用 |
+| S1-sandbox | Mod 后端执行最小权限沙盒（独立子进程 + seccomp/能力限制或 RestrictedPython）+ `/api/mod-store/install` 端点鉴权 | — | 🔭 ⚠️ | 大 | 平台相关、最大块；纵深防御（即使验签被绕过也限制爆炸半径） |
+| S2 | 修签名管线自指哈希 bug | — | ✅ 已修(随 S1-core) | — | `compute_members_hash` 基于规范化 zip 成员排除 META-INF/，签/验两端一致；附带修了 mod_id/ 前缀与 extract manifest 解析潜在 bug |
 
-**剩余工时小计：S1 大（需排期）+ S2 2h + VULN-4 硬化 1h**
+**剩余工时小计：S1-rollout 中（需签名发布流程）+ S1-sandbox 大 + VULN-4 硬化 1h**
 
 ---
 
