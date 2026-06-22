@@ -7,6 +7,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import com.xiuci.xcagi.mobile.ui.feedback.ProvideXcagiHaptic
 
 /**
  * XCAGI 品牌色系 v4 — 单一真相源（SSOT）
@@ -134,6 +135,14 @@ private val DarkColors = darkColorScheme(
     onSurface = N100,
     surfaceVariant = N700,
     onSurfaceVariant = N400,
+    // Material3 surface 层级 — 暗模式从 surface 向亮渐增 5 档（视觉立体感）
+    surfaceContainerLowest = Color(0xFF0E1014),
+    surfaceContainerLow = Color(0xFF181B20),
+    surfaceContainer = N800,
+    surfaceContainerHigh = Color(0xFF2A2E35),
+    surfaceContainerHighest = N700,
+    surfaceBright = Color(0xFF3A3E45),
+    surfaceDim = N900,
     outline = N400,
     outlineVariant = N700,
     error = FuncDanger,
@@ -141,6 +150,10 @@ private val DarkColors = darkColorScheme(
     errorContainer = Color(0xFF5C1A1A),
     onErrorContainer = Color(0xFFFFB3B3),
     surfaceTint = BrandBlueLight,
+    inverseSurface = N100,
+    inverseOnSurface = N800,
+    inversePrimary = BrandBlue,
+    scrim = Color.Black,
 )
 
 private val LightColors = lightColorScheme(
@@ -159,6 +172,14 @@ private val LightColors = lightColorScheme(
     onSurface = N800,
     surfaceVariant = N100,
     onSurfaceVariant = N500,
+    // Material3 surface 层级 — 亮模式从 surface 向灰渐增 5 档
+    surfaceContainerLowest = N00,
+    surfaceContainerLow = Color(0xFFFAFBFC),
+    surfaceContainer = N50,
+    surfaceContainerHigh = Color(0xFFEFF1F3),
+    surfaceContainerHighest = N100,
+    surfaceBright = N00,
+    surfaceDim = Color(0xFFECEEF0),
     outline = N500,
     outlineVariant = N200,
     error = FuncDanger,
@@ -166,7 +187,70 @@ private val LightColors = lightColorScheme(
     errorContainer = Color(0xFFFFECEC),
     onErrorContainer = Color(0xFF6B1A1A),
     surfaceTint = BrandBlue,
+    inverseSurface = N800,
+    inverseOnSurface = N100,
+    inversePrimary = BrandBlueLight,
+    scrim = Color.Black,
 )
+
+/**
+ * 非 Composable 上下文的颜色常量出口（ViewModel/Repository/data 类）。
+ *
+ * Composable 内禁止使用 — Composable 必须走 [MaterialTheme.colorScheme] 或 [LocalXcagiColors]，
+ * 这样才能跟随主题/暗黑模式。本对象仅为承载 *与主题无关的语义色*（如徽标"在线"绿）而存在。
+ */
+object XcagiPalette {
+    val BrandBlue: Color get() = com.xiuci.xcagi.mobile.ui.theme.BrandBlue
+    val Success: Color get() = FuncGreen
+    val Danger: Color get() = FuncDanger
+    val Warning: Color get() = FuncWarning
+    val OnlineGreen: Color get() = WeChatOnline
+
+    /** 头像/徽标轮换色（标准 6 色）— 通过 hash(key) 选择，保证同一主体颜色稳定 */
+    val AvatarRotation: List<Color> = listOf(
+        BrandBlue,
+        FuncGreen,
+        Color(0xFF8B5CF6), // 紫
+        Color(0xFF00ACC1), // 青
+        FuncWarning,
+        Color(0xFF494E56), // 中灰
+    )
+
+    /** 员工选择列表头像（更鲜艳 8 色）— 区分多员工 */
+    val EmployeeAvatarRotation: List<Color> = listOf(
+        Color(0xFF4A90D9), // 蓝
+        Color(0xFFE74C3C), // 红
+        Color(0xFF2ECC71), // 绿
+        Color(0xFFF39C12), // 黄橙
+        Color(0xFF9B59B6), // 紫
+        Color(0xFF1ABC9C), // 青蓝
+        Color(0xFFE67E22), // 橙
+        Color(0xFF3498DB), // 浅蓝
+    )
+
+    /**
+     * Accent 强调色 — 超出 Material3 colorScheme 的扩展品类。
+     * 用于工作台/数据可视化/分类标签等需要区分多类别的场景。
+     * 每个色配 container 浅底（light 模式背景）。
+     */
+    object Accent {
+        // 紫
+        val Purple: Color = Color(0xFF8B5CF6)
+        val PurpleContainer: Color = Color(0xFFF3E8FF)
+        // 靛紫
+        val Indigo: Color = Color(0xFF6366F1)
+        val IndigoContainer: Color = Color(0xFFEEF2FF)
+        // 青
+        val Cyan: Color = Color(0xFF00ACC1)
+        val CyanContainer: Color = Color(0xFFE0F7FA)
+        // 青绿 (Teal)
+        val Teal: Color = Color(0xFF06B6D4)
+        val TealDark: Color = Color(0xFF0F766E)
+        // 粉
+        val Pink: Color = Color(0xFFEC4899)
+        val PinkContainer: Color = Color(0xFFFDF2F8)
+    }
+}
 
 @Composable
 fun XcagiTheme(
@@ -185,8 +269,9 @@ fun XcagiTheme(
             colorScheme = if (dark) DarkColors else LightColors,
             typography = XcagiTypography,
             shapes = XcagiShapes,
-            content = content,
-        )
+        ) {
+            ProvideXcagiHaptic(content = content)
+        }
     }
 }
 

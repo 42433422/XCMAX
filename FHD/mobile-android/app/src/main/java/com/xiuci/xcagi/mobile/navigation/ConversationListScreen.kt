@@ -1,5 +1,8 @@
 package com.xiuci.xcagi.mobile.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -56,6 +59,7 @@ import com.xiuci.xcagi.mobile.model.ConversationType
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
+import com.xiuci.xcagi.mobile.ui.feedback.hapticClickable
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -137,6 +141,14 @@ fun ConversationListScreen(
                 items(filtered, key = { it.id }) { item ->
                     ConversationCell(
                             item = item,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(220),
+                                placementSpec = androidx.compose.animation.core.spring(
+                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
+                                ),
+                                fadeOutSpec = tween(140),
+                            ),
                             onClick = {
                                 when (item.id) {
                                     PinnedIds.ASSISTANT -> onOpenAssistant()
@@ -608,14 +620,14 @@ private fun EcosystemSyncHint() {
 // 会话单元格 — 核心组件
 // ═══════════════════════════════════════════
 @Composable
-private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
+private fun ConversationCell(item: ConversationItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val hasUnread = item.unreadCount > 0
     val timestampText = formatTimestamp(item.timestamp)
     val visibleBadge = item.badgeText?.takeUnless { it == timestampText }
 
     Surface(
             color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+            modifier = modifier.fillMaxWidth().hapticClickable { onClick() },
     ) {
         Row(
                 Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 11.dp),
@@ -818,14 +830,15 @@ private fun CsAvatar() {
 // ═══════════════════════════════════════════
 @Composable
 private fun LetterAvatar(letter: Char, colorOverride: Color? = null) {
+    // LetterAvatar 用主题 SSOT 调色板（XcagiPalette.AvatarRotation 的语义化版本）
     val colors =
             listOf(
                     XcagiTheme.extra.brandBlue,
                     XcagiTheme.extra.success,
                     XcagiTheme.extra.warning,
                     XcagiTheme.extra.danger,
-                    Color(0xFF8B5CF6),
-                    Color(0xFF00ACC1),
+                    com.xiuci.xcagi.mobile.ui.theme.XcagiPalette.AvatarRotation[2], // 紫
+                    com.xiuci.xcagi.mobile.ui.theme.XcagiPalette.AvatarRotation[3], // 青
             )
     val idx = kotlin.math.abs(letter.code) % colors.size
     Box(

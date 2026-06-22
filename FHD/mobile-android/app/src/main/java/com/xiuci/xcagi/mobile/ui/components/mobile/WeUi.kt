@@ -1,15 +1,21 @@
 package com.xiuci.xcagi.mobile.ui.components.mobile
 
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.draw.scale
+import com.xiuci.xcagi.mobile.ui.feedback.HapticKind
+import com.xiuci.xcagi.mobile.ui.feedback.hapticClickable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
@@ -1465,6 +1471,14 @@ fun WeBottomNavBar(
             ) {
                 items.forEach { item ->
                     val selected = currentRoute == item.route
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (selected) 1.08f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                        label = "navIconScale",
+                    )
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -1473,7 +1487,7 @@ fun WeBottomNavBar(
                             .background(
                                 if (selected) XcagiTheme.extra.n50 else Color.Transparent,
                             )
-                            .clickable { onSelect(item.route) },
+                            .hapticClickable(kind = HapticKind.Select) { onSelect(item.route) },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
@@ -1492,7 +1506,9 @@ fun WeBottomNavBar(
                             Icon(
                                 item.icon,
                                 contentDescription = item.label,
-                                modifier = Modifier.size(23.dp),
+                                modifier = Modifier
+                                    .size(23.dp)
+                                    .scale(iconScale),
                                 tint =
                                     if (selected) XcagiTheme.extra.brandBlue
                                     else MaterialTheme.colorScheme.onSurface,

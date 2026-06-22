@@ -84,6 +84,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
+import com.xiuci.xcagi.mobile.ui.theme.XcagiPalette
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 
 /** FontAwesome icon class → Material Icon 映射 */
@@ -112,8 +113,8 @@ private fun iconBgColors(): List<Color> =
                 MaterialTheme.colorScheme.primaryContainer,
                 MaterialTheme.colorScheme.secondaryContainer,
                 XcagiTheme.extra.warning.copy(alpha = 0.15f),
-                Color(0xFFF3E8FF), // 紫色容器，无对应 token，保留硬编码
-                Color(0xFFE0F7FA), // 青色容器，无对应 token，保留硬编码
+                XcagiPalette.Accent.PurpleContainer,
+                XcagiPalette.Accent.CyanContainer,
                 XcagiTheme.extra.danger.copy(alpha = 0.12f),
         )
 
@@ -123,8 +124,8 @@ private fun iconFgColors(): List<Color> =
                 MaterialTheme.colorScheme.primary,
                 MaterialTheme.colorScheme.secondary,
                 XcagiTheme.extra.warning,
-                Color(0xFF8B5CF6), // 紫色，无对应 token，保留硬编码
-                Color(0xFF00ACC1), // 青色，无对应 token，保留硬编码
+                XcagiPalette.Accent.Purple,
+                XcagiPalette.Accent.Cyan,
                 XcagiTheme.extra.danger,
         )
 
@@ -194,8 +195,8 @@ fun WorkScreen(
                                                 title = "AIOPEN 开放智控",
                                                 subtitle = "企业级 AI Agent 接入平台，MCP/API 协议远程 UI 操控",
                                                 icon = Icons.Default.Explore,
-                                                iconTint = Color(0xFF6366F1), // 紫色，无对应 token，保留硬编码
-                                                iconBg = Color(0xFFEEF2FF), // 紫色容器，无对应 token，保留硬编码
+                                                iconTint = XcagiPalette.Accent.Indigo,
+                                                iconBg = XcagiPalette.Accent.IndigoContainer,
                                                 showArrow = true,
                                                 showDivider = true,
                                                 onClick = { onNavigateToApp(Routes.AI_OPEN) },
@@ -338,7 +339,7 @@ fun SmartAnalysisScreen(
                                 Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
                                         Column(Modifier.padding(Spacing.lg)) {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Box(Modifier.size(40.dp).clip(MaterialTheme.shapes.small).background(Color(0xFF0F766E) /* 青绿色品牌色，无对应 token，保留硬编码 */), contentAlignment = Alignment.Center) {
+                                                        Box(Modifier.size(40.dp).clip(MaterialTheme.shapes.small).background(XcagiPalette.Accent.TealDark), contentAlignment = Alignment.Center) {
                                                                 Icon(Icons.Default.Extension, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                                                         }
                                                         Spacer(Modifier.width(Spacing.md))
@@ -366,9 +367,9 @@ fun SmartAnalysisScreen(
                         item { Spacer(Modifier.height(Spacing.xs)) }
                         item {
                                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                                        QuickChip(label = "生成报告", color = Color(0xFF6366F1) /* 紫色，无对应 token，保留硬编码 */, bg = Color(0xFFEEF2FF) /* 紫色容器，无对应 token，保留硬编码 */) { onOpenChat("kitten"); vm.snack("已切换到智慧分析模式") }
+                                        QuickChip(label = "生成报告", color = XcagiPalette.Accent.Indigo, bg = XcagiPalette.Accent.IndigoContainer) { onOpenChat("kitten"); vm.snack("已切换到智慧分析模式") }
                                         Spacer(Modifier.weight(1f))
-                                        QuickChip(label = "上传表格", color = Color(0xFFEC4899) /* 粉色，无对应 token，保留硬编码 */, bg = Color(0xFFFDF2F8) /* 粉色容器，无对应 token，保留硬编码 */) {
+                                        QuickChip(label = "上传表格", color = XcagiPalette.Accent.Pink, bg = XcagiPalette.Accent.PinkContainer) {
                                                 // 调用系统文件选择器
                                                 try {
                                                         val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE) }
@@ -618,7 +619,7 @@ fun AiOpenScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                 copyToClipboard(ctx, "/api/aiopen/mcp", "MCP 地址已复制")
                                                 vm.snack("MCP 端点已复制")
                                         })
-                                        WeCell(title = "使用说明", subtitle = "查看 AIOPEN 接入文档", icon = Icons.Default.AssignmentInd, iconTint = Color(0xFF6366F1) /* 紫色，无对应 token，保留硬编码 */, iconBg = Color(0xFFEEF2FF) /* 紫色容器，无对应 token，保留硬编码 */, showArrow = false, showDivider = false, onClick = {
+                                        WeCell(title = "使用说明", subtitle = "查看 AIOPEN 接入文档", icon = Icons.Default.AssignmentInd, iconTint = XcagiPalette.Accent.Indigo, iconBg = XcagiPalette.Accent.IndigoContainer, showArrow = false, showDivider = false, onClick = {
                                                 try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://docs.xiu-ci.com/aiopen"))) }
                                                 catch (_: Exception) { vm.snack("无法打开浏览器", true) }
                                         })
@@ -732,7 +733,7 @@ fun BrainScreen(vm: AppViewModel, onBack: () -> Unit, onOpenMod: (String) -> Uni
                                 items(modInfos) { mod ->
                                         Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth().clickable { onOpenMod(mod.id) }) {
                                                 Row(Modifier.padding(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
-                                                        val avatarColors = listOf(Color(0xFF4A90D9), Color(0xFFE74C3C), Color(0xFF2ECC71), Color(0xFFF39C12), Color(0xFF9B59B6), Color(0xFF1ABC9C)) // 头像多色轮换，无对应 token，保留硬编码
+                                                        val avatarColors = XcagiPalette.EmployeeAvatarRotation.take(6)
                                                         val avatarColor = avatarColors[kotlin.math.abs(mod.name.hashCode()) % avatarColors.size]
                                                         Box(Modifier.size(44.dp).clip(MaterialTheme.shapes.small).background(avatarColor), contentAlignment = Alignment.Center) {
                                                                 Text(mod.name.firstOrNull()?.toString() ?: "M", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
@@ -806,8 +807,8 @@ fun ModStoreScreen(vm: AppViewModel, onBack: () -> Unit, onOpenMod: (String) -> 
         }
 
         val cardColors = listOf(
-                XcagiTheme.extra.brandBlue, Color(0xFF8B5CF6) /* 紫色，无对应 token，保留硬编码 */, Color(0xFFEC4899) /* 粉色，无对应 token，保留硬编码 */, XcagiTheme.extra.warning,
-                XcagiTheme.extra.success, Color(0xFF06B6D4) /* 青色，无对应 token，保留硬编码 */, XcagiTheme.extra.danger, Color(0xFF6366F1) /* 紫色，无对应 token，保留硬编码 */,
+                XcagiTheme.extra.brandBlue, XcagiPalette.Accent.Purple, XcagiPalette.Accent.Pink, XcagiTheme.extra.warning,
+                XcagiTheme.extra.success, XcagiPalette.Accent.Teal, XcagiTheme.extra.danger, XcagiPalette.Accent.Indigo,
         )
 
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -856,7 +857,7 @@ fun ModStoreScreen(vm: AppViewModel, onBack: () -> Unit, onOpenMod: (String) -> 
                                         Box(
                                                 Modifier.height(100.dp).background(
                                                         androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                                                colors = listOf(XcagiTheme.extra.brandBlue, Color(0xFF8B5CF6) /* 紫色，无对应 token，保留硬编码 */),
+                                                                colors = listOf(XcagiTheme.extra.brandBlue, XcagiPalette.Accent.Purple),
                                                         )
                                                 ).padding(Spacing.lg),
                                         ) {

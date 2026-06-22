@@ -579,7 +579,7 @@ constructor(
                 avatarType = AvatarType.ICON,
                 isPinned = true,
                 badgeText = "AI在线",
-                badgeColor = androidx.compose.ui.graphics.Color(0xFF4CAF50),
+                badgeColor = com.xiuci.xcagi.mobile.ui.theme.XcagiPalette.OnlineGreen,
             )
         )
 
@@ -596,7 +596,7 @@ constructor(
                     isOnline = true,
                     isPinned = true,
                     badgeText = "在线",
-                    badgeColor = androidx.compose.ui.graphics.Color(0xFF07C160),
+                    badgeColor = com.xiuci.xcagi.mobile.ui.theme.XcagiPalette.OnlineGreen,
                 )
             )
         }
@@ -605,17 +605,9 @@ constructor(
     }
 
     private fun employeeAvatarColor(key: String): androidx.compose.ui.graphics.Color {
-        val colors =
-                listOf(
-                        0xFF3370FF,
-                        0xFF00B578,
-                        0xFF8B5CF6,
-                        0xFF00ACC1,
-                        0xFFED7B2F,
-                        0xFF494E56,
-                )
-        val idx = kotlin.math.abs(key.hashCode()) % colors.size
-        return androidx.compose.ui.graphics.Color(colors[idx])
+        val palette = com.xiuci.xcagi.mobile.ui.theme.XcagiPalette.AvatarRotation
+        val idx = kotlin.math.abs(key.hashCode()) % palette.size
+        return palette[idx]
     }
 
     fun runSyncNow() =

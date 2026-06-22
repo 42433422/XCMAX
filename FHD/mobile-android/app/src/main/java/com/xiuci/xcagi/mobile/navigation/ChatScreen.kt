@@ -74,6 +74,10 @@ import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.ChatSuggestion
+import com.xiuci.xcagi.mobile.ui.components.hapticPressable
+import com.xiuci.xcagi.mobile.ui.feedback.HapticKind
+import com.xiuci.xcagi.mobile.ui.feedback.LocalXcagiHaptic
+import com.xiuci.xcagi.mobile.ui.feedback.hapticClickable
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
@@ -83,10 +87,6 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
-
-// ── 微信风格色值（保留作为装饰性常量，未在新设计系统中使用） ──
-// 已迁移至 XcagiTheme.extra.weChatGreen / MaterialTheme.colorScheme
-private val WeChatBubbleBg = Color(0xFFF5F5F5)    // AI 气泡灰底（保留兼容）
 
 data class ChatTopProfileAvatar(
     val text: String,
@@ -553,7 +553,10 @@ private fun WeChatStyleInputBar(
                 color = XcagiTheme.extra.brandBlue,
                 modifier = Modifier
                     .size(36.dp)
-                    .clickable { if (streaming) onStop() else onSend() },
+                    .hapticPressable(
+                        kind = if (streaming) HapticKind.Reject else HapticKind.Confirm,
+                        pressedScale = 0.92f,
+                    ) { if (streaming) onStop() else onSend() },
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -571,7 +574,7 @@ private fun WeChatStyleInputBar(
                     Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .clickable(onClick = onMore),
+                        .hapticClickable { onMore() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -798,12 +801,8 @@ fun AiEmployeeListScreen(
                                 .padding(horizontal = Spacing.md, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // 彩色头像（首字）
-                            val avatarColors = listOf(
-                                Color(0xFF4A90D9), Color(0xFFE74C3C), Color(0xFF2ECC71),
-                                Color(0xFFF39C12), Color(0xFF9B59B6), Color(0xFF1ABC9C),
-                                Color(0xFFE67E22), Color(0xFF3498DB),
-                            )
+                            // 彩色头像（首字）— 走 XcagiPalette SSOT
+                            val avatarColors = com.xiuci.xcagi.mobile.ui.theme.XcagiPalette.EmployeeAvatarRotation
                             val avatarColor = avatarColors[kotlin.math.abs(employee.key.hashCode()) % avatarColors.size]
                             Box(
                                 Modifier

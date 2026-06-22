@@ -1,7 +1,6 @@
 package com.xiuci.xcagi.mobile.navigation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +32,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +49,9 @@ import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.hapticPressable
+import com.xiuci.xcagi.mobile.ui.feedback.HapticKind
+import com.xiuci.xcagi.mobile.ui.feedback.LocalXcagiHaptic
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -63,6 +67,7 @@ fun HomeHubScreen(
     val hub by vm.homeHub.collectAsState()
     val serverLabel by vm.serverModeLabel.collectAsState()
     val fhdHost by vm.fhdHost.collectAsState()
+    val haptic = LocalXcagiHaptic.current
 
     LaunchedEffect(Unit) { vm.loadHomeHub() }
 
@@ -84,7 +89,12 @@ fun HomeHubScreen(
             onRefresh = { vm.loadHomeHub() },
             modifier = Modifier.weight(1f),
         ) {
-            if (hub.loading && hub.mods.isEmpty()) {
+            Crossfade(
+                targetState = hub.loading && hub.mods.isEmpty(),
+                animationSpec = tween(durationMillis = 220),
+                label = "homeHubLoadingCrossfade",
+            ) { isInitialLoading ->
+            if (isInitialLoading) {
                 Column(
                     Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -102,6 +112,7 @@ fun HomeHubScreen(
                 ) {
                     // ── 电脑状态卡片（白底，飞书风格） ──
                     Card(
+                        modifier = Modifier.hapticPressable(kind = HapticKind.Tap) { onConnectPc() },
                         shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(defaultElevation = Elevation.none),
@@ -109,7 +120,6 @@ fun HomeHubScreen(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clickable(onClick = onConnectPc)
                                 .padding(Spacing.lg),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -161,7 +171,7 @@ fun HomeHubScreen(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                     ) {
                         OutlinedButton(
-                            onClick = onConnectPc,
+                            onClick = { haptic.tap(); onConnectPc() },
                             modifier = Modifier.weight(1f),
                             shape = MaterialTheme.shapes.small,
                         ) {
@@ -169,7 +179,7 @@ fun HomeHubScreen(
                             Text("连接电脑")
                         }
                         Button(
-                            onClick = { vm.runSyncNow() },
+                            onClick = { haptic.confirm(); vm.runSyncNow() },
                             enabled = hub.pcOnline && !hub.syncing,
                             modifier = Modifier.weight(1f),
                             shape = MaterialTheme.shapes.small,
@@ -232,6 +242,7 @@ fun HomeHubScreen(
                     }
                 }
             }
+            }
         }
     }
 }
@@ -246,7 +257,7 @@ private fun QuickEntryCard(
     onClick: () -> Unit,
 ) {
     Card(
-        modifier.clickable(onClick = onClick),
+        modifier.hapticPressable { onClick() },
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = Elevation.none),
@@ -274,7 +285,7 @@ private fun QuickEntryCard(
 @Composable
 private fun ModTile(mod: ListItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Card(
-        modifier.clickable(onClick = onClick),
+        modifier.hapticPressable { onClick() },
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = Elevation.none),
