@@ -19,10 +19,8 @@ android {
         applicationId = "com.xiuci.xcagi.mobile"
         minSdk = 26
         targetSdk = 35
-        // versionCode/Name 可被环境变量覆盖：beta 渠道用时间戳当 versionCode 自增，
-        // 这样反复推送都不会被"整数版本号相等"卡死（见 scripts/push-beta.sh）。
-        versionCode = System.getenv("XCMAX_VC")?.toIntOrNull() ?: 10
-        versionName = System.getenv("XCMAX_VN") ?: "10.0.0"
+        versionCode = 10
+        versionName = "10.0.0"
         manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
