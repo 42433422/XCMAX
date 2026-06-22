@@ -436,7 +436,9 @@ async def test_preset_nodes_injected_when_llm_omits():
 
     # 检查真正落库的节点：必须含一个 skill_id=7、名为「解析输入」的 eskill 行。
     persisted_nodes = [
-        c.args[0] for c in db.add.call_args_list if getattr(c.args[0], "node_type", None) is not None
+        c.args[0]
+        for c in db.add.call_args_list
+        if getattr(c.args[0], "node_type", None) is not None
     ]
     node_types = [n.node_type for n in persisted_nodes]
     assert node_types.count("eskill") == 1
