@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HarmonyOS Sans SC 字体族 — 供 XML 主题 / TextView 引用 @font/harmony_sc。
+  Compose 侧请用 XcagiFontFamily (Type.kt)，直接引用各字重 ttf。
+  实际 ttf 文件需另行子集化后放入本目录。
+-->
+<font-family xmlns:android="http://schemas.android.com/apk/res/font">
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="400"
+        android:font="@font/harmony_sc_regular" />
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="500"
+        android:font="@font/harmony_sc_medium" />
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="600"
+        android:font="@font/harmony_sc_semibold" />
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="700"
+        android:font="@font/harmony_sc_bold" />
+</font-family>

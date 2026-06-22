@@ -2,8 +2,27 @@ package com.xiuci.xcagi.mobile.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.xiuci.xcagi.mobile.R
+
+/**
+ * 中文主字体 — HarmonyOS Sans SC（OFL 协议）
+ *
+ * 字体文件需放入 app/src/main/res/font/，文件名固定：
+ *   harmony_sc_regular.ttf  / harmony_sc_medium.ttf
+ *   harmony_sc_semibold.ttf / harmony_sc_bold.ttf
+ * 建议先用 pyftsubset 子集化至通用规范汉字一级表(~3500字) + ASCII + 标点，
+ * 每字重 ≤400KB，合计 ≤1.6MB。
+ */
+val XcagiFontFamily: FontFamily = FontFamily(
+    Font(R.font.harmony_sc_regular, FontWeight.Normal),
+    Font(R.font.harmony_sc_medium, FontWeight.Medium),
+    Font(R.font.harmony_sc_semibold, FontWeight.SemiBold),
+    Font(R.font.harmony_sc_bold, FontWeight.Bold),
+)
 
 /**
  * XCAGI 字体系统 — 对标飞书/钉钉字号阶梯
@@ -23,23 +42,23 @@ import androidx.compose.ui.unit.sp
  * - labelSmall     11sp Medium  — 时间戳/角标
  */
 val XcagiTypography = Typography(
-    displayLarge = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 36.sp),
-    displayMedium = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp),
-    displaySmall = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
+    displayLarge = TextStyle(fontFamily = XcagiFontFamily, fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 36.sp),
+    displayMedium = TextStyle(fontFamily = XcagiFontFamily, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp),
+    displaySmall = TextStyle(fontFamily = XcagiFontFamily, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
 
-    headlineLarge = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp),
-    headlineMedium = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
-    headlineSmall = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp),
+    headlineLarge = TextStyle(fontFamily = XcagiFontFamily, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp),
+    headlineMedium = TextStyle(fontFamily = XcagiFontFamily, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
+    headlineSmall = TextStyle(fontFamily = XcagiFontFamily, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp),
 
-    titleLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 24.sp),
-    titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Medium, lineHeight = 22.sp),
-    titleSmall = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp),
+    titleLarge = TextStyle(fontFamily = XcagiFontFamily, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 24.sp),
+    titleMedium = TextStyle(fontFamily = XcagiFontFamily, fontSize = 17.sp, fontWeight = FontWeight.Medium, lineHeight = 22.sp),
+    titleSmall = TextStyle(fontFamily = XcagiFontFamily, fontSize = 15.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp),
 
-    bodyLarge = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 22.sp),
-    bodyMedium = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 21.sp),
-    bodySmall = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 19.sp),
+    bodyLarge = TextStyle(fontFamily = XcagiFontFamily, fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 22.sp),
+    bodyMedium = TextStyle(fontFamily = XcagiFontFamily, fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 21.sp),
+    bodySmall = TextStyle(fontFamily = XcagiFontFamily, fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 19.sp),
 
-    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 18.sp),
-    labelMedium = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 17.sp),
-    labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 14.sp),
+    labelLarge = TextStyle(fontFamily = XcagiFontFamily, fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 18.sp),
+    labelMedium = TextStyle(fontFamily = XcagiFontFamily, fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 17.sp),
+    labelSmall = TextStyle(fontFamily = XcagiFontFamily, fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 14.sp),
 )
