@@ -59,6 +59,8 @@ from modstore_server.models import (
     get_session_factory,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _parse_positive_int(value: Any) -> int:
     try:
