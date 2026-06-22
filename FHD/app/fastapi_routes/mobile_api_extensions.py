@@ -657,6 +657,29 @@ async def mobile_shipments(
     return format_mobile_response(data=paginate_list(items, total, page, per_page))
 
 
+# ── 员工 & 部门 SSOT（手机端只读派生，与桌面/网页同一份 config/duty_roster.json）──
+def _employee_ssot_payload() -> dict[str, Any]:
+    """管理端 6 部门上岗 + 企业端 4 部门上架/未上架，自动派生自 SSOT。"""
+    from app.application.ops_closure_status import _installed_employee_pack_ids
+    from app.mod_sdk.employee_ssot import derive_employee_ssot
+
+    installed: set[str] = set()
+    try:
+        installed = _installed_employee_pack_ids()
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("mobile employee-ssot: 读取已安装 employee_pack 失败: %s", exc)
+    return derive_employee_ssot(installed_ids=installed)
+
+
+@extension_router.get("/employee-ssot")
+async def mobile_employee_ssot(user=Depends(get_mobile_user)):
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    return format_mobile_response(data=_employee_ssot_payload())
+
+
 # ── 设备管理 ──
 
 

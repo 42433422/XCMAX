@@ -101,3 +101,45 @@ def test_frontend_emp_id_layer_no_overlap_with_ssot():
     emp_layer_ids = set(re.findall(r"(\w+):\s*'\w+'", block))
     overlap = emp_layer_ids & set(_doc()["enterprise_employees"])
     assert not overlap, f"EMP_ID_LAYER 与 SSOT 重叠（应只留 SSOT 外条目）: {sorted(overlap)}"
+
+
+# ── 消费层：API 端点派生自同一 SSOT ──────────────────────────────────────
+def test_platform_shell_employee_ssot_endpoint():
+    """GET /api/platform-shell/employee-ssot（桌面/网页）派生自 SSOT。"""
+    import asyncio
+
+    from app.fastapi_routes.platform_shell_routes import platform_shell_employee_ssot
+
+    resp = asyncio.run(platform_shell_employee_ssot())
+    assert resp["success"] is True
+    assert len(resp["data"]["admin"]["departments"]) == 6
+    assert len(resp["data"]["enterprise"]["layers"]) == 4
+
+
+def test_mobile_employee_ssot_payload_matches_kotlin_dto():
+    """手机端 employee-ssot 派生自同一 SSOT；JSON 键须与 Android Kotlin DTO 对齐。"""
+    import app.fastapi_routes.mobile_api  # noqa: F401 — 须先导入以破已知循环导入
+
+    from app.fastapi_routes.mobile_api_extensions import _employee_ssot_payload
+
+    payload = _employee_ssot_payload()
+    assert {"schema_version", "admin", "enterprise"} <= set(payload)
+    assert len(payload["admin"]["departments"]) == 6
+    assert len(payload["enterprise"]["layers"]) == 4
+    dept0 = payload["admin"]["departments"][0]
+    assert {"id", "label", "employees", "planned_count", "on_duty_count"} <= set(dept0)
+
+
+def test_digest_dispatch_derives_from_roster_ssot():
+    """MODstore digest 产线路由派生自 roster SSOT（生成的 duty_roster），覆盖全编制。"""
+    modstore_dir = FHD / "MODstore"
+    if str(modstore_dir) not in sys.path:
+        sys.path.insert(0, str(modstore_dir))
+    from modstore_server.digest_vibe_line_dispatch import build_employee_dispatch_map
+
+    from app.mod_sdk.duty_roster import all_planned_duty_employee_ids
+
+    dispatch = build_employee_dispatch_map()  # 不传参 → SSOT 派生
+    planned = set(all_planned_duty_employee_ids())
+    assert not (planned - set(dispatch)), "编制员工未被产线派生覆盖"
+    assert dispatch.get("mobile-harmony-release-officer") == {"P-App"}
