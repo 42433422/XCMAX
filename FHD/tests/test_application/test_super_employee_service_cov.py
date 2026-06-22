@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from app.application.super_employee_service import (
+    _PARA_TOKEN_CACHE,
     CLAUDE_PROFILE,
     CODEX_PROFILE,
     DISPATCHER_MESSAGE_KIND,
@@ -518,6 +519,7 @@ class TestParaToken:
         monkeypatch.delenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", raising=False)
         monkeypatch.delenv("MODSTORE_PARA_TOKEN", raising=False)
         monkeypatch.delenv("DEVFLEET_TOKEN", raising=False)
+        _PARA_TOKEN_CACHE.clear()
         svc = _make_svc(tmp_path)
         client = MagicMock()
         resp = MagicMock()
@@ -532,6 +534,7 @@ class TestParaToken:
         monkeypatch.delenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", raising=False)
         monkeypatch.delenv("MODSTORE_PARA_TOKEN", raising=False)
         monkeypatch.delenv("DEVFLEET_TOKEN", raising=False)
+        _PARA_TOKEN_CACHE.clear()
         svc = _make_svc(tmp_path)
         client = MagicMock()
         resp = MagicMock()
@@ -1134,17 +1137,17 @@ class TestCliWorkspaceAndTimeout:
     def test_timeout_invalid_defaults(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_CLI_TIMEOUT_SEC", "not_a_number")
         svc = _make_svc(tmp_path)
-        assert svc._cli_timeout_seconds() == 45.0
+        assert svc._cli_timeout_seconds() == 180.0
 
     def test_timeout_clamped_low(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_CLI_TIMEOUT_SEC", "1")
         svc = _make_svc(tmp_path)
-        assert svc._cli_timeout_seconds() == 5.0
+        assert svc._cli_timeout_seconds() == 15.0
 
     def test_timeout_clamped_high(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_CLI_TIMEOUT_SEC", "999")
         svc = _make_svc(tmp_path)
-        assert svc._cli_timeout_seconds() == 120.0
+        assert svc._cli_timeout_seconds() == 999.0
 
 
 # ─────────────── _sync_para_task_updates ────────────────────────
