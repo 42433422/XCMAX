@@ -28,7 +28,6 @@
 | claimed-vs-actual（对外声称 vs 实测） | [CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) | 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成 |
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
 | account（账号体系） | [account_system_ssot.md](account_system_ssot.md) | 账号四维真相源：账号类型/档位/行业/租户，写入点唯一 |
-| to9-program（TO-9 品质计划） | [reports/TO_9_PROGRAM.md](reports/TO_9_PROGRAM.md) | 品质提升 6→9 执行台账，对抗式审计结果 SSOT |
 
 ## 已退役 SSOT（指针化）
 
