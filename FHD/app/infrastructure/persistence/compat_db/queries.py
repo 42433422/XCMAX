@@ -18,7 +18,7 @@ from app.infrastructure.persistence.compat_db.base import (
     _insp_table_exists,
     _sql_ident,
 )
-from app.shell.mod_row_scope import append_mod_scope_where
+from app.shell.mod_row_scope import append_mod_scope_where, append_tenant_scope_where
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ def _load_purchase_units_rows_pg() -> list[dict]:
     where_parts: list[str] = []
     bind: dict[str, object] = {}
     append_mod_scope_where(where_parts, bind, pu_cols)
+    append_tenant_scope_where(where_parts, bind, pu_cols)
     where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
     try:
         with eng.connect() as conn:
@@ -101,6 +102,7 @@ def _distinct_units_from_products_db_pg() -> list[dict]:
             where_parts.append("(is_active IS NULL OR CAST(is_active AS INTEGER) = 1)")
         bind: dict[str, object] = {}
         append_mod_scope_where(where_parts, bind, col_names)
+        append_tenant_scope_where(where_parts, bind, col_names)
         where_sql = "WHERE " + " AND ".join(where_parts)
         with eng.connect() as conn:
             rows = conn.execute(
@@ -217,6 +219,7 @@ def _load_customers_pg_from_customers_table(eng, insp) -> list[dict]:
             + " AS INTEGER) = 1)"
         )
     append_mod_scope_where(where_parts, bind, cols)
+    append_tenant_scope_where(where_parts, bind, cols)
     where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
     order = f"{_sql_ident(name_col)}, {_sql_ident(id_col)}"
     sql = (
@@ -250,6 +253,7 @@ def _load_customers_pg_from_purchase_units(eng) -> list[dict]:
         where_parts: list[str] = []
         bind: dict[str, object] = {}
         append_mod_scope_where(where_parts, bind, pu_cols)
+        append_tenant_scope_where(where_parts, bind, pu_cols)
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
         with eng.connect() as conn:
             rows = (

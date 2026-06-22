@@ -4,11 +4,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func as sql_func
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
 class ServiceRequestStatus(str, Enum):
@@ -25,7 +26,7 @@ class ServiceRequestPriority(str, Enum):
     URGENT = "urgent"
 
 
-class ServiceRequest(Base):
+class ServiceRequest(TenantScopedMixin, Base):
     __tablename__ = "service_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -70,11 +71,12 @@ class ServiceRequest(Base):
         }
 
 
-class ServiceBridgeConfig(Base):
+class ServiceBridgeConfig(TenantScopedMixin, Base):
     __tablename__ = "service_bridge_config"
+    __table_args__ = (UniqueConstraint("tenant_id", "config_key", name="uq_service_bridge_config_tenant_config_key"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    config_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    config_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     config_value: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(256))
     updated_at: Mapped[Optional[datetime]] = mapped_column(

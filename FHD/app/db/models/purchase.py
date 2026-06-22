@@ -4,17 +4,19 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class Supplier(Base):
+class Supplier(TenantScopedMixin, Base):
     __tablename__ = "suppliers"
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_suppliers_tenant_code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     contact_person: Mapped[Optional[str]] = mapped_column(String(50))
     contact_phone: Mapped[Optional[str]] = mapped_column(String(50))
@@ -33,11 +35,12 @@ class Supplier(Base):
     )
 
 
-class PurchaseOrder(Base):
+class PurchaseOrder(TenantScopedMixin, Base):
     __tablename__ = "purchase_orders"
+    __table_args__ = (UniqueConstraint("tenant_id", "order_no", name="uq_purchase_orders_tenant_order_no"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    order_no: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    order_no: Mapped[str] = mapped_column(String(50), nullable=False)
     supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
     warehouse_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("warehouses.id"))
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -60,7 +63,7 @@ class PurchaseOrder(Base):
     warehouse: Mapped[Optional[Warehouse]] = relationship("Warehouse")
 
 
-class PurchaseOrderItem(Base):
+class PurchaseOrderItem(TenantScopedMixin, Base):
     __tablename__ = "purchase_order_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -84,11 +87,12 @@ class PurchaseOrderItem(Base):
     product: Mapped[Optional[Product]] = relationship("Product")
 
 
-class PurchaseInbound(Base):
+class PurchaseInbound(TenantScopedMixin, Base):
     __tablename__ = "purchase_inbounds"
+    __table_args__ = (UniqueConstraint("tenant_id", "inbound_no", name="uq_purchase_inbounds_tenant_inbound_no"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    inbound_no: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    inbound_no: Mapped[str] = mapped_column(String(50), nullable=False)
     order_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("purchase_orders.id"))
     supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
@@ -108,7 +112,7 @@ class PurchaseInbound(Base):
     )
 
 
-class PurchaseInboundItem(Base):
+class PurchaseInboundItem(TenantScopedMixin, Base):
     __tablename__ = "purchase_inbound_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

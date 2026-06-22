@@ -16,6 +16,7 @@ from app.middleware.auth_rate_limit import AuthRateLimitMiddleware
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.tenant_context import TenantContextMiddleware
 from app.middleware.xss_sanitizer import XSSSanitizerMiddleware
 from app.security import LanCidrGuard, LanLicenseGuard
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -99,6 +100,7 @@ def create_fastapi_app(
         app.add_middleware(CORSMiddleware, **_cors_kw)
 
     app.add_middleware(ModContextMiddleware)
+    app.add_middleware(TenantContextMiddleware)
     app.add_middleware(LanLicenseGuard)
     app.add_middleware(LanCidrGuard)
     app.add_middleware(GlobalRateLimitMiddleware)

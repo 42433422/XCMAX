@@ -18,7 +18,7 @@ from app.infrastructure.persistence.compat_db.base import (
     _EXPORT_MAX_ROWS,
     _sql_statement_timeout_ms,
 )
-from app.shell.mod_row_scope import append_mod_scope_where
+from app.shell.mod_row_scope import append_mod_scope_where, append_tenant_scope_where
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,7 @@ def _load_products_list_impl_pg(
             where_parts.append("unit = :uunit")
             params["uunit"] = un
         append_mod_scope_where(where_parts, params, col_names)
+        append_tenant_scope_where(where_parts, params, col_names)
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
         total: int | None = None

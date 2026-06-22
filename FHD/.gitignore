@@ -237,3 +237,6 @@ _compare_convert_output.xlsx
 
 # Removed mods snapshot (restored from git; may contain large zips)
 _archived_removed_mods/
+
+# local verification venv (Python 3.11, not for commit)
+.venv311/

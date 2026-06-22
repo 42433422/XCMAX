@@ -13,6 +13,7 @@ from sqlalchemy.engine import make_url
 
 from app.db import engine
 from app.db.init_db import (
+    ensure_business_tenant_id_columns,
     ensure_product_query_indexes,
     ensure_sessions_account_meta_columns,
     ensure_sessions_enterprise_entitlement_columns,
@@ -152,6 +153,11 @@ def _initialize_databases_sync(app: FastAPI):
         ensure_sessions_enterprise_entitlement_columns(engine, database_url=cfg_db_url or None)
         ensure_sessions_account_meta_columns(engine, database_url=cfg_db_url or None)
         ensure_users_tenant_id_column(engine, database_url=cfg_db_url or None)
+        ensure_business_tenant_id_columns(engine, database_url=cfg_db_url or None)
+        # 业务表 tenant_id 就位后再装全局租户过滤（幂等，仅注册一次 ORM 事件）。
+        from app.db.tenant_filter import install_tenant_filter
+
+        install_tenant_filter()
         try:
             init_approval_tables(engine)
         except RECOVERABLE_ERRORS as approval_err:

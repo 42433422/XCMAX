@@ -13,11 +13,13 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func as sql_func
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 from app.domain.approval.safe_dsl import should_trigger_condition
 
 
@@ -46,11 +48,11 @@ class ApprovalAction(str, Enum):
     CANCEL = "cancel"
 
 
-class ApprovalFlow(Base):
+class ApprovalFlow(TenantScopedMixin, Base):
     __tablename__ = "approval_flows"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    flow_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    flow_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     flow_name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     industry: Mapped[str] = mapped_column(String(64), default="通用")
@@ -79,7 +81,8 @@ class ApprovalFlow(Base):
     requests: Mapped[list[ApprovalRequest]] = relationship("ApprovalRequest", back_populates="flow")
     creator: Mapped[Optional[User]] = relationship("User", foreign_keys=[created_by])
 
-    __table_args__ = (Index("idx_flow_key_active", "flow_key", "is_active"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "flow_key", name="uq_approval_flows_tenant_flow_key"),Index("idx_flow_key_active", "flow_key", "is_active"),)
 
     def to_dict(self) -> dict:
         return {
@@ -100,7 +103,7 @@ class ApprovalFlow(Base):
         }
 
 
-class ApprovalFlowNode(Base):
+class ApprovalFlowNode(TenantScopedMixin, Base):
     __tablename__ = "approval_flow_nodes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -154,11 +157,12 @@ class ApprovalFlowNode(Base):
         return should_trigger_condition(self, context)
 
 
-class ApprovalRequest(Base):
+class ApprovalRequest(TenantScopedMixin, Base):
     __tablename__ = "approval_requests"
+    __table_args__ = (UniqueConstraint("tenant_id", "request_no", name="uq_approval_requests_tenant_request_no"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    request_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    request_no: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
     flow_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("approval_flows.id"), nullable=False, index=True
@@ -247,7 +251,7 @@ class ApprovalRequest(Base):
         }
 
 
-class ApprovalRecord(Base):
+class ApprovalRecord(TenantScopedMixin, Base):
     __tablename__ = "approval_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -307,7 +311,7 @@ class ApprovalRecord(Base):
         }
 
 
-class ApprovalDelegation(Base):
+class ApprovalDelegation(TenantScopedMixin, Base):
     __tablename__ = "approval_delegations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
