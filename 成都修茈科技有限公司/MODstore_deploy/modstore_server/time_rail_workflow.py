@@ -85,7 +85,9 @@ def _node_status_shell(
                 "detail": dict(detail or {}),
             }
         )
-    is_observed = bool(observed) if observed is not None else bool(ev or last_run or source or ok is not None)
+    is_observed = (
+        bool(observed) if observed is not None else bool(ev or last_run or source or ok is not None)
+    )
     if proof_status is None:
         if guard_active:
             proof_status = "guard_active"
@@ -171,7 +173,9 @@ def _status_from_block(
         block_ok = True
     return _node_status_shell(
         node_id,
-        last_run=_iso_or_none(block.get("completed_at") or block.get("ran_at") or block.get("started_at")),
+        last_run=_iso_or_none(
+            block.get("completed_at") or block.get("ran_at") or block.get("started_at")
+        ),
         ok=bool(block_ok) if block_ok is not None else None,
         source=source,
         detail=detail_out,
@@ -187,10 +191,7 @@ def _latest_ops_staged_change() -> Optional[Any]:
         session_factory = get_session_factory()
         with session_factory() as session:
             return (
-                session.query(OpsStagedChange)
-                .order_by(OpsStagedChange.id.desc())
-                .limit(1)
-                .first()
+                session.query(OpsStagedChange).order_by(OpsStagedChange.id.desc()).limit(1).first()
             )
     except Exception:
         logger.debug("time_rail: ops staged change unavailable", exc_info=True)
@@ -225,7 +226,9 @@ def _action_item_stats(*, day: str = "", record_id: Optional[int] = None) -> Dic
         by_status: Dict[str, int] = {}
         for it in items:
             by_kind[str(it.get("kind") or "")] = by_kind.get(str(it.get("kind") or ""), 0) + 1
-            by_status[str(it.get("status") or "")] = by_status.get(str(it.get("status") or ""), 0) + 1
+            by_status[str(it.get("status") or "")] = (
+                by_status.get(str(it.get("status") or ""), 0) + 1
+            )
         return {"ok": True, "total": len(items), "by_kind": by_kind, "by_status": by_status}
     except Exception:
         logger.debug("time_rail: action item stats unavailable", exc_info=True)
@@ -309,7 +312,9 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
     if guard:
         derived["DRFAIL"] = _node_status_shell(
             "DRFAIL",
-            last_run=_iso_or_none(guard.get("last_probe_at") or guard.get("at") or guard.get("set_at")),
+            last_run=_iso_or_none(
+                guard.get("last_probe_at") or guard.get("at") or guard.get("set_at")
+            ),
             ok=False,
             guard_active=True,
             source="release_train.backup_guard",
@@ -361,7 +366,9 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
             latest_ondemand = ondemand[0]
             derived["BKOND"] = _node_status_shell(
                 "BKOND",
-                last_run=datetime.fromtimestamp(latest_ondemand.stat().st_mtime, timezone.utc).isoformat(),
+                last_run=datetime.fromtimestamp(
+                    latest_ondemand.stat().st_mtime, timezone.utc
+                ).isoformat(),
                 ok=True,
                 source="release_train_history.ondemand",
                 detail={"name": latest_ondemand.name, "path": str(latest_ondemand)},
@@ -401,7 +408,9 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
         )
         derived["MAJ"] = _node_status_shell(
             "MAJ",
-            last_run=_iso_or_none(rt_state.get("last_major_push_at") or rt_state.get("last_bump_at")),
+            last_run=_iso_or_none(
+                rt_state.get("last_major_push_at") or rt_state.get("last_bump_at")
+            ),
             ok=True if major_today else None,
             source="release_train.json",
             detail={**rt_detail, "is_major_day": major_today},
@@ -497,7 +506,9 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
             source="daily_digest_records",
             detail={"release_kind": release_kind, "digest_id": record_id},
             observed=True,
-            proof_status="decision_true" if release_kind in ("installer", "major") else "decision_false",
+            proof_status=(
+                "decision_true" if release_kind in ("installer", "major") else "decision_false"
+            ),
         )
 
         action_stats = _action_item_stats(day=day, record_id=record_id)
@@ -558,7 +569,10 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
             last_run=created,
             ok=True,
             source="daily_digest_records",
-            detail={"digest_id": record_id, "has_meta": bool(getattr(digest, "vibe_prep_meta_json", ""))},
+            detail={
+                "digest_id": record_id,
+                "has_meta": bool(getattr(digest, "vibe_prep_meta_json", "")),
+            },
             observed=True,
         )
         meta_raw = getattr(digest, "vibe_prep_meta_json", "") or ""
@@ -588,7 +602,9 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                         )
                 orch = (meta or {}).get("orchestrator_audit") if isinstance(meta, dict) else None
                 if isinstance(orch, dict):
-                    derived["ORCH"] = _status_from_block("ORCH", orch, source="daily_digest.orchestrator_audit")
+                    derived["ORCH"] = _status_from_block(
+                        "ORCH", orch, source="daily_digest.orchestrator_audit"
+                    )
                     derived["BR"] = _node_status_shell(
                         "BR",
                         last_run=_iso_or_none(orch.get("ran_at")),
@@ -617,22 +633,34 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                     phase_b = ex.get("phase_b") if isinstance(ex.get("phase_b"), dict) else {}
                     phase_c = ex.get("phase_c") if isinstance(ex.get("phase_c"), dict) else {}
                     phase_c_pipeline = (
-                        ex.get("phase_c_pipeline") if isinstance(ex.get("phase_c_pipeline"), dict) else {}
+                        ex.get("phase_c_pipeline")
+                        if isinstance(ex.get("phase_c_pipeline"), dict)
+                        else {}
                     )
 
-                    ps_run = ((phase_a.get("line_results") or {}).get("P-S") or runs.get("P-S") or {})
-                    app_run = ((phase_a.get("line_results") or {}).get("P-App") or runs.get("P-App") or {})
+                    ps_run = (phase_a.get("line_results") or {}).get("P-S") or runs.get("P-S") or {}
+                    app_run = (
+                        (phase_a.get("line_results") or {}).get("P-App") or runs.get("P-App") or {}
+                    )
                     if ps_run:
-                        derived["PSA"] = _status_from_block("PSA", ps_run, source="daily_digest.phase_a.P-S")
+                        derived["PSA"] = _status_from_block(
+                            "PSA", ps_run, source="daily_digest.phase_a.P-S"
+                        )
                     if app_run:
-                        derived["APPA"] = _status_from_block("APPA", app_run, source="daily_digest.phase_a.P-App")
+                        derived["APPA"] = _status_from_block(
+                            "APPA", app_run, source="daily_digest.phase_a.P-App"
+                        )
                     if phase_a:
-                        derived["WB_D"] = _status_from_block("WB_D", phase_a, source="daily_digest.phase_a")
+                        derived["WB_D"] = _status_from_block(
+                            "WB_D", phase_a, source="daily_digest.phase_a"
+                        )
 
                     for line_key, nid in (("P-W", "PW"), ("P-App", "APPB"), ("S-R", "SR")):
                         line_block = (phase_b.get("line_results") or {}).get(line_key) or {}
                         if line_block:
-                            derived[nid] = _status_from_block(nid, line_block, source=f"daily_digest.phase_b.{line_key}")
+                            derived[nid] = _status_from_block(
+                                nid, line_block, source=f"daily_digest.phase_b.{line_key}"
+                            )
                     if phase_b:
                         derived["ORCH"] = derived.get("ORCH") or _status_from_block(
                             "ORCH", phase_b, source="daily_digest.phase_b"
@@ -658,7 +686,10 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                                 "CANARY",
                                 phase_c_pipeline,
                                 source="daily_digest.phase_c_pipeline",
-                                detail={"step_ids": step_ids, "strategy": "staging-canary-production"},
+                                detail={
+                                    "step_ids": step_ids,
+                                    "strategy": "staging-canary-production",
+                                },
                             )
                         if phase_c_pipeline.get("rollback"):
                             derived["ROLLBACK"] = _status_from_block(
@@ -668,8 +699,12 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                             )
 
                     if phase_c:
-                        step_results = phase_c.get("steps") if isinstance(phase_c.get("steps"), list) else []
-                        step_map = {str(s.get("step") or ""): s for s in step_results if isinstance(s, dict)}
+                        step_results = (
+                            phase_c.get("steps") if isinstance(phase_c.get("steps"), list) else []
+                        )
+                        step_map = {
+                            str(s.get("step") or ""): s for s in step_results if isinstance(s, dict)
+                        }
                         for source_step, nid in (("P9", "P9I"), ("P5", "P5I"), ("P6", "P6I")):
                             if source_step in step_map:
                                 derived[nid] = _status_from_block(
@@ -709,12 +744,32 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
         created = _iso_or_none(getattr(staged, "created_at", None))
         approved = _iso_or_none(getattr(staged, "approved_at", None))
         deployed = _iso_or_none(getattr(staged, "deployed_at", None))
-        derived["STG"] = _node_status_shell("STG", last_run=created, ok=True, source="ops_staged_changes", detail=staged_detail)
+        derived["STG"] = _node_status_shell(
+            "STG", last_run=created, ok=True, source="ops_staged_changes", detail=staged_detail
+        )
         if approved:
-            derived["APPR"] = _node_status_shell("APPR", last_run=approved, ok=True, source="ops_staged_changes", detail=staged_detail)
+            derived["APPR"] = _node_status_shell(
+                "APPR",
+                last_run=approved,
+                ok=True,
+                source="ops_staged_changes",
+                detail=staged_detail,
+            )
         if deployed:
-            derived["V10SYNC"] = _node_status_shell("V10SYNC", last_run=deployed, ok=True, source="ops_staged_changes", detail=staged_detail)
-            derived["MERGE"] = _node_status_shell("MERGE", last_run=deployed, ok=True, source="ops_staged_changes", detail=staged_detail)
+            derived["V10SYNC"] = _node_status_shell(
+                "V10SYNC",
+                last_run=deployed,
+                ok=True,
+                source="ops_staged_changes",
+                detail=staged_detail,
+            )
+            derived["MERGE"] = _node_status_shell(
+                "MERGE",
+                last_run=deployed,
+                ok=True,
+                source="ops_staged_changes",
+                detail=staged_detail,
+            )
 
     cr = _latest_change_request()
     if cr is not None:
@@ -725,9 +780,23 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
             "change_kind": getattr(cr, "change_kind", ""),
         }
         created = _iso_or_none(getattr(cr, "created_at", None) or getattr(cr, "submitted_at", None))
-        derived["CS_CHG"] = _node_status_shell("CS_CHG", last_run=created, ok=True, source="employee_change_requests", detail=cr_detail)
-        derived["O7"] = _node_status_shell("O7", last_run=created, ok=True, source="employee_change_requests", detail={"bridge": "feedback-to-change-request", **cr_detail})
-        derived["Vibe08"] = _node_status_shell("Vibe08", last_run=created, ok=True, source="employee_change_requests", detail={"bridge": "change-request-to-next-digest", **cr_detail})
+        derived["CS_CHG"] = _node_status_shell(
+            "CS_CHG", last_run=created, ok=True, source="employee_change_requests", detail=cr_detail
+        )
+        derived["O7"] = _node_status_shell(
+            "O7",
+            last_run=created,
+            ok=True,
+            source="employee_change_requests",
+            detail={"bridge": "feedback-to-change-request", **cr_detail},
+        )
+        derived["Vibe08"] = _node_status_shell(
+            "Vibe08",
+            last_run=created,
+            ok=True,
+            source="employee_change_requests",
+            detail={"bridge": "change-request-to-next-digest", **cr_detail},
+        )
 
     return derived
 
@@ -781,9 +850,13 @@ def collect_node_runtime_status(
                 or (guard_global and nid in ("RT", "DRFAIL", "DRPROBE")),
                 "source": row.get("source") or "",
                 "detail": detail,
-                "observed": bool(row.get("observed")) or bool(row.get("last_run") or row.get("source") or row.get("ok") is not None),
-                "proof_status": row.get("proof_status") or (
-                    "proved_ok" if row.get("ok") is True else "proved_failed" if row.get("ok") is False else "observed"
+                "observed": bool(row.get("observed"))
+                or bool(row.get("last_run") or row.get("source") or row.get("ok") is not None),
+                "proof_status": row.get("proof_status")
+                or (
+                    "proved_ok"
+                    if row.get("ok") is True
+                    else "proved_failed" if row.get("ok") is False else "observed"
                 ),
                 "evidence": evidence
                 or [
@@ -794,8 +867,14 @@ def collect_node_runtime_status(
                         "detail": detail,
                     }
                 ],
-                "evidence_count": int(row.get("evidence_count") or (len(evidence) if evidence else 1)),
-                "missing_evidence": row.get("missing_evidence") if isinstance(row.get("missing_evidence"), list) else [],
+                "evidence_count": int(
+                    row.get("evidence_count") or (len(evidence) if evidence else 1)
+                ),
+                "missing_evidence": (
+                    row.get("missing_evidence")
+                    if isinstance(row.get("missing_evidence"), list)
+                    else []
+                ),
                 "observable": True,
             }
         else:
@@ -832,14 +911,19 @@ def collect_node_runtime_status(
                 }
 
     observed_ids = [nid for nid, row in nodes.items() if row.get("observed")]
-    runtime_evidence_ids = [nid for nid, row in nodes.items() if int(row.get("evidence_count") or 0) > 0]
+    runtime_evidence_ids = [
+        nid for nid, row in nodes.items() if int(row.get("evidence_count") or 0) > 0
+    ]
     maintenance_queued_ids = [
-        nid for nid, row in nodes.items() if str(row.get("proof_status") or "") == "maintenance_queued"
+        nid
+        for nid, row in nodes.items()
+        if str(row.get("proof_status") or "") == "maintenance_queued"
     ]
     proved_ids = [
         nid
         for nid, row in nodes.items()
-        if str(row.get("proof_status") or "") in (
+        if str(row.get("proof_status") or "")
+        in (
             "proved_ok",
             "proved_failed",
             "guard_active",
@@ -888,9 +972,15 @@ def collect_node_runtime_status(
         "observable_coverage_pct": round((len(nodes) / len(ids) * 100.0), 1) if ids else 100.0,
         "observed_coverage_pct": round((len(observed_ids) / len(ids) * 100.0), 1) if ids else 100.0,
         "proved_coverage_pct": round((len(proved_ids) / len(ids) * 100.0), 1) if ids else 100.0,
-        "runtime_evidence_coverage_pct": round((len(runtime_evidence_ids) / len(ids) * 100.0), 1) if ids else 100.0,
-        "maintenance_queued_coverage_pct": round((len(maintenance_queued_ids) / len(ids) * 100.0), 1) if ids else 0.0,
-        "state_classified_coverage_pct": round((len(nodes) / len(ids) * 100.0), 1) if ids else 100.0,
+        "runtime_evidence_coverage_pct": (
+            round((len(runtime_evidence_ids) / len(ids) * 100.0), 1) if ids else 100.0
+        ),
+        "maintenance_queued_coverage_pct": (
+            round((len(maintenance_queued_ids) / len(ids) * 100.0), 1) if ids else 0.0
+        ),
+        "state_classified_coverage_pct": (
+            round((len(nodes) / len(ids) * 100.0), 1) if ids else 100.0
+        ),
     }
 
     return {

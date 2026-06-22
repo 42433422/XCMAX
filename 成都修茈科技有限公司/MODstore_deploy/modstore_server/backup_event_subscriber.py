@@ -216,7 +216,7 @@ def dispatch_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str,
         return {
             "ok": True,
             "skipped": True,
-            "reason": f"backup.completed with ondemand trigger already handled by backup.ondemand_completed",
+            "reason": "backup.completed with ondemand trigger already handled by backup.ondemand_completed",
         }
 
     try:

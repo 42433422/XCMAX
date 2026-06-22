@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import os
 import re
 import subprocess
@@ -31,7 +31,10 @@ def _governance_audit_path() -> Path:
     raw = os.environ.get("MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT")
     if raw:
         return Path(raw)
-    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or DEFAULT_RUNTIME_DIR) / DEFAULT_GOVERNANCE_AUDIT_NAME
+    return (
+        Path(os.environ.get("MODSTORE_RUNTIME_DIR") or DEFAULT_RUNTIME_DIR)
+        / DEFAULT_GOVERNANCE_AUDIT_NAME
+    )
 
 
 def _append_governance_audit(record: Dict[str, Any]) -> None:
@@ -51,7 +54,9 @@ def _yuangon_repo_root() -> Path:
 
 
 def _parse_onboard_summary(stdout: str) -> Dict[str, int]:
-    match = re.search(r"done:\s*onboarded=(\d+),\s*skipped=(\d+),\s*failed=(\d+)", stdout or "", re.I)
+    match = re.search(
+        r"done:\s*onboarded=(\d+),\s*skipped=(\d+),\s*failed=(\d+)", stdout or "", re.I
+    )
     if not match:
         return {}
     return {

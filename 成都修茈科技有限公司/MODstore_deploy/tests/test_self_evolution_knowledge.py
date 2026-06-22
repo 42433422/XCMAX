@@ -139,7 +139,9 @@ def test_record_evolution_metrics_writes_weekly_metric_history(monkeypatch, tmp_
     assert (tmp_path / "kb" / "metrics" / "evolution_metrics.jsonl").exists()
 
 
-def test_build_self_evolution_context_includes_kb_patterns_metrics_and_proactive(monkeypatch, tmp_path):
+def test_build_self_evolution_context_includes_kb_patterns_metrics_and_proactive(
+    monkeypatch, tmp_path
+):
     monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
     record_fix_knowledge(
         symptom="review_or_qa_reported_risk",

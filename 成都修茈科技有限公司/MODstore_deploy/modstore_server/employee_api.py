@@ -16,12 +16,12 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from modstore_server.api.deps import _get_current_user, require_admin
+from modstore_server.duty_employee_registry import duty_employee_records
 from modstore_server.duty_roster import (
     all_planned_employee_ids,
     employee_partition_meta,
     is_planned_duty_employee_pack,
 )
-from modstore_server.duty_employee_registry import duty_employee_records
 from modstore_server.employee_executor import (
     get_employee_status,
 )

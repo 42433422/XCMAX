@@ -9,7 +9,6 @@ from typing import Any, Dict, List
 
 from modstore_server.models import IncidentEvent, get_session_factory
 
-
 KNOWN_SCOPES = ("fhd", "modstore", "website", "desktop", "android")
 
 
@@ -34,7 +33,10 @@ def _priority(event_type: str, payload: Dict[str, Any], scope: str) -> int:
     except (TypeError, ValueError):
         base = 60
     text = json.dumps({"event_type": event_type, "payload": payload}, ensure_ascii=False).lower()
-    if any(token in text for token in ("security", "secret", "credential", "payment", "auth", "安全", "支付")):
+    if any(
+        token in text
+        for token in ("security", "secret", "credential", "payment", "auth", "安全", "支付")
+    ):
         base += 25
     if any(token in text for token in ("down", "outage", "500", "crash", "slo", "不可用", "宕机")):
         base += 18
@@ -97,7 +99,10 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
         try:
             from modstore_server.incident_model_router import route_for_incident
 
-            model_route = route_for_incident(event_type=str(ev.event_type or ""), payload={**payload, "priority": priority, "scope": scope})
+            model_route = route_for_incident(
+                event_type=str(ev.event_type or ""),
+                payload={**payload, "priority": priority, "scope": scope},
+            )
         except Exception as exc:
             model_route = {"error": str(exc)[:300], "route": "auto"}
         plan = {

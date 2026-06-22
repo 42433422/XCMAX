@@ -201,9 +201,8 @@ def _build_template_vibe_markdowns(
         patch_lines.extend(items)
         patch_lines.append("")
 
-    ps_title_issue = (
-        "智能对话 - xcagi" in evidence_lower
-        and ("标题" in evidence or "title" in evidence_lower or "元数据" in evidence)
+    ps_title_issue = "智能对话 - xcagi" in evidence_lower and (
+        "标题" in evidence or "title" in evidence_lower or "元数据" in evidence
     )
     if ps_title_issue:
         ps_items = [
@@ -311,9 +310,7 @@ def _build_template_vibe_markdowns(
             is_transient = any(kw in msg_lower for kw in _TRANSIENT_KEYWORDS)
             if is_transient:
                 suffix = "（基础设施/LLM 瞬断，优先重试而非改代码）"
-                patch_lines.append(
-                    f"- **P0** 修复近期失败：{fail_task[:80] or msg[:160]}{suffix}"
-                )
+                patch_lines.append(f"- **P0** 修复近期失败：{fail_task[:80] or msg[:160]}{suffix}")
             else:
                 patch_lines.append(f"- **P0** 修复近期失败：{msg[:240]}")
         patch_lines.append("")
