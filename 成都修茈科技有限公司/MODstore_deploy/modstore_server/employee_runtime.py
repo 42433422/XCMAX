@@ -4,15 +4,99 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import zipfile
 from typing import Any, Dict, Optional
 
 from modstore_server.catalog_store import employee_pack_records_from_store, files_dir
+from modstore_server.duty_employee_registry import get_duty_employee_record
+from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
 from modstore_server.employee_config_v2_adapter import (
     needs_executor_translation,
     translate_v2_to_executor_config,
 )
 from modstore_server.models import CatalogItem
+
+
+EXECUTOR_ACTION_HANDLERS = frozenset(
+    {
+        "echo",
+        "llm_md",
+        "http_request",
+        "webhook",
+        "data_sync",
+        "direct_python",
+        "wechat_notify",
+        "openapi_tool",
+        "fhd_business",
+        "voice_output",
+        "agent",
+        "para_delegate",
+        "cursor_delegate",
+        "vibe_edit",
+        "vibe_heal",
+        "vibe_code",
+        "doc_sync",
+        "shell_exec",
+        "ssh_exec",
+    }
+)
+
+
+def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
+    """Validate that a catalog pack has a runnable implementation for its handlers."""
+    manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
+    v2 = manifest.get("employee_config_v2") if isinstance(manifest.get("employee_config_v2"), dict) else {}
+    actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    clean_handlers = [str(h).strip() for h in handlers if str(h).strip()]
+    issues: list[str] = []
+    if not clean_handlers:
+        return ["员工包未声明 actions.handlers"]
+    unknown = sorted(set(clean_handlers) - EXECUTOR_ACTION_HANDLERS)
+    if unknown:
+        issues.append("运行时不支持 handler: " + ", ".join(unknown))
+
+    stored = str(pack.get("stored_filename") or "").strip()
+    if not stored:
+        issues.append("员工包缺少 stored_filename")
+        return issues
+    archive = files_dir() / stored
+    if not archive.is_file():
+        issues.append(f"员工包文件不存在: {stored}")
+        return issues
+    if "direct_python" not in clean_handlers:
+        return issues
+
+    pack_id = str(manifest.get("id") or pack.get("pack_id") or "").strip()
+    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+    module = str(direct.get("module") or "").strip()
+    if not module:
+        module = re.sub(r"[^a-z0-9_]+", "_", pack_id.lower()).strip("_")
+    runtime_mod = re.sub(r"[^a-z0-9_]+", "_", pack_id.lower()).strip("_")
+    if runtime_mod.endswith("_employee"):
+        runtime_mod = runtime_mod[: -len("_employee")] or runtime_mod
+    try:
+        with zipfile.ZipFile(archive, "r") as zf:
+            names = {n.replace("\\", "/") for n in zf.namelist()}
+            root = f"{pack_id}/"
+            employee_entry = f"{root}backend/employees/{module}.py"
+            vendor_entry = f"{root}backend/vendor/{runtime_mod}/convert.py"
+            if employee_entry not in names:
+                issues.append(f"direct_python 入口缺失: backend/employees/{module}.py")
+            else:
+                source = zf.read(employee_entry).decode("utf-8", errors="replace")
+                if "_DISPATCH" in source and not (
+                    "'direct_python':" in source or '"direct_python":' in source
+                ):
+                    issues.append("direct_python 入口使用了不支持该 handler 的通用分发模板")
+            if vendor_entry not in names:
+                issues.append(
+                    f"direct_python vendor 运行时缺失: backend/vendor/{runtime_mod}/convert.py"
+                )
+    except (OSError, zipfile.BadZipFile):
+        issues.append("员工包归档损坏或不可读取")
+    return issues
 
 
 def normalize_manifest_legacy_deepseek_to_auto(manifest: Dict[str, Any]) -> None:
@@ -38,17 +122,30 @@ def normalize_manifest_legacy_deepseek_to_auto(manifest: Dict[str, Any]) -> None
 
 
 def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
-    row = (
-        session.query(CatalogItem)
-        .filter(CatalogItem.pkg_id == pack_id, CatalogItem.artifact == "employee_pack")
-        .first()
+    requested_id = str(pack_id or "").strip()
+    duty_rec = (
+        get_duty_employee_record(requested_id)
+        if is_planned_duty_employee_pack(requested_id, "employee_pack")
+        else None
     )
+    row = None
+    if duty_rec:
+        pkg_id = str(duty_rec.get("id") or duty_rec.get("pkg_id") or requested_id).strip()
+        name = str(duty_rec.get("name") or pkg_id)
+        version = str(duty_rec.get("version") or "")
+        stored_filename = str(duty_rec.get("stored_filename") or "")
+    else:
+        row = (
+            session.query(CatalogItem)
+            .filter(CatalogItem.pkg_id == pack_id, CatalogItem.artifact == "employee_pack")
+            .first()
+        )
     if row:
         pkg_id = str(row.pkg_id)
         name = str(row.name or pkg_id)
         version = str(row.version or "")
         stored_filename = str(row.stored_filename or "")
-    else:
+    elif not duty_rec:
         rec = employee_pack_records_from_store().get(str(pack_id).strip())
         if not isinstance(rec, dict):
             raise ValueError(f"员工包不存在: {pack_id}")
@@ -75,12 +172,20 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
                         normalize_manifest_legacy_deepseek_to_auto(manifest)
             except (OSError, zipfile.BadZipFile, json.JSONDecodeError, UnicodeDecodeError):
                 pass
+    archive_mtime = 0.0
+    if fn:
+        try:
+            archive_mtime = float((files_dir() / fn).stat().st_mtime)
+        except OSError:
+            archive_mtime = 0.0
     return {
         "pack_id": pkg_id,
         "name": name,
         "version": version,
         "stored_filename": stored_filename,
+        "archive_mtime": archive_mtime,
         "manifest": manifest,
+        **employee_partition_meta(pkg_id, "employee_pack"),
     }
 
 
@@ -164,6 +269,7 @@ def try_load_employee_pack_from_library(pack_id: str) -> Optional[Dict[str, Any]
         "version": version,
         "stored_filename": "",
         "manifest": manifest,
+        **employee_partition_meta(mid, "employee_pack"),
     }
 
 

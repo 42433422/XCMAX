@@ -32,6 +32,7 @@ from sqlalchemy import func
 
 from modstore_server.models import (
     CatalogItem,
+    EmployeeEvolutionRecord,
     EmployeeExecutionMetric,
     User,
     get_session_factory,
@@ -87,24 +88,81 @@ def _notify_admins(title: str, content: str, *, kind: str, payload: Dict[str, An
 
 
 def _deactivate_catalog_employee(employee_id: str) -> bool:
-    """把 catalog 里 pkg_id == employee_id 且仍 is_active 的员工包置为 False。"""
+    """把 catalog 里 pkg_id == employee_id 的员工包置为不可用。
+
+    当前 catalog schema 没有 ``is_active`` 字段；老逻辑直接访问该字段会让
+    health scan 崩掉。这里兼容两种 schema：有 is_active 就置 False，否则用
+    compliance_status/delist_reason 表达下架。
+    """
     sf = get_session_factory()
     with sf() as session:
-        rows = (
-            session.query(CatalogItem)
-            .filter(
-                CatalogItem.artifact == "employee_pack",
-                CatalogItem.pkg_id == str(employee_id),
-                CatalogItem.is_active.is_(True),
-            )
-            .all()
+        query = session.query(CatalogItem).filter(
+            CatalogItem.artifact == "employee_pack",
+            CatalogItem.pkg_id == str(employee_id),
         )
+        if hasattr(CatalogItem, "is_active"):
+            query = query.filter(CatalogItem.is_active.is_(True))
+        rows = query.all()
         if not rows:
             return False
         for r in rows:
-            r.is_active = False
+            if hasattr(r, "is_active"):
+                r.is_active = False
+            if hasattr(r, "compliance_status"):
+                r.compliance_status = "delisted"
+            if hasattr(r, "delist_reason"):
+                r.delist_reason = "employee_health_auto_deactivated"
         session.commit()
         return True
+
+
+def _record_runtime_policy(
+    *,
+    employee_id: str,
+    fail_count: int,
+    lookback_hours: int,
+    severity: str,
+) -> None:
+    try:
+        from modstore_server.employee_runtime_policy import record_employee_degradation
+
+        record_employee_degradation(
+            employee_id=employee_id,
+            fail_count=fail_count,
+            lookback_hours=lookback_hours,
+            reason="employee_health_scan_failure_rate",
+            severity=severity,
+        )
+    except Exception:
+        logger.debug("employee runtime policy update failed eid=%s", employee_id, exc_info=True)
+
+
+def _record_evolution(
+    *,
+    employee_id: str,
+    fail_count: int,
+    lookback_hours: int,
+    status: str,
+    explanation: str,
+) -> None:
+    try:
+        sf = get_session_factory()
+        with sf() as session:
+            session.add(
+                EmployeeEvolutionRecord(
+                    employee_id=employee_id,
+                    failure_count=int(fail_count or 0),
+                    lookback_hours=int(lookback_hours or 0),
+                    status=status,
+                    prompt_before="",
+                    prompt_after="runtime_policy_override",
+                    diff_explanation=explanation[:4000],
+                    triggered_by="employee_health_scan",
+                )
+            )
+            session.commit()
+    except Exception:
+        logger.debug("employee evolution record failed eid=%s", employee_id, exc_info=True)
 
 
 def run_health_scan(
@@ -177,6 +235,19 @@ def run_health_scan(
 
         if fail_count >= deactivate_threshold:
             ok_deact = _deactivate_catalog_employee(eid)
+            _record_runtime_policy(
+                employee_id=eid,
+                fail_count=fail_count,
+                lookback_hours=lookback_hours,
+                severity="deactivate",
+            )
+            _record_evolution(
+                employee_id=eid,
+                fail_count=fail_count,
+                lookback_hours=lookback_hours,
+                status="auto_degraded",
+                explanation="Failure count reached deactivate threshold; catalog delisted and runtime policy forced conservative fallback.",
+            )
             if not ok_deact:
                 skipped_no_catalog.append(eid)
                 logger.info(
@@ -203,6 +274,19 @@ def run_health_scan(
                 )
         else:
             warned.append(record)
+            _record_runtime_policy(
+                employee_id=eid,
+                fail_count=fail_count,
+                lookback_hours=lookback_hours,
+                severity="warn",
+            )
+            _record_evolution(
+                employee_id=eid,
+                fail_count=fail_count,
+                lookback_hours=lookback_hours,
+                status="auto_degraded",
+                explanation="Failure count reached warning threshold; runtime policy lowered temperature and reduced max tokens.",
+            )
             if notify:
                 _notify_admins(
                     title=f"AI 员工失败预警：{eid}",

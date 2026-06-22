@@ -110,7 +110,7 @@ class TestPlannerCompat:
 
     def test_intent_test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "app.routes.ai_chat.recognize_intents",
+            "app.application.ai_chat_helpers.recognize_intents",
             lambda msg: [{"intent": "greeting", "confidence": 0.9}],
         )
         out = planner_compat.intent_test({"message": "你好"})

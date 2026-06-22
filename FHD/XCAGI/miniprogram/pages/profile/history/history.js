@@ -1,2 +1,0 @@
-const api = require('../../../api/index')
-Page({data:{items:[]},onShow(){this.load()},async load(){try{const r=await api.getFavoriteList();if(r.success)this.setData({items:r.data.items||[]})}catch(e){}},goDetail(e){wx.navigateTo({url:`/pages/product/detail/detail?id=${e.currentTarget.dataset.id}`})}})

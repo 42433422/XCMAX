@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Pre-commit / CI: block newly added FHD/app/**/*_v[0-9]+.py files.
 
-Existing versioned modules are listed in scripts/ci/v2_versioned_py_allowlist.txt.
-See docs/MIGRATION_v2_DROP_PLAN.md.
+Application-layer ``*_app_service_v2.py`` files have been removed. The allowlist should
+stay empty unless a real external protocol path must remain versioned.
 """
 
 from __future__ import annotations
@@ -54,8 +54,8 @@ def main(argv: list[str]) -> int:
     if violations:
         print(
             "禁止新增 FHD/app/**/*_v[0-9]+.py。"
-            " 请扩展既有模块或走 event-primary，勿复制 *_v2 文件。\n"
-            "详见 docs/MIGRATION_v2_DROP_PLAN.md\n"
+            " 请扩展既有无后缀模块或显式兼容层，勿复制 *_v2 文件。\n"
+            "应用层 *_app_service_v2.py 已收敛删除。\n"
             + "\n".join(f"  - {v}" for v in sorted(violations))
         )
         return 1

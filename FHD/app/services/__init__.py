@@ -28,6 +28,7 @@ except ModuleNotFoundError:
     BertIntentClassifier = None
 from app.ai_engines.deepseek.intent_service import DeepseekIntentClassifier
 from app.ai_engines.rasa.nlu_service import RasaNLUService, get_rasa_nlu_service
+from app.di.registry import get_service_registry
 from app.domain.services.unified_intent_recognizer import (
     UnifiedIntentRecognizer,
     get_unified_intent_recognizer,
@@ -90,13 +91,7 @@ from app.services.products_service import ProductsService
 
 def get_products_service() -> ProductsService:
     """获取产品服务单例"""
-    from app.infrastructure.persistence.product_repository_impl import (
-        SQLAlchemyProductRepository,
-    )
-
-    service = ProductsService()
-    service.set_repository(SQLAlchemyProductRepository())
-    return service
+    return get_service_registry().products_service
 
 
 def get_printer_service() -> PrinterService:
@@ -108,17 +103,17 @@ def get_printer_service() -> PrinterService:
 
 def get_materials_service() -> MaterialsService:
     """获取材质服务单例"""
-    return MaterialsService()
+    return get_service_registry().materials_service
 
 
 def get_product_import_service() -> ProductImportService:
     """获取产品导入服务单例"""
-    return ProductImportService()
+    return get_service_registry().product_import_service
 
 
 def get_extract_log_service() -> ExtractLogService:
     """获取提取日志服务单例"""
-    return ExtractLogService()
+    return get_service_registry().extract_log_service
 
 
 __all__ = [

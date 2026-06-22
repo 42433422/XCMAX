@@ -20,10 +20,25 @@ sla:
   retry_max: 1
   escalate_to_human: true
 llm_default: auto
-skills: []
+capabilities:
+  - investor.readonly.report
+  - delivery.metrics.summary
+
+skills:
+  - skills/skill-ecosystem-investor-portal-officer.md
+actions:
+  handlers: ["llm_md", "echo"]
+
 depends_on:
 - market-frontend-dev
 - ecosystem-delivery-reporter
+examples:
+  - title: "投资方只读门户员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次投资方只读门户员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
+
 changelog:
 - version: 1.0.0
   date: '2026-06-03'

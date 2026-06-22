@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -37,6 +38,300 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
+
+
+def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    if not output:
+        for step in getattr(run, "steps", []) or []:
+            if str(getattr(step, "node_id", "")) == node_id:
+                output = dict(getattr(step, "output", {}) or {})
+                break
+    if not output:
+        output = {"success": getattr(run, "status", "") == "completed"}
+    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
+        output["message"] = getattr(run, "error", "")
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    return output
+
+
+def _products_compat_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
+    return str(
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or payload.get("user_id")
+        or payload.get("userId")
+        or "products-compat-route"
+    ).strip()
+
+
+def _products_compat_status_code(result: dict[str, Any]) -> int:
+    if result.get("success"):
+        return 200
+    status_code = result.get("status_code")
+    try:
+        parsed = int(status_code)
+    except RECOVERABLE_ERRORS:
+        parsed = 0
+    if 400 <= parsed < 600:
+        return parsed
+    if str(result.get("error_code") or "") in {"tool_exception", "http_exception"}:
+        return 500
+    return 200
+
+
+def _normalize_products_create_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    data = dict(payload or {})
+    name = str(
+        data.get("name")
+        or data.get("product_name")
+        or data.get("name_or_model")
+        or data.get("model_number")
+        or data.get("product_code")
+        or ""
+    ).strip()
+    if name:
+        data.setdefault("name", name)
+        data.setdefault("product_name", name)
+        data.setdefault("name_or_model", name)
+    data.setdefault("unit_name", data.get("unit") or "个")
+    return data
+
+
+def _products_compat_via_service_enabled() -> bool:
+    try:
+        from app.mod_sdk.erp_products_facade import is_erp_products_via_service_enabled
+
+        return bool(is_erp_products_via_service_enabled())
+    except RECOVERABLE_ERRORS:
+        logger.debug("products compat service flag check skipped", exc_info=True)
+        return False
+
+
+def _products_compat_preflight(
+    request: Request, action: str, payload: dict[str, Any]
+) -> dict | None:
+    if _products_compat_via_service_enabled():
+        return None
+    _products_write_raise(request)
+    gate = _business_mod_json_block()
+    if gate:
+        return gate
+    if action in {"update", "delete"}:
+        pid = _product_parse_id(payload.get("id"))
+        if pid is None:
+            raise HTTPException(status_code=400, detail="id 无效或缺失")
+        payload["id"] = pid
+    if action == "batch_delete":
+        ids = payload.get("ids") or payload.get("product_ids") or []
+        if not isinstance(ids, list) or not ids:
+            raise HTTPException(status_code=400, detail="ids 须为非空数组")
+        payload["ids"] = ids
+    return None
+
+
+def _http_exception_result(exc: HTTPException) -> dict[str, Any]:
+    return {
+        "success": False,
+        "message": str(exc.detail),
+        "status_code": int(exc.status_code),
+        "error_code": "http_exception",
+    }
+
+
+def _execute_products_compat_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
+    data = _normalize_products_create_payload(params) if action == "create" else dict(params or {})
+    try:
+        from app.mod_sdk.erp_products_facade import (
+            is_erp_products_via_service_enabled,
+        )
+        from app.mod_sdk.erp_products_facade import (
+            products_add as products_add_via_service,
+        )
+        from app.mod_sdk.erp_products_facade import (
+            products_batch_delete as products_batch_delete_via_service,
+        )
+        from app.mod_sdk.erp_products_facade import (
+            products_delete as products_delete_via_service,
+        )
+        from app.mod_sdk.erp_products_facade import (
+            products_update as products_update_via_service,
+        )
+
+        if is_erp_products_via_service_enabled():
+            if action == "create":
+                return products_add_via_service(None, data)
+            if action == "update":
+                return products_update_via_service(None, data)
+            if action == "delete":
+                return products_delete_via_service(None, data)
+            if action == "batch_delete":
+                return products_batch_delete_via_service(None, data)
+    except HTTPException as exc:
+        return _http_exception_result(exc)
+    except RECOVERABLE_ERRORS:
+        logger.debug("products compat via service skipped", exc_info=True)
+
+    if action == "create":
+        from app.application.excel_imports import _parse_price
+
+        try:
+            new_id = products_pg_insert_row(
+                data,
+                parse_price=_parse_price,
+                parse_quantity=_product_parse_quantity,
+                parse_is_active=_product_parse_is_active,
+            )
+            return {"success": True, "data": {"id": new_id}}
+        except HTTPException as exc:
+            return _http_exception_result(exc)
+        except RECOVERABLE_ERRORS as exc:
+            logger.exception("products add failed")
+            return {
+                "success": False,
+                "message": f"添加失败：{exc}",
+                "error_code": "tool_exception",
+            }
+
+    if action == "update":
+        from app.application.excel_imports import _parse_price
+
+        pid = _product_parse_id(data.get("id"))
+        if pid is None:
+            return {"success": False, "message": "id 无效或缺失", "status_code": 400}
+        try:
+            products_pg_update_row(
+                pid,
+                data,
+                parse_price=_parse_price,
+                parse_quantity=_product_parse_quantity,
+                parse_is_active=_product_parse_is_active,
+            )
+            return {"success": True, "data": {"id": pid}}
+        except HTTPException as exc:
+            return _http_exception_result(exc)
+        except RECOVERABLE_ERRORS as exc:
+            logger.exception("products update failed")
+            return {
+                "success": False,
+                "message": f"更新失败：{exc}",
+                "error_code": "tool_exception",
+            }
+
+    if action == "delete":
+        pid = _product_parse_id(data.get("id"))
+        if pid is None:
+            return {"success": False, "message": "id 无效或缺失", "status_code": 400}
+        try:
+            products_pg_delete_row(pid)
+            return {"success": True, "message": "已删除"}
+        except HTTPException as exc:
+            return _http_exception_result(exc)
+        except RECOVERABLE_ERRORS as exc:
+            logger.exception("products delete failed")
+            return {
+                "success": False,
+                "message": f"删除失败：{exc}",
+                "error_code": "tool_exception",
+            }
+
+    if action == "batch_delete":
+        ids = data.get("ids") or data.get("product_ids") or []
+        if not isinstance(ids, list) or not ids:
+            return {"success": False, "message": "ids 须为非空数组", "status_code": 400}
+        try:
+            deleted, skipped = products_pg_batch_delete_rows(ids)
+            skipped_items = (
+                skipped if isinstance(skipped, list) else ([] if not skipped else [skipped])
+            )
+            return {
+                "success": True,
+                "message": f"已删除 {deleted} 条",
+                "deleted": deleted,
+                "skipped": skipped_items,
+            }
+        except RECOVERABLE_ERRORS as exc:
+            logger.exception("products batch-delete failed")
+            return {
+                "success": False,
+                "message": f"批量删除失败：{exc}",
+                "error_code": "tool_exception",
+            }
+
+    return {"success": False, "message": f"未注册的 products compat 动作: {action}"}
+
+
+def _run_products_compat_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("products") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return {
+            "success": False,
+            "message": f"未注册的 products 动作: {action}",
+            "agent_status": "failed",
+        }
+
+    node_id = f"products_{action}_compat"
+    user_id = _products_compat_agent_user_id(request, params)
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 执行 legacy products.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="products",
+                action=action,
+                params=dict(params or {}),
+                risk=str(action_meta.get("risk") or "medium"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description="Execute legacy products compat mutation through Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "medium"),
+        metadata={"source": "product_compat_route", "route": route_path},
+    )
+    runtime_context = {
+        "source": "product_compat_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+        "service_source": "fastapi_product_compat_route",
+        "route_module": __name__,
+    }
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(params.get("message") or f"Products compat {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "products-compat-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    return _agent_node_output(run, node_id)
 
 
 def _products_price_list_word_response(
@@ -206,157 +501,65 @@ def products_resolve_name_hints(request: Request, body: dict = Body(default_fact
 @router.post("/products/update")
 @router.post("/products/update/", include_in_schema=False)
 def products_update(request: Request, body: dict = Body(default_factory=dict)) -> dict:
-    try:
-        from app.mod_sdk.erp_products_facade import (
-            is_erp_products_via_service_enabled,
-        )
-        from app.mod_sdk.erp_products_facade import products_update as products_update_via_service
-
-        if is_erp_products_via_service_enabled():
-            return products_update_via_service(request, body)
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.debug("products update via service skipped", exc_info=True)
-    _products_write_raise(request)
-    gate = _business_mod_json_block()
+    payload = dict(body or {})
+    gate = _products_compat_preflight(request, "update", payload)
     if gate:
         return gate
-
-    from app.application.excel_imports import _parse_price
-
-    pid = _product_parse_id(body.get("id"))
-    if pid is None:
-        raise HTTPException(status_code=400, detail="id 无效或缺失")
-
-    try:
-        products_pg_update_row(
-            pid,
-            body,
-            parse_price=_parse_price,
-            parse_quantity=_product_parse_quantity,
-            parse_is_active=_product_parse_is_active,
-        )
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("products update failed")
-        raise HTTPException(status_code=500, detail=f"更新失败：{e}") from e
-
-    return {"success": True, "data": {"id": pid}}
+    result = _run_products_compat_agent(
+        request=request,
+        action="update",
+        params=payload,
+        route_path="/products/update",
+    )
+    return JSONResponse(result, status_code=_products_compat_status_code(result))
 
 
 @router.post("/products/add")
 @router.post("/products/add/", include_in_schema=False)
 def products_add(request: Request, body: dict = Body(default_factory=dict)) -> dict:
-    try:
-        from app.mod_sdk.erp_products_facade import (
-            is_erp_products_via_service_enabled,
-        )
-        from app.mod_sdk.erp_products_facade import products_add as products_add_via_service
-
-        if is_erp_products_via_service_enabled():
-            return products_add_via_service(request, body)
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.debug("products add via service skipped", exc_info=True)
-    _products_write_raise(request)
-    gate = _business_mod_json_block()
+    payload = _normalize_products_create_payload(dict(body or {}))
+    gate = _products_compat_preflight(request, "create", payload)
     if gate:
         return gate
-
-    from app.application.excel_imports import _parse_price
-
-    try:
-        new_id = products_pg_insert_row(
-            body,
-            parse_price=_parse_price,
-            parse_quantity=_product_parse_quantity,
-            parse_is_active=_product_parse_is_active,
-        )
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("products add failed")
-        raise HTTPException(status_code=500, detail=f"添加失败：{e}") from e
-
-    return {"success": True, "data": {"id": new_id}}
+    result = _run_products_compat_agent(
+        request=request,
+        action="create",
+        params=payload,
+        route_path="/products/add",
+    )
+    return JSONResponse(result, status_code=_products_compat_status_code(result))
 
 
 @router.post("/products/delete")
 @router.post("/products/delete/", include_in_schema=False)
 def products_delete(request: Request, body: dict = Body(default_factory=dict)) -> dict:
-    try:
-        from app.mod_sdk.erp_products_facade import (
-            is_erp_products_via_service_enabled,
-        )
-        from app.mod_sdk.erp_products_facade import products_delete as products_delete_via_service
-
-        if is_erp_products_via_service_enabled():
-            return products_delete_via_service(request, body)
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.debug("products delete via service skipped", exc_info=True)
-    _products_write_raise(request)
-    gate = _business_mod_json_block()
+    payload = dict(body or {})
+    gate = _products_compat_preflight(request, "delete", payload)
     if gate:
         return gate
-
-    pid = _product_parse_id(body.get("id"))
-    if pid is None:
-        raise HTTPException(status_code=400, detail="id 无效或缺失")
-
-    try:
-        products_pg_delete_row(pid)
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("products delete failed")
-        raise HTTPException(status_code=500, detail=f"删除失败：{e}") from e
-
-    return {"success": True, "message": "已删除"}
+    result = _run_products_compat_agent(
+        request=request,
+        action="delete",
+        params=payload,
+        route_path="/products/delete",
+    )
+    return JSONResponse(result, status_code=_products_compat_status_code(result))
 
 
 @router.post("/products/batch-delete")
 @router.post("/products/batch-delete/", include_in_schema=False)
 def products_batch_delete(request: Request, body: dict = Body(default_factory=dict)) -> dict:
-    try:
-        from app.mod_sdk.erp_products_facade import (
-            is_erp_products_via_service_enabled,
-        )
-        from app.mod_sdk.erp_products_facade import (
-            products_batch_delete as products_batch_delete_via_service,
-        )
-
-        if is_erp_products_via_service_enabled():
-            return products_batch_delete_via_service(request, body)
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.debug("products batch-delete via service skipped", exc_info=True)
-    _products_write_raise(request)
-    gate = _business_mod_json_block()
+    payload = dict(body or {})
+    gate = _products_compat_preflight(request, "batch_delete", payload)
     if gate:
         return gate
-
-    ids = body.get("ids") or body.get("product_ids") or []
-    if not isinstance(ids, list) or not ids:
-        raise HTTPException(status_code=400, detail="ids 须为非空数组")
-
-    try:
-        deleted, skipped = products_pg_batch_delete_rows(ids)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("products batch-delete failed")
-        raise HTTPException(status_code=500, detail=f"批量删除失败：{e}") from e
-
-    return {
-        "success": True,
-        "message": f"已删除 {deleted} 条",
-        "deleted": deleted,
-        "skipped": skipped,
-    }
+    result = _run_products_compat_agent(
+        request=request,
+        action="batch_delete",
+        params=payload,
+        route_path="/products/batch-delete",
+    )
+    return JSONResponse(result, status_code=_products_compat_status_code(result))
 
 
 @router.get("/products/price-list-export")

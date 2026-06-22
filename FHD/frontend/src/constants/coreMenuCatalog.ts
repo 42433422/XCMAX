@@ -21,7 +21,7 @@ export function pinMenuKeyFirst<T extends { key: string }>(
 
 export const EMPLOYEE_WORKFLOW_MENU_CHILDREN: CoreMenuCatalogItem[] = [
   { key: 'workflow-employee-space', name: '员工空间', iconClass: 'fa-th-large' },
-  { key: 'workflow-visualization', name: '流程全景', iconClass: 'fa-share-alt' },
+  { key: 'workflow-visualization', name: '流程可视化', iconClass: 'fa-share-alt' },
 ]
 
 /** 管理端「员工工作台」额外子项（企业端不可见） */
@@ -39,7 +39,8 @@ export const EMPLOYEE_WORKFLOW_MENU_ITEM: CoreMenuCatalogItem = {
 
 export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
   { key: PRIMARY_CHAT_MENU_KEY, name: '智能对话', iconClass: 'fa-comments-o' },
-  { key: 'im', name: '消息', iconClass: 'fa-envelope-o' },
+  { key: 'im', name: '信息', iconClass: 'fa-envelope-o' },
+  { key: 'ai-groups', name: 'AI群聊', iconClass: 'fa-users' },
   { key: 'ai-ecosystem', name: '智能生态', iconClass: 'fa-sitemap' },
   EMPLOYEE_WORKFLOW_MENU_ITEM,
 ]
@@ -72,7 +73,7 @@ export const CORE_MENU_ITEMS_TRAILING: CoreMenuCatalogItem[] = []
 
 export const ADMIN_MENU_ITEM: CoreMenuCatalogItem = {
   key: 'admin-entitlements',
-  name: '用户 Mod 管理',
+  name: '用户管理',
   iconClass: 'fa-shield',
 }
 

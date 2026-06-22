@@ -1,4 +1,4 @@
-"""Tests for app.routes.document_templates_compat."""
+"""Tests for app.fastapi_routes.document_templates_compat."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.routes.document_templates_compat import (
+from app.fastapi_routes.document_templates_compat import (
     _unpack_response,
     _UploadLikeFile,
     run_archive_template_analyze,
@@ -118,7 +118,7 @@ class TestRunArchiveTemplateCreate:
         mock_resp.get_json.return_value = {"success": True}
         mock_resp.status_code = 201
         mock_tpl.create_template_with_payload.return_value = (mock_resp, 201)
-        with patch("app.routes.document_templates_compat._tpl", mock_tpl):
+        with patch("app.fastapi_routes.document_templates_compat._tpl", mock_tpl):
             data, code = run_archive_template_create({"name": "test"})
             assert data["success"] is True
             assert code == 201
@@ -129,7 +129,7 @@ class TestRunArchiveTemplateCreate:
         mock_resp.get_json.return_value = {"success": True}
         mock_resp.status_code = 200
         mock_tpl.create_template_with_payload.return_value = (mock_resp, 200)
-        with patch("app.routes.document_templates_compat._tpl", mock_tpl):
+        with patch("app.fastapi_routes.document_templates_compat._tpl", mock_tpl):
             data, code = run_archive_template_create(None)
             mock_tpl.create_template_with_payload.assert_called_with({})
 
@@ -143,7 +143,7 @@ class TestRunArchiveTemplateUpdate:
         mock_resp.get_json.return_value = {"success": True}
         mock_resp.status_code = 200
         mock_tpl.update_template_with_payload.return_value = (mock_resp, 200)
-        with patch("app.routes.document_templates_compat._tpl", mock_tpl):
+        with patch("app.fastapi_routes.document_templates_compat._tpl", mock_tpl):
             data, code = run_archive_template_update({"id": 1})
             assert data["success"] is True
 
@@ -157,7 +157,7 @@ class TestRunArchiveTemplateAnalyze:
         mock_resp.get_json.return_value = {"success": True}
         mock_resp.status_code = 200
         mock_tpl.analyze_template_with_upload.return_value = (mock_resp, 200)
-        with patch("app.routes.document_templates_compat._tpl", mock_tpl):
+        with patch("app.fastapi_routes.document_templates_compat._tpl", mock_tpl):
             data, code = run_archive_template_analyze(
                 file_body=b"file content",
                 filename="test.xlsx",

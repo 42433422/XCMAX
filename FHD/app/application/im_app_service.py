@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -111,9 +112,8 @@ class ImApplicationService:
         return int(row[0]) if row else None
 
     def list_conversations(
-        self, user_id: int, session_id: str | None = None
+        self, user_id: int, *, include_enterprise_dedicated_cs: bool = True
     ) -> list[dict[str, Any]]:
-        _ = session_id
         rows = (
             self._db.execute(
                 select(ImConversation)
@@ -159,21 +159,32 @@ class ImApplicationService:
                 "last_message_preview": (last_msg.body[:120] if last_msg else ""),
                 "unread_count": unread,
             }
-            if conv.is_direct and self._is_enterprise_dedicated_cs_user(peer):
+            is_enterprise_dedicated_cs = conv.is_direct and self._is_enterprise_dedicated_cs_user(
+                peer
+            )
+            if is_enterprise_dedicated_cs and not include_enterprise_dedicated_cs:
+                continue
+            if is_enterprise_dedicated_cs:
                 item["is_enterprise_dedicated_cs"] = True
             out.append(item)
         return out
 
-    def list_contacts(self, user_id: int) -> list[dict[str, Any]]:
+    def list_contacts(
+        self, user_id: int, *, include_enterprise_dedicated_cs: bool = True
+    ) -> list[dict[str, Any]]:
         me = self._db.get(User, int(user_id))
         my_tenant = getattr(me, "tenant_id", None) if me else None
-        dedicated_cs = self._ensure_enterprise_dedicated_cs_user()
+        dedicated_cs = (
+            self._ensure_enterprise_dedicated_cs_user() if include_enterprise_dedicated_cs else None
+        )
         dedicated_cs_id = (
             int(dedicated_cs.id) if dedicated_cs is not None and dedicated_cs.id else None
         )
         q = select(User).where(User.id != int(user_id), User.is_active.is_(True))
         if dedicated_cs_id is not None:
             q = q.where(User.id != dedicated_cs_id)
+        elif not include_enterprise_dedicated_cs:
+            q = q.where(User.username != ENTERPRISE_DEDICATED_CS_USERNAME)
         if my_tenant is not None:
             q = q.where(User.tenant_id == my_tenant)
         rows = self._db.execute(q.order_by(User.display_name, User.username)).scalars().all()
@@ -277,6 +288,16 @@ class ImApplicationService:
             conv.last_message_at = utc_now_naive()
         self._db.commit()
         self._db.refresh(msg)
+        try:
+            from app.neuro_bus.application_neuro_bridge import neuro_notify_im_message_sent
+
+            neuro_notify_im_message_sent(
+                conversation_id=msg.conversation_id,
+                sender_id=str(msg.sender_user_id),
+                message_type="text",
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("neuro_notify_im_message_sent skipped", exc_info=True)
         member_ids = self._member_user_ids(conversation_id)
         message = self._message_dict(msg, self._display_name(sender_user_id))
         updated_at_ms = self._record_im_message_change(message, actor=str(sender_user_id))

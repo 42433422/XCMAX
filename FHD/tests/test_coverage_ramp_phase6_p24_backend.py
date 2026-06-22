@@ -263,7 +263,7 @@ class TestSessionServiceSingleton:
         mock_registry = MagicMock()
         mock_registry.session_service = MagicMock()
 
-        with patch("app.di.registry.get_service_registry", return_value=mock_registry):
+        with patch("app.services.session_service.get_service_registry", return_value=mock_registry):
             result = session_service_mod.get_session_service()
 
         assert result is mock_registry.session_service
@@ -936,6 +936,32 @@ class TestGetSkillRegistry:
 
 
 class TestDecideProcessorWithPolicy:
+    """policy_router 的 _load_canary_state() 有模块级缓存 _canary_cache（30s TTL）。
+    全量套件中前序测试调用后缓存了旧值，patch.dict(os.environ) 无法影响缓存读取，
+    导致期望 result is not None 的测试失败。此 fixture 在每个测试前重置缓存。
+
+    注意：--import-mode=importlib 下，decide_processor_with_policy.__globals__
+    可能与 sys.modules 中的模块 __dict__ 不是同一对象，需同时重置两者。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_canary_cache(self):
+        from app.neuro_bus.routing import policy_router as _pr
+
+        # 重置 sys.modules 中模块的缓存
+        _pr._canary_cache = None
+        _pr._canary_cache_ts = 0.0
+        # 重置 decide_processor_with_policy 实际引用的模块字典中的缓存
+        # （--import-mode=importlib 可能导致两者不一致）
+        _g = decide_processor_with_policy.__globals__
+        _g["_canary_cache"] = None
+        _g["_canary_cache_ts"] = 0.0
+        yield
+        _pr._canary_cache = None
+        _pr._canary_cache_ts = 0.0
+        _g["_canary_cache"] = None
+        _g["_canary_cache_ts"] = 0.0
+
     def test_disabled_by_default(self):
         with patch.dict(os.environ, {}, clear=True):
             result = decide_processor_with_policy("hello")
@@ -949,9 +975,17 @@ class TestDecideProcessorWithPolicy:
     @pytest.mark.parametrize("enabled", ["1", "true", "yes", "on"])
     def test_enabled_variants(self, enabled: str):
         with (
-            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": enabled}),
+            patch.dict(
+                os.environ,
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": enabled,
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
+                },
+            ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=0),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(0, 0.9)
+            ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
         ):
             result = decide_processor_with_policy("hello")
@@ -960,27 +994,44 @@ class TestDecideProcessorWithPolicy:
 
     def test_negative_index_returns_none(self):
         with (
-            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+            ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=-1),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(-1, 0.0),
+            ),
         ):
             result = decide_processor_with_policy("hello")
         assert result is None
 
     def test_index_out_of_range_returns_none(self):
         with (
-            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+            ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=99),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(99, 0.9),
+            ),
         ):
             result = decide_processor_with_policy("hello")
         assert result is None
 
     def test_trace_id_from_argument(self):
         with (
-            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+            ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=1),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(1, 0.9)
+            ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
         ):
             result = decide_processor_with_policy("hello", trace_id="tid-1")
@@ -992,9 +1043,14 @@ class TestDecideProcessorWithPolicy:
         event = MagicMock()
         event.metadata.trace_id = "evt-tid"
         with (
-            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+            ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=2),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(2, 0.9)
+            ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
         ):
             result = decide_processor_with_policy("hello", event=event)
@@ -1004,16 +1060,146 @@ class TestDecideProcessorWithPolicy:
     def test_extra_passed_to_features(self):
         extra = {"lang": "zh"}
         with (
-            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+            ),
             patch(
                 "app.neuro_bus.routing.policy_router.build_routing_features",
                 return_value={"lang": "zh"},
             ) as feat_mock,
-            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=0),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(0, 0.9)
+            ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
         ):
             decide_processor_with_policy("hello", extra=extra)
         feat_mock.assert_called_once_with("hello", None, extra)
+
+    def test_shadow_mode_returns_none_but_logs(self):
+        """影子模式：返回 None 但记录 NN 决策。"""
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": "shadow",
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
+                },
+            ),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(0, 0.85),
+            ),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
+        ):
+            result = decide_processor_with_policy("hello", trace_id="shadow-1")
+        assert result is None
+        log_mock.assert_called_once()
+        kwargs = log_mock.call_args.kwargs
+        assert kwargs["trace_id"] == "shadow-1"
+        assert kwargs["outcome"] == "policy_shadow"
+        assert kwargs["sla_hit"] is None
+        assert kwargs["success"] is None
+        assert kwargs["extra"]["shadow"] is True
+        assert kwargs["extra"]["confidence"] == 0.85
+
+    def test_canary_fallback_returns_none_but_logs(self):
+        """灰度回退：random > canary_ratio 时返回 None 但记录 fallback。"""
+        with (
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "0.1"},
+            ),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(1, 0.7)
+            ),
+            patch("app.neuro_bus.routing.policy_router.random.random", return_value=0.5),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
+        ):
+            result = decide_processor_with_policy("hello", trace_id="canary-1")
+        assert result is None
+        log_mock.assert_called_once()
+        kwargs = log_mock.call_args.kwargs
+        assert kwargs["outcome"] == "policy_canary_fallback"
+        assert kwargs["extra"]["canary_fallback"] is True
+        assert kwargs["extra"]["canary_ratio"] == 0.1
+        assert kwargs["extra"]["confidence"] == 0.7
+        assert kwargs["extra"]["shadow"] is False
+
+    def test_canary_pass_through_returns_decision(self):
+        """灰度放行：random <= canary_ratio 时正常路由。"""
+        with (
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "0.5"},
+            ),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(2, 0.95),
+            ),
+            patch("app.neuro_bus.routing.policy_router.random.random", return_value=0.3),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
+        ):
+            result = decide_processor_with_policy("hello")
+        assert result is not None
+        assert result.processor_type == _ACTION_ORDER[2]
+        assert result.confidence == 0.95
+
+    def test_confidence_passed_to_routing_decision(self):
+        """confidence 来自 predict_with_confidence，不再硬编码 0.72。"""
+        with (
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+            ),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(0, 0.42),
+            ),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
+        ):
+            result = decide_processor_with_policy("hello")
+        assert result is not None
+        assert result.confidence == 0.42
+        assert log_mock.call_args.kwargs["extra"]["confidence"] == 0.42
+
+    def test_canary_ratio_invalid_defaults_to_zero(self):
+        """非法 canary_ratio 视为 0.0（全部回退）。"""
+        with (
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "abc"},
+            ),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(0, 0.9)
+            ),
+            patch("app.neuro_bus.routing.policy_router.random.random", return_value=0.001),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
+        ):
+            result = decide_processor_with_policy("hello")
+        # canary_ratio=0.0 → random.random() > 0.0 → True → fallback
+        assert result is None
+
+    def test_canary_ratio_clamped_to_one(self):
+        """canary_ratio > 1.0 被 clamp 到 1.0（全部放行）。"""
+        with (
+            patch.dict(
+                os.environ,
+                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "5.0"},
+            ),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(0, 0.9)
+            ),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
+        ):
+            result = decide_processor_with_policy("hello")
+        assert result is not None
 
 
 # ---------------------------------------------------------------------------

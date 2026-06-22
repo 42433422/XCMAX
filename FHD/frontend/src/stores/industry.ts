@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, readonly } from 'vue'
 import { systemApi } from '@/api/system'
 import { useModsStore } from '@/stores/mods'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 interface Industry {
   id: number | string;
@@ -14,55 +15,14 @@ interface Industry {
   [key: string]: unknown;
 }
 
-/**
- * 把当前 modsStore.mods 中已声明的 manifest.industry 合并进 industries.value。
- * server 来源的优先（按 id 去重时 server 先到不被覆盖），mod 仅作为兜底，
- * 修复"后端 _mod_industries_dict 返回空、/api/system/industries 落到 YAML 兜底
- * 但前端能从 /api/mods/ 看到 mod 行业"造成的下拉缺项问题。
- */
-function mergeModIndustriesInto(
-  base: Industry[],
-  modList: ReadonlyArray<Record<string, unknown>>,
-): Industry[] {
-  const out: Industry[] = Array.isArray(base) ? [...base] : []
-  const seen = new Set(out.map((ind) => String(ind.id ?? '').trim()).filter(Boolean))
-  for (const mod of modList) {
-    const ind = asRecord(mod.industry)
-    if (!Object.keys(ind).length) continue
-    const id = asString(ind.id).trim()
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    out.push({
-      id,
-      name: String(ind.name ?? id),
-      code: id,
-      description: typeof ind.description === 'string' ? ind.description : '',
-      config: {
-        units: ind.units ?? {},
-        quantity_fields: ind.quantity_fields ?? {},
-        product_fields: ind.product_fields ?? {},
-        order_types: ind.order_types ?? {},
-        intent_keywords: ind.intent_keywords ?? {},
-        print_config: ind.print_config ?? {},
-      },
-      // 同时把原始 manifest.industry 放在顶层，方便 useIndustryUiText 复用
-      units: ind.units ?? {},
-      quantity_fields: ind.quantity_fields ?? {},
-      product_fields: ind.product_fields ?? {},
-      order_types: ind.order_types ?? {},
-      intent_keywords: ind.intent_keywords ?? {},
-      print_config: ind.print_config ?? {},
-    })
-  }
-  return out
-}
-
 export const useIndustryStore = defineStore('industry', () => {
   const industries = ref<Industry[]>([])
   const currentIndustry = ref<Industry | null>(null)
   const currentConfig = ref<unknown>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  // Phase 2 会通过 templatePreviewApi.getTermRules 填充；Phase 1 先留空。
+  const termRules = ref<Record<string, unknown>>({})
   let initInFlight: Promise<void> | null = null
 
   const currentIndustryName = computed(() => {
@@ -70,6 +30,8 @@ export const useIndustryStore = defineStore('industry', () => {
   })
 
   const currentIndustryId = computed(() => {
+    // 管理端（admin-console）使用专属「管理端」预设，不套用企业端当前行业（如考勤）
+    if (isAdminConsoleSpa()) return '管理端'
     return currentIndustry.value?.id?.toString() || DEFAULT_INDUSTRY_ID
   })
 
@@ -110,29 +72,15 @@ export const useIndustryStore = defineStore('industry', () => {
 
     try {
       const response = await systemApi.getIndustries()
-      let serverIndustries: Industry[] = []
       if (response.success && response.data) {
-        serverIndustries = asArray<Industry>(asRecord(response.data).industries)
+        industries.value = asArray<Industry>(asRecord(response.data).industries)
+      } else {
+        industries.value = []
       }
-      let modList: ReadonlyArray<Record<string, unknown>> = []
-      try {
-        const modsStore = useModsStore()
-        modList = Array.isArray(modsStore.mods) ? modsStore.mods : []
-      } catch {
-        modList = []
-      }
-      industries.value = mergeModIndustriesInto(serverIndustries, modList)
     } catch (err) {
       error.value = err instanceof Error ? err.message : '加载行业列表失败'
       console.error('Failed to load industries:', err)
-      // server 列表失败时，至少把 mod manifest 行业暴露出来
-      try {
-        const modsStore = useModsStore()
-        const modList = Array.isArray(modsStore.mods) ? modsStore.mods : []
-        industries.value = mergeModIndustriesInto([], modList)
-      } catch {
-        // ignore
-      }
+      industries.value = []
     } finally {
       loading.value = false
     }
@@ -191,23 +139,18 @@ export const useIndustryStore = defineStore('industry', () => {
     }
   }
 
-  async function switchIndustry(industryId: number | string): Promise<boolean> {
+  /**
+   * 只读从 server 加载行业 SSOT：同时拉取行业列表与当前行业。
+   * Phase 1 不再写入 server（switchIndustry 已删除）；Phase 2 会扩展 termRules。
+   */
+  async function loadFromServer(): Promise<void> {
     loading.value = true
     error.value = null
-
     try {
-      const response = await systemApi.setIndustry(industryId)
-      if (response.success) {
-        await loadCurrentIndustry()
-        return true
-      } else {
-        error.value = response.message || '切换行业失败'
-        return false
-      }
+      await Promise.all([loadIndustries(), loadCurrentIndustry()])
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '切换行业失败'
-      console.error('Failed to switch industry:', err)
-      return false
+      error.value = err instanceof Error ? err.message : '从服务器加载行业失败'
+      console.error('Failed to load industry from server:', err)
     } finally {
       loading.value = false
     }
@@ -238,10 +181,13 @@ export const useIndustryStore = defineStore('industry', () => {
 
   return {
     industries,
-    currentIndustry,
+    // 只读暴露：SSOT 行业只能由 loadFromServer / loadCurrentIndustry 从 server 拉取后写入，
+    // 组件层不可直接赋值（switchIndustry 已删除）。
+    currentIndustry: readonly(currentIndustry),
     currentConfig,
     loading,
     error,
+    termRules,
     currentIndustryName,
     currentIndustryId,
     primaryUnit,
@@ -249,7 +195,7 @@ export const useIndustryStore = defineStore('industry', () => {
     isLoaded,
     loadIndustries,
     loadCurrentIndustry,
-    switchIndustry,
+    loadFromServer,
     initialize,
     getIndustryById
   }

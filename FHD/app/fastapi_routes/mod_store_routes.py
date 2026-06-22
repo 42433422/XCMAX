@@ -209,6 +209,8 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
 
 
 async def _remote_rows() -> list[dict[str, Any]]:
+    from fastapi import HTTPException
+
     from app.mod_sdk.host_foundation import is_infrastructure_mod_hidden_from_store
 
     installed_ids = set(_installed_by_id())
@@ -224,9 +226,7 @@ async def _remote_rows() -> list[dict[str, Any]]:
                 continue
             rows.append(info)
     except HTTPException as exc:
-        logger.warning("mod-store remote catalog unavailable: %s", exc.detail)
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("mod-store remote catalog failed: %s", exc)
+        logger.warning("mod store remote catalog unavailable, using empty fallback: %s", exc)
     return rows
 
 

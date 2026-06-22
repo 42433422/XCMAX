@@ -8,7 +8,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     Numeric,
@@ -64,6 +63,7 @@ class Transaction(Base):
     txn_type = Column(String(32), nullable=False)
     status = Column(String(16), default="completed")
     description = Column(Text, default="")
+    idempotency_key = Column(String(128), default="", index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

@@ -17,9 +17,10 @@ if [[ -f "${ENV_FILE}" ]]; then
   set +a
 fi
 
+export MODSTORE_DIGEST_HTTP_TIMEOUT_SEC="${MODSTORE_DIGEST_HTTP_TIMEOUT_SEC:-${MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_SEC:-1800}}"
 export PYTHONPATH="${FHD_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
-log "触发 POST /api/admin/email/digest-now（超时最长 900s，含三端巡检 + 员工大会）…"
+log "触发 POST /api/admin/email/digest-now（超时最长 ${MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_SEC:-1800}s，含三端巡检 + 员工大会）…"
 "${PY}" - <<'PY'
 import asyncio
 import json

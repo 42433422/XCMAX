@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="props.visible"
+    v-if="props.visible && !externallyHidden"
     ref="rootRef"
     class="floating-chat-root"
     :class="{ dragging: isDragging }"
@@ -11,12 +11,12 @@
       type="button"
       :aria-expanded="isOpen ? 'true' : 'false'"
       aria-controls="floating-chat-panel"
-      aria-label="打开智能对话悬浮窗"
-      title="智能对话"
+      aria-label="打开小C助理悬浮窗"
+      title="小C助理"
       @pointerdown="onDragStart"
       @click="toggleOpen"
     >
-      <span class="floating-chat-toggle-label">智能对话</span>
+      <span class="floating-chat-toggle-label">小C助理</span>
     </button>
 
     <div
@@ -96,6 +96,7 @@ const PRO_INTENT_EXPERIENCE_KEY = 'xcagi_pro_intent_experience'
 const proIntentExperienceEnabled = ref(localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1')
 
 const isOpen = ref(false)
+const externallyHidden = ref(false)
 const draft = ref('')
 const messageListRef = ref<HTMLElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
@@ -129,6 +130,20 @@ const rootStyle = computed(() => ({
   left: `${rootLeft.value}px`,
   top: `${rootTop.value}px`
 }))
+
+const closeFloatingChatPanel = () => {
+  isOpen.value = false
+}
+
+const suppressFloatingChatPanel = () => {
+  isOpen.value = false
+  externallyHidden.value = true
+}
+
+const restoreFloatingChatPanel = () => {
+  externallyHidden.value = false
+  void placeRootToBottomRight()
+}
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
@@ -264,10 +279,18 @@ watch(isOpen, () => {
 onMounted(() => {
   void placeRootToBottomRight()
   window.addEventListener('resize', keepRootInViewport)
+  window.addEventListener('xcagi:close-floating-chat', closeFloatingChatPanel)
+  window.addEventListener('xcagi:close-assistant-float', closeFloatingChatPanel)
+  window.addEventListener('xcagi:suppress-floating-chat', suppressFloatingChatPanel)
+  window.addEventListener('xcagi:restore-floating-chat', restoreFloatingChatPanel)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', keepRootInViewport)
+  window.removeEventListener('xcagi:close-floating-chat', closeFloatingChatPanel)
+  window.removeEventListener('xcagi:close-assistant-float', closeFloatingChatPanel)
+  window.removeEventListener('xcagi:suppress-floating-chat', suppressFloatingChatPanel)
+  window.removeEventListener('xcagi:restore-floating-chat', restoreFloatingChatPanel)
 })
 </script>
 

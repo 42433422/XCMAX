@@ -130,9 +130,11 @@ export function useAppBoot() {
     }
     window.addEventListener('pageshow', onPageShowBfCache)
 
+    /* v8 ignore start -- shouldSkipSplashVisual 恒为 true（产品决策取消开屏动画），此分支不可达 */
     if (!shouldSkipSplashVisual()) {
       initStartupAudio(startupPublicUrl)
     }
+    /* v8 ignore end */
     startupProgressPct.value = 0
     runStartupProgressLoop()
 
@@ -158,6 +160,7 @@ export function useAppBoot() {
 
     void (async () => {
       if (shouldSkipSplashVisual()) return
+      /* v8 ignore start -- shouldSkipSplashVisual 恒为 true，return 后代码不可达 */
       try {
         const authResult: StartupAuthResult = await ensureStartupAuthenticated().catch(() => ({
           ok: false,
@@ -193,6 +196,7 @@ export function useAppBoot() {
         clearFailsafeTimer()
         finishSplash()
       }
+      /* v8 ignore end */
     })()
 
     shellBridge.installProModeBridge()

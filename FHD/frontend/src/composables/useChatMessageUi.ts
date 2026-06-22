@@ -68,16 +68,20 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     if (!text) return
     const myIdx = idx
     playingMsgIdx.value = myIdx
-    void speakText(text, {
-      onEnd: () => {
+    try {
+      void Promise.resolve(speakText(text, {
+        onEnd: () => {
+          if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+        },
+        onError: () => {
+          if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+        },
+      })).catch(() => {
         if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-      },
-      onError: () => {
-        if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-      },
-    }).catch(() => {
+      })
+    } catch {
       if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-    })
+    }
   }
 
   const latestAiMessageIndex = computed(() => {

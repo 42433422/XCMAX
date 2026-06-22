@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   manifestToNodes,
   manifestToEdges,
+  applyEdgeToManifest,
   addModuleToManifest,
   removeModuleFromManifest,
   MODULE_META,
@@ -33,6 +34,18 @@ describe('useWorkbenchManifest', () => {
       const kinds = nodes.map((n) => n.data.moduleKind)
       expect(kinds).toContain('memory')
     })
+
+    it('includes voice node with multi-path slice when audio or voice output exists', () => {
+      const manifest = createEmptyEmployeeConfigV2() as Record<string, unknown>
+      manifest.perception = { audio: { enabled: true } }
+      manifest.actions = { voice_output: { enabled: true } }
+      const voiceNode = manifestToNodes(manifest).find((n) => n.data.moduleKind === 'voice')
+      expect(voiceNode).toBeDefined()
+      expect(voiceNode?.data.slice).toMatchObject({
+        'perception.audio': { enabled: true },
+        'actions.voice_output': { enabled: true },
+      })
+    })
   })
 
   describe('manifestToEdges', () => {
@@ -58,6 +71,13 @@ describe('useWorkbenchManifest', () => {
     })
   })
 
+  describe('applyEdgeToManifest', () => {
+    it('returns manifest unchanged for informational edges', () => {
+      const manifest = createEmptyEmployeeConfigV2() as Record<string, unknown>
+      expect(applyEdgeToManifest(manifest, 'emp-identity', 'emp-prompt')).toBe(manifest)
+    })
+  })
+
   describe('addModuleToManifest', () => {
     it('adds memory module with default structure', () => {
       const manifest = createEmptyEmployeeConfigV2() as Record<string, unknown>
@@ -71,6 +91,22 @@ describe('useWorkbenchManifest', () => {
       manifest.memory = { existing: true }
       const next = addModuleToManifest(manifest, 'actions')
       expect((next.memory as Record<string, unknown>).existing).toBe(true)
+    })
+
+    it('adds perception, voice, management, and collaboration defaults', () => {
+      const manifest = createEmptyEmployeeConfigV2() as Record<string, unknown>
+      const withPerception = addModuleToManifest(manifest, 'perception')
+      expect(withPerception.perception).toMatchObject({ vision: { enabled: false } })
+
+      const withVoice = addModuleToManifest({ perception: { document: { enabled: true } }, actions: { text_output: { enabled: true } } }, 'voice')
+      expect((withVoice.perception as any).audio.asr.languages).toContain('zh-CN')
+      expect((withVoice.actions as any).voice_output.tts.provider).toBe('aliyun')
+
+      const withManagement = addModuleToManifest({}, 'management')
+      expect((withManagement.management as any).error_handling.retry_policy.max_retries).toBe(3)
+
+      const withCollaboration = addModuleToManifest({ collaboration: { workflow: { id: 1 } } }, 'collaboration')
+      expect((withCollaboration.collaboration as any).permissions.access_level).toBe('read_write')
     })
   })
 
@@ -86,6 +122,31 @@ describe('useWorkbenchManifest', () => {
       const manifest = createEmptyEmployeeConfigV2() as Record<string, unknown>
       const next = removeModuleFromManifest(manifest, 'identity')
       expect(next.identity).toBeDefined()
+    })
+
+    it('removes voice, perception, actions, management, and collaboration modules', () => {
+      const manifest = {
+        perception: { audio: { enabled: true }, document: { enabled: true } },
+        actions: { voice_output: { enabled: true }, text_output: { enabled: true } },
+        management: { enabled: true },
+        collaboration: { permissions: { access_level: 'read_write' }, workflow: { id: 1 } },
+      } as Record<string, unknown>
+
+      const withoutVoice = removeModuleFromManifest(manifest, 'voice')
+      expect((withoutVoice.perception as any).audio).toBeUndefined()
+      expect((withoutVoice.actions as any).voice_output).toBeUndefined()
+
+      expect(removeModuleFromManifest(manifest, 'perception').perception).toBeUndefined()
+      expect(removeModuleFromManifest(manifest, 'actions').actions).toBeUndefined()
+      expect(removeModuleFromManifest(manifest, 'management').management).toBeUndefined()
+      expect((removeModuleFromManifest(manifest, 'collaboration').collaboration as any).permissions).toBeUndefined()
+
+      const voiceOnly = removeModuleFromManifest({
+        perception: { audio: { enabled: true } },
+        actions: { voice_output: { enabled: true } },
+      }, 'voice')
+      expect(voiceOnly.perception).toBeUndefined()
+      expect(voiceOnly.actions).toBeUndefined()
     })
   })
 })

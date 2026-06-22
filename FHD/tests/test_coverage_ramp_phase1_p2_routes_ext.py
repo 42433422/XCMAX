@@ -158,6 +158,140 @@ def test_tool_categories_list(misc_client: TestClient) -> None:
     assert r.status_code == 200
 
 
+def test_memory_v2_routes_lifecycle_and_preference_sync(
+    misc_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    import app.services.user_memory_service as memory_mod
+
+    memory_dir = tmp_path / "memory"
+    monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
+    monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
+    memory_mod.reset_user_memory_service()
+    try:
+        created = misc_client.post(
+            "/memory/v2/candidates",
+            json={
+                "user_id": "u-memory",
+                "memory_type": "preference",
+                "key": "default_customer",
+                "value": "七彩乐园",
+                "confidence": 0.8,
+                "source": "pytest",
+                "evidence": [{"message": "总是给七彩乐园开单"}],
+            },
+        )
+        assert created.status_code == 200
+        candidate = created.json()["candidate"]
+        memory_id = candidate["memory_id"]
+
+        pending = misc_client.get(
+            "/memory/v2",
+            params={"user_id": "u-memory", "status": "pending"},
+        ).json()
+        assert pending["summary"]["by_status"]["pending"] == 1
+        assert pending["memories"][0]["memory_id"] == memory_id
+
+        confirmed = misc_client.post(
+            f"/memory/v2/{memory_id}/confirm",
+            json={"user_id": "u-memory"},
+        ).json()
+        assert confirmed["memory"]["status"] == "active"
+
+        svc = memory_mod.get_user_memory_service()
+        assert svc.get_preference("u-memory", "default_customer") == "七彩乐园"
+
+        corrected = misc_client.patch(
+            f"/memory/v2/{memory_id}",
+            json={
+                "user_id": "u-memory",
+                "key": "favorite_customer",
+                "value": "彩虹乐园",
+                "reason": "用户纠正名称",
+            },
+        ).json()
+        assert corrected["memory"]["key"] == "favorite_customer"
+        assert svc.get_preference("u-memory", "default_customer") is None
+        assert svc.get_preference("u-memory", "favorite_customer") == "彩虹乐园"
+
+        summary = misc_client.get("/memory/v2/summary", params={"user_id": "u-memory"}).json()
+        assert summary["summary"]["by_status"]["active"] == 1
+        assert "彩虹乐园" in summary["planner_context"]
+
+        deleted = misc_client.delete(
+            f"/memory/v2/{memory_id}",
+            params={"user_id": "u-memory", "reason": "用户删除"},
+        ).json()
+        assert deleted["memory"]["status"] == "deleted"
+        assert svc.get_preference("u-memory", "favorite_customer") is None
+
+        final_summary = misc_client.get("/memory/v2/summary", params={"user_id": "u-memory"}).json()
+        assert final_summary["summary"]["by_status"]["deleted"] == 1
+        assert "无已确认记忆" in final_summary["planner_context"]
+    finally:
+        memory_mod.reset_user_memory_service()
+
+
+def test_memory_v2_routes_validate_type_and_status(misc_client: TestClient) -> None:
+    bad_type = misc_client.post(
+        "/memory/v2/candidates",
+        json={"user_id": "u", "memory_type": "unknown", "key": "k", "value": "v"},
+    )
+    assert bad_type.status_code == 400
+    assert bad_type.json()["success"] is False
+
+    bad_status = misc_client.get("/memory/v2", params={"user_id": "u", "status": "unknown"})
+    assert bad_status.status_code == 400
+    assert bad_status.json()["success"] is False
+
+
+def test_memory_v2_routes_govern_blocked_source(
+    misc_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    import app.services.user_memory_service as memory_mod
+
+    memory_dir = tmp_path / "memory"
+    monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
+    monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
+    memory_mod.reset_user_memory_service()
+    try:
+        created = misc_client.post(
+            "/memory/v2/candidates",
+            json={
+                "user_id": "u-govern",
+                "memory_type": "preference",
+                "key": "favorite_customer",
+                "value": "污染客户",
+                "confidence": 0.95,
+                "source": "llm_guess",
+            },
+        )
+        assert created.status_code == 200
+        candidate = created.json()["candidate"]
+        assert candidate["status"] == "rejected"
+        assert candidate["source_policy"] == "blocked"
+        assert candidate["source_trust"] == "blocked"
+        assert "blocked_source" in candidate["governance_flags"]
+        assert candidate["confidence"] == 0.0
+
+        confirm = misc_client.post(
+            f"/memory/v2/{candidate['memory_id']}/confirm",
+            json={"user_id": "u-govern"},
+        )
+        assert confirm.status_code == 404
+        assert confirm.json()["success"] is False
+
+        summary = misc_client.get("/memory/v2/summary", params={"user_id": "u-govern"}).json()
+        assert summary["summary"]["by_status"]["rejected"] == 1
+        assert summary["summary"]["by_source_policy"]["blocked"] == 1
+        assert "污染客户" not in summary["planner_context"]
+    finally:
+        memory_mod.reset_user_memory_service()
+
+
 @patch("app.infrastructure.db.sync_engine.switch_to_test_mode")
 @patch("app.infrastructure.db.sync_engine.get_db_status")
 @patch("app.infrastructure.db.sync_engine.resolve_mode", return_value="production")

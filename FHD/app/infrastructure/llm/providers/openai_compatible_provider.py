@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 from typing import Any, cast
 
@@ -29,22 +28,22 @@ class OpenAICompatibleProvider:
         if self._adapter is not None:
             return self._adapter
 
+        from app.infrastructure.llm.providers.credentials import (
+            resolve_default_chat_model,
+            resolve_default_openai_provider,
+            resolve_openai_env_credentials,
+        )
         from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
 
-        provider = (
-            os.environ.get("LLM_PROVIDER") or os.environ.get("XCAGI_LLM_PROVIDER") or "deepseek"
-        ).strip()
-        api_key = (
-            os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY") or ""
-        ).strip()
+        provider = resolve_default_openai_provider()
+        api_key, base_url = resolve_openai_env_credentials()
         if not api_key:
             return None
         self._adapter = OpenAICompatibleAdapter(
             provider=provider,
             api_key=api_key,
-            model=(os.environ.get("LLM_MODEL") or os.environ.get("DEEPSEEK_MODEL") or "").strip()
-            or None,
-            base_url=(os.environ.get("OPENAI_BASE_URL") or "").strip() or None,
+            model=resolve_default_chat_model(),
+            base_url=base_url,
         )
         return self._adapter
 

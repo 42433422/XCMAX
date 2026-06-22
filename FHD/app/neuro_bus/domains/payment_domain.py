@@ -9,8 +9,8 @@ from decimal import Decimal
 from typing import Any
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
+from app.neuro_bus.domains.payment_domain_handlers import register_payment_domain_handlers
 from app.neuro_bus.events.base import EventPriority
-from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
 logger = logging.getLogger(__name__)
 
@@ -39,20 +39,7 @@ class PaymentNeuroDomain(NeuroDomain):
         self._setup_handlers()
 
     def _setup_handlers(self):
-        @self.on("payment.completed", priority=0, channel=DomainChannel.CRITICAL)
-        async def on_completed(event):
-            self._transaction_count += 1
-            amount = Decimal(event.payload.get("amount", "0"))
-            self._total_amount += amount
-            logger.info("Payment completed: amount=%s", amount)
-            bump_domain_handler_metric("payment.completed")
-
-        @self.on("payment.failed", priority=0, channel=DomainChannel.CRITICAL)
-        async def on_failed(event):
-            self._failed_count += 1
-            error = event.payload.get("error")
-            logger.error("Payment failed: %s", error)
-            bump_domain_handler_metric("payment.failed")
+        register_payment_domain_handlers(self)
 
     async def initialize(self):
         logger.info("PaymentNeuroDomain initialized")

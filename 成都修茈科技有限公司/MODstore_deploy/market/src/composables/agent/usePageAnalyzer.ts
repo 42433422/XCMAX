@@ -9,14 +9,15 @@ export function usePageAnalyzer() {
     return `路由：${route.fullPath}\n${dom}`
   }
 
-  async function getPageContextWithScreenshot(): Promise<{
+  async function getPageContextWithScreenshot(options: { screenshot?: any } = {}): Promise<{
     textSummary: string
     screenshotDataUrl: string | null
   }> {
     const textSummary = getPageContext()
     const { captureViewport } = await import('../../utils/agent/screenshotCapture')
-    const screenshotDataUrl = await captureViewport()
-    return { textSummary, screenshotDataUrl }
+    const screenshot = await captureViewport(options.screenshot)
+  const screenshotDataUrl = screenshot.ok ? screenshot.dataUrl : null
+    return { textSummary, screenshot, screenshotDataUrl }
   }
 
   return { getPageContext, getPageContextWithScreenshot }

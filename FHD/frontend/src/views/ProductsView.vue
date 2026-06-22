@@ -100,23 +100,35 @@
 
     <div v-if="showModal" class="modal active">
       <div class="modal-content">
-        <div class="modal-header">{{ isEdit ? '编辑产品' : '添加产品' }}</div>
+        <div class="modal-header">{{ isEdit ? '编辑' + entityName : '添加' + entityName }}</div>
         <div class="modal-body">
           <div class="form-group">
-            <label>产品型号 *</label>
+            <label>{{ fieldLabel('model_number', '产品型号') }} *</label>
             <input v-model="formData.model_number" type="text" placeholder="如：A001">
           </div>
           <div class="form-group">
-            <label>产品名称 *</label>
+            <label>{{ fieldLabel('name', '产品名称') }} *</label>
             <input v-model="formData.name" type="text" placeholder="产品名称">
           </div>
           <div class="form-group">
-            <label>规格</label>
-            <input v-model="formData.specification" type="text" placeholder="规格描述">
+            <label>{{ fieldLabel('specification', '规格') }}</label>
+            <select v-if="specOptions.length" v-model="formData.specification">
+              <option value="">请选择{{ fieldLabel('specification', '规格') }}</option>
+              <option v-for="opt in specOptions" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+            <input v-else v-model="formData.specification" type="text" placeholder="规格描述">
           </div>
           <div class="form-group">
-            <label>价格</label>
+            <label>{{ fieldLabel('price', '价格') }}</label>
             <input v-model.number="formData.price" type="number" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group" v-for="f in extraFields" :key="f.key">
+            <label>{{ f.label }}</label>
+            <input
+              v-model="formData[f.key]"
+              :type="f.type === 'date' ? 'date' : (f.type === 'number' ? 'number' : 'text')"
+              :placeholder="f.label"
+            >
           </div>
         </div>
         <div class="modal-footer">
@@ -129,7 +141,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useProductsStore } from '@/stores/products';
 import { storeToRefs } from 'pinia';
 import customersApi from '@/api/customers';
@@ -140,8 +152,29 @@ import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert } from '@/utils/appDialog';
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
+import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema';
 
 const pageNavTitle = useCoreNavLabel('products');
+
+// 行业感知：products 子系统的实体名与字段表头随行业变（产品/人员、型号/工号、规格/班次、单价/时薪）
+const productsSchema = useIndustryFieldSchema('products');
+const entityName = computed(() => productsSchema.entity.value || '产品');
+function fieldLabel(key, fallback) {
+  return productsSchema.labelOf(key, fallback);
+}
+
+// 行业新增字段（批号/保质期等）动态渲染：schema 里超出核心 4 字段(型号/名称/规格/单价)的字段，
+// 在表单尾部按类型自动生成输入；核心字段仍为固定输入，保证稳定。
+const CORE_PRODUCT_KEYS = ['model_number', 'name', 'specification', 'price', 'unit'];
+const extraFields = computed(() =>
+  productsSchema.fields.value.filter((f) => !CORE_PRODUCT_KEYS.includes(f.key)),
+);
+// 「规格」字段若声明了 oneOf（如考勤「班次」=早/中/晚），表单渲染为下拉而非自由文本。
+const specOptions = computed(() => {
+  const sf = productsSchema.fields.value.find((f) => f.key === 'specification');
+  const rule = (sf?.validators || []).find((v) => String(v.type) === 'oneOf');
+  return Array.isArray(rule?.params) ? rule.params.map((x) => String(x)) : [];
+});
 
 const store = useProductsStore();
 const { products, loading } = storeToRefs(store);
@@ -175,12 +208,12 @@ const useAttendanceDetailImport = ref(false);
 /** 删除 description 为考勤明细标记的旧记录后再导入 */
 const replaceTaggedAttendancePersonnel = ref(true);
 
-const columns = [
-  { key: 'model_number', label: '型号' },
-  { key: 'name', label: '名称' },
-  { key: 'specification', label: '规格' },
-  { key: 'price', label: '价格' }
-];
+const columns = computed(() => [
+  { key: 'model_number', label: fieldLabel('model_number', '型号') },
+  { key: 'name', label: fieldLabel('name', '名称') },
+  { key: 'specification', label: fieldLabel('specification', '规格') },
+  { key: 'price', label: fieldLabel('price', '价格') }
+]);
 
 const currentRequestId = ref(0);
 
@@ -249,6 +282,14 @@ const editProduct = (product) => {
 };
 
 const saveProduct = async () => {
+  // 行业感知校验：按当前行业 products 子系统的字段 validators 拦截（如考勤「班次」须为 早/中/晚）。
+  // 未声明 validators 的行业（如涂料）此处为空校验，不改变原有行为。
+  const fieldErrors = productsSchema.validate(formData.value);
+  if (fieldErrors.length > 0) {
+    await appAlert(fieldErrors[0].message);
+    return;
+  }
+
   const result = isEdit.value && formData.value.id
     ? await store.updateProduct(formData.value.id, formData.value)
     : await store.createProduct(formData.value);

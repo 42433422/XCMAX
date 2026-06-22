@@ -257,7 +257,7 @@ class TestHandleExcelAnalysisDeep:
                 return_value=Path(xlsx_path),
             ),
             patch(
-                "app.routes.template_grid_core._extract_customer_hint_from_excel",
+                "app.application.template_grid_core._extract_customer_hint_from_excel",
                 return_value="测试公司",
             ),
         ):

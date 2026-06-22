@@ -14,6 +14,7 @@ import {
   createAdminConsoleAtAliasPlugin,
   createWorkflowComponentsAliasPlugin,
 } from './vite.shared-alias.js'
+import { resolveApiBase } from './vite/resolveApiBase.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const hostRoot = __dirname
@@ -22,7 +23,7 @@ const adminSrc = path.join(adminRoot, 'src')
 const hostSrc = path.join(hostRoot, 'src')
 const hostConstants = path.join(hostSrc, 'constants')
 
-const API_BASE = process.env.VITE_API_BASE || 'http://127.0.0.1:5000'
+const API_BASE = resolveApiBase(process.env.VITE_API_BASE)
 const devPort = Number(process.env.VITE_DEV_PORT || 5011)
 
 const ADMIN_MODS_ROOT = path.resolve(hostRoot, '../mods-admin-runtime')
@@ -66,6 +67,7 @@ const adminModuleAliases = [
 function buildDevProxy(apiBase) {
   return {
     '/api': { target: apiBase, changeOrigin: true },
+    '/ws': { target: apiBase, changeOrigin: true, ws: true },
     '/health': { target: apiBase, changeOrigin: true },
     '/xcmax-dashboard': { target: apiBase, changeOrigin: true },
   }

@@ -8,6 +8,7 @@ import logging
 
 from app.db.models import UserPreference
 from app.db.session import get_db
+from app.di.registry import get_service_registry
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
 logger = logging.getLogger(__name__)
@@ -120,8 +121,6 @@ class UserPreferenceService(NeuroEventPublisherMixin):
 
 def get_user_preference_service() -> UserPreferenceService:
     """获取用户偏好服务单例"""
-    from app.di.registry import get_service_registry
-
     return get_service_registry().user_preference_service
 
 

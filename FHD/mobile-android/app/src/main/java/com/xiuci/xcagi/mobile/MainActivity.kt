@@ -8,6 +8,8 @@ import androidx.fragment.app.FragmentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.xiuci.xcagi.mobile.core.security.BiometricGate
@@ -19,6 +21,7 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private var unlocked = false
+    private var pendingDeepLink by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -37,13 +40,15 @@ class MainActivity : FragmentActivity() {
                         onError = { finish() },
                     )
                 } else {
-                    XcagiNavHost(vm, pendingDeepLink)
+                    XcagiNavHost(
+                        vm = vm,
+                        pendingDeepLink = pendingDeepLink,
+                        onDeepLinkHandled = { pendingDeepLink = null },
+                    )
                 }
             }
         }
     }
-
-    private var pendingDeepLink: String? = null
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

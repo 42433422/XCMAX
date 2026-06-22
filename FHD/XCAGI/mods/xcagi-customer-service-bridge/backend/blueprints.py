@@ -199,38 +199,9 @@ class PassiveLoopConfigBody(BaseModel):
 
 async def _run_user_cs_employee(payload: Dict[str, Any]) -> Dict[str, Any]:
     """调用 user-customer-service-officer 员工包（mods/_employees）。"""
-    try:
-        from app.infrastructure.mods import get_mod_registry  # type: ignore
-        from app.mod_sdk.mods_bus import import_mod_backend_py  # type: ignore
+    from app.services.user_cs_employee_runner import run_user_cs_employee
 
-        reg = get_mod_registry()
-        meta = reg.get_mod_metadata("user-customer-service-officer")
-        mod_path = getattr(meta, "mod_path", "") if meta else ""
-        if not mod_path:
-            here = os.path.dirname(os.path.abspath(__file__))
-            guess = os.path.normpath(
-                os.path.join(here, "..", "..", "..", "_employees", "user-customer-service-officer")
-            )
-            if os.path.isdir(guess):
-                mod_path = guess
-        if mod_path:
-            mod = import_mod_backend_py(
-                mod_path, "user-customer-service-officer", "employees/user_customer_service_officer"
-            )
-            if mod and hasattr(mod, "run"):
-                out = mod.run(payload, {})
-                if hasattr(out, "__await__"):
-                    out = await out
-                return {"success": True, "data": out}
-    except Exception as exc:
-        logger.exception("user-cs employee run failed")
-        return {"success": False, "error": str(exc)[:500], "data": {"ok": False, "error": str(exc)[:500]}}
-
-    return {
-        "success": False,
-        "error": "user-customer-service-officer 未安装",
-        "data": {"ok": False, "error": "请确认 mods/_employees/user-customer-service-officer 已安装并在岗"},
-    }
+    return await run_user_cs_employee(payload)
 
 
 def register_fastapi_routes(app, mod_id: str) -> None:

@@ -3,7 +3,7 @@
 集中提供:
 - reset_command_gateway: 清 _pending 字典 + _gateway 全局
 - reset_health_monitor: 清 _health_monitor_instance + 内部 deque
-- reset_bus_singleton: 重置 app.neuro_bus.bus._bus
+- reset_bus_singleton: 重置 app.neuro_bus.bus._neuro_bus
 - reset_initializer: 重置 _initializer 单例 + 标志位
 - reset_user_memory_service: 重置 _user_memory_service 单例
 - reset_event_publisher_mixin: 抑制 publish_event 副作用
@@ -45,9 +45,9 @@ def reset_bus_singleton(monkeypatch):
     """重置 NeuroBus 单例。"""
     from app.neuro_bus import bus as bus_mod
 
-    monkeypatch.setattr(bus_mod, "_bus", None)
+    monkeypatch.setattr(bus_mod, "_neuro_bus", None)
     yield
-    monkeypatch.setattr(bus_mod, "_bus", None)
+    monkeypatch.setattr(bus_mod, "_neuro_bus", None)
 
 
 @pytest.fixture

@@ -12,6 +12,20 @@ from app.infrastructure.llm.providers.openai_compatible_provider import OpenAICo
 from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
 
 _DEFAULT_ORDER = ("modstore", "openai_compatible", "deepseek_legacy", "openai_sdk")
+_PROVIDER_ID_ALIASES = {
+    "xcauto": "openai_compatible",
+    "xcauto-account": "openai_compatible",
+    "xcauto-default": "openai_compatible",
+    "xiuci": "openai_compatible",
+    "xiuci-account": "openai_compatible",
+    "openai": "openai_compatible",
+    "deepseek": "openai_compatible",
+}
+
+
+def _normalize_provider_id(provider_id: str | None) -> str:
+    text = str(provider_id or "").strip().lower()
+    return _PROVIDER_ID_ALIASES.get(text, text)
 
 
 def _routing_order() -> tuple[str, ...]:
@@ -19,9 +33,9 @@ def _routing_order() -> tuple[str, ...]:
     if not raw:
         forced = (os.environ.get("LLM_PROVIDER") or "").strip().lower()
         if forced:
-            return (forced,)
+            return (_normalize_provider_id(forced),)
         return _DEFAULT_ORDER
-    return tuple(p.strip().lower() for p in raw.split(",") if p.strip())
+    return tuple(_normalize_provider_id(p) for p in raw.split(",") if p.strip())
 
 
 class LLMProviderRegistry:
@@ -37,7 +51,7 @@ class LLMProviderRegistry:
         self._providers[provider_id] = provider
 
     def get(self, provider_id: str) -> LLMProvider | None:
-        return self._providers.get(provider_id)
+        return self._providers.get(_normalize_provider_id(provider_id))
 
     def resolve(
         self,
@@ -46,7 +60,7 @@ class LLMProviderRegistry:
         conversation_service: Any | None = None,
     ) -> LLMProvider | None:
         if header_provider:
-            p = self._providers.get(header_provider.strip().lower())
+            p = self._providers.get(_normalize_provider_id(header_provider))
             if p and p.is_configured:
                 return p
 

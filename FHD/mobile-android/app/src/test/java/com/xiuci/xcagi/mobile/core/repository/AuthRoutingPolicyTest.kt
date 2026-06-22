@@ -23,6 +23,30 @@ class AuthRoutingPolicyTest {
     }
 
     @Test
+    fun enterpriseBuildKeepsCloudModeAfterLanFailoverEvenWhenOldHostExists() {
+        assertEquals(
+            ServerMode.CLOUD,
+            AuthRoutingPolicy.preferredServerModeAfterLogin(
+                isEnterprise = true,
+                configuredHost = "192.168.0.38:17500",
+                currentMode = "cloud",
+            ),
+        )
+    }
+
+    @Test
+    fun enterpriseBuildKeepsLanModeWhenLanIsStillSelected() {
+        assertEquals(
+            ServerMode.LAN,
+            AuthRoutingPolicy.preferredServerModeAfterLogin(
+                isEnterprise = true,
+                configuredHost = "192.168.0.38:17500",
+                currentMode = "lan",
+            ),
+        )
+    }
+
+    @Test
     fun personalBuildDoesNotHijackToEnterpriseHostEvenWhenHostExists() {
         assertFalse(AuthRoutingPolicy.shouldUseEnterpriseAuthHost(false, "192.168.1.8:5100"))
         assertEquals(

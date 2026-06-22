@@ -18,6 +18,11 @@ MODSTORE_RUNTIME_DB_PATH="${MODSTORE_RUNTIME_DB_PATH:-${MODSTORE_RUNTIME_STATE_R
 MODSTORE_RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${MODSTORE_RUNTIME_STATE_ROOT}/runtime}"
 MODSTORE_EVENT_OUTBOX_PATH="${MODSTORE_EVENT_OUTBOX_PATH:-${MODSTORE_RUNTIME_STATE_ROOT}/event_outbox.jsonl}"
 MODSTORE_WEBHOOK_EVENTS_DIR="${MODSTORE_WEBHOOK_EVENTS_DIR:-${MODSTORE_RUNTIME_STATE_ROOT}/webhook_events}"
+MODSTORE_RUNTIME_CONFIG_ROOT="${MODSTORE_RUNTIME_CONFIG_ROOT:-${MODSTORE_RUNTIME_ROOT}/FHD/config}"
+MODSTORE_RELEASE_TRAIN_JSON_DEFAULT="${MODSTORE_RUNTIME_CONFIG_ROOT}/release_train.json"
+MODSTORE_TIME_RAIL_GRAPH_JSON_DEFAULT="${MODSTORE_RUNTIME_CONFIG_ROOT}/time_rail_workflow_graph.json"
+MODSTORE_POST_DEPLOY_SMOKE_STATE_FILE_DEFAULT="${MODSTORE_RUNTIME_STATE_ROOT}/post-deploy-smoke-last.json"
+MODSTORE_SURFACE_AUDIT_STATE_ROOT="${MODSTORE_SURFACE_AUDIT_STATE_ROOT:-${MODSTORE_RUNTIME_STATE_ROOT}/surface_audit}"
 if [[ -d "${_RUNTIME_MODSTORE}/modstore_server" ]]; then
   MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_RUNTIME_MODSTORE}}"
 elif [[ -d "${_WS_MODSTORE}/modstore_server" ]]; then
@@ -42,6 +47,10 @@ fi
 if ! "${PY}" -c "import cursor_sdk" 2>/dev/null; then
   log "安装 cursor-sdk（vibe-coding-maintainer Cursor 委托改码）…"
   "${PY}" -m pip install -q cursor-sdk
+fi
+if [[ "${MODSTORE_SELF_EVOLUTION_REDISVL_ENABLED:-1}" != "0" ]] && ! "${PY}" -c "import redisvl" 2>/dev/null; then
+  log "安装 redis/redisvl（self-evolution KB 向量索引）…"
+  "${PY}" -m pip install -q "redis>=5.0" "redisvl>=0.3.0"
 fi
 
 export XCMAX_MONOREPO_ROOT="${XCMAX_MONOREPO_ROOT:-${XCMAX_ROOT}}"
@@ -80,6 +89,28 @@ _load_modstore_env_file() {
     [[ -n "$k" ]] && export "$k=$v"
   done < "$f"
 }
+_load_modstore_env_keys() {
+  local f="$1"
+  shift
+  [[ -f "$f" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line//$'\r'/}"
+    line="${line%%#*}"
+    line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [[ -z "$line" || "$line" != *=* ]] && continue
+    local k="${line%%=*}" v="${line#*=}" allowed=0 key
+    k="$(echo "$k" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    for key in "$@"; do
+      if [[ "$k" == "$key" ]]; then
+        allowed=1
+        break
+      fi
+    done
+    [[ "$allowed" != "1" ]] && continue
+    v="$(echo "$v" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+    [[ -n "$k" ]] && export "$k=$v"
+  done < "$f"
+}
 SNAPSHOT_LOADED=0
 if [[ -n "${MODSTORE_DAILY_ENV_SNAPSHOT:-}" && -f "${MODSTORE_DAILY_ENV_SNAPSHOT}" ]]; then
   _load_modstore_env_file "${MODSTORE_DAILY_ENV_SNAPSHOT}"
@@ -98,6 +129,45 @@ if [[ "${MODSTORE_DEPLOY_ROOT}" == "${_RUNTIME_MODSTORE}" ]]; then
       export MODSTORE_DB_PATH="${MODSTORE_RUNTIME_DB_PATH}"
       ;;
   esac
+  case "${XCMAX_MONOREPO_ROOT:-}" in
+    ""|*"/Desktop/"*|*"/Documents/"*)
+      export XCMAX_MONOREPO_ROOT="${MODSTORE_RUNTIME_ROOT}"
+      ;;
+  esac
+  case "${MODSTORE_REPO_ROOT:-}" in
+    ""|*"/Desktop/"*|*"/Documents/"*)
+      export MODSTORE_REPO_ROOT="${MODSTORE_DEPLOY_ROOT}"
+      ;;
+  esac
+  case "${MODSTORE_RELEASE_TRAIN_JSON:-}" in
+    ""|*"/Desktop/"*|*"/Documents/"*)
+      export MODSTORE_RELEASE_TRAIN_JSON="${MODSTORE_RELEASE_TRAIN_JSON_DEFAULT}"
+      ;;
+  esac
+  case "${MODSTORE_TIME_RAIL_GRAPH_JSON:-}" in
+    ""|*"/Desktop/"*|*"/Documents/"*)
+      export MODSTORE_TIME_RAIL_GRAPH_JSON="${MODSTORE_TIME_RAIL_GRAPH_JSON_DEFAULT}"
+      ;;
+  esac
+  case "${MODSTORE_SYNC_DEPLOY_BASH:-}" in
+    ""|*"/Desktop/"*|*"/Documents/"*)
+      export MODSTORE_SYNC_DEPLOY_BASH="bash ${MODSTORE_DEPLOY_ROOT}/scripts/trigger_server_git_sync.sh"
+      ;;
+  esac
+  case "${MODSTORE_DAILY_SURFACE_AUDIT_SAVE_DIR:-}" in
+    ""|*"/Desktop/"*|*"/Documents/"*)
+      export MODSTORE_DAILY_SURFACE_AUDIT_SAVE_DIR="${MODSTORE_SURFACE_AUDIT_STATE_ROOT}/digest-surfaces"
+      ;;
+  esac
+  export MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_SEC="${MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_SEC:-1800}"
+  export MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS="${MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS:-90000}"
+  export MODSTORE_DAILY_SURFACE_AUDIT_RETRIES="${MODSTORE_DAILY_SURFACE_AUDIT_RETRIES:-2}"
+  export MODSTORE_DAILY_SURFACE_ANALYSIS_TIMEOUT_SEC="${MODSTORE_DAILY_SURFACE_ANALYSIS_TIMEOUT_SEC:-90}"
+  export MODSTORE_DIGEST_HTTP_TIMEOUT_SEC="${MODSTORE_DIGEST_HTTP_TIMEOUT_SEC:-1800}"
+  export MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS="${MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS:-240}"
+  export MODSTORE_DAILY_MEETING_OUTER_TIMEOUT_SECONDS="${MODSTORE_DAILY_MEETING_OUTER_TIMEOUT_SECONDS:-300}"
+  export MODSTORE_DAILY_MEETING_USE_EMPLOYEE_EXECUTOR="${MODSTORE_DAILY_MEETING_USE_EMPLOYEE_EXECUTOR:-0}"
+  export MODSTORE_ALL_HANDS_EMPLOYEE_TIMEOUT_SEC="${MODSTORE_ALL_HANDS_EMPLOYEE_TIMEOUT_SEC:-60}"
 fi
 # 本地 Mac 日更必须用 SQLite；生产同步 env 里的 DATABASE_URL 仅服务器有效
 if [[ -n "${MODSTORE_DB_PATH:-}" ]]; then
@@ -107,6 +177,7 @@ if [[ -n "${MODSTORE_DB_PATH:-}" ]]; then
   unset DATABASE_USER DATABASE_PASSWORD DATABASE_HOST DATABASE_PORT DATABASE_NAME
 fi
 export MODSTORE_RUNTIME_STATE_ROOT MODSTORE_RUNTIME_DB_PATH MODSTORE_RUNTIME_DIR MODSTORE_EVENT_OUTBOX_PATH MODSTORE_WEBHOOK_EVENTS_DIR
+export MODSTORE_RUNTIME_CONFIG_ROOT
 # 本地无 Redis 时关闭 Streams 双写，避免 incident_bus 刷 Connection refused
 export MODSTORE_EVENT_STREAM_ENABLED="${MODSTORE_EVENT_STREAM_ENABLED:-0}"
 if [[ "${MODSTORE_EVENT_STREAM_ENABLED}" == "0" ]]; then
@@ -116,12 +187,33 @@ export MODSTORE_INTERNAL_API_BASE="${MODSTORE_INTERNAL_API_BASE:-http://127.0.0.
 export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
 export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
 export MODSTORE_DIGEST_BASE_URL="${MODSTORE_DIGEST_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
-# 真 SMTP 授权码（覆盖 .env.production 里的 your-* 占位符）；勿提交 git
-if [[ "${SNAPSHOT_LOADED}" != "1" && "${MODSTORE_DAILY_SKIP_ENV_FILES:-0}" != "1" ]]; then
-  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.smtp.local"
-  _load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.smtp.local"
-  _load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.cursor.local"
+# 真 SMTP / Cursor 授权（覆盖 .env.production 里的 your-* 占位符）；勿提交 git。
+# launchd cleanroom 会优先加载 env snapshot；snapshot 可能在拉取凭证后过期，
+# 所以这些明确的本地 secret 文件始终作为白名单 overlay 重新加载。
+_load_modstore_env_keys "${MODSTORE_DEPLOY_ROOT}/.env.production.synced" \
+  MODSTORE_SMTP_HOST MODSTORE_SMTP_PORT MODSTORE_SMTP_USER MODSTORE_SMTP_PASSWORD \
+  MODSTORE_IMAP_HOST MODSTORE_IMAP_PORT MODSTORE_IMAP_USER MODSTORE_IMAP_PASSWORD \
+  SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD \
+  CURSOR_AUTH_MODE CURSOR_AGENT_MODEL CURSOR_API_KEY
+_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.smtp.local"
+_load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.smtp.local"
+_load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.cursor.local"
+if [[ -n "${XCAGI_FHD_ROOT:-}" && "${XCAGI_FHD_ROOT}" != "${FHD_ROOT}" ]]; then
+  _load_modstore_env_file "${XCAGI_FHD_ROOT}/XCAGI/.env.smtp.local"
+  _load_modstore_env_file "${XCAGI_FHD_ROOT}/XCAGI/.env.cursor.local"
 fi
+# 邮件相关模块历史上混用 MODSTORE_SMTP_* / SMTP_* / MODSTORE_IMAP_*。
+# 本地日更启动时统一补齐 alias，避免某个 worker 读不同变量名后误判 missing credentials。
+if [[ -z "${MODSTORE_SMTP_HOST:-}" && -n "${SMTP_HOST:-}" ]]; then export MODSTORE_SMTP_HOST="${SMTP_HOST}"; fi
+if [[ -z "${MODSTORE_SMTP_PORT:-}" && -n "${SMTP_PORT:-}" ]]; then export MODSTORE_SMTP_PORT="${SMTP_PORT}"; fi
+if [[ -z "${MODSTORE_SMTP_USER:-}" && -n "${SMTP_USER:-}" ]]; then export MODSTORE_SMTP_USER="${SMTP_USER}"; fi
+if [[ -z "${MODSTORE_SMTP_PASSWORD:-}" && -n "${SMTP_PASSWORD:-}" ]]; then export MODSTORE_SMTP_PASSWORD="${SMTP_PASSWORD}"; fi
+if [[ -z "${SMTP_HOST:-}" && -n "${MODSTORE_SMTP_HOST:-}" ]]; then export SMTP_HOST="${MODSTORE_SMTP_HOST}"; fi
+if [[ -z "${SMTP_PORT:-}" && -n "${MODSTORE_SMTP_PORT:-}" ]]; then export SMTP_PORT="${MODSTORE_SMTP_PORT}"; fi
+if [[ -z "${SMTP_USER:-}" && -n "${MODSTORE_SMTP_USER:-}" ]]; then export SMTP_USER="${MODSTORE_SMTP_USER}"; fi
+if [[ -z "${SMTP_PASSWORD:-}" && -n "${MODSTORE_SMTP_PASSWORD:-}" ]]; then export SMTP_PASSWORD="${MODSTORE_SMTP_PASSWORD}"; fi
+if [[ -z "${MODSTORE_IMAP_USER:-}" && -n "${MODSTORE_SMTP_USER:-}" ]]; then export MODSTORE_IMAP_USER="${MODSTORE_SMTP_USER}"; fi
+if [[ -z "${MODSTORE_IMAP_PASSWORD:-}" && -n "${MODSTORE_SMTP_PASSWORD:-}" ]]; then export MODSTORE_IMAP_PASSWORD="${MODSTORE_SMTP_PASSWORD}"; fi
 export MODSTORE_EMAIL_DEBUG="${MODSTORE_EMAIL_DEBUG:-0}"
 if [[ "${MODSTORE_EMAIL_DEBUG}" == "0" && -z "${MODSTORE_SMTP_PASSWORD:-}" ]]; then
   log "WARN: MODSTORE_SMTP_PASSWORD 未设 → 运行: bash ${MODSTORE_DEPLOY_ROOT}/scripts/pull_prod_env_for_local.sh"
@@ -141,6 +233,15 @@ export MODSTORE_DAILY_SURFACE_PPT_ENABLED="${MODSTORE_DAILY_SURFACE_PPT_ENABLED:
 # 注意：不要指向 FHD 企业后端 :5100 —— 它服务的是「企业版登录 SPA」，巡检会全站抓到登录页 + 401（误报）。
 # 如需巡检本地市场 SPA，请显式设 MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL 为对应本地源。
 export MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL="${MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL:-https://xiu-ci.com}"
+export MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_SEC="${MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_SEC:-1800}"
+export MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS="${MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS:-90000}"
+export MODSTORE_DAILY_SURFACE_AUDIT_RETRIES="${MODSTORE_DAILY_SURFACE_AUDIT_RETRIES:-2}"
+export MODSTORE_DAILY_SURFACE_ANALYSIS_TIMEOUT_SEC="${MODSTORE_DAILY_SURFACE_ANALYSIS_TIMEOUT_SEC:-90}"
+export MODSTORE_DIGEST_HTTP_TIMEOUT_SEC="${MODSTORE_DIGEST_HTTP_TIMEOUT_SEC:-1800}"
+export MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS="${MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS:-240}"
+export MODSTORE_DAILY_MEETING_OUTER_TIMEOUT_SECONDS="${MODSTORE_DAILY_MEETING_OUTER_TIMEOUT_SECONDS:-300}"
+export MODSTORE_DAILY_MEETING_USE_EMPLOYEE_EXECUTOR="${MODSTORE_DAILY_MEETING_USE_EMPLOYEE_EXECUTOR:-0}"
+export MODSTORE_ALL_HANDS_EMPLOYEE_TIMEOUT_SEC="${MODSTORE_ALL_HANDS_EMPLOYEE_TIMEOUT_SEC:-60}"
 export MODSTORE_DAILY_SURFACE_AUDIT_MODE="${MODSTORE_DAILY_SURFACE_AUDIT_MODE:-daily}"
 export MODSTORE_DAILY_SURFACE_AUDIT_MAX_PER_LANE="${MODSTORE_DAILY_SURFACE_AUDIT_MAX_PER_LANE:-1}"
 export MODSTORE_SURFACE_AUDIT_SKIP_CATALOG="${MODSTORE_SURFACE_AUDIT_SKIP_CATALOG:-0}"
@@ -148,6 +249,7 @@ export MODSTORE_SURFACE_AUDIT_CATALOG_MAX="${MODSTORE_SURFACE_AUDIT_CATALOG_MAX:
 export MODSTORE_SURFACE_AUDIT_STOP_AFTER="${MODSTORE_SURFACE_AUDIT_STOP_AFTER:-1}"
 export MODSTORE_AUTOMATION_PRIMARY="${MODSTORE_AUTOMATION_PRIMARY:-local_mac}"
 export MODSTORE_AUTOMATION_ROLE="${MODSTORE_AUTOMATION_ROLE:-local_mac}"
+export MODSTORE_GIT_REPO_ROOT="${MODSTORE_GIT_REPO_ROOT:-${XCMAX_ROOT}}"
 export MODSTORE_SYNC_DEPLOY_BASH="${MODSTORE_SYNC_DEPLOY_BASH:-bash ${MODSTORE_DEPLOY_ROOT}/scripts/trigger_server_git_sync.sh}"
 export MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE="${MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE:-primary}"
 export MODSTORE_DAILY_ORCHESTRATOR_ENABLED="${MODSTORE_DAILY_ORCHESTRATOR_ENABLED:-1}"
@@ -168,6 +270,7 @@ export MODSTORE_CR_NARROW_CI_ENABLED="${MODSTORE_CR_NARROW_CI_ENABLED:-1}"
 export MODSTORE_INBOX_POLL_ENABLED="${MODSTORE_INBOX_POLL_ENABLED:-1}"
 export MODSTORE_POST_DEPLOY_SMOKE_ENABLED="${MODSTORE_POST_DEPLOY_SMOKE_ENABLED:-1}"
 export MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED="${MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED:-1}"
+export MODSTORE_POST_DEPLOY_SMOKE_STATE_FILE="${MODSTORE_POST_DEPLOY_SMOKE_STATE_FILE:-${MODSTORE_POST_DEPLOY_SMOKE_STATE_FILE_DEFAULT}}"
 export MODSTORE_DEPLOY_HEALTH_URL="${MODSTORE_DEPLOY_HEALTH_URL:-http://127.0.0.1:${MODSTORE_PORT}/api/health}"
 export MODSTORE_POST_DEPLOY_MARKET_URL="${MODSTORE_POST_DEPLOY_MARKET_URL:-https://xiu-ci.com/market/download}"
 export MODSTORE_LINE_PRIMARY_LINES="${MODSTORE_LINE_PRIMARY_LINES:-P-S}"
@@ -175,13 +278,25 @@ export MODSTORE_LINE_SHADOW_LINES="${MODSTORE_LINE_SHADOW_LINES:-P-W,P-App,S-R}"
 export MODSTORE_SURFACE_AUDIT_AUTO_START="${MODSTORE_SURFACE_AUDIT_AUTO_START:-1}"
 export MODSTORE_SURFACE_AUDIT_ANDROID="${MODSTORE_SURFACE_AUDIT_ANDROID:-1}"
 export MODSTORE_SURFACE_AUDIT_PS_ENABLED="${MODSTORE_SURFACE_AUDIT_PS_ENABLED:-1}"
+export MODSTORE_SURFACE_AUDIT_PIDS_DIR="${MODSTORE_SURFACE_AUDIT_PIDS_DIR:-${MODSTORE_SURFACE_AUDIT_STATE_ROOT}/pids}"
+export MODSTORE_SURFACE_AUDIT_LOG_DIR="${MODSTORE_SURFACE_AUDIT_LOG_DIR:-${MODSTORE_SURFACE_AUDIT_STATE_ROOT}/logs}"
+export MODSTORE_DAILY_SURFACE_AUDIT_SAVE_DIR="${MODSTORE_DAILY_SURFACE_AUDIT_SAVE_DIR:-${MODSTORE_SURFACE_AUDIT_STATE_ROOT}/digest-surfaces}"
+export XCAGI_ANDROID_EMULATOR_PID_FILE="${XCAGI_ANDROID_EMULATOR_PID_FILE:-${MODSTORE_SURFACE_AUDIT_STATE_ROOT}/android-emulator.pid}"
+export XCAGI_ANDROID_EMULATOR_LOG_FILE="${XCAGI_ANDROID_EMULATOR_LOG_FILE:-${MODSTORE_SURFACE_AUDIT_STATE_ROOT}/android-emulator.log}"
+mkdir -p "${MODSTORE_SURFACE_AUDIT_PIDS_DIR}" "${MODSTORE_SURFACE_AUDIT_LOG_DIR}" "${MODSTORE_SURFACE_AUDIT_STATE_ROOT}"
 export SURFACE_AUDIT_PRODUCT_SKU="${SURFACE_AUDIT_PRODUCT_SKU:-enterprise}"
 export SURFACE_AUDIT_INCLUDE_ENTERPRISE="${SURFACE_AUDIT_INCLUDE_ENTERPRISE:-1}"
 # 本地 Mac：.env.daily-closure 常写 :5000/:5100，但 :5000 被 AirPlay 占用、:5100 常为开发 PostgreSQL 实例 → 日更栈专用 :5102 桌面 SQLite
 export SURFACE_AUDIT_API_URL="http://127.0.0.1:5102"
 export SURFACE_AUDIT_ANDROID_FHD_HOST="10.0.2.2:5102"
-ADB_BIN="${FHD_ROOT}/mobile-android/.toolchain/android-sdk/platform-tools/adb"
+ANDROID_SDK_FOR_DAILY="${XCAGI_ANDROID_SDK_ROOT:-${ANDROID_SDK_ROOT:-${FHD_ROOT}/mobile-android/.toolchain/android-sdk}}"
+export XCAGI_ANDROID_SDK_ROOT="${ANDROID_SDK_FOR_DAILY}"
+export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_FOR_DAILY}}"
+export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_SDK_FOR_DAILY}}"
+ADB_BIN="${SURFACE_AUDIT_ANDROID_ADB:-${ANDROID_SDK_FOR_DAILY}/platform-tools/adb}"
 [[ -x "${ADB_BIN}" ]] || ADB_BIN="adb"
+export SURFACE_AUDIT_ANDROID_ADB="${ADB_BIN}"
+ANDROID_EMULATOR_START_SCRIPT="${MODSTORE_ANDROID_EMULATOR_START_SCRIPT:-${FHD_ROOT}/scripts/dev/start_android_emulator.sh}"
 _adb_devices_has_online_target() {
   "${PY}" - "$1" <<'PY'
 import re
@@ -207,16 +322,16 @@ PY
 }
 if [[ "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
   if ! _adb_devices_has_online_target "${ADB_BIN}"; then
-    if [[ "${XCAGI_AUTO_START_EMULATOR:-1}" == "1" && -x "${FHD_ROOT}/mobile-android/.toolchain/android-sdk/emulator/emulator" ]]; then
+    if [[ "${XCAGI_AUTO_START_EMULATOR:-1}" == "1" && -x "${ANDROID_SDK_FOR_DAILY}/emulator/emulator" ]]; then
       log "P-App 截图：无在线模拟器，尝试启动 …"
-      bash "${FHD_ROOT}/scripts/dev/start_android_emulator.sh" || log "WARN: 模拟器启动失败，digest P-App 可能失败"
+      bash "${ANDROID_EMULATOR_START_SCRIPT}" || log "WARN: 模拟器启动失败，digest P-App 可能失败"
     fi
   fi
   if _adb_devices_has_online_target "${ADB_BIN}"; then
     export SURFACE_AUDIT_ANDROID_ADB="${ADB_BIN}"
     log "P-App 截图：adb 模拟器/真机已就绪"
   else
-    log "WARN: 无 adb 设备 — P-App 日更截图将失败（bash FHD/scripts/dev/start_android_emulator.sh）"
+    log "WARN: 无 adb 设备 — P-App 日更截图将失败（bash ${ANDROID_EMULATOR_START_SCRIPT}）"
   fi
 fi
 export MODSTORE_DR_PROBE_ENABLED="${MODSTORE_DR_PROBE_ENABLED:-1}"
@@ -227,7 +342,15 @@ export MODSTORE_INSTALLER_PUSH_ALLOW_HIGH_RISK="${MODSTORE_INSTALLER_PUSH_ALLOW_
 export MODSTORE_EMAIL_INTAKE_ENABLED="${MODSTORE_EMAIL_INTAKE_ENABLED:-1}"
 export MODSTORE_IMAP_HOST="${MODSTORE_IMAP_HOST:-imap.qq.com}"
 export MODSTORE_IMAP_PORT="${MODSTORE_IMAP_PORT:-993}"
-export MODSTORE_RELEASE_TRAIN_JSON="${XCMAX_ROOT}/FHD/config/release_train.json"
+if [[ ! -f "${MODSTORE_RELEASE_TRAIN_JSON_DEFAULT}" ]]; then
+  MODSTORE_RELEASE_TRAIN_JSON_DEFAULT="${XCMAX_ROOT}/FHD/config/release_train.json"
+fi
+if [[ ! -f "${MODSTORE_TIME_RAIL_GRAPH_JSON_DEFAULT}" ]]; then
+  MODSTORE_TIME_RAIL_GRAPH_JSON_DEFAULT="${XCMAX_ROOT}/FHD/config/time_rail_workflow_graph.json"
+fi
+export MODSTORE_RELEASE_TRAIN_JSON="${MODSTORE_RELEASE_TRAIN_JSON:-${MODSTORE_RELEASE_TRAIN_JSON_DEFAULT}}"
+export MODSTORE_TIME_RAIL_GRAPH_JSON="${MODSTORE_TIME_RAIL_GRAPH_JSON:-${MODSTORE_TIME_RAIL_GRAPH_JSON_DEFAULT}}"
+export MODSTORE_TIME_RAIL_RUNTIME_JSON="${MODSTORE_TIME_RAIL_RUNTIME_JSON:-${MODSTORE_RUNTIME_STATE_ROOT}/time_rail_runtime.json}"
 # auto-merge 后 GitOps 晋级（与 fhd-ci-cd gitops-image-bump 双轨；SLO 熔断时 post_merge 会 exit 1）
 export MODSTORE_POST_MERGE_GITOPS_SCRIPT="${MODSTORE_POST_MERGE_GITOPS_SCRIPT:-${FHD_ROOT}/scripts/gitops/post_merge_promote.sh}"
 # TLS 证书到期巡检（K 节点）：写入 .env.local 或在此处设默认路径

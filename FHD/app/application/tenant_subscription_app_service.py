@@ -62,6 +62,16 @@ def provision_trial_for_user(*, user_id: int, username: str, display_name: str =
             tenant.id,
             expires.isoformat(),
         )
+        try:
+            from app.neuro_bus.application_neuro_bridge import neuro_notify_tenant_changed
+
+            neuro_notify_tenant_changed(
+                "created",
+                tenant_id=str(tenant.id),
+                tenant_name=tenant.name or "",
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("neuro_notify_tenant_changed skipped", exc_info=True)
         return int(tenant.id)
 
 
@@ -80,6 +90,16 @@ def sync_tenant_display_name(*, user_id: int, company_brand: str) -> str:
         if (tenant.name or "").strip() != brand:
             tenant.name = brand[:256]
             db.commit()
+            try:
+                from app.neuro_bus.application_neuro_bridge import neuro_notify_tenant_changed
+
+                neuro_notify_tenant_changed(
+                    "updated",
+                    tenant_id=str(tenant.id),
+                    tenant_name=tenant.name or "",
+                )
+            except RECOVERABLE_ERRORS:
+                logger.debug("neuro_notify_tenant_changed skipped", exc_info=True)
         return str(tenant.name or brand)
 
 
@@ -148,10 +168,22 @@ def apply_paid_plan_to_tenant(*, tenant_id: int, plan_id: str) -> bool:
         if not tenant:
             return False
         tenant.plan_id = str(plan_id).strip()
+        if str(plan_id).strip().startswith("saas-permanent-"):
+            tenant.trial_expires_at = None
         db.commit()
         logger.info(
             "[tenant-subscription] plan applied tenant_id=%s plan_id=%s", tenant_id, plan_id
         )
+        try:
+            from app.neuro_bus.application_neuro_bridge import neuro_notify_tenant_changed
+
+            neuro_notify_tenant_changed(
+                "updated",
+                tenant_id=str(tenant.id),
+                tenant_name=tenant.name or "",
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("neuro_notify_tenant_changed skipped", exc_info=True)
         return True
 
 

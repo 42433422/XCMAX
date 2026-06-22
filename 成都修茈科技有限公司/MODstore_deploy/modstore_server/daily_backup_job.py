@@ -237,8 +237,8 @@ def list_backups(*, limit: int = 30) -> List[Dict[str, Any]]:
 def cron_trigger_for_backup():
     from apscheduler.triggers.cron import CronTrigger
 
-    hour = int(os.environ.get("MODSTORE_DAILY_BACKUP_HOUR", "3"))
-    minute = int(os.environ.get("MODSTORE_DAILY_BACKUP_MINUTE", "5"))
+    hour = int(os.environ.get("MODSTORE_DAILY_BACKUP_HOUR", "4"))
+    minute = int(os.environ.get("MODSTORE_DAILY_BACKUP_MINUTE", "0"))
     tz = os.environ.get("MODSTORE_DAILY_BACKUP_TZ", "Asia/Shanghai")
     try:
         from zoneinfo import ZoneInfo

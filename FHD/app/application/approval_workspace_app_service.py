@@ -34,6 +34,9 @@ from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
+AI_WORKFLOW_BUSINESS_TYPE = "workflow_tool"
+AI_WORKFLOW_NODE_NAME = "AI 工作流审批"
+
 
 # --------------------------------------------------------------------------- #
 # 工具函数
@@ -122,6 +125,27 @@ def _ordered_nodes(db, flow_id: int) -> list[ApprovalFlowNode]:
     )
 
 
+def _is_ai_workflow_request(req: ApprovalRequest) -> bool:
+    return str(getattr(req, "business_type", "") or "").strip() == AI_WORKFLOW_BUSINESS_TYPE
+
+
+def _has_pending_ai_workflow(request_no: str | None) -> bool:
+    approval_request_id = str(request_no or "").strip()
+    if not approval_request_id:
+        return False
+    try:
+        from app.application.workflow import get_approval_service
+
+        return bool(get_approval_service().get_pending_workflow(approval_request_id))
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning(
+            "check pending AI workflow failed request_no=%s: %s",
+            approval_request_id,
+            exc,
+        )
+        return False
+
+
 def _next_node(nodes: list[ApprovalFlowNode], current_order: int) -> ApprovalFlowNode | None:
     for n in nodes:
         if n.node_order > current_order:
@@ -132,6 +156,10 @@ def _next_node(nodes: list[ApprovalFlowNode], current_order: int) -> ApprovalFlo
 def _request_to_dict(req: ApprovalRequest, *, include_records: bool = False) -> dict[str, Any]:
     """统一序列化（含 ``records`` 时间线，便于详情视图渲染）。"""
     base = req.to_dict()
+    if _is_ai_workflow_request(req) and not getattr(req, "current_node", None):
+        base["is_ai_workflow_approval"] = True
+        base["current_node_name"] = base.get("current_node_name") or AI_WORKFLOW_NODE_NAME
+        base["current_approvers"] = base.get("current_approvers") or []
     if include_records:
         records = (
             sorted(req.records or [], key=lambda r: r.action_time or datetime.min)
@@ -191,6 +219,18 @@ def list_requests(
             data = _request_to_dict(req, include_records=False)
             if approver_id is not None:
                 node = req.current_node
+                if _is_ai_workflow_request(req) and not node:
+                    if req.status not in (
+                        ApprovalStatus.PENDING.value,
+                        ApprovalStatus.IN_PROGRESS.value,
+                    ):
+                        continue
+                    if not _has_pending_ai_workflow(req.request_no):
+                        continue
+                    data["current_node_name"] = AI_WORKFLOW_NODE_NAME
+                    data["current_approvers"] = [int(approver_id)]
+                    result.append(data)
+                    continue
                 if not node or not _node_query_for_user(node, approver_id):
                     continue
                 if req.status not in (
@@ -431,6 +471,162 @@ def _close_request_if_needed(
     return ApprovalStatus.IN_PROGRESS.value, next_node.id
 
 
+def _resume_pending_ai_workflow_after_approval(
+    *, request_no: str, opinion: str
+) -> dict[str, Any] | None:
+    """工作台审批通过后，继续执行由 AI 工作流创建的 pending workflow。"""
+    approval_request_id = str(request_no or "").strip()
+    if not approval_request_id:
+        return None
+    try:
+        from app.application.workflow import WorkflowEngine, get_approval_service
+        from app.fastapi_routes.domains.misc.helpers import _dispatch_tool_for_approval
+
+        approval_service = get_approval_service()
+        approved_in_memory = approval_service.approve(approval_request_id, opinion)
+        workflow_data = approval_service.get_pending_workflow(approval_request_id)
+        if not workflow_data:
+            return None
+
+        plan_obj = workflow_data.get("plan")
+        runtime_ctx = workflow_data.get("runtime_context", {})
+        if not plan_obj:
+            approval_service.remove_pending_workflow(approval_request_id)
+            return {
+                "workflow_executed": False,
+                "approval_request_id": approval_request_id,
+                "approved_in_memory": approved_in_memory,
+                "message": "审批已通过，但缺少可恢复的工作流计划",
+            }
+
+        engine = WorkflowEngine(tool_dispatcher=_dispatch_tool_for_approval)
+        run_result = engine.run(plan=plan_obj, runtime_context=runtime_ctx, max_retries=1)
+        approval_service.remove_pending_workflow(approval_request_id)
+        return {
+            "workflow_executed": True,
+            "approval_request_id": approval_request_id,
+            "approved_in_memory": approved_in_memory,
+            "success": bool(run_result.success),
+            "plan_id": getattr(plan_obj, "plan_id", ""),
+            "intent": getattr(plan_obj, "intent", ""),
+            "message": str(run_result.message or ""),
+            "nodes_executed": len(run_result.node_results or []),
+            "nodes_total": len(getattr(plan_obj, "nodes", []) or []),
+            "node_results": [
+                {
+                    "node_id": item.node_id,
+                    "tool_id": item.tool_id,
+                    "action": item.action,
+                    "success": bool(item.success),
+                    "error": str(item.error or "")[:240],
+                    "retries": int(getattr(item, "retries", 0) or 0),
+                    "retryable": bool(getattr(item, "retryable", True)),
+                    "recovery_hint": str(getattr(item, "recovery_hint", "") or "")[:240],
+                }
+                for item in (run_result.node_results or [])[:10]
+            ],
+        }
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning(
+            "resume pending AI workflow after approval failed request_no=%s: %s",
+            approval_request_id,
+            exc,
+            exc_info=True,
+        )
+        return {
+            "workflow_executed": False,
+            "approval_request_id": approval_request_id,
+            "success": False,
+            "message": f"审批已通过，但恢复 AI 工作流失败：{exc}",
+        }
+
+
+def _drop_pending_ai_workflow_after_rejection(
+    *, request_no: str, reason: str
+) -> dict[str, Any] | None:
+    """工作台拒绝 AI workflow 审批后，清理内存 pending workflow。"""
+    approval_request_id = str(request_no or "").strip()
+    if not approval_request_id:
+        return None
+    try:
+        from app.application.workflow import get_approval_service
+
+        approval_service = get_approval_service()
+        rejected_in_memory = approval_service.reject(approval_request_id, reason)
+        removed = approval_service.remove_pending_workflow(approval_request_id)
+        return {
+            "workflow_executed": False,
+            "approval_request_id": approval_request_id,
+            "rejected_in_memory": rejected_in_memory,
+            "discarded_pending_workflow": removed is not None,
+            "message": "审批已拒绝，AI 工作流已取消",
+        }
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning(
+            "drop pending AI workflow after rejection failed request_no=%s: %s",
+            approval_request_id,
+            exc,
+            exc_info=True,
+        )
+        return {
+            "workflow_executed": False,
+            "approval_request_id": approval_request_id,
+            "success": False,
+            "message": f"审批已拒绝，但清理 AI 工作流失败：{exc}",
+        }
+
+
+def _approve_ai_workflow_request_without_node(
+    db,
+    *,
+    req: ApprovalRequest,
+    actor: int,
+    approver_name: str | None,
+    opinion: str,
+) -> dict[str, Any] | JSONResponse:
+    """审批由 AI workflow 持久化、没有传统审批节点的请求。"""
+    if not _has_pending_ai_workflow(req.request_no):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "AI 工作流运行态不存在或已过期，请重新发起任务",
+            },
+            status_code=409,
+        )
+
+    status_before = req.status
+    req.status = ApprovalStatus.APPROVED.value
+    req.approved_at = datetime.now()
+    req.approved_by = actor
+    req.approved_by_name = approver_name
+    req.current_node_id = None
+    req.current_node_order = (req.current_node_order or 0) + 1
+
+    _audit(
+        db,
+        actor=actor,
+        action="approval.approve_ai_workflow",
+        payload={
+            "request_id": req.id,
+            "request_no": req.request_no,
+            "status_before": status_before,
+            "status_after": req.status,
+            "opinion": opinion,
+        },
+    )
+
+    db.commit()
+    db.refresh(req)
+    workflow_execution = _resume_pending_ai_workflow_after_approval(
+        request_no=str(req.request_no or ""),
+        opinion=opinion,
+    )
+    data = _request_to_dict(req, include_records=True)
+    if workflow_execution is not None:
+        data["workflow_execution"] = workflow_execution
+    return {"success": True, "data": data}
+
+
 def approve_request(
     request_id: int,
     http_request: Request,
@@ -459,6 +655,14 @@ def approve_request(
 
         current_node = req.current_node
         if current_node is None:
+            if _is_ai_workflow_request(req):
+                return _approve_ai_workflow_request_without_node(
+                    db,
+                    req=req,
+                    actor=actor,
+                    approver_name=approver_name,
+                    opinion=opinion,
+                )
             return JSONResponse(
                 {"success": False, "message": "审批请求缺少当前节点"},
                 status_code=400,
@@ -512,6 +716,12 @@ def approve_request(
 
         db.commit()
         db.refresh(req)
+        workflow_execution = None
+        if new_status == ApprovalStatus.APPROVED.value:
+            workflow_execution = _resume_pending_ai_workflow_after_approval(
+                request_no=str(req.request_no or ""),
+                opinion=opinion,
+            )
         if req.applicant_id:
             notify_mobile_user(
                 int(req.applicant_id),
@@ -519,7 +729,10 @@ def approve_request(
                 f"《{req.title or req.request_no}》已处理",
                 {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
             )
-        return {"success": True, "data": _request_to_dict(req, include_records=True)}
+        data = _request_to_dict(req, include_records=True)
+        if workflow_execution is not None:
+            data["workflow_execution"] = workflow_execution
+        return {"success": True, "data": data}
 
 
 def reject_request(
@@ -553,6 +766,43 @@ def reject_request(
 
         current_node = req.current_node
         if current_node is None:
+            if _is_ai_workflow_request(req):
+                if not _has_pending_ai_workflow(req.request_no):
+                    return JSONResponse(
+                        {
+                            "success": False,
+                            "message": "AI 工作流运行态不存在或已过期，请重新发起任务",
+                        },
+                        status_code=409,
+                    )
+                status_before = req.status
+                req.status = ApprovalStatus.REJECTED.value
+                req.rejected_at = datetime.now()
+                req.rejection_reason = reason
+                req.approved_by = actor
+                req.approved_by_name = approver_name
+                _audit(
+                    db,
+                    actor=actor,
+                    action="approval.reject_ai_workflow",
+                    payload={
+                        "request_id": req.id,
+                        "request_no": req.request_no,
+                        "status_before": status_before,
+                        "status_after": req.status,
+                        "reason": reason,
+                    },
+                )
+                db.commit()
+                db.refresh(req)
+                workflow_execution = _drop_pending_ai_workflow_after_rejection(
+                    request_no=str(req.request_no or ""),
+                    reason=reason,
+                )
+                data = _request_to_dict(req, include_records=True)
+                if workflow_execution is not None:
+                    data["workflow_execution"] = workflow_execution
+                return {"success": True, "data": data}
             return JSONResponse(
                 {"success": False, "message": "审批请求缺少当前节点"},
                 status_code=400,

@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-qgy01mZ2.js";import{a1 as a,t as o,a2 as r}from"./index-C1axxMiF.js";const c=a({__name:"ApprovalRulesView",setup(p){return(t,i)=>(o(),r(e,{"mod-id":"xcagi-approval-bridge",view:"ApprovalRulesView",title:"审批"}))}});export{c as default};

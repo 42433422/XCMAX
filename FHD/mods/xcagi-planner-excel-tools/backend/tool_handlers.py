@@ -246,6 +246,7 @@ def _handle_generate_office_document(args: dict[str, Any]) -> str:
             else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
         token = store_document_pickup(content, fname, mime)
+        download_url = f"/api/ai/kitten/document/pickup/{token}"
         return json.dumps(
             _tag_source(
                 {
@@ -256,7 +257,26 @@ def _handle_generate_office_document(args: dict[str, Any]) -> str:
                     ),
                     "pickup_token": token,
                     "file_name": fname,
-                    "download_url": f"/api/ai/kitten/document/pickup/{token}",
+                    "download_url": download_url,
+                    "artifacts": [
+                        {
+                            "artifact_type": "office_document",
+                            "name": fname,
+                            "source": "generate_office_document",
+                            "uri": download_url,
+                            "mime_type": mime,
+                            "summary": req[:500],
+                            "preview": {
+                                "file_name": fname,
+                                "download_url": download_url,
+                                "output_format": fmt,
+                            },
+                            "metadata": {
+                                "pickup_token": token,
+                                "generator": "generate_office_document",
+                            },
+                        }
+                    ],
                     "assistant_hint": (
                         "将 download_url 原样写入回复（可做成 Markdown 链接）；"
                         "不要再次调用 generate_office_document，除非用户明确要求重新生成。"

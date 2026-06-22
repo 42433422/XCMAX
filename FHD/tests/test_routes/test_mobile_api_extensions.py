@@ -7,6 +7,7 @@ approval/shipment/customer lists, mods, home, platform-shell, and all helper fun
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,6 +24,13 @@ def _resolve_circular_import():
 @pytest.fixture
 def ext_mod():
     return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+
+
+def _mock_pairing_request(host_header: str = "127.0.0.1:5112", hostname: str = "127.0.0.1"):
+    return SimpleNamespace(
+        headers={"host": host_header},
+        url=SimpleNamespace(hostname=hostname),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +117,17 @@ class TestPairingIssueHost:
             assert ext_mod._pairing_issue_host(None) == "192.168.1.100"
 
 
+class TestPairingIssuePort:
+    def test_requested_port_wins(self, ext_mod):
+        assert ext_mod._pairing_issue_port(_mock_pairing_request(), 8788) == 8788
+
+    def test_infers_port_from_host_header(self, ext_mod):
+        assert ext_mod._pairing_issue_port(_mock_pairing_request("127.0.0.1:5112"), 0) == 5112
+
+    def test_default_5000_yields_to_real_request_port(self, ext_mod):
+        assert ext_mod._pairing_issue_port(_mock_pairing_request("127.0.0.1:17500"), 5000) == 17500
+
+
 # ---------------------------------------------------------------------------
 # Pairing routes (direct handler tests)
 # ---------------------------------------------------------------------------
@@ -118,6 +137,7 @@ class TestPairingIssue:
     @pytest.mark.asyncio
     async def test_issue_success(self, ext_mod):
         body = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
+        request = _mock_pairing_request("192.168.1.10:5000", "192.168.1.10")
         with (
             patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
             patch(
@@ -125,7 +145,7 @@ class TestPairingIssue:
                 return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
             ),
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(body, request)
         # format_mobile_response returns a dict
         if hasattr(result, "body"):
             import json
@@ -134,6 +154,34 @@ class TestPairingIssue:
         else:
             data = result
         assert data.get("success") is True or data.get("data", {}).get("host") == "192.168.1.10"
+
+    @pytest.mark.asyncio
+    async def test_issue_returns_mobile_ready_base_url(self, ext_mod):
+        body = ext_mod.PairingIssueBody()
+        request = _mock_pairing_request("127.0.0.1:17500", "127.0.0.1")
+        with (
+            patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.0.38"),
+            patch.object(
+                ext_mod,
+                "issue_pairing_nonce",
+                return_value={
+                    "nonce": "abc123",
+                    "host": "192.168.0.38",
+                    "port": 17500,
+                    "shortCode": "123456",
+                    "exp": 123,
+                },
+            ),
+            patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value=None),
+        ):
+            result = await ext_mod.mobile_pairing_issue(body, request)
+        data = result if isinstance(result, dict) else __import__("json").loads(result.body)
+        payload = data["data"]
+        assert payload["api_base_url"] == "http://192.168.0.38:17500/"
+        assert payload["base_url"] == "http://192.168.0.38:17500/"
+        assert payload["code"] == "123456"
+        assert payload["qr_json"]["api_base_url"] == "http://192.168.0.38:17500/"
+        assert "xcagi://pairing?" in payload["deep_link"]
 
 
 class TestPairingLookup:
@@ -164,7 +212,10 @@ class TestPairingExchange:
         ):
             # First issue a pairing to get a nonce
             body_issue = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
-            issue_result = await ext_mod.mobile_pairing_issue(body_issue)
+            issue_result = await ext_mod.mobile_pairing_issue(
+                body_issue,
+                _mock_pairing_request("192.168.1.10:5000", "192.168.1.10"),
+            )
             if hasattr(issue_result, "body"):
                 import json
 
@@ -206,6 +257,7 @@ class TestPairingExchange:
         assert data["success"] is True
         assert data["data"]["host"] == "192.168.1.20"
         assert data["data"]["port"] == 5100
+        assert data["data"]["api_base_url"] == "http://192.168.1.20:5100/"
 
     @pytest.mark.asyncio
     async def test_exchange_no_credentials(self, ext_mod):
@@ -291,6 +343,116 @@ class TestUnauthorizedRoutes:
         assert result.status_code == 401
 
 
+class TestServiceBridgeRoutes:
+    @pytest.mark.asyncio
+    async def test_codex_super_employee_messages_allows_enterprise_user(self, ext_mod):
+        user = SimpleNamespace(id=901, role="enterprise")
+        result_data = [{"id": 1, "text": "ok"}]
+        with (
+            patch.object(
+                ext_mod,
+                "_mobile_session_meta",
+                return_value={"account_kind": "enterprise"},
+            ),
+            patch.object(ext_mod, "CodexSuperEmployeeService") as mock_service,
+        ):
+            mock_service.return_value.list_messages.return_value = result_data
+            result = await ext_mod.mobile_admin_codex_super_employee_messages(
+                request=_mock_pairing_request(),
+                limit=80,
+                user=user,
+            )
+        payload = result if isinstance(result, dict) else __import__("json").loads(result.body)
+        assert payload["success"] is True
+        assert payload["data"]["messages"] == result_data
+        mock_service.return_value.list_messages.assert_called_once_with(user_id=901, limit=80)
+
+    @pytest.mark.asyncio
+    async def test_codex_super_employee_invoke_allows_enterprise_user(self, ext_mod):
+        user = SimpleNamespace(id=901, role="enterprise")
+        expected = {"task_id": "t1", "request_id": "r1", "assistant_message": {"body": "done"}}
+        with (
+            patch.object(
+                ext_mod,
+                "_mobile_session_meta",
+                return_value={"account_kind": "enterprise"},
+            ),
+            patch.object(ext_mod, "CodexSuperEmployeeService") as mock_service,
+        ):
+            mock_service.return_value.invoke.return_value = expected
+            result = await ext_mod.mobile_admin_codex_super_employee_invoke(
+                request=_mock_pairing_request(),
+                body=ext_mod.CodexSuperEmployeeMobileMessageBody(message="帮我做点什么"),
+                user=user,
+            )
+        payload = result if isinstance(result, dict) else __import__("json").loads(result.body)
+        assert payload["success"] is True
+        assert payload["data"] == expected
+        call_kwargs = mock_service.return_value.invoke.call_args.kwargs
+        assert call_kwargs["user_id"] == 901
+        assert call_kwargs["message"] == "帮我做点什么"
+        assert call_kwargs["context"]["source"] == "mobile_im"
+
+    @pytest.mark.asyncio
+    async def test_codex_super_employee_messages_rejects_personal_user(self, ext_mod):
+        user = SimpleNamespace(id=902, role="personal")
+        with patch.object(
+            ext_mod,
+            "_mobile_session_meta",
+            return_value={"account_kind": "personal"},
+        ):
+            result = await ext_mod.mobile_admin_codex_super_employee_messages(
+                request=_mock_pairing_request(),
+                limit=80,
+                user=user,
+            )
+        assert result.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_service_bridge_requests_unauthorized(self, ext_mod):
+        result = await ext_mod.mobile_service_bridge_requests(
+            request=_mock_pairing_request(), user=None
+        )
+        assert result.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_service_bridge_requests_success(self, ext_mod):
+        row = MagicMock()
+        row.id = 1
+        row.to_dict.return_value = {"id": 1, "title": "need help", "status": "pending"}
+        query = MagicMock()
+        query.filter.return_value = query
+        query.count.return_value = 1
+        query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [row]
+        db = MagicMock()
+        db.query.return_value = query
+        db.__enter__ = MagicMock(return_value=db)
+        db.__exit__ = MagicMock(return_value=False)
+        user = SimpleNamespace(id=1, username="u")
+        with patch("app.db.session.get_db", return_value=db):
+            result = await ext_mod.mobile_service_bridge_requests(
+                request=_mock_pairing_request(), user=user, page=1, per_page=20
+            )
+        # result 可能是 dict（format_mobile_response 直接返回）或 JSONResponse
+        if isinstance(result, dict):
+            payload = result
+        elif hasattr(result, "body"):
+            payload = __import__("json").loads(result.body)
+        else:
+            payload = result
+        assert payload["success"] is True
+        assert payload["data"]["pagination"]["total"] == 1
+        assert payload["data"]["items"][0]["id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_service_bridge_respond_invalid_status(self, ext_mod):
+        body = ext_mod.MobileServiceBridgeRespondBody(response="x", status="invalid")
+        result = await ext_mod.mobile_service_bridge_request_respond(
+            request_id=1, body=body, user=None
+        )
+        assert result.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # _mobile_mod_items
 # ---------------------------------------------------------------------------
@@ -298,12 +460,18 @@ class TestUnauthorizedRoutes:
 
 class TestMobileModItems:
     def test_empty_list(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = []
             assert ext_mod._mobile_mod_items() == []
 
     def test_dict_mods(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "mod-a", "name": "Mod A"},
                 {"mod_id": "mod-b", "title": "Mod B"},
@@ -313,7 +481,10 @@ class TestMobileModItems:
             assert items[0]["id"] == "mod-a"
 
     def test_object_mods(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mod = MagicMock()
             mod.id = "mod-obj"
             mod.name = "Obj Mod"
@@ -324,20 +495,30 @@ class TestMobileModItems:
             assert items[0]["id"] == "mod-obj"
 
     def test_exception_returns_empty(self, ext_mod):
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=RuntimeError("fail")
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                side_effect=RuntimeError("fail"),
+            ),
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             assert ext_mod._mobile_mod_items() == []
 
     def test_limit_100(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": f"mod-{i}", "name": f"Mod {i}"} for i in range(150)
             ]
             assert len(ext_mod._mobile_mod_items()) == 100
 
     def test_empty_id_skipped(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "", "name": "NoId"},
                 {"mod_id": "has-id", "title": "HasId"},
@@ -392,6 +573,64 @@ class TestShipmentItems:
             items = ext_mod._shipment_items(limit=10)
             assert len(items) == 1
             assert items[0]["id"] == 5
+
+
+# ---------------------------------------------------------------------------
+# AI employee market profile enrichment
+# ---------------------------------------------------------------------------
+
+
+class TestAiEmployeeMarketProfiles:
+    def test_index_market_ai_employee_profiles_filters_non_employees(self, ext_mod):
+        profiles = ext_mod._index_market_ai_employee_profiles(
+            [
+                {
+                    "pkg_id": "deploy-release-officer",
+                    "name": "发布部署主管",
+                    "material_category": "ai_employee",
+                    "artifact": "mod",
+                },
+                {"pkg_id": "theme-pack", "name": "Theme", "material_category": "theme"},
+            ]
+        )
+        assert "deploy-release-officer" in profiles
+        assert "发布部署主管" in profiles
+        assert "theme-pack" not in profiles
+
+    def test_admin_employee_items_enriches_matching_market_profile(self, ext_mod):
+        with patch.object(
+            ext_mod,
+            "_load_admin_duty_records",
+            return_value=[
+                {
+                    "id": "deploy-release-officer",
+                    "name": "发布部署主管",
+                    "description": "本地职责",
+                    "stored_filename": "deploy-release-officer-1.0.0.xcemp",
+                }
+            ],
+        ):
+            items = ext_mod._admin_employee_items(
+                {
+                    "deploy-release-officer": {
+                        "pkg_id": "deploy-release-officer",
+                        "name": "发布部署主管",
+                        "description": "市场资料",
+                        "version": "2.0.0",
+                        "author": "MODstore",
+                        "industry": "企业服务",
+                        "material_category": "ai_employee",
+                        "license_scope": "enterprise",
+                        "security_level": "enterprise",
+                    }
+                },
+                market_connected=True,
+            )
+
+        assert items[0]["profile_source"] == "ai_market"
+        assert items[0]["market_connected"] is True
+        assert items[0]["market_pkg_id"] == "deploy-release-officer"
+        assert items[0]["market_description"] == "市场资料"
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +692,7 @@ class TestOidcExchange:
                 "app.infrastructure.auth.oidc_provider.verify_oidc_state", return_value=(True, "rt")
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
                 side_effect=_raise,
             ),
         ):

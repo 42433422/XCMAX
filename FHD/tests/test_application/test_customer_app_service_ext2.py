@@ -623,7 +623,9 @@ class TestGetCustomerAppServiceExtended:
         mock_registry = Mock()
         mock_svc = Mock()
         mock_registry.customer_application_service = mock_svc
-        with patch("app.di.registry.get_service_registry", return_value=mock_registry):
+        with patch(
+            "app.application.customer_app_service.get_service_registry", return_value=mock_registry
+        ):
             result = get_customer_app_service()
         assert result is mock_svc
 
@@ -663,6 +665,8 @@ class TestGetCustomersSessionExtended:
 class TestResetCustomersEngineExtended:
     def test_calls_invalidate(self):
         mock_registry = Mock()
-        with patch("app.di.registry.get_service_registry", return_value=mock_registry):
+        with patch(
+            "app.application.customer_app_service.get_service_registry", return_value=mock_registry
+        ):
             reset_customers_engine()
         mock_registry.invalidate_customer_application_service.assert_called_once()

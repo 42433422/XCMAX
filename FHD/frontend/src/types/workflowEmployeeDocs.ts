@@ -47,12 +47,8 @@ export type WorkflowEmployeeDocsV1 = {
     lead: string
     bullets?: string[]
   }
-  /** 副窗「一键托管 / 龙虾」里工作流员工区提示 */
+  /** 副窗工作流员工区提示 */
   floatPanelHint: string
   /** 流程全景链接 title 属性 */
   workflowVisualLinkTitle?: string
-  /** 覆盖一键托管顶栏介绍；缺省或空串则用代码内置逻辑 */
-  recommendIntroOneClick?: string
-  /** 覆盖龙虾托管顶栏介绍 */
-  recommendIntroLobster?: string
 }

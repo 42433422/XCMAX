@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
+import app.fastapi_routes.mobile_api as mobile_api_mod  # noqa: E402 — must precede mobile_api_extensions to break circular import
 import app.fastapi_routes.mobile_api_extensions as mobile_ext
 from app.application import aibiz_web_terminal_service as aibiz_mod
 from app.application.approval_workspace_app_service import (
@@ -22,7 +23,6 @@ from app.application.approval_workspace_app_service import (
 from app.application.file_analysis_app_service import FileAnalysisService
 from app.application.product_app_service import ProductApplicationService
 from app.fastapi_routes import market_account as market_mod
-from app.fastapi_routes import mobile_api as mobile_api_mod
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 
 # ---------------------------------------------------------------------------
@@ -277,13 +277,13 @@ def test_mobile_shipments_list(mock_get_db: MagicMock, mobile_client: TestClient
 
 
 def test_mobile_mods_list(mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda: [{"id": "demo"}])
+    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda *args, **kwargs: [{"id": "demo"}])
     r = mobile_client.get("/mods")
     assert r.status_code == 200
 
 
 def test_mobile_home(mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda: [{"id": "demo"}])
+    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda *args, **kwargs: [{"id": "demo"}])
     r = mobile_client.get("/home")
     assert r.status_code == 200
 
@@ -294,6 +294,6 @@ def test_mobile_sync_status(mobile_client: TestClient) -> None:
 
 
 def test_mobile_platform_shell(mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda: [{"id": "demo"}])
+    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda *args, **kwargs: [{"id": "demo"}])
     r = mobile_client.get("/platform-shell")
     assert r.status_code == 200

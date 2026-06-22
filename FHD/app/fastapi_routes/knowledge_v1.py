@@ -15,7 +15,8 @@ import logging
 import threading
 from typing import Any, cast
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.infrastructure.rag import (
@@ -67,6 +68,51 @@ class StatusResponse(BaseModel):
     embedder_available: bool
     indexed_sources: int
     indexed_chunks: int
+
+
+class DatasetDocumentIngestRequest(BaseModel):
+    text: str = Field("", description="inline document text")
+    file_path: str = Field("", description="allowed local file path")
+    source: str = Field("", description="source label")
+    document_id: str = Field("", description="optional stable document id")
+    tenant_id: str = Field("", description="tenant/user isolation key")
+    version: str = Field("", description="document version number, vN, or empty for auto increment")
+    version_label: str = Field("", description="optional display version label")
+    chunk_strategy: str = Field("semantic", description="semantic | fixed")
+    chunk_size: int = Field(500, ge=50, le=5000)
+    chunk_overlap: int = Field(50, ge=0, le=500)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DatasetQueryRequest(BaseModel):
+    query: str = Field(..., description="question or retrieval query")
+    top_k: int = Field(5, ge=1, le=50)
+    include_answer: bool = Field(True, description="return deterministic answer with citations")
+    tenant_id: str = Field("", description="tenant/user isolation key")
+    version: str = Field("", description="document version number, vN, latest, or empty")
+    metadata_filter: dict[str, Any] = Field(default_factory=dict)
+    rerank: bool = Field(False, description="apply lexical reranker after hybrid retrieval")
+
+
+class DatasetVersionDiffRequest(BaseModel):
+    source: str = Field(..., description="document source label")
+    tenant_id: str = Field("", description="tenant/user isolation key")
+    from_version: str = Field(..., description="source version number, vN, or label")
+    to_version: str = Field("latest", description="target version number, vN, label, or latest")
+
+
+class DatasetRollbackRequest(BaseModel):
+    source: str = Field(..., description="document source label")
+    tenant_id: str = Field("", description="tenant/user isolation key")
+    target_version: str = Field(..., description="version to restore into a new latest version")
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DatasetRebuildRequest(BaseModel):
+    tenant_id: str = Field("", description="tenant/user isolation key")
+    metadata_filter: dict[str, Any] = Field(default_factory=dict)
+    background: bool = Field(True, description="run index rebuild in a background thread")
+    max_attempts: int = Field(1, ge=1, le=5)
 
 
 class _KnowledgeIndex:
@@ -125,6 +171,162 @@ class _KnowledgeIndex:
 _index = _KnowledgeIndex()
 
 
+def _dataset_access_context_from_request(request: Request) -> Any | None:
+    from app.application.dataset_rag_app_service import DatasetAccessContext
+    from app.infrastructure.auth.tenant_context import resolve_tenant_id
+
+    headers = request.headers
+    tenant = (headers.get("X-Dataset-Tenant-ID") or headers.get("X-Tenant-ID") or "").strip()
+    if not tenant:
+        resolved_tenant = resolve_tenant_id(request)
+        tenant = str(resolved_tenant) if resolved_tenant is not None else ""
+    actor_id = (headers.get("X-Dataset-Actor-ID") or headers.get("X-User-ID") or "").strip()
+    permissions_raw = headers.get("X-Dataset-Permissions") or headers.get("X-Permissions") or ""
+    permissions = frozenset(
+        part.strip() for part in permissions_raw.replace(";", ",").split(",") if part.strip()
+    )
+    is_admin = headers.get("X-Dataset-Admin", "").strip().lower() in {"1", "true", "yes", "on"}
+    if not tenant and not actor_id and not permissions and not is_admin:
+        return None
+    return DatasetAccessContext(
+        actor_id=actor_id,
+        tenant_id=tenant,
+        permissions=permissions,
+        is_admin=is_admin,
+    )
+
+
+def _dataset_access_payload_from_request(request: Request) -> dict[str, Any]:
+    context = _dataset_access_context_from_request(request)
+    if context is None:
+        return {}
+    payload = dict(context.to_dict())
+    permissions = payload.get("permissions") if isinstance(payload.get("permissions"), list) else []
+    if not payload.get("tenant_id") and not permissions and not payload.get("is_admin"):
+        return {}
+    return payload
+
+
+def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    if not output:
+        for step in getattr(run, "steps", []) or []:
+            if str(getattr(step, "node_id", "")) == node_id:
+                output = dict(getattr(step, "output", {}) or {})
+                break
+    if not output:
+        output = {"success": getattr(run, "status", "") == "completed"}
+    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
+        output["message"] = getattr(run, "error", "")
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    return output
+
+
+def _dataset_agent_user_id(request: Request, params: dict[str, Any]) -> str:
+    access_context = (
+        params.get("access_context") if isinstance(params.get("access_context"), dict) else {}
+    )
+    return str(
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or access_context.get("actor_id")
+        or params.get("actor_id")
+        or params.get("user_id")
+        or params.get("tenant_id")
+        or "dataset-rag-route"
+    ).strip()
+
+
+def _run_dataset_rag_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+) -> JSONResponse:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    data = dict(params or {})
+    access_payload = _dataset_access_payload_from_request(request)
+    if access_payload:
+        data["access_context"] = access_payload
+        if access_payload.get("tenant_id"):
+            data.setdefault("tenant_id", access_payload["tenant_id"])
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("dataset_rag") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return JSONResponse(
+            {"success": False, "message": f"未注册的 Dataset/RAG 动作: {action}"},
+            status_code=400,
+        )
+
+    node_id = f"dataset_rag_{action}"
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 执行 dataset_rag.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="dataset_rag",
+                action=action,
+                params=data,
+                risk=str(action_meta.get("risk") or "medium"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Execute dataset_rag.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "medium"),
+        metadata={"source": "dataset_rag_route", "route": route_path},
+    )
+    user_id = _dataset_agent_user_id(request, data)
+    runtime_context = {
+        "source": "dataset_rag_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+    }
+    if access_payload:
+        runtime_context["dataset_access_context"] = access_payload
+        if access_payload.get("tenant_id"):
+            runtime_context["dataset_tenant_id"] = access_payload["tenant_id"]
+        runtime_context["dataset_permissions"] = list(access_payload.get("permissions") or [])
+        runtime_context["dataset_admin"] = bool(access_payload.get("is_admin"))
+
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(data.get("message") or f"Dataset/RAG {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "dataset-rag-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+
+    payload = _agent_node_output(run, node_id)
+    status_code = 200
+    if payload.get("error_code") == "tool_exception":
+        status_code = 500
+    if run.status in {"waiting_user", "blocked"}:
+        status_code = 202
+    return JSONResponse(payload, status_code=status_code)
+
+
 @router.post("/ingest", response_model=IngestResponse)
 def ingest(req: IngestRequest) -> IngestResponse:
     try:
@@ -160,6 +362,176 @@ def query(req: QueryRequest) -> QueryResponse:
         ],
         citations=[],
         rag_enabled=is_rag_enabled(),
+    )
+
+
+@router.post("/datasets/{dataset_id}/documents")
+def ingest_dataset_document(
+    dataset_id: str,
+    req: DatasetDocumentIngestRequest,
+    request: Request,
+) -> JSONResponse:
+    return _run_dataset_rag_agent(
+        request=request,
+        action="ingest_document",
+        route_path="/api/knowledge/v1/datasets/{dataset_id}/documents",
+        params={
+            "dataset_id": dataset_id,
+            "source": req.source,
+            "text": req.text,
+            "file_path": req.file_path,
+            "document_id": req.document_id,
+            "chunk_strategy": req.chunk_strategy,
+            "chunk_size": req.chunk_size,
+            "chunk_overlap": req.chunk_overlap,
+            "metadata": req.metadata,
+            "tenant_id": req.tenant_id,
+            "version": req.version,
+            "version_label": req.version_label,
+        },
+    )
+
+
+@router.post("/datasets/{dataset_id}/query")
+def query_dataset(
+    dataset_id: str,
+    req: DatasetQueryRequest,
+    request: Request,
+) -> JSONResponse:
+    return _run_dataset_rag_agent(
+        request=request,
+        action="query",
+        route_path="/api/knowledge/v1/datasets/{dataset_id}/query",
+        params={
+            "dataset_id": dataset_id,
+            "query": req.query,
+            "top_k": req.top_k,
+            "include_answer": req.include_answer,
+            "tenant_id": req.tenant_id,
+            "version": req.version,
+            "metadata_filter": req.metadata_filter,
+            "rerank": req.rerank,
+        },
+    )
+
+
+@router.get("/datasets")
+def dataset_status_all(request: Request) -> dict[str, Any]:
+    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+    return get_dataset_rag_app_service().status(
+        access_context=_dataset_access_context_from_request(request),
+    )
+
+
+@router.get("/datasets/{dataset_id}/status")
+def dataset_status(dataset_id: str, request: Request) -> dict[str, Any]:
+    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+    return get_dataset_rag_app_service().status(
+        dataset_id,
+        access_context=_dataset_access_context_from_request(request),
+    )
+
+
+@router.post("/datasets/{dataset_id}/versions/diff")
+def diff_dataset_versions(
+    dataset_id: str,
+    req: DatasetVersionDiffRequest,
+    request: Request,
+) -> JSONResponse:
+    return _run_dataset_rag_agent(
+        request=request,
+        action="diff_versions",
+        route_path="/api/knowledge/v1/datasets/{dataset_id}/versions/diff",
+        params={
+            "dataset_id": dataset_id,
+            "source": req.source,
+            "tenant_id": req.tenant_id,
+            "from_version": req.from_version,
+            "to_version": req.to_version,
+        },
+    )
+
+
+@router.post("/datasets/{dataset_id}/versions/rollback")
+def rollback_dataset_version(
+    dataset_id: str,
+    req: DatasetRollbackRequest,
+    request: Request,
+) -> JSONResponse:
+    return _run_dataset_rag_agent(
+        request=request,
+        action="rollback_version",
+        route_path="/api/knowledge/v1/datasets/{dataset_id}/versions/rollback",
+        params={
+            "dataset_id": dataset_id,
+            "source": req.source,
+            "tenant_id": req.tenant_id,
+            "target_version": req.target_version,
+            "metadata": req.metadata,
+        },
+    )
+
+
+@router.post("/datasets/{dataset_id}/index/rebuild")
+def rebuild_dataset_index(
+    dataset_id: str,
+    req: DatasetRebuildRequest,
+    request: Request,
+) -> JSONResponse:
+    return _run_dataset_rag_agent(
+        request=request,
+        action="rebuild_index",
+        route_path="/api/knowledge/v1/datasets/{dataset_id}/index/rebuild",
+        params={
+            "dataset_id": dataset_id,
+            "tenant_id": req.tenant_id,
+            "metadata_filter": req.metadata_filter,
+            "background": req.background,
+            "max_attempts": req.max_attempts,
+        },
+    )
+
+
+@router.post("/datasets/{dataset_id}/index/rebuild/{job_id}/cancel")
+def cancel_dataset_rebuild_job(
+    dataset_id: str,
+    job_id: str,
+    request: Request,
+) -> JSONResponse:
+    return _run_dataset_rag_agent(
+        request=request,
+        action="cancel_rebuild",
+        route_path="/api/knowledge/v1/datasets/{dataset_id}/index/rebuild/{job_id}/cancel",
+        params={
+            "dataset_id": dataset_id,
+            "job_id": job_id,
+        },
+    )
+
+
+@router.get("/datasets/{dataset_id}/index/rebuild/{job_id}")
+def dataset_rebuild_job(dataset_id: str, job_id: str, request: Request) -> dict[str, Any]:
+    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+    return get_dataset_rag_app_service().get_rebuild_job(
+        dataset_id,
+        job_id,
+        access_context=_dataset_access_context_from_request(request),
+    )
+
+
+@router.delete("/datasets/{dataset_id}/documents/{document_id}")
+def delete_dataset_document(dataset_id: str, document_id: str, request: Request) -> JSONResponse:
+    return _run_dataset_rag_agent(
+        request=request,
+        action="delete_document",
+        route_path="/api/knowledge/v1/datasets/{dataset_id}/documents/{document_id}",
+        params={
+            "dataset_id": dataset_id,
+            "document_id": document_id,
+        },
     )
 
 

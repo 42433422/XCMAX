@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from app.di.registry import get_service_registry
 from app.domain.customer.entities import PurchaseUnit
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -36,8 +37,6 @@ def reset_customers_engine() -> None:
     侧的独立缓存。迁移到统一 engine 后，重置工作完全由 ``app.db`` 内部完成，这里
     仅保留符号以便现有 ``try/except import`` 调用链不中断。
     """
-    from app.di.registry import get_service_registry
-
     get_service_registry().invalidate_customer_application_service()
 
 
@@ -182,6 +181,17 @@ class CustomerApplicationService:
                 session.commit()
                 session.refresh(unit)
 
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_customer_changed,
+                    )
+
+                    neuro_notify_customer_changed(
+                        "created", customer_id=unit.id, customer_name=unit.unit_name
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_customer_changed skipped", exc_info=True)
+
                 return {
                     "success": True,
                     "message": "客户创建成功",
@@ -240,6 +250,17 @@ class CustomerApplicationService:
 
                 session.commit()
                 session.refresh(unit)
+
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_customer_changed,
+                    )
+
+                    neuro_notify_customer_changed(
+                        "updated", customer_id=unit.id, customer_name=unit.unit_name
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_customer_changed skipped", exc_info=True)
 
                 return {
                     "success": True,
@@ -358,6 +379,17 @@ class CustomerApplicationService:
 
                 session.delete(unit)
                 session.commit()
+
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_customer_changed,
+                    )
+
+                    neuro_notify_customer_changed(
+                        "deleted", customer_id=customer_id, customer_name=unit.unit_name
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_customer_changed skipped", exc_info=True)
 
                 return {
                     "success": True,
@@ -827,6 +859,4 @@ instrument_application_service_class(CustomerApplicationService)
 
 def get_customer_app_service() -> CustomerApplicationService:
     """获取客户服务单例"""
-    from app.di.registry import get_service_registry
-
     return get_service_registry().customer_application_service

@@ -22,6 +22,25 @@ def normalize_account_kind(raw: Any, *, default: str = "enterprise") -> AccountK
     return default
 
 
+def derive_account_kind_from_user(
+    *,
+    tier: Any,
+    market_is_admin: bool = False,
+    market_is_enterprise: bool = False,
+) -> AccountKind:
+    """单一真相源派生会话档位（account_kind）。
+
+    以本地 ``User.tier`` 为主真相源；修茈市场身份只能向上提升，不能下调。
+    优先级 admin > enterprise > personal。登录入口（前端 hint）不再决定档位。
+    """
+    t = str(tier or "").strip().lower()
+    if t == "admin" or market_is_admin:
+        return "admin"
+    if t == "enterprise" or market_is_enterprise:
+        return "enterprise"
+    return "personal"
+
+
 def extract_market_user_blob(market_result: dict[str, Any] | None) -> dict[str, Any]:
     if not market_result or not isinstance(market_result, dict):
         return {}
@@ -116,6 +135,22 @@ def persist_session_account_meta(
         logger.exception("persist_session_account_meta failed")
 
 
+def persist_session_membership_tier(session_id: str, membership_tier: str | None) -> None:
+    """单独写入会话的修茈市场会员等级（登录时从 /api/payment/my-plan 同步）。"""
+    sid = (session_id or "").strip()
+    if not sid:
+        return
+    try:
+        with get_host_db() as db:
+            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
+            if row is None:
+                return
+            row.market_membership_tier = (membership_tier or "").strip()[:32] or None
+            db.commit()
+    except RECOVERABLE_ERRORS:
+        logger.exception("persist_session_membership_tier failed")
+
+
 def load_session_account_meta(session_id: str) -> dict[str, Any] | None:
     sid = (session_id or "").strip()
     if not sid:
@@ -140,6 +175,9 @@ def session_row_to_meta_dict(row: UserSession) -> dict[str, Any]:
         "market_user_id": getattr(row, "market_user_id", None),
         "market_is_admin": bool(getattr(row, "market_is_admin", False)),
         "market_is_enterprise": bool(getattr(row, "market_is_enterprise", False)),
+        "market_membership_tier": (
+            str(getattr(row, "market_membership_tier", None) or "").strip() or None
+        ),
         "impersonating_market_user_id": int(imp_uid) if imp_uid is not None else None,
         "impersonating_username": str(getattr(row, "impersonating_username", None) or "").strip(),
         "tenant_id": getattr(row, "tenant_id", None),

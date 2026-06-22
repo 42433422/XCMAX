@@ -88,17 +88,11 @@ def set_mode(mode: str, model: str | None = None) -> None:
 def _first_api_key() -> tuple[str, str | None]:
     """返回 (api_key, base_url 可选)。
 
-    优先 OPENAI；否则 DeepSeek（常用兼容基座）。
+    优先 OPENAI/XCauto；否则 DeepSeek（常用兼容基座）。
     """
-    oa = (os.environ.get("OPENAI_API_KEY") or "").strip()
-    if oa:
-        base = (os.environ.get("OPENAI_BASE_URL") or "").strip() or None
-        return oa, base
-    ds = (os.environ.get("DEEPSEEK_API_KEY") or "").strip()
-    if ds:
-        base = (os.environ.get("OPENAI_BASE_URL") or "").strip() or "https://api.deepseek.com"
-        return ds, base
-    return "", None
+    from app.infrastructure.llm.providers.credentials import resolve_openai_env_credentials
+
+    return resolve_openai_env_credentials()
 
 
 def require_api_key() -> None:
@@ -185,13 +179,9 @@ def get_openai_compatible_client() -> Any:
 
 
 def resolve_chat_model() -> str:
-    return (
-        os.environ.get("DP_MODEL")
-        or os.environ.get("DEEPSEEK_MODEL")
-        or os.environ.get("LLM_MODEL")
-        or os.environ.get("OPENAI_MODEL")
-        or "deepseek-chat"
-    )
+    from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
+
+    return resolve_default_chat_model()
 
 
 __all__ = [

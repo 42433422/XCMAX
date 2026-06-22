@@ -2,9 +2,20 @@ package com.xiuci.xcagi.mobile.core.network
 
 import com.google.gson.JsonObject
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
+import com.xiuci.xcagi.mobile.core.model.AiCircleListData
+import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
+import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupListData
+import com.xiuci.xcagi.mobile.core.model.AiGroupMemberBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupMessageBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupMessagesData
+import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
+import com.xiuci.xcagi.mobile.core.model.AiGroupWrap
+import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.MeData
@@ -38,7 +49,7 @@ data class AuthQrConfirmBody(
     val qr_id: String,
     val username: String = "",
     val password: String = "",
-    val account_kind: String = "enterprise",
+    val account_kind: String = "",
 )
 
 data class OidcExchangeBody(
@@ -59,6 +70,13 @@ data class ApproveBody(val approver_id: Int, val opinion: String = "")
 data class RejectBody(val approver_id: Int, val reason: String = "")
 data class BridgeRespondBody(val response: String, val responded_by: String? = null, val status: String = "resolved")
 data class PairingExchangeBody(val nonce: String = "", val code: String = "")
+data class RelayConfirmBody(val relay_id: String, val code: String)
+data class RelayConfirmCodeBody(val code: String)
+data class RelayTaskCreateBody(
+    val relay_id: String,
+    val kind: String = "codex.invoke",
+    val payload: Map<String, Any?> = emptyMap(),
+)
 
 data class SyncPullBody(val since_cursor: Int = 0)
 
@@ -74,33 +92,68 @@ data class SyncPushBody(val items: List<SyncPushItem> = emptyList())
 data class ImDirectBody(val peer_user_id: Int)
 
 data class ImSendBody(val body: String)
+data class AiCircleTextBody(val body: String)
+
+/**
+ * 钱包余额信息（移动端"我"页面展示）。
+ */
+data class WalletBalanceDto(
+    val balance: Double? = null,
+    val currency: String = "CNY",
+    val membership_level: String? = null,
+    val experience: Long? = null,
+    val byok_configured: Boolean = false,
+    val byok_count: Int = 0,
+    val synced: Boolean = false,
+    val message: String? = null,
+)
+
+/**
+ * 侧栏菜单项（与桌面端侧栏对齐）。
+ */
+data class NavMenuItem(
+    val key: String = "",
+    val name: String = "",
+    val icon: String = "",
+    val path: String = "",
+    val source: String = "core",
+    val mod_id: String? = null,
+)
+
+/**
+ * 侧栏菜单响应（探索 Tab 配对后动态渲染工具列表）。
+ */
+data class NavMenuData(
+    val items: List<NavMenuItem> = emptyList(),
+    val account_kind: String = "enterprise",
+)
 
 interface FhdApi {
     @GET("api/health")
     suspend fun health(): Map<String, Any?>
 
-    @GET("api/mobile/v1/health")
+    @GET(ApiEndpoints.HEALTH)
     suspend fun mobileHealth(): MobileEnvelope<Map<String, String>>
 
-    @POST("api/mobile/v1/auth/login")
+    @POST(ApiEndpoints.AUTH_LOGIN)
     suspend fun mobileLogin(@Body body: MobileLoginRequest): MobileEnvelope<MobileLoginData>
 
-    @POST("api/mobile/v1/auth/login-with-phone-code")
+    @POST(ApiEndpoints.AUTH_LOGIN_WITH_PHONE_CODE)
     suspend fun mobileLoginWithPhone(@Body body: MobilePhoneLoginRequest): MobileEnvelope<MobileLoginData>
 
-    @POST("api/mobile/v1/auth/qr/confirm")
+    @POST(ApiEndpoints.AUTH_QR_CONFIRM)
     suspend fun authQrConfirm(@Body body: AuthQrConfirmBody): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/auth/oidc/exchange")
+    @POST(ApiEndpoints.AUTH_OIDC_EXCHANGE)
     suspend fun oidcExchange(@Body body: OidcExchangeBody): MobileEnvelope<MobileLoginData>
 
-    @POST("api/mobile/v1/auth/refresh")
+    @POST(ApiEndpoints.AUTH_REFRESH)
     suspend fun mobileRefresh(@Body body: MobileRefreshRequest): MobileEnvelope<MobileLoginData>
 
-    @GET("api/mobile/v1/host/discover-hint")
+    @GET(ApiEndpoints.HOST_DISCOVER_HINT)
     suspend fun discoverHint(): MobileEnvelope<DiscoverHintData>
 
-    @GET("api/mobile/v1/me")
+    @GET(ApiEndpoints.ME)
     suspend fun me(): MobileEnvelope<MeData>
 
     @POST("api/auth/register")
@@ -119,7 +172,7 @@ interface FhdApi {
     @POST("api/ai/chat/stream")
     suspend fun chatStream(@Body body: Map<String, String>): ResponseBody
 
-    @GET("api/mobile/v1/approval/requests")
+    @GET(ApiEndpoints.APPROVAL_REQUESTS)
     suspend fun mobileApprovals(
         @Query("page") page: Int = 1,
         @Query("page_size") pageSize: Int = 50,
@@ -134,16 +187,28 @@ interface FhdApi {
     @POST("api/approval/requests/{id}/reject")
     suspend fun approvalReject(@Path("id") id: Int, @Body body: RejectBody): Map<String, Any?>
 
-    @GET("api/mobile/v1/customers")
+    @GET(ApiEndpoints.CUSTOMERS)
     suspend fun mobileCustomers(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
     ): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/shipments")
+    @GET(ApiEndpoints.SHIPMENTS)
     suspend fun mobileShipments(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.SERVICE_BRIDGE_REQUESTS)
+    suspend fun mobileBridgeRequests(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 20,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @PUT(ApiEndpoints.SERVICE_BRIDGE_REQUESTS_RESPOND)
+    suspend fun mobileBridgeRespond(
+        @Path("id") id: Int,
+        @Body body: BridgeRespondBody,
     ): MobileEnvelope<Map<String, Any?>>
 
     @GET("api/service-bridge/requests")
@@ -158,25 +223,46 @@ interface FhdApi {
         @Body body: BridgeRespondBody,
     ): Map<String, Any?>
 
-    @GET("api/mobile/v1/mods")
+    @GET(ApiEndpoints.MODS)
     suspend fun mobileMods(): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/platform-shell")
+    @GET(ApiEndpoints.PLATFORM_SHELL)
     suspend fun mobilePlatformShell(): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/home")
+    @GET(ApiEndpoints.HOME)
     suspend fun mobileHome(): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/sync/status")
+    @GET(ApiEndpoints.NAV_MENU)
+    suspend fun mobileNavMenu(): MobileEnvelope<NavMenuData>
+
+    @GET(ApiEndpoints.CIRCLE_POSTS)
+    suspend fun aiCirclePosts(@Query("limit") limit: Int = 50): MobileEnvelope<AiCircleListData>
+
+    @POST(ApiEndpoints.CIRCLE_POSTS)
+    suspend fun createAiCirclePost(@Body body: AiCircleTextBody): MobileEnvelope<Map<String, Int>>
+
+    @POST(ApiEndpoints.CIRCLE_LIKE)
+    suspend fun toggleAiCircleLike(@Path("postId") postId: Int): MobileEnvelope<Map<String, Boolean>>
+
+    @POST(ApiEndpoints.CIRCLE_COMMENTS)
+    suspend fun addAiCircleComment(
+        @Path("postId") postId: Int,
+        @Body body: AiCircleTextBody,
+    ): MobileEnvelope<Map<String, Int>>
+
+    @GET(ApiEndpoints.ADMIN_HOME)
+    suspend fun mobileAdminHome(): MobileEnvelope<AdminMobileHomeData>
+
+    @GET(ApiEndpoints.SYNC_STATUS)
     suspend fun mobileSyncStatus(): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/sync/pull")
+    @POST(ApiEndpoints.SYNC_PULL)
     suspend fun mobileSyncPull(@Body body: SyncPullBody): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/sync/push")
+    @POST(ApiEndpoints.SYNC_PUSH)
     suspend fun mobileSyncPush(@Body body: SyncPushBody): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/sync/conflicts")
+    @GET(ApiEndpoints.SYNC_CONFLICTS)
     suspend fun mobileSyncConflicts(): MobileEnvelope<Map<String, Any?>>
 
     @GET("api/inventory/items")
@@ -185,11 +271,26 @@ interface FhdApi {
     @GET("api/mods/")
     suspend fun modsList(): Map<String, Any?>
 
-    @POST("api/mobile/v1/devices/register")
+    @POST(ApiEndpoints.DEVICES_REGISTER)
     suspend fun registerDevice(@Body body: DeviceRegisterBody): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/pairing/exchange")
+    @POST(ApiEndpoints.PAIRING_EXCHANGE)
     suspend fun pairingExchange(@Body body: PairingExchangeBody): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.RELAY_MOBILE_CONFIRM)
+    suspend fun relayConfirm(@Body body: RelayConfirmBody): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.RELAY_MOBILE_CONFIRM_CODE)
+    suspend fun relayConfirmCode(@Body body: RelayConfirmCodeBody): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.RELAY_MOBILE_DESKTOPS)
+    suspend fun relayDesktops(): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.RELAY_TASKS)
+    suspend fun relayCreateTask(@Body body: RelayTaskCreateBody): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.RELAY_TASKS_DETAIL)
+    suspend fun relayTaskStatus(@Path("taskId") taskId: String): MobileEnvelope<Map<String, Any?>>
 
     @POST("api/market/account-sync")
     suspend fun marketAccountSync(@Body body: Map<String, String>): Map<String, Any?>
@@ -216,12 +317,66 @@ interface FhdApi {
     ): Map<String, Any?>
 
     // ── 专属客服接口 ──
-    @GET("api/mobile/v1/cs/info")
-    suspend fun getCsInfo(): retrofit2.Response<CsInfoDto>
+    @GET(ApiEndpoints.CS_INFO)
+    suspend fun getCsInfo(): MobileEnvelope<CsInfoDto>
 
-    @POST("api/mobile/v1/cs/messages")
-    suspend fun sendCsMessage(@Body body: Map<String, String>): retrofit2.Response<CsMessageResponseDto>
+    @POST(ApiEndpoints.CS_MESSAGES)
+    suspend fun sendCsMessage(@Body body: Map<String, String>): MobileEnvelope<CsMessageResponseDto>
 
-    @GET("api/mobile/v1/cs/messages")
-    suspend fun getCsMessages(@Query("since") since: String? = null): retrofit2.Response<CsMessagesListDto>
+    @GET(ApiEndpoints.CS_MESSAGES)
+    suspend fun getCsMessages(@Query("since") since: String? = null): MobileEnvelope<CsMessagesListDto>
+
+    @GET(ApiEndpoints.ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun getCodexSuperEmployeeMessages(
+        @Query("limit") limit: Int = 80,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun postCodexSuperEmployeeMessage(
+        @Body body: CodexSuperEmployeeMobileMessageBody,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun getClaudeSuperEmployeeMessages(
+        @Query("limit") limit: Int = 80,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun postClaudeSuperEmployeeMessage(
+        @Body body: ClaudeSuperEmployeeMobileMessageBody,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    // ── AI 群聊 ──
+    @GET(ApiEndpoints.AI_GROUPS)
+    suspend fun getAiGroups(): MobileEnvelope<AiGroupListData>
+
+    @POST(ApiEndpoints.AI_GROUPS)
+    suspend fun createAiGroup(@Body body: AiGroupCreateBody): MobileEnvelope<AiGroupWrap>
+
+    @GET(ApiEndpoints.AI_GROUP_MESSAGES)
+    suspend fun getAiGroupMessages(
+        @Path("groupId") groupId: String,
+        @Query("limit") limit: Int = 100,
+    ): MobileEnvelope<AiGroupMessagesData>
+
+    @POST(ApiEndpoints.AI_GROUP_MESSAGES)
+    suspend fun postAiGroupMessage(
+        @Path("groupId") groupId: String,
+        @Body body: AiGroupMessageBody,
+    ): MobileEnvelope<AiGroupPostData>
+
+    @POST(ApiEndpoints.AI_GROUP_MEMBERS)
+    suspend fun addAiGroupMember(
+        @Path("groupId") groupId: String,
+        @Body body: AiGroupMemberBody,
+    ): MobileEnvelope<AiGroupWrap>
+
+    @DELETE(ApiEndpoints.AI_GROUP_MEMBER)
+    suspend fun removeAiGroupMember(
+        @Path("groupId") groupId: String,
+        @Path("employeeId") employeeId: String,
+    ): MobileEnvelope<AiGroupWrap>
+
+    @GET(ApiEndpoints.WALLET_BALANCE)
+    suspend fun mobileWalletBalance(): MobileEnvelope<WalletBalanceDto>
 }

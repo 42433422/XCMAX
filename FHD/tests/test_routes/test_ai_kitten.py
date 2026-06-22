@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -468,6 +468,50 @@ def test_financial_report_success(client: TestClient, monkeypatch: pytest.Monkey
     assert "inventory_valuation" in body["data"]
 
 
+def test_financial_report_attaches_agent_run(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    fake_fin_plugin = MagicMock()
+    fake_fin_plugin.run.return_value = MagicMock(
+        key="financial", title="财务报告", level="info", summary="摘要", details={}
+    )
+    fake_inv_plugin = MagicMock()
+    fake_inv_plugin.run.return_value = MagicMock(
+        key="inventory", title="库存估值", level="info", summary="摘要", details={}
+    )
+    fake_save_svc = MagicMock()
+    fake_save_svc.save_analysis.return_value = {
+        "success": True,
+        "id": "r-trace",
+        "filename": "f.xlsx",
+    }
+
+    monkeypatch.setattr(f"{_FACADE}.FinancialReportPlugin", lambda: fake_fin_plugin)
+    monkeypatch.setattr(f"{_FACADE}.InventoryValuationPlugin", lambda: fake_inv_plugin)
+    monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
+
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        r = client.post(
+            "/api/ai/kitten/financial/report",
+            json={"metadata": {"tenant_id": "tenant-k", "user_id": "u-k"}},
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    run = repo.get(body["run_id"])
+    assert run is not None
+    assert run.user_id == "u-k"
+    assert run.intent == "kitten_financial_report"
+    assert run.metadata["channel"] == "ai_kitten_route"
+    assert run.metadata["runtime_context"]["route"] == "/api/ai/kitten/financial/report"
+
+
 def test_financial_report_save_fails_still_returns_data(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -658,6 +702,37 @@ def test_document_generate_docx_success(
     r = client.post("/api/ai/kitten/document/generate", json={"prompt": "写一份合同"})
     assert r.status_code == 200
     assert "wordprocessingml" in r.headers.get("content-type", "")
+
+
+def test_document_generate_attaches_agent_run_header_and_artifact(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        f"{_FACADE}.generate_office_file",
+        lambda prompt, fmt: (b"docx-bytes", "trace.docx"),
+    )
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        r = client.post(
+            "/api/ai/kitten/document/generate",
+            json={"prompt": "写一份验收文档", "user_id": "u-doc"},
+        )
+
+    assert r.status_code == 200
+    run_id = r.headers.get("x-agent-run-id")
+    assert run_id
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.user_id == "u-doc"
+    assert run.intent == "kitten_document_generate"
+    assert run.artifacts[0].artifact_type == "office_document"
+    assert run.artifacts[0].name == "trace.docx"
+    assert run.artifacts[0].uri == "/api/ai/kitten/document/generate"
 
 
 def test_document_generate_xlsx_success(

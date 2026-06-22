@@ -16,7 +16,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # Use MagicMock for all mocks to support context manager protocol
-Mock = MagicMock  # type: ignore[assignment,misc]
+Mock = MagicMock  # type: ignore[assignment,misc]  # noqa: F811
 
 import pytest
 from sqlalchemy import create_engine, text

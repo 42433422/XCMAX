@@ -256,7 +256,7 @@ class DeepSeekIntentRecognizer:
                 else:
                     try:
                         normalized[key] = int(re.search(r"\d+", value).group())
-                    except:
+                    except Exception:
                         normalized[key] = value
 
             elif key == "tin_spec":
@@ -266,7 +266,7 @@ class DeepSeekIntentRecognizer:
                 else:
                     try:
                         normalized[key] = float(re.search(r"\d+", value).group())
-                    except:
+                    except Exception:
                         normalized[key] = value
 
             elif key == "unit_name":
@@ -309,7 +309,7 @@ class DeepSeekIntentRecognizer:
                 if char in cn_map:
                     result = result * 10 + cn_map[char]
             return result if result > 0 else int(cn)
-        except:
+        except Exception:
             return int(re.search(r"\d+", cn).group()) if re.search(r"\d+", cn) else 0
 
     def _fallback_result(self, message: str, raw_response: str = "") -> dict[str, Any]:
@@ -767,7 +767,7 @@ def cn_to_number(cn: str) -> int:
             if char in cn_map:
                 result = result * 10 + cn_map[char]
         return result if result > 0 else int(cn)
-    except:
+    except Exception:
         return int(re.search(r"\d+", cn).group()) if re.search(r"\d+", cn) else 0
 
 

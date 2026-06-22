@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,29 @@ def blocked_pattern_hit(diff_summary: str) -> str:
     return ""
 
 
-def should_auto_approve_staged(*, files_changed_count: int, diff_summary: str = "") -> bool:
+def diff_summary_path_evidence_incomplete(diff_summary: str) -> bool:
+    """Return True when a stat-style diff summary hides path segments with ellipsis."""
+    for raw_line in (diff_summary or "").splitlines():
+        path_part = raw_line.split("|", 1)[0].strip()
+        if not path_part:
+            continue
+        if "..." in path_part or "…" in path_part:
+            return True
+    return False
+
+
+def _changed_file_evidence(changed_files: Optional[Sequence[str]], diff_summary: str) -> str:
+    if changed_files:
+        return "\n".join(str(path) for path in changed_files)
+    return diff_summary
+
+
+def should_auto_approve_staged(
+    *,
+    files_changed_count: int,
+    diff_summary: str = "",
+    changed_files: Optional[Sequence[str]] = None,
+) -> bool:
     if not _env_bool("MODSTORE_OPS_STAGED_AUTO_APPROVE", "0"):
         return False
     if release_slo_halt_active():
@@ -93,7 +115,25 @@ def should_auto_approve_staged(*, files_changed_count: int, diff_summary: str = 
         return False
     if files_changed_count <= 0 or files_changed_count > _max_files():
         return False
-    hit = blocked_pattern_hit(diff_summary)
+    if changed_files is None and diff_summary_path_evidence_incomplete(diff_summary):
+        logger.info("ops staged auto-approve blocked: diff summary path evidence is incomplete")
+        return False
+    try:
+        from modstore_server.self_maintenance_policy import (
+            should_block_marker_only_diff_summary,
+        )
+
+        policy = should_block_marker_only_diff_summary(diff_summary)
+        if policy.get("blocked"):
+            logger.info(
+                "ops staged auto-approve blocked: self-maintenance marker-only diff: %s",
+                policy.get("reason"),
+            )
+            return False
+    except Exception:
+        logger.exception("ops staged self-maintenance policy failed closed")
+        return False
+    hit = blocked_pattern_hit(_changed_file_evidence(changed_files, diff_summary))
     if hit:
         logger.info("ops staged auto-approve blocked: high-risk path matched '%s'", hit)
         return False

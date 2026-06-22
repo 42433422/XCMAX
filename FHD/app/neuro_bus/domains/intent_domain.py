@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.domains.intent_domain_handlers import register_intent_domain_handlers
+from app.neuro_bus.events.base import EventPriority
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -54,67 +55,7 @@ class IntentNeuroDomain(NeuroDomain):
 
     def _setup_handlers(self):
         """设置默认事件处理器"""
-
-        @self.on("intent.recognized", priority=0, channel=DomainChannel.FAST)
-        async def on_intent_recognized(event: NeuroEvent):
-            """意图识别完成"""
-            self._recognized_count += 1
-            intent_type = event.payload.get("intent_type")
-            confidence = event.payload.get("confidence", 0.0)
-            processor = event.payload.get("processor_used", "unknown")
-
-            if processor == "reflex":
-                self._reflex_count += 1
-
-            logger.debug(
-                f"Intent recognized: {intent_type} (confidence={confidence:.2f}, processor={processor})"  # noqa: G004
-            )
-            try:
-                from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
-
-                bump_domain_handler_metric("intent.recognized")
-            except RECOVERABLE_ERRORS:
-                pass
-
-        @self.on("intent.processing", priority=1, channel=DomainChannel.FAST)
-        async def on_intent_processing(event: NeuroEvent):
-            """意图处理中"""
-            intent_type = event.payload.get("intent_type")
-            logger.debug("Intent processing: %s", intent_type)
-            try:
-                from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
-
-                bump_domain_handler_metric("intent.processing")
-            except RECOVERABLE_ERRORS:
-                pass
-
-        @self.on("intent.failed", priority=0, channel=DomainChannel.STANDARD)
-        async def on_intent_failed(event: NeuroEvent):
-            """意图处理失败"""
-            self._failed_count += 1
-            intent_type = event.payload.get("intent_type")
-            error = event.payload.get("error", "Unknown")
-            logger.error("Intent failed: %s, error: %s", intent_type, error)
-            try:
-                from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
-
-                bump_domain_handler_metric("intent.failed")
-            except RECOVERABLE_ERRORS:
-                pass
-
-        @self.on("intent.reflex_triggered", priority=0, channel=DomainChannel.FAST)
-        async def on_reflex_triggered(event: NeuroEvent):
-            """反射弧触发"""
-            self._reflex_count += 1
-            reflex_type = event.payload.get("reflex_type")
-            latency_ms = event.payload.get("latency_ms", 0)
-            logger.debug(f"Reflex triggered: {reflex_type} ({latency_ms:.2f}ms)")  # noqa: G004
-            try:
-                from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
-
-                bump_domain_handler_metric("intent.reflex_triggered")
-            except RECOVERABLE_ERRORS:
-                pass
+        register_intent_domain_handlers(self)
 
     async def initialize(self):
         """初始化意图域"""

@@ -11,7 +11,7 @@
       type="button"
       data-tutorial-id="toolbar-excel-analyze"
       :title="$t('chat.uploadTitle')"
-      @click="handleUploadClick"
+      @click="triggerUpload"
       :disabled="excelAnalyzeUploading"
     >
       <i class="fa fa-upload" aria-hidden="true"></i>
@@ -102,7 +102,7 @@ watch(fileInputRef, (el) => {
   emit('register-excel-input', el)
 }, { immediate: true })
 
-function handleUploadClick() {
+function triggerUpload() {
   fileInputRef.value?.click()
   emit('trigger-upload')
 }

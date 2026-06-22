@@ -28,11 +28,26 @@ sla:
 
 llm_default: "auto"
 
-skills: []
+capabilities:
+  - delivery.receipt.verify
+  - acceptance.evidence.audit
+
+skills:
+  - skills/skill-delivery-receipt-officer.md
+
+actions:
+  handlers: ["llm_md", "echo"]
 
 depends_on:
   - test-qa-runner
   - change-request-auditor
+
+examples:
+  - title: "交付签收员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次交付签收员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

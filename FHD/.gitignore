@@ -58,6 +58,9 @@ coverage/
 .tox/
 .vector_index/
 
+# 运行时端口文件（run_fastapi.py 自动写入，前端 Vite 读取联动）
+.runtime/
+
 # ============================================================================
 # Database files (runtime data - keep code references to schemas)
 # ============================================================================
@@ -241,3 +244,7 @@ _archived_removed_mods/
 # detect_migration_status.py 运行产物(CI artifact,勿提交)
 migration_metrics.json
 migration_status_report.txt
+
+# mutmut 3.x 变异测试沙箱与缓存（运行时生成约80M，勿提交）
+mutants/
+.mutmut-cache

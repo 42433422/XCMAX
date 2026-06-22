@@ -51,6 +51,17 @@ const SANDBOX_ALLOWED = new Set([
   'tools',
 ]);
 
+const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department';
+
+function normalizeDutyRosterGraphView(raw: unknown): string {
+  const token = String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase();
+  if (token === 'department' || token === 'dept' || token === '六部门') return 'department';
+  if (token === 'hub' || token === 'center' || token === '中心' || token === '中心图') return 'hub';
+  if (token === 'legacy-area' || token === 'area' || token === '物理' || token === '物理分区') return 'legacy-area';
+  if (token === 'client' || token === 'workshop' || token === '车间' || token === '客户端车间') return 'client';
+  return DEFAULT_DUTY_ROSTER_GRAPH_VIEW;
+}
+
 const allRoutes: RouteRecordRaw[] = [
   {
     path: '/index.html',
@@ -318,13 +329,19 @@ allRoutes.push(
     path: '/im',
     name: 'im',
     component: () => import('../views/ImMessengerView.vue'),
-    meta: { title: '消息' }
+    meta: { title: '信息' }
+  },
+  {
+    path: '/ai-groups',
+    name: 'ai-groups',
+    component: () => import('../views/AiGroupChatView.vue'),
+    meta: { title: 'AI群聊' }
   },
   {
     path: '/admin/entitlements',
     name: 'admin-entitlements',
     component: () => import('../views/AdminEntitlementsView.vue'),
-    meta: { title: '用户 Mod 管理', requiresAdminAccount: true },
+    meta: { title: '用户管理', requiresAdminAccount: true },
   },
   {
     path: '/desktop-runtime',
@@ -365,12 +382,23 @@ allRoutes.push(
     component: () => import('../views/EmployeeWorkspaceView.vue'),
     meta: { title: '员工空间' }
   },
-  {
-    path: '/workflow-employee-space/stitch-full',
-    name: 'workflow-employee-stitch-full',
-    component: () => import('../views/YuangongStitchFullView.vue'),
-    meta: { title: '员工工作流全景' }
-  },
+  ...(isAdminConsoleSpa()
+    ? [
+        {
+          path: '/workflow-employee-space/stitch-full',
+          name: 'workflow-employee-stitch-full',
+          redirect: { name: 'duty-roster-graph' },
+          meta: { title: '管理端六部门可视化' },
+        } as RouteRecordRaw,
+      ]
+    : [
+        {
+          path: '/workflow-employee-space/stitch-full',
+          name: 'workflow-employee-stitch-full',
+          component: () => import('../views/YuangongStitchFullView.vue'),
+          meta: { title: '企业员工工作流全景' },
+        } as RouteRecordRaw,
+      ]),
   {
     path: '/employee-workspace',
     redirect: { name: 'workflow-employee-space' }
@@ -428,6 +456,21 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, _from, next) => {
+  if (to.name === 'duty-roster-graph') {
+    const nextView = normalizeDutyRosterGraphView(to.query.view);
+    const currentView = String(Array.isArray(to.query.view) ? to.query.view[0] : to.query.view || '').trim().toLowerCase();
+    const normalizedView = String(nextView);
+    if (currentView !== normalizedView) {
+      next({
+        name: 'duty-roster-graph',
+        query: { ...to.query, view: normalizedView },
+        hash: to.hash,
+        replace: true,
+      });
+      return;
+    }
+  }
+
   if (
     isAdminConsoleSpa() &&
     to.path.startsWith('/mod/xcagi-planner-bridge/')

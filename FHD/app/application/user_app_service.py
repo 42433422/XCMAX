@@ -4,12 +4,15 @@
 此模块已迁移到 app/application/
 """
 
+import logging
 from typing import Any
 
 from app.db.models import User
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.password_hash import generate_password_hash
+
+logger = logging.getLogger(__name__)
 
 
 class UserApplicationService:
@@ -84,6 +87,14 @@ class UserApplicationService:
                 db.add(user)
                 db.commit()
                 db.refresh(user)
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_user_changed,
+                    )
+
+                    neuro_notify_user_changed("created", user_id=user.id, username=user.username)
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_user_changed skipped", exc_info=True)
                 return {
                     "success": True,
                     "user": {
@@ -119,6 +130,14 @@ class UserApplicationService:
                     user.role = role
 
                 db.commit()
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_user_changed,
+                    )
+
+                    neuro_notify_user_changed("updated", user_id=user.id, username=user.username)
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_user_changed skipped", exc_info=True)
                 return {
                     "success": True,
                     "user": {
@@ -142,6 +161,14 @@ class UserApplicationService:
 
                 user.is_active = False
                 db.commit()
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_user_changed,
+                    )
+
+                    neuro_notify_user_changed("deleted", user_id=user.id, username=user.username)
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_user_changed skipped", exc_info=True)
                 return {"success": True, "message": "用户已禁用"}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()

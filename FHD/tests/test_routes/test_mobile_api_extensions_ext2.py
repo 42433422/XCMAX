@@ -848,8 +848,13 @@ class TestMobileAuthOidcExchangeAdditional:
                 return_value=(True, "rt"),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
         ):
@@ -872,13 +877,18 @@ class TestMobileAuthOidcExchangeAdditional:
                 return_value=(True, "rt"),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                "app.application.enterprise_login_flow.finalize_auth_after_oidc",
                 new=AsyncMock(
                     return_value={
                         "user": {"id": 1, "username": "alice"},
@@ -912,7 +922,10 @@ class TestMobileAuthOidcExchangeAdditional:
 class TestMobileModItemsAdditional:
     def test_object_mod_with_mod_id_only(self, ext_mod):
         """Test object mod that only has mod_id attribute."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mod = MagicMock()
             mod.id = None
             mod.name = None
@@ -925,7 +938,10 @@ class TestMobileModItemsAdditional:
 
     def test_object_mod_with_title_only(self, ext_mod):
         """Test object mod that only has title attribute."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mod = MagicMock()
             mod.id = "mod-1"
             mod.name = None
@@ -938,7 +954,10 @@ class TestMobileModItemsAdditional:
 
     def test_dict_mod_with_name_fallback(self, ext_mod):
         """Test dict mod that uses name as fallback for id."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"name": "Just Name"},  # No id/mod_id
             ]

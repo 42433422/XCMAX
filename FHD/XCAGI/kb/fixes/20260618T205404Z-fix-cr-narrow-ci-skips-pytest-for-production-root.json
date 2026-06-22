@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-06-18T20:54:04.618952+00:00",
+  "fix_diff": "diff --git a/cr_narrow_ci.py b/cr_narrow_ci.py\n+def _prepare_overlay_root(root, rel_path, content):\n+    copy MODstore_deploy-shaped source tree into a temp overlay\n+    write proposed CR content into overlay_rel before ruff/pytest\n+\n+def _resolve_test_file_for_root(test_file, root):\n+    check root/test, root/MODstore_deploy/test, root/成都修茈科技有限公司/MODstore_deploy/test\n+\n-args = [\"python3\", \"-m\", \"pytest\", ...]\n+args = [sys.executable, \"-m\", \"pytest\", ...]\n",
+  "kind": "fix",
+  "metadata": {
+    "files": [
+      "cr_narrow_ci.py",
+      "test_self_evolution_loop.py"
+    ],
+    "source": "codex_direct_fix"
+  },
+  "root_cause": "infer_related_test_files 返回相对于 MODstore_deploy 的路径，而 _run_pytest_subset 只解析 root/<test>；提议的 CR 内容也未在 ruff/pytest 前写入覆盖层。",
+  "schema_version": 1,
+  "symptom": "cr_narrow_ci 对生产根目录形态跳过 pytest：测试位于 MODstore_deploy/tests 下，但子集运行器检查的是 root/tests"
+}

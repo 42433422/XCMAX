@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-qgy01mZ2.js";import{a1 as a,t as o,a2 as t}from"./index-C1axxMiF.js";const m=a({__name:"LabelEditorView",setup(i){return(r,n)=>(o(),t(e,{"mod-id":"xcagi-erp-domain-bridge",view:"LabelEditorView",title:"ERP 业务页"}))}});export{m as default};

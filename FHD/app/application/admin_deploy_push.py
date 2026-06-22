@@ -345,7 +345,7 @@ async def _execute_deploy_job(job: DeployJob) -> None:
                 hub = snap2.get("update_hub") or {}
                 local_sha = snap2["admin_local"]["git_sha"]
                 hub_sha = hub.get("git_sha") or ""
-                step.detail = "update 站 {}".format(hub_sha or "?")
+                step.detail = "update 站 " + (hub_sha or "?")
                 step.status = "done" if hub_sha == local_sha or not local_sha else "error"
                 step.finished_at = time.time()
                 if step.status == "error":

@@ -1,11 +1,30 @@
 {
-  "active_version": "0",
+  "active_version": "2",
   "policies": [
     {
       "version": "0",
       "path": "policy_v0.pt",
       "sha256": "",
       "trained_at": ""
+    },
+    {
+      "version": "1",
+      "path": "policy_v1.pt",
+      "sha256": "2b77ea6e343cc7e5263eb3e5c2ed2f9694d457a124dc0d666af6dffdea01c7e8",
+      "trained_at": "2026-06-20T04:03:14+0800",
+      "metrics": {
+        "train_size": 400,
+        "val_size": 100,
+        "final_train_loss": 0.9832316637039185,
+        "final_val_acc": 0.6000000238418579,
+        "epochs": 80
+      }
+    },
+    {
+      "version": "2",
+      "path": "policy_v2.pt",
+      "sha256": "a61010d9bcb2729f25d0c6a9d13dc26c934c024da1934f92c96ae7c22e26c460",
+      "trained_at": "2026-06-19T20:14:15Z"
     }
   ]
 }

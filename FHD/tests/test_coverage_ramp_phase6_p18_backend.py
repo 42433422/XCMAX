@@ -2202,6 +2202,10 @@ class TestMobileExtPairingRoutes:
     @pytest.mark.asyncio
     async def test_pairing_issue_success(self, ext_mod):
         body = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
+        request = SimpleNamespace(
+            headers={"host": "192.168.1.10:5000"},
+            url=SimpleNamespace(hostname="192.168.1.10"),
+        )
         with (
             patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
             patch(
@@ -2209,7 +2213,7 @@ class TestMobileExtPairingRoutes:
                 return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
             ),
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(body, request)
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:
@@ -2354,12 +2358,18 @@ class TestMobileExtMobileModItems:
     """Cover ``_mobile_mod_items`` branches."""
 
     def test_empty_list(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = []
             assert ext_mod._mobile_mod_items() == []
 
     def test_dict_mods(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "mod-a", "name": "Mod A"},
                 {"mod_id": "mod-b", "title": "Mod B"},
@@ -2369,7 +2379,10 @@ class TestMobileExtMobileModItems:
             assert items[0]["id"] == "mod-a"
 
     def test_object_mods(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mod = MagicMock()
             mod.id = "mod-obj"
             mod.name = "Obj Mod"
@@ -2380,21 +2393,30 @@ class TestMobileExtMobileModItems:
             assert items[0]["id"] == "mod-obj"
 
     def test_exception_returns_empty(self, ext_mod):
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("fail"),
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                side_effect=RuntimeError("fail"),
+            ),
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             assert ext_mod._mobile_mod_items() == []
 
     def test_limit_100(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": f"mod-{i}", "name": f"Mod {i}"} for i in range(150)
             ]
             assert len(ext_mod._mobile_mod_items()) == 100
 
     def test_empty_id_skipped(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "", "name": "NoId"},
                 {"mod_id": "has-id", "title": "HasId"},

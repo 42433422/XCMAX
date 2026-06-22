@@ -1,10 +1,13 @@
 """employee_pack 员工实现（MODstore 生成）。
 
-行为按 manifest.employee_config_v2.actions.handlers 分支：
+实际每日分支、提交、OpsStagedChange 入队由宿主
+``modstore_server.daily_orchestrator_job`` 负责。本员工包只按
+manifest.employee_config_v2.actions.handlers 分支：
   - echo     → 直接回显 payload，不调 LLM
   - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
   - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
 若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+agent 分支必须由宿主注入 ctx.agent_runner；未注入时 fail closed。
 """
 from __future__ import annotations
 
@@ -19,7 +22,7 @@ logger = logging.getLogger(__name__)
 EMPLOYEE_ID = "daily-orchestrator"
 EMPLOYEE_LABEL = "每日编排员"
 
-SYSTEM_PROMPT = "你是 XCAGI 员工「每日编排员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+SYSTEM_PROMPT = "你是 XCAGI 员工「每日编排员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；真实分支、提交与待审批入队由宿主 daily_orchestrator_job 负责；agent 分支必须依赖 ctx.agent_runner，未注入时要明确失败，禁止声称已创建分支、提交、合并或入队。输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
 
 DEFAULT_README_SECTIONS = (
     '## 用途\n'

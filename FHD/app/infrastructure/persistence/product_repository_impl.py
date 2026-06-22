@@ -334,8 +334,9 @@ class SQLAlchemyProductRepository(ProductRepository):
                 db.add(product)
                 db.commit()
                 db.refresh(product)
+                product_id = product.id
 
-            return {"success": True, "message": "产品创建成功", "product_id": product.id}
+            return {"success": True, "message": "产品创建成功", "product_id": product_id}
 
         except _REPOSITORY_ERRORS as e:
             return {"success": False, "message": f"创建失败：{str(e)}"}

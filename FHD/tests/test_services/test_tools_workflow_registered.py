@@ -10,6 +10,7 @@ from app.services.tools_workflow_registered import (
     _REGISTERED_WORKFLOW_ROUTERS,
     _registered_router_business_docking_family,
     _registered_router_customers,
+    _registered_router_generate_office_document,
     _registered_router_materials,
     _registered_router_normal_slot_dispatch,
     _registered_router_print,
@@ -506,6 +507,35 @@ class TestBusinessDockingRouter:
 
 
 # ---------------------------------------------------------------------------
+# _registered_router_generate_office_document
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateOfficeDocumentRouter:
+    def test_execute_uses_existing_workflow_tool(self):
+        with patch(
+            "app.application.tools.workflow.execute_workflow_tool",
+            return_value='{"success": true, "file_name": "out.docx", "artifacts": [{"artifact_type": "office_document"}]}',
+        ):
+            result = _registered_router_generate_office_document(
+                "execute",
+                {"output_format": "docx"},
+                {},
+                "normal",
+                "生成合同",
+            )
+
+        assert result["success"] is True
+        assert result["file_name"] == "out.docx"
+        assert result["artifacts"][0]["artifact_type"] == "office_document"
+
+    def test_unknown_action(self):
+        result = _registered_router_generate_office_document("view", {}, {}, "normal", "")
+        assert result["success"] is False
+        assert "未知" in result["message"]
+
+
+# ---------------------------------------------------------------------------
 # execute_registered_workflow_tool
 # ---------------------------------------------------------------------------
 
@@ -545,14 +575,30 @@ class TestExecuteRegisteredWorkflowTool:
             "products",
             "materials",
             "shipment_records",
+            "shipment_orders",
             "business_docking",
+            "business_event",
             "template_extract",
             "template_preview",
+            "document_template",
+            "label_template_generator",
             "wechat",
             "print",
             "printer_list",
             "settings",
             "excel_analysis",
+            "excel_analyzer",
+            "excel_toolkit",
             "excel_import",
+            "excel_vector_index",
+            "generate_office_document",
+            "unit_products_import",
+            "inventory",
+            "purchase",
+            "finance",
+            "ocr",
+            "dataset_rag",
+            "memory_v2",
+            "system_maintenance",
         }
         assert set(_REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys

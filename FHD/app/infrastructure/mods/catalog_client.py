@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -58,16 +59,38 @@ def _catalog_url(path: str) -> str:
 
 
 async def _http_get_json(url: str) -> dict[str, Any]:
-    try:
-        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
-            resp = await client.get(url, headers=_catalog_headers())
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"远端 Catalog 不可达：{exc}") from exc
-    if resp.status_code >= 400:
-        raise HTTPException(
-            status_code=502,
-            detail=f"远端 Catalog 返回 {resp.status_code}: {resp.text[:300]}",
+    """GET 远端 catalog JSON。远端 5xx/SSL 握手超时短退避重试，4xx 直接抛。"""
+    max_attempts = 3
+    # 精细化超时：连接 5s（避免 SSL 握手卡 60s）、读取 15s、写入 5s、连接池 5s
+    timeout = httpx.Timeout(5.0, read=15.0, write=5.0, connect=5.0)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(url, headers=_catalog_headers())
+        except httpx.RequestError as exc:
+            # 网络层错误（含 SSL 握手超时）：最后一次直接抛，中间次退避后重试
+            if attempt == max_attempts:
+                raise HTTPException(status_code=502, detail=f"远端 Catalog 不可达：{exc}") from exc
+            logger.warning(
+                "catalog request failed (attempt %s/%s): %s; retrying", attempt, max_attempts, exc
+            )
+            await asyncio.sleep(0.8 * attempt)
+            continue
+        if resp.status_code < 400:
+            break
+        # 4xx 不重试（客户端错误，重试无意义）；5xx 退避后重试
+        if resp.status_code < 500 or attempt == max_attempts:
+            raise HTTPException(
+                status_code=502,
+                detail=f"远端 Catalog 返回 {resp.status_code}: {resp.text[:300]}",
+            )
+        logger.warning(
+            "远端 Catalog 返回 %s (attempt %s/%s); retrying after backoff",
+            resp.status_code,
+            attempt,
+            max_attempts,
         )
+        await asyncio.sleep(0.8 * attempt)
     try:
         data = resp.json()
     except ValueError as exc:

@@ -153,7 +153,7 @@ def test_run_normal_slot_product_query_miss(mock_build: MagicMock) -> None:
     assert out["success"] is False
 
 
-@patch("app.routes.tools._parse_order_text")
+@patch("app.application.facades.tools_facade._parse_order_text")
 def test_run_normal_slot_shipment_preview_parse_fail(mock_parse: MagicMock) -> None:
     mock_parse.return_value = {"success": False, "message": "缺单位"}
     out = run_normal_slot_shipment_preview("开单")

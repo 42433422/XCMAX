@@ -1,1 +1,0 @@
-import{E as t,O as a,o,d as s,e as n}from"./index-BM0eyJ6q.js";const r={class:"page-view",id:"view-model-payment","aria-busy":"true","aria-label":"正在跳转到系统设置"},l=t({__name:"ModelPaymentRedirectView",setup(i){const e=a();return o(()=>{e.replace({path:"/settings",query:{section:"model-payment"}})}),(c,d)=>(s(),n("div",r))}});export{l as default};

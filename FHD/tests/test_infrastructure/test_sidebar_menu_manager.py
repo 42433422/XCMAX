@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
+import os
+import tempfile
 from unittest.mock import patch
 
 import pytest
 
 # The module uses a hyphen in directory name, so we need importlib
-FHD_ROOT = Path(__file__).resolve().parents[2]
+_MODULE_PATH = os.path.join(
+    os.path.dirname(__file__),  # tests/test_infrastructure/
+    "..",
+    "..",  # FHD/
+    "app",
+    "infrastructure",
+    "skills",
+    "sidebar-menu-manager",
+    "sidebar_menu_manager.py",
+)
 spec = importlib.util.spec_from_file_location(
     "sidebar_menu_manager",
-    FHD_ROOT / "app/infrastructure/skills/sidebar-menu-manager/sidebar_menu_manager.py",
+    os.path.abspath(_MODULE_PATH),
 )
 assert spec is not None
 _mod = importlib.util.module_from_spec(spec)

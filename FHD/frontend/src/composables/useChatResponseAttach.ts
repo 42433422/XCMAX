@@ -2,7 +2,7 @@ import { type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
 import type { TaskItem } from './useChatPersistence'
 import type { ChatPlannerPayload } from '@/types/chat'
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
+import { asRecord, asArray, asString, asNumber, asBoolean } from '@/utils/typeGuards'
 
 export interface UseChatResponseAttachDeps {
   messages: Ref<ChatMessage[]>
@@ -72,6 +72,12 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
         tool_id: asString(x.tool_id),
         action: asString(x.action),
         error: asString(x.error),
+        message: asString(x.message),
+        output_preview: asString(x.output_preview),
+        retries: asNumber(x.retries, 0),
+        retryable: asBoolean(x.retryable, true),
+        recovery_hint: asString(x.recovery_hint),
+        duration_ms: asNumber(x.duration_ms, 0),
       }))
       .filter((x) => x.node_id)
     if (!action && !nodeResults.length) return
@@ -121,6 +127,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     }
     if (action === 'workflow_done' || action === 'workflow_failed') {
       const target = taskList.value.find((t) => t.type === 'workflow' && (t.status === 'queued' || t.status === 'running'))
+      const nodeResults = asArray<Record<string, unknown>>(nestedData(resp).node_results)
       if (!target) return
       if (action === 'workflow_done') {
         upsertTask({
@@ -131,7 +138,11 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
           status: 'success',
           progress: 100,
           summary: '执行完成',
-          messageRef
+          messageRef,
+          payload: {
+            ...(target.payload || {}),
+            workflowNodeResults: nodeResults,
+          },
         })
       } else {
         upsertTask({
@@ -141,7 +152,11 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
           title: target.title,
           status: 'failed',
           error: asString(resp.message) || '工作流执行失败',
-          messageRef
+          messageRef,
+          payload: {
+            ...(target.payload || {}),
+            workflowNodeResults: nodeResults,
+          },
         })
       }
       return

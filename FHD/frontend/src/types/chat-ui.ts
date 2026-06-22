@@ -13,28 +13,21 @@ export interface UiChatMessage {
     tool_id: string
     action: string
     error?: string
+    message?: string
+    output_preview?: string
+    retries?: number
+    retryable?: boolean
+    recovery_hint?: string
+    duration_ms?: number
   }>
-  contextSummary?: unknown
-  attachments?: Array<Record<string, unknown>>
-  downloadUrl?: string
-  toolProgressLabel?: string
+  contextSummary?: string
   streamingShell?: boolean
+  toolProgressLabel?: string
+  downloadUrl?: string
   /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
   shipmentDownloadUrl?: string
+  /** 附件（Excel 分析等 Mod 回传的结构化数据） */
+  attachments?: Record<string, unknown>[]
 }
 
-export type UiChatMessageExtras = Partial<
-  Pick<
-    UiChatMessage,
-    | 'attachments'
-    | 'contextSummary'
-    | 'downloadUrl'
-    | 'shipmentDownloadUrl'
-    | 'streamingShell'
-    | 'thinkingSteps'
-    | 'todoSteps'
-    | 'toolProgressLabel'
-    | 'workflowAction'
-    | 'nodeResults'
-  >
->
+export type UiChatMessageExtras = Partial<UiChatMessage>

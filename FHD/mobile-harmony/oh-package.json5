@@ -1,0 +1,14 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "xcagi-enterprise-harmony",
+  "version": "10.0.0",
+  "description": "XCAGI Enterprise HarmonyOS mobile client",
+  "main": "",
+  "author": "Xiuci",
+  "license": "UNLICENSED",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hvigor": "5.19.8",
+    "@ohos/hvigor-ohos-plugin": "5.19.8"
+  }
+}

@@ -1,1 +1,0 @@
-import e from"./InternalCustomerServiceView-D7bzSkzJ.js";import{E as r,d as o,Q as t}from"./index-BM0eyJ6q.js";import"./useServiceBridge-BoIuiY_3.js";const p=r({__name:"InternalCustomerServiceView",setup(n){return(a,c)=>(o(),t(e))}});export{p as default};

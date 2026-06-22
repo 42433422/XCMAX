@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -50,9 +52,92 @@ def _modstore_tests_root(root: Path) -> Path:
     return root / "tests"
 
 
+def _strip_modstore_deploy_prefix(rel_path: str) -> str:
+    rel = (rel_path or "").replace("\\", "/").lstrip("/")
+    prefixes = (
+        "成都修茈科技有限公司/MODstore_deploy/",
+        "MODstore_deploy/",
+    )
+    for prefix in prefixes:
+        if rel.startswith(prefix):
+            return rel[len(prefix) :]
+    return rel
+
+
+def _copytree_filtered(src: Path, dst: Path) -> None:
+    shutil.copytree(
+        src,
+        dst,
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns(
+            ".devfleet",
+            ".git",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            ".trae",
+            ".venv",
+            "__pycache__",
+            "*.db",
+            "*.sqlite",
+            "*.sqlite3",
+            "chroma.sqlite3",
+            "coverage",
+            "data",
+            "dist",
+            "htmlcov",
+            "node_modules",
+            "vector_data",
+            "venv",
+        ),
+    )
+
+
+def _prepare_overlay_root(root: Path, rel_path: str, content: str) -> tuple[tempfile.TemporaryDirectory[str], Path, str]:
+    """Create a small overlay repo and write proposed CR content into it."""
+
+    tmp = tempfile.TemporaryDirectory(prefix="modstore_narrow_ci_")
+    try:
+        overlay = Path(tmp.name) / "repo"
+        overlay.mkdir(parents=True, exist_ok=True)
+
+        rel = rel_path.replace("\\", "/").lstrip("/")
+        deploy_rel = _strip_modstore_deploy_prefix(rel)
+        if root.name == "MODstore_deploy":
+            _copytree_filtered(root, overlay)
+            overlay_rel = deploy_rel
+        elif (root / "MODstore_deploy").is_dir():
+            _copytree_filtered(root / "MODstore_deploy", overlay / "MODstore_deploy")
+            overlay_rel = f"MODstore_deploy/{deploy_rel}"
+        elif (root / "成都修茈科技有限公司" / "MODstore_deploy").is_dir():
+            deploy = root / "成都修茈科技有限公司" / "MODstore_deploy"
+            _copytree_filtered(deploy, overlay / "成都修茈科技有限公司" / "MODstore_deploy")
+            overlay_rel = f"成都修茈科技有限公司/MODstore_deploy/{deploy_rel}"
+        else:
+            for child in ("modstore_server", "tests"):
+                source = root / child
+                if source.exists():
+                    _copytree_filtered(source, overlay / child)
+            overlay_rel = rel
+
+        target = overlay / overlay_rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content or "", encoding="utf-8")
+        parts = target.parts
+        if "modstore_server" in parts:
+            pkg_dir = Path(*parts[: parts.index("modstore_server") + 1])
+            init_file = pkg_dir / "__init__.py"
+            if not init_file.exists():
+                init_file.write_text("", encoding="utf-8")
+        return tmp, overlay, overlay_rel
+    except Exception:
+        tmp.cleanup()
+        raise
+
+
 def infer_related_test_files(rel_path: str, *, root: Optional[Path] = None) -> List[str]:
     """根据变更文件推断可跑的窄 pytest 目标。"""
-    rp = (rel_path or "").replace("\\", "/").lstrip("/")
+    rp = _strip_modstore_deploy_prefix(rel_path)
     if not rp:
         return []
     root = root or _repo_root()
@@ -96,12 +181,16 @@ def _run_py_compile(content: str, rel_path: str) -> Dict[str, Any]:
         ) as tmp:
             tmp.write(content or "")
             tmp_path = tmp.name
-        proc = subprocess.run(
-            ["python3", "-m", "py_compile", tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        with tempfile.TemporaryDirectory(prefix="modstore_pycache_") as pycache_dir:
+            env = os.environ.copy()
+            env.setdefault("PYTHONPYCACHEPREFIX", pycache_dir)
+            proc = subprocess.run(
+                ["python3", "-m", "py_compile", tmp_path],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=env,
+            )
         ok = proc.returncode == 0
         return {
             "ok": ok,
@@ -152,15 +241,51 @@ def _run_ruff_check(rel_path: str, *, root: Path) -> Dict[str, Any]:
         return {"ok": False, "step": "ruff", "error": str(exc)}
 
 
+def _resolve_test_file_for_root(test_file: str, *, root: Path) -> Optional[str]:
+    rel = test_file.replace("\\", "/").lstrip("/")
+    candidates = [
+        root / rel,
+        root / "MODstore_deploy" / rel,
+        root / "成都修茈科技有限公司" / "MODstore_deploy" / rel,
+    ]
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            return str(candidate.relative_to(root))
+        except ValueError:
+            return str(candidate)
+    return None
+
+
+def _pytest_env(root: Path) -> Dict[str, str]:
+    env = os.environ.copy()
+    candidates = [
+        root,
+        root / "MODstore_deploy",
+        root / "成都修茈科技有限公司" / "MODstore_deploy",
+    ]
+    pythonpath = [str(path) for path in candidates if path.exists()]
+    existing = env.get("PYTHONPATH")
+    if existing:
+        pythonpath.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath)
+    return env
+
+
 def _run_pytest_subset(test_files: Sequence[str], *, root: Path) -> Dict[str, Any]:
     if not test_files:
         return {"ok": True, "skipped": True, "reason": "no related tests"}
 
-    existing = [f for f in test_files if (root / f.replace("\\", "/")).is_file()]
+    existing = []
+    for test_file in test_files:
+        resolved = _resolve_test_file_for_root(test_file, root=root)
+        if resolved and resolved not in existing:
+            existing.append(resolved)
     if not existing:
         return {"ok": True, "skipped": True, "reason": "related tests not present on disk"}
 
-    args = ["python3", "-m", "pytest", "-q", "--tb=short", *list(existing)]
+    args = [sys.executable, "-m", "pytest", "-q", "--tb=short", *list(existing)]
     try:
         proc = subprocess.run(
             args,
@@ -168,6 +293,7 @@ def _run_pytest_subset(test_files: Sequence[str], *, root: Path) -> Dict[str, An
             text=True,
             timeout=_pytest_timeout_sec(),
             cwd=str(root),
+            env=_pytest_env(root),
         )
         return {
             "ok": proc.returncode == 0,
@@ -207,30 +333,46 @@ def run_narrow_ci_validation(
             "failed_step": "py_compile",
         }
 
-    ruff_out = _run_ruff_check(rel, root=root)
-    steps.append(ruff_out)
-    if not ruff_out.get("ok") and not ruff_out.get("skipped"):
+    try:
+        overlay_tmp, overlay_root, overlay_rel = _prepare_overlay_root(root, rel, content)
+    except Exception as exc:  # noqa: BLE001
+        overlay_out = {
+            "error": str(exc)[:800],
+            "ok": False,
+            "step": "overlay_prepare",
+        }
+        steps.append(overlay_out)
         return {
+            "failed_step": "overlay_prepare",
             "ok": False,
             "rel_path": rel,
             "steps": steps,
-            "failed_step": "ruff",
         }
+    with overlay_tmp:
+        ruff_out = _run_ruff_check(overlay_rel, root=overlay_root)
+        steps.append(ruff_out)
+        if not ruff_out.get("ok") and not ruff_out.get("skipped"):
+            return {
+                "ok": False,
+                "rel_path": overlay_rel,
+                "steps": steps,
+                "failed_step": "ruff",
+            }
 
-    test_files = infer_related_test_files(rel, root=root)
-    pytest_out = _run_pytest_subset(test_files, root=root)
-    steps.append({**pytest_out, "test_files": test_files})
-    if not pytest_out.get("ok") and not pytest_out.get("skipped"):
-        return {
-            "ok": False,
-            "rel_path": rel,
-            "steps": steps,
-            "failed_step": "pytest",
-        }
+        test_files = infer_related_test_files(overlay_rel, root=overlay_root)
+        pytest_out = _run_pytest_subset(test_files, root=overlay_root)
+        steps.append({**pytest_out, "test_files": test_files})
+        if not pytest_out.get("ok") and not pytest_out.get("skipped"):
+            return {
+                "ok": False,
+                "rel_path": overlay_rel,
+                "steps": steps,
+                "failed_step": "pytest",
+            }
 
     return {
         "ok": True,
-        "rel_path": rel,
+        "rel_path": overlay_rel,
         "steps": steps,
         "test_files": test_files,
     }

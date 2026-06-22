@@ -320,7 +320,7 @@ class ShipmentDocumentGenerator:
                 try:
                     cell = worksheet.cell(row=row, column=col)
                     cell.value = None
-                except:
+                except Exception:
                     pass
     
     def _fill_from_template(
@@ -488,7 +488,7 @@ class ShipmentDocumentGenerator:
                 try:
                     cell = worksheet.cell(row=row, column=col)
                     cell.border = thin_border
-                except:
+                except Exception:
                     pass
     
     def _get_purchase_unit_info(self, unit_name: str) -> PurchaseUnitInfo:
@@ -746,7 +746,7 @@ class DocumentAPIGenerator:
             except ImportError:
                 # 最终兜底：使用 XCAGI 内部解析函数，避免依赖外部 98k 目录
                 logger.warning("未找到本地解析器模块，回退到 XCAGI 内部解析器")
-                from app.routes.tools import _parse_order_text
+                from app.application.facades.tools_facade import _parse_order_text
 
                 class _FallbackParsedOrder:
                     def __init__(self, raw_text: str, parsed: Dict):

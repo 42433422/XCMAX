@@ -12,8 +12,8 @@ REMOTE_DIR="${FHD_PUSH_REMOTE_DIR:-/var/www/update/releases/${CHANNEL}/server}"
 SSH_KEY="${FHD_PUSH_SSH_KEY:-}"
 VUE_DIST="${FHD_VUE_DIST:-$FHD_ROOT/templates/vue-dist}"
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
-SCP_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
+SSH_OPTS=(-o StrictHostKeyChecking=no -o ServerAliveInterval=30)
+SCP_OPTS=(-o StrictHostKeyChecking=no -o ServerAliveInterval=30)
 if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY")
   SCP_OPTS+=(-i "$SSH_KEY")

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 from app.infrastructure.auth.db_token import configured_db_write_token  # noqa: F401
 from app.infrastructure.excel.schema_service import ExcelSchemaUnderstandingService
+from app.infrastructure.excel.text_to_pandas import _safe_exec_pandas
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _workflow_tool_registry_cache: list[dict[str, Any]] | None = None
@@ -81,11 +82,9 @@ def run_natural_language_pandas(
         code = converter.translate(natural_language, df)
         if code and code.strip():
             generated_code = code
-            local_ns: dict = {"df": df.copy()}
-            exec(code, {"pd": pd, "__builtins__": {}}, local_ns)  # noqa: S102
-            out = local_ns.get("result", local_ns.get("df"))
-            if isinstance(out, pd.DataFrame):
-                result_df = out
+            result_df = _safe_exec_pandas(code, df)
+    except ValueError as e:
+        error_msg = str(e)
     except RECOVERABLE_ERRORS as e:
         error_msg = str(e)
 
@@ -157,7 +156,7 @@ def handle_excel_analysis(
             "records": json.loads(slice_df.replace({float("nan"): None}).to_json(orient="records")),
         }
         try:
-            from app.routes.template_grid_core import _extract_customer_hint_from_excel
+            from app.application.template_grid_core import _extract_customer_hint_from_excel
 
             customer_hint = str(
                 _extract_customer_hint_from_excel(str(p), str(sheet_name).strip() or None) or ""
@@ -808,7 +807,13 @@ def execute_workflow_tool(
         )
     if name == "generate_office_document":
         try:
-            req = str(args.get("user_request") or args.get("prompt") or "").strip()
+            req = str(
+                args.get("user_request")
+                or args.get("prompt")
+                or args.get("request")
+                or args.get("message")
+                or ""
+            ).strip()
             fmt = str(args.get("output_format") or "docx").lower().strip()
             if fmt not in ("docx", "xlsx"):
                 fmt = "docx"
@@ -826,13 +831,33 @@ def execute_workflow_tool(
                 else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
             token = store_document_pickup(content, fname, mime)
+            download_url = f"/api/ai/kitten/document/pickup/{token}"
             return json.dumps(
                 {
                     "success": True,
                     "message": f"已生成《{fname}》。请让用户在浏览器打开以下路径下载（一次性有效，勿泄露 token）：",
                     "pickup_token": token,
                     "file_name": fname,
-                    "download_url": f"/api/ai/kitten/document/pickup/{token}",
+                    "download_url": download_url,
+                    "artifacts": [
+                        {
+                            "artifact_type": "office_document",
+                            "name": fname,
+                            "source": "generate_office_document",
+                            "uri": download_url,
+                            "mime_type": mime,
+                            "summary": req[:500],
+                            "preview": {
+                                "file_name": fname,
+                                "download_url": download_url,
+                                "output_format": fmt,
+                            },
+                            "metadata": {
+                                "pickup_token": token,
+                                "generator": "generate_office_document",
+                            },
+                        }
+                    ],
                     "assistant_hint": (
                         "将 download_url 原样写入回复（可做成 Markdown 链接）；"
                         "不要再次调用 generate_office_document，除非用户明确要求重新生成。"
@@ -889,6 +914,26 @@ def _handle_import_excel_to_database(
                 {"success": False, "error": "file_path is required"}, ensure_ascii=False
             )
 
+        import os
+
+        required_token = str(os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip()
+        provided_token = str(args.get("db_write_token") or db_write_token or "").strip()
+        if required_token and workspace_root is None:
+            if not provided_token:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "requires_token": True,
+                        "token_name": "DB_WRITE_TOKEN",
+                    },
+                    ensure_ascii=False,
+                )
+            if provided_token != required_token:
+                return json.dumps(
+                    {"success": False, "error": "invalid_token"},
+                    ensure_ascii=False,
+                )
+
         p = resolve_safe_excel_path(workspace_root or str(Path.cwd()), file_path)
         if not p.exists():
             return json.dumps({"success": False, "error": "file not found"}, ensure_ascii=False)
@@ -909,7 +954,7 @@ def _handle_import_excel_to_database(
                     ).strip()
             if not unit_name:
                 try:
-                    from app.routes.template_grid_core import (
+                    from app.application.template_grid_core import (
                         _extract_inline_customer_hits_from_cell,
                     )
 
@@ -932,7 +977,7 @@ def _handle_import_excel_to_database(
                     logger.debug("suppressed exception", exc_info=True)
             if not unit_name:
                 try:
-                    from app.routes.template_grid_core import _extract_customer_hint_from_excel
+                    from app.application.template_grid_core import _extract_customer_hint_from_excel
 
                     unit_name = str(
                         _extract_customer_hint_from_excel(str(p), sheet_n if sheet_n else None)

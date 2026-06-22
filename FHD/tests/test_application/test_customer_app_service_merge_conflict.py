@@ -208,6 +208,8 @@ class TestResetEngine:
         from app.application.customer_app_service import reset_customers_engine
 
         registry = MagicMock()
-        with patch("app.di.registry.get_service_registry", return_value=registry):
+        with patch(
+            "app.application.customer_app_service.get_service_registry", return_value=registry
+        ):
             reset_customers_engine()
         registry.invalidate_customer_application_service.assert_called_once()

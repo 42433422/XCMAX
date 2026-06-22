@@ -5,6 +5,7 @@ XCAGI 前端兼容 API — 客户管理路由。
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -36,6 +37,173 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
+
+
+def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    if not output:
+        for step in getattr(run, "steps", []) or []:
+            if str(getattr(step, "node_id", "")) == node_id:
+                output = dict(getattr(step, "output", {}) or {})
+                break
+    if not output:
+        output = {"success": getattr(run, "status", "") == "completed"}
+    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
+        output["message"] = getattr(run, "error", "")
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    return output
+
+
+def _customers_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
+    return str(
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or payload.get("user_id")
+        or payload.get("userId")
+        or "customers-route"
+    ).strip()
+
+
+def _run_customers_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("customers") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return {
+            "success": False,
+            "message": f"未注册的 customers 动作: {action}",
+            "agent_status": "failed",
+        }
+
+    node_id = f"customers_{action}"
+    user_id = _customers_agent_user_id(request, params)
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 执行 customers.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="customers",
+                action=action,
+                params=dict(params or {}),
+                risk=str(action_meta.get("risk") or "medium"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Execute customers.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "medium"),
+        metadata={"source": "customers_route", "route": route_path},
+    )
+    runtime_context = {
+        "source": "customers_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+        "service_source": "fastapi_customer_route",
+    }
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(params.get("message") or f"Customers {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "customers-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    return _agent_node_output(run, node_id)
+
+
+def _execute_customers_route_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
+    if action == "create":
+        name = str(
+            params.get("customer_name") or params.get("unit_name") or params.get("name") or ""
+        ).strip()
+        if not name:
+            return {"success": False, "message": "客户名称不能为空"}
+        data = _customer_pg_insert(
+            name,
+            str(params.get("contact_person") or ""),
+            str(params.get("contact_phone") or ""),
+            str(params.get("contact_address") or params.get("address") or ""),
+        )
+        return {"success": True, "data": data}
+
+    if action == "update":
+        customer_id = int(params.get("id") or params.get("customer_id") or 0)
+        if customer_id <= 0:
+            return {"success": False, "message": "缺少 id"}
+        name = str(
+            params.get("customer_name") or params.get("unit_name") or params.get("name") or ""
+        ).strip()
+        if not name:
+            return {"success": False, "message": "客户名称不能为空"}
+        data = _customer_pg_update(
+            customer_id,
+            name,
+            str(params.get("contact_person") or ""),
+            str(params.get("contact_phone") or ""),
+            str(params.get("contact_address") or params.get("address") or ""),
+        )
+        return {"success": True, "data": data}
+
+    if action == "delete":
+        customer_id = int(params.get("id") or params.get("customer_id") or 0)
+        if customer_id <= 0:
+            return {"success": False, "message": "缺少 id"}
+        _customer_delete_unified(customer_id)
+        return {"success": True, "message": "已删除"}
+
+    if action == "batch_delete":
+        ids = params.get("ids") or params.get("customer_ids") or []
+        if not isinstance(ids, list) or not ids:
+            return {"success": False, "message": "ids 须为非空数组"}
+        deleted = 0
+        errors: list[str] = []
+        for raw in ids:
+            try:
+                cid = int(raw)
+            except (TypeError, ValueError):
+                errors.append(str(raw))
+                continue
+            try:
+                _customer_delete_unified(cid)
+                deleted += 1
+            except HTTPException as e:
+                if e.status_code == 404:
+                    errors.append(str(cid))
+                else:
+                    raise
+        return {
+            "success": True,
+            "message": f"已删除 {deleted} 条",
+            "deleted": deleted,
+            "skipped": errors,
+        }
+
+    return {"success": False, "message": f"未注册的 customers route 动作: {action}"}
 
 
 @router.get("/customers", response_model=None)
@@ -208,18 +376,31 @@ def customers_create(request: Request, body: dict = Body(default_factory=dict)) 
     name, cp, ph, addr = _customer_body_name_contact(body)
     if not name:
         raise HTTPException(status_code=400, detail="客户名称不能为空")
-    data = _customer_pg_insert(name, cp, ph, addr)
-
-    publish_simple_event(
-        "customer.created",
-        {
-            "customer_id": data.get("id") if isinstance(data, dict) else None,
+    result = _run_customers_agent(
+        request=request,
+        action="create",
+        params={
             "customer_name": name,
+            "unit_name": name,
+            "contact_person": cp,
+            "contact_phone": ph,
+            "contact_address": addr,
         },
-        domain="customers",
+        route_path="/customers",
     )
 
-    return {"success": True, "data": data}
+    if result.get("success"):
+        data = result.get("data") if isinstance(result.get("data"), dict) else {}
+        publish_simple_event(
+            "customer.created",
+            {
+                "customer_id": data.get("id") if isinstance(data, dict) else None,
+                "customer_name": name,
+            },
+            domain="customers",
+        )
+
+    return result
 
 
 @router.put("/customers/{customer_id}")
@@ -245,8 +426,19 @@ def customers_update(
     name, cp, ph, addr = _customer_body_name_contact(body)
     if not name:
         raise HTTPException(status_code=400, detail="客户名称不能为空")
-    data = _customer_pg_update(customer_id, name, cp, ph, addr)
-    return {"success": True, "data": data}
+    return _run_customers_agent(
+        request=request,
+        action="update",
+        params={
+            "id": customer_id,
+            "customer_name": name,
+            "unit_name": name,
+            "contact_person": cp,
+            "contact_phone": ph,
+            "contact_address": addr,
+        },
+        route_path="/customers/{customer_id}",
+    )
 
 
 @router.delete("/customers/{customer_id}")
@@ -267,8 +459,12 @@ def customers_delete(request: Request, customer_id: int) -> dict:
     except RECOVERABLE_ERRORS:
         logger.debug("customers delete via service skipped", exc_info=True)
     _customers_write_raise(request)
-    _customer_delete_unified(customer_id)
-    return {"success": True, "message": "已删除"}
+    return _run_customers_agent(
+        request=request,
+        action="delete",
+        params={"id": customer_id},
+        route_path="/customers/{customer_id}",
+    )
 
 
 @router.post("/customers/batch-delete")
@@ -278,28 +474,12 @@ def customers_batch_delete(request: Request, body: dict = Body(default_factory=d
     ids = body.get("ids") or body.get("customer_ids") or []
     if not isinstance(ids, list) or not ids:
         raise HTTPException(status_code=400, detail="ids 须为非空数组")
-    deleted = 0
-    errors: list[str] = []
-    for raw in ids:
-        try:
-            cid = int(raw)
-        except (TypeError, ValueError):
-            errors.append(str(raw))
-            continue
-        try:
-            _customer_delete_unified(cid)
-            deleted += 1
-        except HTTPException as e:
-            if e.status_code == 404:
-                errors.append(str(cid))
-            else:
-                raise
-    return {
-        "success": True,
-        "message": f"已删除 {deleted} 条",
-        "deleted": deleted,
-        "skipped": errors,
-    }
+    return _run_customers_agent(
+        request=request,
+        action="batch_delete",
+        params={"ids": ids},
+        route_path="/customers/batch-delete",
+    )
 
 
 @router.post("/customers/import")

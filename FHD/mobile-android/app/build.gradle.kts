@@ -8,6 +8,7 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
+    id("org.openapi.generator") version "7.8.0"
 }
 
 android {
@@ -23,7 +24,7 @@ android {
         manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
-        buildConfigField("int", "FHD_DEFAULT_PORT", "5000")
+        buildConfigField("int", "FHD_DEFAULT_PORT", "17500")
         buildConfigField("String", "MODSTORE_BASE_URL", "\"https://xiu-ci.com\"")
         buildConfigField("String", "ENTERPRISE_FHD_BASE_URL", "\"https://xiu-ci.com/fhd-api\"")
         buildConfigField("String", "COMPANY_NAME", "\"成都修茈科技有限公司\"")
@@ -50,6 +51,12 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    sourceSets {
+        getByName("main") {
+            java.srcDirs("$rootDir/build/generated/openapi/src/main/kotlin")
+        }
     }
 
     compileOptions {
@@ -128,6 +135,19 @@ android {
     }
 }
 
+openApiGenerate {
+    generatorName.set("kotlin")
+    inputSpec.set("$rootDir/../contracts/openapi.json")
+    outputDir.set("$rootDir/build/generated/openapi")
+    modelPackage.set("com.xiuci.xcagi.mobile.api.contract")
+    configOptions.set(
+        mapOf(
+            "dateLibrary" to "java8",
+            "serializableModel" to "true",
+        ),
+    )
+}
+
 afterEvaluate {
     tasks.matching { it.name.contains("uploadCrashlyticsMappingFile") }.configureEach {
         enabled = project.findProperty("uploadCrashlyticsMapping")?.toString() == "true"
@@ -149,7 +169,7 @@ tasks.matching { it.name.startsWith("assemble") && it.name.contains("Release") }
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
+    val composeBom = platform("androidx.compose:compose-bom:2025.01.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -190,6 +210,9 @@ dependencies {
     implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Coil 图片加载（网络头像）
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
     val firebaseBom = platform("com.google.firebase:firebase-bom:33.7.0")
     implementation(firebaseBom)

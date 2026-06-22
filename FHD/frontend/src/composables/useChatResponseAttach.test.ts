@@ -54,11 +54,27 @@ describe('useChatResponseAttach', () => {
       success: true,
       data: {
         action: 'workflow_done',
-        data: { node_results: [{ node_id: 'n1', success: true, tool_id: 'products' }] },
+        data: {
+          node_results: [
+            {
+              node_id: 'n1',
+              success: false,
+              tool_id: 'business_db',
+              action: 'write',
+              retries: 0,
+              retryable: false,
+              recovery_hint: '请审批后重试',
+              duration_ms: 12,
+            },
+          ],
+        },
       },
     })
     expect(messages.value[1].nodeResults?.length).toBe(1)
     expect(messages.value[1].workflowAction).toBe('workflow_done')
+    expect(messages.value[1].nodeResults?.[0].retryable).toBe(false)
+    expect(messages.value[1].nodeResults?.[0].recovery_hint).toBe('请审批后重试')
+    expect(messages.value[1].nodeResults?.[0].duration_ms).toBe(12)
   })
 
   it('syncTaskFromChatResponse queues workflow confirmation', () => {
@@ -81,11 +97,24 @@ describe('useChatResponseAttach', () => {
   it('syncTaskFromChatResponse marks workflow done', () => {
     const { upsertTask, syncTaskFromChatResponse } = makeDeps()
     syncTaskFromChatResponse(
-      { success: true, data: { action: 'workflow_done', data: {} } },
+      {
+        success: true,
+        data: {
+          action: 'workflow_done',
+          data: { node_results: [{ node_id: 'n1', success: true }] },
+        },
+      },
       'ok',
     )
     expect(upsertTask).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'wf-running', status: 'success', progress: 100 }),
+      expect.objectContaining({
+        id: 'wf-running',
+        status: 'success',
+        progress: 100,
+        payload: expect.objectContaining({
+          workflowNodeResults: [expect.objectContaining({ node_id: 'n1' })],
+        }),
+      }),
     )
   })
 

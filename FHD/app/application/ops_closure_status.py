@@ -10,14 +10,26 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _installed_employee_pack_ids() -> set[str]:
+    """扫描所有 mods search roots 下的 `_employees/`，避免主 mods_root 副本残缺时误报缺岗。"""
     ids: set[str] = set()
     try:
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
         mgr = get_mod_manager()
-        mods_root = getattr(mgr, "mods_root", None)
-        if mods_root:
+        # 主 mods_root + 仓库内其它 mods 目录（去重，主目录优先）
+        roots: list[str] = []
+        try:
+            roots = list(mgr.all_mods_roots() or [])
+        except RECOVERABLE_ERRORS:
+            pass
+        if not roots:
+            primary = getattr(mgr, "mods_root", None)
+            if primary:
+                roots = [primary]
+        for mods_root in roots:
+            if not mods_root:
+                continue
             registry = EmployeeRegistry(mods_root)
             for pack in registry.list_packs():
                 pid = str(pack.get("id") or "").strip()

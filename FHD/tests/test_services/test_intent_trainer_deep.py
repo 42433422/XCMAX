@@ -25,6 +25,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+_MISSING_MODULE = object()
+_ORIGINAL_ML_MODULES = {
+    name: sys.modules.get(name, _MISSING_MODULE)
+    for name in ("torch", "torch.utils", "torch.utils.data", "transformers")
+}
+
 # ---------------------------------------------------------------------------
 # Stub heavy ML deps so the source module can be imported without torch /
 # transformers installed. We use real ``types.ModuleType`` stubs (not bare
@@ -181,6 +187,13 @@ from app.services.intent_trainer import (  # noqa: E402
     split_data,
     train_intent_model,
 )
+
+for _module_name, _original_module in _ORIGINAL_ML_MODULES.items():
+    if _original_module is _MISSING_MODULE:
+        sys.modules.pop(_module_name, None)
+    else:
+        sys.modules[_module_name] = _original_module
+
 
 # ---------------------------------------------------------------------------
 # Helpers

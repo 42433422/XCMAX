@@ -6,6 +6,7 @@ from typing import Any
 
 from app.db.models import User
 from app.db.session import get_db
+from app.di.registry import get_service_registry
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.password_hash import generate_password_hash
@@ -150,8 +151,6 @@ class UserService(NeuroEventPublisherMixin):
 
 
 def get_user_service() -> UserService:
-    from app.di.registry import get_service_registry
-
     return get_service_registry().user_service
 
 

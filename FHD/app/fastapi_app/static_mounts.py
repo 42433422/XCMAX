@@ -6,6 +6,7 @@ import logging
 import os
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -36,6 +37,29 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
         logger.warning("xcmax-dashboard 目录未找到，跳过挂载（需 XCAGI-Full-Pipeline.html 于仓根）")
         return
     try:
+
+        @app.get(
+            "/xcmax-dashboard/.cache/xcmax/xcmax-pytest-coverage.json",
+            include_in_schema=False,
+        )
+        def xcmax_dashboard_pytest_coverage_compat():
+            for rel in (
+                ".cache/xcmax/xcmax-pytest-coverage.json",
+                "xcmax-pytest-coverage.json",
+                "FHD/metrics/coverage-dual-summary.json",
+            ):
+                path = os.path.join(directory, rel)
+                if os.path.isfile(path):
+                    return FileResponse(path, media_type="application/json")
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error_code": "coverage_json_missing",
+                    "message": "xcmax pytest coverage json not found",
+                },
+                status_code=404,
+            )
+
         app.mount(
             "/xcmax-dashboard",
             StaticFiles(directory=directory, html=True),
@@ -44,6 +68,56 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
         logger.info("Mounted xcmax-dashboard: /xcmax-dashboard -> %s", directory)
     except RECOVERABLE_ERRORS as e:
         logger.warning("挂载 /xcmax-dashboard 失败: %s", e)
+
+
+def mount_admin_console_static(app: FastAPI) -> None:
+    """挂载管理端 Vite 产物到 ``/admin``，避免未启动 dev server 时落入企业端 SPA。"""
+    admin_dist = os.path.join(get_base_dir(), "templates", "admin-vue-dist")
+    if not os.path.isdir(admin_dist):
+        logger.warning("Admin console dist 目录不存在，跳过 /admin 挂载: %s", admin_dist)
+        return
+
+    for sub in (
+        "assets",
+        "data-sources",
+        "font-awesome",
+        "sounds",
+        "startup",
+        "static",
+        "workflow",
+        "yuangong",
+    ):
+        directory = os.path.join(admin_dist, sub)
+        if not os.path.isdir(directory):
+            continue
+        mount_path = f"/admin/{sub}"
+        try:
+            app.mount(mount_path, StaticFiles(directory=directory), name=f"admin-console-{sub}")
+            logger.info("Mounted admin console static: %s -> %s", mount_path, directory)
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("挂载 %s 失败: %s", mount_path, e)
+
+    def _admin_index() -> FileResponse | JSONResponse:
+        index = os.path.join(admin_dist, "index.html")
+        if os.path.isfile(index):
+            return FileResponse(index, media_type="text/html")
+        return JSONResponse(
+            {"success": False, "message": "管理端构建产物缺少 index.html"},
+            status_code=404,
+        )
+
+    @app.get("/admin", include_in_schema=False)
+    @app.get("/admin/", include_in_schema=False)
+    def admin_console_index():
+        return _admin_index()
+
+    @app.get("/admin/{fallback:path}", include_in_schema=False)
+    def admin_console_history_fallback(fallback: str):
+        root = os.path.abspath(admin_dist)
+        candidate = os.path.abspath(os.path.join(root, fallback))
+        if candidate.startswith(root + os.sep) and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        return _admin_index()
 
 
 def mount_vue_dist_public_static(app: FastAPI) -> None:

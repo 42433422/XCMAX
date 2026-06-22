@@ -306,8 +306,8 @@ const statusText = computed(() => {
 
 const primaryBtnLabel = computed(() => {
   if (setupRunning.value) return '开启中…'
-  if (shutdownRunning.value) return '关闭中…'
-  return aiOpenActive.value ? '关闭智控' : '一键开启'
+  if (remoteControlEnabled.value) return '关闭智控'
+  return '一键开启'
 })
 
 const friendlyTools = computed(() =>
@@ -563,6 +563,8 @@ const shutdownAiOpen = async () => {
   shutdownRunning.value = true
   accessResult.value = ''
   try {
+    remoteControlEnabled.value = false
+    setCursorEnabled(false)
     if (panelAvailable.value) {
       await safeJsonRequest('/api/aiopen/control', {
         method: 'POST',
@@ -570,8 +572,6 @@ const shutdownAiOpen = async () => {
         body: JSON.stringify({ enabled: false }),
       })
     }
-    remoteControlEnabled.value = false
-    setCursorEnabled(false)
     accessResult.value = '已关闭开放智控'
   } finally {
     shutdownRunning.value = false

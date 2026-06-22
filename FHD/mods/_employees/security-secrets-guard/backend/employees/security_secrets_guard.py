@@ -134,7 +134,7 @@ async def _handle_llm_md(payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[
             call_llm(messages, max_tokens=cfg['max_tokens'], temperature=cfg['temperature']),
             timeout=120.0,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return _err('LLM 调用超时（120s）', meta={'handler': 'llm_md'})
     except Exception as e:  # noqa: BLE001
         logger.exception('call_llm raised')
@@ -155,7 +155,7 @@ async def _handle_webhook(payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict
         return _err('actions.webhook.url 未配置', meta={'handler': 'webhook'})
     try:
         r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return _err('webhook 超时（30s）', meta={'handler': 'webhook', 'url': url})
     except Exception as e:  # noqa: BLE001
         return _err('webhook 异常：' + str(e)[:300], meta={'handler': 'webhook', 'url': url})
@@ -179,7 +179,7 @@ async def _handle_agent(payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[s
             runner.run(task, system_prompt=sys_prompt),
             timeout=300.0,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return _err('agent 执行超时（300s）', meta={'handler': 'agent'})
     except Exception as e:  # noqa: BLE001
         logger.exception('agent run raised')
@@ -201,10 +201,359 @@ _DISPATCH = {
 }
 
 
+# ---------------------------------------------------------------------------
+# P2 skill：解析 GitHub 原生安全工具报告（gitleaks / Trivy / CodeQL）
+# ---------------------------------------------------------------------------
+
+_SECRET_PREVIEW_KEEP = 4  # 明文保留首尾各 4 字符
+
+
+def _redact_secret(value: str) -> str:
+    """脱敏密钥：保留首尾各 4 字符，中间用 *** 代替。空值或过短返回 <redacted>。"""
+    if not value or not isinstance(value, str):
+        return '<redacted>'
+    s = value.strip()
+    if len(s) <= _SECRET_PREVIEW_KEEP * 2:
+        return '<redacted>'
+    return s[:_SECRET_PREVIEW_KEEP] + '***' + s[-_SECRET_PREVIEW_KEEP:]
+
+
+def _sarif_level_to_severity(level: str) -> str:
+    """SARIF level → 通用 severity（high/medium/low）。"""
+    lv = (level or '').strip().lower()
+    if lv in ('error', 'high'):
+        return 'high'
+    if lv in ('warning', 'medium'):
+        return 'medium'
+    return 'low'
+
+
+def parse_gitleaks_sarif(sarif_data: Any) -> Dict[str, Any]:
+    """解析 gitleaks SARIF v2.1.0 报告，提取泄漏项并脱敏。
+
+    输入：SARIF dict（含 runs[].results[]）
+    输出：{ok, summary, items, warnings, error, meta}
+      items[] 每项：{rule_id, severity, file, start_line, secret_preview, redacted, message}
+    """
+    _empty_meta = {'skill': 'parse-gitleaks-sarif', 'total': 0, 'severity_counts': {'high': 0, 'medium': 0, 'low': 0}}
+    if not isinstance(sarif_data, dict):
+        return _err('gitleaks SARIF 报告不是 dict', meta=_empty_meta)
+    runs = sarif_data.get('runs')
+    if not isinstance(runs, list) or not runs:
+        return _ok([], warnings=['SARIF runs 为空，无泄漏项'], meta=_empty_meta)
+
+    items: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        # 规则索引：ruleId → rule metadata（含 security-severity）
+        rules_map: Dict[str, Dict[str, Any]] = {}
+        rules = run.get('tool', {}).get('driver', {}).get('rules')
+        if isinstance(rules, list):
+            for r in rules:
+                rid = str(r.get('id') or '')
+                if rid:
+                    rules_map[rid] = r if isinstance(r, dict) else {}
+
+        results = run.get('results')
+        if not isinstance(results, list):
+            continue
+        for res in results:
+            if not isinstance(res, dict):
+                continue
+            rule_id = str(res.get('ruleId') or 'unknown')
+            rule_meta = rules_map.get(rule_id, {})
+            # severity：优先 properties.security-severity，其次 level
+            props = rule_meta.get('properties') if isinstance(rule_meta.get('properties'), dict) else {}
+            sec_sev = str(props.get('security-severity') or '').strip().lower()
+            if sec_sev:
+                try:
+                    sv = float(sec_sev)
+                    severity = 'high' if sv >= 7.0 else ('medium' if sv >= 4.0 else 'low')
+                except ValueError:
+                    severity = _sarif_level_to_severity(str(res.get('level') or ''))
+            else:
+                severity = _sarif_level_to_severity(str(res.get('level') or ''))
+
+            locs = res.get('locations')
+            file_path = ''
+            start_line = 0
+            if isinstance(locs, list) and locs:
+                phys_loc = locs[0].get('physicalLocation') if isinstance(locs[0], dict) else {}
+                art = phys_loc.get('artifactLocation') if isinstance(phys_loc, dict) else {}
+                file_path = str(art.get('uri') or '')
+                region = phys_loc.get('region') if isinstance(phys_loc, dict) else {}
+                start_line = int(region.get('startLine') or 0) if isinstance(region, dict) else 0
+
+            # 提取 secret 明文用于脱敏预览（fingerprints 或 partialFingerprints）
+            secret_raw = ''
+            fps = res.get('partialFingerprints') or res.get('fingerprints')
+            if isinstance(fps, dict):
+                for _k, _v in fps.items():
+                    if _v and isinstance(_v, str) and len(_v) > 8:
+                        secret_raw = _v
+                        break
+
+            # 提取 message（dict 时取 text，否则转字符串）
+            msg_obj = res.get('message')
+            if isinstance(msg_obj, dict):
+                message = str(msg_obj.get('text') or '')
+            else:
+                message = str(msg_obj or '')
+
+            items.append({
+                'rule_id': rule_id,
+                'severity': severity,
+                'file': file_path,
+                'start_line': start_line,
+                'secret_preview': _redact_secret(secret_raw),
+                'redacted': not bool(secret_raw),
+                'message': message[:300],
+            })
+
+    if not items:
+        warnings.append('gitleaks SARIF 解析完成，未发现泄漏项')
+
+    severity_counts = {'high': 0, 'medium': 0, 'low': 0}
+    for it in items:
+        severity_counts[it['severity']] = severity_counts.get(it['severity'], 0) + 1
+
+    return _ok(
+        items,
+        warnings=warnings,
+        meta={
+            'skill': 'parse-gitleaks-sarif',
+            'total': len(items),
+            'severity_counts': severity_counts,
+        },
+    )
+
+
+def parse_trivy_report(trivy_data: Any) -> Dict[str, Any]:
+    """解析 Trivy JSON 报告，提取容器/依赖漏洞。
+
+    输入：Trivy JSON dict（含 Results[].Vulnerabilities[]）
+    输出：{ok, summary, items, warnings, error, meta}
+      items[] 每项：{vuln_id, pkg, installed_version, fixed_version, severity, cvss, title, target}
+    """
+    _empty_meta = {'skill': 'parse-trivy-report', 'total': 0, 'severity_counts': {}}
+    if not isinstance(trivy_data, dict):
+        return _err('Trivy 报告不是 dict', meta=_empty_meta)
+    results = trivy_data.get('Results')
+    if not isinstance(results, list) or not results:
+        return _ok([], warnings=['Trivy Results 为空，无漏洞'], meta=_empty_meta)
+
+    items: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        target = str(result.get('Target') or '')
+        target_type = str(result.get('Type') or '')
+        vulns = result.get('Vulnerabilities')
+        if not isinstance(vulns, list):
+            continue
+        for v in vulns:
+            if not isinstance(v, dict):
+                continue
+            severity = str(v.get('Severity') or 'UNKNOWN').upper()
+            # CVSS：取第一个可用的 CVSS 向量分数
+            cvss_score: Optional[float] = None
+            cvss_list = v.get('CVSS')
+            if isinstance(cvss_list, dict):
+                for _vendor, _cvss in cvss_list.items():
+                    if isinstance(_cvss, dict) and _cvss.get('V3Score') is not None:
+                        cvss_score = float(_cvss['V3Score'])
+                        break
+                    if isinstance(_cvss, dict) and _cvss.get('V2Score') is not None:
+                        cvss_score = float(_cvss['V2Score'])
+                        break
+            items.append({
+                'vuln_id': str(v.get('VulnerabilityID') or ''),
+                'pkg': str(v.get('PkgName') or ''),
+                'installed_version': str(v.get('InstalledVersion') or ''),
+                'fixed_version': str(v.get('FixedVersion') or ''),
+                'severity': severity,
+                'cvss': cvss_score,
+                'title': str(v.get('Title') or '')[:200],
+                'target': target,
+                'target_type': target_type,
+            })
+
+    if not items:
+        warnings.append('Trivy 解析完成，未发现漏洞')
+
+    severity_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']
+    severity_counts = dict.fromkeys(severity_order, 0)
+    for it in items:
+        severity_counts[it['severity']] = severity_counts.get(it['severity'], 0) + 1
+
+    return _ok(
+        items,
+        warnings=warnings,
+        meta={
+            'skill': 'parse-trivy-report',
+            'total': len(items),
+            'severity_counts': severity_counts,
+        },
+    )
+
+
+def parse_codeql_sarif(sarif_data: Any) -> Dict[str, Any]:
+    """解析 CodeQL SARIF v2.1.0 报告，提取代码漏洞告警。
+
+    输入：SARIF dict（含 runs[].results[]）
+    输出：{ok, summary, items, warnings, error, meta}
+      items[] 每项：{rule_id, severity, file, start_line, message, cwe, rule_name}
+    """
+    _empty_meta = {'skill': 'parse-codeql-sarif', 'total': 0, 'severity_counts': {'high': 0, 'medium': 0, 'low': 0}}
+    if not isinstance(sarif_data, dict):
+        return _err('CodeQL SARIF 报告不是 dict', meta=_empty_meta)
+    runs = sarif_data.get('runs')
+    if not isinstance(runs, list) or not runs:
+        return _ok([], warnings=['SARIF runs 为空，无告警'], meta=_empty_meta)
+
+    items: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        # 规则索引：ruleId → rule metadata（含 name, security-severity, tags/CWE）
+        rules_map: Dict[str, Dict[str, Any]] = {}
+        rules = run.get('tool', {}).get('driver', {}).get('rules')
+        if isinstance(rules, list):
+            for r in rules:
+                rid = str(r.get('id') or '')
+                if rid:
+                    rules_map[rid] = r if isinstance(r, dict) else {}
+
+        results = run.get('results')
+        if not isinstance(results, list):
+            continue
+        for res in results:
+            if not isinstance(res, dict):
+                continue
+            rule_id = str(res.get('ruleId') or 'unknown')
+            rule_meta = rules_map.get(rule_id, {})
+
+            # severity：CodeQL 用 level（error/warning/note），properties.security-severity 覆盖
+            props = rule_meta.get('properties') if isinstance(rule_meta.get('properties'), dict) else {}
+            sec_sev = str(props.get('security-severity') or '').strip().lower()
+            if sec_sev:
+                try:
+                    sv = float(sec_sev)
+                    severity = 'high' if sv >= 7.0 else ('medium' if sv >= 4.0 else 'low')
+                except ValueError:
+                    severity = _sarif_level_to_severity(str(res.get('level') or ''))
+            else:
+                severity = _sarif_level_to_severity(str(res.get('level') or ''))
+
+            # 定位代码位置
+            locs = res.get('locations')
+            file_path = ''
+            start_line = 0
+            if isinstance(locs, list) and locs:
+                phys_loc = locs[0].get('physicalLocation') if isinstance(locs[0], dict) else {}
+                art = phys_loc.get('artifactLocation') if isinstance(phys_loc, dict) else {}
+                file_path = str(art.get('uri') or '')
+                region = phys_loc.get('region') if isinstance(phys_loc, dict) else {}
+                start_line = int(region.get('startLine') or 0) if isinstance(region, dict) else 0
+
+            # 提取 message
+            msg_obj = res.get('message')
+            if isinstance(msg_obj, dict):
+                message = str(msg_obj.get('text') or '')
+            elif isinstance(msg_obj, str):
+                message = msg_obj
+            else:
+                message = ''
+
+            # 提取 CWE（从 rule properties.tags）
+            cwe = ''
+            tags = props.get('tags')
+            if isinstance(tags, list):
+                for tag in tags:
+                    tag_s = str(tag)
+                    if tag_s.lower().startswith('cwe-'):
+                        cwe = tag_s
+                        break
+
+            rule_name = str(rule_meta.get('name') or rule_id)
+
+            items.append({
+                'rule_id': rule_id,
+                'rule_name': rule_name,
+                'severity': severity,
+                'file': file_path,
+                'start_line': start_line,
+                'message': message[:300],
+                'cwe': cwe,
+            })
+
+    if not items:
+        warnings.append('CodeQL SARIF 解析完成，未发现告警')
+
+    severity_counts = {'high': 0, 'medium': 0, 'low': 0}
+    for it in items:
+        severity_counts[it['severity']] = severity_counts.get(it['severity'], 0) + 1
+
+    return _ok(
+        items,
+        warnings=warnings,
+        meta={
+            'skill': 'parse-codeql-sarif',
+            'total': len(items),
+            'severity_counts': severity_counts,
+        },
+    )
+
+
+# skill 名 → parse 函数（同步函数，返回 _ok/_err 结构）
+_SKILL_DISPATCH = {
+    'skill-parse-gitleaks-sarif': parse_gitleaks_sarif,
+    'skill-parse-trivy-report': parse_trivy_report,
+    'skill-parse-codeql-sarif': parse_codeql_sarif,
+}
+
+
 async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     logger.info('[employee:%s] run keys=%s', EMPLOYEE_ID, list((payload or {}).keys())[:12])
     payload = payload or {}
     ctx = ctx or {}
+
+    # P2 skill 分发：payload.skill 优先于 handler
+    # 用于解析 GitHub 原生安全工具报告（gitleaks/Trivy/CodeQL）
+    requested_skill = str(payload.get('skill') or '').strip()
+    if requested_skill:
+        skill_fn = _SKILL_DISPATCH.get(requested_skill)
+        if skill_fn is None:
+            return _err(
+                f"不支持的 skill：{requested_skill}（支持：{sorted(_SKILL_DISPATCH.keys())}）",
+                meta={'employee_id': EMPLOYEE_ID, 'requested_skill': requested_skill},
+            )
+        # 报告数据从 payload.report / payload.data / payload.sarif 取
+        report_data = payload.get('report') or payload.get('data') or payload.get('sarif')
+        if report_data is None:
+            return _err(
+                f"payload 缺少 report/data/sarif 字段，无法解析（skill={requested_skill}）",
+                meta={'employee_id': EMPLOYEE_ID, 'requested_skill': requested_skill},
+            )
+        try:
+            out = skill_fn(report_data)
+        except Exception as e:  # noqa: BLE001
+            logger.exception('skill %s raised', requested_skill)
+            return _err(
+                f"skill {requested_skill} 解析异常：{str(e)[:300]}",
+                meta={'employee_id': EMPLOYEE_ID, 'requested_skill': requested_skill},
+            )
+        if isinstance(out, dict):
+            meta = out.setdefault('meta', {})
+            if isinstance(meta, dict):
+                meta.setdefault('employee_id', EMPLOYEE_ID)
+                meta.setdefault('requested_skill', requested_skill)
+        return out
+
     manifest = _load_manifest()
     v2 = _v2(manifest)
     if not v2:

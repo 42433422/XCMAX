@@ -16,12 +16,14 @@ resources/config/industry_config.py::_mod_industries_dict 与
 app/infrastructure/mods/manifest.py::ModMetadata.industry。
 """
 
+import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from app.infrastructure.auth.dependencies import require_admin_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,9 @@ def _build_industry_response(industry_id: str, profile: Any) -> dict[str, Any]:
             "product_fields": profile.product_fields,
             "order_types": profile.order_types,
             "print_config": profile.print_config,
+            # 行业感知子系统 schema（菜单键→label/visible/entity/fields/rules）；
+            # 前端 useIndustryFieldSchema(menuKey) 消费。缺省空 dict，向后兼容。
+            "subsystems": getattr(profile, "subsystems", {}) or {},
         },
     }
 
@@ -166,8 +171,12 @@ async def get_current_industry_endpoint(request: Request):
 
 
 @router.post("/industry")
-async def set_industry_endpoint(request_body: SetIndustryRequest, request: Request):
-    """Set current industry"""
+async def set_industry_endpoint(
+    request_body: SetIndustryRequest,
+    request: Request,
+    admin_user: Any = Depends(require_admin_user),
+):
+    """Set current industry（仅限管理端 admin 账号）。"""
     try:
         from resources.config.industry_config import (
             get_industry_profile,
@@ -310,6 +319,66 @@ async def get_employee_registry_rules():
         return {"success": True, "data": get_employee_registry_rules()}
     except RECOVERABLE_ERRORS as e:
         logger.error("Failed to get employee registry rules: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/duty-roster")
+async def get_duty_roster():
+    """编制矩阵 SSOT 派生（替代前端硬编码 yuangonDutyRoster.ts）。
+
+    单一真相源：FHD/config/duty_roster.json + mods/_employees/*/manifest.json
+    运行时派生：areas / departments / employee_labels / employee_descriptions / all_planned_ids
+    """
+    try:
+        from app.mod_sdk.duty_roster import (
+            all_planned_duty_employee_ids,
+            load_duty_roster_document,
+        )
+        from app.mod_sdk.host_profile import resolve_fhd_config_dir
+
+        doc = load_duty_roster_document()
+        areas = doc.get("areas") or {}
+        departments = doc.get("departments") or {}
+
+        # 从 mods/_employees/*/manifest.json 派生员工中文名与说明
+        employee_labels: dict[str, str] = {}
+        employee_descriptions: dict[str, str] = {}
+        cfg_dir = resolve_fhd_config_dir()
+        if cfg_dir is not None:
+            employees_dir = cfg_dir.parent / "mods" / "_employees"
+            if employees_dir.is_dir():
+                for manifest_path in employees_dir.glob("*/manifest.json"):
+                    try:
+                        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                        if not isinstance(data, dict):
+                            continue
+                        emp_id = str(data.get("id") or "").strip()
+                        if not emp_id:
+                            continue
+                        name = str(data.get("name") or "").strip()
+                        desc = str(data.get("description") or "").strip()
+                        if name:
+                            employee_labels[emp_id] = name
+                        if desc:
+                            employee_descriptions[emp_id] = desc
+                    except RECOVERABLE_ERRORS:
+                        continue
+
+        all_planned_ids = sorted(all_planned_duty_employee_ids())
+
+        return {
+            "success": True,
+            "data": {
+                "areas": areas,
+                "departments": departments,
+                "employee_labels": employee_labels,
+                "employee_descriptions": employee_descriptions,
+                "all_planned_ids": all_planned_ids,
+                "schema_version": doc.get("schema_version", 1),
+            },
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.error("Failed to get duty roster: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

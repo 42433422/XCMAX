@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -87,9 +89,11 @@ import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.connectivity.NetworkMonitor
 import com.xiuci.xcagi.mobile.core.media.SoundHelper
 import com.xiuci.xcagi.mobile.core.model.ListItem
+import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.core.work.LanProbeWorker
 import com.xiuci.xcagi.mobile.feature.legal.LegalConsentScreen
 import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
+import com.xiuci.xcagi.mobile.feature.web.DesktopToolWebView
 import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
@@ -110,6 +114,13 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
+import com.xiuci.xcagi.mobile.feature.about.AboutScreen
+import com.xiuci.xcagi.mobile.feature.auth.RegisterScreen
+import com.xiuci.xcagi.mobile.feature.bridge.BridgeScreen
+import com.xiuci.xcagi.mobile.feature.finance.LongTailScreen
+import com.xiuci.xcagi.mobile.feature.list.ListScreen
+import com.xiuci.xcagi.mobile.feature.market.MarketListScreen
+import com.xiuci.xcagi.mobile.feature.ocr.OcrScreen
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -118,7 +129,11 @@ interface NetworkEntryPoint {
 }
 
 @Composable
-fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
+fun XcagiNavHost(
+        vm: AppViewModel,
+        pendingDeepLink: String? = null,
+        onDeepLinkHandled: () -> Unit = {},
+) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     var currentSnack by remember { mutableStateOf<SnackData?>(null) }
@@ -145,6 +160,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
             vm.handleDeepLink(pendingDeepLink) { route ->
                 nav.navigate(route) { launchSingleTop = true }
             }
+            onDeepLinkHandled()
         }
     }
 
@@ -207,8 +223,6 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
         }
     }
 
-    val approvalCount by vm.approvalPendingCount.collectAsState()
-
     val current = backStack?.destination?.route?.substringBefore("?")
     val bottomNavRoutes = setOf(Routes.CHAT, Routes.WORK, Routes.DISCOVER, Routes.PROFILE)
     val showBar = loggedIn && current in bottomNavRoutes
@@ -243,14 +257,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                                         listOf(
                                                 WeBottomNavItem(
                                                         Routes.CHAT,
-                                                        "会话",
+                                                        "消息",
                                                         Icons.Default.Forum
                                                 ),
                                                 WeBottomNavItem(
                                                         Routes.WORK,
-                                                        "名录",
-                                                        Icons.Default.Badge,
-                                                        approvalCount
+                                                        "AI员工",
+                                                        Icons.Default.Badge
                                                 ),
                                                 WeBottomNavItem(
                                                         Routes.DISCOVER,
@@ -259,7 +272,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                                                 ),
                                                 WeBottomNavItem(
                                                         Routes.PROFILE,
-                                                        "个人",
+                                                        "我",
                                                         Icons.Default.AccountCircle
                                                 ),
                                         ),
@@ -326,11 +339,21 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 }
                 composable(Routes.SETTINGS) { SettingsScreen(vm) { nav.popBackStack() } }
                 composable(Routes.AUTH) {
-                    AuthScreen(vm, { nav.navigate(Routes.REGISTER) }, { nav.navigate(Routes.CHAT) })
+                    AuthScreen(
+                            vm,
+                            { nav.navigate(Routes.REGISTER) },
+                            { nav.navigate(Routes.CHAT) },
+                            { nav.navigate(Routes.SCAN_QR) },
+                    )
                 }
                 composable(Routes.AUTH_AUTO_LOGIN) {
                     // 自动登录路由：显示登录页同时自动尝试用保存的凭证登录
-                    AuthScreen(vm, { nav.navigate(Routes.REGISTER) }, { nav.navigate(Routes.CHAT) })
+                    AuthScreen(
+                            vm,
+                            { nav.navigate(Routes.REGISTER) },
+                            { nav.navigate(Routes.CHAT) },
+                            { nav.navigate(Routes.SCAN_QR) },
+                    )
                     LaunchedEffect(Unit) { vm.tryAutoLogin() }
                 }
                 composable(Routes.REGISTER) { RegisterScreen(vm) { nav.popBackStack() } }
@@ -344,10 +367,10 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 }
                 composable(
                         Routes.PROFILE,
-                        enterTransition = { fadeIn(tween(250)) },
-                        exitTransition = { fadeOut(tween(250)) },
-                        popEnterTransition = { fadeIn(tween(250)) },
-                        popExitTransition = { fadeOut(tween(250)) },
+                        enterTransition = { fadeIn(tween(250)) + slideInHorizontally(tween(300)) { it / 6 } },
+                        exitTransition = { fadeOut(tween(200)) },
+                        popEnterTransition = { fadeIn(tween(250)) + slideInHorizontally(tween(300)) { -it / 6 } },
+                        popExitTransition = { fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { it / 4 } },
                 ) {
                     ProfileScreen(
                             vm,
@@ -362,31 +385,17 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 }
                 composable(
                         Routes.WORK,
-                        enterTransition = { fadeIn(tween(250)) },
-                        exitTransition = { fadeOut(tween(250)) },
-                        popEnterTransition = { fadeIn(tween(250)) },
-                        popExitTransition = { fadeOut(tween(250)) },
+                        enterTransition = { fadeIn(tween(250)) + slideInHorizontally(tween(300)) { it / 6 } },
+                        exitTransition = { fadeOut(tween(200)) },
+                        popEnterTransition = { fadeIn(tween(250)) + slideInHorizontally(tween(300)) { -it / 6 } },
+                        popExitTransition = { fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { it / 4 } },
                 ) {
-                    WorkScreen(
+                    AiEmployeeListScreen(
                             vm,
-                            onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
-                            onModMenuClick = { menu ->
-                                // 已知 Mod 的原生路由映射
-                                when (menu.id) {
-                                    "approval", "approvals" -> nav.navigate(Routes.APPROVAL)
-                                    "erp", "customers" -> nav.navigate("${Routes.ERP}?tab=0")
-                                    "shipments" -> nav.navigate("${Routes.ERP}?tab=1")
-                                    "inventory" -> nav.navigate("${Routes.ERP}?tab=2")
-                                    "im" -> nav.navigate(Routes.IM)
-                                    "bridge", "service-bridge" -> nav.navigate(Routes.BRIDGE)
-                                    "finance", "long-tail" -> nav.navigate(Routes.LONGTAIL)
-                                    else -> {
-                                        // 未知 Mod 走 WebView
-                                        nav.navigate("mod/${menu.id}")
-                                    }
-                                }
+                            onSelect = { modId, employeeId ->
+                                nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
                             },
-                            onNavigateToApp = { route -> nav.navigate(route) },
+                            onScan = { nav.navigate(Routes.SCAN_QR) },
                     )
                 }
                 composable(
@@ -397,9 +406,16 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                         popExitTransition = { WeFadeTransition.exit() },
                 ) {
                     DiscoverScreen(
-                            onScan = { nav.navigate(Routes.SCAN_QR) },
-                            onOcr = { nav.navigate(Routes.OCR) },
-                            onAiCircle = { nav.navigate(Routes.AI_CIRCLE) },
+                        vm = vm,
+                        onScan = { nav.navigate(Routes.SCAN_QR) },
+                        onOcr = { nav.navigate(Routes.OCR) },
+                        onAiCircle = { nav.navigate(Routes.AI_CIRCLE) },
+                        onNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
+                        onNavigate = { route -> nav.navigate(route) },
+                        onOpenWebView = { path, title ->
+                            val url = vm.desktopPageUrl(path)
+                            nav.navigate(Routes.webView(url, title))
+                        },
                     )
                 }
                 composable(
@@ -435,18 +451,25 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                                     restoreState = true
                                 }
                             },
+                            onStartGroupChat = { nav.navigate(Routes.AI_GROUP_CREATE) },
+                            onOpenGroups = { nav.navigate(Routes.AI_GROUPS) },
+                            onOpenGroup = { group ->
+                                vm.openAiGroup(group)
+                                nav.navigate(Routes.AI_GROUP_CHAT)
+                            },
                     )
                 }
-                // AI 对话 — 复用现有 ChatScreen
-                composable(Routes.AI_CHAT) {
+                // AI 对话 — 小C助理，走 /api/ai/chat/stream（与桌面端智能对话一致）
+                composable(
+                        Routes.AI_CHAT,
+                        enterTransition = { slideInHorizontally(tween(300)) { it } },
+                        exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
+                        popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
+                        popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+                ) {
                     ChatScreen(
                             vm,
                             onBack = { nav.popBackStack() },
-                            profileAvatar =
-                                    ChatTopProfileAvatar(
-                                            text = "C",
-                                            containerColor = XcagiTheme.extra.brandBlue,
-                                    ),
                             onOpenProfile = {
                                 nav.navigate(
                                         Routes.fixedPartnerProfile(FixedPartnerKinds.ASSISTANT)
@@ -466,12 +489,24 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 composable(
                         route = Routes.CONVERSATION_CHAT + "/{conversationId}",
                         arguments = listOf(navArgument("conversationId") { type = NavType.StringType }),
+                        enterTransition = { slideInHorizontally(tween(300)) { it } },
+                        exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
+                        popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
+                        popExitTransition = { slideOutHorizontally(tween(300)) { it } },
                 ) { backStackEntry ->
                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
+                    val pinnedPartnerKind = when (conversationId) {
+                        PinnedIds.CODEX -> FixedPartnerKinds.CODEX
+                        PinnedIds.CLAUDE -> FixedPartnerKinds.CLAUDE
+                        else -> null
+                    }
                     ChatScreen(
                             vm,
                             conversationId = conversationId,
                             onBack = { nav.popBackStack() },
+                            onOpenProfile = pinnedPartnerKind?.let { kind ->
+                                { nav.navigate(Routes.fixedPartnerProfile(kind)) }
+                            },
                             onOpenMod = { id ->
                                 vm.requestModOpen(
                                         id,
@@ -486,7 +521,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     )
                 }
                 // 专属客服对话
-                composable(Routes.CS_CHAT) {
+                composable(
+                        Routes.CS_CHAT,
+                        enterTransition = { slideInHorizontally(tween(300)) { it } },
+                        exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
+                        popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
+                        popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+                ) {
                     CsChatScreen(
                             vm = vm,
                             onBack = { nav.popBackStack() },
@@ -506,6 +547,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                             onSelect = { modId, employeeId ->
                                 nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
                             },
+                            onScan = { nav.navigate(Routes.SCAN_QR) },
                     )
                 }
                 composable(Routes.AI_CIRCLE) {
@@ -514,6 +556,33 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                             onBack = { nav.popBackStack() },
                             onOpenEmployee = { modId, employeeId ->
                                 nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
+                            },
+                    )
+                }
+                composable(Routes.AI_GROUPS) {
+                    AiGroupListScreen(
+                            vm = vm,
+                            onBack = { nav.popBackStack() },
+                            onOpenGroup = { group ->
+                                vm.openAiGroup(group)
+                                nav.navigate(Routes.AI_GROUP_CHAT)
+                            },
+                    )
+                }
+                composable(Routes.AI_GROUP_CHAT) {
+                    AiGroupChatScreen(
+                            vm = vm,
+                            onBack = { nav.popBackStack() },
+                    )
+                }
+                composable(Routes.AI_GROUP_CREATE) {
+                    AiGroupCreateScreen(
+                            vm = vm,
+                            onBack = { nav.popBackStack() },
+                            onCreated = {
+                                nav.navigate(Routes.AI_GROUP_CHAT) {
+                                    popUpTo(Routes.AI_GROUP_CREATE) { inclusive = true }
+                                }
                             },
                     )
                 }
@@ -550,10 +619,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                             vm = vm,
                             partnerKind = partnerKind,
                             onBack = { nav.popBackStack() },
+                            onOpenCircle = { nav.navigate(Routes.AI_CIRCLE) },
                             onOpenChat = {
                                 val target =
                                         when (partnerKind) {
                                             FixedPartnerKinds.CUSTOMER_SERVICE -> Routes.CS_CHAT
+                                            FixedPartnerKinds.CODEX -> Routes.conversationChat(PinnedIds.CODEX)
+                                            FixedPartnerKinds.CLAUDE -> Routes.conversationChat(PinnedIds.CLAUDE)
                                             else -> Routes.AI_CHAT
                                         }
                                 nav.navigate(target) { launchSingleTop = true }
@@ -662,7 +734,32 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                         ModWebViewScreen(url, bearer, access, refresh, fhdAccess)
                     }
                 }
+                composable(
+                        Routes.WEB_VIEW,
+                        arguments = listOf(
+                                navArgument("url") { type = NavType.StringType },
+                                navArgument("title") { type = NavType.StringType },
+                        )
+                ) { e ->
+                    val url = e.arguments?.getString("url") ?: ""
+                    val title = e.arguments?.getString("title") ?: "桌面工具"
+                    var bearer by remember { mutableStateOf("") }
+                    val access by vm.marketAccess.collectAsState()
+                    val refresh by vm.marketRefresh.collectAsState()
+                    val fhdAccess by vm.fhdAccess.collectAsState()
+                    LaunchedEffect(url) {
+                        bearer = vm.bearerToken()
+                    }
+                    if (url.isNotBlank()) {
+                        DesktopToolWebView(url, title, bearer, access, refresh, fhdAccess) {
+                            nav.popBackStack()
+                        }
+                    }
+                }
                 composable(Routes.LONGTAIL) { LongTailScreen(vm) }
+                composable(Routes.NOTIFICATIONS) {
+                    NotificationListScreen(onBack = { nav.popBackStack() })
+                }
                 composable(Routes.ABOUT) {
                     val cfg by vm.appConfig.collectAsState()
                     AboutScreen(
@@ -680,535 +777,5 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 onDismiss = { currentSnack = null },
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp),
         )
-    }
-}
-
-@Composable
-fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
-    var u by remember { mutableStateOf("") }
-    var p by remember { mutableStateOf("") }
-    var e by remember { mutableStateOf("") }
-    var agreed by remember { mutableStateOf(false) }
-    val ctx = LocalContext.current
-    val canSubmit = u.isNotBlank() && p.isNotBlank() && e.isNotBlank() && agreed
-
-    Column(
-            Modifier.fillMaxSize()
-                    .background(Color.White)
-                    .padding(horizontal = 24.dp)
-                    .padding(top = 60.dp),
-    ) {
-        Text(
-                "创建账号",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-                "注册 XCAGI 企业平台账号",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.outline,
-        )
-        Spacer(Modifier.height(32.dp))
-
-        // 用户名
-        OutlinedTextField(
-                value = u,
-                onValueChange = { u = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("用户名") },
-                singleLine = true,
-                shape = RoundedCornerShape(8.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-
-        // 密码
-        OutlinedTextField(
-                value = p,
-                onValueChange = { p = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("密码") },
-                singleLine = true,
-                shape = RoundedCornerShape(8.dp),
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        )
-        Spacer(Modifier.height(12.dp))
-
-        // 邮箱
-        OutlinedTextField(
-                value = e,
-                onValueChange = { e = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("邮箱") },
-                singleLine = true,
-                shape = RoundedCornerShape(8.dp),
-        )
-        Spacer(Modifier.height(24.dp))
-
-        // 协议勾选
-        Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable { agreed = !agreed },
-        ) {
-            Box(
-                    Modifier.size(16.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(
-                                    if (agreed) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.outlineVariant
-                            ),
-                    contentAlignment = Alignment.Center,
-            ) {
-                if (agreed)
-                        Icon(Icons.Default.Check, null, Modifier.size(12.dp), tint = Color.White)
-            }
-            Spacer(Modifier.size(6.dp))
-            Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.outline, fontSize = 12.sp)) {
-                            append("我已阅读并同意")
-                        }
-                        withStyle(
-                                SpanStyle(
-                                        color = XcagiTheme.extra.brandBlue,
-                                        fontSize = 12.sp,
-                                        textDecoration = TextDecoration.Underline
-                                )
-                        ) { append("《用户协议》") }
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.outline, fontSize = 12.sp)) {
-                            append("和")
-                        }
-                        withStyle(
-                                SpanStyle(
-                                        color = XcagiTheme.extra.brandBlue,
-                                        fontSize = 12.sp,
-                                        textDecoration = TextDecoration.Underline
-                                )
-                        ) { append("《隐私政策》") }
-                    }
-            )
-        }
-        Spacer(Modifier.height(24.dp))
-
-        // 注册按钮
-        Box(
-                Modifier.fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(if (canSubmit) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.outlineVariant)
-                        .clickable(enabled = canSubmit) {
-                            vm.register(u, p, e) { if (it) onBack() }
-                        },
-                contentAlignment = Alignment.Center,
-        ) { Text("注册", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White) }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MarketListScreen(
-        vm: AppViewModel,
-        onUse: (String) -> Unit,
-        onBack: () -> Unit,
-) {
-    val items by vm.items.collectAsState()
-    val loading by vm.listLoading.collectAsState()
-    val error by vm.listError.collectAsState()
-    LaunchedEffect(Unit) { vm.loadMarket() }
-
-    com.xiuci.xcagi.mobile.ui.components.mobile.MobileScaffold(
-            title = "MODstore",
-            onBack = onBack,
-            onRefresh = vm::loadMarket,
-            loading = loading,
-            error = error,
-            empty = items.isEmpty(),
-            emptyMessage = "暂无 Mod",
-            onRetry = vm::loadMarket,
-    ) { _ ->
-        LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            item { WeSectionCaption("可用能力") }
-            item {
-                WeCellGroup {
-                    items.forEachIndexed { idx, item ->
-                        WeCell(
-                                title = item.title,
-                                subtitle = item.subtitle.ifBlank { "从企业端同步的能力包" },
-                                icon = Icons.Default.Extension,
-                                iconTint = XcagiTheme.extra.brandBlue,
-                                iconBg = MaterialTheme.colorScheme.primaryContainer,
-                                showArrow = false,
-                                showDivider = idx < items.lastIndex,
-                                trailing = {
-                                    TextButton(onClick = { onUse(item.id) }) {
-                                        Text("使用", color = XcagiTheme.extra.brandBlue)
-                                    }
-                                },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MarketModCard(item: ListItem, onUse: () -> Unit) {
-    Row(
-            Modifier.fillMaxWidth()
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-                Modifier.size(44.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.secondaryContainer),
-                contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                    Icons.Default.Extension,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary
-            )
-        }
-        Column(
-                Modifier.weight(1f).padding(horizontal = 12.dp),
-        ) {
-            Text(
-                    item.title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                    item.subtitle.ifBlank { "浏览并安装行业 Mod" },
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Button(onClick = onUse, shape = MaterialTheme.shapes.medium) { Text("使用") }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ListScreen(
-        title: String,
-        vm: AppViewModel,
-        load: () -> Unit,
-        onClick: ((String) -> Unit)?,
-        onBack: (() -> Unit)? = null,
-) {
-    val items by vm.items.collectAsState()
-    val loading by vm.listLoading.collectAsState()
-    val error by vm.listError.collectAsState()
-    LaunchedEffect(Unit) { load() }
-
-    com.xiuci.xcagi.mobile.ui.components.mobile.MobileScaffold(
-            title = title,
-            onBack = onBack,
-            onRefresh = load,
-            loading = loading,
-            error = error,
-            empty = items.isEmpty(),
-            emptyMessage = "暂无数据",
-            onRetry = load,
-    ) { _ ->
-        LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            item { WeSectionCaption(title) }
-            item {
-                WeCellGroup {
-                    items.forEachIndexed { idx, item ->
-                        WeCell(
-                                title = item.title,
-                                subtitle = item.subtitle,
-                                showArrow = onClick != null,
-                                showDivider = idx < items.lastIndex,
-                                onClick = onClick?.let { cb -> { cb(item.id) } },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun BridgeScreen(vm: AppViewModel) {
-    val items by vm.items.collectAsState()
-    var reply by remember { mutableStateOf("") }
-    var selectedId by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { vm.loadBridge() }
-
-    com.xiuci.xcagi.mobile.ui.components.mobile.WeScreen(
-            title = "服务桥接",
-            scrollable = false,
-    ) {
-        LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            item { WeSectionCaption("待处理工单") }
-            item {
-                WeCellGroup {
-                    if (items.isEmpty()) {
-                        WeCell(
-                                title = "暂无工单",
-                                subtitle = "企业端有新工单后会同步到这里",
-                                icon = Icons.Default.Forum,
-                                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                iconBg = MaterialTheme.colorScheme.surfaceVariant,
-                                showArrow = false,
-                                showDivider = false,
-                        )
-                    } else {
-                        items.forEachIndexed { idx, item ->
-                            val id = item.id.toIntOrNull() ?: 0
-                            WeCell(
-                                    title = item.title,
-                                    subtitle = item.subtitle.ifBlank { "等待处理" },
-                                    icon = Icons.Default.Forum,
-                                    iconTint =
-                                            if (selectedId == id) XcagiTheme.extra.brandBlue
-                                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    iconBg =
-                                            if (selectedId == id) MaterialTheme.colorScheme.primaryContainer
-                                            else MaterialTheme.colorScheme.surfaceVariant,
-                                    showArrow = true,
-                                    showDivider = idx < items.lastIndex,
-                                    onClick = { selectedId = id },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        WeSectionCaption(if (selectedId > 0) "回复 #$selectedId" else "回复")
-        WeCellGroup {
-            OutlinedTextField(
-                    value = reply,
-                    onValueChange = { reply = it },
-                    modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    placeholder = { Text("输入处理意见或补充说明") },
-                    minLines = 2,
-                    maxLines = 4,
-                    shape = RoundedCornerShape(8.dp),
-                    colors =
-                            androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color.Transparent,
-                                    unfocusedBorderColor = Color.Transparent,
-                            ),
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        WeBlockButton(
-                text = "发送回复",
-                onClick = {
-                    vm.bridgeRespond(selectedId, reply) {
-                        reply = ""
-                        vm.loadBridge()
-                    }
-                },
-                enabled = selectedId > 0 && reply.isNotBlank(),
-        )
-        Spacer(Modifier.height(16.dp))
-    }
-}
-
-@Composable
-fun LongTailScreen(vm: AppViewModel) {
-    val detail by vm.detailJson.collectAsState()
-    LaunchedEffect(Unit) { vm.loadFinance() }
-
-    com.xiuci.xcagi.mobile.ui.components.mobile.WeScreen(title = "财务摘要") {
-        WeSectionCaption("概览")
-        WeCellGroup {
-            WeCell(
-                    title = if (detail.isBlank()) "暂无财务数据" else "财务看板已同步",
-                    subtitle = financePreview(detail),
-                    icon = Icons.Default.Analytics,
-                    iconTint = XcagiTheme.extra.brandBlue,
-                    iconBg = MaterialTheme.colorScheme.primaryContainer,
-                    showArrow = false,
-                    showDivider = false,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        WeSectionCaption("操作")
-        WeCellGroup {
-            WeCell(
-                    title = "凭证与收支",
-                    subtitle = "查看应收、应付与交易记录",
-                    icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                    iconTint = MaterialTheme.colorScheme.secondary,
-                    iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                    showArrow = true,
-                    showDivider = true,
-                    onClick = { vm.snack("请在电脑端打开完整财务看板") },
-            )
-            WeCell(
-                    title = "标签打印",
-                    subtitle = "打印商品标签和条码模板",
-                    icon = Icons.Default.LocalPrintshop,
-                    iconTint = XcagiTheme.extra.warning,
-                    iconBg = XcagiTheme.extra.warning.copy(alpha = 0.12f),
-                    showArrow = true,
-                    showDivider = false,
-                    onClick = { vm.snack("请在电脑端完成标签打印") },
-            )
-        }
-    }
-}
-
-private fun financePreview(raw: String): String {
-    if (raw.isBlank()) return "连接企业后端后显示收入、成本、毛利与应付摘要"
-    return raw
-            .replace("{", "")
-            .replace("}", "")
-            .replace("success=true,", "")
-            .replace("data=", "")
-            .split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .take(3)
-            .joinToString(" · ")
-            .take(120)
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun OcrScreen(vm: AppViewModel, onBack: () -> Unit) {
-    WeScreen(title = "拍照识别", onBack = onBack) {
-        WeSectionCaption("入口")
-        WeCellGroup {
-            WeCell(
-                    title = "拍照识别",
-                    subtitle = "调用企业端 OCR 引擎处理图片文字",
-                    icon = Icons.Default.CameraAlt,
-                    iconTint = XcagiTheme.extra.brandBlue,
-                    iconBg = MaterialTheme.colorScheme.primaryContainer,
-                    showArrow = true,
-                    showDivider = true,
-                    onClick = { vm.snack("移动端拍照上传正在接入，请先使用电脑端 OCR") },
-            )
-            WeCell(
-                    title = "从相册选择",
-                    subtitle = "识别票据、表格截图与文档图片",
-                    icon = Icons.Default.PhotoLibrary,
-                    iconTint = MaterialTheme.colorScheme.secondary,
-                    iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                    showArrow = true,
-                    showDivider = true,
-                    onClick = { vm.snack("移动端相册识别正在接入，请先使用电脑端 OCR") },
-            )
-            WeCell(
-                    title = "批量识别",
-                    subtitle = "完整批量处理请使用电脑端",
-                    icon = Icons.AutoMirrored.Filled.InsertDriveFile,
-                    iconTint = XcagiTheme.extra.warning,
-                    iconBg = XcagiTheme.extra.warning.copy(alpha = 0.12f),
-                    showArrow = false,
-                    showDivider = false,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        WeSectionCaption("状态")
-        WeCellGroup {
-            WeCell(
-                    title = "企业 OCR",
-                    subtitle = "等待移动端上传链路接入",
-                    icon = Icons.Default.CloudDone,
-                    iconTint = XcagiTheme.extra.success,
-                    iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                    showArrow = false,
-                    showDivider = false,
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AboutScreen(
-        onBack: () -> Unit,
-        appConfig: com.xiuci.xcagi.mobile.core.model.AppConfigResponse? = null,
-        onCheckUpdate: () -> Unit = {}
-) {
-    val ctx = LocalContext.current
-    com.xiuci.xcagi.mobile.ui.components.mobile.WeScreen(title = "关于", onBack = onBack) {
-        Column(
-                Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(Modifier.height(32.dp))
-            Image(
-                    painter = painterResource(R.mipmap.ic_launcher_foreground),
-                    contentDescription = null,
-                    modifier = Modifier.size(72.dp),
-                    contentScale = ContentScale.Fit,
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                    "XCAGI",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                    "v${com.xiuci.xcagi.mobile.BuildConfig.VERSION_NAME}",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.outline
-            )
-        }
-        Spacer(Modifier.height(24.dp))
-        WeSectionCaption("信息")
-        WeCellGroup {
-            WeCell(
-                    title = "公司",
-                    subtitle = stringResource(R.string.company_name),
-                    showArrow = false,
-                    showDivider = true,
-            )
-            WeCell(
-                    title = "官网",
-                    subtitle = stringResource(R.string.brand_url),
-                    showArrow = true,
-                    showDivider = true,
-                    onClick = {
-                        ctx.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse("https://xiu-ci.com"))
-                        )
-                    },
-            )
-            WeCell(
-                    title = "检查更新",
-                    subtitle = "v${com.xiuci.xcagi.mobile.BuildConfig.VERSION_NAME}",
-                    showArrow = true,
-                    showDivider = false,
-                    onClick = onCheckUpdate,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        ComplianceFooter(appConfig)
     }
 }

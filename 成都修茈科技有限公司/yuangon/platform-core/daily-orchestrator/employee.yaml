@@ -39,6 +39,9 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - daily.orchestrator
+
 skills:
   - skills/skill-daily-orchestrator.md
 
@@ -54,6 +57,13 @@ depends_on:
   - test-qa-runner
   # schema 类失败 escalate 到 DBA
   - dbops-engineer
+
+examples:
+  - title: "每日编排员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次每日编排员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

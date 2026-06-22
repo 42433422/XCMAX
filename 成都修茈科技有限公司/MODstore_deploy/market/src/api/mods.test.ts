@@ -59,6 +59,22 @@ describe('mods api', () => {
     expect(req).toHaveBeenCalledWith('/api/mods/ai-scaffold', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('modAiScaffold and putRepoConfig apply fallback payload values', async () => {
+    vi.mocked(req).mockResolvedValue({})
+    await mods.modAiScaffold('brief', '', true, '', undefined, undefined)
+    expect(JSON.parse((vi.mocked(req).mock.calls[0] as any[])[1].body)).toEqual({
+      brief: 'brief',
+      replace: true,
+      industry_id: '通用',
+    })
+
+    await mods.putRepoConfig(undefined as any)
+    expect(vi.mocked(req).mock.calls[1]).toEqual([
+      '/api/config',
+      expect.objectContaining({ method: 'PUT', body: '{}' }),
+    ])
+  })
+
   it('push calls req with POST', async () => {
     vi.mocked(req).mockResolvedValue({})
     await mods.push(['mod1'])
@@ -172,6 +188,40 @@ describe('mods api', () => {
     await mods.exportModZip('mod1')
     expect(fetchZipBlob).toHaveBeenCalledWith('/api/mods/mod1/export', expect.any(Object))
   })
+
+  it('exportEmployeePackZip falls back to legacy route on missing new route', async () => {
+    const zip = new Blob(['zip'])
+    vi.mocked(fetchZipBlob)
+      .mockRejectedValueOnce(new Error('Not Found'))
+      .mockResolvedValueOnce(zip)
+
+    await expect(mods.exportEmployeePackZip(' mod/1 ', -1)).resolves.toBe(zip)
+    expect(fetchZipBlob).toHaveBeenNthCalledWith(
+      1,
+      '/api/mods/mod%2F1/export-employee-pack?workflow_index=0',
+      { Authorization: 'Bearer test' },
+    )
+    expect(fetchZipBlob).toHaveBeenNthCalledWith(
+      2,
+      '/api/mods/mod%2F1/export_employee_pack?workflow_index=0',
+      { Authorization: 'Bearer test' },
+    )
+  })
+
+  it('exportEmployeePackZip classifies stale route and non-route errors', async () => {
+    vi.mocked(fetchZipBlob)
+      .mockRejectedValueOnce(new Error('{\"detail\":\"Not Found\"}'))
+      .mockRejectedValueOnce(new Error('{\"detail\":[{\"msg\":\"not found\"}]}'))
+    await expect(mods.exportEmployeePackZip('mod1', 1)).rejects.toThrow('8765 上的 API 进程')
+
+    vi.mocked(fetchZipBlob).mockReset()
+    vi.mocked(fetchZipBlob).mockRejectedValueOnce(new Error('Mod 不存在'))
+    await expect(mods.exportEmployeePackZip('missing', 0)).rejects.toThrow('Mod 不存在')
+
+    vi.mocked(fetchZipBlob).mockReset()
+    vi.mocked(fetchZipBlob).mockRejectedValueOnce('string failure')
+    await expect(mods.exportEmployeePackZip('mod1', 0)).rejects.toThrow('导出失败')
+  })
 })
 
 describe('packages api', () => {
@@ -221,6 +271,24 @@ describe('packages api', () => {
     vi.mocked(req).mockResolvedValue({})
     await packages.registerWorkflowEmployeeCatalog('mod1', 0, { industry: 'tech', price: 100, release_channel: 'beta' })
     expect(req).toHaveBeenCalledWith('/api/mods/mod1/register-workflow-employee-catalog', expect.objectContaining({ method: 'POST' }))
+  })
+
+  it('registerWorkflowEmployeeCatalog and closure use default options', async () => {
+    vi.mocked(req).mockResolvedValue({})
+    await packages.registerWorkflowEmployeeCatalog('mod1')
+    expect(JSON.parse((vi.mocked(req).mock.calls[0] as any[])[1].body)).toEqual({
+      workflow_index: 0,
+      industry: '通用',
+      price: 0,
+      release_channel: 'stable',
+    })
+
+    await packages.runWorkflowEmployeeClosure('mod1', { register_missing: false, patch_canvas: false, industry: '' })
+    expect(JSON.parse((vi.mocked(req).mock.calls[1] as any[])[1].body)).toEqual({
+      register_missing: false,
+      patch_canvas: false,
+      industry: '通用',
+    })
   })
 
   it('patchModWorkflowEmployeeNodes calls req with POST', async () => {

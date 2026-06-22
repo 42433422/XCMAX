@@ -22,6 +22,7 @@ export type ModForNavLabel = {
 /** 与 MainLayout.viewTitlesBase 对齐；默认文案保持通用宿主语境，行业词汇由 preset / Mod 覆盖 */
 export const MENU_DEFAULT_NAMES: Record<string, string> = {
   chat: '智能对话',
+  im: '信息',
   'ai-ecosystem': '智能生态',
   brain: '智脑集成',
   'model-payment': '模型服务',
@@ -50,7 +51,7 @@ export const MENU_DEFAULT_NAMES: Record<string, string> = {
   'other-tools': '员工视图',
   'employee-workflow': '员工工作台',
   'workflow-employee-space': '员工空间',
-  'workflow-visualization': '流程全景',
+  'workflow-visualization': '流程可视化',
   purchase: '耗材申领',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
@@ -108,6 +109,17 @@ export const INDUSTRY_MENU_LABELS: Record<string, Record<string, string>> = {
     'shipment-records': '出货记录',
     customers: '收发方管理',
     print: '运单打印',
+  },
+  管理端: {
+    chat: '运维对话',
+    im: '信息',
+    'ai-ecosystem': '智能生态',
+    'mod-store': '能力库',
+    'employee-workflow': '编制工作台',
+    'workflow-visualization': '流程可视化',
+    'duty-roster-graph': '员工图谱',
+    'data-sources': '运维数据源',
+    tools: '运维工具',
   },
 }
 

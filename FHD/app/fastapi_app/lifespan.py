@@ -18,7 +18,7 @@ from app.db.init_db import (
     ensure_sessions_enterprise_entitlement_columns,
     ensure_sessions_market_access_token_column,
     ensure_sessions_market_refresh_token_column,
-    ensure_users_tenant_id_column,
+    ensure_user_profile_columns,
     init_approval_tables,
     init_distillation_tables,
     init_extract_logs_tables,
@@ -72,6 +72,8 @@ async def lifespan(app: FastAPI):
         logger.warning("Performance optimizer init skipped: %s", exc)
 
     await _init_neuro_ddd_async(app)
+    await _init_employee_runtime_async(app)
+    await _init_mobile_relay_desktop_async(app)
 
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成")
@@ -80,10 +82,34 @@ async def lifespan(app: FastAPI):
 
     logger.info("🛑 FastAPI 应用关闭中...")
     try:
+        from app.application.employee_runtime.scheduler import stop_employee_scheduler
+
+        stop_employee_scheduler()
+        logger.info("✅ 员工本地调度器已关闭")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 员工本地调度器关闭失败: %s", e)
+    try:
+        from app.services.mobile_relay_desktop_client import stop_desktop_relay_poller
+
+        stop_desktop_relay_poller()
+        logger.info("✅ 移动端云中继轮询已关闭")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 移动端云中继轮询关闭失败: %s", e)
+    try:
         from app.neuro_bus.bus_setup import teardown_neuro_bus
 
         await teardown_neuro_bus()
         logger.info("✅ 神经总线已关闭")
+        try:
+            from app.neuro_bus.health_monitor import get_health_monitor
+
+            get_health_monitor().stop_monitoring()
+            task = getattr(app.state, "neuro_health_monitor_task", None)
+            if task and not task.done():
+                task.cancel()
+            logger.info("✅ HealthMonitor 监控循环已停止")
+        except RECOVERABLE_ERRORS as hm_err:
+            logger.warning("⚠️ HealthMonitor 关闭失败: %s", hm_err)
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 神经总线关闭失败: %s", e)
 
@@ -151,7 +177,19 @@ def _initialize_databases_sync(app: FastAPI):
         ensure_sessions_market_refresh_token_column(engine, database_url=cfg_db_url or None)
         ensure_sessions_enterprise_entitlement_columns(engine, database_url=cfg_db_url or None)
         ensure_sessions_account_meta_columns(engine, database_url=cfg_db_url or None)
-        ensure_users_tenant_id_column(engine, database_url=cfg_db_url or None)
+        ensure_user_profile_columns(engine, database_url=cfg_db_url or None)
+        try:
+            from app.db.init_db import ensure_users_tenant_id_column
+
+            ensure_users_tenant_id_column(engine, database_url=cfg_db_url or None)
+        except (ImportError, AttributeError) as tenant_err:
+            logger.warning("users.tenant_id 自检函数不可用，已跳过: %s", tenant_err)
+        try:
+            from app.db.init_db import ensure_business_tenant_id_columns
+
+            ensure_business_tenant_id_columns(engine, database_url=cfg_db_url or None)
+        except (ImportError, AttributeError) as biz_tenant_err:
+            logger.warning("业务表 tenant_id 自检函数不可用，已跳过: %s", biz_tenant_err)
         try:
             init_approval_tables(engine)
         except RECOVERABLE_ERRORS as approval_err:
@@ -160,6 +198,13 @@ def _initialize_databases_sync(app: FastAPI):
             init_service_bridge_tables(engine)
         except RECOVERABLE_ERRORS as bridge_err:
             logger.warning("service_bridge 表初始化失败（不影响主流程）: %s", bridge_err)
+
+        try:
+            from app.db.init_db import init_persona_tables
+
+            init_persona_tables(engine)
+        except RECOVERABLE_ERRORS as persona_err:
+            logger.warning("persona 表初始化失败（不影响主流程）: %s", persona_err)
 
         if not is_sqlite_url(database_url):
             try:
@@ -215,8 +260,62 @@ async def _init_neuro_ddd_async(app: FastAPI):
         app.state.neuro_bus = bus
         app.state.neuro_bus_manager = get_neuro_bus_manager()
         logger.info("✅ 神经总线已启动，域: %s", bus.registered_domains)
+        try:
+            from app.neuro_bus.health_monitor import get_health_monitor
+
+            monitor = get_health_monitor()
+            app.state.neuro_health_monitor_task = asyncio.create_task(monitor.start_monitoring())
+            logger.info("✅ HealthMonitor 监控循环已启动")
+        except RECOVERABLE_ERRORS as hm_err:
+            logger.warning("⚠️ HealthMonitor 启动失败: %s", hm_err)
+
+        # 注册认知层 / 潜意识层 / 进化层 handler（Phase 2-4 接线）
+        try:
+            from app.domain.neuro.register_cognition_handlers import register_cognition_handlers
+
+            cognition_result = register_cognition_handlers()
+            app.state.neuro_cognition = cognition_result
+            if cognition_result.get("enabled"):
+                logger.info(
+                    "✅ 认知层 handler 已注册（%d 个）",
+                    cognition_result.get("handler_count", 0),
+                )
+        except RECOVERABLE_ERRORS as cog_err:
+            logger.warning("⚠️ 认知层 handler 注册失败: %s", cog_err)
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 神经总线初始化失败: %s", e)
+
+
+async def _init_employee_runtime_async(app: FastAPI):
+    """Initialize local AI employee triggers and cron scheduler."""
+    try:
+        from app.application.employee_runtime.scheduler import start_employee_scheduler
+        from app.application.employee_runtime.triggers import refresh_employee_triggers
+
+        trigger_status = await asyncio.to_thread(refresh_employee_triggers)
+        scheduler_status = await asyncio.to_thread(start_employee_scheduler)
+        app.state.employee_triggers = trigger_status
+        app.state.employee_scheduler = scheduler_status
+        logger.info(
+            "✅ 员工运行时已启动 triggers=%d scheduler_running=%s",
+            len(trigger_status.get("registered") or []),
+            scheduler_status.get("running"),
+        )
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 员工运行时初始化失败: %s", e)
+
+
+async def _init_mobile_relay_desktop_async(app: FastAPI):
+    """Resume desktop relay polling when this runtime has a saved cloud binding."""
+    try:
+        from app.services.mobile_relay_desktop_client import start_desktop_relay_poller
+
+        running = await asyncio.to_thread(start_desktop_relay_poller)
+        app.state.mobile_relay_desktop_running = running
+        if running:
+            logger.info("✅ 移动端云中继轮询已启动")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 移动端云中继轮询启动失败: %s", e)
 
 
 async def _init_mods_async(app: FastAPI):

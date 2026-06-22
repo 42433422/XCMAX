@@ -6,11 +6,11 @@ owner: admin
 area: site-and-marketing
 
 scope_globs:
-  - sitemap.xml
-  - robots.txt
-  - baidu_urls.txt
-  - BingSiteAuth.xml
-  - baidu_verify_*.html
+  - ./sitemap.xml
+  - ./robots.txt
+  - ./baidu_urls.txt
+  - ./BingSiteAuth.xml
+  - ./baidu_verify_*.html
 
 forbidden_globs:
   - "*.py"
@@ -35,11 +35,28 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - sitemap.update
+
 skills:
   - skills/skill-sitemap-update.md
 
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on:
   - site-content-editor   # 感知页面变更后同步 sitemap
+
+examples:
+  - title: "SEO 站点地图管理员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次SEO 站点地图管理员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

@@ -218,6 +218,57 @@
                 </div>
               </div>
             </div>
+
+            <div v-if="selectedRequest.workflow_execution" class="detail-section">
+              <h4>AI 工作流执行</h4>
+              <div
+                class="workflow-execution-panel"
+                :class="{ failed: selectedRequest.workflow_execution.success === false }"
+              >
+                <div class="workflow-execution-head">
+                  <span class="workflow-execution-status">
+                    {{ getWorkflowExecutionStatusLabel(selectedRequest.workflow_execution) }}
+                  </span>
+                  <span v-if="selectedRequest.workflow_execution.plan_id" class="workflow-execution-plan">
+                    {{ selectedRequest.workflow_execution.plan_id }}
+                  </span>
+                </div>
+                <div class="workflow-execution-meta">
+                  <span v-if="selectedRequest.workflow_execution.intent">
+                    意图：{{ selectedRequest.workflow_execution.intent }}
+                  </span>
+                  <span>
+                    节点：{{ selectedRequest.workflow_execution.nodes_executed || 0 }}/{{ selectedRequest.workflow_execution.nodes_total || 0 }}
+                  </span>
+                </div>
+                <div v-if="selectedRequest.workflow_execution.message" class="workflow-execution-message">
+                  {{ selectedRequest.workflow_execution.message }}
+                </div>
+                <ul
+                  v-if="selectedRequest.workflow_execution.node_results?.length"
+                  class="workflow-execution-nodes"
+                >
+                  <li
+                    v-for="node in selectedRequest.workflow_execution.node_results"
+                    :key="node.node_id"
+                  >
+                    <span :class="['workflow-node-status', node.success ? 'ok' : 'fail']">
+                      {{ node.success ? '成功' : '失败' }}
+                    </span>
+                    <span class="workflow-node-main">
+                      {{ node.node_id }} · {{ node.tool_id }}.{{ node.action }}
+                    </span>
+                    <span v-if="node.retries" class="workflow-node-meta">
+                      重试 {{ node.retries }} 次
+                    </span>
+                    <span v-if="node.error" class="workflow-node-error">{{ node.error }}</span>
+                    <span v-if="node.recovery_hint" class="workflow-node-hint">
+                      恢复建议：{{ node.recovery_hint }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
         <div class="modal-footer" v-if="canApprove && selectedRequest">
@@ -235,7 +286,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { approvalApi, type ApprovalRequest } from '@/api/approval'
+import { approvalApi, type ApprovalRequest, type ApprovalWorkflowExecution } from '@/api/approval'
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
 
 const FINAL_STATUSES = ['approved', 'rejected', 'withdrawn', 'cancelled'] as const
@@ -265,6 +316,11 @@ const cleanupLoading = ref(false)
 const completedInitiatedCount = computed(
   () => initiatedRequests.value.filter((r) => isFinalStatus(r.status)).length
 )
+
+const isPendingAiWorkflowApproval = (request?: ApprovalRequest | null) =>
+  request?.business_type === 'workflow_tool' &&
+  !isFinalStatus(request.status) &&
+  !request.current_node_id
 
 // 获取当前用户 ID（从 localStorage 获取）
 const getCurrentUserId = () => {
@@ -304,12 +360,14 @@ const viewDetails = async (requestId: number) => {
   try {
     const res = await approvalApi.getRequestDetails(requestId)
     if (res.success) {
-      selectedRequest.value = res.data
+      const request = res.data as ApprovalRequest
+      selectedRequest.value = request
       showDetails.value = true
       
       // 判断当前用户是否可以审批
       const userId = getCurrentUserId()
-      canApprove.value = res.data.current_approvers?.includes(userId) || false
+      canApprove.value =
+        request.current_approvers?.includes(userId) || isPendingAiWorkflowApproval(request)
     }
   } catch (error) {
     console.error('加载详情失败:', error)
@@ -322,6 +380,22 @@ const closeDetails = () => {
   canApprove.value = false
 }
 
+const getWorkflowExecutionStatusLabel = (execution?: ApprovalWorkflowExecution) => {
+  if (!execution) return ''
+  if (!execution.workflow_executed) return '未触发执行'
+  if (execution.success === true) return '执行完成'
+  if (execution.success === false) return '执行失败'
+  return '已触发执行'
+}
+
+const buildWorkflowExecutionAlert = (execution?: ApprovalWorkflowExecution) => {
+  if (!execution) return ''
+  const status = getWorkflowExecutionStatusLabel(execution)
+  const nodes = `${execution.nodes_executed || 0}/${execution.nodes_total || 0}`
+  const message = execution.message ? `，${execution.message}` : ''
+  return `\nAI 工作流：${status}（节点 ${nodes}）${message}`
+}
+
 // 审批操作
 const approve = async (requestId: number) => {
   const opinion = await appPrompt('请输入审批意见：', '同意', { title: '审批通过' })
@@ -331,9 +405,17 @@ const approve = async (requestId: number) => {
   try {
     const res = await approvalApi.approve(requestId, userId, String(opinion).trim())
     if (res.success) {
-      await appAlert('审批通过！')
-      loadData()
-      closeDetails()
+      const updatedRequest = res.data as ApprovalRequest | undefined
+      const workflowExecution = updatedRequest?.workflow_execution
+      await appAlert(`审批通过！${buildWorkflowExecutionAlert(workflowExecution)}`)
+      await loadData()
+      if (workflowExecution && updatedRequest) {
+        selectedRequest.value = updatedRequest
+        canApprove.value = false
+        showDetails.value = true
+      } else {
+        closeDetails()
+      }
     } else {
       await appAlert('审批失败：' + res.message)
     }
@@ -1027,6 +1109,126 @@ onMounted(() => {
   background: white;
   border-radius: 4px;
   font-style: italic;
+}
+
+.workflow-execution-panel {
+  border: 1px solid #d1fae5;
+  border-radius: 8px;
+  background: #f0fdf4;
+  padding: 14px;
+  color: #064e3b;
+}
+
+.workflow-execution-panel.failed {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+
+.workflow-execution-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.workflow-execution-status {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.workflow-execution-plan {
+  min-width: 0;
+  max-width: 55%;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.workflow-execution-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.workflow-execution-message {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #1f2937;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.workflow-execution-nodes {
+  list-style: none;
+  margin: 12px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workflow-execution-nodes li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: start;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.workflow-node-status {
+  grid-row: span 4;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.workflow-node-status.ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.workflow-node-status.fail {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.workflow-node-main,
+.workflow-node-error,
+.workflow-node-hint {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workflow-node-main {
+  font-family: monospace;
+  font-size: 13px;
+  color: #111827;
+}
+
+.workflow-node-meta {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.workflow-node-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.workflow-node-hint {
+  font-size: 12px;
+  color: #92400e;
 }
 
 .modal-footer {

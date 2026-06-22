@@ -1,0 +1,116 @@
+# XCMAX SSOT 注册表 — 唯一真相源登记
+# 由 ssot_cli.py 读取；新增域在此声明后经 ssot enable 启用。
+# MVP 只跑 check（调用各域 check 命令）；sync 命令在对应 P 批次落地后才被调用。
+version: 1
+
+domains:
+  # ===== MVP enabled 域（包装现有 5 个脚本）=====
+  - name: mods
+    owner: FHD/mod_sdk
+    enabled: true
+    ssot: FHD/mods/
+    derived:
+      - FHD/XCAGI/mods/
+    mode: sync
+    check: python scripts/dev/mods_ssot.py check
+    sync: python scripts/dev/mods_ssot.py sync
+
+  - name: ci-workflows
+    owner: ci
+    enabled: true
+    ssot: FHD/.github/workflows/
+    derived:
+      - .github/workflows/
+    mode: generate
+    # publish 脚本无 --check 模式；check = 只读 header 检查（ci_workflows.py）
+    check: python scripts/dev/ssot_plugins/ci_workflows.py check
+    sync: python scripts/dev/publish_ci_workflows_to_root.py
+
+  - name: coverage
+    owner: qa
+    enabled: true
+    ssot: FHD/metrics/coverage_ratchet_baseline.json
+    derived:
+      - FHD/pyproject.toml#[tool.coverage.report]fail_under
+      - FHD/frontend/vitest.config.js#thresholds
+      - FHD/metrics/coverage-dual-summary.json
+    mode: ratchet+verify
+    check: python scripts/dev/coverage_ratchet.py --check
+    # --bump 会同步更新 vitest.config.js thresholds（除非 --no-vitest）
+    sync: python scripts/dev/coverage_ratchet.py --bump
+
+  - name: version
+    owner: release
+    enabled: true
+    ssot: FHD/VERSION.md
+    derived:
+      - FHD/pyproject.toml#[project]version
+      - FHD/XCAGI/pyproject.toml#[project]version
+      - FHD/frontend/package.json#version
+      - FHD/desktop/package.json#version
+      - FHD/package.json#version
+      - FHD/app/fastapi_app/factory.py#FastAPI(version=)
+      - FHD/app/infrastructure/mods/manifest.py#current_version
+      - FHD/mobile-android/app/build.gradle.kts#versionName
+    mode: sync+verify
+    check: python scripts/dev/verify_version_anchors.py
+    # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本
+    sync: python scripts/dev/version_sync.py --apply
+
+  - name: docs-ssot
+    owner: docs
+    enabled: true
+    ssot: FHD/docs/SSOT_INDEX.md
+    derived: []
+    mode: lint
+    check: python scripts/dev/docs_ssot_lint.py
+    sync: null
+
+  # ===== 已启用域（lint/verify，advisory gate 不阻断）=====
+  - name: test-files
+    owner: qa
+    enabled: true
+    ssot: FHD/tests/
+    derived: []
+    mode: lint
+    check: python scripts/dev/ssot_plugins/test_files.py check
+    sync: null
+
+  - name: deploy-scripts
+    owner: devops
+    enabled: true
+    ssot: FHD/scripts/deploy/
+    derived: []
+    mode: lint
+    check: python scripts/dev/ssot_plugins/deploy_scripts.py check
+    sync: null
+
+  - name: deps
+    owner: backend
+    enabled: true
+    ssot: FHD/pyproject.toml
+    derived:
+      - FHD/requirements.txt
+      - FHD/requirements-ml.txt
+    mode: sync+verify
+    check: python scripts/dev/ssot_plugins/deps.py check
+    sync: null
+
+  - name: error-codes
+    owner: backend
+    enabled: true
+    ssot: FHD/app/http/error_codes.py
+    derived: []
+    mode: lint
+    check: python scripts/dev/ssot_plugins/error_codes.py check
+    sync: null
+
+  - name: k8s-manifests
+    owner: devops
+    enabled: true
+    ssot: FHD/k8s/
+    derived:
+      - FHD/XCAGI/k8s/
+    mode: verify
+    check: python scripts/dev/ssot_plugins/k8s.py check
+    sync: null

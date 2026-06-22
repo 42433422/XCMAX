@@ -16,6 +16,7 @@ from typing import Any
 from app.db.models.customer import Customer
 from app.db.models.product import Product
 from app.db.session import get_db
+from app.di.registry import get_service_registry
 from app.infrastructure.db.sql_identifiers import (
     quote_sqlite_identifier,
     resolve_products_table,
@@ -101,6 +102,20 @@ class UnitProductsImportService:
             import_result = self._batch_import_products(products_rows)
             imported = import_result.get("imported", 0)
             failed_products = import_result.get("failed_products", [])
+
+            # P2 NeuroBus: 广播产品导入完成事件
+            try:
+                from app.neuro_bus.application_neuro_bridge import (
+                    neuro_notify_products_imported,
+                )
+
+                neuro_notify_products_imported(
+                    count=imported,
+                    customer_id=unit_name,
+                    source="excel",
+                )
+            except RECOVERABLE_ERRORS:
+                logger.debug("neuro_notify_products_imported skipped", exc_info=True)
 
             return {
                 "success": True,
@@ -306,6 +321,4 @@ instrument_application_service_class(UnitProductsImportService)
 
 def get_unit_products_import_app_service() -> UnitProductsImportService:
     """获取单位产品导入服务单例"""
-    from app.di.registry import get_service_registry
-
     return get_service_registry().unit_products_import_application_service

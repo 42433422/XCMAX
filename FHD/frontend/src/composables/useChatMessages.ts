@@ -215,8 +215,9 @@ export function useChatMessages(sessionId: Ref<string>) {
       .filter((item) => Object.keys(item).length > 0)
     if (attachments.length) extras.attachments = attachments
 
-    if (row.contextSummary != null && String(row.contextSummary).trim()) {
-      extras.contextSummary = row.contextSummary
+    const contextSummary = asString(row.contextSummary).trim()
+    if (contextSummary) {
+      extras.contextSummary = contextSummary
     }
 
     return extras
@@ -271,13 +272,16 @@ export function useChatMessages(sessionId: Ref<string>) {
         const roleRaw = asString(row.role)
         const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
         const content = asString(row.content)
-        if (!hasMeaningfulContent(content) && !hasRenderableSidecar(row)) return null
+        const streamingShell = asBoolean(row.streamingShell)
+        const toolProgressLabel = asString(row.toolProgressLabel).trim()
+        if (!hasMeaningfulContent(content) && !streamingShell && !toolProgressLabel) return null
         return {
           role,
           content,
           time: asString(row.time).trim()
             || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-          ...sanitizeMessageExtras(row),
+          ...(streamingShell ? { streamingShell: true } : {}),
+          ...(toolProgressLabel ? { toolProgressLabel } : {}),
         } as ChatMessage
       })
       .filter((m): m is ChatMessage => !!m)
@@ -345,7 +349,7 @@ export function useChatMessages(sessionId: Ref<string>) {
       role: 'ai',
       content: '',
       time,
-      streamingShell: true
+      streamingShell: true,
     })
     persistMessagesCache()
     return messages.value.length - 1
@@ -358,7 +362,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     if (!row) return
     row.content = safe
     if (safe) {
-      row.streamingShell = undefined
+      delete row.streamingShell
     } else {
       row.streamingShell = true
     }

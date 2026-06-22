@@ -28,11 +28,30 @@ sla:
 
 llm_default: "auto"
 
-skills: []
+capabilities:
+  - payment.contract.audit
+  - java.python.bridge
+
+skills:
+  - skills/skill-java-payment-bridge-officer.md
+
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
 
 depends_on:
   - modstore-backend-api
   - payment-billing-reconciler
+
+examples:
+  - title: "Java 支付桥接员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次Java 支付桥接员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

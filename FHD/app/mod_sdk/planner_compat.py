@@ -50,7 +50,7 @@ def resolve_ai_tier_for_request(request: Request) -> str:
 def intent_test(body: dict[str, Any] | None) -> dict[str, Any]:
     from fastapi.responses import JSONResponse
 
-    from app.routes.ai_chat import recognize_intents
+    from app.application.ai_chat_helpers import recognize_intents
 
     message = str((body or {}).get("message") or "").strip()
     if not message:

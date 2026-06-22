@@ -240,7 +240,7 @@ describe('SaasPricingView', () => {
   })
 
   it('disables buy buttons during checkout', async () => {
-    let resolveCheckout: (value: unknown) => void
+      let resolveCheckout: (value: unknown) => void
     mockCheckout.mockImplementation(() => new Promise(resolve => { resolveCheckout = resolve }))
     const wrapper = await mountComponent()
     await flushPromises()

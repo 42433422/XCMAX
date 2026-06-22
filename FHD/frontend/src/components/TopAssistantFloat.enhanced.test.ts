@@ -4,7 +4,7 @@
  * product search、workflow employee toggles、starter pack、
  * tutorial tracks、keyboard navigation、event listeners
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
@@ -327,32 +327,17 @@ describe('TopAssistantFloat.vue – product search', () => {
   })
 })
 
-describe('TopAssistantFloat.vue – workflow employees', () => {
-  it('shows workflow employee section in oneClick tab', async () => {
-    const { wrapper } = await mountTopAssistantFloat()
-    await wrapper.find('.assistant-float-toggle').trigger('click')
-    const tabs = wrapper.findAll('.assistant-tab')
-    await tabs[2].trigger('click') // oneClick tab
-    expect(wrapper.find('.workflow-employee-section').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('displays workflow employee toggles', async () => {
-    const { wrapper } = await mountTopAssistantFloat()
-    await wrapper.find('.assistant-float-toggle').trigger('click')
-    const tabs = wrapper.findAll('.assistant-tab')
-    await tabs[2].trigger('click') // oneClick tab
-    expect(wrapper.findAll('.workflow-employee-row').length).toBeGreaterThan(0)
-    wrapper.unmount()
-  })
-})
+// NOTE: The standalone "oneClick" tab and its workflow-employee section/rows were
+// removed from TopAssistantFloat.vue (only orphan CSS remains). The previous
+// "workflow employees" tests targeted that removed UI and are dropped accordingly.
+// Current tab layout is: push(0), assistant(1), starterPack(2), tutorial(3).
 
 describe('TopAssistantFloat.vue – starter pack', () => {
   it('shows starter pack items in starterPack tab', async () => {
     const { wrapper } = await mountTopAssistantFloat()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     const tabs = wrapper.findAll('.assistant-tab')
-    await tabs[4].trigger('click') // starterPack tab
+    await tabs[2].trigger('click') // starterPack tab
     expect(wrapper.find('.starter-pack-list').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -363,7 +348,7 @@ describe('TopAssistantFloat.vue – tutorial tracks', () => {
     const { wrapper } = await mountTopAssistantFloat()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     const tabs = wrapper.findAll('.assistant-tab')
-    await tabs[5].trigger('click') // tutorial tab
+    await tabs[3].trigger('click') // tutorial tab
     expect(wrapper.find('.tutorial-track-list').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -372,7 +357,7 @@ describe('TopAssistantFloat.vue – tutorial tracks', () => {
     const { wrapper } = await mountTopAssistantFloat()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     const tabs = wrapper.findAll('.assistant-tab')
-    await tabs[5].trigger('click')
+    await tabs[3].trigger('click')
     expect(wrapper.findAll('.tutorial-track-card').length).toBeGreaterThan(0)
     wrapper.unmount()
   })

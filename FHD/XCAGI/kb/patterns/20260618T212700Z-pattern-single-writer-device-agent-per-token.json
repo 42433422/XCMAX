@@ -1,0 +1,12 @@
+{
+  "after": "Keep one watchdog-owned agent process per device token; kickstart the watchdog label only.",
+  "before": "Run multiple device agents with the same websocket token and device id.",
+  "created_at": "2026-06-18T21:27:00.740647+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T212700Z-fix-para-task-stays-running-with-only-waiting-dispatch.json"
+  },
+  "pattern": "single_writer_device_agent_per_token",
+  "schema_version": 1,
+  "summary": "远程 worker 设备需要每个 token 的单一所有权，以避免 websocket 连接抖动。"
+}

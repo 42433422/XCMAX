@@ -24,7 +24,7 @@
    Android `assembleDebug` 通过。
 3. **行为零变化优先**：先做「等价重构」（移动/抽取/改依赖方向），**不**在同一步混入逻辑修改。
 4. **棘轮护栏（ratchet）**：对每类债设「只减不增」CI 校验，防止边修边长。
-5. **覆盖率不退**：后端棘轮 floor 现 **51% 行 / 36% 分支**（HEAD 实测 **52.74% / 37.17%**；WIP **74.56% / 61.8%** 但有 196 红灯），
+5. **覆盖率不退**：后端棘轮 floor 现 **84% 行 / 73% 分支**（HEAD 实测 **85.07% / 74.22%**；WIP **74.56% / 61.8%**，2026-06-17 红灯已收口），
    见 `FHD/metrics/coverage-dual-summary.json`。拆分时**同步补特征测试**，新抽出的纯函数/UseCase 必须带测试。
 
 ---
@@ -48,10 +48,8 @@
   `target-structure.md` 的 `routes → application → domain` 铁律。
   代表：`contract_lifecycle_api.py`(16)、`finance_invoices_api.py`(8)、`domains/wechat/routes.py`(7)、
   `user_cs_wechat_passive_compat.py`(6)、`operations_line_api.py`(5)。
-- **`_v2` 双版本并存**：17 个领域同时存在 `xxx_app_service.py` 与 `xxx_app_service_v2.py`：
-  `auth / user / customer / product / material / ocr / print / purchase / inventory / template /
-  conversation / file_analysis / shipment / extract_log / wechat_contact / user_preference /
-  user_memory_vector`。这是 `MIGRATION_v2_DROP_PLAN.md` 受控债，但「并存」本身是读者认知负担。
+- **`_v2` 双版本并存已收敛**：`FHD/app/application/*_app_service_v2.py` 已清零，
+  由 `MIGRATION_v2_DROP_PLAN.md` 与 `test_no_app_service_v2_files.py` 防回潮。
 - **`services/` 职责混杂**：106 个文件里混着领域逻辑、基础设施、AI 引擎、工具。
 
 ### 1.2 `services/` 实际分类（决定各自去向）
@@ -419,6 +417,6 @@ Step 5  mods.ts 收敛为门面（return 维持原 API）
 ---
 
 ## 8. 不在本方案范围（受控债 / 仓外 / 需单独决策）
-- `_v2` 删除动作：遵循 `MIGRATION_v2_DROP_PLAN.md` 既有 allowlist + CI guard，不在此私改。
+- `_v2` 应用服务删除动作：已完成；后续只保留 guard，禁止重新新增 application service 双轨。
 - 官网 HTTPS：服务器/证书侧，运维处置。
 - `admin123` 默认凭据链、写路由认证：属安全策略变更，见安全审计结论，需产品决策后单独执行。

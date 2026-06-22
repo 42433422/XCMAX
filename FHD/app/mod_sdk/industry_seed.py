@@ -40,6 +40,12 @@ def open_industry_seed_mod_ids() -> list[str]:
         mid = str(row.get("mod_id") or "").strip()
         if mid:
             out.append(mid)
+    for row in packages.values():
+        if not isinstance(row, dict):
+            continue
+        mid = str(row.get("mod_id") or "").strip()
+        if mid.endswith("-industry"):
+            out.append(mid)
     return _dedupe(out)
 
 

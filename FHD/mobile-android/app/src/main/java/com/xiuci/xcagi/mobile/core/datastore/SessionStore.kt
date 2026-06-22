@@ -51,10 +51,19 @@ constructor(
     private val rememberPassKey = booleanPreferencesKey("remember_password")
     private val autoLoginKey = booleanPreferencesKey("auto_login")
     private val avatarUriKey = stringPreferencesKey("avatar_uri")
+    private val relayDesktopIdKey = stringPreferencesKey("relay_desktop_id")
+    private val relayBaseUrlKey = stringPreferencesKey("relay_base_url")
+    private val localBaseUrlKey = stringPreferencesKey("local_base_url")
+    private val relaySessionTokenKey = stringPreferencesKey("relay_session_token")
+    private val relayAccountIdKey = stringPreferencesKey("relay_account_id")
+    private val relayTenantIdKey = stringPreferencesKey("relay_tenant_id")
+    private val relayPairedAtKey = stringPreferencesKey("relay_paired_at")
+    private val walletBalanceJsonKey = stringPreferencesKey("wallet_balance_json")
 
     val fhdHostFlow: Flow<String> = context.dataStore.data.map { it[fhdHost] ?: "" }
     val userIdFlow: Flow<Int> = context.dataStore.data.map { it[userIdKey] ?: 0 }
     val fhdAccessFlow: Flow<String> = context.dataStore.data.map { it[fhdAccess] ?: "" }
+    val fhdRefreshFlow: Flow<String> = context.dataStore.data.map { it[fhdRefresh] ?: "" }
     val serverModeFlow: Flow<String> = context.dataStore.data.map { it[serverMode] ?: "cloud" }
     val accountKindFlow: Flow<String> = context.dataStore.data.map { it[accountKind] ?: "" }
     val marketTokenFlow: Flow<String> = context.dataStore.data.map { it[marketToken] ?: "" }
@@ -95,6 +104,15 @@ constructor(
     val rememberPassFlow: Flow<Boolean> = context.dataStore.data.map { it[rememberPassKey] == true }
     val autoLoginFlow: Flow<Boolean> = context.dataStore.data.map { it[autoLoginKey] == true }
     val avatarUriFlow: Flow<String> = context.dataStore.data.map { it[avatarUriKey] ?: "" }
+    val relayDesktopIdFlow: Flow<String> = context.dataStore.data.map { it[relayDesktopIdKey] ?: "" }
+    val relayBaseUrlFlow: Flow<String> = context.dataStore.data.map { it[relayBaseUrlKey] ?: "" }
+    val localBaseUrlFlow: Flow<String> = context.dataStore.data.map { it[localBaseUrlKey] ?: "" }
+    val relaySessionTokenFlow: Flow<String> =
+            context.dataStore.data.map { it[relaySessionTokenKey] ?: "" }
+    val relayAccountIdFlow: Flow<String> =
+            context.dataStore.data.map { it[relayAccountIdKey] ?: "" }
+    val relayTenantIdFlow: Flow<String> = context.dataStore.data.map { it[relayTenantIdKey] ?: "" }
+    val relayPairedAtFlow: Flow<String> = context.dataStore.data.map { it[relayPairedAtKey] ?: "" }
 
     suspend fun isSetupComplete(): Boolean = isSetupCompleteFlow.first()
 
@@ -121,7 +139,11 @@ constructor(
     }
 
     suspend fun setFhdHost(host: String) {
-        context.dataStore.edit { it[fhdHost] = host.trim() }
+        context.dataStore.edit { prefs ->
+            val value = host.trim()
+            if (value.isBlank()) prefs.remove(fhdHost)
+            else prefs[fhdHost] = value
+        }
     }
 
     suspend fun fhdHost(): String = fhdHostFlow.first()
@@ -141,6 +163,15 @@ constructor(
             if (userId > 0) it[userIdKey] = userId
         }
     }
+
+    suspend fun setFhdTokens(access: String, refresh: String = "") {
+        context.dataStore.edit {
+            it[fhdAccess] = access.trim()
+            if (refresh.isNotBlank()) it[fhdRefresh] = refresh.trim()
+        }
+    }
+
+    suspend fun fhdRefreshToken(): String = fhdRefreshFlow.first()
 
     val fcmTokenFlow: Flow<String> = context.dataStore.data.map { it[fcmTokenKey] ?: "" }
 
@@ -198,6 +229,70 @@ constructor(
         }
     }
 
+    suspend fun setRelayDesktopId(relayId: String) {
+        context.dataStore.edit { prefs ->
+            val value = relayId.trim()
+            if (value.isBlank()) prefs.remove(relayDesktopIdKey)
+            else prefs[relayDesktopIdKey] = value
+        }
+    }
+
+    suspend fun setRelayBaseUrl(url: String) {
+        context.dataStore.edit { prefs ->
+            val value = url.trim()
+            if (value.isBlank()) prefs.remove(relayBaseUrlKey)
+            else prefs[relayBaseUrlKey] = value
+        }
+    }
+
+    suspend fun setLocalBaseUrl(url: String) {
+        context.dataStore.edit { prefs ->
+            val value = url.trim()
+            if (value.isBlank()) prefs.remove(localBaseUrlKey)
+            else prefs[localBaseUrlKey] = value
+        }
+    }
+
+    suspend fun setRelaySessionToken(token: String) {
+        context.dataStore.edit { prefs ->
+            val value = token.trim()
+            if (value.isBlank()) prefs.remove(relaySessionTokenKey)
+            else prefs[relaySessionTokenKey] = value
+        }
+    }
+
+    suspend fun setRelayAccountId(accountId: String) {
+        context.dataStore.edit { prefs ->
+            val value = accountId.trim()
+            if (value.isBlank()) prefs.remove(relayAccountIdKey)
+            else prefs[relayAccountIdKey] = value
+        }
+    }
+
+    suspend fun setRelayTenantId(tenantId: String) {
+        context.dataStore.edit { prefs ->
+            val value = tenantId.trim()
+            if (value.isBlank()) prefs.remove(relayTenantIdKey)
+            else prefs[relayTenantIdKey] = value
+        }
+    }
+
+    suspend fun setRelayPairedAt(timestamp: String) {
+        context.dataStore.edit { prefs ->
+            val value = timestamp.trim()
+            if (value.isBlank()) prefs.remove(relayPairedAtKey)
+            else prefs[relayPairedAtKey] = value
+        }
+    }
+
+    suspend fun relayDesktopId(): String = relayDesktopIdFlow.first()
+    suspend fun relayBaseUrl(): String = relayBaseUrlFlow.first()
+    suspend fun localBaseUrl(): String = localBaseUrlFlow.first()
+    suspend fun relaySessionToken(): String = relaySessionTokenFlow.first()
+    suspend fun relayAccountId(): String = relayAccountIdFlow.first()
+    suspend fun relayTenantId(): String = relayTenantIdFlow.first()
+    suspend fun relayPairedAt(): String = relayPairedAtFlow.first()
+
     suspend fun legalAcceptedVersion(): String = legalAcceptedVersionFlow.first()
 
     suspend fun setLegalAcceptedVersion(version: String) {
@@ -253,6 +348,20 @@ constructor(
         val p = savedPasswordFlow.first()
         return autoLoginFlow.first() && u.isNotBlank() && p.isNotBlank()
     }
+
+    /** 钱包余额缓存 JSON（冷启动秒出用）。空字符串表示无缓存。 */
+    val walletBalanceJsonFlow: Flow<String> =
+            context.dataStore.data.map { it[walletBalanceJsonKey] ?: "" }
+
+    suspend fun setWalletBalanceJson(json: String) {
+        context.dataStore.edit { prefs ->
+            val value = json.trim()
+            if (value.isBlank()) prefs.remove(walletBalanceJsonKey)
+            else prefs[walletBalanceJsonKey] = value
+        }
+    }
+
+    suspend fun walletBalanceJson(): String = walletBalanceJsonFlow.first()
 
     suspend fun clear() {
         context.dataStore.edit { it.clear() }

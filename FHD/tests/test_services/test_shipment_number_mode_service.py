@@ -552,6 +552,9 @@ class TestExecute:
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
             patch("app.services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
         ):
+            # 源码已修复：用 `"quantity_tins" in product` 判断键是否存在（而非 `or` 短路），
+            # 且 `float(quantity)` 包裹在 try/except 内回退 0.0；当 quantity_tins=0 时
+            # quantity_value==0.0，命中 `quantity_value <= 0` 分支，按严格策略返回 400。
             result, status = svc.execute(
                 order_text="",
                 custom_order_number="",

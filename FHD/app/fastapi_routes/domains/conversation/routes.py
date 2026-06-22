@@ -20,6 +20,47 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["legacy-conversation"], deprecated=True)
 
 
+def _trace_ai_message_save(payload: dict, *, body: dict) -> dict:
+    if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
+        return payload
+    try:
+        from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
+
+        safe_body = {
+            "session_id": str(body.get("session_id") or ""),
+            "user_id": str(body.get("user_id") or "default"),
+            "role": str(body.get("role") or ""),
+            "intent": str(body.get("intent") or ""),
+            "content_preview": str(body.get("content") or "")[:500],
+        }
+        message = str(body.get("content") or "message saved")
+        run = create_chat_trace_run(
+            {
+                "success": bool(payload.get("success", False)),
+                "response": str(payload.get("message") or "message saved"),
+                "data": {"text": "message saved", "route_result": dict(payload)},
+            },
+            message=message,
+            runtime_context={
+                "route": "/api/ai/message/save",
+                "source": "legacy_conversation",
+                "action": "message_save",
+                "request": safe_body,
+            },
+            user_id=safe_body["user_id"],
+            source="legacy_conversation",
+            channel="ai_message_save",
+            intent="conversation_message_save",
+        )
+        traced = dict(payload)
+        traced["run_id"] = run.run_id
+        traced["agent_run_id"] = run.run_id
+        return traced
+    except Exception:  # noqa: BLE001 - tracing must not break legacy message persistence
+        logger.exception("failed to attach AgentRun trace to /api/ai/message/save")
+        return payload
+
+
 @router.get("/api/conversations/{session_id}")
 def conversations_get(session_id: str, limit: int = Query(default=50)):
     try:
@@ -116,6 +157,7 @@ def ai_message_save(body: dict = Body(default_factory=dict)):
     user_id_str = str(user_raw) if user_raw is not None else "default"
     try:
         message_id = service.save_message(session_id, user_id_str, role, content, intent, metadata)
-        return {"success": True, "message_id": message_id}
+        return _trace_ai_message_save({"success": True, "message_id": message_id}, body=body)
     except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        traced = _trace_ai_message_save({"success": False, "message": str(e)}, body=body)
+        return JSONResponse(traced, status_code=500)

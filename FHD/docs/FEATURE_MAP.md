@@ -1,6 +1,6 @@
 # 功能边界图(Feature Map)
 
-> 单一事实来源:每个业务功能**只在一个地方**有实现;其它位置要么是路由挂载,要么是过渡 shim。
+> 单一实现源:每个业务功能**只在一个地方**有实现;其它位置要么是路由挂载,要么是过渡 shim。
 >
 > 本文件与源码同步维护,破坏本约束的 PR 必须被拒绝。
 
@@ -15,12 +15,12 @@
 | 目录 | 类型 | 职责 |
 |------|------|------|
 | [XCAGI/](../XCAGI/) | 启动外壳 | `run.py` 入口、alembic、mods、部署配置、资源。**不含业务代码**(通过 sys.path 加载根 `app/`)。 |
-| [app/](../app/) | 服务端唯一代码 | Neuro-DDD 分层:`domain/` / `application/` / `infrastructure/` / `neuro_bus/` / `fastapi_app.py` / `fastapi_routes/`(含历史兼容子集) / `legacy/`(过渡期集中托管的支持模块) / `shell/`。 |
+| [app/](../app/) | 服务端唯一代码 | Neuro-DDD 分层:`domain/` / `application/` / `infrastructure/` / `neuro_bus/` / `fastapi_app.py` / `fastapi_routes/`(含历史兼容子集) / `shell/`. |
+| [app/legacy/](../app/legacy/) | legacy 模块唯一收容目录 | 所有 `legacy_*` 命名的过渡期模块必须迁入此目录；禁止在 `app/` 其他子目录新增 `legacy_*` 文件。 |
 | [frontend/](../frontend/) | 前端唯一代码 | Vue 3 + Vite,`package.json` name = `xcagi-frontend`。 |
-| [mods/](../mods/) | 模块包（**SSOT**） | 行业包与 bridge Mod；**日常只改此处**。本地 dev 与 Vite 优先加载。 |
+| [mods/](../mods/) | 模块包（**唯一编辑源**） | 行业包与 bridge Mod；**日常只改此处**。本地 dev 与 Vite 优先加载。 |
 | [XCAGI/mods/](../XCAGI/mods/) | Mod 导出副本 | 由 `scripts/dev/mods_ssot.py sync` 从 `mods/` 同步；供 Docker/打包路径，**禁止手改**。 |
 | [MODstore/](../MODstore/) | 独立产品子线 | MOD 市场,单独部署,不是主应用的一部分。 |
-| [WXCC/](../WXCC/) | 独立产品子线 | 微信小程序,不是主应用运行时的一部分(主应用只暴露 `/api/mp*` 给它调)。 |
 | [mobile-android/](../mobile-android/) | 独立客户端 | Kotlin + Compose 原生 App;调 FHD `/api/mobile/v1` 与 MODstore 公网 API。见 [guides/MOBILE_ANDROID.md](./guides/MOBILE_ANDROID.md)。 |
 | [rasa/](../rasa/) | NLU 训练数据 | 训练 Rasa 模型用,非运行时代码。 |
 | [scripts/](../scripts/) | 运维/开发脚本 | `dev/` 开发调试,`launchers/` 辅助启动,`backend-legacy/` 历史脚本。 |
@@ -47,7 +47,7 @@
 
 ### 发货单 / Shipment
 
-- 应用服务:[app/application/shipment_app_service_v2.py](../app/application/shipment_app_service_v2.py)
+- 应用服务:[app/application/shipment_app_service.py](../app/application/shipment_app_service.py)
 - 聚合根:[app/domain/aggregates/shipment_aggregate.py](../app/domain/aggregates/shipment_aggregate.py)
 - 仓储接口:[app/domain/repositories/shipment_repository.py](../app/domain/repositories/shipment_repository.py)
 - 持久化:[app/db/models/shipment.py](../app/db/models/shipment.py)
@@ -71,9 +71,8 @@
 - 消息与任务:[app/services/wechat_task_service.py](../app/services/wechat_task_service.py)
 - 持久化:[app/infrastructure/persistence/wechat_contact_store_impl.py](../app/infrastructure/persistence/wechat_contact_store_impl.py)
 - 神经域:[app/neuro_bus/domains/wechat_domain.py](../app/neuro_bus/domains/wechat_domain.py)
-- 小程序 HTTP:[app/routes/wechat_miniprogram.py](../app/routes/wechat_miniprogram.py) + [app/fastapi_routes/miniprogram.py](../app/fastapi_routes/miniprogram.py)
+- 小程序后端模型:[app/db/models/miniprogram.py](../app/db/models/miniprogram.py)(ORM 模型,小程序客户端未实现)
 - **解密工具**(外部进程):[resources/wechat-decrypt/](../resources/wechat-decrypt/)、[XCAGI/WechatDecrypt/](../XCAGI/WechatDecrypt/)(二进制构建)
-- 客户端:[WXCC/](../WXCC/)(独立小程序源码)
 
 ### 支付 / Payment(支付宝)
 
@@ -96,7 +95,7 @@
 
 - 运行时加载:[app/infrastructure/mods/](../app/infrastructure/mods/)
 - 发现外壳:[app/shell/xcagi_mods_discover.py](../app/shell/xcagi_mods_discover.py)
-- 模块源（SSOT）:[mods/](../mods/) ；导出副本 [XCAGI/mods/](../XCAGI/mods/)（`mods_ssot.py sync`，Docker/打包用）
+- 模块源（唯一编辑源）:[mods/](../mods/) ；导出副本 [XCAGI/mods/](../XCAGI/mods/)（`mods_ssot.py sync`，Docker/打包用）
 - 市场 UI(独立子线):[MODstore/](../MODstore/)
 
 ### 模板 / 单据

@@ -7,7 +7,7 @@ import os
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
@@ -22,8 +22,105 @@ def _svc():
     return get_material_application_service()
 
 
+def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    if not output:
+        for step in getattr(run, "steps", []) or []:
+            if str(getattr(step, "node_id", "")) == node_id:
+                output = dict(getattr(step, "output", {}) or {})
+                break
+    if not output:
+        output = {"success": getattr(run, "status", "") == "completed"}
+    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
+        output["message"] = getattr(run, "error", "")
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    return output
+
+
+def _materials_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
+    return str(
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or payload.get("user_id")
+        or payload.get("userId")
+        or "materials-route"
+    ).strip()
+
+
+def _run_materials_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("materials") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return {
+            "success": False,
+            "message": f"未注册的 materials 动作: {action}",
+            "agent_status": "failed",
+        }
+
+    node_id = f"materials_{action}"
+    user_id = _materials_agent_user_id(request, params)
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 执行 materials.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="materials",
+                action=action,
+                params=dict(params or {}),
+                risk=str(action_meta.get("risk") or "medium"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Execute materials.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "medium"),
+        metadata={"source": "materials_route", "route": route_path},
+    )
+    runtime_context = {
+        "source": "materials_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+        "service_source": "fastapi_materials_route",
+    }
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(params.get("message") or f"Materials {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "materials-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    return _agent_node_output(run, node_id)
+
+
 @router.post("/api/materials")
-def add_material(data: dict[str, Any] = Body(default_factory=dict)):
+def add_material(request: Request, data: dict[str, Any] = Body(default_factory=dict)):
     try:
         if "name" not in data:
             return JSONResponse(
@@ -52,8 +149,15 @@ def add_material(data: dict[str, Any] = Body(default_factory=dict)):
         if "min_stock" not in data and "min_quantity" in data:
             data["min_stock"] = data.get("min_quantity")
 
-        result = _svc().create_material(data)
+        result = _run_materials_agent(
+            request=request,
+            action="create",
+            params=data,
+            route_path="/api/materials",
+        )
         status = 200 if result.get("success") else 400
+        if result.get("error_code") == "tool_exception":
+            status = 500
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.error("添加原材料失败：%s", e)
@@ -85,17 +189,33 @@ def get_materials(
 
 
 @router.put("/api/materials/{material_id}")
-def update_material(material_id: int, data: dict[str, Any] = Body(default_factory=dict)):
+def update_material(
+    request: Request,
+    material_id: int,
+    data: dict[str, Any] = Body(default_factory=dict),
+):
     try:
-        result = _svc().update_material(material_id, **data)
+        params = {"id": material_id, **dict(data or {})}
+        result = _run_materials_agent(
+            request=request,
+            action="update",
+            params=params,
+            route_path="/api/materials/{material_id}",
+        )
+        if not result.get("success"):
+            status = 500 if result.get("error_code") == "tool_exception" else 400
+            return JSONResponse(result, status_code=status)
         payload = result.get("data") or {}
         if isinstance(payload, dict):
             payload.setdefault("id", material_id)
             for k, v in (data or {}).items():
                 if v is not None:
                     payload[k] = v
+        result["message"] = result.get("message") or "更新成功"
+        result["data"] = payload
         return JSONResponse(
-            {"success": True, "message": "更新成功", "data": payload}, status_code=200
+            result,
+            status_code=200,
         )
     except RECOVERABLE_ERRORS as e:
         logger.error("更新原材料失败：%s", e)
@@ -103,17 +223,29 @@ def update_material(material_id: int, data: dict[str, Any] = Body(default_factor
 
 
 @router.delete("/api/materials/{material_id}")
-def delete_material(material_id: int):
+def delete_material(request: Request, material_id: int):
     try:
-        _svc().delete_material(material_id)
-        return JSONResponse({"success": True, "message": "删除成功"}, status_code=200)
+        result = _run_materials_agent(
+            request=request,
+            action="delete",
+            params={"id": material_id},
+            route_path="/api/materials/{material_id}",
+        )
+        if not result.get("success"):
+            status = 500 if result.get("error_code") == "tool_exception" else 400
+            return JSONResponse(result, status_code=status)
+        result["message"] = result.get("message") or "删除成功"
+        return JSONResponse(result, status_code=200)
     except RECOVERABLE_ERRORS as e:
         logger.error("删除原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
 @router.post("/api/materials/batch-delete")
-def batch_delete_materials(data: dict[str, Any] = Body(default_factory=dict)):
+def batch_delete_materials(
+    request: Request,
+    data: dict[str, Any] = Body(default_factory=dict),
+):
     try:
         if not isinstance(data, dict):
             return JSONResponse(
@@ -131,14 +263,21 @@ def batch_delete_materials(data: dict[str, Any] = Body(default_factory=dict)):
             except (TypeError, ValueError):
                 continue
 
-        try:
-            _svc().batch_delete_materials(valid_ids)
-        except RECOVERABLE_ERRORS as e:
-            logger.error("批量删除原材料时 service 执行异常：%s", e)
-
         deleted_count = len(valid_ids)
+        result = _run_materials_agent(
+            request=request,
+            action="batch_delete",
+            params={"ids": valid_ids},
+            route_path="/api/materials/batch-delete",
+        )
+        if not result.get("success"):
+            if result.get("error_code") == "tool_exception":
+                logger.error("批量删除原材料时 Agent 执行异常：%s", result.get("message"))
+            else:
+                return JSONResponse(result, status_code=400)
         return JSONResponse(
             {
+                **result,
                 "success": True,
                 "message": f"已删除 {deleted_count} 条记录",
                 "deleted_count": deleted_count,

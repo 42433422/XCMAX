@@ -15,7 +15,7 @@
 [Architecture](#-neuro-ddd-与代码落点必读)
 [Vue](https://vuejs.org/)
 [Platform](https://www.microsoft.com/windows/)
-[Code style: black](https://github.com/psf/black)
+[Code style: Ruff](https://docs.astral.sh/ruff/)
 [Contributions welcome](https://github.com/42433422/XCMAX/blob/main/FHD/.github/CONTRIBUTING.md)
 
 ## 🌟 项目简介
@@ -340,7 +340,6 @@ NeuroBus：生产级异步事件总线；上表为可选 publish/分发增强。
 | 路线         | 说明                    | 典型落点                                   |
 | ---------- | --------------------- | -------------------------------------- |
 | **Mod 仓库** | 扩展功能与行业包，核心尽量不 fork   | `mods/`、`/api/mod-store/`*、Mod Manager |
-| **小程序**    | 移动侧 CRM / 单据能力        | `/api/mp`* 族接口、`miniprogram/`          |
 | **传统模式**   | 类资源管理器 + 表格工作流，降低上手成本 | 前端「传统模式」视图与对应 API（以 OpenAPI 为准）        |
 
 

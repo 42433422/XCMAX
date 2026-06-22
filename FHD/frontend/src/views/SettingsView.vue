@@ -261,6 +261,270 @@
 
         <details
           class="settings-card"
+          data-tutorial-id="settings-memory-v2"
+          open
+        >
+          <summary class="settings-row">
+            <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
+              <i class="fa fa-bookmark"></i>
+            </span>
+            <span class="settings-row__label">拟人persy系统</span>
+            <span class="settings-row__meta">{{ persyFoldMeta }}</span>
+            <span class="settings-row__arrow" aria-hidden="true"></span>
+          </summary>
+
+          <div class="settings-card__body settings-card__body--compact">
+            <div class="persy-profile">
+              <div v-if="persyLoading" class="persy-profile__state muted">人设加载中…</div>
+              <div v-else-if="persyProfile" class="persy-profile__body">
+                <div class="persy-profile__head">
+                  <span class="persy-profile__identity">{{ persyProfile.identity_composite || persyProfile.identity_primary }}</span>
+                  <span class="persy-profile__type">{{ persyProfile.mbti_type }}</span>
+                  <span class="persy-profile__meta">互动 {{ persyProfile.interaction_count }} 轮</span>
+                </div>
+                <div class="persy-profile__axes">
+                  <div class="persy-axis">
+                    <span class="persy-axis__label">亲切度</span>
+                    <div class="persy-axis__bar">
+                      <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.warmth}%` }"></div>
+                    </div>
+                    <span class="persy-axis__score">{{ persyProfile.four_axes.warmth }}</span>
+                  </div>
+                  <div class="persy-axis">
+                    <span class="persy-axis__label">详细度</span>
+                    <div class="persy-axis__bar">
+                      <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.verbosity}%` }"></div>
+                    </div>
+                    <span class="persy-axis__score">{{ persyProfile.four_axes.verbosity }}</span>
+                  </div>
+                  <div class="persy-axis">
+                    <span class="persy-axis__label">主动度</span>
+                    <div class="persy-axis__bar">
+                      <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.proactiveness}%` }"></div>
+                    </div>
+                    <span class="persy-axis__score">{{ persyProfile.four_axes.proactiveness }}</span>
+                  </div>
+                  <div class="persy-axis">
+                    <span class="persy-axis__label">结构度</span>
+                    <div class="persy-axis__bar">
+                      <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.structuredness}%` }"></div>
+                    </div>
+                    <span class="persy-axis__score">{{ persyProfile.four_axes.structuredness }}</span>
+                  </div>
+                </div>
+                <div class="persy-profile__footer">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-secondary"
+                    :disabled="persyInferring"
+                    @click="runPersyInfer"
+                  >
+                    {{ persyInferring ? '推断中…' : '触发推断' }}
+                  </button>
+                  <span v-if="persyLastReason" class="persy-profile__reason">{{ persyLastReason }}</span>
+                </div>
+              </div>
+              <div v-else class="persy-profile__state muted">暂无人设数据</div>
+            </div>
+
+            <div class="memory-v2-toolbar">
+              <select
+                v-model="memoryV2StatusFilter"
+                class="settings-item__control settings-item__control--select memory-v2-select"
+                :disabled="memoryV2Loading"
+                @change="loadMemoryV2"
+              >
+                <option
+                  v-for="item in MEMORY_V2_STATUS_FILTERS"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </option>
+              </select>
+              <select
+                v-model="memoryV2TypeFilter"
+                class="settings-item__control settings-item__control--select memory-v2-select"
+                :disabled="memoryV2Loading"
+                @change="loadMemoryV2"
+              >
+                <option value="all">全部类型</option>
+                <option
+                  v-for="item in MEMORY_V2_TYPE_OPTIONS"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </option>
+              </select>
+              <button
+                type="button"
+                class="btn btn-sm btn-secondary"
+                :disabled="memoryV2Loading"
+                @click="loadMemoryV2"
+              >
+                刷新
+              </button>
+            </div>
+
+            <p v-if="memoryV2Error" class="memory-v2-error" role="alert">{{ memoryV2Error }}</p>
+
+            <form class="memory-v2-form" @submit.prevent="createMemoryV2Candidate">
+              <select
+                v-model="memoryV2Draft.memoryType"
+                class="settings-item__control settings-item__control--select memory-v2-form__type"
+                :disabled="memoryV2Creating"
+              >
+                <option
+                  v-for="item in MEMORY_V2_TYPE_OPTIONS"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </option>
+              </select>
+              <input
+                v-model="memoryV2Draft.key"
+                class="settings-item__control settings-item__control--text memory-v2-form__input"
+                type="text"
+                maxlength="64"
+                placeholder="键"
+                :disabled="memoryV2Creating"
+              >
+              <input
+                v-model="memoryV2Draft.value"
+                class="settings-item__control settings-item__control--text memory-v2-form__input"
+                type="text"
+                maxlength="240"
+                placeholder="值"
+                :disabled="memoryV2Creating"
+              >
+              <input
+                v-model.number="memoryV2Draft.confidence"
+                class="settings-item__control settings-item__control--text memory-v2-form__confidence"
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+                :disabled="memoryV2Creating"
+              >
+              <button
+                type="submit"
+                class="btn btn-sm btn-primary"
+                :disabled="memoryV2Creating"
+              >
+                {{ memoryV2Creating ? '写入中…' : '写入候选' }}
+              </button>
+            </form>
+
+            <pre v-if="memoryV2PlannerContext" class="memory-v2-context">{{ memoryV2PlannerContext }}</pre>
+
+            <p v-if="memoryV2Loading" class="memory-v2-state muted">加载中…</p>
+            <ul v-else-if="memoryV2Records.length" class="memory-v2-list">
+              <li
+                v-for="record in memoryV2Records"
+                :key="record.memory_id"
+                class="memory-v2-item"
+              >
+                <div class="memory-v2-item__head">
+                  <span class="memory-v2-chip">{{ memoryV2TypeLabel(record.memory_type) }}</span>
+                  <span class="memory-v2-chip" :class="`memory-v2-chip--${record.status}`">
+                    {{ memoryV2StatusLabel(record.status) }}
+                  </span>
+                  <span class="memory-v2-item__time">{{ memoryV2Time(record.updated_at || record.created_at) }}</span>
+                </div>
+
+                <div v-if="memoryV2Edit.memoryId === record.memory_id" class="memory-v2-edit">
+                  <input
+                    v-model="memoryV2Edit.key"
+                    class="settings-item__control settings-item__control--text memory-v2-edit__input"
+                    type="text"
+                    maxlength="64"
+                    :disabled="memoryV2BusyId === record.memory_id"
+                  >
+                  <textarea
+                    v-model="memoryV2Edit.value"
+                    class="memory-v2-edit__textarea"
+                    rows="3"
+                    :disabled="memoryV2BusyId === record.memory_id"
+                  ></textarea>
+                </div>
+                <div v-else class="memory-v2-item__body">
+                  <strong class="memory-v2-item__key">{{ record.key }}</strong>
+                  <span class="memory-v2-item__value">{{ memoryV2DisplayValue(record.value) }}</span>
+                </div>
+
+                <div class="memory-v2-item__meta">
+                  <span>{{ record.source || '未知' }}</span>
+                  <span>置信度 {{ Number(record.confidence || 0).toFixed(2) }}</span>
+                </div>
+
+                <div class="memory-v2-actions">
+                  <template v-if="memoryV2Edit.memoryId === record.memory_id">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-primary"
+                      :disabled="memoryV2BusyId === record.memory_id"
+                      @click="saveMemoryV2Edit(record)"
+                    >
+                      保存
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-secondary"
+                      :disabled="memoryV2BusyId === record.memory_id"
+                      @click="cancelMemoryV2Edit"
+                    >
+                      取消
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button
+                      v-if="record.status === 'pending'"
+                      type="button"
+                      class="btn btn-sm btn-primary"
+                      :disabled="memoryV2BusyId === record.memory_id"
+                      @click="confirmMemoryV2(record)"
+                    >
+                      确认
+                    </button>
+                    <button
+                      v-if="record.status === 'pending'"
+                      type="button"
+                      class="btn btn-sm btn-secondary"
+                      :disabled="memoryV2BusyId === record.memory_id"
+                      @click="rejectMemoryV2(record)"
+                    >
+                      拒绝
+                    </button>
+                    <button
+                      v-if="canEditMemoryV2(record)"
+                      type="button"
+                      class="btn btn-sm btn-secondary"
+                      :disabled="memoryV2BusyId === record.memory_id"
+                      @click="startMemoryV2Edit(record)"
+                    >
+                      修正
+                    </button>
+                    <button
+                      v-if="record.status !== 'deleted'"
+                      type="button"
+                      class="btn btn-sm btn-danger"
+                      :disabled="memoryV2BusyId === record.memory_id"
+                      @click="deleteMemoryV2(record)"
+                    >
+                      删除
+                    </button>
+                  </template>
+                </div>
+              </li>
+            </ul>
+            <p v-else class="memory-v2-state muted">暂无记忆</p>
+          </div>
+        </details>
+
+        <details
+          class="settings-card"
           data-tutorial-id="settings-basic"
           open
         >
@@ -591,7 +855,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onActivated, ref, computed, watch, nextTick } from 'vue';
+import { onMounted, onActivated, ref, computed, watch, nextTick, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { authApi, type User } from '../api/auth';
@@ -601,6 +865,8 @@ import api, { ApiError } from '../api';
 import { buildFullApiUrl } from '@/api/core';
 import { systemApi, type Industry as ApiIndustry } from '../api/system';
 import { intentPackagesApi, type IntentPackage as ApiIntentPackage } from '../api/intentPackages';
+import { memoryV2Api, type MemoryV2Record, type MemoryV2Status, type MemoryV2Summary, type MemoryV2Type } from '@/api/memoryV2';
+import { butlerProfileApi, type ButlerProfileView } from '@/api/butlerProfile';
 import { useIndustryStore } from '../stores/industry';
 import {
   SIDEBAR_THEME_OPTIONS,
@@ -627,7 +893,7 @@ import MobilePairingQrCard from '@/components/settings/MobilePairingQrCard.vue';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
 import { setAppLocale } from '@/i18n';
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards';
 
 const { t, locale } = useI18n();
 const appLocale = ref<'zh-CN' | 'en-US'>((locale.value === 'en-US' ? 'en-US' : 'zh-CN'));
@@ -696,6 +962,287 @@ const avatarCacheBust = ref(0);
 const profileDisplayNameDraft = ref('');
 const profileEmailDraft = ref('');
 const profileSaving = ref(false);
+const MEMORY_V2_TYPE_OPTIONS: Array<{ value: MemoryV2Type; label: string }> = [
+  { value: 'preference', label: '偏好' },
+  { value: 'entity', label: '实体' },
+  { value: 'episodic', label: '任务' },
+];
+const MEMORY_V2_STATUS_FILTERS: Array<{ value: 'all' | MemoryV2Status; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'pending', label: '待确认' },
+  { value: 'active', label: '已确认' },
+  { value: 'rejected', label: '已拒绝' },
+  { value: 'deleted', label: '已删除' },
+];
+const memoryV2Records = ref<MemoryV2Record[]>([]);
+const memoryV2Summary = ref<MemoryV2Summary>({ total: 0, by_status: {}, by_type: {} });
+const memoryV2PlannerContext = ref('');
+const memoryV2Loading = ref(false);
+const memoryV2Creating = ref(false);
+const memoryV2BusyId = ref('');
+const memoryV2Error = ref('');
+const memoryV2StatusFilter = ref<'all' | MemoryV2Status>('all');
+const memoryV2TypeFilter = ref<'all' | MemoryV2Type>('all');
+const memoryV2Draft = reactive({
+  memoryType: 'preference' as MemoryV2Type,
+  key: '',
+  value: '',
+  confidence: 0.7,
+});
+const memoryV2Edit = reactive({
+  memoryId: '',
+  key: '',
+  value: '',
+});
+
+// ========== 拟人 Persy 系统 ==========
+const persyProfile = ref<ButlerProfileView | null>(null);
+const persyLoading = ref(false);
+const persyInferring = ref(false);
+const persyLastReason = ref('');
+
+const persyUserId = computed(() => {
+  const raw = localUser.value?.id || '1';
+  const num = Number(raw);
+  return Number.isFinite(num) && num > 0 ? num : 1;
+});
+
+const persyFoldMeta = computed(() => {
+  if (!persyProfile.value) return '待确认 0 · 已确认 0';
+  const identity = persyProfile.value.identity_composite || persyProfile.value.identity_primary || '未初始化';
+  const interactions = persyProfile.value.interaction_count || 0;
+  return `${identity} · 互动 ${interactions}`;
+});
+
+async function loadPersyProfile() {
+  persyLoading.value = true;
+  try {
+    const result = await butlerProfileApi.get(persyUserId.value);
+    if (result.success === false) throw new Error(result.message || '人设加载失败');
+    persyProfile.value = result.profile || null;
+  } catch (e: unknown) {
+    persyProfile.value = null;
+  } finally {
+    persyLoading.value = false;
+  }
+}
+
+async function runPersyInfer() {
+  persyInferring.value = true;
+  persyLastReason.value = '';
+  try {
+    const result = await butlerProfileApi.infer({ userId: persyUserId.value });
+    if (result.success === false) throw new Error(result.message || '推断失败');
+    if (result.profile) persyProfile.value = result.profile;
+    if (result.inference?.reasons?.length) {
+      persyLastReason.value = result.inference.reasons[result.inference.reasons.length - 1];
+    }
+  } catch (e: unknown) {
+    persyLastReason.value = e instanceof Error ? e.message : '推断失败';
+  } finally {
+    persyInferring.value = false;
+  }
+}
+
+const memoryV2UserId = computed(() => {
+  const raw = localUser.value?.username || localUser.value?.id || 'default';
+  return String(raw || 'default').trim() || 'default';
+});
+
+const memoryV2FoldMeta = computed(() => {
+  const pending = Number(memoryV2Summary.value.by_status.pending || 0);
+  const active = Number(memoryV2Summary.value.by_status.active || 0);
+  return `待确认 ${pending} · 已确认 ${active}`;
+});
+
+function memoryV2TypeLabel(type: unknown): string {
+  return MEMORY_V2_TYPE_OPTIONS.find((item) => item.value === type)?.label || String(type || '未知');
+}
+
+function memoryV2StatusLabel(status: unknown): string {
+  return MEMORY_V2_STATUS_FILTERS.find((item) => item.value === status)?.label || String(status || '未知');
+}
+
+function memoryV2EditableValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value ?? '');
+  }
+}
+
+function memoryV2DisplayValue(value: unknown): string {
+  const text = memoryV2EditableValue(value);
+  return text.length > 160 ? `${text.slice(0, 160)}…` : text;
+}
+
+function parseMemoryV2InputValue(value: string): unknown {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^(\{|\[|"|-?\d+(\.\d+)?$|true$|false$|null$)/i.test(trimmed)) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+function memoryV2Time(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const parsed = Date.parse(raw);
+  if (Number.isNaN(parsed)) return raw;
+  return new Date(parsed).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function canEditMemoryV2(record: MemoryV2Record): boolean {
+  return record.status === 'pending' || record.status === 'active';
+}
+
+async function loadMemoryV2() {
+  memoryV2Loading.value = true;
+  memoryV2Error.value = '';
+  try {
+    const [listResult, summaryResult] = await Promise.all([
+      memoryV2Api.list({
+        userId: memoryV2UserId.value,
+        status: memoryV2StatusFilter.value === 'all' ? undefined : memoryV2StatusFilter.value,
+        memoryType: memoryV2TypeFilter.value === 'all' ? undefined : memoryV2TypeFilter.value,
+      }),
+      memoryV2Api.summary(memoryV2UserId.value),
+    ]);
+    if (listResult.success === false) throw new Error(listResult.message || '记忆加载失败');
+    if (summaryResult.success === false) throw new Error(summaryResult.message || '记忆摘要加载失败');
+    memoryV2Records.value = Array.isArray(listResult.memories) ? listResult.memories : [];
+    memoryV2Summary.value = summaryResult.summary || listResult.summary || { total: 0, by_status: {}, by_type: {} };
+    memoryV2PlannerContext.value = String(summaryResult.planner_context || '');
+  } catch (e: unknown) {
+    memoryV2Records.value = [];
+    memoryV2PlannerContext.value = '';
+    memoryV2Error.value = errorMessage(e, '记忆加载失败');
+  } finally {
+    memoryV2Loading.value = false;
+  }
+}
+
+async function createMemoryV2Candidate() {
+  const key = memoryV2Draft.key.trim();
+  const value = memoryV2Draft.value.trim();
+  if (!key || !value) {
+    await appAlert('请填写记忆键和值');
+    return;
+  }
+  memoryV2Creating.value = true;
+  memoryV2Error.value = '';
+  try {
+    const result = await memoryV2Api.createCandidate({
+      userId: memoryV2UserId.value,
+      memoryType: memoryV2Draft.memoryType,
+      key,
+      value: parseMemoryV2InputValue(memoryV2Draft.value),
+      confidence: Number(memoryV2Draft.confidence),
+      source: 'settings_ui',
+    });
+    if (result.success === false) throw new Error(result.message || '候选记忆创建失败');
+    memoryV2Draft.key = '';
+    memoryV2Draft.value = '';
+    await loadMemoryV2();
+  } catch (e: unknown) {
+    memoryV2Error.value = errorMessage(e, '候选记忆创建失败');
+  } finally {
+    memoryV2Creating.value = false;
+  }
+}
+
+async function confirmMemoryV2(record: MemoryV2Record) {
+  memoryV2BusyId.value = record.memory_id;
+  memoryV2Error.value = '';
+  try {
+    const result = await memoryV2Api.confirm(record.memory_id, memoryV2UserId.value);
+    if (result.success === false) throw new Error(result.message || '确认失败');
+    await loadMemoryV2();
+  } catch (e: unknown) {
+    memoryV2Error.value = errorMessage(e, '确认失败');
+  } finally {
+    memoryV2BusyId.value = '';
+  }
+}
+
+async function rejectMemoryV2(record: MemoryV2Record) {
+  if (!(await appConfirm(`拒绝记忆「${record.key}」？`, { danger: true }))) return;
+  memoryV2BusyId.value = record.memory_id;
+  memoryV2Error.value = '';
+  try {
+    const result = await memoryV2Api.reject(record.memory_id, memoryV2UserId.value, 'settings_ui_rejected');
+    if (result.success === false) throw new Error(result.message || '拒绝失败');
+    await loadMemoryV2();
+  } catch (e: unknown) {
+    memoryV2Error.value = errorMessage(e, '拒绝失败');
+  } finally {
+    memoryV2BusyId.value = '';
+  }
+}
+
+function startMemoryV2Edit(record: MemoryV2Record) {
+  memoryV2Edit.memoryId = record.memory_id;
+  memoryV2Edit.key = String(record.key || '');
+  memoryV2Edit.value = memoryV2EditableValue(record.value);
+}
+
+function cancelMemoryV2Edit() {
+  memoryV2Edit.memoryId = '';
+  memoryV2Edit.key = '';
+  memoryV2Edit.value = '';
+}
+
+async function saveMemoryV2Edit(record: MemoryV2Record) {
+  const key = memoryV2Edit.key.trim();
+  if (!key) {
+    await appAlert('请填写记忆键');
+    return;
+  }
+  memoryV2BusyId.value = record.memory_id;
+  memoryV2Error.value = '';
+  try {
+    const result = await memoryV2Api.correct(record.memory_id, {
+      userId: memoryV2UserId.value,
+      key,
+      value: parseMemoryV2InputValue(memoryV2Edit.value),
+      reason: 'settings_ui_correction',
+    });
+    if (result.success === false) throw new Error(result.message || '修正失败');
+    cancelMemoryV2Edit();
+    await loadMemoryV2();
+  } catch (e: unknown) {
+    memoryV2Error.value = errorMessage(e, '修正失败');
+  } finally {
+    memoryV2BusyId.value = '';
+  }
+}
+
+async function deleteMemoryV2(record: MemoryV2Record) {
+  if (!(await appConfirm(`删除记忆「${record.key}」？`, { danger: true }))) return;
+  memoryV2BusyId.value = record.memory_id;
+  memoryV2Error.value = '';
+  try {
+    const result = await memoryV2Api.remove(record.memory_id, memoryV2UserId.value, 'settings_ui_deleted');
+    if (result.success === false) throw new Error(result.message || '删除失败');
+    if (memoryV2Edit.memoryId === record.memory_id) cancelMemoryV2Edit();
+    await loadMemoryV2();
+  } catch (e: unknown) {
+    memoryV2Error.value = errorMessage(e, '删除失败');
+  } finally {
+    memoryV2BusyId.value = '';
+  }
+}
 
 function unwrapUserFromMe(res: unknown): User | null {
   if (!res || typeof res !== 'object') return null;
@@ -1147,31 +1694,14 @@ async function retryModRoutesLoad() {
 async function onActiveModChange(modId: string) {
   const next = String(modId || '').trim();
   if (!next || activeModId.value === next) return;
-  const nextMod = mods.value.find((m) => String(m.id || '').trim() === next);
-  const nextIndustryId = String(nextMod?.industry?.id || '').trim();
 
-  // 先把前端 activeModId 切到目标 mod；这样侧栏副标题、主单位、意图包等
-  // 由 useIndustryUiText / activeModIndustry 派生的 UI 立刻反映新选择，
-  // 不依赖后端 industry 切换是否被接受。
+  // 行业现在由后端 SSOT 决定（industryStore.switchIndustry 已删除）：
+  // 切换 active mod 后，前端只更新 activeModId，行业由后端在 mod 加载时
+  // 自动同步；UI 派生（useIndustryUiText / activeModIndustry）会跟随 mod 选择。
   modsStore.setActiveModId(next);
 
-  if (nextIndustryId && nextIndustryId !== String(industryStore.currentIndustryId || '').trim()) {
-    const success = await industryStore.switchIndustry(nextIndustryId);
-    if (!success) {
-      // 后端拒绝（旧版后端、或 Mod backend init 失败）：不再硬性回滚 active mod，
-      // 仅给一条提示并让前端 UI 沿用 manifest.industry 兜底（已由 industry.ts
-      // loadCurrentIndustry 失败分支与 useIndustryUiText effectiveIndustryId 处理）。
-      console.warn(
-        '[settings] 切换行业到',
-        nextIndustryId,
-        '失败：',
-        industryStore.error || '未知',
-        '；前端将沿用 mod manifest.industry 渲染',
-      );
-    }
-  }
-  // 切换 Mod 会改变侧栏菜单、工作流员工与 X-XCAGI-Active-Mod-Id 请求头，
-  // 同时同步当前行业，避免侧栏副标题和业务字段仍停留在旧行业。
+  // 切换 Mod 会改变侧栏菜单、工作流员工与 X-XCAGI-Active-Mod-Id 请求头；
+  // 刷新页面让后端按新 active mod 重新拉取行业 SSOT 与路由表。
   window.location.reload();
 }
 
@@ -1618,11 +2148,24 @@ onMounted(async () => {
   await loadCurrentIndustryDetail();
   await loadIntentPackages();
   loadPreferences();
+  void loadMemoryV2();
+  void loadPersyProfile();
   loadDistillationVersions();
 });
 
 onActivated(() => {
-  void loadLocalUser();
+  void loadLocalUser().then(() => {
+    loadMemoryV2();
+    loadPersyProfile();
+  });
+});
+
+watch(memoryV2UserId, () => {
+  void loadMemoryV2();
+});
+
+watch(persyUserId, () => {
+  void loadPersyProfile();
 });
 
 watch(
@@ -2372,6 +2915,304 @@ select.settings-item__control,
   font-size: 12px;
 }
 
+/* ========== 拟人 Persy 系统 ========== */
+.persy-profile {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.persy-profile__state {
+  padding: 8px 0;
+  text-align: center;
+}
+
+.persy-profile__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.persy-profile__identity {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.persy-profile__type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.persy-profile__meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.persy-profile__axes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.persy-axis {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.persy-axis__label {
+  width: 56px;
+  font-size: 12px;
+  color: #4b5563;
+  flex-shrink: 0;
+}
+
+.persy-axis__bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.persy-axis__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #60a5fa, #3b82f6);
+  transition: width 0.3s ease;
+}
+
+.persy-axis__score {
+  width: 28px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+  flex-shrink: 0;
+}
+
+.persy-profile__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.persy-profile__reason {
+  font-size: 12px;
+  color: #6b7280;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-v2-toolbar,
+.memory-v2-form,
+.memory-v2-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-v2-toolbar {
+  margin-bottom: 12px;
+}
+
+.memory-v2-select {
+  max-width: 132px;
+}
+
+.memory-v2-form {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.memory-v2-form__type {
+  max-width: 104px;
+}
+
+.memory-v2-form__input {
+  flex: 1 1 132px;
+  max-width: none;
+}
+
+.memory-v2-form__confidence {
+  width: 86px;
+  max-width: 86px;
+}
+
+.memory-v2-error {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.memory-v2-context {
+  max-height: 132px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #e5e7eb;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.memory-v2-state {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.memory-v2-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-v2-item {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.memory-v2-item__head,
+.memory-v2-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-v2-item__head {
+  margin-bottom: 8px;
+}
+
+.memory-v2-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.memory-v2-chip--active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.memory-v2-chip--pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.memory-v2-chip--rejected,
+.memory-v2-chip--deleted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.memory-v2-item__time {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.memory-v2-item__body {
+  display: grid;
+  grid-template-columns: minmax(96px, 32%) 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.memory-v2-item__key {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-size: 13px;
+}
+
+.memory-v2-item__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.memory-v2-item__meta {
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.memory-v2-actions {
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.memory-v2-edit {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-v2-edit__input {
+  max-width: none;
+}
+
+.memory-v2-edit__textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.memory-v2-edit__textarea:focus,
+.memory-v2-edit__textarea:focus-visible {
+  outline: none;
+  border-color: #93c5fd;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(45, 109, 246, 0.14);
+}
+
 .settings-about-line {
   margin: 0 0 6px;
   font-size: 14px;
@@ -2952,6 +3793,29 @@ select.settings-item__control,
 
   .intent-showcase-grid {
     grid-template-columns: 1fr;
+  }
+
+  .memory-v2-select,
+  .memory-v2-form__type,
+  .memory-v2-form__input,
+  .memory-v2-form__confidence {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none;
+  }
+
+  .memory-v2-item__body {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .memory-v2-item__time {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .memory-v2-actions {
+    justify-content: flex-start;
   }
 
   #settings-model-payment :deep(.mp-embedded-toolbar) {

@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -713,14 +714,79 @@ def _parse_set_cookie_headers(headers: Any) -> Dict[str, str]:
     return jar
 
 
-def _login_surface_audit_sync() -> Dict[str, str]:
-    """Playwright 截图前登录 MODstore，写入 modstore_token（对齐 FHD surface_audit_auth.mjs）。"""
-    api_base = (
-        (os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base()).strip().rstrip("/")
+def _surface_demo_account_defaults() -> Tuple[str, str]:
+    fallback = ("xcagi-enterprise-demo", "Demo@2026")
+    candidates: List[Path] = []
+    raw_cfg = (os.environ.get("MODSTORE_RUNTIME_CONFIG_ROOT") or "").strip()
+    if raw_cfg:
+        candidates.append(Path(raw_cfg).expanduser().resolve() / "surface_audit_demo_account.json")
+    try:
+        candidates.append(_repo_root() / "FHD" / "config" / "surface_audit_demo_account.json")
+    except Exception:
+        pass
+    for path in candidates:
+        try:
+            cfg = json.loads(path.read_text(encoding="utf-8"))
+            user = str(cfg.get("username") or fallback[0]).strip()
+            password = str(cfg.get("password") or fallback[1])
+            if user and password:
+                return user, password
+        except Exception:
+            continue
+    return fallback
+
+
+def _surface_audit_login_api_base(account_kind: str) -> str:
+    """按巡检对象选择登录 API 根。
+
+    P-W/MODstore 市场页使用 MODstore 内部 API（默认 :8788）；P-S 企业客户端页面
+    使用 FHD API（默认 SURFACE_AUDIT_API_URL/:5102）。两者 session/token 存储不共用。
+    """
+    if account_kind == "enterprise":
+        raw = (
+            os.environ.get("MODSTORE_SURFACE_AUDIT_ENTERPRISE_API_URL")
+            or os.environ.get("MODSTORE_SURFACE_AUDIT_PS_API_URL")
+            or os.environ.get("SURFACE_AUDIT_API_URL")
+            or "http://127.0.0.1:5102"
+        )
+        return str(raw).strip().rstrip("/")
+    raw = (
+        os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base()
     )
-    user = (os.environ.get("MODSTORE_SURFACE_AUDIT_USER") or "admin").strip()
-    password = (os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD") or "admin123").strip()
-    account_kind = (os.environ.get("MODSTORE_SURFACE_AUDIT_ACCOUNT_KIND") or "admin").strip()
+    return str(raw).strip().rstrip("/")
+
+
+def _login_surface_audit_sync(
+    *,
+    account_kind: Optional[str] = None,
+    user: Optional[str] = None,
+    password: Optional[str] = None,
+    label: str = "market",
+) -> Dict[str, Any]:
+    """Playwright 截图前登录对应系统，并返回可注入的 token/cookie/session。"""
+    account_kind = (account_kind or os.environ.get("MODSTORE_SURFACE_AUDIT_ACCOUNT_KIND") or "admin").strip()
+    api_base = _surface_audit_login_api_base(account_kind)
+    if account_kind == "enterprise":
+        demo_user, demo_password = _surface_demo_account_defaults()
+        user = (
+            user
+            or os.environ.get("MODSTORE_SURFACE_AUDIT_ENTERPRISE_USER")
+            or os.environ.get("SURFACE_AUDIT_ENTERPRISE_USER")
+            or os.environ.get("SURFACE_AUDIT_USER")
+            or demo_user
+        )
+        password = (
+            password
+            or os.environ.get("MODSTORE_SURFACE_AUDIT_ENTERPRISE_PASSWORD")
+            or os.environ.get("SURFACE_AUDIT_ENTERPRISE_PASSWORD")
+            or os.environ.get("SURFACE_AUDIT_PASSWORD")
+            or demo_password
+        )
+    else:
+        user = user or os.environ.get("MODSTORE_SURFACE_AUDIT_USER") or "admin"
+        password = password or os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD") or "admin123"
+    user = str(user).strip()
+    password = str(password).strip()
 
     cookies: Dict[str, str] = {}
 
@@ -752,20 +818,69 @@ def _login_surface_audit_sync() -> Dict[str, str]:
             {"username": user, "password": password, "account_kind": account_kind},
         )
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
-        logger.warning("surface audit: market login failed base=%s err=%s", api_base, exc)
+        logger.warning("surface audit: %s login failed base=%s err=%s", label, api_base, exc)
         return {}
 
     ok = bool(web.get("ok") or web.get("success"))
-    access = str(web.get("access_token") or web.get("token") or "").strip()
-    refresh = str(web.get("refresh_token") or "").strip()
-    if not ok or not access:
+    data = web.get("data") if isinstance(web.get("data"), dict) else {}
+    access = str(
+        web.get("access_token")
+        or web.get("token")
+        or web.get("market_access_token")
+        or data.get("access_token")
+        or data.get("token")
+        or data.get("market_access_token")
+        or ""
+    ).strip()
+    refresh = str(
+        web.get("refresh_token")
+        or web.get("market_refresh_token")
+        or data.get("refresh_token")
+        or data.get("market_refresh_token")
+        or ""
+    ).strip()
+    session_id = str(
+        web.get("session_id")
+        or data.get("session_id")
+        or cookies.get("session_id")
+        or cookies.get("admin_session_id")
+        or ""
+    ).strip()
+    csrf = str(cookies.get("csrf_token") or "").strip()
+
+    if account_kind == "enterprise" and ok and session_id and not access:
+        try:
+            handoff, _ = _req(f"{api_base}/api/market/session-handoff")
+            handoff_data = handoff.get("data") if isinstance(handoff.get("data"), dict) else {}
+            access = str(
+                handoff_data.get("market_access_token") or handoff_data.get("token") or ""
+            ).strip()
+            refresh = str(
+                handoff_data.get("market_refresh_token") or handoff_data.get("refresh_token") or refresh
+            ).strip()
+        except Exception as exc:
+            logger.warning("surface audit: %s session-handoff failed base=%s err=%s", label, api_base, exc)
+
+    has_required_state = bool(access) or (account_kind == "enterprise" and bool(session_id))
+    if not ok or not has_required_state:
         logger.warning(
-            "surface audit: market login rejected base=%s msg=%s",
+            "surface audit: %s login rejected base=%s msg=%s",
+            label,
             api_base,
             web.get("message") or web.get("error") or "no access_token",
         )
         return {}
-    return {"access_token": access, "refresh_token": refresh, "username": user}
+    return {
+        "access_token": access,
+        "refresh_token": refresh,
+        "session_id": session_id,
+        "csrf_token": csrf,
+        "username": user,
+        "account_kind": account_kind,
+        "api_base": api_base,
+        "cookies": cookies,
+        "raw": web,
+    }
 
 
 def _fetch_admin_digest_code_sync(auth: Dict[str, str]) -> str:
@@ -835,20 +950,58 @@ async def _prepare_admin_digest(context: Any, auth: Dict[str, str]) -> None:
     await _inject_admin_digest(context, code)
 
 
-async def _inject_market_auth(context: Any, auth: Dict[str, str]) -> None:
+def _cookie_url_for_auth(target_url: str, auth: Dict[str, Any]) -> str:
+    for candidate in (target_url, str(auth.get("api_base") or "")):
+        try:
+            parsed = urllib.parse.urlsplit(candidate)
+        except Exception:
+            continue
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}/"
+    return "http://127.0.0.1/"
+
+
+async def _inject_market_auth(context: Any, auth: Dict[str, Any], target_url: str = "") -> None:
+    cookies = auth.get("cookies") if isinstance(auth.get("cookies"), dict) else {}
+    session_id = str(auth.get("session_id") or cookies.get("session_id") or "").strip()
+    csrf = str(auth.get("csrf_token") or cookies.get("csrf_token") or "").strip()
+    cookie_rows: List[Dict[str, str]] = []
+    cookie_url = _cookie_url_for_auth(target_url, auth)
+    for name, value in {**cookies, "session_id": session_id, "csrf_token": csrf}.items():
+        v = str(value or "").strip()
+        if name and v:
+            cookie_rows.append({"name": str(name), "value": v, "url": cookie_url})
+    if cookie_rows:
+        try:
+            await context.add_cookies(cookie_rows)
+        except Exception as exc:
+            logger.warning("surface audit: inject auth cookies failed url=%s err=%s", cookie_url, exc)
+
     access = str(auth.get("access_token") or "").strip()
-    if not access:
+    if not access and not session_id:
         return
     refresh = str(auth.get("refresh_token") or "").strip()
+    account_kind = str(auth.get("account_kind") or "").strip()
+    username = str(auth.get("username") or "").strip()
+    market_user = {
+        "username": username,
+        "account_kind": account_kind,
+        "market_is_enterprise": account_kind == "enterprise",
+        "is_admin": account_kind == "admin",
+    }
     script = (
-        "(function(){"
-        f"localStorage.setItem('modstore_token', {json.dumps(access)});"
+        "(function(){try{"
+        + (f"localStorage.setItem('modstore_token', {json.dumps(access)});" if access else "")
+        + (f"localStorage.setItem('xcagi_market_access_token', {json.dumps(access)});" if access else "")
         + (
             f"localStorage.setItem('modstore_refresh_token', {json.dumps(refresh)});"
+            f"localStorage.setItem('xcagi_market_refresh_token', {json.dumps(refresh)});"
             if refresh
             else ""
         )
-        + "})();"
+        + (f"localStorage.setItem('xcagi_surface_audit_session_id', {json.dumps(session_id)});" if session_id else "")
+        + f"localStorage.setItem('xcagi_market_user_json', {json.dumps(json.dumps(market_user, ensure_ascii=False))});"
+        + "}catch(e){}})();"
     )
     await context.add_init_script(script)
 
@@ -867,6 +1020,37 @@ async def _goto_with_retry(page: Any, url: str, *, timeout_ms: int) -> Any:
         except Exception:
             pass
         return resp
+
+
+_TRANSIENT_NAV_ERROR_MARKERS: Tuple[str, ...] = (
+    "Timeout",
+    "ERR_TIMED_OUT",
+    "ERR_CONNECTION_CLOSED",
+    "ERR_CONNECTION_RESET",
+    "ERR_NETWORK_CHANGED",
+    "ERR_HTTP2_PROTOCOL_ERROR",
+    "ERR_QUIC_PROTOCOL_ERROR",
+    "net::ERR_FAILED",
+)
+
+
+def _surface_capture_retry_count() -> int:
+    raw = (os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_RETRIES") or "2").strip()
+    try:
+        return max(0, min(4, int(raw)))
+    except ValueError:
+        return 2
+
+
+def _is_retryable_surface_row(row: Dict[str, Any]) -> bool:
+    err = str(row.get("error") or "")
+    if err and any(marker in err for marker in _TRANSIENT_NAV_ERROR_MARKERS):
+        return True
+    try:
+        status = int(row.get("status") or 0)
+    except (TypeError, ValueError):
+        status = 0
+    return status in (408, 425, 429) or status >= 500
 
 
 async def _wait_page_ready(page: Any, *, timeout_ms: int) -> None:
@@ -1093,6 +1277,14 @@ def _rule_based_lane_analysis(lane: str, rows: List[Dict[str, Any]]) -> str:
     return "；".join(parts) + "。"
 
 
+def _surface_analysis_timeout_sec() -> float:
+    raw = (os.environ.get("MODSTORE_DAILY_SURFACE_ANALYSIS_TIMEOUT_SEC") or "90").strip()
+    try:
+        return max(10.0, min(600.0, float(raw)))
+    except ValueError:
+        return 90.0
+
+
 def _build_lane_analysis_user_content(
     lane: str, lane_label: str, rows: List[Dict[str, Any]]
 ) -> str:
@@ -1156,41 +1348,49 @@ async def analyze_surface_lanes(report: Dict[str, Any], *, user_id: int = 0) -> 
         owners = lane_employee_ids(lane)
         rule_md = _rule_based_lane_analysis(lane, rows)
         if not bench_prov or not bench_mdl:
-            if enabled in ("0", "false", "no", "off"):
-                out[lane] = {
-                    "markdown": rule_md,
-                    "owners": owners,
-                    "model": "",
-                    "error": "",
-                    "source": "rule",
-                }
-                continue
-            raise RuntimeError(
-                f"surface audit lane analysis: bench LLM 未配置（lane={lane}）"
-            )
+            out[lane] = {
+                "markdown": rule_md,
+                "owners": owners,
+                "model": "",
+                "error": "" if enabled in ("0", "false", "no", "off") else "bench LLM 未配置",
+                "source": "rule",
+            }
+            if enabled not in ("0", "false", "no", "off"):
+                logger.warning("surface audit: lane analysis fallback lane=%s err=bench LLM 未配置", lane)
+            continue
         system = _LANE_ANALYSIS_SYSTEM.format(lane=lane, owners="、".join(owners[:3]) or lane)
         user_content = _build_lane_analysis_user_content(lane, lane_labels.get(lane, lane), rows)
         try:
+            import asyncio as _asyncio
+
             from modstore_server.models import get_session_factory as _gsf
             from modstore_server.services.llm import chat_dispatch_via_session
 
             with _gsf()() as db:
-                result = await chat_dispatch_via_session(
-                    db,
-                    int(user_id or 0),
-                    bench_prov,
-                    bench_mdl,
-                    [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user_content},
-                    ],
-                    max_tokens=700,
+                result = await _asyncio.wait_for(
+                    chat_dispatch_via_session(
+                        db,
+                        int(user_id or 0),
+                        bench_prov,
+                        bench_mdl,
+                        [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user_content},
+                        ],
+                        max_tokens=700,
+                    ),
+                    timeout=_surface_analysis_timeout_sec(),
                 )
         except Exception as exc:  # noqa: BLE001
             logger.warning("surface audit: lane analysis dispatch failed lane=%s err=%s", lane, exc)
-            raise RuntimeError(
-                f"surface audit lane analysis failed lane={lane}: {exc}"
-            ) from exc
+            out[lane] = {
+                "markdown": rule_md,
+                "owners": owners,
+                "model": f"{bench_prov}/{bench_mdl}",
+                "error": str(exc),
+                "source": "rule",
+            }
+            continue
         md = ""
         if isinstance(result, dict) and result.get("ok"):
             md = str(result.get("content") or "").strip()
@@ -1214,7 +1414,14 @@ async def analyze_surface_lanes(report: Dict[str, Any], *, user_id: int = 0) -> 
                 if isinstance(result, dict)
                 else "bench LLM 返回为空"
             )
-            raise RuntimeError(f"surface audit lane analysis empty lane={lane}: {err}")
+            logger.warning("surface audit: lane analysis empty lane=%s err=%s", lane, err)
+            out[lane] = {
+                "markdown": rule_md,
+                "owners": owners,
+                "model": f"{bench_prov}/{bench_mdl}",
+                "error": err,
+                "source": "rule",
+            }
     return out
 
 
@@ -1250,36 +1457,74 @@ async def _capture_surface_target_async(
         ctx_kwargs["viewport"] = _DESKTOP_VIEWPORT
     context = await browser.new_context(**ctx_kwargs)
     try:
-        if market_auth and _path_needs_market_auth(target.path):
-            await _inject_market_auth(context, market_auth)
+        if market_auth and (target.lane == "P-S" or _path_needs_market_auth(target.path)):
+            await _inject_market_auth(context, market_auth, url)
         if target.prepare == "admin_digest" and market_auth:
             await _prepare_admin_digest(context, market_auth)
-        page = await context.new_page()
-        try:
-            row = await _capture_one(
-                page,
-                url=url,
-                viewport=target.viewport,
-                timeout_ms=timeout_ms,
-                save_path=save_path,
-                prepare=target.prepare,
+        row: Dict[str, Any] = {}
+        attempts = 1 + _surface_capture_retry_count()
+        for attempt in range(attempts):
+            page = await context.new_page()
+            try:
+                row = await _capture_one(
+                    page,
+                    url=url,
+                    viewport=target.viewport,
+                    timeout_ms=timeout_ms,
+                    save_path=save_path,
+                    prepare=target.prepare,
+                )
+            except Exception as exc:  # noqa: BLE001
+                row = {
+                    "url": url,
+                    "status": None,
+                    "title": "",
+                    "console_errors": [],
+                    "error": str(exc),
+                    "screenshot_saved": str(save_path) if save_path and save_path.is_file() else "",
+                    "viewport": target.viewport,
+                    "prepare": target.prepare or "",
+                }
+            finally:
+                try:
+                    await page.close()
+                except Exception:
+                    pass
+            if attempt >= attempts - 1 or not _is_retryable_surface_row(row):
+                break
+            logger.warning(
+                "surface audit: retry target=%s attempt=%s/%s err=%s status=%s",
+                target.name,
+                attempt + 2,
+                attempts,
+                str(row.get("error") or "")[:240],
+                row.get("status"),
             )
-        except Exception as exc:  # noqa: BLE001
-            row = {
-                "url": url,
-                "status": None,
-                "title": "",
-                "console_errors": [],
-                "error": str(exc),
-                "screenshot_saved": str(save_path) if save_path and save_path.is_file() else "",
-                "viewport": target.viewport,
-                "prepare": target.prepare or "",
-            }
+            try:
+                import asyncio as _asyncio
+
+                await _asyncio.sleep(min(8, 2 * (attempt + 1)))
+            except Exception:
+                pass
     finally:
         await context.close()
     row["lane"] = target.lane
     row["lane_label"] = target.lane_label
     row["name"] = target.name
+    if target.lane == "P-S":
+        title = str(row.get("title") or "")
+        final_url = str(row.get("url") or url)
+        console_blob = "\n".join(str(x) for x in (row.get("console_errors") or [])[:10])
+        auth_bad = (
+            "登录" in title
+            or "/login" in final_url
+            or "401" in console_blob
+            or "unauthorized" in console_blob.lower()
+        )
+        row["auth_account_kind"] = str((market_auth or {}).get("account_kind") or "")
+        row["auth_state_ok"] = not auth_bad
+        if auth_bad and not row.get("error"):
+            row["error"] = "P-S enterprise auth state invalid: landed on login/401"
     if "/market/admin/" in str(target.path or ""):
         row["admin"] = True
         row["digest_unlock_ok"] = bool(not row.get("error") and int(row.get("status") or 0) < 400)
@@ -1305,10 +1550,10 @@ async def run_surface_audit_async() -> Dict[str, Any]:
 
     try:
         timeout_ms = max(
-            10_000, int(os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS", "45000"))
+            10_000, int(os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS", "90000"))
         )
     except ValueError:
-        timeout_ms = 45_000
+        timeout_ms = 90_000
 
     base = _base_url()
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1370,7 +1615,7 @@ async def run_surface_audit_async() -> Dict[str, Any]:
                     "results": [],
                 }
         else:
-            market_auth = _login_surface_audit_sync()
+            market_auth = _login_surface_audit_sync(label="P-W")
             if market_auth:
                 logger.info("surface audit: market login ok user=%s", market_auth.get("username"))
             elif any(_path_needs_market_auth(t.path) for t in _targets):
@@ -1380,6 +1625,16 @@ async def run_surface_audit_async() -> Dict[str, Any]:
                 )
             else:
                 logger.info("surface audit: no market-auth pages in target set; login skipped")
+            ps_auth: Dict[str, str] = {}
+            if any(t.lane == "P-S" for t in _targets):
+                ps_auth = _login_surface_audit_sync(account_kind="enterprise", label="P-S")
+                if ps_auth:
+                    logger.info("surface audit: P-S enterprise login ok user=%s", ps_auth.get("username"))
+                else:
+                    raise RuntimeError(
+                        "surface audit: P-S enterprise login required but login failed "
+                        "(check SURFACE_AUDIT_API_URL and MODSTORE_SURFACE_AUDIT_ENTERPRISE_USER/PASSWORD)"
+                    )
 
             async with async_playwright() as pw:
                 browser = await pw.chromium.launch(headless=True)
@@ -1397,13 +1652,14 @@ async def run_surface_audit_async() -> Dict[str, Any]:
 
                     async def _run_one(idx: int, target: SurfaceTarget) -> Dict[str, Any]:
                         async with _sem:
+                            auth = ps_auth if target.lane == "P-S" else market_auth
                             return await _capture_surface_target_async(
                                 browser,
                                 idx,
                                 target,
                                 base=base,
                                 save_root=save_root,
-                                market_auth=market_auth,
+                                market_auth=auth,
                                 timeout_ms=timeout_ms,
                             )
 

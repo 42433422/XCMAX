@@ -13,6 +13,7 @@ export function formatTaskSourceLabel(source: string): string {
     manual: '手动',
     system: 'AI 员工',
     wechat: '微信',
+    agent: 'Agent',
     pro: 'AI 链路',
     normal: '对话',
   }

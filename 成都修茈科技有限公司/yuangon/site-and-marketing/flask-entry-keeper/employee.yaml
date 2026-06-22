@@ -6,12 +6,12 @@ owner: admin
 area: site-and-marketing
 
 scope_globs:
-  - app.py
-  - requirements.txt
-  - public/**
-  - uploads/**
-  - site/**
-  - excel-to-ai.html
+  - ./app.py
+  - ./requirements.txt
+  - ./public/**
+  - ./uploads/**
+  - ./site/**
+  - ./excel-to-ai.html
 
 forbidden_globs:
   - nginx-*.conf
@@ -36,11 +36,28 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - flask.route.health
+
 skills:
   - skills/skill-flask-route-health.md
 
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on:
   - nginx-config-engineer   # Nginx 反代规则影响路由可达性
+
+examples:
+  - title: "Flask 入口维护员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次Flask 入口维护员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

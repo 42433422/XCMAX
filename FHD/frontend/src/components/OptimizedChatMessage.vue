@@ -52,8 +52,9 @@
       
       <!-- 上下文摘要 -->
       <ContextSummaryPills
-        v-if="contextSummaryText"
-        :summary="contextSummaryText"
+        v-if="message.contextSummary"
+        class="context-summary"
+        :summary="message.contextSummary"
       />
       
       <!-- 思考步骤 -->
@@ -87,6 +88,17 @@
               {{ nr.success ? '成功' : '失败' }}
             </span>
             <span>{{ nr.node_id }} · {{ nr.tool_id }}.{{ nr.action }}</span>
+            <span v-if="nr.retries || nr.duration_ms" class="trace-node-meta">
+              <template v-if="nr.retries">重试 {{ nr.retries }} 次</template>
+              <template v-if="nr.retries && nr.duration_ms"> · </template>
+              <template v-if="nr.duration_ms">{{ nr.duration_ms }}ms</template>
+            </span>
+            <span v-if="nr.error || nr.message" class="trace-node-error">
+              {{ nr.error || nr.message }}
+            </span>
+            <span v-if="nr.recovery_hint" class="trace-node-hint">
+              恢复建议：{{ nr.recovery_hint }}
+            </span>
           </li>
         </ul>
       </div>
@@ -116,9 +128,9 @@ import { computed, ref, watch, onMounted } from 'vue';
 import DOMPurify from 'dompurify';
 import { measureText, type MeasureResult } from '@/utils/pretext';
 import type { UiChatMessage } from '@/types/chat-ui';
+import ContextSummaryPills from '@/components/chat/ContextSummaryPills.vue';
 import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue';
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue';
-import ContextSummaryPills from '@/components/chat/ContextSummaryPills.vue';
 
 interface Props {
   message: UiChatMessage;
@@ -235,6 +247,33 @@ onMounted(() => {
   if (!measureResult.value) {
     performMeasure();
   }
+});
+
+defineExpose({
+  get measureResult() {
+    return measureResult.value;
+  },
+  set measureResult(value: MeasureResult | null) {
+    measureResult.value = value;
+  },
+  get isCollapsed() {
+    return isCollapsed.value;
+  },
+  set isCollapsed(value: boolean) {
+    isCollapsed.value = value;
+  },
+  get sanitizedContent() {
+    return sanitizedContent.value;
+  },
+  get collapsedPreview() {
+    return collapsedPreview.value;
+  },
+  get messageStyle() {
+    return messageStyle.value;
+  },
+  collapse,
+  expand,
+  toggleTts,
 });
 </script>
 
@@ -427,6 +466,7 @@ onMounted(() => {
 .trace-list li {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 4px 0;
 }
@@ -446,6 +486,26 @@ onMounted(() => {
 .trace-status.fail {
   background: #f44336;
   color: white;
+}
+
+.trace-node-meta,
+.trace-node-error,
+.trace-node-hint {
+  flex-basis: 100%;
+  margin-left: 56px;
+  line-height: 1.4;
+}
+
+.trace-node-meta {
+  color: #555;
+}
+
+.trace-node-error {
+  color: #b91c1c;
+}
+
+.trace-node-hint {
+  color: #0d47a1;
 }
 
 /* 时间戳 */

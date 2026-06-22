@@ -20,7 +20,8 @@ help:
 	@echo "  test-xcagi     — pytest FHD/XCAGI/xcagi_tests (importlib)"
 	@echo "  test-coverage  — pytest + app 覆盖率"
 	@echo "  lint           — ruff check FHD/app/"
-	@echo "  openapi-check  — OpenAPI 一致性脚本"
+	@echo "  openapi-check  — OpenAPI 路由/Schema 错误门禁"
+	@echo "  openapi-check-strict — OpenAPI 元数据零告警目标"
 	@echo "  e2e            — Playwright (FHD/frontend)"
 
 setup:
@@ -46,10 +47,11 @@ lint:
 openapi-check:
 	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py
 
+openapi-check-relaxed:
+	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py
+
 openapi-check-strict:
 	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py --strict
-
-openapi-check-relaxed: openapi-check
 
 e2e:
 	bash $(FHD)/scripts/dev/e2e-full.sh

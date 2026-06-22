@@ -112,6 +112,16 @@ def test_list_contacts_includes_enterprise_dedicated_cs(im_db):
     assert row.role == "support"
 
 
+def test_list_contacts_can_exclude_enterprise_dedicated_cs_for_admin_side(im_db):
+    svc = ImApplicationService(im_db)
+    svc.list_contacts(1)
+
+    contacts = svc.list_contacts(1, include_enterprise_dedicated_cs=False)
+
+    assert not any(c.get("is_enterprise_dedicated_cs") for c in contacts)
+    assert not any(c.get("username") == ENTERPRISE_DEDICATED_CS_USERNAME for c in contacts)
+
+
 def test_direct_conversation_with_enterprise_cs_is_pinned(im_db):
     svc = ImApplicationService(im_db)
     cs = next(c for c in svc.list_contacts(1) if c.get("is_enterprise_dedicated_cs"))
@@ -121,6 +131,17 @@ def test_direct_conversation_with_enterprise_cs_is_pinned(im_db):
     pinned = next(c for c in conversations if c["id"] == conv["id"])
     assert pinned["title"] == ENTERPRISE_DEDICATED_CS_DISPLAY_NAME
     assert pinned["is_enterprise_dedicated_cs"] is True
+
+
+def test_list_conversations_can_exclude_enterprise_dedicated_cs_for_admin_side(im_db):
+    svc = ImApplicationService(im_db)
+    cs = next(c for c in svc.list_contacts(1) if c.get("is_enterprise_dedicated_cs"))
+    conv = svc.get_or_create_direct(1, int(cs["id"]))
+
+    conversations = svc.list_conversations(1, include_enterprise_dedicated_cs=False)
+
+    assert not any(c["id"] == conv["id"] for c in conversations)
+    assert not any(c.get("is_enterprise_dedicated_cs") for c in conversations)
 
 
 def test_apply_im_message_insert(im_db, monkeypatch: pytest.MonkeyPatch):

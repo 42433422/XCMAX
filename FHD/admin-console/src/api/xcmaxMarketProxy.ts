@@ -103,6 +103,22 @@ const xcmaxMarketProxy = {
     marketReq('admin/duty-graph/runs', { method: 'POST', body: payload }),
   adminDutyGraphRunDetail: (runId: number | string) =>
     marketReq(`admin/duty-graph/runs/${encodeURIComponent(String(runId))}`),
+  adminYuangonOnboardStatus: () => marketReq('admin/yuangon-onboard/status'),
+  adminYuangonOnboardRun: (
+    payload: { pkg_ids?: string[] | string; dry_run?: boolean; force?: boolean } = {},
+  ) => {
+    const pkgIds = Array.isArray(payload.pkg_ids)
+      ? payload.pkg_ids.map((id) => String(id || '').trim()).filter(Boolean).join(',')
+      : String(payload.pkg_ids || '').trim()
+    return marketReq('admin/yuangon-onboard/run', {
+      method: 'POST',
+      body: {
+        dry_run: Boolean(payload.dry_run),
+        force: Boolean(payload.force),
+        pkg_ids: pkgIds,
+      },
+    })
+  },
   adminEmployeeExecutionCapabilities: (employeeIds?: string[]) =>
     marketReq('admin/employees/execution-capabilities', {
       method: 'POST',
@@ -152,6 +168,32 @@ const xcmaxMarketProxy = {
       method: 'POST',
       body: { task, input_data: inputData ?? {} },
     }),
+  selfMaintenanceRuntimeStatus: async (limit = 80) => {
+    const q = `limit=${encodeURIComponent(String(limit))}`
+    try {
+      return await api.get(`${LOCAL_PREFIX}/ops/self-maintenance/status?${q}`)
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        return marketReq(`ops/self-maintenance/status?${q}`)
+      }
+      throw e
+    }
+  },
+  selfMaintenanceGovernanceReview: async (payload: { note?: string } = {}) => {
+    try {
+      return await api.post(`${LOCAL_PREFIX}/ops/self-maintenance/governance-review`, payload)
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        return marketReq('ops/self-maintenance/governance-review', {
+          method: 'POST',
+          body: payload,
+        })
+      }
+      throw e
+    }
+  },
   llmStatus: () => marketReq('llm/status'),
   llmResolveChatDefault: () => marketReq('llm/resolve-chat-default'),
   llmChat: (provider: string, model: string, messages: unknown[], maxTokens = 1024) =>

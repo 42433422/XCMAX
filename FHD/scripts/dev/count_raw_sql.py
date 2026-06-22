@@ -18,6 +18,8 @@ ALLOWLIST_SUFFIXES = (
     "app/infrastructure/persistence/sqlite_vector_store.py",
     "app/infrastructure/persistence/user_memory_vector_store.py",
     "app/security/license_store.py",
+    # 表名来自可信模型常量 __tablename__，行数据全部走 :uid/:limit 绑定参数（无用户可控 SQL 拼接）。
+    "app/infrastructure/persona/persona_repository_impl.py",
 )
 
 TEXT_F_PATTERN = re.compile(r"\btext\s*\(\s*f[\"']", re.MULTILINE)

@@ -64,7 +64,7 @@ class TimeRailAppService:
                 for n in (graph.get("nodes") or [])
                 if n.get("id")
             }
-        except (FileNotFoundError, OSError, ValueError):
+        except (OSError, ValueError):
             graph = {}
             graph_nodes = {}
         nodes: dict[str, Any] = {}
@@ -157,6 +157,38 @@ class TimeRailAppService:
             logger.warning("MODstore time-rail status 不可达，返回 degraded: %s", exc)
             return self._degraded_runtime_status(f"MODstore time-rail status 不可达: {exc}")
 
+    def _desktop_maintenance_fallback_enabled(self) -> bool:
+        try:
+            from app.utils.deployment import is_desktop_mode
+
+            return bool(is_desktop_mode())
+        except RECOVERABLE_ERRORS:
+            return False
+
+    def _maintenance_sync_unavailable(self, reason: str, *, limit: int) -> dict[str, Any]:
+        if not self._desktop_maintenance_fallback_enabled():
+            return {"ok": False, "error": reason}
+
+        degraded = self._degraded_runtime_status(reason)
+        missing = degraded.get("missing_evidence")
+        missing_items = missing if isinstance(missing, list) else []
+        total_missing = len(missing_items)
+        request_limit = max(1, int(limit))
+        queued_items = missing_items[:request_limit]
+        logger.warning("MODstore time-rail maintenance sync 不可用，桌面本地降级: %s", reason)
+        return {
+            "ok": True,
+            "degraded": True,
+            "source": "fhd-degraded",
+            "reason": reason,
+            "added": len(queued_items),
+            "skipped": 0,
+            "total_missing": total_missing,
+            "limit": request_limit,
+            "items": queued_items,
+            "message": "MODstore time-rail maintenance sync unavailable; queued local desktop fallback items",
+        }
+
     async def maintenance_sync(self, *, limit: int = 32) -> dict[str, Any]:
         request_limit = max(1, int(limit))
         try:
@@ -171,24 +203,30 @@ class TimeRailAppService:
                 base_url=modstore_digest_base_url(),
             )
             if not isinstance(payload, dict):
-                return {"ok": False, "error": "MODstore time-rail maintenance sync 响应无效"}
+                return self._maintenance_sync_unavailable(
+                    "MODstore time-rail maintenance sync 响应无效",
+                    limit=request_limit,
+                )
             if payload.get("ok") is False:
-                return {
-                    "ok": False,
-                    "error": str(
+                return self._maintenance_sync_unavailable(
+                    str(
                         payload.get("error")
                         or payload.get("message")
                         or payload.get("detail")
                         or "MODstore time-rail maintenance sync failed",
                     ),
-                }
+                    limit=request_limit,
+                )
             data = payload.get("data")
             if isinstance(data, dict):
                 return data
             return {"ok": True, "data": data}
         except RECOVERABLE_ERRORS as exc:
             logger.warning("MODstore time-rail maintenance sync 失败，返回 fallback: %s", exc)
-            return {"ok": False, "error": f"MODstore time-rail maintenance sync 不可达: {exc}"}
+            return self._maintenance_sync_unavailable(
+                f"MODstore time-rail maintenance sync 不可达: {exc}",
+                limit=request_limit,
+            )
         except ValueError as exc:
             logger.warning("MODstore time-rail maintenance sync 参数错误: %s", exc)
             return {"ok": False, "error": f"maintenance sync 参数错误: {exc}"}

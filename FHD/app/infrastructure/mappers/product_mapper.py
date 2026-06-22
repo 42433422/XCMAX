@@ -11,7 +11,7 @@ def product_to_domain(db_model: ProductModel) -> Product:
         model_number=ModelNumber(db_model.model_number) if db_model.model_number else None,
         name=db_model.name or "",
         specification=db_model.specification or "",
-        price=Money(db_model.price or 0),
+        price=Money.from_float(float(db_model.price or 0)),
         quantity=db_model.quantity or 0,
         description=db_model.description or "",
         category=db_model.category or "",

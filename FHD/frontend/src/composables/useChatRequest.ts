@@ -61,6 +61,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory
     }
+    // industry 由后端根据 session account_kind 自动派生（单一真相源），前端不传
     const contextParts: string[] = []
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = injectExcelContextPayload(contextPayload, contextParts)

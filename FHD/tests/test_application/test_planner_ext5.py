@@ -96,7 +96,7 @@ class TestExecuteShipmentGenerateTool:
 
         with (
             patch("app.bootstrap.get_shipment_app_service") as mock_ss,
-            patch("app.routes.tools._parse_order_text"),
+            patch("app.application.facades.tools_facade._parse_order_text"),
         ):
             mock_svc = MagicMock()
             mock_svc.generate_shipment_document.return_value = {"success": True}
@@ -109,7 +109,7 @@ class TestExecuteShipmentGenerateTool:
     def test_with_order_text_parse_failure(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
 
-        with patch("app.routes.tools._parse_order_text") as mock_parse:
+        with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse:
             mock_parse.return_value = {"success": False, "message": "parse error"}
             result = _execute_shipment_generate_tool({"order_text": "invalid"})
         assert result["success"] is False
@@ -127,7 +127,7 @@ class TestExecuteShipmentGenerateTool:
     def test_value_error(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
 
-        with patch("app.routes.tools._parse_order_text") as mock_parse:
+        with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse:
             mock_parse.side_effect = ValueError("bad")
             result = _execute_shipment_generate_tool({"order_text": "x"})
         assert result["success"] is False
@@ -137,7 +137,7 @@ class TestExecuteShipmentGenerateTool:
         from app.application.workflow.planner import _execute_shipment_generate_tool
 
         with (
-            patch("app.routes.tools._parse_order_text") as mock_parse,
+            patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
             patch("app.bootstrap.get_shipment_app_service") as mock_ss,
         ):
             mock_parse.return_value = {
@@ -156,7 +156,7 @@ class TestExecuteShipmentGenerateTool:
         from app.application.workflow.planner import _execute_shipment_generate_tool
 
         with (
-            patch("app.routes.tools._parse_order_text") as mock_parse,
+            patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
             patch("app.bootstrap.get_shipment_app_service") as mock_ss,
         ):
             mock_parse.return_value = {

@@ -137,6 +137,9 @@ EVENT_TYPES = frozenset(
 
 def repo_root() -> Path:
     """仓库根（含 yuangon、nginx 配置、MODstore_deploy）。"""
+    git_env = os.environ.get("MODSTORE_GIT_REPO_ROOT", "").strip()
+    if git_env:
+        return Path(git_env).resolve()
     env = os.environ.get("MODSTORE_REPO_ROOT", "").strip()
     if env:
         return Path(env).resolve()

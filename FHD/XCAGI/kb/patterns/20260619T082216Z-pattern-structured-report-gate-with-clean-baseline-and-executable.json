@@ -1,0 +1,13 @@
+{
+  "after": "Merge policy consumes structured review/QA JSON, QA compares against clean baseline, and KB fixes include executable applicability/test/rollback templates.",
+  "before": "Merge policy inferred QA state from prose and old failures; KB records were passive notes.",
+  "created_at": "2026-06-19T08:22:16.309178+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "baseline_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/metrics/self_maintenance_clean_baseline.json",
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260619T082216Z-fix-self-maintenance-loop-relies-on-natural-language-qa.json"
+  },
+  "pattern": "structured_report_gate_with_clean_baseline_and_executable_kb_template",
+  "schema_version": 1,
+  "summary": "自主维护循环在自动合并前需要结构化的 employee 契约、干净基线和可执行的修复模板。"
+}

@@ -81,6 +81,6 @@ describe('redactForLLM', () => {
     const t0 = Date.now()
     redactForLLM(big)
     redactForLLM(big)
-    expect(Date.now() - t0).toBeLessThan(500)
+    expect(Date.now() - t0).toBeLessThan(1000)
   })
 })

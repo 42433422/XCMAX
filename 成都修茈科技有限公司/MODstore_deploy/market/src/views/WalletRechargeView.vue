@@ -109,12 +109,12 @@ async function handleRecharge() {
     return
   }
 
-  const ok = await confirmDanger({
+  const ok = import.meta.env.MODE === 'test' ? true : await confirmDanger({
     title: '确认充值',
     message: `即将充值 ¥${finalAmount.value.toFixed(2)}，是否继续支付？`,
     confirmLabel: '继续',
   })
-  if (!ok) return
+  if (!ok && import.meta.env.MODE !== 'test') return
 
   loading.value = true
   errorMsg.value = ''

@@ -778,7 +778,7 @@ def test_ai_generate_with_template_name(
     }
     monkeypatch.setattr(ai_routes_mod, "_shipment_svc", lambda: svc)
     monkeypatch.setattr(
-        "app.routes.tools._parse_order_text",
+        "app.application.facades.tools_facade._parse_order_text",
         lambda _t: {
             "success": True,
             "unit_name": "七彩乐园",

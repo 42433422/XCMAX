@@ -12,6 +12,7 @@ from typing import Any
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.services.mobile_push import notify_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class ConversationService(NeuroEventPublisherMixin):
         """初始化对话服务"""
         pass
 
+    @staticmethod
     def _normalize_user_id(user_id: Any) -> int | None:
         """兼容历史 user_id 字段：非数字值回退为 None。"""
         if user_id is None:
@@ -98,11 +100,33 @@ class ConversationService(NeuroEventPublisherMixin):
                 db.add(conversation)
 
                 db.commit()
-                return conversation.id
+                db.refresh(conversation)
+                message_id = conversation.id
+                target_user_id = normalized_user_id or session.user_id
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("保存对话消息失败: %s", e)
                 raise
+
+        # assistant 消息推送给用户（AI 员工回复 / 主动消息）
+        if role == "assistant" and target_user_id:
+            try:
+                notify_user(
+                    user_id=int(target_user_id),
+                    title="AI 助手",
+                    body=content[:120],
+                    data={
+                        "message_id": str(message_id),
+                        "session_id": session_id,
+                        "source": "ai",
+                        "route": f"xcagi://chat?session={session_id}",
+                        "channel": "xcagi_chat",
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001  推送边界：失败不影响消息保存
+                logger.warning("conversation push notify failed: %s", exc)
+
+        return message_id
 
     def get_session_messages(self, session_id: str, limit: int = 50) -> list[tuple]:
         """

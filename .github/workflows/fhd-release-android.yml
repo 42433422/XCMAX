@@ -1,6 +1,6 @@
 # CI SSOT: generated from FHD/.github/workflows/release-android.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-name: Release Android
+name: Release Enterprise Mobile
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
         type: boolean
         default: false
       harmony_artifact:
-        description: Optional HarmonyOS .hap/.hsp path (enterprise package). If empty, scan mobile-harmony/artifacts then mobile-harmony for latest matching package.
+        description: Enterprise HarmonyOS .hap/.hsp path. If empty, scan mobile-harmony/artifacts then mobile-harmony; packaging fails if none is found.
         required: false
         type: string
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
@@ -105,7 +105,27 @@ jobs:
           echo "version=${raw}" >> "${GITHUB_OUTPUT}"
       - name: Ensure gradlew executable
         run: chmod +x ./gradlew
+      - name: Configure release signing
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret 未配置,release APK 将用 debug key 签名(仅适用于测试,不可用于生产分发)"
+          else
+            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > signing/xcagi-release.jks
+            chmod 600 signing/xcagi-release.jks
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+            echo "已配置正式签名 keystore"
+          fi
       - name: Assemble Release (enterprise only)
+        env:
+          XCAGI_ANDROID_KEYSTORE: ${{ steps.signing.outputs.configured == 'true' && 'signing/xcagi-release.jks' || '' }}
+          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          XCAGI_REQUIRE_RELEASE_SIGNING: ${{ steps.signing.outputs.configured == 'true' && '1' || '0' }}
         run: |
           ./gradlew assembleEnterpriseRelease \
             -PuploadCrashlyticsMapping=${{ github.event.inputs.upload_crashlytics_mapping == true && 'true' || 'false' }} \
@@ -116,13 +136,14 @@ jobs:
             --version "${{ steps.release_version.outputs.version }}" \
             --android-version "${{ steps.release_version.outputs.version }}" \
             --harmony-artifact "${{ github.event.inputs.harmony_artifact || '' }}"
-      - name: Upload APK artifacts
+      - name: Upload mobile package artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: xcagi-android-release-packages
+          name: xcagi-enterprise-mobile-release-packages
           path: |
             FHD/mobile-android/app/build/outputs/apk/enterprise/release/*.apk
             release/packages-v${{ steps.release_version.outputs.version }}/enterprise/
+            release/packages-v${{ steps.release_version.outputs.version }}/企业版/
             release/XCAGI-Enterprise-Mobile-Packages-v${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
 
@@ -133,7 +154,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: xcagi-android-release-packages
+          name: xcagi-enterprise-mobile-release-packages
           path: artifacts
       - name: Upload mobile packages to release
         uses: softprops/action-gh-release@v2

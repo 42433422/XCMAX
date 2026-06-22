@@ -8,9 +8,10 @@ from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Tex
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class Warehouse(Base):
+class Warehouse(TenantScopedMixin, Base):
     __tablename__ = "warehouses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -31,7 +32,7 @@ class Warehouse(Base):
     )
 
 
-class StorageLocation(Base):
+class StorageLocation(TenantScopedMixin, Base):
     __tablename__ = "storage_locations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -49,7 +50,7 @@ class StorageLocation(Base):
     )
 
 
-class InventoryLedger(Base):
+class InventoryLedger(TenantScopedMixin, Base):
     __tablename__ = "inventory_ledger"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -78,7 +79,7 @@ class InventoryLedger(Base):
     )
 
 
-class InventoryTransaction(Base):
+class InventoryTransaction(TenantScopedMixin, Base):
     __tablename__ = "inventory_transactions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

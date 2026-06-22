@@ -11,16 +11,25 @@ _lock = threading.Lock()
 _qr_sessions: dict[str, dict[str, Any]] = {}
 
 
-def issue_auth_qr(*, client_hint: str = "", ttl_seconds: int = 120) -> dict[str, Any]:
+def issue_auth_qr(
+    *,
+    client_hint: str = "",
+    ttl_seconds: int = 120,
+    account_kind: str = "enterprise",
+) -> dict[str, Any]:
     qr_id = secrets.token_urlsafe(18)
     poll_secret = secrets.token_urlsafe(12)
     exp = int(time.time()) + ttl_seconds
+    kind = str(account_kind or "enterprise").strip().lower()
+    if kind not in {"personal", "enterprise", "admin"}:
+        kind = "enterprise"
     payload = {
         "qr_id": qr_id,
         "poll_secret": poll_secret,
         "status": "pending",
         "exp": exp,
         "client_hint": (client_hint or "")[:256],
+        "account_kind": kind,
         "session_id": None,
         "login_payload": None,
     }
@@ -31,6 +40,7 @@ def issue_auth_qr(*, client_hint: str = "", ttl_seconds: int = 120) -> dict[str,
         "poll_secret": poll_secret,
         "expires_at": exp,
         "client_hint": payload["client_hint"],
+        "account_kind": kind,
     }
 
 

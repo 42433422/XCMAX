@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -118,10 +118,8 @@ def trigger_cve_autofix(
 
     cve_id = str(cve_payload.get("cve_id", ""))
     package = str(cve_payload.get("package", ""))
-    current_version = str(cve_payload.get("current_version", ""))
     fix_version = str(cve_payload.get("fix_version", ""))
     cvss_score = float(cve_payload.get("cvss_score", 0) or 0)
-    advisory = str(cve_payload.get("advisory", ""))
 
     if not package or not fix_version:
         return {"ok": False, "error": "missing package or fix_version"}
@@ -181,6 +179,7 @@ def trigger_cve_autofix(
             "package": package,
             "fix_version": fix_version,
             "cvss_score": cvss_score,
+            "risk_level": risk_level,
             "cr_results": results,
         },
         source="auto_fix_loop",
@@ -211,7 +210,7 @@ def _patch_requirement(rel_path: str, package: str, fix_version: str) -> Optiona
     if not os.path.isfile(full_path):
         return None
 
-    with open(full_path, "r", encoding="utf-8") as f:
+    with open(full_path, encoding="utf-8") as f:
         content = f.read()
 
     pattern = re.compile(
@@ -237,7 +236,7 @@ def _patch_pyproject_dependency(rel_path: str, package: str, fix_version: str) -
     if not os.path.isfile(full_path):
         return None
 
-    with open(full_path, "r", encoding="utf-8") as f:
+    with open(full_path, encoding="utf-8") as f:
         content = f.read()
 
     pattern = re.compile(
@@ -256,7 +255,7 @@ def _patch_pyproject_dependency(rel_path: str, package: str, fix_version: str) -
 
 
 def register_auto_fix_event_bindings() -> None:
-    """注册异常和 CVE 事件到 incident_bus 的 trigger bindings。"""
+    """注册异常、CVE、Dependabot、gitleaks、CodeQL 事件到 incident_bus 的 trigger bindings。"""
     try:
         from modstore_server.models import EmployeeTriggerBinding, get_session_factory
 
@@ -267,13 +266,32 @@ def register_auto_fix_event_bindings() -> None:
                     event_type="anomaly.detected",
                     employee_id="daily-orchestrator",
                     priority=10,
-                    active=True,
+                    is_active=True,
                 ),
                 EmployeeTriggerBinding(
                     event_type="cve.detected",
                     employee_id="security-secrets-guard",
                     priority=5,
-                    active=True,
+                    is_active=True,
+                ),
+                # P1 扩展：GitHub 原生工具信号桥接
+                EmployeeTriggerBinding(
+                    event_type="dependabot.pr.opened",
+                    employee_id="github-pr-gatekeeper",
+                    priority=8,
+                    is_active=True,
+                ),
+                EmployeeTriggerBinding(
+                    event_type="gitleaks.scan.completed",
+                    employee_id="security-secrets-guard",
+                    priority=3,
+                    is_active=True,
+                ),
+                EmployeeTriggerBinding(
+                    event_type="codeql.alert.created",
+                    employee_id="vibe-coding-maintainer",
+                    priority=5,
+                    is_active=True,
                 ),
             ]
             for b in bindings:
@@ -288,3 +306,394 @@ def register_auto_fix_event_bindings() -> None:
         logger.info("auto_fix event bindings registered")
     except Exception:
         logger.exception("register_auto_fix_event_bindings failed")
+
+
+# ---------------------------------------------------------------------------
+# P1 扩展：GitHub 原生工具信号桥接（Dependabot / gitleaks / CodeQL）
+# ---------------------------------------------------------------------------
+
+
+def _dependabot_autofix_enabled() -> bool:
+    return os.environ.get("XCAGI_DEPENDABOT_AUTOFIX_ENABLED", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _gitleaks_response_enabled() -> bool:
+    return os.environ.get("XCAGI_GITLEAKS_RESPONSE_ENABLED", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _codeql_response_enabled() -> bool:
+    return os.environ.get("XCAGI_CODEQL_RESPONSE_ENABLED", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def trigger_dependabot_autofix(
+    pr_event: Dict[str, Any],
+    *,
+    source: str = "github_webhook",
+) -> Dict[str, Any]:
+    """Dependabot PR 自动审查与合并。
+
+    信号源：GitHub webhook (pull_request.opened, sender=dependabot[bot])
+    策略：
+    - patch/minor + 测试通过 → 自动 approve + merge
+    - major → 派发给 vibe-coding-maintainer 做兼容性验证
+    - security PR → 优先级最高，跳过 major 限制
+
+    流程：
+    1. 解析 PR 信息（number、url、依赖名、版本变更类型）
+    2. 创建建议单 → 派发给 github-pr-gatekeeper
+    3. github-pr-gatekeeper 调用 GitHub API 做 review/approve/merge
+    """
+    if not _dependabot_autofix_enabled():
+        return {"ok": True, "skipped": True, "reason": "dependabot autofix disabled"}
+
+    sender_login = str(pr_event.get("sender", {}).get("login", ""))
+    if "dependabot" not in sender_login:
+        return {"ok": True, "skipped": True, "reason": f"not dependabot PR: {sender_login}"}
+
+    pr_number = int(pr_event.get("number", 0) or 0)
+    pr_url = str(pr_event.get("html_url", "") or pr_event.get("pull_request", {}).get("html_url", ""))
+    pr_title = str(pr_event.get("title", "") or pr_event.get("pull_request", {}).get("title", ""))
+
+    # 从 PR 标题解析版本变更类型
+    # Dependabot 标题格式："Bump foo from 1.0.0 to 1.1.0" 或 "Bump foo from 1.0.0 to 2.0.0"
+    update_type = _classify_dependabot_update(pr_title)
+    is_security = "security" in pr_title.lower() or "security" in pr_url.lower()
+
+    risk_level = "low"
+    if is_security:
+        risk_level = "high"  # 安全 PR 优先级最高，但风险也高（需快速验证）
+    elif update_type == "major":
+        risk_level = "medium"  # major 版本可能有 breaking change
+
+    from modstore_server.employee_autonomy_service import create_employee_suggestion
+
+    summary = f"Dependabot PR #{pr_number}: {pr_title[:120]}"
+    detail_parts = [
+        f"PR 编号: #{pr_number}",
+        f"PR URL: {pr_url}",
+        f"PR 标题: {pr_title}",
+        f"版本变更类型: {update_type}",
+        f"是否安全更新: {is_security}",
+        f"来源: {source}",
+    ]
+    detail = "\n".join(detail_parts)
+
+    result = create_employee_suggestion(
+        source_employee_id="security-secrets-guard",
+        summary=summary,
+        detail=detail,
+        payload={
+            "pr_number": pr_number,
+            "pr_url": pr_url,
+            "pr_title": pr_title,
+            "update_type": update_type,
+            "is_security": is_security,
+            "source": source,
+        },
+        target_employee_ids=["github-pr-gatekeeper"],
+        kind="dependabot_autofix",
+        risk_level=risk_level,
+        auto_dispatch=True,
+        emit_event=True,
+    )
+
+    from modstore_server.incident_bus import publish
+
+    publish(
+        "dependabot.autofix.triggered",
+        {
+            "pr_number": pr_number,
+            "pr_url": pr_url,
+            "update_type": update_type,
+            "is_security": is_security,
+            "suggestion_id": result.get("suggestion_id"),
+        },
+        source="auto_fix_loop",
+    )
+
+    return {
+        "ok": True,
+        "pr_number": pr_number,
+        "update_type": update_type,
+        "is_security": is_security,
+        "suggestion_id": result.get("suggestion_id"),
+        "result": result,
+    }
+
+
+def _classify_dependabot_update(pr_title: str) -> str:
+    """从 Dependabot PR 标题解析版本变更类型。
+
+    Dependabot 标题格式：
+    - "Bump foo from 1.0.0 to 1.0.1" → patch
+    - "Bump foo from 1.0.0 to 1.1.0" → minor
+    - "Bump foo from 1.0.0 to 2.0.0" → major
+    """
+    if not pr_title:
+        return "unknown"
+
+    # 匹配 "from X.Y.Z to A.B.C" 模式
+    match = re.search(r"from\s+(\d+)\.(\d+)\.(\d+)\s+to\s+(\d+)\.(\d+)\.(\d+)", pr_title)
+    if not match:
+        return "unknown"
+
+    from_major, from_minor, _ = int(match.group(1)), int(match.group(2)), int(match.group(3))
+    to_major, to_minor, _ = int(match.group(4)), int(match.group(5)), int(match.group(6))
+
+    if to_major > from_major:
+        return "major"
+    if to_minor > from_minor:
+        return "minor"
+    return "patch"
+
+
+def trigger_gitleaks_response(
+    scan_result: Dict[str, Any],
+    *,
+    source: str = "gitleaks_action",
+) -> Dict[str, Any]:
+    """gitleaks 扫描结果响应。
+
+    信号源：gitleaks-action workflow 完成 + webhook 通知
+    策略：
+    - 无泄漏 → 记录日志，不派发
+    - 有泄漏 → 立即派发 security-secrets-guard 评估
+    - 高危泄漏（私钥/数据库密码/生产 token）→ 创建 incident + 通知 + 准备密钥轮换
+
+    流程：
+    1. 解析扫描结果（leaks 列表、严重程度）
+    2. 按 secret type 分级
+    3. 创建建议单 → 派发给 security-secrets-guard
+    4. security-secrets-guard 评估 → 决定是否轮换密钥
+    """
+    if not _gitleaks_response_enabled():
+        return {"ok": True, "skipped": True, "reason": "gitleaks response disabled"}
+
+    leaks = scan_result.get("leaks", [])
+    if not leaks:
+        logger.info("gitleaks scan clean: no leaks found")
+        return {"ok": True, "clean": True, "leaks_count": 0}
+
+    # 按泄漏类型分级
+    high_risk_types = {
+        "private-key",
+        "aws-access-token",
+        "github-pat",
+        "github-oauth",
+        "database-url",
+        "xcmag-cursor-admin-token",
+        "xcmag-modstore-api-key",
+        "xcmag-lan-gateway-secret",
+    }
+
+    high_risk_leaks = []
+    other_leaks = []
+    for leak in leaks:
+        rule_id = str(leak.get("RuleID", "") or leak.get("rule_id", ""))
+        if rule_id in high_risk_types or "private" in rule_id.lower() or "key" in rule_id.lower():
+            high_risk_leaks.append(leak)
+        else:
+            other_leaks.append(leak)
+
+    risk_level = "high" if high_risk_leaks else "medium"
+
+    from modstore_server.employee_autonomy_service import create_employee_suggestion
+
+    summary = f"gitleaks 发现 {len(leaks)} 处泄漏（高危 {len(high_risk_leaks)} 处）"
+    detail_parts = [
+        f"扫描来源: {source}",
+        f"总泄漏数: {len(leaks)}",
+        f"高危泄漏数: {len(high_risk_leaks)}",
+        f"严重程度: {risk_level}",
+        "",
+        "## 高危泄漏清单（脱敏）",
+    ]
+    for i, leak in enumerate(high_risk_leaks[:20], 1):
+        rule_id = str(leak.get("RuleID", "") or leak.get("rule_id", "unknown"))
+        file_path = str(leak.get("File", "") or leak.get("file", "unknown"))
+        start_line = leak.get("StartLine", leak.get("start_line", "?"))
+        # 脱敏：不输出 secret 明文，只输出位置和规则
+        detail_parts.append(f"{i}. [{rule_id}] {file_path}:{start_line}")
+    detail_parts.append("")
+    detail_parts.append("## 其他泄漏清单（脱敏）")
+    for i, leak in enumerate(other_leaks[:20], 1):
+        rule_id = str(leak.get("RuleID", "") or leak.get("rule_id", "unknown"))
+        file_path = str(leak.get("File", "") or leak.get("file", "unknown"))
+        start_line = leak.get("StartLine", leak.get("start_line", "?"))
+        detail_parts.append(f"{i}. [{rule_id}] {file_path}:{start_line}")
+
+    detail = "\n".join(detail_parts)
+
+    result = create_employee_suggestion(
+        source_employee_id="log-monitor-incident",
+        summary=summary,
+        detail=detail,
+        payload={
+            "leaks_count": len(leaks),
+            "high_risk_count": len(high_risk_leaks),
+            "risk_level": risk_level,
+            "source": source,
+            # 不传 leaks 原文，避免 secret 明文进入建议单
+            "leaks_summary": [
+                {
+                    "rule_id": str(leak_item.get("RuleID", "") or leak_item.get("rule_id", "")),
+                    "file": str(leak_item.get("File", "") or leak_item.get("file", "")),
+                    "line": leak_item.get("StartLine", leak_item.get("start_line", "?")),
+                }
+                for leak_item in leaks[:50]
+            ],
+        },
+        target_employee_ids=["security-secrets-guard"],
+        kind="gitleaks_response",
+        risk_level=risk_level,
+        auto_dispatch=True,
+        emit_event=True,
+    )
+
+    from modstore_server.incident_bus import publish
+
+    publish(
+        "gitleaks.response.triggered",
+        {
+            "leaks_count": len(leaks),
+            "high_risk_count": len(high_risk_leaks),
+            "risk_level": risk_level,
+            "suggestion_id": result.get("suggestion_id"),
+        },
+        source="auto_fix_loop",
+    )
+
+    return {
+        "ok": True,
+        "leaks_count": len(leaks),
+        "high_risk_count": len(high_risk_leaks),
+        "risk_level": risk_level,
+        "suggestion_id": result.get("suggestion_id"),
+        "result": result,
+    }
+
+
+def trigger_codeql_response(
+    alert: Dict[str, Any],
+    *,
+    source: str = "codeql_webhook",
+) -> Dict[str, Any]:
+    """CodeQL 告警响应。
+
+    信号源：GitHub code-scanning alert webhook
+    策略：
+    - HIGH/CRITICAL → 派发 vibe-coding-maintainer 修复
+    - MEDIUM/LOW → 加入 backlog，由 daily-orchestrator 排期
+
+    流程：
+    1. 解析告警（rule_id、severity、location、description）
+    2. 按 security_severity_level 分级
+    3. HIGH/CRITICAL → 创建建议单 → 派发 vibe-coding-maintainer
+    4. MEDIUM/LOW → 创建 backlog item
+    """
+    if not _codeql_response_enabled():
+        return {"ok": True, "skipped": True, "reason": "codeql response disabled"}
+
+    rule = alert.get("rule", {}) or {}
+    severity = str(rule.get("security_severity_level", "") or rule.get("severity", "low")).lower()
+    rule_id = str(rule.get("id", "") or rule.get("name", "unknown"))
+    rule_description = str(rule.get("description", "") or rule.get("short_description", ""))
+
+    instance = alert.get("most_recent_instance", {}) or {}
+    location = instance.get("location", {}) or {}
+    file_path = str(location.get("path", "unknown"))
+    start_line = location.get("start_line", location.get("startLine", "?"))
+
+    alert_url = str(alert.get("html_url", "") or alert.get("url", ""))
+
+    # 分级
+    if severity in ("critical", "high"):
+        risk_level = "high"
+        target_employees = ["vibe-coding-maintainer"]
+        kind = "codeql_fix"
+        auto_dispatch = True
+    elif severity == "medium":
+        risk_level = "medium"
+        target_employees = ["daily-orchestrator"]
+        kind = "codeql_backlog"
+        auto_dispatch = False
+    else:
+        risk_level = "low"
+        target_employees = ["daily-orchestrator"]
+        kind = "codeql_backlog"
+        auto_dispatch = False
+
+    from modstore_server.employee_autonomy_service import create_employee_suggestion
+
+    summary = f"CodeQL [{severity.upper()}] {rule_id}: {file_path}:{start_line}"
+    detail_parts = [
+        f"告警来源: {source}",
+        f"规则 ID: {rule_id}",
+        f"严重程度: {severity}",
+        f"风险等级: {risk_level}",
+        f"文件位置: {file_path}:{start_line}",
+        f"告警 URL: {alert_url}",
+        f"规则描述: {rule_description}",
+    ]
+    detail = "\n".join(detail_parts)
+
+    result = create_employee_suggestion(
+        source_employee_id="security-secrets-guard",
+        summary=summary,
+        detail=detail,
+        payload={
+            "rule_id": rule_id,
+            "severity": severity,
+            "risk_level": risk_level,
+            "file_path": file_path,
+            "start_line": start_line,
+            "alert_url": alert_url,
+            "rule_description": rule_description,
+            "source": source,
+        },
+        target_employee_ids=target_employees,
+        kind=kind,
+        risk_level=risk_level,
+        auto_dispatch=auto_dispatch,
+        emit_event=True,
+    )
+
+    from modstore_server.incident_bus import publish
+
+    publish(
+        "codeql.response.triggered",
+        {
+            "rule_id": rule_id,
+            "severity": severity,
+            "risk_level": risk_level,
+            "file_path": file_path,
+            "suggestion_id": result.get("suggestion_id"),
+            "auto_dispatched": auto_dispatch,
+        },
+        source="auto_fix_loop",
+    )
+
+    return {
+        "ok": True,
+        "rule_id": rule_id,
+        "severity": severity,
+        "risk_level": risk_level,
+        "auto_dispatched": auto_dispatch,
+        "suggestion_id": result.get("suggestion_id"),
+        "result": result,
+    }

@@ -73,9 +73,16 @@ class NodeExecutionResult:
     success: bool
     tool_id: str
     action: str
+    params: dict[str, Any] = field(default_factory=dict)
     output: dict[str, Any] = field(default_factory=dict)
     error: str = ""
     retries: int = 0
+    retryable: bool = True
+    recovery_hint: str = ""
+    started_at: str = ""
+    finished_at: str = ""
+    duration_ms: int = 0
+    attempts: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass

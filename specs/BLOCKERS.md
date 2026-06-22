@@ -11,6 +11,7 @@
 | ~~**T58/T60**~~ | **2026-06 部分完成**：个人账号 3 空仓 + README 总览；org remote 待 Owner | — | — |
 | ~~**T28**~~ | **2026-06 已收口**：`sqlite_write_guard` → `session_cache.py` + shim | — | — |
 | ~~**T27**~~ | **2026-06 已收口** | — | — |
+| ~~**桌面打包阻塞**~~ | **2026-06-20 已收口**：`desktop/build/` 下 4 文件（before-pack.cjs / installer.nsh / entitlements.mac.plist / notarize.cjs）缺失致 electron-builder 打包失败，已补齐；仓根 README macOS 启动路径与 checklist "签约级"过度声称同步修正 | — | — |
 
 未列出的 P0/P1 项若依赖本机 `git rm --cached` 或 Windows 路径，由对应 P0 worker 在仓根卫生 PR 中处理。
 

@@ -24,6 +24,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, Header, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
+from app.application.agent_orchestrator.chat_trace import (
+    attach_chat_trace_run,
+    create_chat_trace_run,
+)
 from app.application.aiopen.service import (
     AIOPEN_STATE,
     MCP_DEFAULT_PROTOCOL_VERSION,
@@ -54,6 +58,106 @@ def _unauthorized() -> JSONResponse:
         {"success": False, "message": "invalid X-AIOPEN-Key", "code": "AIOPEN_KEY_INVALID"},
         status_code=401,
     )
+
+
+def _trace_aiopen_tool_call(
+    *,
+    route: str,
+    channel: str,
+    tool: str,
+    args: dict[str, Any],
+    result: dict[str, Any],
+    user_id: str = "",
+) -> str:
+    try:
+        message = str(result.get("message") or result.get("code") or f"AIOPEN tool {tool} executed")
+        trace_payload = {
+            "success": bool(result.get("success", False)),
+            "response": message,
+            "data": {
+                "text": message,
+                "legacy_tool_records": [
+                    {
+                        "tool_id": "aiopen",
+                        "tool_name": "aiopen",
+                        "action": tool,
+                        "params": dict(args or {}),
+                        "output": dict(result or {}),
+                        "tool_call_id": f"aiopen:{tool}",
+                    }
+                ],
+            },
+        }
+        run = create_chat_trace_run(
+            trace_payload,
+            message=f"AIOPEN {tool}",
+            runtime_context={
+                "route": route,
+                "source": "aiopen",
+                "tool": tool,
+                "protocol": "mcp" if channel == "aiopen_mcp" else "rest",
+            },
+            user_id=user_id or str(args.get("user_id") or args.get("userId") or "aiopen"),
+            source="aiopen",
+            channel=channel,
+            intent="aiopen_tool_call",
+        )
+        return run.run_id
+    except Exception:  # noqa: BLE001 - tracing must not break external tool calls
+        logger.exception("failed to attach AgentRun trace to AIOPEN tool call")
+        return ""
+
+
+def _safe_aiopen_control_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    safe = dict(payload or {})
+    raw_key = str(safe.pop("key", "") or "")
+    if raw_key:
+        safe["key_preview"] = raw_key[:16]
+    return safe
+
+
+def _trace_aiopen_control_result(
+    payload: dict[str, Any],
+    *,
+    route: str,
+    action: str,
+    body: dict[str, Any] | None = None,
+    channel: str = "aiopen_control",
+    intent: str = "aiopen_control_update",
+) -> dict[str, Any]:
+    if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
+        return payload
+    try:
+        safe_payload = _safe_aiopen_control_payload(payload)
+        safe_body = _safe_aiopen_control_payload(body or {})
+        message = str(payload.get("message") or action)
+        run = create_chat_trace_run(
+            {
+                "success": bool(payload.get("success", False)),
+                "response": message,
+                "data": {"text": message, "control_result": safe_payload},
+            },
+            message=f"AIOPEN {action}",
+            runtime_context={
+                "route": route,
+                "source": "aiopen",
+                "action": action,
+                "request": safe_body,
+            },
+            user_id=str(
+                (body or {}).get("user_id") or (body or {}).get("userId") or "aiopen-control"
+            ),
+            source="aiopen",
+            channel=channel,
+            intent=intent,
+        )
+        traced = dict(payload)
+        traced["run_id"] = run.run_id
+        traced["agent_run_id"] = run.run_id
+        return traced
+    except Exception:  # noqa: BLE001 - tracing must not break control-plane writes
+        logger.exception("failed to attach AgentRun trace to AIOPEN control action")
+        return payload
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +225,19 @@ async def aiopen_invoke(
         status = 403
     elif result.get("code") == "UNKNOWN_TOOL":
         status = 404
-    return JSONResponse({"tool": tool, **result}, status_code=status)
+    payload = {"tool": tool, **result}
+    run_id = _trace_aiopen_tool_call(
+        route="/api/aiopen/invoke",
+        channel="aiopen_invoke",
+        tool=tool,
+        args=args,
+        result=result,
+        user_id=str(body.get("user_id") or body.get("userId") or ""),
+    )
+    if run_id:
+        payload["run_id"] = run_id
+        payload["agent_run_id"] = run_id
+    return JSONResponse(payload, status_code=status)
 
 
 # ---------------------------------------------------------------------------
@@ -201,12 +317,22 @@ async def _handle_mcp_message(
             return _jsonrpc_error(req_id, -32603, f"tool execution failed: {err}")
         is_error = not bool(result.get("success", False))
         text = format_tool_result_text(tool, result)
+        run_id = _trace_aiopen_tool_call(
+            route="/api/aiopen/mcp",
+            channel="aiopen_mcp",
+            tool=tool,
+            args=args,
+            result=result,
+        )
+        mcp_result: dict[str, Any] = {
+            "content": [{"type": "text", "text": text}],
+            "isError": is_error,
+        }
+        if run_id:
+            mcp_result["_meta"] = {"run_id": run_id, "agent_run_id": run_id}
         return _jsonrpc_result(
             req_id,
-            {
-                "content": [{"type": "text", "text": text}],
-                "isError": is_error,
-            },
+            mcp_result,
         )
     if is_notification:
         return None
@@ -309,7 +435,12 @@ def aiopen_keys_list():
 @router.post("/api/aiopen/keys")
 def aiopen_keys_create(body: dict = Body(default_factory=dict)):
     created = generate_api_key(str(body.get("label") or ""))
-    return {"success": True, **created}
+    return _trace_aiopen_control_result(
+        {"success": True, **created},
+        route="/api/aiopen/keys",
+        action="keys_create",
+        body=body,
+    )
 
 
 @router.delete("/api/aiopen/keys")
@@ -318,7 +449,12 @@ def aiopen_keys_revoke(body: dict = Body(default_factory=dict)):
     if not key:
         return JSONResponse({"success": False, "message": "key 不能为空"}, status_code=400)
     ok = revoke_api_key(key)
-    return {"success": ok, "revoked": ok}
+    return _trace_aiopen_control_result(
+        {"success": ok, "revoked": ok},
+        route="/api/aiopen/keys",
+        action="keys_revoke",
+        body=body,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +491,12 @@ def aiopen_whitelist(body: dict = Body(default_factory=dict)):
     if not path:
         return JSONResponse({"success": False, "message": "path 不能为空"}, status_code=400)
     AIOPEN_STATE.setdefault("whitelist", {})[path] = enabled
-    return {"success": True, "path": path, "enabled": enabled}
+    return _trace_aiopen_control_result(
+        {"success": True, "path": path, "enabled": enabled},
+        route="/api/aiopen/whitelist",
+        action="whitelist_update",
+        body=body,
+    )
 
 
 @router.post("/api/aiopen/config")
@@ -364,14 +505,24 @@ def aiopen_config(body: dict = Body(default_factory=dict)):
     if not base_url:
         return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
     AIOPEN_STATE["openclaw_base"] = base_url
-    return {"success": True, "openclaw_base": base_url}
+    return _trace_aiopen_control_result(
+        {"success": True, "openclaw_base": base_url},
+        route="/api/aiopen/config",
+        action="openclaw_config_update",
+        body=body,
+    )
 
 
 @router.post("/api/aiopen/control")
 def aiopen_control(body: dict = Body(default_factory=dict)):
     enabled = bool(body.get("enabled", False))
     AIOPEN_STATE["remote_control_enabled"] = enabled
-    return {"success": True, "remote_control_enabled": enabled}
+    return _trace_aiopen_control_result(
+        {"success": True, "remote_control_enabled": enabled},
+        route="/api/aiopen/control",
+        action="remote_control_update",
+        body=body,
+    )
 
 
 @router.post("/api/aiopen/openclaw/chat")
@@ -380,6 +531,19 @@ def aiopen_openclaw_chat(body: dict = Body(default_factory=dict)):
     if not message:
         return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)
     payload, status = openclaw_chat_proxy(message)
+    payload = attach_chat_trace_run(
+        payload,
+        message=message,
+        runtime_context={
+            "route": "/api/aiopen/openclaw/chat",
+            "source": "aiopen",
+            "external_gateway": "openclaw",
+        },
+        user_id=str(body.get("user_id") or body.get("userId") or "").strip() or None,
+        source="aiopen",
+        channel="aiopen_openclaw",
+        intent="external_openclaw_chat",
+    )
     if status == 200:
         return payload
     return JSONResponse(payload, status_code=status)

@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-qgy01mZ2.js";import{a1 as a,t as n,a2 as r}from"./index-C1axxMiF.js";const s=a({__name:"BrainView",setup(i){return(t,o)=>(n(),r(e,{"mod-id":"xcagi-planner-bridge",view:"BrainView",title:"Planner 页"}))}});export{s as default};

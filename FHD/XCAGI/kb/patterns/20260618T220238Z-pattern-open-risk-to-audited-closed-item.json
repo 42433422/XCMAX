@@ -1,0 +1,13 @@
+{
+  "after": "Move resolved open_items to closed_items with original item and resolution metadata; only unresolved open_items block QA.",
+  "before": "Append-only open_items caused old failures to remain active forever.",
+  "created_at": "2026-06-18T22:02:38.560238+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T220238Z-fix-self-maintenance-qa-repeatedly-fails-because-historical-loop.json"
+  },
+  "pattern": "open_risk_to_audited_closed_item",
+  "schema_version": 1,
+  "summary": "不要在提示中隐藏陈旧的循环风险；真实修复落地后用可审计的解决记录关闭它们。"
+}

@@ -12,31 +12,29 @@ const MOD_UNAVAILABLE: ApiResponse<never> = {
 
 let modRouteAvailable: boolean | null = null;
 
-function isPrivateDbModAvailablePayload(data: unknown): boolean {
-  if (Array.isArray(data)) {
-    return data.some((m) => {
-      if (!m || typeof m !== 'object') return false;
-      const row = m as { id?: unknown; mod_id?: unknown; enabled?: unknown };
-      const id = String(row.id || row.mod_id || '').trim();
-      return id === PRIVATE_DB_READ_ASSISTANT_MOD_ID && row.enabled !== false;
-    });
-  }
-  if (data && typeof data === 'object') {
-    const row = data as { id?: unknown; mod_id?: unknown; enabled?: unknown };
-    const id = String(row.id || row.mod_id || '').trim();
-    return id === PRIVATE_DB_READ_ASSISTANT_MOD_ID && row.enabled !== false;
-  }
-  return false;
-}
+type PrivateDbModRouteRow = {
+  id?: string;
+  mod_id?: string;
+  enabled?: boolean;
+};
 
 async function isPrivateDbModRouteAvailable(): Promise<boolean> {
   if (modRouteAvailable !== null) return modRouteAvailable;
   try {
     const { api } = await import('./core');
-    const resp = await api.get<{ success?: boolean; data?: unknown }>(
+    const resp = await api.get<{
+      success?: boolean;
+      data?: PrivateDbModRouteRow[] | PrivateDbModRouteRow;
+    }>(
       '/api/mods/',
     );
-    modRouteAvailable = resp?.success !== false && isPrivateDbModAvailablePayload(resp?.data);
+    const mods = Array.isArray(resp?.data) ? resp.data : resp?.data ? [resp.data] : [];
+    modRouteAvailable =
+      resp?.success !== false &&
+      mods.some((m) => {
+        const id = String(m?.id || m?.mod_id || '');
+        return id === PRIVATE_DB_READ_ASSISTANT_MOD_ID && m?.enabled !== false;
+      });
   } catch {
     modRouteAvailable = false;
   }

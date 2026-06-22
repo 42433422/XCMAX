@@ -390,7 +390,9 @@ def test_dynamic_workflow_unit_products_import(
 def test_execute_pro_mode_shipment_generate(chat_svc: AIChatApplicationService) -> None:
     ai_result = {"text": "生成发货单", "data": {}}
     response_data = {"success": True, "data": {}}
-    with patch("app.routes.tools._parse_order_text", return_value={"success": False}):
+    with patch(
+        "app.application.facades.tools_facade._parse_order_text", return_value={"success": False}
+    ):
         out = chat_svc._execute_pro_mode_tools(
             response_data,
             "shipment_generate",
