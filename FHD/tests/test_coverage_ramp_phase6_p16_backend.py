@@ -543,6 +543,12 @@ class TestInitDbRuntimeAuthBootstrap:
 
         monkeypatch.setattr("app.db.init_db.ensure_postgresql_auth_bootstrap", fake_pg)
         monkeypatch.setattr("app.db.init_db.ensure_user_preferences_bootstrap", fake_prefs)
+        # Also stub neuro_event_log (called in the else/pg branch); without this,
+        # _resolve_auth_bootstrap_engine falls back to the local DB and connects.
+        monkeypatch.setattr(
+            "app.db.init_db.ensure_neuro_event_log_bootstrap",
+            lambda engine=None, *, database_url=None, swallow_errors=True: None,
+        )
 
         ensure_runtime_auth_bootstrap()
         assert called == {"pg": 1, "prefs": 1}
@@ -1914,10 +1920,13 @@ class TestCustomerRepositorySave:
 
         mock_db.add.side_effect = fake_add
 
-        # Use a Mock contact_info to provide .person/.phone/.address attributes
-        # (the real ContactInfo value object uses .name, but the repository
-        # source code calls .person — a pre-existing bug we work around here).
-        contact_info = SimpleNamespace(person="John", phone="123", address="St")
+        # Use a Mock contact_info to provide .name/.phone/.address attributes.
+        # address must be an Address-like object with to_full_string() because
+        # customer_repository_impl.py calls contact.address.to_full_string().
+        from unittest.mock import MagicMock as _MagicMock
+        _addr = _MagicMock()
+        _addr.to_full_string.return_value = "St"
+        contact_info = SimpleNamespace(name="John", person="John", phone="123", address=_addr)
         customer = Customer(customer_name="Acme", contact_info=contact_info)
 
         # Patch customer_to_domain to avoid the broken ContactInfo(person=...) call
@@ -1959,7 +1968,10 @@ class TestCustomerRepositorySave:
         mock_query.first.return_value = existing
         mock_db.query.return_value = mock_query
 
-        contact_info = SimpleNamespace(person="New", phone="111", address="NewAddr")
+        from unittest.mock import MagicMock as _MagicMock
+        _addr2 = _MagicMock()
+        _addr2.to_full_string.return_value = "NewAddr"
+        contact_info = SimpleNamespace(name="New", person="New", phone="111", address=_addr2)
         customer = Customer(customer_name="Acme", contact_info=contact_info)
 
         with (

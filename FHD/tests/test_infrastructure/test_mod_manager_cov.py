@@ -599,7 +599,8 @@ class TestMountOnDiskPrimaryClientMods:
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mm),
         ):
             result = mount_on_disk_primary_client_mods(mm)
-        assert result == ["sunbird"]
+        # Function now always returns [] (placeholder for compat); mods are loaded via ensure_mod_api_ready
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
