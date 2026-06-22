@@ -878,9 +878,7 @@ class TestSnapshotRestoreTblBorders:
         from app.infrastructure.documents.price_list_export import _restore_tbl_borders
 
         table = MagicMock()
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_pr"
-        ) as mock_tbl_pr:
+        with patch("app.infrastructure.documents.price_list_export._tbl_pr") as mock_tbl_pr:
             _restore_tbl_borders(table, None)
         # None borders -> early return before touching/creating tblPr
         mock_tbl_pr.assert_not_called()
@@ -1254,9 +1252,7 @@ class TestEnsureLastRowCellBottomsMatchAbove:
                 "app.infrastructure.documents.price_list_export._tbl_row_count",
                 return_value=1,
             ),
-            patch(
-                "app.infrastructure.documents.price_list_export._tc_set_side_border"
-            ) as mock_set,
+            patch("app.infrastructure.documents.price_list_export._tc_set_side_border") as mock_set,
         ):
             _ensure_last_row_cell_bottoms_match_above(table)
         # Fewer than 2 rows -> early return, no border written
