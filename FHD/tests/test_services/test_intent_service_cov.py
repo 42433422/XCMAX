@@ -47,6 +47,7 @@ class TestLoadIntentRuntimeRules:
 
     def setup_method(self):
         import sys as _sys
+
         _m = _sys.modules.get("app.services.intent_service")
         if _m is None:
             self._saved = None
@@ -61,6 +62,7 @@ class TestLoadIntentRuntimeRules:
 
     def teardown_method(self):
         import sys as _sys
+
         if not getattr(self, "_saved", None):
             return
         _m = _sys.modules.get("app.services.intent_service")

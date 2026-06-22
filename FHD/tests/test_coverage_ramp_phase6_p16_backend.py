@@ -1924,6 +1924,7 @@ class TestCustomerRepositorySave:
         # address must be an Address-like object with to_full_string() because
         # customer_repository_impl.py calls contact.address.to_full_string().
         from unittest.mock import MagicMock as _MagicMock
+
         _addr = _MagicMock()
         _addr.to_full_string.return_value = "St"
         contact_info = SimpleNamespace(name="John", person="John", phone="123", address=_addr)
@@ -1969,6 +1970,7 @@ class TestCustomerRepositorySave:
         mock_db.query.return_value = mock_query
 
         from unittest.mock import MagicMock as _MagicMock
+
         _addr2 = _MagicMock()
         _addr2.to_full_string.return_value = "NewAddr"
         contact_info = SimpleNamespace(name="New", person="New", phone="111", address=_addr2)
