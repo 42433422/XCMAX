@@ -525,22 +525,34 @@ class TestDistillationTrainerEvaluateEdgeCases:
         """evaluate should handle multiple batches correctly."""
         import types
 
-        import torch
-
         trainer = DistillationTrainer(device="cpu")
 
-        batch1_ns = types.SimpleNamespace(
-            loss=torch.tensor(0.3),
-            logits=torch.tensor([[0.9, 0.1], [0.2, 0.8]]),
-        )
-        batch2_ns = types.SimpleNamespace(
-            loss=torch.tensor(0.5),
-            logits=torch.tensor([[0.7, 0.3]]),
-        )
+        # Pure Python stubs — no torch.tensor() calls so this test is immune to
+        # whatever sys.modules['torch'] is (real, stub, or MagicMock) when other
+        # test files in this session temporarily patch distillation_trainer.torch.
+        class _FL:
+            def __init__(self, v):
+                self._v = v
 
-        # Avoid MagicMock entirely for the model — MagicMock.side_effect + @torch.no_grad()
-        # produces unreliable attribute access in CI (child mock returns MagicMock for .loss).
-        # A plain callable class is fully deterministic.
+            def item(self):
+                return float(self._v)
+
+        class _FT:
+            def __init__(self, data=None):
+                self._data = data if data is not None else []
+
+            def to(self, _d):
+                return self
+
+            def cpu(self):
+                return self
+
+            def numpy(self):
+                return self._data
+
+        batch1_ns = types.SimpleNamespace(loss=_FL(0.3), logits=_FT())
+        batch2_ns = types.SimpleNamespace(loss=_FL(0.5), logits=_FT())
+
         class _FakeModel:
             def __init__(self, outputs):
                 self._it = iter(outputs)
@@ -554,14 +566,14 @@ class TestDistillationTrainerEvaluateEdgeCases:
         trainer.model = _FakeModel([batch1_ns, batch2_ns])
 
         batch1 = {
-            "input_ids": torch.tensor([[1, 2], [3, 4]]),
-            "attention_mask": torch.tensor([[1, 1], [1, 1]]),
-            "labels": torch.tensor([0, 1]),
+            "input_ids": _FT(),
+            "attention_mask": _FT(),
+            "labels": _FT([0, 1]),
         }
         batch2 = {
-            "input_ids": torch.tensor([[5, 6]]),
-            "attention_mask": torch.tensor([[1, 1]]),
-            "labels": torch.tensor([0]),
+            "input_ids": _FT(),
+            "attention_mask": _FT(),
+            "labels": _FT([0]),
         }
 
         class _FakeLoader:
@@ -576,7 +588,14 @@ class TestDistillationTrainerEvaluateEdgeCases:
 
         trainer.val_loader = _FakeLoader([batch1, batch2])
 
-        with patch("app.services.distillation_trainer.accuracy_score", return_value=1.0):
+        # Patch distillation_trainer.torch so torch.argmax works regardless of
+        # whether distillation_trainer imported real torch or the stub torch.
+        preds_ft = _FT([0])
+        with (
+            patch("app.services.distillation_trainer.torch") as mock_torch,
+            patch("app.services.distillation_trainer.accuracy_score", return_value=1.0),
+        ):
+            mock_torch.argmax.return_value = preds_ft
             result = trainer.evaluate()
         assert isinstance(result["val_loss"], float), f"val_loss={result['val_loss']!r}"
         assert result["val_loss"] > 0
