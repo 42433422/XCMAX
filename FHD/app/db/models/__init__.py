@@ -9,6 +9,10 @@ from app.db.models.ai import (
     AIToolCategory,
     UserPreference,
 )
+from app.db.models.ai_business_evidence import (
+    ContractExpiryNotification,
+    ShipmentAuditEvent,
+)
 from app.db.models.approval import (
     ApprovalDelegation,
     ApprovalFlow,
@@ -25,16 +29,6 @@ from app.db.models.inventory import (
     Warehouse,
 )
 from app.db.models.material import Material
-from app.db.models.miniprogram import (
-    MpAddress,
-    MpBrowseHistory,
-    MpCart,
-    MpFavorite,
-    MpFeedback,
-    MpNotification,
-    MpOrder,
-    MpOrderItem,
-)
 from app.db.models.mobile_device import MobileDeviceToken
 from app.db.models.permission import Permission, Role, role_permissions
 from app.db.models.product import Product
@@ -95,14 +89,8 @@ __all__ = [
     "ApprovalDelegation",
     "ServiceRequest",
     "ServiceBridgeConfig",
-    "MpAddress",
-    "MpBrowseHistory",
-    "MpCart",
-    "MpFavorite",
-    "MpFeedback",
-    "MpNotification",
-    "MpOrder",
-    "MpOrderItem",
+    "ShipmentAuditEvent",
+    "ContractExpiryNotification",
     "PersonaProfileModel",
     "PersonaEventLogModel",
     "NeuroEventLog",

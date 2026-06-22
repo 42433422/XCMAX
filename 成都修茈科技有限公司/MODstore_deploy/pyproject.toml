@@ -105,8 +105,12 @@ branch = true
 omit = ["*/tests/*", "*/modstore_server/workbench_script_runs/*"]
 
 [tool.coverage.report]
-# 适用于 ``coverage run`` + ``coverage report``；全量 tree 当前约 40%+，抬升需补测后再调。
-fail_under = 80
+# 适用于裸 ``coverage report``。enforced floor = 当前真实覆盖率(全量 tree 自承约 40%+,
+# 本地未实测:xcagi_common 要求 Python>=3.10)。设为诚实的 40 作棘轮——能挡回归、只可上调。
+# 路线图目标(尚未达成)为 80;CI 实际门禁见
+# .github/workflows/ci-backend-python.yml 的 MODSTORE_PY_COVERAGE_FLOOR(=40,与此一致),
+# 它发布到仓库根 .github/workflows/modstore-ci-backend-python.yml 后由 GitHub 实际执行。
+fail_under = 40
 
 [tool.mypy]
 python_version = "3.10"

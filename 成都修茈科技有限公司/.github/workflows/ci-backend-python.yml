@@ -62,11 +62,15 @@ jobs:
           black --check modstore_server modman tests
           isort --check-only modstore_server modman tests
 
-      - name: Test with coverage (global floor)
+      - name: Test with coverage (global floor — ratchet)
         env:
           MODSTORE_JWT_SECRET: ci-test-secret-at-least-32-characters-long
           MODSTORE_DATABASE_URL: "sqlite+pysqlite:///:memory:"
-          MODSTORE_PY_COVERAGE_FLOOR: '8'
+          # 诚实 floor=40(原为虚低的 8)。取 pyproject 自承"全量 tree 约 40%+"作保守值;
+          # 本地无法实测(xcagi_common 要求 Python>=3.10)。棘轮:能挡回归、不可下调,
+          # 实测后只能上调。必须与 MODstore_deploy/.github/workflows/ci-backend-python.yml
+          # (经 scripts/dev/publish_ci_workflows_to_root.py 发布到根并实际运行的那份)一致。
+          MODSTORE_PY_COVERAGE_FLOOR: '40'
         run: |
           pytest tests/ -q \
             --cov=modstore_server \
