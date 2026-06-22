@@ -1115,6 +1115,25 @@ class SuperEmployeeService:
         except (TypeError, ValueError):
             return 3600.0
 
+    def _cli_subprocess_env(self) -> dict[str, str] | None:
+        """给 CLI 子进程注入代理。差异化代理：FHD 本身直连自有云端 xiu-ci.com（代理会断 SSL），
+        但 claude/codex 调 api.anthropic.com 等需走代理（直连被 403 拦）。
+        仅当 XCMAX_CLI_PROXY 设了才注入；否则返回 None（继承当前环境，行为不变）。"""
+        proxy = str(os.environ.get("XCMAX_CLI_PROXY") or "").strip()
+        if not proxy:
+            return None
+        env = os.environ.copy()
+        for k in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ):
+            env[k] = proxy
+        return env
+
     def _run_cli_idle(
         self,
         cmd: list[str],
@@ -1133,6 +1152,7 @@ class SuperEmployeeService:
             bufsize=1,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=self._cli_subprocess_env(),
         )
         out_parts: list[str] = []
         err_parts: list[str] = []
