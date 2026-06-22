@@ -1,16 +1,24 @@
 """Add inventory and purchase tables
 
 Revision ID: xcagi_v4_inventory_purchase
-Revises:
+Revises: c4a9f8e1d2b3
 Create Date: 2026-03-29
 
+NOTE (2026-06-22): down_revision was changed from None to "c4a9f8e1d2b3".
+In this versions tree the revision had been left as a second, disconnected base
+(down_revision = None), which made it an extra head AND risked running its
+``create_table`` calls before ``products`` exists (it declares FKs to
+``products.id``). ``products`` is created by ``b1f4a6d2e8c1`` which is an
+ancestor of ``c4a9f8e1d2b3``, so attaching here guarantees correct ordering on a
+fresh ``alembic upgrade head`` (this matches the intent recorded in the legacy
+FHD/XCAGI/alembic copy of this file).
 """
 from alembic import op
 import sqlalchemy as sa
 
 
 revision = 'xcagi_v4_inventory_purchase'
-down_revision = None
+down_revision = 'c4a9f8e1d2b3'
 branch_labels = None
 depends_on = None
 

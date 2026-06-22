@@ -93,7 +93,11 @@ class TestIntentDataset:
         examples = [IntentExample(text="test", label="unknown_label")]
         ds = IntentDataset(examples, mock_tokenizer)
         item = ds[0]
-        assert "labels" not in item or item.get("labels") is None or True
+        # Unknown label is not in LABEL_TO_ID -> no "labels" key is emitted,
+        # but tokenizer outputs are still present.
+        assert "labels" not in item
+        assert "input_ids" in item
+        assert "attention_mask" in item
 
 
 class TestLoadTrainingData:

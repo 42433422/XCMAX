@@ -79,14 +79,20 @@ class TestEnsurePostgresqlAuthBootstrapDeep:
         mock_engine = Mock()
         mock_engine.dialect.name = "sqlite"
         with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine):
-            # Should not raise
             ensure_postgresql_auth_bootstrap(None)
+        # Non-postgresql dialect -> early return, no DDL (begin) executed
+        mock_engine.begin.assert_not_called()
 
     def test_none_engine_skipped(self):
         from app.db.init_db import ensure_postgresql_auth_bootstrap
 
-        with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=None):
+        with (
+            patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=None),
+            patch("app.db.init_db._seed_default_admin_user") as mock_seed,
+        ):
             ensure_postgresql_auth_bootstrap(None)
+        # No engine resolved -> early return before any seeding work
+        mock_seed.assert_not_called()
 
     def test_creates_users_table_when_missing(self):
         from app.db.init_db import ensure_postgresql_auth_bootstrap
@@ -126,6 +132,9 @@ class TestEnsurePostgresqlAuthBootstrapDeep:
             patch("app.db.init_db._seed_default_admin_user"),
         ):
             ensure_postgresql_auth_bootstrap(mock_engine)
+        # users already present (no users DDL), sessions missing -> exactly one
+        # begin() for the CREATE TABLE sessions
+        mock_engine.begin.assert_called_once()
 
     def test_sessions_skipped_when_users_still_missing(self):
         from app.db.init_db import ensure_postgresql_auth_bootstrap
@@ -141,9 +150,14 @@ class TestEnsurePostgresqlAuthBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=[mock_insp_1, mock_insp_2]),
-            patch("app.db.init_db._seed_default_admin_user"),
+            patch("app.db.init_db._seed_default_admin_user") as mock_seed,
         ):
             ensure_postgresql_auth_bootstrap(mock_engine)
+        # users missing -> one begin() to create users; re-inspect still shows
+        # users missing -> sessions creation skipped (no second begin) and the
+        # function returns before seeding the admin user
+        mock_engine.begin.assert_called_once()
+        mock_seed.assert_not_called()
 
     def test_handles_recoverable_errors(self):
         from app.db.init_db import ensure_postgresql_auth_bootstrap
@@ -154,9 +168,13 @@ class TestEnsurePostgresqlAuthBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
+            patch("app.db.init_db._seed_default_admin_user") as mock_seed,
         ):
-            # Should not raise
+            # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
             ensure_postgresql_auth_bootstrap(mock_engine)
+        # error hit before any DDL or seeding ran
+        mock_engine.begin.assert_not_called()
+        mock_seed.assert_not_called()
 
 
 # ========================= ensure_sessions_market_access_token_column - deep
@@ -168,10 +186,14 @@ class TestEnsureSessionsMarketAccessTokenColumnDeep:
 
         with (
             patch("app.db._create_engine_for_url", side_effect=RuntimeError("no url")),
-            patch("app.db._get_engine", side_effect=ImportError("no engine")),
+            patch("app.db._get_engine", side_effect=ImportError("no engine")) as mock_get,
         ):
-            # Should not raise
-            ensure_sessions_market_access_token_column(None, database_url=None)
+            # No url and no engine -> falls back to _get_engine which raises a
+            # RECOVERABLE_ERRORS member -> function returns without raising
+            result = ensure_sessions_market_access_token_column(None, database_url=None)
+        assert result is None
+        # confirms we actually reached the _get_engine fallback (not short-circuited)
+        mock_get.assert_called_once()
 
     def test_column_already_exists(self):
         from app.db.init_db import ensure_sessions_market_access_token_column
@@ -291,8 +313,11 @@ class TestEnsureSessionsMarketAccessTokenColumnDeep:
             patch("app.db._create_engine_for_url", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=[mock_insp_1, mock_insp_2]),
         ):
-            # Should not raise
+            # add step runs (column missing); verify step sees sessions table gone
+            # and returns instead of raising the "缺少 market_access_token" error
             ensure_sessions_market_access_token_column(None, database_url="sqlite:///test.db")
+        # exactly one begin() for the ALTER; verify step does no further DDL
+        mock_engine.begin.assert_called_once()
 
     def test_engine_from_explicit_param(self):
         from app.db.init_db import ensure_sessions_market_access_token_column
@@ -305,6 +330,8 @@ class TestEnsureSessionsMarketAccessTokenColumnDeep:
 
         with patch("sqlalchemy.inspect", return_value=mock_insp):
             ensure_sessions_market_access_token_column(mock_engine, database_url=None)
+        # explicit engine used directly; column already present -> no ALTER (begin)
+        mock_engine.begin.assert_not_called()
 
     def test_add_column_failure_logs(self):
         from app.db.init_db import ensure_sessions_market_access_token_column
@@ -328,8 +355,11 @@ class TestEnsureSessionsMarketAccessTokenColumnDeep:
             patch("app.db._create_engine_for_url", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=[mock_insp_1, mock_insp_2]),
         ):
-            # Should not raise - error is logged, verify sees column present
+            # ALTER (begin) raises a RECOVERABLE_ERRORS member -> swallowed/logged;
+            # verify step then sees the column present -> no RuntimeError raised
             ensure_sessions_market_access_token_column(None, database_url="sqlite:///test.db")
+        # the add path was actually entered (begin attempted) before the error was swallowed
+        mock_engine.begin.assert_called_once()
 
 
 # ========================= ensure_sessions_market_refresh_token_column ====
@@ -373,9 +403,13 @@ class TestEnsureSessionsMarketRefreshTokenColumnDeep:
 
         with (
             patch("app.db._create_engine_for_url", side_effect=RuntimeError("no url")),
-            patch("app.db._get_engine", side_effect=ImportError("no engine")),
+            patch("app.db._get_engine", side_effect=ImportError("no engine")) as mock_get,
         ):
-            ensure_sessions_market_refresh_token_column(None, database_url=None)
+            # No url and no engine -> _get_engine fallback raises a recoverable
+            # error -> function returns without raising
+            result = ensure_sessions_market_refresh_token_column(None, database_url=None)
+        assert result is None
+        mock_get.assert_called_once()
 
 
 # ========================= ensure_sessions_enterprise_entitlement_columns ==
@@ -501,18 +535,34 @@ class TestEnsureSessionsAccountMetaColumnsDeep:
 
 class TestEnsureUserPreferencesBootstrapDeep:
     def test_non_sqlite_skipped(self):
+        # NOTE: ensure_user_preferences_bootstrap has NO dialect gate (unlike
+        # ensure_sqlite_*). With a non-None engine and the table missing it
+        # creates user_preferences regardless of dialect. Assert that real
+        # behavior: create_all IS invoked (would fail if a skip were added).
         from app.db.init_db import ensure_user_preferences_bootstrap
 
         mock_engine = Mock()
         mock_engine.dialect.name = "postgresql"
-        with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine):
+        mock_insp = Mock()
+        mock_insp.get_table_names.return_value = []
+        with (
+            patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
+            patch("sqlalchemy.inspect", return_value=mock_insp),
+            patch("app.db.base.Base.metadata.create_all") as mock_create,
+        ):
             ensure_user_preferences_bootstrap(None)
+        mock_create.assert_called_once()
 
     def test_none_engine_skipped(self):
         from app.db.init_db import ensure_user_preferences_bootstrap
 
-        with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=None):
+        with (
+            patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=None),
+            patch("app.db.base.Base.metadata.create_all") as mock_create,
+        ):
             ensure_user_preferences_bootstrap(None)
+        # No engine resolved -> early return before any table creation
+        mock_create.assert_not_called()
 
     def test_creates_table_when_missing(self):
         from app.db.init_db import ensure_user_preferences_bootstrap
@@ -525,9 +575,11 @@ class TestEnsureUserPreferencesBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", return_value=mock_insp),
-            patch("app.db.base.Base.metadata.create_all"),
+            patch("app.db.base.Base.metadata.create_all") as mock_create,
         ):
             ensure_user_preferences_bootstrap(mock_engine)
+        # table absent -> create_all invoked for UserPreference table
+        mock_create.assert_called_once()
 
     def test_table_already_exists(self):
         from app.db.init_db import ensure_user_preferences_bootstrap
@@ -540,8 +592,11 @@ class TestEnsureUserPreferencesBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", return_value=mock_insp),
+            patch("app.db.base.Base.metadata.create_all") as mock_create,
         ):
             ensure_user_preferences_bootstrap(mock_engine)
+        # table already present -> no create_all
+        mock_create.assert_not_called()
 
     def test_swallow_errors_true(self):
         from app.db.init_db import ensure_user_preferences_bootstrap
@@ -551,9 +606,12 @@ class TestEnsureUserPreferencesBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
+            patch("app.db.base.Base.metadata.create_all") as mock_create,
         ):
-            # Should not raise
+            # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
             ensure_user_preferences_bootstrap(None, swallow_errors=True)
+        # error happened before reaching create_all
+        mock_create.assert_not_called()
 
     def test_swallow_errors_false(self):
         from app.db.init_db import ensure_user_preferences_bootstrap
@@ -575,8 +633,17 @@ class TestEnsureRuntimeAuthBootstrapDeep:
     def test_empty_url_returns(self):
         from app.db.init_db import ensure_runtime_auth_bootstrap
 
-        with patch("app.fastapi_app.sqlite_paths.resolve_effective_database_url", return_value=""):
+        with (
+            patch(
+                "app.fastapi_app.sqlite_paths.resolve_effective_database_url", return_value=""
+            ),
+            patch("app.db.init_db.ensure_sqlite_auth_bootstrap") as mock_sqlite,
+            patch("app.db.init_db.ensure_postgresql_auth_bootstrap") as mock_pg,
+        ):
             ensure_runtime_auth_bootstrap(None)
+        # empty resolved url -> early return, neither dialect branch runs
+        mock_sqlite.assert_not_called()
+        mock_pg.assert_not_called()
 
     def test_sqlite_url_calls_sqlite_bootstraps(self):
         from app.db.init_db import ensure_runtime_auth_bootstrap
@@ -661,7 +728,15 @@ class TestInitImTablesDeep:
 
         engine = create_engine("sqlite:///:memory:")
         init_im_tables(engine)
-        init_im_tables(engine)  # Should not raise
+        init_im_tables(engine)  # second call must not raise (checkfirst=True)
+
+        # tables remain present and intact after the repeated call
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            tables = {row[0] for row in result}
+        assert "im_conversations" in tables
+        assert "im_conversation_members" in tables
+        assert "im_messages" in tables
 
 
 # ========================= init_approval_tables ==========================
@@ -706,9 +781,14 @@ class TestEnsureProductQueryIndexesDeep:
         from app.db.init_db import ensure_product_query_indexes
 
         engine = create_engine("sqlite:///:memory:")
-        # No products table
+        # No products table -> function returns early, creates no indexes
         ensure_product_query_indexes(engine)
-        # Should not raise
+
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='index'"))
+            indexes = {row[0] for row in result}
+        assert "ix_products_unit" not in indexes
+        assert "ix_products_model_number" not in indexes
 
     def test_creates_indexes(self):
         from app.db.init_db import ensure_product_query_indexes
@@ -947,9 +1027,12 @@ class TestEnsureSqliteRbacBootstrapCreatesTables:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
+            patch("app.db.init_db._seed_sqlite_rbac_defaults") as mock_seed,
         ):
-            # Should not raise
+            # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
             ensure_sqlite_rbac_bootstrap(None, swallow_errors=True)
+        # error hit during inspect, before the RBAC seeding step
+        mock_seed.assert_not_called()
 
     def test_swallow_errors_false(self):
         from app.db.init_db import ensure_sqlite_rbac_bootstrap
@@ -988,8 +1071,12 @@ class TestEnsureSqliteInventoryBootstrapCreatesTables:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
+            patch("app.db.base.Base.metadata.create_all") as mock_create,
         ):
+            # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
             ensure_sqlite_inventory_bootstrap(None, swallow_errors=True)
+        # error hit during inspect, before any table creation
+        mock_create.assert_not_called()
 
     def test_swallow_errors_false(self):
         from app.db.init_db import ensure_sqlite_inventory_bootstrap
@@ -1022,6 +1109,15 @@ class TestEnsureSqliteAuthBootstrapCreatesTables:
 
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=engine),
-            patch("app.db.init_db._seed_default_admin_user"),
+            patch("app.db.init_db._seed_default_admin_user") as mock_seed,
         ):
             ensure_sqlite_auth_bootstrap(engine)
+
+        # tables were already present (no recreate error) and the seed step was
+        # still reached
+        mock_seed.assert_called_once()
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            tables = {row[0] for row in result}
+        assert "users" in tables
+        assert "sessions" in tables
