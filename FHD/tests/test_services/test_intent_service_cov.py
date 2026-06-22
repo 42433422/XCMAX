@@ -46,7 +46,11 @@ class TestLoadIntentRuntimeRules:
     """Hit the dict-vs-tuple branches inside _load_intent_runtime_rules."""
 
     def setup_method(self):
-        import app.services.intent_service as _m
+        import sys as _sys
+        _m = _sys.modules.get("app.services.intent_service")
+        if _m is None:
+            self._saved = None
+            return
         self._saved = (
             dict(_m._quick_command_map),
             list(_m._quick_intent_patterns),
@@ -56,7 +60,12 @@ class TestLoadIntentRuntimeRules:
         )
 
     def teardown_method(self):
-        import app.services.intent_service as _m
+        import sys as _sys
+        if not getattr(self, "_saved", None):
+            return
+        _m = _sys.modules.get("app.services.intent_service")
+        if _m is None:
+            return
         (
             _m._quick_command_map,
             _m._quick_intent_patterns,
