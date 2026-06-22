@@ -33,7 +33,7 @@ repos:
         name: Alembic 迁移链单 head 校验(无多头/无悬空 down_revision)
         # 任一活跃 alembic 版本目录变动时，整树校验 revision 图
         files: '^FHD/alembic/versions/.*\.py$|^成都修茈科技有限公司/MODstore_deploy/alembic/versions/.*\.py$'
-        entry: python3 scripts/check_alembic_single_head.py
+        entry: python3 scripts/guard_alembic_single_head.py
         language: system
         pass_filenames: false
         stages: [pre-commit]

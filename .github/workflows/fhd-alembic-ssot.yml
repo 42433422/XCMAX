@@ -15,7 +15,7 @@ on:
     paths:
       - 'FHD/alembic/**'
       - 'FHD/app/db/**'
-      - 'scripts/check_alembic_single_head.py'
+      - 'scripts/guard_alembic_single_head.py'
       - '.github/workflows/fhd-alembic-ssot.yml'
   push:
     branches: [main, develop]
@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Alembic single-head / no-dangling check
-        run: python3 scripts/check_alembic_single_head.py
+        run: python3 scripts/guard_alembic_single_head.py
 
   ssot-parity:
     # The real SSOT gate: a fresh DB must be fully buildable by Alembic alone,

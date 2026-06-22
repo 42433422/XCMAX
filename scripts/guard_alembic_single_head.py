@@ -19,7 +19,7 @@ Fails (exit 1) on, per tree:
 
 Multiple roots/bases are allowed (Alembic supports several bases merged later).
 
-Run manually:  python3 scripts/check_alembic_single_head.py
+Run manually:  python3 scripts/guard_alembic_single_head.py
 """
 
 from __future__ import annotations
