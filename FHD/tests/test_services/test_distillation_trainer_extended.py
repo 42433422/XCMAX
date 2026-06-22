@@ -529,8 +529,6 @@ class TestDistillationTrainerEvaluateEdgeCases:
 
         trainer = DistillationTrainer(device="cpu")
 
-        # Use SimpleNamespace instead of MagicMock so .loss/.logits are real tensors,
-        # not auto-generated child mocks whose attribute access is unreliable in CI.
         batch1_ns = types.SimpleNamespace(
             loss=torch.tensor(0.3),
             logits=torch.tensor([[0.9, 0.1], [0.2, 0.8]]),
@@ -540,9 +538,20 @@ class TestDistillationTrainerEvaluateEdgeCases:
             logits=torch.tensor([[0.7, 0.3]]),
         )
 
-        _outputs = iter([batch1_ns, batch2_ns])
-        mock_model = MagicMock(side_effect=lambda **kw: next(_outputs))
-        trainer.model = mock_model
+        # Avoid MagicMock entirely for the model — MagicMock.side_effect + @torch.no_grad()
+        # produces unreliable attribute access in CI (child mock returns MagicMock for .loss).
+        # A plain callable class is fully deterministic.
+        class _FakeModel:
+            def __init__(self, outputs):
+                self._it = iter(outputs)
+
+            def eval(self):
+                pass
+
+            def __call__(self, **kwargs):
+                return next(self._it)
+
+        trainer.model = _FakeModel([batch1_ns, batch2_ns])
 
         batch1 = {
             "input_ids": torch.tensor([[1, 2], [3, 4]]),
@@ -569,6 +578,7 @@ class TestDistillationTrainerEvaluateEdgeCases:
 
         with patch("app.services.distillation_trainer.accuracy_score", return_value=1.0):
             result = trainer.evaluate()
+        assert isinstance(result["val_loss"], float), f"val_loss={result['val_loss']!r}"
         assert result["val_loss"] > 0
         assert 0 <= result["val_accuracy"] <= 1
 
