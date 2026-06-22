@@ -168,6 +168,8 @@ def apply_paid_plan_to_tenant(*, tenant_id: int, plan_id: str) -> bool:
         if not tenant:
             return False
         tenant.plan_id = str(plan_id).strip()
+        if str(plan_id).strip().startswith("saas-permanent-"):
+            tenant.trial_expires_at = None
         db.commit()
         logger.info(
             "[tenant-subscription] plan applied tenant_id=%s plan_id=%s", tenant_id, plan_id
