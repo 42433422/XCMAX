@@ -32,10 +32,34 @@ from app.mod_sdk.duty_roster import (
 # 企业端四层 —— 缺省定义（SSOT 缺失时的兜底，须与 config/duty_roster.json 一致）
 # ---------------------------------------------------------------------------
 DEFAULT_ENTERPRISE_LAYERS: tuple[dict[str, str], ...] = (
-    {"id": "tools", "code": "L1", "label": "工具层", "desc": "连接、授权、技能与通用工具 Mod", "color": "#4f46e5"},
-    {"id": "execution", "code": "L2", "label": "执行层", "desc": "出货、打单、单据与履约执行", "color": "#d97706"},
-    {"id": "service", "code": "L3", "label": "服务层", "desc": "微信触达、客服沟通与人事服务", "color": "#059669"},
-    {"id": "management", "code": "L4", "label": "管理层", "desc": "流程编排、路由协同与自治监控", "color": "#7c3aed"},
+    {
+        "id": "tools",
+        "code": "L1",
+        "label": "工具层",
+        "desc": "连接、授权、技能与通用工具 Mod",
+        "color": "#4f46e5",
+    },
+    {
+        "id": "execution",
+        "code": "L2",
+        "label": "执行层",
+        "desc": "出货、打单、单据与履约执行",
+        "color": "#d97706",
+    },
+    {
+        "id": "service",
+        "code": "L3",
+        "label": "服务层",
+        "desc": "微信触达、客服沟通与人事服务",
+        "color": "#059669",
+    },
+    {
+        "id": "management",
+        "code": "L4",
+        "label": "管理层",
+        "desc": "流程编排、路由协同与自治监控",
+        "color": "#7c3aed",
+    },
 )
 
 ENTERPRISE_LAYER_IDS: tuple[str, ...] = tuple(layer["id"] for layer in DEFAULT_ENTERPRISE_LAYERS)
@@ -44,17 +68,39 @@ LISTING_UNLISTED = "unlisted"
 
 # manifest / 别名 → 规范层 id（与 frontend enterpriseWorkflowEstablishment.ts 对齐）
 _LAYER_ALIASES: dict[str, str] = {
-    "tools": "tools", "tool": "tools", "tool_layer": "tools", "工具层": "tools", "工具": "tools",
-    "execution": "execution", "action": "execution", "execution_layer": "execution", "执行层": "execution", "执行": "execution",
-    "service": "service", "collaboration": "service", "service_layer": "service", "服务层": "service", "服务": "service",
-    "management": "management", "manage": "management", "management_layer": "management", "管理层": "management", "管理": "management",
+    "tools": "tools",
+    "tool": "tools",
+    "tool_layer": "tools",
+    "工具层": "tools",
+    "工具": "tools",
+    "execution": "execution",
+    "action": "execution",
+    "execution_layer": "execution",
+    "执行层": "execution",
+    "执行": "execution",
+    "service": "service",
+    "collaboration": "service",
+    "service_layer": "service",
+    "服务层": "service",
+    "服务": "service",
+    "management": "management",
+    "manage": "management",
+    "management_layer": "management",
+    "管理层": "management",
+    "管理": "management",
 }
 
 # 关键词推断（仅用于 SSOT 未登记的员工，保证「自动派生」对未知员工也成立）
 _KEYWORD_LAYER_RULES: tuple[tuple[str, str], ...] = (
     ("tools", r"局域网|lan|授权|接入|gate|token|连接|工具|tool|skill|ocr|adapter"),
-    ("execution", r"出货|收货|发货|shipment|receipt|delivery|履约|订单|对账|标签|打印|label|print|单据|票据|条码|excel|word|pdf|ppt|csv"),
-    ("service", r"微信|wechat|消息|触点|客服|沟通|contacts|考勤|attendance|人事|排班|出勤|taiyangniao|太阳鸟"),
+    (
+        "execution",
+        r"出货|收货|发货|shipment|receipt|delivery|履约|订单|对账|标签|打印|label|print|单据|票据|条码|excel|word|pdf|ppt|csv",
+    ),
+    (
+        "service",
+        r"微信|wechat|消息|触点|客服|沟通|contacts|考勤|attendance|人事|排班|出勤|taiyangniao|太阳鸟",
+    ),
     ("management", r"编排|路由|orchestr|router|监控|自治|管理|workflow_auto|automator|dispatcher"),
 )
 
@@ -236,16 +282,16 @@ def compute_duty_staffing(
     }
 
 
-def derive_admin_duty_roster(installed_ids: set[str] | frozenset[str] | None = None) -> dict[str, Any]:
+def derive_admin_duty_roster(
+    installed_ids: set[str] | frozenset[str] | None = None,
+) -> dict[str, Any]:
     """管理端 6 部门视图：每部门列出上岗员工。
 
     ``installed_ids`` 为本机已安装 employee_pack 集合（``None`` 时仅给编制，不判在岗）。
     上岗(on_duty) = 编制内 ∩ 已安装（经 :func:`compute_duty_staffing`）。
     """
     planned = all_planned_duty_employee_ids()
-    staffing = (
-        compute_duty_staffing(planned, installed_ids) if installed_ids is not None else None
-    )
+    staffing = compute_duty_staffing(planned, installed_ids) if installed_ids is not None else None
     on_duty_set = set(staffing["on_duty"]) if staffing is not None else None
     depts_out: list[dict[str, Any]] = []
     for dept_key, dept in load_departments().items():

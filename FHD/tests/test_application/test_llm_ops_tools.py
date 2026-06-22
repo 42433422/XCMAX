@@ -74,11 +74,11 @@ class TestLlmOpsToolRegistration:
         missing = required - set(TOOL_REGISTRY.keys())
         assert not missing, f"未注册的工具: {missing}"
 
-    def test_llm_ops_engineer_has_6_tools(self):
-        """llm-ops-engineer 员工注册了 6 个专属工具。"""
+    def test_llm_ops_engineer_has_core_tools(self):
+        """llm-ops-engineer 员工注册了全部专属工具（含 6 个核心工具）。"""
         tools = EMPLOYEE_TOOLS.get("llm-ops-engineer", [])
-        assert len(tools) == 6, f"期望 6 个工具，实际 {len(tools)}: {tools}"
-        assert set(tools) == {
+        # 核心 6 个工具必须存在（工具集后续可扩展，断言"至少包含核心"更稳健）
+        core = {
             "read_llm_env_config",
             "list_configured_providers",
             "test_llm_key_health",
@@ -86,6 +86,14 @@ class TestLlmOpsToolRegistration:
             "compare_model_prices",
             "query_local_token_usage",
         }
+        missing = core - set(tools)
+        assert not missing, f"缺少核心工具: {missing}"
+        # 当前工具集已从 6 扩展到 9（新增 cursor/codex/trae 用量查询）
+        assert set(tools) == core | {
+            "query_cursor_usage",
+            "query_codex_usage",
+            "query_trae_usage",
+        }, f"实际工具集: {tools}"
 
     def test_all_tools_are_callable(self):
         """所有工具函数都是可调用的。"""
@@ -138,12 +146,18 @@ class TestMaskSecret:
 class TestReadEnvFile:
     """.env 文件解析验证。"""
 
-    def test_reads_fhd_env_file(self):
-        """能读取 FHD/.env 文件。"""
-        env_path = _FHD / ".env"
+    def test_reads_env_file_with_content(self, tmp_path):
+        """能读取一个有内容的 .env 文件（自洽，不依赖仓库根的真实 .env）。"""
+        env_path = tmp_path / ".env"
+        env_path.write_text(
+            "XCAGI_LLM_PROVIDER=openai\nOPENAI_API_KEY=sk-test1234567890\n",
+            encoding="utf-8",
+        )
         env_map = _read_env_file(env_path)
         assert isinstance(env_map, dict)
         assert len(env_map) > 0, ".env 应该有内容"
+        assert env_map["XCAGI_LLM_PROVIDER"] == "openai"
+        assert env_map["OPENAI_API_KEY"] == "sk-test1234567890"
 
     def test_skips_comments_and_empty_lines(self):
         """跳过注释和空行。"""
@@ -185,11 +199,28 @@ class TestReadEnvFile:
 class TestReadLlmEnvConfig:
     """验证 read_llm_env_config 真实读取 .env 并脱敏。"""
 
-    def test_reads_real_env_file(self):
-        """真实读取 FHD/.env，返回 LLM 配置。"""
-        from dotenv import load_dotenv
+    @pytest.fixture(autouse=True)
+    def _temp_env_file(self, tmp_path, monkeypatch):
+        """造一个临时 .env 并指向它（自洽，不依赖仓库根的真实 .env / CI）。
 
-        load_dotenv()  # 确保 .env 已加载
+        tool_read_llm_env_config 读取 模块级 _FHD_ROOT / ".env"，
+        monkeypatch 该常量即可让工具读到临时 .env。
+        """
+        import app.mod_sdk.employee_specialized_tools as mod
+
+        env_path = tmp_path / ".env"
+        env_path.write_text(
+            "XCAGI_LLM_PROVIDER=openai\n"
+            "OPENAI_API_KEY=sk-a8m2xbs0jbqbgw9ex6st8o7u4zmqa8jz\n"
+            "OPENAI_BASE_URL=https://api.b.ai/v1\n"
+            "OPENAI_MODEL=MiniMax-M3\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(mod, "_FHD_ROOT", tmp_path)
+        yield
+
+    def test_reads_real_env_file(self):
+        """读取临时 .env，返回 LLM 配置。"""
         fn = TOOL_REGISTRY["read_llm_env_config"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
         assert result["ok"] is True, f"读取失败: {result.get('error')}"
@@ -198,9 +229,6 @@ class TestReadLlmEnvConfig:
 
     def test_api_key_is_masked_in_output(self):
         """输出的 API key 必须脱敏，不含完整 key。"""
-        from dotenv import load_dotenv
-
-        load_dotenv()
         fn = TOOL_REGISTRY["read_llm_env_config"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
         env_cfg = result.get("env_config", {})
@@ -215,13 +243,10 @@ class TestReadLlmEnvConfig:
 
     def test_returns_configured_provider(self):
         """返回 configured_provider 字段。"""
-        from dotenv import load_dotenv
-
-        load_dotenv()
         fn = TOOL_REGISTRY["read_llm_env_config"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
         assert "configured_provider" in result
-        # .env 配了 XCAGI_LLM_PROVIDER=openai
+        # 临时 .env 配了 XCAGI_LLM_PROVIDER=openai
         assert result["configured_provider"] in ("openai", "(未配置)")
 
 
@@ -732,11 +757,16 @@ class TestHandleSpecializedDispatch:
         assert result["ok"] is True
         assert "prices" in result
 
-    def test_dispatches_read_llm_env_config(self):
-        """handle_specialized 能调度 read_llm_env_config。"""
-        from dotenv import load_dotenv
+    def test_dispatches_read_llm_env_config(self, tmp_path, monkeypatch):
+        """handle_specialized 能调度 read_llm_env_config（自洽临时 .env）。"""
+        import app.mod_sdk.employee_specialized_tools as mod
 
-        load_dotenv()
+        env_path = tmp_path / ".env"
+        env_path.write_text(
+            "XCAGI_LLM_PROVIDER=openai\nOPENAI_API_KEY=sk-test1234567890\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(mod, "_FHD_ROOT", tmp_path)
         result = asyncio.get_event_loop().run_until_complete(
             handle_specialized(
                 "llm-ops-engineer", {"tool": "read_llm_env_config", "params": {}}, {}

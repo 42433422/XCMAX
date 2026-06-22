@@ -84,7 +84,7 @@ class UpcasterRegistry:
             )
         if upcaster.to_version != upcaster.from_version + 1:
             raise ValueError(
-                f"[UpcasterRegistry] upcaster 必须连续升级: ver {upcaster.from_version}->{upcaster.to_version}"
+                f"[UpcasterRegistry] upcaster 必须连续升级: from_ver={upcaster.from_version} to_ver={upcaster.to_version}"
             )
         self._upcasters[key] = upcaster
         # 更新当前版本（取最大 to_version）

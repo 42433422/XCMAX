@@ -119,7 +119,6 @@ def test_platform_shell_employee_ssot_endpoint():
 def test_mobile_employee_ssot_payload_matches_kotlin_dto():
     """手机端 employee-ssot 派生自同一 SSOT；JSON 键须与 Android Kotlin DTO 对齐。"""
     import app.fastapi_routes.mobile_api  # noqa: F401 — 须先导入以破已知循环导入
-
     from app.fastapi_routes.mobile_api_extensions import _employee_ssot_payload
 
     payload = _employee_ssot_payload()

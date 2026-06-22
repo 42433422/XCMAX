@@ -26,7 +26,7 @@
 
 - **docs(coverage)**：退役 `60.63%` / 窄包 `70%` / `77.4%` 误报；`coverage-dual-summary.json` 重写为 HEAD（52.74% 行）+ WIP（74.56% 行，196 红灯）双轨
 - **docs(claimed)**：`CLAIMED_VS_ACTUAL.md` 工程节对齐全量棘轮口径；`COVERAGE_RAMP.md` / `COVERAGE_GAP.md` 全面更新
-- **docs(repo)**：`README.md` Android 签约级对齐 `VERSION.md`[^android-skeleton]；`spec.md` / `checklist.md` / `对标头部SaaS` 覆盖率行更新
+- **docs(repo)**：`README.md` Android 签约级对齐 `VERSION.md`；`spec.md` / `checklist.md` / `对标头部SaaS` 覆盖率行更新
 - **chore(metrics)**：`coverage-history.jsonl` 追加 WIP 快照；`xcmax-pytest-coverage.json` 标记退役
 
 ### Phase 4 覆盖率长尾与变异测试（v10 线内迭代 · 2026-06-14）
@@ -94,7 +94,7 @@
 
 - **feat(android)**：AuthScreen 密码/手机号 OTP 双模式；NavHost 注册 `CONNECT`/`WORKBENCH`；发现/我的入口工作台
 - **test(android)**：`RoutesTest` + `NavRoutesInstrumentedTest`；gradle 单测/instrumented 依赖；lint 门禁启用
-- **docs(android)**：`VERSION.md` Android 签约级[^android-skeleton]；`MOBILE_ANDROID.md` / `CLAIMED_VS_ACTUAL` 对齐
+- **docs(android)**：`VERSION.md` Android 签约级；`MOBILE_ANDROID.md` / `CLAIMED_VS_ACTUAL` 对齐
 - **test(backend)**：time_rail / production_line_event / business mount / shipment_parser / mod_store_catalog 单测；CI 稳定子集扩面
 - **test(frontend)**：修复 `plannerPagePaths` 租户隔离 mock；Vitest gate ≥50% 绿
 - **docs(v2)**：`*_v2` 24 模块为受控双入口 SSOT（非 tech debt）；allowlist guard 零漂移
@@ -1035,5 +1035,3 @@ cd XCAGI && python run.py
 > - **v10**: 工程纪律整固 - 版本锁死 + Flask 清除 + DI 类型安全 + 工具链增强
 
 *最后更新：2026-06-07*
-
-[^android-skeleton]: **更正（2026-06-21）**：上文「Android 签约级」为误记。Android 端权威交付等级以 [`docs/guides/MOBILE_ANDROID.md`](docs/guides/MOBILE_ANDROID.md) 与 [`VERSION.md`](VERSION.md) 『各端交付等级』表为准 —— **实验骨架·非签约级**（可构建双 SKU 骨架）。差距详见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
