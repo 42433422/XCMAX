@@ -1462,21 +1462,35 @@ class TestRunMarketFirstLogin:
         assert err is not None
 
     @pytest.mark.asyncio
-    async def test_enterprise_account_kind_mismatch(self):
+    async def test_enterprise_account_kind_mismatch_is_ignored(self):
+        # 行为变更：account_kind hint 与市场身份不一致不再拒绝登录，仅记录告警，
+        # 实际档位由 User.tier 派生（见 finalize_enterprise_login）。此处断言
+        # 市场已通过时即使入口 hint 与市场身份不匹配也会继续完成本地登录。
         from app.application.enterprise_login_flow import run_market_first_login
 
-        result, err = await run_market_first_login(
-            username="alice",
-            password="pass",
-            account_kind="admin",
-            market_result={"success": True, "is_enterprise": True, "is_market_admin": False},
-            auth_app_service=MagicMock(),
-            sku="enterprise",
-            jit_create_fn=MagicMock(),
-            market_user_email_from_raw=MagicMock(),
-        )
-        assert result is None
-        assert err is not None
+        local_result = {"success": True, "session_id": "s9", "user": {"id": 1}}
+        with (
+            patch(
+                "app.application.enterprise_login_flow.ensure_local_user_after_market",
+                AsyncMock(return_value=(local_result, None)),
+            ),
+            patch(
+                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                AsyncMock(return_value=local_result),
+            ),
+        ):
+            result, err = await run_market_first_login(
+                username="alice",
+                password="pass",
+                account_kind="admin",
+                market_result={"success": True, "is_enterprise": True, "is_market_admin": False},
+                auth_app_service=MagicMock(),
+                sku="enterprise",
+                jit_create_fn=MagicMock(),
+                market_user_email_from_raw=MagicMock(),
+            )
+        assert result is not None
+        assert err is None
 
     @pytest.mark.asyncio
     async def test_enterprise_no_username_from_market(self):
