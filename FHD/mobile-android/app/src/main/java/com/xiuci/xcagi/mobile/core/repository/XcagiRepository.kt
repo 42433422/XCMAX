@@ -1034,6 +1034,10 @@ class XcagiRepository @Inject constructor(
         if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE) {
             val isClaude = conversationId == PinnedIds.CLAUDE
             val tokenSink: (String) -> Unit = { t -> acc.append(t); onToken(t) }
+            // 捕获最终回复用于本地持久化：relay 路径真正的结果经 onDone 下发（不进 acc），
+            // 必须在此截获，否则缓存到的只是"思考中…"等状态闲话。
+            var finalReply = ""
+            val doneSink: (String) -> Unit = { full -> finalReply = full; onDone(full) }
             // 连不到本地 PC 但已配对中继电脑 → 经服务器中继到本地电脑执行（超级员工必须本地设备）。
             val relayId = if (!isPcReachable()) sessionStore.relayDesktopId() else ""
             if (relayId.isNotBlank()) {
@@ -1041,16 +1045,17 @@ class XcagiRepository @Inject constructor(
                     relayId = relayId,
                     message = message,
                     kind = if (isClaude) "claude.invoke" else "codex.invoke",
+                    conversationId = conversationId ?: "",
                     onToken = tokenSink,
-                    onDone = onDone,
+                    onDone = doneSink,
                     onError = onError,
                 )
             } else if (isClaude) {
-                streamClaudeSuperEmployeeChat(message = message, onToken = tokenSink, onDone = onDone, onError = onError)
+                streamClaudeSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
             } else {
-                streamCodexSuperEmployeeChat(message = message, onToken = tokenSink, onDone = onDone, onError = onError)
+                streamCodexSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
             }
-            val finalText = acc.toString()
+            val finalText = finalReply.ifBlank { acc.toString() }
             if (finalText.isNotBlank()) {
                 cacheChatMessage(sessionId = sessionId, role = "assistant", text = finalText)
             }
@@ -1064,6 +1069,7 @@ class XcagiRepository @Inject constructor(
                 streamRelayCodexTask(
                     relayId = relayId,
                     message = message,
+                    conversationId = conversationId ?: "",
                     onToken = { t ->
                         acc.append(t)
                         onToken(t)
@@ -1364,6 +1370,49 @@ class XcagiRepository @Inject constructor(
         fhd().deleteAiGroup(groupId).let { if (it.success) Result.success(true) else fail(it) }
     }
 
+    // ── 会话状态（个人 AI 会话） ──
+    suspend fun toggleConversationPin(conversationId: String): Result<Map<String, Any?>> =
+        aiGroupCall {
+            val res = fhd().toggleConversationPin(conversationId)
+            if (res.success) Result.success(res.data ?: emptyMap())
+            else Result.failure(Exception(res.message.ifBlank { "操作失败" }))
+        }
+
+    suspend fun markConversationUnread(conversationId: String): Result<Map<String, Any?>> =
+        aiGroupCall {
+            val res = fhd().markConversationUnread(conversationId)
+            if (res.success) Result.success(res.data ?: emptyMap())
+            else Result.failure(Exception(res.message.ifBlank { "操作失败" }))
+        }
+
+    suspend fun markConversationRead(conversationId: String): Result<Map<String, Any?>> =
+        aiGroupCall {
+            val res = fhd().markConversationRead(conversationId)
+            if (res.success) Result.success(res.data ?: emptyMap())
+            else Result.failure(Exception(res.message.ifBlank { "操作失败" }))
+        }
+
+    suspend fun toggleConversationFollowed(conversationId: String): Result<Map<String, Any?>> =
+        aiGroupCall {
+            val res = fhd().toggleConversationFollowed(conversationId)
+            if (res.success) Result.success(res.data ?: emptyMap())
+            else Result.failure(Exception(res.message.ifBlank { "操作失败" }))
+        }
+
+    suspend fun toggleConversationHidden(conversationId: String): Result<Map<String, Any?>> =
+        aiGroupCall {
+            val res = fhd().toggleConversationHidden(conversationId)
+            if (res.success) Result.success(res.data ?: emptyMap())
+            else Result.failure(Exception(res.message.ifBlank { "操作失败" }))
+        }
+
+    suspend fun deleteConversation(conversationId: String): Result<Map<String, Any?>> =
+        aiGroupCall {
+            val res = fhd().deleteConversation(conversationId)
+            if (res.success) Result.success(res.data ?: emptyMap())
+            else Result.failure(Exception(res.message.ifBlank { "操作失败" }))
+        }
+
     private fun <T> fail(env: com.xiuci.xcagi.mobile.core.model.MobileEnvelope<*>): Result<T> =
         Result.failure(Exception(env.message.ifBlank { "群聊请求失败" }))
 
@@ -1602,6 +1651,7 @@ class XcagiRepository @Inject constructor(
         relayId: String,
         message: String,
         kind: String = "codex.invoke",
+        conversationId: String = "",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -1636,33 +1686,10 @@ class XcagiRepository @Inject constructor(
                 onError("中继任务缺少 task_id")
                 return
             }
-            onToken("已派发到电脑执行端，等待回写。")
-            var lastStatus = "queued"
-            repeat(150) {
-                delay(2000)
-                val status = fhd().relayTaskStatus(taskId)
-                val current = status.data?.get("task") as? Map<*, *> ?: emptyMap<Any?, Any?>()
-                val currentStatus = current["status"]?.toString().orEmpty()
-                if (currentStatus.isNotBlank() && currentStatus != lastStatus) {
-                    when (currentStatus) {
-                        "running", "assigned" -> onToken("\n电脑执行端正在运行 $toolLabel。")
-                        "queued" -> onToken("\n任务仍在服务器队列中。")
-                    }
-                    lastStatus = currentStatus
-                }
-                when (currentStatus) {
-                    "done", "completed" -> {
-                        val final = relayTaskResultText(current).ifBlank { "电脑执行端已完成任务。" }
-                        onDone(final)
-                        return
-                    }
-                    "failed", "blocked", "cancelled" -> {
-                        onError(relayTaskResultText(current).ifBlank { "电脑执行端执行失败" })
-                        return
-                    }
-                }
-            }
-            onError("电脑执行端暂未回写结果，任务已保留在服务器队列。")
+            // 持久化在飞任务：刷新/重启后可恢复轮询，避免"任务状态丢了"。
+            if (conversationId.isNotBlank()) sessionStore.setInflightRelayTask(conversationId, taskId)
+            onToken("思考中...")
+            pollRelayTask(taskId, toolLabel, conversationId, onToken, onDone, onError)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1670,12 +1697,140 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    /** 轮询一个已存在的中继任务直到终态；终态清除在飞记录（取消/超时不清，留待恢复）。 */
+    private suspend fun pollRelayTask(
+        taskId: String,
+        toolLabel: String,
+        conversationId: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        suspend fun clearInflight() {
+            if (conversationId.isNotBlank()) sessionStore.setInflightRelayTask(conversationId, "")
+        }
+        var lastStatus = ""
+        repeat(150) {
+            delay(2000)
+            val status = fhd().relayTaskStatus(taskId)
+            val current = status.data?.get("task") as? Map<*, *> ?: emptyMap<Any?, Any?>()
+            val currentStatus = current["status"]?.toString().orEmpty()
+            if (currentStatus.isNotBlank() && currentStatus != lastStatus) {
+                when (currentStatus) {
+                    "running", "assigned" -> onToken("\n电脑执行端正在运行 $toolLabel。")
+                    "queued" -> onToken("\n任务仍在服务器队列中。")
+                }
+                lastStatus = currentStatus
+            }
+            when (currentStatus) {
+                "done", "completed" -> {
+                    clearInflight()
+                    onDone(relayTaskResultText(current).ifBlank { "电脑执行端已完成任务。" })
+                    return
+                }
+                "failed", "blocked", "cancelled" -> {
+                    clearInflight()
+                    onError(relayTaskResultText(current).ifBlank { "电脑执行端执行失败" })
+                    return
+                }
+            }
+        }
+        // 超时未回写：保留在飞记录，下次进入会话可继续恢复轮询。
+        onError("电脑执行端暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。")
+    }
+
+    suspend fun hasInflightRelay(conversationId: String): Boolean =
+        sessionStore.inflightRelayTask(conversationId).isNotBlank()
+
+    /** 手机底部功能键触发的 git 操作（git.merge / git.diff / git.discard），经中继到电脑执行端。 */
+    suspend fun streamRelayGitOp(
+        branch: String,
+        op: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        val relayId = sessionStore.relayDesktopId()
+        if (relayId.isBlank()) {
+            onError("未绑定电脑执行端，无法执行 $op")
+            return
+        }
+        try {
+            refreshFhdAccessToken()
+            val created = fhd().relayCreateTask(
+                RelayTaskCreateBody(
+                    relay_id = relayId,
+                    kind = op,
+                    payload = mapOf(
+                        "branch" to branch,
+                        "context" to mapOf("source" to "mobile_chat", "client_surface" to "mobile"),
+                    ),
+                ),
+            )
+            if (!created.success) {
+                onError(created.message.ifBlank { "操作创建失败" })
+                return
+            }
+            val task = created.data?.get("task") as? Map<*, *> ?: emptyMap<Any?, Any?>()
+            val taskId = task["task_id"]?.toString().orEmpty()
+            if (taskId.isBlank()) {
+                onError("操作缺少 task_id")
+                return
+            }
+            onToken("执行中…")
+            // conversationId 传空：git 操作短小，不需要持久化为"在飞任务"。
+            pollRelayTask(taskId, "Git", "", onToken, onDone, onError)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onError(e.message ?: "操作失败")
+        }
+    }
+
+    /** 恢复某会话上次未完成的中继任务轮询；无在飞任务返回 false。完成时把回复写入本地缓存。 */
+    suspend fun resumeRelayTask(
+        conversationId: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ): Boolean {
+        val taskId = sessionStore.inflightRelayTask(conversationId)
+        if (taskId.isBlank()) return false
+        val toolLabel = if (conversationId == PinnedIds.CLAUDE) "Claude" else "Codex"
+        var reply = ""
+        try {
+            refreshFhdAccessToken()
+            onToken("思考中...")
+            pollRelayTask(
+                taskId,
+                toolLabel,
+                conversationId,
+                onToken,
+                onDone = { full -> reply = full; onDone(full) },
+                onError = onError,
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onError(e.message ?: "恢复中继任务失败")
+        }
+        if (reply.isNotBlank()) {
+            cacheChatMessage(sessionId = conversationId, role = "assistant", text = reply)
+        }
+        return true
+    }
+
     private fun relayTaskResultText(task: Map<*, *>): String {
         val result = task["result"] as? Map<*, *> ?: return ""
         result["error"]?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
-        val codex = result["codex"] as? Map<*, *> ?: return ""
-        val assistant = codex["assistant_message"] as? Map<*, *> ?: return ""
-        return assistant["body"]?.toString().orEmpty()
+        (result["codex"] as? Map<*, *>)?.let { codex ->
+            (codex["assistant_message"] as? Map<*, *>)?.get("body")?.toString()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return it }
+        }
+        // git.* 等简单操作直接返回 reply 字段
+        result["reply"]?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
+        return ""
     }
 
     suspend fun streamChatCloud(

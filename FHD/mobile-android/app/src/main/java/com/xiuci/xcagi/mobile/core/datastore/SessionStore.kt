@@ -52,6 +52,8 @@ constructor(
     private val autoLoginKey = booleanPreferencesKey("auto_login")
     private val avatarUriKey = stringPreferencesKey("avatar_uri")
     private val relayDesktopIdKey = stringPreferencesKey("relay_desktop_id")
+    // 在飞中继任务：按会话持久化 task_id，刷新/重启后可恢复轮询，避免"任务状态丢了"。
+    private val inflightRelayTasksKey = stringPreferencesKey("inflight_relay_tasks")
     private val relayBaseUrlKey = stringPreferencesKey("relay_base_url")
     private val localBaseUrlKey = stringPreferencesKey("local_base_url")
     private val relaySessionTokenKey = stringPreferencesKey("relay_session_token")
@@ -284,6 +286,35 @@ constructor(
             else prefs[relayPairedAtKey] = value
         }
     }
+
+    /** 记录/清除某会话正在进行的中继任务 id（JSON 映射 {conversationId: taskId}）。 */
+    suspend fun setInflightRelayTask(conversationId: String, taskId: String) {
+        val cid = conversationId.trim()
+        if (cid.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val obj =
+                    try {
+                        org.json.JSONObject(prefs[inflightRelayTasksKey] ?: "{}")
+                    } catch (_: Exception) {
+                        org.json.JSONObject()
+                    }
+            if (taskId.isBlank()) obj.remove(cid) else obj.put(cid, taskId.trim())
+            prefs[inflightRelayTasksKey] = obj.toString()
+        }
+    }
+
+    suspend fun inflightRelayTask(conversationId: String): String =
+            try {
+                org.json
+                        .JSONObject(
+                                context.dataStore.data
+                                        .map { it[inflightRelayTasksKey] ?: "{}" }
+                                        .first()
+                        )
+                        .optString(conversationId.trim(), "")
+            } catch (_: Exception) {
+                ""
+            }
 
     suspend fun relayDesktopId(): String = relayDesktopIdFlow.first()
     suspend fun relayBaseUrl(): String = relayBaseUrlFlow.first()

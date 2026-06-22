@@ -74,6 +74,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -843,50 +846,60 @@ private fun PairingCodeInput(
         onSubmit: () -> Unit,
 ) {
         val digitCount = 6
-        Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-                modifier = Modifier.fillMaxWidth(),
-        ) {
-                repeat(digitCount) { index ->
-                        val isFocused = index == value.length && value.length < digitCount
-                        val char = value.getOrNull(index)?.toString() ?: ""
-                        Box(
-                                modifier = Modifier
-                                        .size(width = 46.dp, height = 54.dp)
-                                        .clip(MaterialTheme.shapes.small)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                                        .border(
-                                                width = if (isFocused) 1.8.dp else 0.7.dp,
-                                                color = if (isFocused) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.outlineVariant,
-                                                shape = MaterialTheme.shapes.small,
-                                        ),
-                                contentAlignment = Alignment.Center,
-                        ) {
-                                Text(
-                                        text = char,
-                                        fontSize = MaterialTheme.typography.displayMedium.fontSize,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (char.isNotBlank()) MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                                )
+        val focusRequester = remember { FocusRequester() }
+        Box(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                        modifier = Modifier.fillMaxWidth(),
+                ) {
+                        repeat(digitCount) { index ->
+                                val isFocused = index == value.length && value.length < digitCount
+                                val char = value.getOrNull(index)?.toString() ?: ""
+                                Box(
+                                        modifier = Modifier
+                                                .size(width = 46.dp, height = 54.dp)
+                                                .clip(MaterialTheme.shapes.small)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                .border(
+                                                        width = if (isFocused) 1.8.dp else 0.7.dp,
+                                                        color = if (isFocused) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.outlineVariant,
+                                                        shape = MaterialTheme.shapes.small,
+                                                ),
+                                        contentAlignment = Alignment.Center,
+                                ) {
+                                        Text(
+                                                text = char,
+                                                fontSize = MaterialTheme.typography.displayMedium.fontSize,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (char.isNotBlank()) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                        )
+                                }
                         }
                 }
+
+                // 透明全覆盖输入框：承接点击聚焦 + 键盘输入，OTP 字符显示在下层方格。
+                // 之前用 1dp 隐藏框且无 FocusRequester，永远拿不到焦点 → 键盘不弹、没法输入。
+                androidx.compose.foundation.text.BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        modifier = Modifier
+                                .matchParentSize()
+                                .focusRequester(focusRequester),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.Transparent),
+                        cursorBrush = SolidColor(Color.Transparent),
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                onDone = { onSubmit() },
+                        ),
+                )
         }
 
-        // 隐藏的输入框（用于接收键盘输入）
-        androidx.compose.foundation.text.BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.height(1.dp), // 隐藏但保持焦点
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 1.sp, color = Color.Transparent),
-                singleLine = true,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                        onDone = { onSubmit() },
-                ),
-        )
+        // 弹窗出现即自动聚焦并弹出数字键盘。
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

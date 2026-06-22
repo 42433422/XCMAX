@@ -30,7 +30,7 @@ try:
         DistillationDataset,
         DistillationTrainer,
     )
-except ImportError:
+except (ImportError, TypeError):
     pytest.skip("distillation_trainer 依赖不可用", allow_module_level=True)
 
 

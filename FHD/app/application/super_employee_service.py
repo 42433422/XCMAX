@@ -1298,7 +1298,7 @@ class SuperEmployeeService:
                 cap = self._cli_hard_cap_seconds()
                 r = subprocess.run(
                     custom,
-                    shell=True,
+                    shell=True,  # nosec B602 – operator-supplied env var, may use shell syntax
                     cwd=cwd,
                     capture_output=True,
                     text=True,

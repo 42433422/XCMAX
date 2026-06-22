@@ -395,6 +395,24 @@ interface FhdApi {
     @DELETE(ApiEndpoints.AI_GROUP_DELETE)
     suspend fun deleteAiGroup(@Path("groupId") groupId: String): MobileEnvelope<Map<String, Any>>
 
+    @PUT(ApiEndpoints.CONVERSATION_PIN)
+    suspend fun toggleConversationPin(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @POST(ApiEndpoints.CONVERSATION_MARK_UNREAD)
+    suspend fun markConversationUnread(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @POST(ApiEndpoints.CONVERSATION_MARK_READ)
+    suspend fun markConversationRead(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @PUT(ApiEndpoints.CONVERSATION_FOLLOWED)
+    suspend fun toggleConversationFollowed(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @PUT(ApiEndpoints.CONVERSATION_HIDDEN)
+    suspend fun toggleConversationHidden(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @DELETE(ApiEndpoints.CONVERSATION_DELETE)
+    suspend fun deleteConversation(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
     @GET(ApiEndpoints.WALLET_BALANCE)
     suspend fun mobileWalletBalance(): MobileEnvelope<WalletBalanceDto>
 }

@@ -2,6 +2,7 @@ package com.xiuci.xcagi.mobile.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -133,7 +134,7 @@ fun AiGroupListScreen(
                         onClick = {
                             vm.markGroupUnread(g.id)
                             longPressGroup = null
-                            haptics.click()
+                            haptics.tap()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("标为未读") }
@@ -141,7 +142,7 @@ fun AiGroupListScreen(
                         onClick = {
                             vm.toggleGroupPin(g.id)
                             longPressGroup = null
-                            haptics.click()
+                            haptics.tap()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -151,7 +152,7 @@ fun AiGroupListScreen(
                         onClick = {
                             vm.toggleGroupFollowed(g.id)
                             longPressGroup = null
-                            haptics.click()
+                            haptics.tap()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -161,7 +162,7 @@ fun AiGroupListScreen(
                         onClick = {
                             vm.toggleGroupHidden(g.id)
                             longPressGroup = null
-                            haptics.click()
+                            haptics.tap()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -171,7 +172,7 @@ fun AiGroupListScreen(
                         onClick = {
                             vm.deleteGroup(g.id)
                             longPressGroup = null
-                            haptics.click()
+                            haptics.tap()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -213,7 +214,7 @@ fun AiGroupListScreen(
                 GroupConversationRow(
                     group = group,
                     onClick = { onOpenGroup(group) },
-                    onLongClick = { haptics.longClick(); longPressGroup = group },
+                    onLongClick = { haptics.confirm(); longPressGroup = group },
                 )
                 if (idx < groups.lastIndex) {
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 80.dp))
@@ -271,6 +272,7 @@ internal fun GroupGridAvatar(members: List<AiGroupMemberDto>, size: androidx.com
 }
 
 /** 群聊在「消息页」/群列表里的一行（九宫格头像 + 名字 + 预览）。 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun GroupConversationRow(
     group: AiGroupDto,
@@ -308,8 +310,7 @@ internal fun GroupConversationRow(
                         group.name,
                         style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
                         fontWeight = FontWeight.Medium,
-                        color = if (dimmed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                        alpha = if (group.is_hidden) 0.65f else 1f,
+                        color = if (group.is_hidden) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f) else if (!group.is_followed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
