@@ -13,10 +13,12 @@ from app.application.claude_super_employee_service import (
 
 
 def fake_claude_runner(reply: str, seen: list[list[str]] | None = None):
+    """CLI runner for Claude. Wraps reply in stream-json since CLAUDE_PROFILE.cli_stream_json=True."""
+
     def runner(cmd, **kwargs):
         seen.append(list(cmd)) if seen is not None else None
-        # Claude CLI 走 print 模式，回答打到 stdout（不写 last-message 文件）。
-        return subprocess.CompletedProcess(cmd, 0, stdout=reply, stderr="")
+        stream_line = json.dumps({"type": "result", "result": reply})
+        return subprocess.CompletedProcess(cmd, 0, stdout=stream_line, stderr="")
 
     return runner
 

@@ -27,6 +27,7 @@ def test_codex_super_employee_invoke_writes_outbox_when_dispatch_not_configured(
     monkeypatch,
 ):
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
+    monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "0")
     monkeypatch.delenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", raising=False)
     monkeypatch.delenv("MODSTORE_PARA_DELEGATE_WEBHOOK", raising=False)
 
