@@ -20,7 +20,7 @@ from modstore_server.script_agent.brief import (
 )
 from modstore_server.script_agent.code_writer import write_code
 from modstore_server.script_agent.context_collector import collect_context
-from modstore_server.script_agent.llm_client import LlmClient, SCRIPT_AGENT_CODE_MAX_TOKENS
+from modstore_server.script_agent.llm_client import SCRIPT_AGENT_CODE_MAX_TOKENS, LlmClient
 from modstore_server.script_agent.observer import judge
 from modstore_server.script_agent.planner import make_plan
 from modstore_server.script_agent.repairer import repair_code
@@ -732,9 +732,7 @@ async def run_agent_loop_v2(
             if sys_msg:
                 msgs.append({"role": "system", "content": sys_msg})
             msgs.append({"role": "user", "content": user or ""})
-            result = await _maybe_await(
-                llm.chat(msgs, max_tokens=SCRIPT_AGENT_CODE_MAX_TOKENS)
-            )
+            result = await _maybe_await(llm.chat(msgs, max_tokens=SCRIPT_AGENT_CODE_MAX_TOKENS))
             return str(result or "")
 
     ctx = await collect_context(brief, user_id=user_id, upload_items=files)

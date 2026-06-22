@@ -240,9 +240,7 @@ def main() -> int:
 
     session_factory = get_session_factory()
     with session_factory() as db:
-        author = (
-            db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
-        )
+        author = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         author = author or db.query(User).order_by(User.id.asc()).first()
         if not author:
             print("No user exists in DB; cannot determine author_id.", file=sys.stderr)

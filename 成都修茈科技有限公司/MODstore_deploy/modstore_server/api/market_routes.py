@@ -864,7 +864,10 @@ def _ai_settled_amount_for_hold(session: Any, user_id: int, hold_no: str) -> Dec
 
 def _ai_refunded_amount_for_hold(session: Any, user_id: int, hold_no: str) -> Decimal:
     return sum(
-        (_wallet_money(row.amount) for row in _ai_txns_for_hold(session, user_id, "ai_refund", hold_no)),
+        (
+            _wallet_money(row.amount)
+            for row in _ai_txns_for_hold(session, user_id, "ai_refund", hold_no)
+        ),
         Decimal("0.00"),
     )
 
@@ -1034,8 +1037,7 @@ def api_wallet_ai_release(
             .all()
         )
         if any(
-            str(_parse_ai_wallet_meta(row.description).get("hold_no") or "")
-            == body.hold_no.strip()
+            str(_parse_ai_wallet_meta(row.description).get("hold_no") or "") == body.hold_no.strip()
             for row in settled
         ):
             return {
