@@ -36,10 +36,38 @@ TASK_ID_RE = re.compile(r"任务\s*ID[:：]\s*([A-Za-z0-9][A-Za-z0-9._:-]{5,})")
 
 # 任务类关键词：命中则走 Para 多设备派工，否则走 CLI 直答。工具无关，共享。
 _TASK_MARKERS: tuple[str, ...] = (
-    "修复", "修改", "改一下", "改成", "实现", "新增", "加一个", "接入", "打通",
-    "任务", "测试", "验证", "跑测试", "测试一下", "验证一下", "打包", "构建",
-    "build", "提交", "commit", "push", "上传git", "部署", "发布", "合并",
-    "开分支", "派工", "调用", "调用所有设备", "多设备", "回写日志", "检查当前工作区",
+    "修复",
+    "修改",
+    "改一下",
+    "改成",
+    "实现",
+    "新增",
+    "加一个",
+    "接入",
+    "打通",
+    "任务",
+    "测试",
+    "验证",
+    "跑测试",
+    "测试一下",
+    "验证一下",
+    "打包",
+    "构建",
+    "build",
+    "提交",
+    "commit",
+    "push",
+    "上传git",
+    "部署",
+    "发布",
+    "合并",
+    "开分支",
+    "派工",
+    "调用",
+    "调用所有设备",
+    "多设备",
+    "回写日志",
+    "检查当前工作区",
 )
 # 多设备分工标签，工具无关，共享。
 _SUBTASK_LABELS: tuple[str, ...] = ("需求定位与方案", "核心实现", "验证与收尾")
@@ -86,17 +114,17 @@ class SuperEmployeeToolProfile:
 
     employee_id: str
     employee_name: str
-    display_tool: str           # 用户可见的工具名，如 "Codex" / "Claude"
-    tool_name: str              # Para devTool / toolName，如 "codex" / "claude"
-    capability_key: str         # Para 设备能力键，如 "codex_cli" / "claude_cli"
-    storage_subdir: str         # 持久化子目录
-    result_kind: str            # 结果消息 kind
-    direct_kind: str            # 直答消息 kind
-    env_super_prefix: str       # 形如 "XCMAX_CODEX_SUPER_EMPLOYEE"
-    env_tool_prefix: str        # 形如 "XCMAX_CODEX"
-    cli_binary: str             # 可执行名，用于 shutil.which
+    display_tool: str  # 用户可见的工具名，如 "Codex" / "Claude"
+    tool_name: str  # Para devTool / toolName，如 "codex" / "claude"
+    capability_key: str  # Para 设备能力键，如 "codex_cli" / "claude_cli"
+    storage_subdir: str  # 持久化子目录
+    result_kind: str  # 结果消息 kind
+    direct_kind: str  # 直答消息 kind
+    env_super_prefix: str  # 形如 "XCMAX_CODEX_SUPER_EMPLOYEE"
+    env_tool_prefix: str  # 形如 "XCMAX_CODEX"
+    cli_binary: str  # 可执行名，用于 shutil.which
     cli_extra_candidates: tuple[str, ...] = ()
-    cli_reads_output_file: bool = True   # 是否从 --output-last-message 文件读结果
+    cli_reads_output_file: bool = True  # 是否从 --output-last-message 文件读结果
     cli_command_builder: Callable[[str, str, Path, str], list[str]] = _codex_cli_command
 
 
@@ -553,11 +581,7 @@ class SuperEmployeeService:
             tool = self._device_tool(item, self._p.tool_name)
             if tool and str(tool.get("status") or "") == "not_installed":
                 continue
-            if (
-                tool
-                and str(tool.get("status") or "") == "running"
-                and tool.get("currentTask")
-            ):
+            if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
                 continue
             capabilities = (
                 item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
@@ -919,7 +943,9 @@ class SuperEmployeeService:
         return not any(marker in normalized for marker in _TASK_MARKERS)
 
     def _cli_reply_body(self, text: str, context: dict[str, Any]) -> str:
-        if str(os.environ.get(f"{self._p.env_tool_prefix}_CLI_CHAT_ENABLED") or "1").strip().lower() in {
+        if str(
+            os.environ.get(f"{self._p.env_tool_prefix}_CLI_CHAT_ENABLED") or "1"
+        ).strip().lower() in {
             "0",
             "false",
             "off",
@@ -1024,10 +1050,22 @@ class SuperEmployeeService:
         tool = self._p.display_tool
         name = self._p.employee_name
         identity_prompts = {
-            "你是谁", "你是誰", "你谁", "你是哪个", "你是什么", "whoareyou", "whatareyou",
+            "你是谁",
+            "你是誰",
+            "你谁",
+            "你是哪个",
+            "你是什么",
+            "whoareyou",
+            "whatareyou",
         }
         help_prompts = {
-            "你能做什么", "你能干什么", "你会什么", "怎么用", "如何使用", "帮助", "help",
+            "你能做什么",
+            "你能干什么",
+            "你会什么",
+            "怎么用",
+            "如何使用",
+            "帮助",
+            "help",
         }
         greeting_prompts = {"你好", "在吗", "在不在", "hello", "hi"}
         slow_prompts = {"为什么这么慢", "为啥这么慢", "为什么出不来", "怎么出不来"}
@@ -1070,8 +1108,7 @@ class SuperEmployeeService:
             for item in rows
             if int(item.get("user_id") or 0) == int(user_id)
             and (
-                str(item.get("kind") or "")
-                in {self._p.direct_kind, self._p.result_kind}
+                str(item.get("kind") or "") in {self._p.direct_kind, self._p.result_kind}
                 or (
                     str(item.get("role") or "") == "assistant"
                     and str(item.get("kind") or "") != DISPATCHER_MESSAGE_KIND

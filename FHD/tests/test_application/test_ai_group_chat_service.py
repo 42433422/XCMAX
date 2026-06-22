@@ -101,9 +101,7 @@ async def test_post_message_mention_targets_one(tmp_path: Path):
     svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e2", "name": "小服"})
 
     # 显式 mentions：只有 e2 回复
-    result = await svc.post_message(
-        user_id=1, group_id=gid, text="帮忙看下", mentions=["e2"]
-    )
+    result = await svc.post_message(user_id=1, group_id=gid, text="帮忙看下", mentions=["e2"])
     ai = [m for m in result["messages"] if m["role"] == "ai"]
     assert len(ai) == 1
     assert ai[0]["sender_name"] == "小服"

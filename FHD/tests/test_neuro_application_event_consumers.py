@@ -44,11 +44,7 @@ def _rows_with_nonce(session_factory, nonce: str):
     from app.db.models.neuro_event_log import NeuroEventLog
 
     with session_factory() as db:
-        return (
-            db.query(NeuroEventLog)
-            .filter(NeuroEventLog.payload.like(f"%{nonce}%"))
-            .all()
-        )
+        return db.query(NeuroEventLog).filter(NeuroEventLog.payload.like(f"%{nonce}%")).all()
 
 
 @pytest.mark.asyncio
@@ -125,6 +121,6 @@ async def test_real_startup_registration_wires_consumer(sqlite_sessionlocal):
         await bus.stop()
 
     rows = _rows_with_nonce(sqlite_sessionlocal, nonce)
-    assert any(
-        r.event_type == "application.products.imported" for r in rows
-    ), "real startup registration path did not deliver event to durable consumer"
+    assert any(r.event_type == "application.products.imported" for r in rows), (
+        "real startup registration path did not deliver event to durable consumer"
+    )
