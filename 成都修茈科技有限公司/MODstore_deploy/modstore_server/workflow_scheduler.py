@@ -478,12 +478,17 @@ def start_scheduler() -> None:
         global _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS
         global _LAST_TIME_RAIL_OBSERVABILITY_MISSING
         try:
-            from modstore_server.time_rail_workflow import collect_node_runtime_status, sync_missing_evidence_backlog
+            from modstore_server.time_rail_workflow import (
+                collect_node_runtime_status,
+                sync_missing_evidence_backlog,
+            )
 
             threshold = int(os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_THRESHOLD", "3"))
             sync_limit = int(os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_LIMIT", "32"))
             min_queue_gap = int(os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_MIN_QUEUE_GAP", "1"))
-            cooldown_seconds = int(os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_COOLDOWN_SECONDS", str(10 * 60)))
+            cooldown_seconds = int(
+                os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_COOLDOWN_SECONDS", str(10 * 60))
+            )
             if threshold < 1:
                 threshold = 1
             if sync_limit < 1:
@@ -803,7 +808,9 @@ def start_scheduler() -> None:
 
     _scheduler.add_job(
         _predictive_maintenance_job,
-        IntervalTrigger(hours=max(1, _env_int("MODSTORE_PREDICTIVE_MAINTENANCE_INTERVAL_HOURS", 6))),
+        IntervalTrigger(
+            hours=max(1, _env_int("MODSTORE_PREDICTIVE_MAINTENANCE_INTERVAL_HOURS", 6))
+        ),
         id="predictive_maintenance_forecast",
         replace_existing=True,
         coalesce=True,

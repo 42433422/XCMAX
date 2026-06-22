@@ -62,7 +62,9 @@ def enqueue_uncertain_item(
     humans see only blocked or low-confidence decisions.
     """
 
-    if (os.environ.get("MODSTORE_AUTONOMOUS_UNCERTAINTY_QUEUE_ENABLED") or "1").strip().lower() not in {
+    if (
+        os.environ.get("MODSTORE_AUTONOMOUS_UNCERTAINTY_QUEUE_ENABLED") or "1"
+    ).strip().lower() not in {
         "1",
         "true",
         "yes",

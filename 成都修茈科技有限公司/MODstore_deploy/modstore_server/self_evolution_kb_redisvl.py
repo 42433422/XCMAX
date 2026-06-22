@@ -15,7 +15,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 
-
 INDEX_PREFIX = "xcmax:self_evolution_kb:"
 SIGNATURE_PREFIX = "xcmax:self_evolution_kb:signature:"
 DEFAULT_DIM = 1536
@@ -49,7 +48,9 @@ def _embedding_dim() -> int:
 
         return int(embedding_config_snapshot().get("dim") or DEFAULT_DIM)
     except Exception:
-        return int((os.environ.get("MODSTORE_EMBEDDING_DIM") or str(DEFAULT_DIM)).strip() or DEFAULT_DIM)
+        return int(
+            (os.environ.get("MODSTORE_EMBEDDING_DIM") or str(DEFAULT_DIM)).strip() or DEFAULT_DIM
+        )
 
 
 def _index_name(kind: str) -> str:
@@ -63,7 +64,12 @@ def _key_prefix(kind: str) -> str:
 
 
 def _doc_id(kind: str, doc: Dict[str, Any]) -> str:
-    raw = str(doc.get("_path") or doc.get("id") or doc.get("created_at") or json.dumps(doc, sort_keys=True))
+    raw = str(
+        doc.get("_path")
+        or doc.get("id")
+        or doc.get("created_at")
+        or json.dumps(doc, sort_keys=True)
+    )
     return hashlib.sha256(f"{kind}\0{raw}".encode("utf-8")).hexdigest()[:32]
 
 
@@ -75,7 +81,9 @@ def _doc_text(doc: Dict[str, Any], fields: Sequence[str]) -> str:
             parts.append(f"{field}: {value}")
     template = doc.get("executable_template")
     if isinstance(template, dict):
-        parts.append("executable_template: " + json.dumps(template, ensure_ascii=False, sort_keys=True))
+        parts.append(
+            "executable_template: " + json.dumps(template, ensure_ascii=False, sort_keys=True)
+        )
     if not parts:
         parts.append(json.dumps(doc, ensure_ascii=False, sort_keys=True, default=str))
     return "\n".join(parts)[:MAX_DOC_TEXT]
@@ -182,7 +190,9 @@ def _embed(texts: List[str]) -> List[List[float]]:
     return vectors
 
 
-def ensure_indexed(kind: str, docs: Sequence[Dict[str, Any]], fields: Sequence[str]) -> Dict[str, Any]:
+def ensure_indexed(
+    kind: str, docs: Sequence[Dict[str, Any]], fields: Sequence[str]
+) -> Dict[str, Any]:
     if not enabled():
         return {"enabled": False, "ready": False, "reason": "disabled"}
     docs = [doc for doc in docs if isinstance(doc, dict)]
