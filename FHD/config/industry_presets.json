@@ -7,7 +7,8 @@
     "批发",
     "电商",
     "餐饮",
-    "物流"
+    "物流",
+    "管理端"
   ],
   "presets": {
     "通用": {
@@ -49,6 +50,53 @@
         "model_label": "编号",
         "shipment_order": "业务单",
         "records": "业务记录"
+      }
+    },
+    "管理端": {
+      "id": "管理端",
+      "name": "平台运维",
+      "scenario": "XCMAX 服务器后台运维。",
+      "welcomeIntro": "你好，平台运维助手。",
+      "welcomeBullets": [
+        "查看运维总览",
+        "管理服务器功能"
+      ],
+      "quickButtons": [
+        {
+          "text": "打开服务器后台总览",
+          "label": "运维总览"
+        },
+        {
+          "text": "查看自动化方针",
+          "label": "自动化方针"
+        },
+        {
+          "text": "服务器功能模块",
+          "label": "功能模块"
+        },
+        {
+          "text": "员工可视化图谱",
+          "label": "员工图谱"
+        }
+      ],
+      "placeholderNormal": "输入运维指令",
+      "placeholderPro": "复合运维任务",
+      "menuLabels": {
+        "chat": "运维对话",
+        "im": "信息",
+        "ai-ecosystem": "智能生态",
+        "mod-store": "能力库",
+        "employee-workflow": "编制工作台",
+        "workflow-visualization": "流程可视化",
+        "duty-roster-graph": "员工图谱",
+        "data-sources": "运维数据源",
+        "tools": "运维工具"
+      },
+      "uiLabels": {
+        "entity": "对象",
+        "model_label": "编号",
+        "shipment_order": "任务",
+        "records": "运维记录"
       }
     },
     "涂料": {

@@ -116,7 +116,6 @@ const mockIndustryStore = {
   error: null as string | null,
   loadIndustries: vi.fn().mockResolvedValue(undefined),
   loadCurrentIndustry: vi.fn().mockResolvedValue(undefined),
-  switchIndustry: vi.fn().mockResolvedValue(true),
   initialize: vi.fn().mockResolvedValue(undefined),
   getIndustryById: vi.fn().mockReturnValue(null),
 }

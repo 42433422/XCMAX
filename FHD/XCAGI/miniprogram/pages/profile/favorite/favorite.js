@@ -1,2 +1,0 @@
-const api = require('../../../api/index')
-Page({data:{items:[],loading:true},onShow(){this.load()},async load(){try{const r=await api.getFavoriteList();if(r.success)this.setData({items:r.data.items||[],loading:false})}catch(e){this.setData({loading:false})}},goDetail(e){wx.navigateTo({url:`/pages/product/detail/detail?id=${e.currentTarget.dataset.id}`})},async removeFav(e){try{await api.removeFavorite(e.currentTarget.dataset.id);this.load()}catch(e){}},onReachBottom(){}})

@@ -58,7 +58,7 @@ class TestIntentDataset:
         assert len(ds) == 2
 
     def test_getitem_known_label(self):
-        import torch
+        torch = pytest.importorskip("torch")
 
         examples = [IntentExample(text="发货", label="shipment_generate")]
         mock_tokenizer = MagicMock()
@@ -73,7 +73,7 @@ class TestIntentDataset:
         assert item["labels"].item() == LABEL_TO_ID["shipment_generate"]
 
     def test_getitem_unknown_label(self):
-        import torch
+        torch = pytest.importorskip("torch")
 
         examples = [IntentExample(text="test", label="nonexistent_label")]
         mock_tokenizer = MagicMock()

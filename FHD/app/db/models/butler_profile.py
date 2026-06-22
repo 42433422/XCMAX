@@ -23,9 +23,7 @@ class ButlerUserProfile(Base):
 
     __tablename__ = "butler_user_profiles"
 
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), primary_key=True
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), primary_key=True)
 
     # === 身份层 ===
     identity_primary: Mapped[str] = mapped_column(
@@ -39,32 +37,20 @@ class ButlerUserProfile(Base):
     )
 
     # === MBTI 层（底层模型，不在 UI 显示）===
-    mbti_ei: Mapped[int] = mapped_column(
-        Integer, default=65, comment="E/I 轴 0-100，E=100"
-    )
-    mbti_sn: Mapped[int] = mapped_column(
-        Integer, default=60, comment="S/N 轴 0-100，N=100"
-    )
-    mbti_tf: Mapped[int] = mapped_column(
-        Integer, default=70, comment="T/F 轴 0-100，F=100"
-    )
+    mbti_ei: Mapped[int] = mapped_column(Integer, default=65, comment="E/I 轴 0-100，E=100")
+    mbti_sn: Mapped[int] = mapped_column(Integer, default=60, comment="S/N 轴 0-100，N=100")
+    mbti_tf: Mapped[int] = mapped_column(Integer, default=70, comment="T/F 轴 0-100，F=100")
     mbti_jp: Mapped[int] = mapped_column(
         Integer, default=40, comment="J/P 轴 0-100，P=100（< 50 = J）"
     )
-    mbti_type: Mapped[str] = mapped_column(
-        String(4), default="ENFJ", comment="派生 16 型标签"
-    )
-    mbti_confidence: Mapped[float] = mapped_column(
-        Float, default=0.3, comment="推断置信度 0-1"
-    )
+    mbti_type: Mapped[str] = mapped_column(String(4), default="ENFJ", comment="派生 16 型标签")
+    mbti_confidence: Mapped[float] = mapped_column(Float, default=0.3, comment="推断置信度 0-1")
 
     # === 元数据 ===
     last_inferred_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, comment="最后推断时间"
     )
-    interaction_count: Mapped[int] = mapped_column(
-        Integer, default=0, comment="累计互动轮数"
-    )
+    interaction_count: Mapped[int] = mapped_column(Integer, default=0, comment="累计互动轮数")
 
     def to_public_dict(self) -> dict:
         """返回 UI 可见的字典（不含 MBTI 原始分数，含派生四轴）。"""
@@ -79,7 +65,9 @@ class ButlerUserProfile(Base):
             "mbti_type": self.mbti_type,
             "mbti_confidence": self.mbti_confidence,
             "interaction_count": self.interaction_count,
-            "last_inferred_at": self.last_inferred_at.isoformat() if self.last_inferred_at else None,
+            "last_inferred_at": self.last_inferred_at.isoformat()
+            if self.last_inferred_at
+            else None,
         }
 
     def to_internal_dict(self) -> dict:
@@ -95,6 +83,8 @@ class ButlerUserProfile(Base):
             "mbti_jp": self.mbti_jp,
             "mbti_type": self.mbti_type,
             "mbti_confidence": self.mbti_confidence,
-            "last_inferred_at": self.last_inferred_at.isoformat() if self.last_inferred_at else None,
+            "last_inferred_at": self.last_inferred_at.isoformat()
+            if self.last_inferred_at
+            else None,
             "interaction_count": self.interaction_count,
         }

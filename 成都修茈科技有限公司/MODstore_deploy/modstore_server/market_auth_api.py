@@ -988,6 +988,31 @@ def api_login(body: LoginDTO):
     }
 
 
+class InternalSsoIssueTokenDTO(BaseModel):
+    username: str = Field(default="", max_length=128)
+    email: str = Field(default="", max_length=256)
+    oidc_sub: str = Field(default="", max_length=256)
+    display_name: str = Field(default="", max_length=128)
+
+
+@router.post("/auth/internal/sso-issue-token", include_in_schema=False)
+def api_internal_sso_issue_token(body: InternalSsoIssueTokenDTO, request: Request):
+    """FHD OIDC 回调后签发 MODstore JWT（Header: X-Internal-Api-Key）。"""
+    _require_internal_api_key(request)
+    from modstore_server.auth_service import issue_market_tokens_for_sso_identity
+
+    try:
+        data = issue_market_tokens_for_sso_identity(
+            username=(body.username or "").strip(),
+            email=(body.email or "").strip(),
+            oidc_sub=(body.oidc_sub or "").strip(),
+            display_name=(body.display_name or "").strip(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"success": True, "data": data}
+
+
 @router.get("/auth/me", summary="当前用户资料与等级（含 Java 侧叠加字段）")
 def api_me(request: Request, user: Optional[User] = Depends(_optional_current_user)):
     # 与 FHD /api/auth/me 一致：未登录用 200，避免 SPA 控制台刷 401。

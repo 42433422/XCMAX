@@ -70,10 +70,13 @@ class RapportCalculator:
         if interaction_count == 0 and not business_domain_counts and emotion_signal_count == 0:
             score = self.COLD_START_DEFAULT
 
-        # clamp
-        if score < 0.0:
-            score = 0.0
-        elif score > 1.0:
+        # 单调地板：rapport 从冷启动基线 0.3 起步、只升不降（目标 4：0.3→1.0 平滑过渡）。
+        # 否则首条消息会因 interaction_count +1 把原始分压到 ≈0.02，体感上"越聊越冷"。
+        if score < self.COLD_START_DEFAULT:
+            score = self.COLD_START_DEFAULT
+
+        # clamp 上界
+        if score > 1.0:
             score = 1.0
 
         return RapportScore(

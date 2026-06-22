@@ -493,6 +493,24 @@ def _resolve_user_id_int(request: Request, body: dict | None = None) -> int:
         return 1
 
 
+def _persona_backed_profile_view(uid: int) -> dict:
+    """方案 B（桥接合并）：persona_profile 为单一真相源。
+
+    存在 persona 画像（用户已对话过）则派生 butler 视图，使 Settings UI 与对话流
+    展示同一人格；尚无画像时回退 butler 自身默认视图。响应形状与 ``to_public_dict``
+    严格一致，前端零改动。
+    """
+    try:
+        from app.application.persona_butler_bridge import persona_view_for_user
+
+        view = persona_view_for_user(uid)
+        if view is not None:
+            return view
+    except Exception as exc:  # noqa: BLE001 - 桥接失败不应阻断 Settings 读取
+        logger.warning("persona 派生 butler 视图失败，回退 butler 默认: %s", exc)
+    return _butler_profile_service().get_profile_view(uid)
+
+
 @router.get("/butler/profile")
 @router.get("/butler/profile/", include_in_schema=False)
 def butler_profile_get(
@@ -502,8 +520,7 @@ def butler_profile_get(
     """读取当前用户的 butler profile（身份 + 四轴，不含 MBTI 原始分数）。"""
     try:
         uid = _resolve_user_id_int(request, {"user_id": user_id})
-        svc = _butler_profile_service()
-        view = svc.get_profile_view(uid)
+        view = _persona_backed_profile_view(uid)
         return {"success": True, "profile": view}
     except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
         logger.warning("读取 butler profile 失败: %s", exc)

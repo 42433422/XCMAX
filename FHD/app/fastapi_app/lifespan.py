@@ -185,6 +185,12 @@ def _initialize_databases_sync(app: FastAPI):
         except (ImportError, AttributeError) as tenant_err:
             logger.warning("users.tenant_id 自检函数不可用，已跳过: %s", tenant_err)
         try:
+            from app.db.init_db import ensure_business_tenant_id_columns
+
+            ensure_business_tenant_id_columns(engine, database_url=cfg_db_url or None)
+        except (ImportError, AttributeError) as biz_tenant_err:
+            logger.warning("业务表 tenant_id 自检函数不可用，已跳过: %s", biz_tenant_err)
+        try:
             init_approval_tables(engine)
         except RECOVERABLE_ERRORS as approval_err:
             logger.warning("approval 表初始化失败（不影响主流程）: %s", approval_err)
@@ -192,6 +198,13 @@ def _initialize_databases_sync(app: FastAPI):
             init_service_bridge_tables(engine)
         except RECOVERABLE_ERRORS as bridge_err:
             logger.warning("service_bridge 表初始化失败（不影响主流程）: %s", bridge_err)
+
+        try:
+            from app.db.init_db import init_persona_tables
+
+            init_persona_tables(engine)
+        except RECOVERABLE_ERRORS as persona_err:
+            logger.warning("persona 表初始化失败（不影响主流程）: %s", persona_err)
 
         if not is_sqlite_url(database_url):
             try:

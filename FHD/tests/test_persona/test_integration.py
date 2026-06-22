@@ -68,16 +68,24 @@ class TestPersonaIntegration:
         )
 
         assert profile.identity.name == "门店管家"
-        # 注：RapportCalculator 的冷启动保护仅在 interaction_count==0 时触发，
-        # 但 update_on_message 会将计数 +1，导致首条消息后 score≈0.0214（<0.3）。
-        # 这是 Task 5 实现与测试预期的设计偏差，待后续调整冷启动阈值。
-        if profile.rapport.score < 0.3:
-            pytest.skip(
-                f"冷启动 rapport score={profile.rapport.score} < 0.3，"
-                "RapportCalculator 冷启动保护未覆盖首条消息后的状态"
-            )
-        assert profile.rapport.score >= 0.3  # 冷启动友好
+        # 单调地板修复后：首条消息后 rapport 不再跌破 0.3 冷启动基线（曾退化到 ≈0.0214）。
+        assert profile.rapport.score >= 0.3
         assert 0.0 <= profile.axes.warmth <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_emotion_signal_increments_on_emoji(self, service, mock_repo):
+        """含 emoji/语气词的消息累计一次情感信号（驱动 rapport 的情感权重）。"""
+        stored = PersonaProfile.create("user-emo", "零售业")
+        mock_repo.find_by_user_id = AsyncMock(return_value=stored)
+
+        profile = await service.update_on_message(
+            user_id="user-emo",
+            message="你好呀😊",
+            history=[],
+            industry="零售业",
+        )
+
+        assert profile.rapport.emotion_signal_count == 1
 
     @pytest.mark.asyncio
     async def test_warm_message_increases_warmth(self, service, mock_repo):

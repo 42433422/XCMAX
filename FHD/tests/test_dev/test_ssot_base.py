@@ -1,4 +1,5 @@
 """SSOT plugin 基础设施单测。"""
+
 from __future__ import annotations
 
 import sys

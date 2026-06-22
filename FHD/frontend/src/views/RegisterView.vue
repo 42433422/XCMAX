@@ -5,6 +5,7 @@ import { ApiError } from '@/api';
 import { authApi } from '@/api/auth';
 import { applyMarketTokensAfterFhdLogin } from '@/api/marketAccount';
 import { loginPageTitle } from '@/constants/loginBranding';
+import { INDUSTRY_PRESET_IDS } from '@/constants/industryPresets';
 import { fetchProductSku } from '@/utils/productSku';
 
 const route = useRoute();
@@ -17,6 +18,12 @@ const confirmPassword = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
 const errorMessage = ref('');
+
+// 账号体系：行业 + 预算区间（企业版展示；预算 → account_tier 自动派生）
+const industryId = ref('通用');
+const budgetRange = ref('');
+const industryOptions = INDUSTRY_PRESET_IDS.filter((id) => id !== '管理端');
+const BUDGET_OPTIONS = ['5 万以内', '5–20 万', '20–50 万', '50 万以上'];
 
 const productSku = ref<string>('generic');
 const isEnterpriseEdition = computed(() => productSku.value === 'enterprise');
@@ -101,6 +108,8 @@ async function submitRegister() {
       username: username.value.trim(),
       password: password.value,
       email: email.value.trim() || undefined,
+      budget_range: budgetRange.value || undefined,
+      industry_id: isEnterpriseEdition.value ? industryId.value : undefined,
     });
     const raw = result as unknown as Record<string, unknown>;
     const ok = raw?.success === true;
@@ -180,6 +189,20 @@ async function submitRegister() {
             :disabled="loading"
           />
         </div>
+
+        <template v-if="isEnterpriseEdition">
+          <div class="login-field-line login-field-line--select">
+            <select v-model="industryId" name="industry" :disabled="loading" aria-label="行业">
+              <option v-for="opt in industryOptions" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+          <div class="login-field-line login-field-line--select">
+            <select v-model="budgetRange" name="budget" :disabled="loading" aria-label="预算区间">
+              <option value="">预算区间（选填，决定账号等级）</option>
+              <option v-for="opt in BUDGET_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+        </template>
 
         <div class="login-field-line login-field-line--password">
           <input
@@ -321,6 +344,23 @@ async function submitRegister() {
 
 .login-field-line input::placeholder {
   color: #bbb;
+}
+
+.login-field-line--select select {
+  width: 100%;
+  height: 48px;
+  border: 0;
+  background: transparent;
+  color: #000;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  padding: 0 2px;
+}
+
+.login-field-line--select select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .login-field-line input:disabled {

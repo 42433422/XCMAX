@@ -7,6 +7,14 @@ import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
+import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupListData
+import com.xiuci.xcagi.mobile.core.model.AiGroupMemberBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupMessageBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupMessagesData
+import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
+import com.xiuci.xcagi.mobile.core.model.AiGroupWrap
+import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
@@ -327,6 +335,47 @@ interface FhdApi {
     suspend fun postCodexSuperEmployeeMessage(
         @Body body: CodexSuperEmployeeMobileMessageBody,
     ): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun getClaudeSuperEmployeeMessages(
+        @Query("limit") limit: Int = 80,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun postClaudeSuperEmployeeMessage(
+        @Body body: ClaudeSuperEmployeeMobileMessageBody,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    // ── AI 群聊 ──
+    @GET(ApiEndpoints.AI_GROUPS)
+    suspend fun getAiGroups(): MobileEnvelope<AiGroupListData>
+
+    @POST(ApiEndpoints.AI_GROUPS)
+    suspend fun createAiGroup(@Body body: AiGroupCreateBody): MobileEnvelope<AiGroupWrap>
+
+    @GET(ApiEndpoints.AI_GROUP_MESSAGES)
+    suspend fun getAiGroupMessages(
+        @Path("groupId") groupId: String,
+        @Query("limit") limit: Int = 100,
+    ): MobileEnvelope<AiGroupMessagesData>
+
+    @POST(ApiEndpoints.AI_GROUP_MESSAGES)
+    suspend fun postAiGroupMessage(
+        @Path("groupId") groupId: String,
+        @Body body: AiGroupMessageBody,
+    ): MobileEnvelope<AiGroupPostData>
+
+    @POST(ApiEndpoints.AI_GROUP_MEMBERS)
+    suspend fun addAiGroupMember(
+        @Path("groupId") groupId: String,
+        @Body body: AiGroupMemberBody,
+    ): MobileEnvelope<AiGroupWrap>
+
+    @DELETE(ApiEndpoints.AI_GROUP_MEMBER)
+    suspend fun removeAiGroupMember(
+        @Path("groupId") groupId: String,
+        @Path("employeeId") employeeId: String,
+    ): MobileEnvelope<AiGroupWrap>
 
     @GET(ApiEndpoints.WALLET_BALANCE)
     suspend fun mobileWalletBalance(): MobileEnvelope<WalletBalanceDto>

@@ -58,7 +58,7 @@ class SimpleLabelGenerator:
         for font_path in font_paths:
             try:
                 return ImageFont.truetype(font_path, size)
-            except:
+            except Exception:
                 continue
 
         import sys
@@ -73,7 +73,7 @@ class SimpleLabelGenerator:
             for font_path in win_fonts:
                 try:
                     return ImageFont.truetype(font_path, size)
-                except:
+                except Exception:
                     continue
 
         return ImageFont.load_default()

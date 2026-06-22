@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -149,7 +150,10 @@ private fun AiEmployeeProfile.abilityLabels(): List<String> {
     return labels.take(4)
 }
 
-/** AI 圈预览标签色；头像已统一使用图片资源。 */
+/**
+ * AI 圈预览标签的分类配色（按 key 哈希取色）。
+ * 这是一组刻意的「分类装饰色板」，非语义色，故不纳入主题令牌；明暗主题下均为实底色块，可读性一致。
+ */
 internal fun aiEmployeeAvatarColor(key: String): Color {
     val colors = listOf(
         Color(0xFF3370FF),
@@ -224,6 +228,7 @@ private fun AiCircleHeader(
             Modifier
                 .fillMaxWidth()
                 .height(144.dp)
+                // 交流圈封面：刻意的深岩灰「封面照」底色（承载白字），明暗主题一致，故保留为常量
                 .background(Color(0xFF3F4A4D)),
         ) {
             Column(
@@ -326,7 +331,7 @@ private fun AiMomentCard(
                                 employee.name,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF1F6F50),
+                                color = XcagiTheme.extra.momentAccent,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -406,7 +411,7 @@ private fun AiMomentActionText(label: String) {
     Text(
         label,
         style = MaterialTheme.typography.labelMedium,
-        color = Color(0xFF1F6F50),
+        color = XcagiTheme.extra.momentAccent,
         fontWeight = FontWeight.Medium,
     )
 }
@@ -419,7 +424,7 @@ private fun AiMomentReplyBox(
     Surface(
         modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
         shape = MaterialTheme.shapes.extraSmall,
-        color = Color(0xFFF4F5F4),
+        color = XcagiTheme.extra.replyBoxBg,
     ) {
         Column(Modifier.padding(horizontal = 9.dp, vertical = 6.dp)) {
             Text(
@@ -553,6 +558,15 @@ fun AiEmployeeProfileScreen(
                     onClick = { onOpenChat("employee:${employee.modId}:${employee.employeeId}") },
                 )
             }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                AiProfileActionRow(
+                    text = "进入 AI 交流圈",
+                    icon = Icons.Default.Forum,
+                    onClick = onOpenCircle,
+                )
+            }
         }
     }
 }
@@ -676,30 +690,48 @@ private fun AiProfileCirclePreview(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Row(
-            Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "AI交流圈",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.width(88.dp),
-            )
-            Row(
-                Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                employee.abilityLabels().take(3).forEach { label ->
-                    AiCirclePreviewTile(label = label, color = aiEmployeeAvatarColor("${employee.key}:$label"))
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Forum,
+                    contentDescription = null,
+                    tint = XcagiTheme.extra.momentAccent,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "AI交流圈",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "进入交流圈 · 查看 ${employee.name} 的动态与能力更新",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            val abilities = employee.abilityLabels().take(3)
+            if (abilities.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.padding(start = 30.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    abilities.forEach { label ->
+                        AiCirclePreviewTile(label = label, color = aiEmployeeAvatarColor("${employee.key}:$label"))
+                    }
                 }
             }
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                modifier = Modifier.size(20.dp),
-            )
         }
     }
 }
@@ -769,12 +801,12 @@ private fun AiEmployeeAvatar(employee: AiEmployeeProfile, size: androidx.compose
 private fun AiAbilityChip(label: String) {
     Surface(
         shape = MaterialTheme.shapes.large,
-        color = Color(0xFFEAF3EF),
+        color = XcagiTheme.extra.momentChipBg,
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF1F6F50),
+            color = XcagiTheme.extra.momentAccent,
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
         )
     }

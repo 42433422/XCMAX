@@ -2,7 +2,7 @@
   <div class="page-view" id="view-create-order">
     <div class="page-content">
       <div class="page-header">
-        <h2>新建发货单</h2>
+        <h2>新建{{ orderTitle }}</h2>
         <button class="btn btn-secondary" @click="goOrdersList">返回列表</button>
       </div>
 
@@ -11,10 +11,10 @@
       </div>
 
       <div class="card">
-        <h3>选择发货单模板</h3>
+        <h3>选择{{ orderTitle }}模板</h3>
         <div class="form-row">
           <div class="form-col">
-            <label>发货单模板</label>
+            <label>{{ orderTitle }}模板</label>
             <select v-model="form.templateName" @change="onTemplateChange">
               <option value="">-- 请选择模板 --</option>
               <option v-for="t in templates" :key="t.name" :value="t.name">{{ t.name }}</option>
@@ -31,10 +31,10 @@
         <h3>基础信息</h3>
         <div class="form-row">
           <div class="form-col">
-            <label>购买单位 *</label>
+            <label>{{ fieldLabel('purchase_unit', '购买单位') }} *</label>
             <div style="display: flex; gap: 10px;">
               <select v-model="form.purchaseUnit" @change="onPurchaseUnitChange" style="flex: 1;">
-                <option value="">-- 选择购买单位 --</option>
+                <option value="">-- 选择{{ fieldLabel('purchase_unit', '购买单位') }} --</option>
                 <option v-for="u in purchaseUnits" :key="u.unit_name" :value="u.unit_name">
                   {{ u.unit_name }}{{ u.contact_person ? ` (${u.contact_person})` : '' }}
                 </option>
@@ -60,7 +60,7 @@
       </div>
 
       <div class="card">
-        <h3>产品信息</h3>
+        <h3>{{ entityName }}信息</h3>
         <div style="margin-bottom: 15px;">
           <button class="btn btn-success" @click="addProductRow"><i class="fa fa-plus" aria-hidden="true"></i> 添加产品</button>
           <button class="btn" @click="showProductSelector = true"><i class="fa fa-search" aria-hidden="true"></i> 选择产品名称</button>
@@ -73,11 +73,11 @@
 
         <div v-for="(product, index) in products" :key="product.id" class="product-row">
           <div class="product-cell">
-            <label>产品型号 *</label>
+            <label>{{ fieldLabel('model_number', '产品型号') }} *</label>
             <input type="text" v-model="product.model" placeholder="产品型号" @input="onProductModelChange(product, index)">
           </div>
           <div class="product-cell">
-            <label>产品名称 *</label>
+            <label>{{ fieldLabel('product_name', '产品名称') }} *</label>
             <select v-model="product.nameId" @change="onProductNameSelect(product, index)">
               <option value="">-- 请选择产品 --</option>
               <option v-for="p in allProducts" :key="p.id" :value="p.id">
@@ -87,23 +87,23 @@
             <input type="hidden" v-model="product.name">
           </div>
           <div class="product-cell">
-            <label>数量/件</label>
+            <label>{{ fieldLabel('quantity_tins', '数量/件') }}</label>
             <input type="number" v-model.number="product.quantityBox" min="0" step="1" @input="calculateKg(index)">
           </div>
           <div class="product-cell">
-            <label>规格/KG</label>
+            <label>{{ fieldLabel('tin_spec', '规格/KG') }}</label>
             <input type="number" v-model.number="product.specification" min="0" step="0.01" @input="calculateKg(index)">
           </div>
           <div class="product-cell">
-            <label>数量/KG</label>
+            <label>{{ fieldLabel('quantity_kg', '数量/KG') }}</label>
             <input type="number" v-model.number="product.quantityKg" min="0" step="0.01" @input="calculateAmount(index)">
           </div>
           <div class="product-cell">
-            <label>单价/元</label>
+            <label>{{ fieldLabel('unit_price', '单价/元') }}</label>
             <input type="number" v-model.number="product.unitPrice" min="0" step="0.01" @input="calculateAmount(index)">
           </div>
           <div class="product-cell">
-            <label>金额/元</label>
+            <label>{{ fieldLabel('amount', '金额/元') }}</label>
             <input type="number" v-model.number="product.amount" readonly style="background-color: #f0f0f0;">
           </div>
           <div class="product-cell">
@@ -183,8 +183,20 @@ import api from '@/api/index'
 import { appAlert } from '@/utils/appDialog'
 import { pushErpPage } from '@/utils/erpPagePaths'
 import { resolveErpApiPath } from '@/utils/erpDomainPaths'
+import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema'
 
 const router = useRouter()
+
+// 行业感知：标题、购买单位、行项字段标签随行业变（发货单/考勤单、数量(桶)/数量(天·次)、规格/班次…）。
+// 注意：generateShipment 的 productData[1/4/5/6/7/8/9] 是把字段“值”映射到固定 Excel 模板单元格，
+// 与标签无关，保持原样不动，避免发货单错位。
+const ordersSchema = useIndustryFieldSchema('orders')
+const productsSchema = useIndustryFieldSchema('products')
+const orderTitle = computed(() => ordersSchema.label.value || '发货单')
+const entityName = computed(() => productsSchema.entity.value || '产品')
+function fieldLabel(key, fallback) {
+  return ordersSchema.labelOf(key, fallback)
+}
 
 function goOrdersList() {
   pushErpPage(router, '/orders')

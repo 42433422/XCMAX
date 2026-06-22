@@ -81,7 +81,8 @@ async def ensure_local_user_after_market(
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """市场已通过：确保本地用户存在并创建 session。"""
     if password:
-        result = auth_app_service.login(username, password)
+        # 市场已验证身份，本地仅二次确认密码：不在此处强制本地 MFA（市场是认证权威）
+        result = auth_app_service.login(username, password, enforce_mfa=False)
         if result.get("success"):
             return result, None
 
@@ -141,7 +142,7 @@ async def ensure_local_user_after_market(
             )
 
     if password:
-        result = auth_app_service.login(username, password)
+        result = auth_app_service.login(username, password, enforce_mfa=False)
     else:
         result = auth_app_service.create_session_for_username(username)
     if not result.get("success"):
@@ -180,6 +181,47 @@ def bind_tenant_for_login(
     return out
 
 
+def _derive_and_heal_account_kind(
+    *,
+    user_id: Any,
+    market_is_admin: bool,
+    market_is_enterprise: bool,
+    fallback: AccountKind,
+) -> AccountKind:
+    """从本地 User.tier 派生 account_kind；市场身份可向上提升并回写 User.tier（不下调）。"""
+    from app.application.session_account_meta import derive_account_kind_from_user
+
+    if user_id is None:
+        return derive_account_kind_from_user(
+            tier=fallback,
+            market_is_admin=market_is_admin,
+            market_is_enterprise=market_is_enterprise,
+        )
+    try:
+        from app.db.models.user import User
+        from app.db.session import get_db
+
+        with get_db() as db:
+            user = db.get(User, int(user_id))
+            tier = str(getattr(user, "tier", "") or "").strip() if user else ""
+            kind = derive_account_kind_from_user(
+                tier=tier,
+                market_is_admin=market_is_admin,
+                market_is_enterprise=market_is_enterprise,
+            )
+            if user is not None and kind in ("admin", "enterprise") and tier in ("", "personal"):
+                user.tier = kind
+                db.commit()
+            return kind
+    except RECOVERABLE_ERRORS:
+        logger.exception("_derive_and_heal_account_kind failed user_id=%s", user_id)
+        return derive_account_kind_from_user(
+            tier=fallback,
+            market_is_admin=market_is_admin,
+            market_is_enterprise=market_is_enterprise,
+        )
+
+
 async def finalize_enterprise_login(
     *,
     result: dict[str, Any],
@@ -192,6 +234,7 @@ async def finalize_enterprise_login(
 ) -> dict[str, Any]:
     """绑定市场 token、会话元数据、Mod 权益与租户信息。"""
     from app.fastapi_routes.market_account import (
+        fetch_market_membership_tier,
         save_session_market_token,
     )
 
@@ -239,19 +282,39 @@ async def finalize_enterprise_login(
                 if tenant_info.get("tenant_name"):
                     tenant_name = str(tenant_info["tenant_name"])
                     result["tenant_name"] = tenant_name
+            market_is_admin = bool(market_result.get("is_market_admin"))
+            market_is_enterprise = bool(market_result.get("is_enterprise"))
+            # 单一真相源 + 自动派生：account_kind 由本地 User.tier 派生（市场身份可向上提升），
+            # 不再采用登录入口传入的 account_kind。
+            account_kind = _derive_and_heal_account_kind(
+                user_id=user_id,
+                market_is_admin=market_is_admin,
+                market_is_enterprise=market_is_enterprise,
+                fallback=account_kind,
+            )
             persist_session_account_meta(
                 str(session_id),
                 account_kind=account_kind,
                 company_brand=company_brand,
                 market_user_id=market_uid,
-                market_is_admin=bool(market_result.get("is_market_admin")),
-                market_is_enterprise=bool(market_result.get("is_enterprise")),
+                market_is_admin=market_is_admin,
+                market_is_enterprise=market_is_enterprise,
                 tenant_id=tenant_id_val,
             )
             result["account_kind"] = account_kind
             result["company_brand"] = company_brand
-            result["market_is_admin"] = bool(market_result.get("is_market_admin"))
-            result["market_is_enterprise"] = bool(market_result.get("is_enterprise"))
+            result["market_is_admin"] = market_is_admin
+            result["market_is_enterprise"] = market_is_enterprise
+            # 维度3 会员体系：登录后从市场同步会员等级到 Session.market_membership_tier
+            if mtok:
+                from app.application.session_account_meta import (
+                    persist_session_membership_tier,
+                )
+
+                membership_tier = await fetch_market_membership_tier(mtok)
+                if membership_tier:
+                    persist_session_membership_tier(str(session_id), membership_tier)
+                    result["market_membership_tier"] = membership_tier
         elif skip_market_sync:
             user_id = (result.get("user") or {}).get("id")
             if user_id is not None:
@@ -357,6 +420,7 @@ async def run_market_first_login(
     jit_create_fn: Any,
     market_user_email_from_raw: Any,
     login_market_fn: Any | None = None,
+    totp_code: str | None = None,
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
     from app.application.session_account_meta import persist_session_account_meta
@@ -367,7 +431,8 @@ async def run_market_first_login(
             market_result = await login_market_fn(username, password)
         if not (market_result or {}).get("success"):
             if account_kind == "admin" and password:
-                local_admin = auth_app_service.login(username, password)
+                # 市场不可达的本地管理员应急登录：不阻断于本地 MFA
+                local_admin = auth_app_service.login(username, password, enforce_mfa=False)
                 user_role = str((local_admin.get("user") or {}).get("role") or "")
                 if local_admin.get("success") and user_role == "admin":
                     session_id = local_admin.get("session_id")
@@ -410,19 +475,17 @@ async def run_market_first_login(
                     }
                     return local_admin, None
             return None, market_auth_error_response(market_result or {})
+        # 账号档位改为登录后由 User.tier 派生（见 finalize_enterprise_login）。
+        # 前端登录入口的 account_kind 仅作 hint：不再因入口与市场身份不匹配而拒绝登录，
+        # 仅记录告警，消除“管理员从企业入口登录被拒”等历史摩擦。
         kind_err = validate_account_kind_for_market(
             account_kind,
             is_enterprise=bool((market_result or {}).get("is_enterprise")),
             is_market_admin=bool((market_result or {}).get("is_market_admin")),
         )
         if kind_err:
-            return None, JSONResponse(
-                {
-                    "success": False,
-                    "message": kind_err,
-                    "error": {"code": "ACCOUNT_KIND_MISMATCH", "message": kind_err},
-                },
-                status_code=_login_client_http_status(403),
+            logger.info(
+                "account_kind hint 与市场身份不一致（已忽略，按 User.tier 派生）：%s", kind_err
             )
         login_username = username or resolve_market_username(market_result or {})
         if not login_username:
@@ -449,7 +512,8 @@ async def run_market_first_login(
                 {"success": False, "error": {"code": "INVALID_INPUT", "message": "密码不能为空"}},
                 status_code=_login_client_http_status(400),
             )
-        result = auth_app_service.login(username, password)
+        # 通用 SKU 本地直登：强制 MFA（用户开启时），透传 TOTP
+        result = auth_app_service.login(username, password, totp_code=totp_code)
         if not result.get("success"):
             return None, JSONResponse(result, status_code=_login_client_http_status(401))
         if market_result is None and login_market_fn:
@@ -466,3 +530,43 @@ async def run_market_first_login(
             sku=sku,
         )
     return result, None
+
+
+async def finalize_auth_after_oidc(
+    *,
+    auth_result: dict[str, Any],
+    oidc_profile: dict[str, Any],
+    oidc_access_token: str = "",
+    account_kind: AccountKind,
+    sku: str,
+) -> dict[str, Any]:
+    """OIDC 本地会话创建后，自动桥接 MODstore JWT 并走统一 finalize。"""
+    from app.fastapi_routes.market_account import login_market_for_oidc_profile
+
+    username = str((auth_result.get("user") or {}).get("username") or "")
+    session_id = auth_result.get("session_id")
+    market_result = await login_market_for_oidc_profile(
+        oidc_profile,
+        oidc_access_token=oidc_access_token,
+    )
+    if sku == "enterprise" and market_result.get("success"):
+        kind_err = validate_account_kind_for_market(
+            account_kind,
+            is_enterprise=bool(market_result.get("is_enterprise")),
+            is_market_admin=bool(market_result.get("is_market_admin")),
+        )
+        if kind_err:
+            market_result = {
+                "success": False,
+                "message": kind_err,
+                "market_base_url": market_result.get("market_base_url"),
+            }
+    return await finalize_enterprise_login(
+        result=auth_result,
+        session_id=str(session_id) if session_id else None,
+        market_result=market_result,
+        account_kind=account_kind,
+        username=username,
+        sku=sku,
+        skip_market_sync=not bool(market_result.get("success")),
+    )

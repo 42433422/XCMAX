@@ -282,7 +282,7 @@ def _parse_order_text(order_text: str) -> dict:
                                 else:
                                     digits = normalize_chinese_digits(token)
                                     quantity = float(digits) if digits else float(token)
-                        except:
+                        except Exception:
                             quantity = 1
 
                         product_name = groups[3].strip() if len(groups) > 3 else "产品"
@@ -317,7 +317,7 @@ def _parse_order_text(order_text: str) -> dict:
                                 return {"success": False, "message": "解析数字失败（型号无法识别）"}
 
                             spec = float(groups[3]) if len(groups) > 3 else 10.0
-                        except:
+                        except Exception:
                             return {"success": False, "message": "解析数字失败"}
 
                         return {

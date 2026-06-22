@@ -12,6 +12,12 @@
 - **feat(api)**：`GET /api/model-payment/plans?budget_range=` 返回试用 + 对应永久套餐
 - **feat(frontend)**：定价页展示 `/永久` 单位并按 `budget_range` 加载套餐
 
+### 账号体系（2026-06-21 · v10 线内迭代）
+
+- **chore(miniprogram)**：移除过期 `XCAGI/miniprogram/` 前端树；`tasks.md` 标记下线；DB ORM 保留作历史表兼容
+- **feat(auth)**：OIDC SSO 回调/Android `oidc/exchange` 经 MODstore `POST /api/auth/internal/sso-issue-token` 自动绑定市场 JWT（`XCAGI_MARKET_INTERNAL_API_KEY`）
+- **docs(auth)**：`AUTH_MARKET_CONTRACT.md` / `ENTERPRISE_IDP_SETUP.md` 同步 SSO 市场桥接说明
+
 ### Windows/macOS 桌面打包统一（2026-06-17 · v10 线内迭代）
 
 - **fix(desktop)**：Electron 后端启动改为统一候选路径 + `electron-backend.log`；迁移流程复用 SKU Edition 环境；Windows 退出使用 `taskkill /T /F` 清理后端子进程

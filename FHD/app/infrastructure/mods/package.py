@@ -291,7 +291,21 @@ class ModPackage:
                 logger.info("MOD signature verified successfully")
                 return True
             else:
-                logger.info("MOD 哈希验证通过（未进行签名验证）")
+                # 未配置公钥 -> 无法做密码学验签。默认保持现状放行（不破坏现有
+                # 安装），但提供运维收紧开关 XCAGI_REQUIRE_SIGNED_MODS：
+                #   未设 / "0" / "false" -> 放行（与历史行为完全一致）
+                #   "1" / "true"        -> fail-closed，拒绝未验签的 MOD
+                require_signed = os.environ.get("XCAGI_REQUIRE_SIGNED_MODS", "0").strip().lower()
+                if require_signed in ("1", "true", "yes", "on"):
+                    raise ModSignatureError(
+                        "XCAGI_REQUIRE_SIGNED_MODS 已启用，但未配置 "
+                        "XCAGI_MOD_PUBLIC_KEY，无法对 MOD 进行签名验证，拒绝安装"
+                    )
+                logger.warning(
+                    "MOD 未经签名验证即放行：仅校验了内容哈希，未配置 "
+                    "XCAGI_MOD_PUBLIC_KEY 做密码学验签。恶意/被篡改的 MOD 可能"
+                    "被安装。如需强制要求验签请设置 XCAGI_REQUIRE_SIGNED_MODS=1。"
+                )
                 return True
 
         except ModSignatureError:

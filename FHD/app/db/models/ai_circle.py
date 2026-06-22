@@ -30,9 +30,7 @@ class AiCirclePost(Base):
 
 class AiCircleReaction(Base):
     __tablename__ = "ai_circle_reactions"
-    __table_args__ = (
-        UniqueConstraint("post_id", "user_id", "kind", name="uq_ai_circle_reaction"),
-    )
+    __table_args__ = (UniqueConstraint("post_id", "user_id", "kind", name="uq_ai_circle_reaction"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     post_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)

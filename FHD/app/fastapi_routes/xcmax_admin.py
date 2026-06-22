@@ -650,17 +650,44 @@ async def admin_set_user_profile(
     user_id: int,
     payload: dict = Body(...),
 ):
-    """设置用户等级与行业（本地 User 表持久化）。
+    """设置用户账号体系字段（本地 User 表持久化）。
 
-    body: {username: str, tier?: str, industry_id?: str}
-    用 username 匹配本地 User 表；不存在则 upsert 最小记录。
+    body: {
+        username: str,
+        tier?: personal|enterprise|admin,
+        industry_id?: str,
+        account_tier?: normal|pro|max|ultra,   # 仅 enterprise 可设
+        budget_range?: str,
+        entitled_industries?: list[str],
+    }
+    校验：account_tier 仅企业可设；industry_id 必须 ∈ entitled_industries（显式提供时）。
     """
+    from app.application.account_tier_derivation import (
+        VALID_ACCOUNT_TIERS,
+        normalize_account_tier,
+        should_have_account_tier,
+    )
+    from app.application.entitled_industries_init import (
+        merge_entitled_industries,
+        validate_industry_in_entitled,
+    )
+
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
     username = str(payload.get("username") or "").strip()
     tier = str(payload.get("tier") or "").strip()
     industry_id = str(payload.get("industry_id") or "").strip()
+    account_tier = str(payload.get("account_tier") or "").strip()
+    budget_range = str(payload.get("budget_range") or "").strip()
+    entitled_raw = payload.get("entitled_industries")
+    entitled_provided = isinstance(entitled_raw, list)
+    entitled_in = (
+        merge_entitled_industries([str(x or "").strip() for x in entitled_raw], [])
+        if entitled_provided
+        else None
+    )
+
     if not username:
         return JSONResponse({"success": False, "message": "username 必填"}, status_code=422)
     if tier and tier not in _VALID_TIERS:
@@ -668,6 +695,17 @@ async def admin_set_user_profile(
             {"success": False, "message": f"tier 必须是 {sorted(_VALID_TIERS)} 之一"},
             status_code=422,
         )
+    norm_account_tier = None
+    if account_tier:
+        norm_account_tier = normalize_account_tier(account_tier)
+        if norm_account_tier is None:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": f"account_tier 必须是 {sorted(VALID_ACCOUNT_TIERS)} 之一",
+                },
+                status_code=422,
+            )
     try:
         from app.db.models.user import User
         from app.db.session import get_db
@@ -678,12 +716,57 @@ async def admin_set_user_profile(
                 user = User(username=username, password="", role="user")
                 db.add(user)
                 db.flush()
+
+            final_tier = (
+                (tier or str(getattr(user, "tier", "") or "") or "personal").strip().lower()
+            )
+            # account_tier 仅企业可设
+            if norm_account_tier is not None and not should_have_account_tier(final_tier):
+                return JSONResponse(
+                    {"success": False, "message": "账号等级（account_tier）仅企业用户可设置"},
+                    status_code=422,
+                )
+
+            # 计算最终 entitled 集合 + industry_id 校验
+            current_entitled = list(getattr(user, "entitled_industries", None) or [])
+            final_entitled = entitled_in if entitled_in is not None else current_entitled
+            if industry_id:
+                if entitled_provided:
+                    if not validate_industry_in_entitled(industry_id, final_entitled):
+                        return JSONResponse(
+                            {
+                                "success": False,
+                                "message": "industry_id 必须在 entitled_industries 内",
+                            },
+                            status_code=422,
+                        )
+                else:
+                    final_entitled = merge_entitled_industries(
+                        final_entitled or ["通用"], [industry_id]
+                    )
+
             if tier:
                 user.tier = tier
             if industry_id:
                 user.industry_id = industry_id
+            if budget_range:
+                user.budget_range = budget_range
+            if norm_account_tier is not None:
+                user.account_tier = norm_account_tier
+            elif not should_have_account_tier(final_tier):
+                user.account_tier = None
+            if entitled_in is not None or industry_id:
+                user.entitled_industries = final_entitled
+
             db.commit()
-            result = {"username": username, "tier": user.tier, "industry_id": user.industry_id}
+            result = {
+                "username": username,
+                "tier": user.tier,
+                "industry_id": user.industry_id,
+                "account_tier": user.account_tier,
+                "budget_range": user.budget_range,
+                "entitled_industries": list(getattr(user, "entitled_industries", None) or []),
+            }
         return {"success": True, "data": result}
     except RECOVERABLE_ERRORS as exc:
         logger.warning("设置用户 profile 失败: %s", exc)
@@ -692,7 +775,7 @@ async def admin_set_user_profile(
 
 @router.get("/admin/users/profiles", response_model=None)
 async def admin_list_user_profiles(request: Request):
-    """返回本地所有用户的 tier/industry_id 映射（按 username 索引）。
+    """返回本地所有用户的账号体系字段映射（按 username 索引）。
 
     前端拿到远端用户列表后，调此端点合并本地 profile。
     """
@@ -704,8 +787,24 @@ async def admin_list_user_profiles(request: Request):
         from app.db.session import get_db
 
         with get_db() as db:
-            rows = db.query(User.username, User.tier, User.industry_id).all()
-        data = {r[0]: {"tier": r[1], "industry_id": r[2]} for r in rows}
+            rows = db.query(
+                User.username,
+                User.tier,
+                User.industry_id,
+                User.account_tier,
+                User.budget_range,
+                User.entitled_industries,
+            ).all()
+        data = {
+            r[0]: {
+                "tier": r[1],
+                "industry_id": r[2],
+                "account_tier": r[3],
+                "budget_range": r[4],
+                "entitled_industries": list(r[5] or []),
+            }
+            for r in rows
+        }
         return {"success": True, "data": data}
     except RECOVERABLE_ERRORS as exc:
         logger.warning("读取用户 profile 列表失败: %s", exc)
