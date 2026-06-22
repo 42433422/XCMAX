@@ -65,6 +65,9 @@ def _build_industry_response(industry_id: str, profile: Any) -> dict[str, Any]:
             "product_fields": profile.product_fields,
             "order_types": profile.order_types,
             "print_config": profile.print_config,
+            # 行业感知子系统 schema（菜单键→label/visible/entity/fields/rules）；
+            # 前端 useIndustryFieldSchema(menuKey) 消费。缺省空 dict，向后兼容。
+            "subsystems": getattr(profile, "subsystems", {}) or {},
         },
     }
 

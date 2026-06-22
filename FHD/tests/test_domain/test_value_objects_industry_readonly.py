@@ -130,7 +130,7 @@ class TestOnDemandLoading:
             assert fields == {"primary_field": "pieces", "secondary_field": "cartons"}
 
     def test_get_current_industry_config_fallback_on_error(self):
-        """industry_config 异常时回退到内置涂料默认单位。"""
+        """行业档案加载异常时回退到内置默认单位（get_industry_profile 抛错路径）。"""
         with (
             patch(
                 "app.infrastructure.request_context.get_current_request",
@@ -138,6 +138,10 @@ class TestOnDemandLoading:
             ),
             patch(
                 "resources.config.industry_config.get_current_industry",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                "resources.config.industry_config.get_industry_profile",
                 side_effect=RuntimeError("boom"),
             ),
         ):

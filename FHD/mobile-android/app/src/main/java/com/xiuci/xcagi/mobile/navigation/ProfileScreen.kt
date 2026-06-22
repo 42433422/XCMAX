@@ -435,7 +435,7 @@ private fun WalletBalanceCard(
                 androidx.compose.ui.graphics.Brush.linearGradient(
                     listOf(
                         XcagiTheme.extra.brandBlue,
-                        androidx.compose.ui.graphics.Color(0xFF5B8DEF),
+                        XcagiTheme.extra.brandBlueGradientEnd,
                     )
                 )
             )

@@ -2,7 +2,7 @@
   <div class="page-view" id="view-orders">
     <div class="page-content">
       <div class="page-header">
-        <h2>出货单记录</h2>
+        <h2>{{ ordersTitle }}</h2>
         <div style="display: flex; gap: 10px;">
           <button class="btn btn-primary" @click="goCreateOrder">+ 新建订单</button>
           <button class="btn btn-danger" @click="handleClearAll" :disabled="store.loading">清空全部</button>
@@ -60,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrdersStore } from '@/stores/orders';
 import { pushErpPage } from '@/utils/erpPagePaths';
@@ -68,10 +68,16 @@ import { storeToRefs } from 'pinia';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog';
+import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema';
 
 const router = useRouter();
 const store = useOrdersStore();
 const { orders } = storeToRefs(store);
+
+// 行业感知：订单标题与「客户」列随行业变（发货单/考勤单、客户/部门），取代硬编码
+const ordersSchema = useIndustryFieldSchema('orders');
+const customerSchema = useIndustryFieldSchema('customers');
+const ordersTitle = computed(() => `${ordersSchema.label.value || '出货单'}记录`);
 
 function goCreateOrder() {
   pushErpPage(router, '/orders/create');
@@ -80,13 +86,13 @@ function goCreateOrder() {
 const searchQuery = ref('');
 const showClearConfirm = ref(false);
 
-const columns = [
+const columns = computed(() => [
   { key: 'order_number', label: '单号' },
-  { key: 'customer_name', label: '客户' },
+  { key: 'customer_name', label: customerSchema.entity.value || '客户' },
   { key: 'date', label: '日期' },
   { key: 'total_amount', label: '金额' },
   { key: 'status', label: '状态' }
-];
+]);
 
 function formatAmount(value) {
   const n = Number(value || 0);

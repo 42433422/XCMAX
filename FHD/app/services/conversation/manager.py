@@ -371,10 +371,35 @@ class _InMemoryPersonaRepository:
         return self._events.get(user_id, [])[-limit:]
 
 
+def _build_persona_repository():
+    """构造持久化 persona 仓储（Redis 热缓存 + DB 冷存储）。
+
+    PersonaRepositoryImpl 内部已对 Redis/DB 不可用做优雅降级；仅当构造本身失败时
+    才回退纯内存仓储，确保对话流人格永不因持久化层缺失而中断。
+    """
+    try:
+        from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
+
+        return PersonaRepositoryImpl()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Persona 持久化仓储不可用，降级内存仓储: %s", exc)
+        return _InMemoryPersonaRepository()
+
+
 def _create_persona_service():
-    """创建 PersonaService 实例（内存 repo，无需 DB/Redis）。"""
+    """创建 PersonaService 实例（持久化仓储 + L1/L2/L3 三层推断）。
+
+    - 持久化：PersonaRepositoryImpl（Redis-first + DB），画像跨重启存活。
+    - L1：RuleInferencer（同步实时）。
+    - L2：EmbeddingInferencer；未配置 XCAGI_EMBEDDING_API_KEY 时返回中性值自动待命。
+    - L3：LlmInferencer，复用主对话 LLM 客户端（PersonaLlmClient 适配器）。
+    """
+    from app.infrastructure.persona.embedding_client import EmbeddingClient
+    from app.infrastructure.persona.llm_client_adapter import PersonaLlmClient
     from app.services.persona.axes_fuser import AxesFuser
+    from app.services.persona.embedding_inferencer import EmbeddingInferencer
     from app.services.persona.identity_resolver import IdentityResolver
+    from app.services.persona.llm_inferencer import LlmInferencer
     from app.services.persona.param_mapper import PersonaParamMapper
     from app.services.persona.persona_service import PersonaService
     from app.services.persona.prompt_builder import PersonaPromptBuilder
@@ -383,10 +408,10 @@ def _create_persona_service():
 
     identity_resolver = IdentityResolver()
     return PersonaService(
-        repo=_InMemoryPersonaRepository(),
+        repo=_build_persona_repository(),
         rule_inferencer=RuleInferencer(),
-        embedding_inferencer=None,
-        llm_inferencer=None,
+        embedding_inferencer=EmbeddingInferencer(EmbeddingClient()),
+        llm_inferencer=LlmInferencer(PersonaLlmClient()),
         axes_fuser=AxesFuser(),
         rapport_calculator=RapportCalculator(),
         identity_resolver=identity_resolver,

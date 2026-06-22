@@ -5,6 +5,10 @@ import { clearAutoLoginPreference } from '@/utils/loginPreferences';
 import type { ApiResponse } from '@/types/api';
 
 export type AccountKind = 'personal' | 'enterprise' | 'admin';
+// 账号体系：等级（仅企业有意义）/ 预算区间 / 修茈市场会员等级
+export type AccountTier = 'normal' | 'pro' | 'max' | 'ultra';
+export type BudgetRange = '5 万以内' | '5–20 万' | '20–50 万' | '50 万以上';
+export type MarketMembershipTier = string; // free | vip | vip_plus | svip1..svip8
 
 export interface LoginRequest {
   username: string;
@@ -44,6 +48,9 @@ export interface RegisterRequest {
   email?: string;
   verification_code?: string;
   display_name?: string;
+  // 账号体系：预算区间（→ account_tier 派生）与行业
+  budget_range?: string;
+  industry_id?: string;
 }
 
 async function invalidateSessionScopedUiCaches(): Promise<void> {

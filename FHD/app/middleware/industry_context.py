@@ -59,6 +59,17 @@ def _resolve_industry_id(user: Any | None) -> str:
         return DEFAULT_INDUSTRY
 
 
+def _resolve_tenant_id(user: Any | None) -> int | None:
+    """从已解析用户派生租户 id（业务数据隔离作用域；零额外查询）。"""
+    if user is None:
+        return None
+    try:
+        tid = getattr(user, "tenant_id", None)
+        return int(tid) if tid is not None else None
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 class IndustryContextMiddleware(BaseHTTPMiddleware):
     """每请求注入 ``request.state.industry_id`` 并设置请求 ContextVar。"""
 
@@ -72,9 +83,12 @@ class IndustryContextMiddleware(BaseHTTPMiddleware):
             try:
                 user = get_current_user(request)
                 industry_id = _resolve_industry_id(user)
+                tenant_id = _resolve_tenant_id(user)
             except RECOVERABLE_ERRORS:
                 industry_id = DEFAULT_INDUSTRY
+                tenant_id = None
             request.state.industry_id = industry_id
+            request.state.tenant_id = tenant_id
             return await call_next(request)
         finally:
             reset_current_request(token)

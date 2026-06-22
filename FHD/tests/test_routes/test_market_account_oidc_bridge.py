@@ -19,9 +19,9 @@ async def test_login_market_for_oidc_profile_uses_internal_bridge(monkeypatch):
         "_proxy_json",
         new=AsyncMock(
             side_effect=[
-                # 1) IdP bearer 探测：GET /api/auth/me（Bearer oidc-bearer）→ 失败，转内部桥接
+                # 1) 用 OIDC bearer 探测 /api/auth/me（本测试令其失败，回落到内部桥接）
                 {"__proxy_error__": True, "status_code": 401, "payload": {}},
-                # 2) 内部桥接签发：POST /api/auth/internal/sso-issue-token → 返回市场 JWT
+                # 2) POST /api/auth/internal/sso-issue-token 返回市场 token
                 {
                     "success": True,
                     "data": {
@@ -30,12 +30,8 @@ async def test_login_market_for_oidc_profile_uses_internal_bridge(monkeypatch):
                         "user": {"id": 1, "username": "sso-user", "is_enterprise": True},
                     },
                 },
-                # 3) _normalize_market_auth_payload 内部用市场 JWT 拉取身份：
-                #    GET /api/auth/me（Bearer market-jwt）
-                {
-                    "success": True,
-                    "user": {"id": 1, "username": "sso-user", "is_enterprise": True},
-                },
+                # 3) _normalize_market_auth_payload 用市场 token 再查一次 /api/auth/me 取身份
+                {"id": 1, "username": "sso-user", "is_enterprise": True},
             ]
         ),
     ) as proxy_mock:

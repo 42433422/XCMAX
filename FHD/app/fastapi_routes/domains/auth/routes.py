@@ -78,6 +78,25 @@ def _session_meta_for_response(request: Request, user=None) -> dict[str, Any]:
     return meta if meta else {}
 
 
+def _account_profile_fields(user: Any, session_meta: dict[str, Any]) -> dict[str, Any]:
+    """账号体系真相源字段（暴露给前端只读展示）：tier / account_tier / budget_range /
+    entitled_industries / market_membership_tier。account_tier 经派生（非企业为 None）。"""
+    from app.application.account_tier_derivation import resolve_account_tier_for_user
+
+    tier = str(getattr(user, "tier", "") or "") if user is not None else ""
+    return {
+        "tier": tier or None,
+        "account_tier": resolve_account_tier_for_user(tier, getattr(user, "account_tier", None)),
+        "budget_range": getattr(user, "budget_range", None) if user is not None else None,
+        "entitled_industries": list(getattr(user, "entitled_industries", None) or []),
+        "market_membership_tier": session_meta.get("market_membership_tier"),
+        "email_verified": bool(getattr(user, "email_verified", False))
+        if user is not None
+        else False,
+        "mfa_enabled": bool(getattr(user, "mfa_enabled", False)) if user is not None else False,
+    }
+
+
 @router.get("/api/auth/me")
 def auth_me(request: Request):
     from app.application.auth_app_service import get_auth_app_service
@@ -115,8 +134,95 @@ def auth_me(request: Request):
             or "",
             "impersonating_market_user_id": session_meta.get("impersonating_market_user_id"),
             "impersonating_username": session_meta.get("impersonating_username") or "",
+            **_account_profile_fields(user, session_meta),
         },
     }
+
+
+@router.post("/api/auth/mfa/setup")
+def auth_mfa_setup(request: Request):
+    """生成 TOTP 密钥（待验证；mfa_enabled 在 /enable 校验通过后才置 True）。"""
+    user = resolve_session_user(request)
+    if not user:
+        return JSONResponse(error_envelope(UNAUTHORIZED, "请先登录"), status_code=200)
+    from app.application.account_security import generate_totp_secret, provisioning_uri
+    from app.db.models.user import User
+    from app.db.session import get_db
+
+    secret = generate_totp_secret()
+    with get_db() as db:
+        u = db.get(User, int(user.id))
+        if u is None:
+            return JSONResponse(error_envelope(UNAUTHORIZED, "用户不存在"), status_code=200)
+        u.totp_secret = secret
+        db.commit()
+        username = u.username
+    return {
+        "success": True,
+        "data": {"secret": secret, "otpauth_uri": provisioning_uri(secret, username)},
+    }
+
+
+@router.post("/api/auth/mfa/enable")
+def auth_mfa_enable(request: Request, body: dict = Body(default_factory=dict)):
+    """校验 TOTP 后开启 MFA。"""
+    user = resolve_session_user(request)
+    if not user:
+        return JSONResponse(error_envelope(UNAUTHORIZED, "请先登录"), status_code=200)
+    code = str(body.get("code") or body.get("totp_code") or "").strip()
+    from app.application.account_security import verify_totp
+    from app.db.models.user import User
+    from app.db.session import get_db
+
+    with get_db() as db:
+        u = db.get(User, int(user.id))
+        if u is None or not (u.totp_secret or ""):
+            return JSONResponse(
+                error_envelope(INVALID_INPUT, "请先调用 /api/auth/mfa/setup 生成密钥"),
+                status_code=400,
+            )
+        if not verify_totp(u.totp_secret, code):
+            return JSONResponse(error_envelope(INVALID_INPUT, "动态验证码错误"), status_code=400)
+        u.mfa_enabled = True
+        db.commit()
+    return {"success": True, "message": "MFA 已开启"}
+
+
+@router.post("/api/auth/mfa/disable")
+def auth_mfa_disable(request: Request, body: dict = Body(default_factory=dict)):
+    """关闭 MFA（已开启时需校验当前 TOTP）。"""
+    user = resolve_session_user(request)
+    if not user:
+        return JSONResponse(error_envelope(UNAUTHORIZED, "请先登录"), status_code=200)
+    code = str(body.get("code") or body.get("totp_code") or "").strip()
+    from app.application.account_security import verify_totp
+    from app.db.models.user import User
+    from app.db.session import get_db
+
+    with get_db() as db:
+        u = db.get(User, int(user.id))
+        if u is None:
+            return JSONResponse(error_envelope(UNAUTHORIZED, "用户不存在"), status_code=200)
+        if u.mfa_enabled and not verify_totp(u.totp_secret or "", code):
+            return JSONResponse(error_envelope(INVALID_INPUT, "动态验证码错误"), status_code=400)
+        u.mfa_enabled = False
+        u.totp_secret = None
+        db.commit()
+    return {"success": True, "message": "MFA 已关闭"}
+
+
+@router.post("/api/auth/token/refresh")
+def auth_token_refresh(body: dict = Body(default_factory=dict)):
+    """无状态 JWT：用 refresh token 轮转出新的 access/refresh（一次性使用）。"""
+    from app.security.web_jwt import refresh_web_access_token
+
+    rt = str(body.get("refresh_token") or "").strip()
+    tokens = refresh_web_access_token(rt)
+    if not tokens:
+        return JSONResponse(
+            error_envelope(INVALID_INPUT, "refresh token 无效或已使用"), status_code=401
+        )
+    return {"success": True, "data": tokens}
 
 
 @router.get("/api/auth/session/validate")
@@ -194,6 +300,7 @@ async def auth_session_validate(request: Request):
         payload["tenant_name"] = session_meta.get("tenant_name")
         payload["impersonating_market_user_id"] = session_meta.get("impersonating_market_user_id")
         payload["impersonating_username"] = session_meta.get("impersonating_username")
+        payload.update(_account_profile_fields(user, session_meta))
     return payload
 
 
@@ -484,6 +591,9 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
     password = body.get("password", "")
     email = (body.get("email") or "").strip()
     verification_code = str(body.get("verification_code") or body.get("code") or "").strip()
+    # 账号体系：行业 + 预算区间（预算 → account_tier 自动派生）
+    industry_id = (body.get("industry_id") or "").strip()
+    budget_range = (body.get("budget_range") or "").strip()
 
     if not username or not password:
         return JSONResponse(
@@ -596,6 +706,16 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
             company_brand=email or username,
         )
 
+    # 单一真相源 + 自动派生：写入 tier/industry_id/budget_range/account_tier/entitled_industries
+    from app.application.account_registration import apply_account_profile_on_register
+
+    apply_account_profile_on_register(
+        username,
+        tier="enterprise" if sku == "enterprise" else "personal",
+        industry_id=industry_id,
+        budget_range=budget_range,
+    )
+
     payload = {"success": True, **result}
     return _attach_session_cookie(JSONResponse(payload), result.get("session_id"))
 
@@ -640,12 +760,27 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
         jit_create_fn=_jit_create_local_user_for_enterprise,
         market_user_email_from_raw=_market_user_email_from_raw,
         login_market_fn=login_market_with_password,
+        totp_code=str(body.get("totp_code") or "").strip() or None,
     )
     if err:
         auth_login_duration_seconds.labels(auth_method="password").observe(
             time.perf_counter() - login_start
         )
         return err
+    # 增量无状态 JWT：附带签发 web token（前端/API 客户端可选用；不影响 session cookie）
+    if result and result.get("success"):
+        _u = result.get("user") or {}
+        if _u.get("id") is not None:
+            try:
+                from app.security.web_jwt import issue_web_tokens
+
+                result["web_tokens"] = issue_web_tokens(
+                    user_id=int(_u["id"]),
+                    username=str(_u.get("username") or ""),
+                    account_kind=str(result.get("account_kind") or "enterprise"),
+                )
+            except INFRA_TRANSIENT:
+                logger.exception("issue web tokens failed")
     resp = _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
     auth_login_duration_seconds.labels(auth_method="password").observe(
         time.perf_counter() - login_start
