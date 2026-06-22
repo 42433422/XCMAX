@@ -143,6 +143,8 @@
 - 14 个**预存测试失败**（`TestSetIndustryEndpoint` 401，`require_admin_user` 拒测试客户端）——经 HEAD 基线对照确认非本批次回归，但应修。
 - `ruff check` 仅在 `app/` 已清零；`scripts/`、`XCAGI/`、`MODstore/` 等扫描范围未审。
 - 全量 `mypy app/` 实测 1671 errors（文档曾称"绿"，已在 §5 C1 纠正口径）。
+- **layer-ratchet 已 `--force` 放宽至 services=125 / routes→services=29**（原基线 12/29 的 12 系很久前快照，仓库实际已累积到 29）。这是为让 backend-smoke 转绿的**记账式放宽，非真清偿**。🔭 **计划重构（大）**：把 17 个 route 文件（im_routes/inventory/materials/purchase/shipment_orders/knowledge_v1/print_routes/xcagi_compat_product 等，多为预存）的 `app.services.*` 直连下沉到 `app.application` 层 facade，逐文件验证后用 `--update-baseline`（**只减**）把基线压回。属独立架构批次，高回归风险，须单独 PR + 评审。
+- arch_fitness_baseline 同理已纳入 21 项预存/分支既有违规（含 WIP `value_objects_industry` domain→infra），其中 domain→infra 应在 DDD 批次（§6）真清偿。
 
 ---
 
