@@ -1,3 +1,0 @@
-const api = require('../../../api/index')
-const { formatShortDate } = require('../../../utils/util')
-Page({data:{messages:[],loading:true},onShow(){this.load()},async load(){try{const r=await api.getMessageList();if(r.success){const msgs=(r.data.items||[]).map(m=>({...m,created_at:formatShortDate(m.created_at)}));this.setData({messages:msgs,loading:false})}else this.setData({loading:false})}catch(e){this.setData({loading:false})}},async readMsg(e){try{await api.readMessage(e.currentTarget.dataset.id);this.load()}catch(e){}},async readAll(){try{await api.readAllMessages();this.load();wx.showToast({title:'已全部标记为已读'})}catch(e){}}})

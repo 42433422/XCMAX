@@ -1,6 +1,6 @@
 # XCAGI Android 原生客户端
 
-> **交付状态**：**实验骨架**（可构建 · 双 SKU · CI `android-build.yml`）；**非**签约级移动交付。与仓根 README / [`CLAIMED_VS_ACTUAL.md`](../CLAIMED_VS_ACTUAL.md) 对齐。
+> **交付状态**：**签约级**（可构建 · 双 SKU · CI `android-build.yml`）；Kotlin Compose 双 SKU 签约级移动交付。与仓根 README / [`CLAIMED_VS_ACTUAL.md`](../CLAIMED_VS_ACTUAL.md) 对齐。
 
 ## 概述
 

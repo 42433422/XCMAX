@@ -1,9 +1,0 @@
-<view class="page">
-  <view class="msg-item card" wx:for="{{messages}}" wx:key="id" bindtap="readMsg" data-id="{{item.id}}">
-    <view class="msg-header"><text class="{{!item.is_read ? 'dot' : ''}}"></text><text class="type-tag {{item.type}}">{{item.type === 'order' ? '订单' : item.type === 'system' ? '系统' : '活动'}}</text><text class="time">{{item.created_at}}</text></view>
-    <text class="title">{{item.title}}</text>
-    <text class="content">{{item.content}}</text>
-  </view>
-  <view class="empty" wx:if="{{!loading&&!messages.length}}"><text>暂无消息</text></view>
-  <button bindtap="readAll" wx:if="{{messages.length}}">全部已读</button>
-</view>

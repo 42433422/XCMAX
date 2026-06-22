@@ -677,10 +677,9 @@ async function confirmIndustryAndNext() {
       /* 离线仍允许继续 */
     }
   }
-  const id = pickedIndustryId.value
-  if (industryStore.isLoaded && id !== industryStore.currentIndustryId) {
-    await industryStore.switchIndustry(id)
-  }
+  // 行业现在由后端 SSOT 决定（industryStore.switchIndustry 已删除）：
+  // 这里只确认用户选择的行业（pickedIndustryId），用于后续 host-pack 步骤
+  // 拉取对应行业的基础线与安装行业包；后端会在行业包装载后自动同步当前行业。
   goStep('host-pack')
 }
 

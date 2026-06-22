@@ -71,6 +71,30 @@ class CodexSuperEmployeeMobileMessageBody(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
+class ClaudeSuperEmployeeMobileMessageBody(BaseModel):
+    message: str = Field(default="", max_length=4000)
+    body: str = Field(default="", max_length=4000)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class AiGroupCreateBody(BaseModel):
+    name: str = Field(default="", max_length=60)
+
+
+class AiGroupMemberBody(BaseModel):
+    employee_id: str = Field(default="", max_length=120)
+    mod_id: str = Field(default="", max_length=120)
+    name: str = Field(default="", max_length=60)
+    avatar: str = Field(default="", max_length=1024)
+    summary: str = Field(default="", max_length=280)
+
+
+class AiGroupMessageBody(BaseModel):
+    message: str = Field(default="", max_length=4000)
+    sender_name: str = Field(default="我", max_length=60)
+    mentions: list[str] = Field(default_factory=list)
+
+
 class MobileServiceBridgeRespondBody(BaseModel):
     response: str
     responded_by: str | None = None

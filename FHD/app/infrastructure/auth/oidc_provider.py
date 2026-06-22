@@ -120,7 +120,8 @@ async def _build_authorize_url_async(*, state: str) -> str:
     return f"{auth_ep}?{q}"
 
 
-async def exchange_code_for_userinfo(code: str) -> dict[str, Any]:
+async def exchange_oidc_authorization(code: str) -> dict[str, Any]:
+    """换 OIDC code → userinfo + access/refresh token（供市场 SSO 桥接）。"""
     disc = await _discovery()
     token_ep = str(disc.get("token_endpoint") or "").strip()
     if not token_ep:
@@ -150,5 +151,16 @@ async def exchange_code_for_userinfo(code: str) -> dict[str, Any]:
         ui_res.raise_for_status()
         profile = ui_res.json()
     if not isinstance(profile, dict):
-        return {}
-    return profile
+        profile = {}
+    return {
+        "profile": profile,
+        "access_token": access,
+        "refresh_token": str(tokens.get("refresh_token") or "").strip(),
+        "id_token": str(tokens.get("id_token") or "").strip(),
+    }
+
+
+async def exchange_code_for_userinfo(code: str) -> dict[str, Any]:
+    session = await exchange_oidc_authorization(code)
+    profile = session.get("profile")
+    return profile if isinstance(profile, dict) else {}

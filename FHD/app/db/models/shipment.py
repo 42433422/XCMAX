@@ -8,13 +8,13 @@ from sqlalchemy import DateTime, Float, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.db.base import Base
-from app.db.mixins import IntegerPrimaryKeyMixin, TimestampMixin
+from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.infrastructure.database.fk_validation import ForeignKeyValidator
 
 
-class ShipmentRecord(IntegerPrimaryKeyMixin, TimestampMixin, Base):
+class ShipmentRecord(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "shipment_records"
     purchase_unit: Mapped[str] = mapped_column(String, nullable=False)
     unit_id: Mapped[Optional[int]] = mapped_column(Integer)

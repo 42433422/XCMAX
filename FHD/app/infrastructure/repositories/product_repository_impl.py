@@ -11,6 +11,7 @@ from app.domain.product.entities import Product
 from app.infrastructure.mappers.product_mapper import product_to_db, product_to_domain
 from app.infrastructure.persistence.product_repository_impl import TRIVIAL_MEASURE_UNITS
 from app.infrastructure.repositories.product_repository import ProductRepository
+from app.infrastructure.tenant_scope import apply_tenant_filter, tenant_id_for_write
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,11 @@ class SQLAlchemyProductRepository(ProductRepository):
     def save(self, product: Product) -> Product:
         with get_db() as db:
             if product.id:
-                existing = db.query(ProductModel).filter(ProductModel.id == product.id).first()
+                existing = (
+                    apply_tenant_filter(db.query(ProductModel), ProductModel)
+                    .filter(ProductModel.id == product.id)
+                    .first()
+                )
                 if existing:
                     for key, value in self._to_db_model(product).items():
                         setattr(existing, key, value)
@@ -38,6 +43,8 @@ class SQLAlchemyProductRepository(ProductRepository):
                     return self._to_domain(existing)
 
             db_model = ProductModel(**self._to_db_model(product))
+            if getattr(db_model, "tenant_id", None) is None:
+                db_model.tenant_id = tenant_id_for_write()
             db.add(db_model)
             db.commit()
             db.refresh(db_model)
@@ -48,13 +55,17 @@ class SQLAlchemyProductRepository(ProductRepository):
 
     def find_by_id(self, product_id: int) -> Product | None:
         with get_db() as db:
-            model = db.query(ProductModel).filter(ProductModel.id == product_id).first()
+            model = (
+                apply_tenant_filter(db.query(ProductModel), ProductModel)
+                .filter(ProductModel.id == product_id)
+                .first()
+            )
             return self._to_domain(model) if model else None
 
     def find_all(self, page: int = 1, per_page: int = 20, **kwargs) -> tuple:
         with get_db() as db:
             offset = (page - 1) * per_page
-            query = db.query(ProductModel)
+            query = apply_tenant_filter(db.query(ProductModel), ProductModel)
 
             unit_name = kwargs.get("unit_name")
             if unit_name:
@@ -129,7 +140,7 @@ class SQLAlchemyProductRepository(ProductRepository):
         """快速查询，返回字典列表（避免 Domain 对象转换开销）"""
         with get_db() as db:
             offset = (page - 1) * per_page
-            query = db.query(ProductModel)
+            query = apply_tenant_filter(db.query(ProductModel), ProductModel)
 
             unit_name = kwargs.get("unit_name")
             if unit_name:
@@ -220,17 +231,29 @@ class SQLAlchemyProductRepository(ProductRepository):
 
     def find_by_model_number(self, model_number: str) -> Product | None:
         with get_db() as db:
-            model = db.query(ProductModel).filter(ProductModel.model_number == model_number).first()
+            model = (
+                apply_tenant_filter(db.query(ProductModel), ProductModel)
+                .filter(ProductModel.model_number == model_number)
+                .first()
+            )
             return self._to_domain(model) if model else None
 
     def find_by_name(self, name: str) -> list[Product]:
         with get_db() as db:
-            models = db.query(ProductModel).filter(ProductModel.name.like(f"%{name}%")).all()
+            models = (
+                apply_tenant_filter(db.query(ProductModel), ProductModel)
+                .filter(ProductModel.name.like(f"%{name}%"))
+                .all()
+            )
             return [self._to_domain(m) for m in models]
 
     def delete(self, product_id: int) -> bool:
         with get_db() as db:
-            model = db.query(ProductModel).filter(ProductModel.id == product_id).first()
+            model = (
+                apply_tenant_filter(db.query(ProductModel), ProductModel)
+                .filter(ProductModel.id == product_id)
+                .first()
+            )
             if model:
                 db.delete(model)
                 db.commit()
@@ -239,7 +262,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
     def count(self) -> int:
         with get_db() as db:
-            return cast("int", db.query(ProductModel).count())
+            return cast("int", apply_tenant_filter(db.query(ProductModel), ProductModel).count())
 
     def find_product_units(self) -> list[str]:
         """与 persistence.SQLAlchemyProductRepository.find_product_units 行为对齐。"""

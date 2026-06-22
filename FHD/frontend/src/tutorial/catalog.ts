@@ -32,7 +32,7 @@ export function getTrackLabel(trackId: string | null | undefined, ctx: TutorialB
   return hit?.title || trackId
 }
 
-export function formatAdvancedTrackHint(visibleNames: string[], max = 5): string {
+export function formatAdvancedTrackHint(visibleNames: string[], _max = 5): string {
   if (!visibleNames.length) return '按侧栏生成步骤。'
   return `含 ${visibleNames.length} 个菜单项。`
 }

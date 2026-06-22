@@ -27,3 +27,14 @@ class TimestampMixin:
 
 class SoftDeleteMixin:
     is_deleted: Mapped[bool] = mapped_column(default=False)
+
+
+class TenantScopedMixin:
+    """业务数据多租户隔离作用域列。
+
+    仅业务模型继承；``User`` / ``Session`` / ``Tenant`` / RBAC 等**不**继承，
+    故全局租户过滤（app/db/tenant_filter.py）永不波及登录与会话校验。
+    nullable：存量未打标数据为 NULL，配合 NULL 容忍过滤不被隐藏。
+    """
+
+    tenant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)

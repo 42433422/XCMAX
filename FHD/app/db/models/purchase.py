@@ -8,9 +8,10 @@ from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Tex
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class Supplier(Base):
+class Supplier(TenantScopedMixin, Base):
     __tablename__ = "suppliers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -33,7 +34,7 @@ class Supplier(Base):
     )
 
 
-class PurchaseOrder(Base):
+class PurchaseOrder(TenantScopedMixin, Base):
     __tablename__ = "purchase_orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -60,7 +61,7 @@ class PurchaseOrder(Base):
     warehouse: Mapped[Optional[Warehouse]] = relationship("Warehouse")
 
 
-class PurchaseOrderItem(Base):
+class PurchaseOrderItem(TenantScopedMixin, Base):
     __tablename__ = "purchase_order_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -84,7 +85,7 @@ class PurchaseOrderItem(Base):
     product: Mapped[Optional[Product]] = relationship("Product")
 
 
-class PurchaseInbound(Base):
+class PurchaseInbound(TenantScopedMixin, Base):
     __tablename__ = "purchase_inbounds"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -108,7 +109,7 @@ class PurchaseInbound(Base):
     )
 
 
-class PurchaseInboundItem(Base):
+class PurchaseInboundItem(TenantScopedMixin, Base):
     __tablename__ = "purchase_inbound_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

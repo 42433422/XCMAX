@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -41,8 +42,30 @@ class User(Base):
     tenant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
 
     # 用户等级与行业（管理端可编辑，复用 industryPresets 行业 id）
-    tier: Mapped[str] = mapped_column(String(32), default="personal", nullable=False, comment="用户等级: personal|enterprise|admin")
-    industry_id: Mapped[str] = mapped_column(String(32), default="通用", nullable=False, comment="行业 id，引用 industryPresets")
+    tier: Mapped[str] = mapped_column(
+        String(32),
+        default="personal",
+        nullable=False,
+        comment="用户等级: personal|enterprise|admin",
+    )
+    industry_id: Mapped[str] = mapped_column(
+        String(32), default="通用", nullable=False, comment="行业 id，引用 industryPresets"
+    )
+    # 用户已开通的行业 id 列表（admin 分配；SSOT，前端只读展示）
+    entitled_industries: Mapped[Optional[list]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True, default=list
+    )
+    # 账号等级（普通/Pro/Max/Ultra）：注册时由 budget_range 自动派生；仅 tier=enterprise 有意义，否则 NULL
+    account_tier: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True, comment="账号等级: normal|pro|max|ultra（仅 enterprise）"
+    )
+    # 注册/联系表单填写的预算区间（account_tier 的派生来源）
+    budget_range: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # 安全：登录失败计数与账户锁定
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # 邮箱是否已验证（本地账号；自助验证需 SMTP 配置）
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_user: Mapped[Optional[User]] = relationship(
         "User", remote_side=[id], backref="created_users", foreign_keys=[created_by]
@@ -84,6 +107,8 @@ class Session(Base):
     company_brand: Mapped[Optional[str]] = mapped_column(String(256), nullable=True, default="")
     market_is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     market_is_enterprise: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 修茈市场会员等级（登录时从市场 /api/payment/my-plan 同步）：free|vip|vip_plus|svip1..8
+    market_membership_tier: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     impersonating_market_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     impersonating_username: Mapped[Optional[str]] = mapped_column(
         String(128), nullable=True, default=""

@@ -998,7 +998,10 @@ def test_run_blocked_by_risk_gate_returns_blocked_result() -> None:
     assert out["blocked_by_risk_gate"] is True
     assert out["result"]["summary"] == "blocked by risk middleware"
     assert out["result"]["risk_gate"] == gate
-    mock_record.assert_called_once_with("emp-1", success=False, blocked=True)
+    # 源码记录运行时附带 task/summary（供 AI Circle 活动流），summary 取 gate.reason。
+    mock_record.assert_called_once_with(
+        "emp-1", success=False, blocked=True, task="task", summary="r"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1094,7 +1097,10 @@ def test_run_direct_python_fast_path_success() -> None:
     assert out["pack"]["id"] == "emp-1"
     assert out["source"] == "employee_runtime.local"
     assert out["memory_used"] is False
-    mock_record.assert_called_once_with("emp-1", success=True)
+    # summary 由 _summarize(result) 生成：[handler] output
+    mock_record.assert_called_once_with(
+        "emp-1", success=True, task="task", summary="[direct_python] done"
+    )
     # 验证 direct_only 路径：reasoning 应包含 skipped_cognition
     actions_call = mock_actions.call_args
     reasoning = actions_call.args[1]
@@ -1219,7 +1225,8 @@ def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
     assert out["result"]["outputs"][0]["handler"] == "interactive_chat_fallback"
     assert "变更评审员" in out["result"]["outputs"][0]["output"]
     mock_actions.assert_not_called()
-    mock_record.assert_called_once_with("emp-1", success=True)
+    # interactive_chat fallback 分支仅传 task（无 summary）。
+    mock_record.assert_called_once_with("emp-1", success=True, task="你好")
 
 
 # ---------------------------------------------------------------------------
@@ -1299,7 +1306,9 @@ def test_run_full_success_with_agent_handler() -> None:
     assert out["source"] == "employee_runtime.local"
     mock_build_tools.assert_called_once()
     mock_build_gate.assert_called_once()
-    mock_record.assert_called_once_with("emp-1", success=True)
+    mock_record.assert_called_once_with(
+        "emp-1", success=True, task="task", summary="[agent] agent done"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1375,7 +1384,7 @@ def test_run_handler_fails_publishes_trigger() -> None:
 
         out = agent.run("task", input_data={}, session_id="s1")
     assert out["success"] is False
-    mock_record.assert_called_once_with("emp-1", success=False)
+    mock_record.assert_called_once_with("emp-1", success=False, task="task", summary="[echo] boom")
     mock_publish.assert_called_once()
     call_args = mock_publish.call_args.args
     call_kwargs = mock_publish.call_args.kwargs

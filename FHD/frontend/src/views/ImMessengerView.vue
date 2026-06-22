@@ -152,7 +152,7 @@
                 <dd>{{ systemEntryIdentity(activeSystemEntry) }}</dd>
               </div>
               <div>
-                <dt>{{ isCodexSuperEmployeeEntry(activeSystemEntry) ? '调度' : '联系方式' }}</dt>
+                <dt>{{ isSuperEmployeeEntry(activeSystemEntry) ? '调度' : '联系方式' }}</dt>
                 <dd>{{ systemEntryDispatch(activeSystemEntry) }}</dd>
               </div>
               <div>
@@ -166,7 +166,7 @@
             </dl>
           </div>
           <div
-            v-if="isCodexSuperEmployeeEntry(activeSystemEntry)"
+            v-if="isSuperEmployeeEntry(activeSystemEntry)"
             ref="codexScrollEl"
             class="im-system-call-log"
           >
@@ -214,7 +214,7 @@
           </div>
         </div>
         <form
-          v-if="isCodexSuperEmployeeEntry(activeSystemEntry)"
+          v-if="isSuperEmployeeEntry(activeSystemEntry)"
           class="im-compose im-compose--codex"
           @submit.prevent="onCodexSend"
         >
@@ -223,7 +223,7 @@
             v-model="codexDraft"
             type="text"
             class="im-compose-input"
-            placeholder="向超级员工-Codex派工"
+            :placeholder="`向${activeSystemEntry.display_name}派工`"
             maxlength="4000"
             :disabled="codexBusy"
             @keydown.enter.prevent="onCodexSend"
@@ -377,6 +377,10 @@ import {
   type CodexSuperEmployeeDispatch,
   type CodexSuperEmployeeMessage,
 } from '@/api/codexSuperEmployee';
+import {
+  fetchClaudeSuperEmployeeMessages,
+  sendClaudeSuperEmployeeMessage,
+} from '@/api/claudeSuperEmployee';
 
 type CurrentUserPayload = {
   user?: { id?: number };
@@ -392,6 +396,14 @@ type CodexSuperEmployeeEntry = {
   is_codex_super_employee: true;
 };
 
+type ClaudeSuperEmployeeEntry = {
+  id: 'claude-super-employee';
+  display_name: '超级员工-Claude';
+  username: 'claude-super-employee';
+  subtitle: '全设备协同 · 排比派工';
+  is_claude_super_employee: true;
+};
+
 type DutyEmployeeEntry = {
   id: string;
   display_name: string;
@@ -405,7 +417,7 @@ type DutyEmployeeEntry = {
   is_duty_employee_entry: true;
 };
 
-type SystemEmployeeEntry = CodexSuperEmployeeEntry | DutyEmployeeEntry;
+type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | DutyEmployeeEntry;
 type PinnedImEntry = ImContact | SystemEmployeeEntry;
 type CodexDisplayMessage = CodexSuperEmployeeMessage & {
   streaming?: boolean;
@@ -465,6 +477,14 @@ const CODEX_SUPER_EMPLOYEE_ENTRY: CodexSuperEmployeeEntry = {
   username: 'codex-super-employee',
   subtitle: '全设备协同调度',
   is_codex_super_employee: true,
+};
+
+const CLAUDE_SUPER_EMPLOYEE_ENTRY: ClaudeSuperEmployeeEntry = {
+  id: 'claude-super-employee',
+  display_name: '超级员工-Claude',
+  username: 'claude-super-employee',
+  subtitle: '全设备协同 · 排比派工',
+  is_claude_super_employee: true,
 };
 
 const localUserId = ref<number | null>(null);
@@ -546,6 +566,23 @@ const codexApiScope = computed<CodexSuperEmployeeApiScope>(() =>
   isAdminConsoleSpa() ? 'admin' : 'mobile',
 );
 
+// 当前激活的超级员工是否为 Claude（Codex/Claude 共用同一套合成器与轮询，仅端点不同）。
+const isClaudeActive = computed(() =>
+  Boolean(activeSystemEntry.value && isClaudeSuperEmployeeEntry(activeSystemEntry.value)),
+);
+
+function fetchActiveSuperMessages(): Promise<CodexSuperEmployeeMessage[]> {
+  return isClaudeActive.value
+    ? fetchClaudeSuperEmployeeMessages({ scope: codexApiScope.value })
+    : fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
+}
+
+function sendActiveSuperMessage(message: string, context: Record<string, unknown>) {
+  return isClaudeActive.value
+    ? sendClaudeSuperEmployeeMessage(message, context, { scope: codexApiScope.value })
+    : sendCodexSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
+}
+
 const codexSenderLabel = computed(() =>
   codexApiScope.value === 'mobile' ? '手机端' : '管理端',
 );
@@ -606,7 +643,7 @@ const filteredContacts = computed(() => {
 
 const pinnedContacts = computed<PinnedImEntry[]>(() => {
   if (isAdminCustomerServiceConsole.value) {
-    return [CODEX_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
+    return [CODEX_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
   }
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
 });
@@ -621,18 +658,30 @@ function isCodexSuperEmployeeEntry(entry: PinnedImEntry): entry is CodexSuperEmp
   return 'is_codex_super_employee' in entry && entry.is_codex_super_employee;
 }
 
+function isClaudeSuperEmployeeEntry(entry: PinnedImEntry): entry is ClaudeSuperEmployeeEntry {
+  return 'is_claude_super_employee' in entry && entry.is_claude_super_employee;
+}
+
+/** 超级员工（Codex / Claude）共用同一套合成器、消息管线与轮询。 */
+function isSuperEmployeeEntry(
+  entry: PinnedImEntry | null,
+): entry is CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry {
+  return Boolean(entry && (isCodexSuperEmployeeEntry(entry) || isClaudeSuperEmployeeEntry(entry)));
+}
+
 function isDutyEmployeeEntry(entry: PinnedImEntry | null): entry is DutyEmployeeEntry {
   return Boolean(entry && 'is_duty_employee_entry' in entry && entry.is_duty_employee_entry);
 }
 
 function pinnedEntryPreview(entry: PinnedImEntry): string {
-  if (isCodexSuperEmployeeEntry(entry)) return entry.subtitle;
+  if (isSuperEmployeeEntry(entry)) return entry.subtitle;
   if (isDutyEmployeeEntry(entry)) return entry.subtitle;
   return `@${entry.username}`;
 }
 
 function pinnedAvatarText(entry: PinnedImEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return 'Codex';
+  if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
   if (isDutyEmployeeEntry(entry)) return avatarText(entry.display_name);
   return avatarText(entry.display_name);
 }
@@ -645,30 +694,31 @@ function dutyContactLabel(channel: string): string {
 }
 
 function systemEntryStatusLabel(entry: SystemEmployeeEntry): string {
-  if (isCodexSuperEmployeeEntry(entry)) return '多设备调度';
+  if (isSuperEmployeeEntry(entry)) return '多设备调度';
   return entry.status === 'on_duty' ? '在岗员工' : '编制员工';
 }
 
 function systemEntryIdentity(entry: SystemEmployeeEntry): string {
-  if (isCodexSuperEmployeeEntry(entry)) return '跨设备协作开发员工';
+  if (isSuperEmployeeEntry(entry)) return '跨设备协作开发员工';
   return entry.area || '管理端编制员工';
 }
 
 function systemEntryDispatch(entry: SystemEmployeeEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return '全设备 Codex';
+  if (isClaudeSuperEmployeeEntry(entry)) return '全设备 Claude';
   if (entry.api_base_path) return `${dutyContactLabel(entry.phone_channel)} · ${entry.api_base_path}`;
   return dutyContactLabel(entry.phone_channel);
 }
 
 function systemEntryRuntimeStatus(entry: SystemEmployeeEntry): string {
-  if (isCodexSuperEmployeeEntry(entry)) {
+  if (isSuperEmployeeEntry(entry)) {
     return codexBusy.value ? '提交中' : codexStreamActive.value ? '回复中' : '可派工';
   }
   return dutyEmployeeBusy.value && activeSystemEntry.value?.id === entry.id ? '执行中' : '可对话';
 }
 
 function systemEntryLastStatus(entry: SystemEmployeeEntry): string {
-  if (isCodexSuperEmployeeEntry(entry)) return codexLastStatus.value;
+  if (isSuperEmployeeEntry(entry)) return codexLastStatus.value;
   const last = (dutyEmployeeMessages.value[entry.id] || []).at(-1);
   if (!last) return '等待任务';
   return last.role === 'assistant' ? (last.status || '已回复') : '已发送';
@@ -878,7 +928,7 @@ function existingDedicatedConversation(contact: ImContact): ImConversationSummar
 }
 
 function isPinnedContactActive(contact: PinnedImEntry): boolean {
-  if (isCodexSuperEmployeeEntry(contact)) {
+  if (isSuperEmployeeEntry(contact)) {
     return activeSystemEntry.value?.id === contact.id;
   }
   if (isDutyEmployeeEntry(contact)) {
@@ -913,7 +963,7 @@ function restoreOverlappingAssistantFloat(): void {
 
 function focusCodexInput(): void {
   const tryFocus = () => {
-    if (!activeSystemEntry.value || !isCodexSuperEmployeeEntry(activeSystemEntry.value) || codexBusy.value) return;
+    if (!isSuperEmployeeEntry(activeSystemEntry.value) || codexBusy.value) return;
     try {
       const active = document.activeElement;
       if (active instanceof HTMLElement && active !== codexInputEl.value) {
@@ -1109,10 +1159,10 @@ function startCodexPolling(requestId = ''): void {
   stopCodexPolling();
   codexPollRound = 0;
   const poll = async () => {
-    if (!activeSystemEntry.value || !isCodexSuperEmployeeEntry(activeSystemEntry.value)) return;
+    if (!isSuperEmployeeEntry(activeSystemEntry.value)) return;
     codexPollRound += 1;
     try {
-      const next = await fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
+      const next = await fetchActiveSuperMessages();
       codexMessages.value = next;
       const shouldContinue = syncCodexStreamFromMessages(next, requestId);
       if (shouldContinue && codexPollRound < CODEX_POLL_MAX_ROUNDS) {
@@ -1134,12 +1184,14 @@ function startCodexPolling(requestId = ''): void {
 }
 
 async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
-  if (isCodexSuperEmployeeEntry(entry)) {
+  if (isSuperEmployeeEntry(entry)) {
     closeOverlappingAssistantFloat();
     stopCodexPolling();
+    stopCodexTypewriter(true);
     activeSystemEntry.value = entry;
     activeConversationId.value = null;
     messages.value = [];
+    codexMessages.value = [];
     hasMoreHistory.value = false;
     closeContactPicker();
     await loadCodexConversation();
@@ -1190,7 +1242,7 @@ async function startChatWith(contact: ImContact): Promise<void> {
 async function loadCodexConversation(options: { syncStream?: boolean } = {}): Promise<void> {
   if (!isAdminCustomerServiceConsole.value) return;
   try {
-    const next = await fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
+    const next = await fetchActiveSuperMessages();
     codexMessages.value = next;
     if (options.syncStream !== false) {
       const shouldContinue = syncCodexStreamFromMessages(next, codexStreamRequestId.value);
@@ -1236,7 +1288,7 @@ async function loadDutyEmployees(): Promise<void> {
 }
 
 async function onCodexSend(): Promise<void> {
-  if (!activeSystemEntry.value || !isCodexSuperEmployeeEntry(activeSystemEntry.value)) return;
+  if (!isSuperEmployeeEntry(activeSystemEntry.value)) return;
   if (codexBusy.value) return;
   const text = codexDraft.value.trim();
   if (!text) return;
@@ -1267,17 +1319,11 @@ async function onCodexSend(): Promise<void> {
   await nextTick();
   scrollCodexToBottom();
   try {
-    const result = await sendCodexSuperEmployeeMessage(
-      text,
-      {
-        source: codexContextSource.value,
-        client_surface: codexApiScope.value === 'mobile' ? 'mobile' : 'admin_console',
-        target_devices: ['all'],
-      },
-      {
-        scope: codexApiScope.value,
-      },
-    );
+    const result = await sendActiveSuperMessage(text, {
+      source: codexContextSource.value,
+      client_surface: codexApiScope.value === 'mobile' ? 'mobile' : 'admin_console',
+      target_devices: ['all'],
+    });
     codexDispatch.value = result.dispatch ?? null;
     codexMessages.value = result.messages;
     const requestId = String(

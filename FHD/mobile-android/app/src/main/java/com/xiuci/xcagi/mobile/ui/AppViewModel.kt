@@ -51,6 +51,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
+private val BadgeAdminColor = androidx.compose.ui.graphics.Color(0xFFED7B2F)     // 管理端徽标：警示橙
+private val BadgeInstalledColor = androidx.compose.ui.graphics.Color(0xFF3370FF) // 已安装徽标：品牌蓝
+
 data class UiMessage(val text: String, val isError: Boolean = false)
 
 data class UpdatePrompt(
@@ -252,6 +255,16 @@ constructor(
     private val _navMenu = MutableStateFlow<List<NavMenuItem>>(emptyList())
     val navMenu: StateFlow<List<NavMenuItem>> = _navMenu.asStateFlow()
 
+    // ── AI 群聊 ──
+    private val _aiGroups = MutableStateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupDto>>(emptyList())
+    val aiGroups: StateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupDto>> = _aiGroups.asStateFlow()
+    private val _groupMessages = MutableStateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto>>(emptyList())
+    val groupMessages: StateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto>> = _groupMessages.asStateFlow()
+    private val _currentGroup = MutableStateFlow<com.xiuci.xcagi.mobile.core.model.AiGroupDto?>(null)
+    val currentGroup: StateFlow<com.xiuci.xcagi.mobile.core.model.AiGroupDto?> = _currentGroup.asStateFlow()
+    private val _groupSending = MutableStateFlow(false)
+    val groupSending: StateFlow<Boolean> = _groupSending.asStateFlow()
+
     private val _walletBalance = MutableStateFlow<WalletBalanceDto?>(null)
     val walletBalance: StateFlow<WalletBalanceDto?> = _walletBalance.asStateFlow()
 
@@ -283,14 +296,13 @@ constructor(
                 val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
                 val fixedItems = fixedConversationItems(
                         showCodex = isEnterprise || adminMode,
+                        showClaude = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                         timestamps = timestamps,
                         previews = previews,
                 )
                 val badgeText = if (adminMode) "管理端" else "已安装"
-                val badgeColor =
-                        if (adminMode) androidx.compose.ui.graphics.Color(0xFFED7B2F)
-                        else androidx.compose.ui.graphics.Color(0xFF3370FF)
+                val badgeColor = if (adminMode) BadgeAdminColor else BadgeInstalledColor
                 val employees = employeeConversationItems(mods, badgeText, badgeColor, timestamps, previews)
                 fixedItems + employees
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -627,6 +639,88 @@ constructor(
                 }
             }
 
+    fun loadAiGroups() =
+            viewModelScope.launch {
+                repo.loadAiGroups()
+                    .onSuccess { _aiGroups.value = it }
+                    .onFailure { snack("群聊列表加载失败", true) }
+            }
+
+    fun createAiGroup(name: String) =
+            viewModelScope.launch {
+                repo.createAiGroup(name)
+                    .onSuccess { loadAiGroups() }
+                    .onFailure { snack(it.message ?: "建群失败", true) }
+            }
+
+    /** 打开群聊：载入成员与历史消息。 */
+    fun openAiGroup(group: com.xiuci.xcagi.mobile.core.model.AiGroupDto) {
+        _currentGroup.value = group
+        _groupMessages.value = emptyList()
+        loadAiGroupMessages(group.id)
+    }
+
+    fun loadAiGroupMessages(groupId: String) =
+            viewModelScope.launch {
+                repo.loadAiGroupMessages(groupId)
+                    .onSuccess { _groupMessages.value = it }
+                    .onFailure { snack("群消息加载失败", true) }
+            }
+
+    fun sendGroupMessage(groupId: String, text: String, mentions: List<String> = emptyList()) {
+        val body = text.trim()
+        if (body.isBlank() || _groupSending.value) return
+        // 本地先回显用户消息
+        _groupMessages.value = _groupMessages.value + com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto(
+            id = "local-${System.currentTimeMillis()}",
+            group_id = groupId,
+            role = "user",
+            sender_id = "user",
+            sender_name = "我",
+            body = body,
+        )
+        _groupSending.value = true
+        viewModelScope.launch {
+            repo.postAiGroupMessage(groupId, body, mentions)
+                .onSuccess { data ->
+                    // 用服务端权威消息替换尾部（去掉本地回显，拼接服务端返回的 user+ai）
+                    val withoutLocalTail = _groupMessages.value.dropLastWhile { it.id.startsWith("local-") }
+                    _groupMessages.value = withoutLocalTail + data.messages
+                    data.group?.let { g -> _currentGroup.value = g }
+                }
+                .onFailure { snack(it.message ?: "发送失败", true) }
+            _groupSending.value = false
+        }
+    }
+
+    fun addGroupMember(
+        groupId: String,
+        employeeId: String,
+        modId: String,
+        name: String,
+        avatar: String,
+        summary: String,
+    ) =
+            viewModelScope.launch {
+                repo.addAiGroupMember(
+                    groupId = groupId,
+                    employeeId = employeeId,
+                    modId = modId,
+                    name = name,
+                    avatar = avatar,
+                    summary = summary,
+                )
+                    .onSuccess { g -> g?.let { _currentGroup.value = it }; loadAiGroups() }
+                    .onFailure { snack(it.message ?: "添加成员失败", true) }
+            }
+
+    fun removeGroupMember(groupId: String, employeeId: String) =
+            viewModelScope.launch {
+                repo.removeAiGroupMember(groupId, employeeId)
+                    .onSuccess { g -> g?.let { _currentGroup.value = it }; loadAiGroups() }
+                    .onFailure { snack(it.message ?: "移除成员失败", true) }
+            }
+
     /** 拉取钱包余额（移动端"我"页面展示）。失败时保留旧值，不弹错误。成功后写入缓存。 */
     fun loadWalletBalance() =
             viewModelScope.launch {
@@ -789,6 +883,7 @@ constructor(
 
     private fun fixedConversationItems(
             showCodex: Boolean,
+            showClaude: Boolean,
             showCustomerService: Boolean,
             timestamps: Map<String, Long>,
             previews: Map<String, String>,
@@ -817,6 +912,21 @@ constructor(
                             subtitle = cachedConversationPreview(PinnedIds.CODEX, previews)
                                 .ifBlank { "全设备协同" },
                             timestamp = cachedConversationTimestamp(PinnedIds.CODEX, timestamps),
+                            isOnline = true,
+                            isPinned = true,
+                    )
+                )
+        }
+
+        if (showClaude) {
+                items.add(
+                    ConversationItem(
+                            id = PinnedIds.CLAUDE,
+                            type = ConversationType.PINNED_CLAUDE,
+                            title = "超级员工-Claude",
+                            subtitle = cachedConversationPreview(PinnedIds.CLAUDE, previews)
+                                .ifBlank { "全设备协同 · 排比派工" },
+                            timestamp = cachedConversationTimestamp(PinnedIds.CLAUDE, timestamps),
                             isOnline = true,
                             isPinned = true,
                     )
@@ -1206,6 +1316,15 @@ constructor(
                             .onSuccess { _chatMessages.value = it }
                             .onFailure {
                                 snack("超级员工-Codex 历史加载失败", true)
+                                _chatMessages.value = emptyList()
+                            }
+                    return@launch
+                }
+                if (conversationId == PinnedIds.CLAUDE) {
+                    repo.loadClaudeSuperEmployeeMessages()
+                            .onSuccess { _chatMessages.value = it }
+                            .onFailure {
+                                snack("超级员工-Claude 历史加载失败", true)
                                 _chatMessages.value = emptyList()
                             }
                     return@launch
