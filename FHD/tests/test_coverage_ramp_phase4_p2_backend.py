@@ -533,14 +533,26 @@ def test_product_domain_handlers_register() -> None:
 
     bus = MagicMock()
     register_product_domain_handlers(bus)
-    assert bus.register_handler.called or bus.subscribe.called or True
+    # Registration must subscribe one handler per product event (6 total).
+    assert bus.subscribe.call_count == 6
+    subscribed_events = {call.args[0] for call in bus.subscribe.call_args_list}
+    assert "product.created" in subscribed_events
+    assert "product.price_changed" in subscribed_events
 
 
 def test_inventory_handlers_handle_query() -> None:
-    from app.neuro_bus.domains.inventory_domain_handlers import get_inventory_handlers
+    from app.neuro_bus.domains.inventory_domain_handlers import (
+        InventoryServiceDomainHandlers,
+        get_inventory_handlers,
+    )
 
     h = get_inventory_handlers()
-    assert hasattr(h, "handle") or hasattr(h, "on_event") or h is not None
+    # Singleton of the concrete handler type exposing the real domain methods.
+    assert isinstance(h, InventoryServiceDomainHandlers)
+    assert callable(h.handle_stock_in)
+    assert callable(h.handle_stock_out)
+    # Singleton: repeated calls return the same instance.
+    assert get_inventory_handlers() is h
 
 
 def test_ocr_handlers_instantiate() -> None:

@@ -8,6 +8,19 @@ the gates to silently disappear.
 Component CI lives under ``.github/workflows/ci-*.yml`` (split from legacy
 ``ci.yml``). Backend Python, Market frontend, and Java payment each have a
 dedicated workflow; production deploy expectations live in ``deploy.yml``.
+
+CRITICAL — what GitHub *actually* runs: the backend Python workflow is a CI
+SSOT. The authored file lives at
+``成都修茈科技有限公司/MODstore_deploy/.github/workflows/ci-backend-python.yml``
+and is published to the XCMAX repo root as
+``.github/workflows/modstore-ci-backend-python.yml`` by
+``scripts/dev/publish_ci_workflows_to_root.py``. **GitHub Actions runs the root
+copy**, not the component copy. A previous version of this test only checked the
+``成都修茈科技有限公司/.github/workflows/ci-backend-python.yml`` orphan, which is
+not what runs — giving a false "gate exists" signal while the running file had
+no ``--cov-fail-under`` at all. We now assert the *running root* file and the
+*published source* both carry the honest floor, and that all backend
+``ci-backend-python.yml`` copies agree on it.
 """
 
 from __future__ import annotations
@@ -16,13 +29,33 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-COMPANY_ROOT = REPO_ROOT.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent  # MODstore_deploy
+COMPANY_ROOT = REPO_ROOT.parent  # 成都修茈科技有限公司
+XCMAX_ROOT = COMPANY_ROOT.parent  # XCMAX repo root — where GitHub Actions runs
 WORKFLOWS = COMPANY_ROOT / ".github" / "workflows"
 CI_BACKEND = WORKFLOWS / "ci-backend-python.yml"
 CI_MARKET = WORKFLOWS / "ci-market.yml"
 CI_JAVA = WORKFLOWS / "ci-payment-java.yml"
 DEPLOY_WORKFLOW = WORKFLOWS / "deploy.yml"
+
+# The published source the publisher reads, and the root copy GitHub runs.
+CI_BACKEND_SOURCE = REPO_ROOT / ".github" / "workflows" / "ci-backend-python.yml"
+CI_BACKEND_RUNNING = XCMAX_ROOT / ".github" / "workflows" / "modstore-ci-backend-python.yml"
+
+# Honest, conservative global coverage floor (ratchet). Not measured locally —
+# ``xcagi_common`` requires Python>=3.10 — so we adopt pyproject's self-reported
+# "全量 tree 约 40%+" as a floor that catches regressions and can only go up.
+EXPECTED_COVERAGE_FLOOR = "40"
+
+
+def _read_required(path: Path) -> str:
+    """Read a file that MUST exist. Missing => hard failure, never a silent skip.
+
+    Skipping on absence let the gate config disappear unnoticed; for the
+    backend coverage gate we want a loud failure instead.
+    """
+    assert path.is_file(), f"required gate file missing: {path}"
+    return path.read_text(encoding="utf-8")
 
 
 def _read(path: Path) -> str:
@@ -32,13 +65,40 @@ def _read(path: Path) -> str:
 
 
 def test_pyproject_declares_coverage_target():
+    """pyproject 的 enforced floor 必须等于 CI 实际门禁(诚实值),不得是未兑现的 80。"""
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "[tool.coverage.report]" in pyproject
-    assert "fail_under = 80" in pyproject, "Pyproject must declare the 80% coverage target"
+    assert (
+        f"fail_under = {EXPECTED_COVERAGE_FLOOR}" in pyproject
+    ), f"Pyproject coverage floor must match the enforced CI floor ({EXPECTED_COVERAGE_FLOOR})"
+
+
+def test_running_root_workflow_enforces_coverage_floor():
+    """GitHub *实际运行* 的是发布到仓库根的那份;它必须真的带 --cov-fail-under。
+
+    这是消除"覆盖率注水"的核心断言:此前测试只看组件目录的孤儿文件,
+    给了"门禁存在"的假象,而真正运行的根文件根本没有 floor。
+    """
+    text = _read_required(CI_BACKEND_RUNNING)
+    assert "pytest" in text
+    assert "--cov=modstore_server" in text
+    assert "--cov=modman" in text
+    assert "--cov-fail-under" in text, "运行的根 workflow 必须带 --cov-fail-under(否则 0 门禁)"
+    assert "MODSTORE_PY_COVERAGE_FLOOR" in text
+    assert (
+        f"MODSTORE_PY_COVERAGE_FLOOR: '{EXPECTED_COVERAGE_FLOOR}'" in text
+    ), f"运行的根 workflow floor 必须是诚实值 {EXPECTED_COVERAGE_FLOOR}"
+
+
+def test_published_source_workflow_enforces_coverage_floor():
+    """发布源(publisher 读取的那份)也必须带同一诚实 floor,否则下次发布会把门禁冲掉。"""
+    text = _read_required(CI_BACKEND_SOURCE)
+    assert "--cov-fail-under" in text
+    assert f"MODSTORE_PY_COVERAGE_FLOOR: '{EXPECTED_COVERAGE_FLOOR}'" in text
 
 
 def test_ci_backend_workflow_runs_python_tests():
-    text = _read(CI_BACKEND)
+    text = _read_required(CI_BACKEND)
     assert "pytest" in text
     assert "MODSTORE_JWT_SECRET" in text
     assert "--cov=modstore_server" in text
@@ -49,10 +109,18 @@ def test_ci_backend_workflow_runs_python_tests():
     assert "WEBHOOK_DISPATCHER_COVERAGE_FLOOR" in text
 
 
+def test_all_backend_workflow_copies_agree_on_floor():
+    """所有 ci-backend-python.yml 副本(组件孤儿 / 发布源 / 运行根)必须 floor 一致,避免再次漂移。"""
+    needle = f"MODSTORE_PY_COVERAGE_FLOOR: '{EXPECTED_COVERAGE_FLOOR}'"
+    for path in (CI_BACKEND, CI_BACKEND_SOURCE, CI_BACKEND_RUNNING):
+        text = _read_required(path)
+        assert needle in text, f"{path} 的 coverage floor 与诚实值 {EXPECTED_COVERAGE_FLOOR} 不一致"
+
+
 def test_pyproject_coverage_floor_documents_critical_modules():
     """总覆盖率门槛在 ``pyproject.toml``；per-file 关键模块 gate 由本地 ``coverage report`` 与代码审查维护。"""
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert "fail_under = 80" in pyproject
+    assert f"fail_under = {EXPECTED_COVERAGE_FLOOR}" in pyproject
     assert "modstore_server" in pyproject
     assert "modman" in pyproject
 

@@ -235,8 +235,12 @@ class TestAppendTrCloneFromLast:
         )
 
         table = MagicMock()
-        table._tbl = OxmlElement("w:tbl")
-        _append_tr_clone_from_last(table)  # Should not raise
+        tbl = OxmlElement("w:tbl")
+        table._tbl = tbl
+        _append_tr_clone_from_last(table)
+        # No source row to clone -> nothing appended
+        trs = [c for c in tbl if c.tag == qn("w:tr")]
+        assert trs == []
 
     def test_clones_last_row(self):
         from app.infrastructure.documents.price_list_export import (
@@ -343,7 +347,11 @@ class TestTcApplyTcBordersSnapshot:
         )
 
         cell = MagicMock()
-        _tc_apply_tc_borders_snapshot(cell, None)  # Should not raise
+        tc = OxmlElement("w:tc")
+        cell._tc = tc
+        _tc_apply_tc_borders_snapshot(cell, None)
+        # None snapshot -> returns before ensuring tcPr; nothing created
+        assert tc.find(qn("w:tcPr")) is None
 
     def test_replaces_existing_borders(self):
         from app.infrastructure.documents.price_list_export import (
@@ -492,7 +500,12 @@ class TestApplyTcBordersToAllBodyRows:
         )
 
         table = MagicMock()
-        _apply_tc_borders_to_all_body_rows(table, 1, [])  # Should not raise
+        with patch(
+            "app.infrastructure.documents.price_list_export._tc_apply_tc_borders_snapshot"
+        ) as mock_apply:
+            _apply_tc_borders_to_all_body_rows(table, 1, [])
+        # Empty snapshot list -> early return, no per-cell application
+        mock_apply.assert_not_called()
 
     def test_applies_snaps(self):
         from app.infrastructure.documents.price_list_export import (
@@ -748,7 +761,10 @@ class TestWriteProductRowAdditional:
             with_serial=False,
             col_map={"model": 5, "name": 6, "spec": 7, "price": 8},
         )
-        # All indices out of range, should not raise
+        # All mapped indices are out of range and serial is off: the only
+        # mutation is the clear loop, so the lone cell stays empty (M1 was NOT
+        # written). If the out-of-range guard were missing this would IndexError.
+        assert cells[0].text == ""
 
 
 # ---------------------------------------------------------------------------
@@ -862,7 +878,12 @@ class TestSnapshotRestoreTblBorders:
         from app.infrastructure.documents.price_list_export import _restore_tbl_borders
 
         table = MagicMock()
-        _restore_tbl_borders(table, None)  # Should not raise
+        with patch(
+            "app.infrastructure.documents.price_list_export._tbl_pr"
+        ) as mock_tbl_pr:
+            _restore_tbl_borders(table, None)
+        # None borders -> early return before touching/creating tblPr
+        mock_tbl_pr.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -919,7 +940,12 @@ class TestTblBordersEnsureBottomEdge:
         bottom = OxmlElement("w:bottom")
         bottom.set(qn("w:val"), "single")
         tb.append(bottom)
-        _tbl_borders_ensure_bottom_edge(tb)  # Should not modify
+        _tbl_borders_ensure_bottom_edge(tb)
+        # Already has an effective bottom edge -> unchanged (no duplicate added,
+        # original value preserved)
+        bottoms = tb.findall(qn("w:bottom"))
+        assert len(bottoms) == 1
+        assert bottoms[0].get(qn("w:val")) == "single"
 
     def test_no_sample_returns(self):
         from app.infrastructure.documents.price_list_export import (
@@ -927,7 +953,9 @@ class TestTblBordersEnsureBottomEdge:
         )
 
         tb = OxmlElement("w:tblBorders")
-        _tbl_borders_ensure_bottom_edge(tb)  # Should not add bottom
+        _tbl_borders_ensure_bottom_edge(tb)
+        # No sample border to copy from -> no bottom edge fabricated
+        assert tb.find(qn("w:bottom")) is None
 
     def test_copies_from_insideH(self):
         from app.infrastructure.documents.price_list_export import (
@@ -1194,12 +1222,19 @@ class TestEnsureRowTcBottomFromTemplate:
         )
 
         table = MagicMock()
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=2,
+        with (
+            patch(
+                "app.infrastructure.documents.price_list_export._tbl_row_count",
+                return_value=2,
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export._sample_horizontal_border_for_row_separation"
+            ) as mock_sample,
         ):
             _ensure_row_tc_bottom_from_template(table, -1, force=False)
             _ensure_row_tc_bottom_from_template(table, 5, force=False)
+        # Out-of-range indices -> early return before any border work
+        mock_sample.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1214,11 +1249,18 @@ class TestEnsureLastRowCellBottomsMatchAbove:
         )
 
         table = MagicMock()
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=1,
+        with (
+            patch(
+                "app.infrastructure.documents.price_list_export._tbl_row_count",
+                return_value=1,
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export._tc_set_side_border"
+            ) as mock_set,
         ):
             _ensure_last_row_cell_bottoms_match_above(table)
+        # Fewer than 2 rows -> early return, no border written
+        mock_set.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1234,12 +1276,17 @@ class TestFillFirstTableWithProductsAdditional:
 
         table = MagicMock()
         table.rows = []
-        _fill_first_table_with_products(table, [])
-        # Should not raise
+        with patch(
+            "app.infrastructure.documents.price_list_export._snapshot_tbl_borders"
+        ) as mock_snap:
+            _fill_first_table_with_products(table, [])
+        # No rows -> early return before any table processing begins
+        mock_snap.assert_not_called()
 
     def test_no_products(self):
         from app.infrastructure.documents.price_list_export import (
             _fill_first_table_with_products,
+            _tbl_row_count,
         )
 
         doc = Document()
@@ -1248,8 +1295,13 @@ class TestFillFirstTableWithProductsAdditional:
         tbl.rows[0].cells[1].text = "名称"
         tbl.rows[0].cells[2].text = "规格"
         tbl.rows[0].cells[3].text = "单价"
+        tbl.rows[1].cells[0].text = "OLD_DATA"
         _fill_first_table_with_products(tbl, [])
-        # Should not raise
+        # No products: body target is 0 rows, so the single data row is trimmed
+        # away leaving only the header, which stays intact.
+        assert _tbl_row_count(tbl) == 1
+        assert tbl.rows[0].cells[0].text == "型号"
+        assert tbl.rows[0].cells[3].text == "单价"
 
 
 # ---------------------------------------------------------------------------

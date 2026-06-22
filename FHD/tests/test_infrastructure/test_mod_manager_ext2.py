@@ -107,9 +107,13 @@ class TestRegisterModHooksExtended:
             mod_path="/tmp/test",
             hooks={"on_chat": "invalid_no_dot"},
         )
-        with patch("app.infrastructure.mods.mod_manager.import_mod_backend_py"):
-            # Should not raise, just log error
+        with (
+            patch("app.infrastructure.mods.mod_manager.import_mod_backend_py"),
+            patch("app.infrastructure.mods.hooks.subscribe") as mock_sub,
+        ):
             _register_mod_hooks("test", meta)
+        # Spec has no module.attr form -> invalid, nothing subscribed.
+        mock_sub.assert_not_called()
 
     def test_hooks_with_backend_prefix(self):
         from app.infrastructure.mods.manifest import ModMetadata
@@ -133,9 +137,17 @@ class TestRegisterModHooksExtended:
     def test_hooks_no_mod_path(self):
         from app.infrastructure.mods.manifest import ModMetadata
 
-        meta = ModMetadata(id="test", name="Test", version="1.0", mod_path="")
-        # Should not raise, just log error
-        _register_mod_hooks("test", meta)
+        meta = ModMetadata(
+            id="test",
+            name="Test",
+            version="1.0",
+            mod_path="",
+            hooks={"on_chat": "services.handler"},
+        )
+        with patch("app.infrastructure.mods.hooks.subscribe") as mock_sub:
+            _register_mod_hooks("test", meta)
+        # Empty mod_path -> cannot resolve handlers, nothing subscribed.
+        mock_sub.assert_not_called()
 
     def test_hooks_handler_not_callable(self):
         from app.infrastructure.mods.manifest import ModMetadata
@@ -149,11 +161,16 @@ class TestRegisterModHooksExtended:
         )
         mock_module = Mock()
         mock_module.not_callable = "not a function"
-        with patch(
-            "app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=mock_module
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.import_mod_backend_py",
+                return_value=mock_module,
+            ),
+            patch("app.infrastructure.mods.hooks.subscribe") as mock_sub,
         ):
-            # Should not raise, just log error
             _register_mod_hooks("test", meta)
+        # Resolved attribute is not callable -> skipped, nothing subscribed.
+        mock_sub.assert_not_called()
 
     def test_hooks_import_error(self):
         from app.infrastructure.mods.manifest import ModMetadata
@@ -165,12 +182,16 @@ class TestRegisterModHooksExtended:
             mod_path="/tmp/test",
             hooks={"on_chat": "services.handler"},
         )
-        with patch(
-            "app.infrastructure.mods.mod_manager.import_mod_backend_py",
-            side_effect=ImportError("no module"),
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.import_mod_backend_py",
+                side_effect=ImportError("no module"),
+            ),
+            patch("app.infrastructure.mods.hooks.subscribe") as mock_sub,
         ):
-            # Should not raise, just log error
+            # Import failure is recoverable -> swallowed, nothing subscribed.
             _register_mod_hooks("test", meta)
+        mock_sub.assert_not_called()
 
 
 # ========================= ModManager - invalidate_scan_cache ============
@@ -262,38 +283,59 @@ class TestModManagerRecordMethods:
 class TestModManagerEnsureModsLoaded:
     def test_mods_disabled(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.dict("os.environ", {"XCAGI_DISABLE_MODS": "1"}):
+        with (
+            patch.dict("os.environ", {"XCAGI_DISABLE_MODS": "1"}),
+            patch.object(mm, "load_all_mods") as mock_load,
+        ):
             mm.ensure_mods_loaded(Mock())
-        # Should not attempt loading
+        mock_load.assert_not_called()
 
     def test_already_loaded(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
-        mm._loaded_mods = ["existing_mod"]
-        mm.ensure_mods_loaded(Mock())
-        # Should not attempt loading
+        # ensure_mods_loaded consults list_loaded_mods() (the registry view),
+        # not the _loaded_mods attribute directly.
+        with (
+            patch.object(mm, "list_loaded_mods", return_value=[Mock()]),
+            patch.object(mm, "load_all_mods") as mock_load,
+        ):
+            mm.ensure_mods_loaded(Mock())
+        # Registry already has a mod -> no reload.
+        mock_load.assert_not_called()
 
     def test_no_discovered_mods(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "scan_mods", return_value=[]):
+        with (
+            patch.object(mm, "scan_mods", return_value=[]),
+            patch.object(mm, "load_all_mods") as mock_load,
+        ):
             mm.ensure_mods_loaded(Mock())
+        # Nothing discovered on disk -> nothing to load.
+        mock_load.assert_not_called()
 
     def test_throttle_rate(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
         mm._last_ensure_at = 9999999999.0  # Very recent
         mm._ensure_attempts = 0
         mock_plan = Mock()
-        with patch.object(mm, "scan_mods", return_value=[mock_plan]):
-            with patch.object(mm, "load_all_mods"):
-                mm.ensure_mods_loaded(Mock())
-        # Should be throttled
+        with (
+            patch.object(mm, "scan_mods", return_value=[mock_plan]),
+            patch.object(mm, "load_all_mods") as mock_load,
+        ):
+            mm.ensure_mods_loaded(Mock())
+        # Within the throttle window -> load is skipped.
+        mock_load.assert_not_called()
 
     def test_max_attempts_reached(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
         mm._ensure_attempts = 20
         mock_plan = Mock()
-        with patch.object(mm, "scan_mods", return_value=[mock_plan]):
+        with (
+            patch.object(mm, "scan_mods", return_value=[mock_plan]),
+            patch.object(mm, "load_all_mods") as mock_load,
+        ):
             mm.ensure_mods_loaded(Mock())
-        # Should not attempt loading
+        # Attempt budget exhausted -> load is skipped.
+        mock_load.assert_not_called()
 
 
 # ========================= ModManager - resolve_mod_directory =============
@@ -522,12 +564,14 @@ class TestModManagerLoadModBackend:
     def test_no_backend_dir(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
         mod_dir = tmp_path / "no_backend"
-        mod_dir.mkdir()
+        mod_dir.mkdir()  # no backend/ subdir
         from app.infrastructure.mods.manifest import ModMetadata
 
         meta = ModMetadata(id="no_backend", name="No Backend", version="1.0", mod_path=str(mod_dir))
-        mm._load_mod_backend("no_backend", str(mod_dir), meta)
-        # Should not raise
+        result = mm._load_mod_backend("no_backend", str(mod_dir), meta)
+        # No backend directory -> early return, no backend module registered.
+        assert result is None
+        assert "no_backend" not in mm._backend_entry_modules
 
     def test_backend_entry_with_init(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))

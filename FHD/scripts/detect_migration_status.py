@@ -65,12 +65,22 @@ class MigrationReport:
             return 0.0
         return (self.event_driven_routes / self.total_routes) * 100
 
+    @property
+    def instrument_rate(self) -> float:
+        if self.total_services == 0:
+            return 0.0
+        return (self.instrumented_services / self.total_services) * 100
+
 
 class MigrationDetector:
     """迁移状态检测器"""
 
-    def __init__(self, project_root: str = "e:/FHD"):
-        self.project_root = Path(project_root)
+    def __init__(self, project_root: Optional[str] = None):
+        # Default to the FHD repo root derived from this file's location
+        # (scripts/detect_migration_status.py -> FHD/), not a hardcoded path.
+        self.project_root = (
+            Path(project_root) if project_root else Path(__file__).resolve().parents[1]
+        )
         self.report = MigrationReport()
 
         # 定义扫描模式
@@ -261,7 +271,7 @@ class MigrationDetector:
             f"[SUMMARY] 总体统计",
             f"  Services 层:",
             f"    总服务数: {self.report.total_services}",
-            f"    已 Instrument: {self.report.instrumented_services} ({self.report.instrumented_services/self.report.total_services*100:.1f}%)",
+            f"    已 Instrument: {self.report.instrumented_services} ({self.report.instrument_rate:.1f}%)",
             f"    事件驱动: {self.report.event_driven_services} ({self.report.service_migration_rate:.1f}%)",
             f"",
             f"  Application 层:",
@@ -349,8 +359,10 @@ class MigrationDetector:
 
         return "\n".join(lines)
 
-    def save_report(self, output_path: str = "e:/FHD/migration_status_report.txt") -> None:
+    def save_report(self, output_path: Optional[str] = None) -> None:
         """保存报告到文件"""
+        if output_path is None:
+            output_path = str(self.project_root / "migration_status_report.txt")
         report = self.generate_report()
         Path(output_path).write_text(report, encoding="utf-8")
         print(f"\n[SAVE] 报告已保存: {output_path}")
@@ -358,10 +370,17 @@ class MigrationDetector:
 
 def main():
     """主函数"""
+    import json
+    import os
+    import sys
+
+    # Project root: CLI arg > env > auto-derived FHD/ (never a hardcoded path).
+    root = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("XCAGI_PROJECT_ROOT")
+
     print("[START] 启动 Neuro-DDD 迁移状态全面检测")
     print("=" * 60)
 
-    detector = MigrationDetector()
+    detector = MigrationDetector(root)
 
     # 执行扫描
     detector.scan_services()
@@ -372,19 +391,38 @@ def main():
     print("\n" + detector.generate_report())
     detector.save_report()
 
-    # 打印摘要
+    r = detector.report
+    metrics = {
+        "service_rate": round(r.service_migration_rate, 1),
+        "app_rate": round(r.app_service_migration_rate, 1),
+        "routes_rate": round(r.routes_migration_rate, 1),
+        "total_services": r.total_services,
+        "event_driven_services": r.event_driven_services,
+        "total_app_services": r.total_app_services,
+        "event_driven_app_services": r.event_driven_app_services,
+        "total_routes": r.total_routes,
+        "event_driven_routes": r.event_driven_routes,
+    }
+
+    # Machine-readable outputs so CI uses REAL numbers (no hardcoded placeholders).
+    metrics_path = detector.project_root / "migration_metrics.json"
+    metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    print(f"[SAVE] 指标已保存: {metrics_path}")
+
+    # 打印摘要 + key=value(便于 shell 解析)
     print("\n" + "=" * 60)
     print("[SUMMARY] 检测完成摘要")
     print("=" * 60)
-    print(
-        f"  Services: {detector.report.event_driven_services}/{detector.report.total_services} 事件驱动"
-    )
-    print(
-        f"  Application: {detector.report.event_driven_app_services}/{detector.report.total_app_services} 事件驱动"
-    )
-    print(
-        f"  Routes: {detector.report.event_driven_routes}/{detector.report.total_routes} 事件驱动"
-    )
+    for k, v in metrics.items():
+        print(f"{k.upper()}={v}")
+
+    # GitHub Actions step outputs (consumed by the workflow's threshold/badge steps).
+    gh_output = os.environ.get("GITHUB_OUTPUT")
+    if gh_output:
+        with open(gh_output, "a", encoding="utf-8") as fh:
+            for k, v in metrics.items():
+                fh.write(f"{k}={v}\n")
+
     print("\n[DONE] 检测完成")
 
 
