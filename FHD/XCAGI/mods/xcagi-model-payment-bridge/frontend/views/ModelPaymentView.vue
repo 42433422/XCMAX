@@ -264,7 +264,8 @@ type MarketMembershipPlan = {
   features: string[];
 };
 
-const membershipPlans: MarketMembershipPlan[] = [
+// 离线兜底套餐（与历史硬编码一致）：后端 /api/market/membership-plans 不可达时使用
+const FALLBACK_PLANS: MarketMembershipPlan[] = [
   {
     id: 'plan_basic',
     tier: 'vip',
@@ -292,6 +293,43 @@ const membershipPlans: MarketMembershipPlan[] = [
     features: ['企业级 AI 额度', '高级功能优先体验', '团队协作入口', 'SVIP 身份标识'],
   },
 ];
+
+// SSOT：会员套餐改从后端代理修茈市场 GET /api/payment/plans 读取（不再硬编码）
+const membershipPlans = ref<MarketMembershipPlan[]>([...FALLBACK_PLANS]);
+
+const PLAN_TIER_BY_ID: Record<string, string> = {
+  plan_basic: 'vip',
+  plan_pro: 'vip_plus',
+  plan_enterprise: 'svip1',
+};
+
+async function loadMembershipPlans(): Promise<void> {
+  try {
+    const res = await fetch('/api/market/membership-plans', {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return;
+    const body = await res.json();
+    const raw = body?.data?.plans;
+    if (!Array.isArray(raw) || raw.length === 0) return;
+    membershipPlans.value = raw.map((p: Record<string, unknown>) => {
+      const id = String(p.id || '');
+      return {
+        id,
+        tier: String(p.tier || PLAN_TIER_BY_ID[id] || ''),
+        title: String(p.name || p.title || ''),
+        price: String(p.price ?? ''),
+        description: String(p.description || ''),
+        recommended: id === 'plan_pro',
+        badge: id === 'plan_pro' ? '推荐' : undefined,
+        features: Array.isArray(p.features) ? p.features.map(String) : [],
+      };
+    });
+  } catch {
+    /* 保底用 FALLBACK_PLANS */
+  }
+}
 
 const rechargeAmounts = [10, 30, 100, 300];
 
@@ -882,6 +920,9 @@ onMounted(async () => {
   // 0. 初始化离线状态监听
   setupOnlineListeners();
   updateOnlineStatus();
+
+  // 0b. 会员套餐改从后端代理市场接口读取（失败保底 FALLBACK_PLANS）
+  void loadMembershipPlans();
 
   // 1. 立即从缓存恢复数据（秒开体验）
   const hasCache = restoreFromCache();
