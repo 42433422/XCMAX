@@ -26,12 +26,21 @@ export type ModelPaymentEntitlement = {
 };
 
 export const modelPaymentApi = {
-  getPlans: () =>
-    api.get<{
+  getPlans: (budget_range?: string) => {
+    const params =
+      budget_range && budget_range.trim()
+        ? { budget_range: budget_range.trim() }
+        : undefined;
+    return api.get<{
       success: boolean;
-      data?: { plans: ModelPaymentPlan[]; integration: ModelPaymentIntegration };
+      data?: {
+        plans: ModelPaymentPlan[];
+        integration: ModelPaymentIntegration;
+        budget_range?: string | null;
+      };
       message?: string;
-    }>(mp('/api/model-payment/plans')),
+    }>(mp('/api/model-payment/plans'), params);
+  },
 
   checkout: (plan_id: string) =>
     api.post<{

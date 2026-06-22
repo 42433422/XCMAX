@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 企业定价 · 预算档位永久购买（2026-06-21 · v10 线内迭代）
+
+- **feat(billing)**：`saas_plans.json` 按预算四档永久购买定价（¥49,999 / ¥199,999 / ¥499,999 / ¥999,999）+ 30 天试用 ¥99
+- **feat(api)**：`GET /api/model-payment/plans?budget_range=` 返回试用 + 对应永久套餐
+- **feat(frontend)**：定价页展示 `/永久` 单位并按 `budget_range` 加载套餐
+
 ### 账号体系（2026-06-21 · v10 线内迭代）
 
 - **chore(miniprogram)**：移除过期 `XCAGI/miniprogram/` 前端树；`tasks.md` 标记下线；DB ORM 保留作历史表兼容

@@ -1,27 +1,51 @@
 {
-  "trial_days": 14,
+  "trial_days": 30,
   "currency": "CNY",
+  "budget_permanent_map": {
+    "5 万以内": "saas-permanent-starter",
+    "5–20 万": "saas-permanent-growth",
+    "20–50 万": "saas-permanent-max",
+    "50 万以上": "saas-permanent-ultra",
+    "under-50k": "saas-permanent-starter",
+    "50k-200k": "saas-permanent-growth",
+    "200k-500k": "saas-permanent-max",
+    "500k-plus": "saas-permanent-ultra"
+  },
   "plans": [
     {
-      "id": "saas-starter",
-      "title": "入门版",
-      "description": "适合小团队试用转正；含核心 ERP 与 AI 对话。",
-      "amount_cents": 99900,
-      "badge": null
+      "id": "saas-trial-30",
+      "title": "30 天试用",
+      "description": "全功能试用 30 天，到期后可购买永久授权继续使用。",
+      "amount_cents": 9900,
+      "badge": "试用"
     },
     {
-      "id": "saas-growth",
-      "title": "成长版",
-      "description": "多用户协作、审批与工作流；适合成长型企业。",
-      "amount_cents": 299900,
-      "badge": "推荐"
+      "id": "saas-permanent-starter",
+      "title": "永久授权 · 5 万以内",
+      "description": "适用于预算 5 万以内的企业，一次购买永久使用。",
+      "amount_cents": 4999900,
+      "badge": "永久"
     },
     {
-      "id": "saas-enterprise",
-      "title": "企业版",
-      "description": "全功能 + 优先支持；大客户 SSO 与审计。",
-      "amount_cents": 999900,
-      "badge": null
+      "id": "saas-permanent-growth",
+      "title": "永久授权 · 5–20 万",
+      "description": "适用于预算 5–20 万的企业，一次购买永久使用。",
+      "amount_cents": 19999900,
+      "badge": "永久"
+    },
+    {
+      "id": "saas-permanent-max",
+      "title": "永久授权 · 20–50 万",
+      "description": "适用于预算 20–50 万的企业，一次购买永久使用。",
+      "amount_cents": 49999900,
+      "badge": "永久"
+    },
+    {
+      "id": "saas-permanent-ultra",
+      "title": "永久授权 · 50 万以上",
+      "description": "适用于预算 50 万以上的企业，一次购买永久使用。",
+      "amount_cents": 99999900,
+      "badge": "永久"
     }
   ]
 }
