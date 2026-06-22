@@ -41,6 +41,8 @@ def test_normalize_package_zip_flattens_single_top_folder(tmp_path: Path):
 
 
 def test_mod_store_market_catalog_proxy(monkeypatch: pytest.MonkeyPatch):
+    import sys
+
     async def _fake_market(**kwargs):
         assert kwargs.get("collection") == "office_employee_aux_pack_1"
         return {
@@ -60,6 +62,13 @@ def test_mod_store_market_catalog_proxy(monkeypatch: pytest.MonkeyPatch):
         "app.fastapi_routes.mod_store_routes.fetch_market_catalog_page",
         _fake_market,
     )
+
+    # Restore pass-through implementations in case another test file has overwritten them
+    # on the stub/real app.application.mod_store_catalog_app module.
+    _ca = sys.modules.get("app.application.mod_store_catalog_app")
+    if _ca is not None:
+        monkeypatch.setattr(_ca, "market_item_to_package_row", lambda raw: raw)
+        monkeypatch.setattr(_ca, "is_public_catalog_row", lambda row: bool(row))
 
     app = FastAPI()
     app.include_router(mod_store_router, prefix="/api/mod-store")

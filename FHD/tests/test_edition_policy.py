@@ -14,6 +14,8 @@ from app.mod_sdk.edition_policy import (
 )
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
 
+import app.mod_sdk.edition_bootstrap  # force real module load before stub injection in other test files
+
 
 @pytest.fixture(autouse=True)
 def _isolate_edition_and_sku_env(monkeypatch):

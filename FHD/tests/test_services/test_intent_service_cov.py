@@ -938,6 +938,37 @@ class TestIsNegationIntentBranches:
 
 
 class TestLoadIntentRuntimeRulesEdgeCases:
+    def setup_method(self):
+        import sys as _sys
+
+        _m = _sys.modules.get("app.services.intent_service")
+        if _m is None:
+            self._saved = None
+            return
+        self._saved = (
+            dict(_m._quick_command_map),
+            list(_m._quick_intent_patterns),
+            list(_m._context_inherit_patterns),
+            list(_m._append_keywords),
+            dict(_m._negation_action_keywords),
+        )
+
+    def teardown_method(self):
+        import sys as _sys
+
+        if not getattr(self, "_saved", None):
+            return
+        _m = _sys.modules.get("app.services.intent_service")
+        if _m is None:
+            return
+        (
+            _m._quick_command_map,
+            _m._quick_intent_patterns,
+            _m._context_inherit_patterns,
+            _m._append_keywords,
+            _m._negation_action_keywords,
+        ) = self._saved
+
     def test_pattern_or_intent_empty_not_appended(self):
         """if pattern and intent: is False when either is empty/None -> not appended."""
         config = {

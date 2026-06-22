@@ -10,6 +10,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import app.infrastructure.mods.mod_manager  # force real module load before stub injection
+import app.infrastructure.mods.employee_registry  # force real module load before stub injection
+import app.mod_sdk.employee_runtime  # force real module load before stub injection
+
 
 def _minimal_pack(parent: Path, pack_id: str) -> Path:
     pack_dir = parent / "_employees" / pack_id
