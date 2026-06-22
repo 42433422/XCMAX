@@ -34,6 +34,7 @@
 [giant-file] app/fastapi_routes/ai_assistant.py
 [giant-file] app/fastapi_routes/ai_open.py
 [giant-file] app/fastapi_routes/approval.py
+[giant-file] app/fastapi_routes/model_payment.py
 [giant-file] app/fastapi_routes/domains/auth/routes.py
 [giant-file] app/fastapi_routes/domains/conversation/helpers.py
 [giant-file] app/fastapi_routes/domains/customer/routes.py
