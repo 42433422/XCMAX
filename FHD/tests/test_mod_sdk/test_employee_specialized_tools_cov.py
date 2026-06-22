@@ -828,13 +828,10 @@ class TestDocTools:
         docs_dir = tmp_path / "docs"
         docs_dir.mkdir()
         (docs_dir / "README.md").write_text("# Test", encoding="utf-8")
+        # Patching _FHD_ROOT to tmp_path/FHD makes _FHD_ROOT.parent == tmp_path automatically.
+        # tool_list_docs checks both _FHD_ROOT/docs and _FHD_ROOT.parent/docs (= tmp_path/docs).
         with patch.object(module, "_FHD_ROOT", tmp_path / "FHD"):
-            # patch parent so docs_dir matches
-            with patch.object(
-                module._FHD_ROOT, "parent", new_callable=lambda: property(lambda self: tmp_path)
-            ):
-                r = await tool_list_docs({}, {})
-        # Just check it returns ok
+            r = await tool_list_docs({}, {})
         assert r["ok"] is True
 
     async def test_read_file_no_path(self):
@@ -1757,7 +1754,9 @@ class TestHandleSpecialized:
         assert r.get("handler") == "specialized"
 
     async def test_tool_exception_returns_error(self):
-        with patch.object(module, "tool_run_pytest", AsyncMock(side_effect=RuntimeError("boom"))):
+        # handle_specialized looks up the function from TOOL_REGISTRY, not the module attribute.
+        # Patch the registry entry directly so the injected side_effect is actually used.
+        with patch.dict(TOOL_REGISTRY, {"run_pytest": AsyncMock(side_effect=RuntimeError("boom"))}):
             r = await handle_specialized(
                 "fhd-core-maintainer",
                 {"tool": "run_pytest", "params": {}},

@@ -45,6 +45,26 @@ def _make_cache(cached=None):
 class TestLoadIntentRuntimeRules:
     """Hit the dict-vs-tuple branches inside _load_intent_runtime_rules."""
 
+    def setup_method(self):
+        import app.services.intent_service as _m
+        self._saved = (
+            dict(_m._quick_command_map),
+            list(_m._quick_intent_patterns),
+            list(_m._context_inherit_patterns),
+            list(_m._append_keywords),
+            dict(_m._negation_action_keywords),
+        )
+
+    def teardown_method(self):
+        import app.services.intent_service as _m
+        (
+            _m._quick_command_map,
+            _m._quick_intent_patterns,
+            _m._context_inherit_patterns,
+            _m._append_keywords,
+            _m._negation_action_keywords,
+        ) = self._saved
+
     def test_dict_intent_patterns(self):
         """intent_patterns as list of dicts -> appended as (pattern, intent)."""
         config = {

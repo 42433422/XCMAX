@@ -500,6 +500,7 @@ class TestEnsureSessionsAccountMetaColumnsDeep:
             {"name": "impersonating_market_user_id"},
             {"name": "impersonating_username"},
             {"name": "tenant_id"},
+            {"name": "market_membership_tier"},
         ]
 
         with (
@@ -674,6 +675,7 @@ class TestEnsureRuntimeAuthBootstrapDeep:
             patch("app.fastapi_app.sqlite_paths.is_sqlite_url", return_value=False),
             patch("app.db.init_db.ensure_postgresql_auth_bootstrap") as mock_pg,
             patch("app.db.init_db.ensure_user_preferences_bootstrap") as mock_pref,
+            patch("app.db.init_db.ensure_neuro_event_log_bootstrap"),
         ):
             ensure_runtime_auth_bootstrap(None)
             mock_pg.assert_called_once()

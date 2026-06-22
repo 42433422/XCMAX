@@ -818,11 +818,19 @@ class TestExtractExcelRecordsWithExistingParser:
 
     def test_import_error_returns_empty(self) -> None:
         # Temporarily remove the stub so the `from app.application import ...` raises ImportError.
-        saved = sys.modules.pop("app.application")
+        # Save all app.application.* submodule entries AND the parent package's attribute —
+        # popping the parent triggers a reimport that sets sys.modules["app"].application to a
+        # NEW module object, orphaning submodule attributes (e.g. .tools) on the OLD object.
+        saved_submodules = {k: v for k, v in sys.modules.items() if k.startswith("app.application")}
+        app_pkg = sys.modules.get("app")
+        for k in saved_submodules:
+            sys.modules.pop(k, None)
         try:
             result = _extract_excel_records_with_existing_parser({}, {}, "")
         finally:
-            sys.modules["app.application"] = saved
+            sys.modules.update(saved_submodules)
+            if app_pkg is not None and "app.application" in saved_submodules:
+                app_pkg.application = saved_submodules["app.application"]
         assert result == []
 
     def test_extractor_not_callable_returns_empty(self) -> None:

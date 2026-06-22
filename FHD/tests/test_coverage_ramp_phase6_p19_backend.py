@@ -1463,20 +1463,32 @@ class TestRunMarketFirstLogin:
 
     @pytest.mark.asyncio
     async def test_enterprise_account_kind_mismatch(self):
+        # account_kind hint mismatch is now just a warning — login proceeds.
+        # Patch internals to avoid DB access.
         from app.application.enterprise_login_flow import run_market_first_login
 
-        result, err = await run_market_first_login(
-            username="alice",
-            password="pass",
-            account_kind="admin",
-            market_result={"success": True, "is_enterprise": True, "is_market_admin": False},
-            auth_app_service=MagicMock(),
-            sku="enterprise",
-            jit_create_fn=MagicMock(),
-            market_user_email_from_raw=MagicMock(),
-        )
-        assert result is None
-        assert err is not None
+        with (
+            patch(
+                "app.application.enterprise_login_flow.ensure_local_user_after_market",
+                new=AsyncMock(return_value=({"success": True, "session_id": "s"}, None)),
+            ),
+            patch(
+                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                new=AsyncMock(return_value={"success": True}),
+            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
+        ):
+            result, err = await run_market_first_login(
+                username="alice",
+                password="pass",
+                account_kind="admin",
+                market_result={"success": True, "is_enterprise": True, "is_market_admin": False},
+                auth_app_service=MagicMock(),
+                sku="enterprise",
+                jit_create_fn=MagicMock(),
+                market_user_email_from_raw=MagicMock(),
+            )
+        assert err is None
 
     @pytest.mark.asyncio
     async def test_enterprise_no_username_from_market(self):
