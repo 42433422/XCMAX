@@ -8,10 +8,11 @@ from sqlalchemy import DateTime, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+from app.db.mixins import TenantScopedMixin
 from app.utils.time import utc_now_naive
 
 
-class FinancialTransaction(Base):
+class FinancialTransaction(TenantScopedMixin, Base):
     __tablename__ = "financial_transactions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

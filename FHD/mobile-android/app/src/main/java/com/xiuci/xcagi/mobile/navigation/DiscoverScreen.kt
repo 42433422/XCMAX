@@ -77,6 +77,9 @@ fun DiscoverScreen(
 ) {
     val navMenu by vm.navMenu.collectAsState()
 
+    // 进入即与电脑端侧栏对齐：拉取最新 nav-menu（未配对时静默失败，保留旧值）。
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.loadNavMenu() }
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         WeTopBar(
             title = "探索",
@@ -94,8 +97,18 @@ fun DiscoverScreen(
                         iconTint = XcagiTheme.extra.brandBlue,
                         iconBg = MaterialTheme.colorScheme.primaryContainer,
                         showArrow = true,
-                        showDivider = false,
+                        showDivider = true,
                         onClick = onAiCircle,
+                    )
+                    WeCell(
+                        title = "AI群聊",
+                        subtitle = "6 个部门群，可把多个 AI 拉进一个群一起聊",
+                        icon = Icons.Default.Group,
+                        iconTint = XcagiTheme.extra.brandBlue,
+                        iconBg = MaterialTheme.colorScheme.primaryContainer,
+                        showArrow = true,
+                        showDivider = false,
+                        onClick = { onNavigate(Routes.AI_GROUPS) },
                     )
                 }
             }
@@ -126,6 +139,22 @@ fun DiscoverScreen(
                                 },
                             )
                         }
+                    }
+                }
+            } else {
+                item {
+                    WeSectionCaption("桌面工具（与电脑端侧栏对齐）")
+                    WeCellGroup {
+                        WeCell(
+                            title = "扫码绑定电脑端",
+                            subtitle = "绑定后，电脑端侧栏的工具会同步到这里",
+                            icon = Icons.Default.QrCodeScanner,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            iconBg = MaterialTheme.colorScheme.primaryContainer,
+                            showArrow = true,
+                            showDivider = false,
+                            onClick = onScan,
+                        )
                     }
                 }
             }

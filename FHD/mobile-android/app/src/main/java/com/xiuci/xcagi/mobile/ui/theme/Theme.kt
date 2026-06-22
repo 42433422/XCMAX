@@ -33,6 +33,23 @@ private val FuncWarning = Color(0xFFED7B2F)
 private val WeChatGreen = Color(0xFF95EC69)
 private val WeChatOnline = Color(0xFF07C160)
 
+// ── 品牌渐变端色（钱包卡等）──
+private val BrandBlueGradientEnd = Color(0xFF5B8DEF)
+
+// ── 聊天气泡（用户侧）──
+private val ChatUserBubbleLight = Color(0xFF7AD04F)   // 浅色：比微信深一档的绿
+private val ChatUserBubbleDark = Color(0xFF2E5E2A)    // 深色：深绿，承载浅色文字
+private val ChatBubbleTextLight = Color(0xFF1F2329)   // 浅色绿气泡上的近黑文字
+private val ChatBubbleTextDark = Color(0xFFE8F0E6)    // 深色绿气泡上的近白文字
+
+// ── AI 交流圈（朋友圈风）──
+private val MomentAccentLight = Color(0xFF1F6F50)     // 浅色：墨绿强调（昵称/操作/标签字）
+private val MomentAccentDark = Color(0xFF5BC08C)      // 深色：提亮的绿，保证对比度
+private val MomentChipBgLight = Color(0xFFEAF3EF)     // 浅色：能力标签浅绿底
+private val MomentChipBgDark = Color(0xFF22302A)      // 深色：绿调深底
+private val ReplyBoxBgLight = Color(0xFFF4F5F4)       // 浅色：回复框浅灰底
+private val ReplyBoxBgDark = Color(0xFF2E2E2E)        // 深色：与次级表面一致
+
 // ── 中性色（飞书同系）──
 private val N00 = Color(0xFFFFFFFF)
 private val N50 = Color(0xFFF5F6F7)
@@ -53,10 +70,18 @@ private val N900 = Color(0xFF141619)
 data class XcagiExtraColors(
     val brandBlue: Color,
     val brandBlueContainer: Color,
+    val brandBlueGradientEnd: Color,
     val weChatGreen: Color,
     val weChatOnline: Color,
     val weChatInputBg: Color,
     val weChatDivider: Color,
+    // 聊天气泡（用户侧绿气泡 + 其上文字，明暗各一套以保证对比度）
+    val chatUserBubble: Color,
+    val chatUserBubbleText: Color,
+    // AI 交流圈（朋友圈风）：强调绿、能力标签底、回复框底
+    val momentAccent: Color,
+    val momentChipBg: Color,
+    val replyBoxBg: Color,
     val success: Color,
     val warning: Color,
     val danger: Color,
@@ -78,10 +103,16 @@ val LocalXcagiColors = staticCompositionLocalOf {
     XcagiExtraColors(
         brandBlue = BrandBlue,
         brandBlueContainer = BrandBlueContainer,
+        brandBlueGradientEnd = BrandBlueGradientEnd,
         weChatGreen = WeChatGreen,
         weChatOnline = WeChatOnline,
         weChatInputBg = N50,
         weChatDivider = N200,
+        chatUserBubble = ChatUserBubbleLight,
+        chatUserBubbleText = ChatBubbleTextLight,
+        momentAccent = MomentAccentLight,
+        momentChipBg = MomentChipBgLight,
+        replyBoxBg = ReplyBoxBgLight,
         success = FuncGreen,
         warning = FuncWarning,
         danger = FuncDanger,
@@ -93,10 +124,16 @@ val LocalXcagiColors = staticCompositionLocalOf {
 private val LightExtraColors = XcagiExtraColors(
     brandBlue = BrandBlue,
     brandBlueContainer = BrandBlueContainer,
+    brandBlueGradientEnd = BrandBlueGradientEnd,
     weChatGreen = WeChatGreen,
     weChatOnline = WeChatOnline,
     weChatInputBg = N50,
     weChatDivider = N200,
+    chatUserBubble = ChatUserBubbleLight,
+    chatUserBubbleText = ChatBubbleTextLight,
+    momentAccent = MomentAccentLight,
+    momentChipBg = MomentChipBgLight,
+    replyBoxBg = ReplyBoxBgLight,
     success = FuncGreen,
     warning = FuncWarning,
     danger = FuncDanger,
@@ -116,10 +153,16 @@ private val DarkTextTertiary = Color(0xFF5C5C5C)  // 三级文字/占位
 private val DarkExtraColors = XcagiExtraColors(
     brandBlue = BrandBlueLight,
     brandBlueContainer = Color(0xFF1A3A80),
+    brandBlueGradientEnd = Color(0xFF3F6FD8),
     weChatGreen = Color(0xFF6FAA4A),
     weChatOnline = FuncGreenLight,
     weChatInputBg = DarkSurfaceVariant,
     weChatDivider = DarkBorder,
+    chatUserBubble = ChatUserBubbleDark,
+    chatUserBubbleText = ChatBubbleTextDark,
+    momentAccent = MomentAccentDark,
+    momentChipBg = MomentChipBgDark,
+    replyBoxBg = ReplyBoxBgDark,
     success = FuncGreenLight,
     warning = FuncWarning,
     danger = FuncDanger,

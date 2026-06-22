@@ -1441,6 +1441,7 @@ fun WeBottomNavBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberHaptics()
     Box(
         modifier
             .fillMaxWidth()
@@ -1468,7 +1469,10 @@ fun WeBottomNavBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        onClick = { onSelect(item.route) },
+                        onClick = {
+                            if (item.route != currentRoute) haptics.tap()
+                            onSelect(item.route)
+                        },
                         shape = RoundedCornerShape(24.dp),
                         color = if (selected) XcagiTheme.extra.n50 else Color.Transparent,
                     ) {

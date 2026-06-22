@@ -277,6 +277,29 @@
             "version_label": "v157"
           }
         },
+        "artifact_art_1978f99238f646dab9bf283cfc2269c2": {
+          "document_id": "artifact_art_1978f99238f646dab9bf283cfc2269c2",
+          "source": "contract.docx",
+          "parser": "inline_text",
+          "text_length": 18,
+          "chunk_count": 1,
+          "tenant_id": "eval-user",
+          "version": 181,
+          "version_label": "v181",
+          "metadata": {
+            "artifact_id": "art_1978f99238f646dab9bf283cfc2269c2",
+            "artifact_type": "office_document",
+            "artifact_name": "contract.docx",
+            "artifact_source": "generate_office_document",
+            "agent_run_id": "run_75342be1bd4743a99278301448d46c22",
+            "user_id": "eval-user",
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "parser_used": "",
+            "tenant_id": "eval-user",
+            "document_version": 181,
+            "version_label": "v181"
+          }
+        },
         "artifact_art_1bad60b331614927be10605d82526fc3": {
           "document_id": "artifact_art_1bad60b331614927be10605d82526fc3",
           "source": "contract.docx",
@@ -916,6 +939,29 @@
             "tenant_id": "eval-user",
             "document_version": 129,
             "version_label": "v129"
+          }
+        },
+        "artifact_art_45a83f7325244e2292feb45495f265dc": {
+          "document_id": "artifact_art_45a83f7325244e2292feb45495f265dc",
+          "source": "contract.docx",
+          "parser": "inline_text",
+          "text_length": 18,
+          "chunk_count": 1,
+          "tenant_id": "eval-user",
+          "version": 183,
+          "version_label": "v183",
+          "metadata": {
+            "artifact_id": "art_45a83f7325244e2292feb45495f265dc",
+            "artifact_type": "office_document",
+            "artifact_name": "contract.docx",
+            "artifact_source": "generate_office_document",
+            "agent_run_id": "run_3cadded3644048c083fcb784cce772ea",
+            "user_id": "eval-user",
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "parser_used": "",
+            "tenant_id": "eval-user",
+            "document_version": 183,
+            "version_label": "v183"
           }
         },
         "artifact_art_46a9f3e7430d4a6bbc1c86a32076fb8a": {
@@ -1652,6 +1698,52 @@
             "tenant_id": "eval-user",
             "document_version": 106,
             "version_label": "v106"
+          }
+        },
+        "artifact_art_6e271d8adfc7444d8f89aa0cdcac79dd": {
+          "document_id": "artifact_art_6e271d8adfc7444d8f89aa0cdcac79dd",
+          "source": "contract.docx",
+          "parser": "inline_text",
+          "text_length": 18,
+          "chunk_count": 1,
+          "tenant_id": "eval-user",
+          "version": 182,
+          "version_label": "v182",
+          "metadata": {
+            "artifact_id": "art_6e271d8adfc7444d8f89aa0cdcac79dd",
+            "artifact_type": "office_document",
+            "artifact_name": "contract.docx",
+            "artifact_source": "generate_office_document",
+            "agent_run_id": "run_cf084ab97456485d840a94b5e6162daa",
+            "user_id": "eval-user",
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "parser_used": "",
+            "tenant_id": "eval-user",
+            "document_version": 182,
+            "version_label": "v182"
+          }
+        },
+        "artifact_art_6ed258fcd4504aee87e91a70de1af7de": {
+          "document_id": "artifact_art_6ed258fcd4504aee87e91a70de1af7de",
+          "source": "contract.docx",
+          "parser": "inline_text",
+          "text_length": 18,
+          "chunk_count": 1,
+          "tenant_id": "eval-user",
+          "version": 184,
+          "version_label": "v184",
+          "metadata": {
+            "artifact_id": "art_6ed258fcd4504aee87e91a70de1af7de",
+            "artifact_type": "office_document",
+            "artifact_name": "contract.docx",
+            "artifact_source": "generate_office_document",
+            "agent_run_id": "run_0ab114de54f3458989374d89d6c35efb",
+            "user_id": "eval-user",
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "parser_used": "",
+            "tenant_id": "eval-user",
+            "document_version": 184,
+            "version_label": "v184"
           }
         },
         "artifact_art_704deda989734a89a71b7e3dae0f9588": {
@@ -9500,14 +9592,126 @@
           },
           "source_url": "contract.docx",
           "page": null
+        },
+        {
+          "text": "Generated contract",
+          "score": 0.0,
+          "source": "contract.docx",
+          "chunk_index": 187,
+          "char_start": 0,
+          "char_end": 18,
+          "metadata": {
+            "dataset_id": "user_eval-user",
+            "document_id": "artifact_art_1978f99238f646dab9bf283cfc2269c2",
+            "source": "contract.docx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "eval-user",
+            "document_version": 181,
+            "version_label": "v181",
+            "artifact_id": "art_1978f99238f646dab9bf283cfc2269c2",
+            "artifact_type": "office_document",
+            "artifact_name": "contract.docx",
+            "artifact_source": "generate_office_document",
+            "agent_run_id": "run_75342be1bd4743a99278301448d46c22",
+            "user_id": "eval-user",
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "parser_used": ""
+          },
+          "source_url": "contract.docx",
+          "page": null
+        },
+        {
+          "text": "Generated contract",
+          "score": 0.0,
+          "source": "contract.docx",
+          "chunk_index": 188,
+          "char_start": 0,
+          "char_end": 18,
+          "metadata": {
+            "dataset_id": "user_eval-user",
+            "document_id": "artifact_art_6e271d8adfc7444d8f89aa0cdcac79dd",
+            "source": "contract.docx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "eval-user",
+            "document_version": 182,
+            "version_label": "v182",
+            "artifact_id": "art_6e271d8adfc7444d8f89aa0cdcac79dd",
+            "artifact_type": "office_document",
+            "artifact_name": "contract.docx",
+            "artifact_source": "generate_office_document",
+            "agent_run_id": "run_cf084ab97456485d840a94b5e6162daa",
+            "user_id": "eval-user",
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "parser_used": ""
+          },
+          "source_url": "contract.docx",
+          "page": null
+        },
+        {
+          "text": "Generated contract",
+          "score": 0.0,
+          "source": "contract.docx",
+          "chunk_index": 189,
+          "char_start": 0,
+          "char_end": 18,
+          "metadata": {
+            "dataset_id": "user_eval-user",
+            "document_id": "artifact_art_45a83f7325244e2292feb45495f265dc",
+            "source": "contract.docx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "eval-user",
+            "document_version": 183,
+            "version_label": "v183",
+            "artifact_id": "art_45a83f7325244e2292feb45495f265dc",
+            "artifact_type": "office_document",
+            "artifact_name": "contract.docx",
+            "artifact_source": "generate_office_document",
+            "agent_run_id": "run_3cadded3644048c083fcb784cce772ea",
+            "user_id": "eval-user",
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "parser_used": ""
+          },
+          "source_url": "contract.docx",
+          "page": null
+        },
+        {
+          "text": "Generated contract",
+          "score": 0.0,
+          "source": "contract.docx",
+          "chunk_index": 190,
+          "char_start": 0,
+          "char_end": 18,
+          "metadata": {
+            "dataset_id": "user_eval-user",
+            "document_id": "artifact_art_6ed258fcd4504aee87e91a70de1af7de",
+            "source": "contract.docx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "eval-user",
+            "document_version": 184,
+            "version_label": "v184",
+            "artifact_id": "art_6ed258fcd4504aee87e91a70de1af7de",
+            "artifact_type": "office_document",
+            "artifact_name": "contract.docx",
+            "artifact_source": "generate_office_document",
+            "agent_run_id": "run_0ab114de54f3458989374d89d6c35efb",
+            "user_id": "eval-user",
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "parser_used": ""
+          },
+          "source_url": "contract.docx",
+          "page": null
         }
       ],
       "index": {
         "schema_version": 2,
         "retriever": "hybrid_bm25_vector",
         "reranker": "lexical_overlap_v1",
-        "document_count": 187,
-        "chunk_count": 187,
+        "document_count": 191,
+        "chunk_count": 191,
         "embedding_count": 0,
         "embedding_persisted": false,
         "vector_backend": {
@@ -9515,20 +9719,20 @@
           "dataset_id": "user_eval-user",
           "backend": "sqlite_vector",
           "created_at": 1781861207.0653088,
-          "updated_at": 1781978760.51743,
-          "chunk_count": 187,
+          "updated_at": 1782062129.0043058,
+          "chunk_count": 191,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
         "vector_backend_name": "sqlite_vector",
-        "vector_backend_chunk_count": 187,
+        "vector_backend_chunk_count": 191,
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
-        "vector_backend_synced_chunks": 187,
-        "vector_backend_synced_at": "2026-06-20T18:06:00.524176Z",
+        "vector_backend_synced_chunks": 191,
+        "vector_backend_synced_at": "2026-06-21T17:15:29.010627Z",
         "vector_backend_error": "",
-        "updated_at": "2026-06-20T18:06:00.524377Z"
+        "updated_at": "2026-06-21T17:15:29.010873Z"
       },
       "rebuild_jobs": {}
     },
@@ -9648,6 +9852,29 @@
             "tenant_id": "tenant-a",
             "document_version": 43,
             "version_label": "v43"
+          }
+        },
+        "artifact_art_03ba6126ae184cc48b5443f5c4af5b69": {
+          "document_id": "artifact_art_03ba6126ae184cc48b5443f5c4af5b69",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 130,
+          "version_label": "v130",
+          "metadata": {
+            "artifact_id": "art_03ba6126ae184cc48b5443f5c4af5b69",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_2b0da96fabdf48a8b0421a91923d3332",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 130,
+            "version_label": "v130"
           }
         },
         "artifact_art_03fbf363d6054a84bb00bd851082f5b7": {
@@ -10087,6 +10314,29 @@
             "version_label": "v86"
           }
         },
+        "artifact_art_17386fd481734417bc22f1bacc88ce84": {
+          "document_id": "artifact_art_17386fd481734417bc22f1bacc88ce84",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 134,
+          "version_label": "v134",
+          "metadata": {
+            "artifact_id": "art_17386fd481734417bc22f1bacc88ce84",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_66c20e4e338f4cf89aacc81f399dd0d2",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 134,
+            "version_label": "v134"
+          }
+        },
         "artifact_art_1787476122fa44cd8dd58a72c44a706a": {
           "document_id": "artifact_art_1787476122fa44cd8dd58a72c44a706a",
           "source": "shipment-template.xlsx",
@@ -10177,6 +10427,29 @@
             "tenant_id": "tenant-a",
             "document_version": 107,
             "version_label": "v107"
+          }
+        },
+        "artifact_art_1c3aee48bfea45be8d302c68f5dee471": {
+          "document_id": "artifact_art_1c3aee48bfea45be8d302c68f5dee471",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 145,
+          "version_label": "v145",
+          "metadata": {
+            "artifact_id": "art_1c3aee48bfea45be8d302c68f5dee471",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_e59318219c7246da90d092575530bc71",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 145,
+            "version_label": "v145"
           }
         },
         "artifact_art_1ccc900cf7d64c60b0dbcb9c38360901": {
@@ -10752,6 +11025,29 @@
             "tenant_id": "tenant-a",
             "document_version": 40,
             "version_label": "v40"
+          }
+        },
+        "artifact_art_3152606dfdef4d6895fb542e0f8a20d6": {
+          "document_id": "artifact_art_3152606dfdef4d6895fb542e0f8a20d6",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 137,
+          "version_label": "v137",
+          "metadata": {
+            "artifact_id": "art_3152606dfdef4d6895fb542e0f8a20d6",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_3b761429794d4a3dbc03718f36ee7cde",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 137,
+            "version_label": "v137"
           }
         },
         "artifact_art_31579909e9054b63996dd9abef5f1af5": {
@@ -11743,6 +12039,29 @@
             "version_label": "v139"
           }
         },
+        "artifact_art_563efe258aad4368af647a5b487de576": {
+          "document_id": "artifact_art_563efe258aad4368af647a5b487de576",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 132,
+          "version_label": "v132",
+          "metadata": {
+            "artifact_id": "art_563efe258aad4368af647a5b487de576",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_ef43590611bf494eb4382c563ebdd270",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 132,
+            "version_label": "v132"
+          }
+        },
         "artifact_art_564fd0a8b0ce44918536b608eb499485": {
           "document_id": "artifact_art_564fd0a8b0ce44918536b608eb499485",
           "source": "shipment-template.xlsx",
@@ -12295,6 +12614,29 @@
             "version_label": "v62"
           }
         },
+        "artifact_art_689c72c008b24f1bbdd53eae01a43cec": {
+          "document_id": "artifact_art_689c72c008b24f1bbdd53eae01a43cec",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 146,
+          "version_label": "v146",
+          "metadata": {
+            "artifact_id": "art_689c72c008b24f1bbdd53eae01a43cec",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_e9f785381916463e9387fe875bde639c",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 146,
+            "version_label": "v146"
+          }
+        },
         "artifact_art_6989266f549b457997ac1602c5702248": {
           "document_id": "artifact_art_6989266f549b457997ac1602c5702248",
           "source": "ocr_result",
@@ -12408,6 +12750,29 @@
             "tenant_id": "tenant-a",
             "document_version": 102,
             "version_label": "v102"
+          }
+        },
+        "artifact_art_6e20bfb659b944d0b420305b0a0a6138": {
+          "document_id": "artifact_art_6e20bfb659b944d0b420305b0a0a6138",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 133,
+          "version_label": "v133",
+          "metadata": {
+            "artifact_id": "art_6e20bfb659b944d0b420305b0a0a6138",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_189f7dea7ee14570adf6a0c2d2f55c7c",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 133,
+            "version_label": "v133"
           }
         },
         "artifact_art_6ee0c0f2539e497e8e591972bf1916c0": {
@@ -12824,6 +13189,29 @@
             "version_label": "v22"
           }
         },
+        "artifact_art_7d18be248eaf42968a2fbaaae1f971b8": {
+          "document_id": "artifact_art_7d18be248eaf42968a2fbaaae1f971b8",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 143,
+          "version_label": "v143",
+          "metadata": {
+            "artifact_id": "art_7d18be248eaf42968a2fbaaae1f971b8",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_8aeec30f3bfb41439ead5003cc5770e6",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 143,
+            "version_label": "v143"
+          }
+        },
         "artifact_art_7d9d4c5132d342a48322e88c59626da1": {
           "document_id": "artifact_art_7d9d4c5132d342a48322e88c59626da1",
           "source": "ocr_result",
@@ -13215,6 +13603,29 @@
             "version_label": "v109"
           }
         },
+        "artifact_art_8ed22f948015478eaf2664e5ae1507f6": {
+          "document_id": "artifact_art_8ed22f948015478eaf2664e5ae1507f6",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 135,
+          "version_label": "v135",
+          "metadata": {
+            "artifact_id": "art_8ed22f948015478eaf2664e5ae1507f6",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_da4aa95208ba407fbea55e8d7a3885bc",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 135,
+            "version_label": "v135"
+          }
+        },
         "artifact_art_8f0bca5f66d449e69d45c127f9793c48": {
           "document_id": "artifact_art_8f0bca5f66d449e69d45c127f9793c48",
           "source": "shipment-template.xlsx",
@@ -13466,6 +13877,29 @@
             "tenant_id": "tenant-a",
             "document_version": 124,
             "version_label": "v124"
+          }
+        },
+        "artifact_art_955a2dc375b342fcb669ded8317f9bc2": {
+          "document_id": "artifact_art_955a2dc375b342fcb669ded8317f9bc2",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 144,
+          "version_label": "v144",
+          "metadata": {
+            "artifact_id": "art_955a2dc375b342fcb669ded8317f9bc2",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_c6368b54124344e79e37fbc60eed5d99",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 144,
+            "version_label": "v144"
           }
         },
         "artifact_art_960441c8b2d44fa1b9bd55d749613291": {
@@ -13765,6 +14199,52 @@
             "tenant_id": "tenant-a",
             "document_version": 60,
             "version_label": "v60"
+          }
+        },
+        "artifact_art_a1823ff7b25045159dc00e3110d32b0b": {
+          "document_id": "artifact_art_a1823ff7b25045159dc00e3110d32b0b",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 141,
+          "version_label": "v141",
+          "metadata": {
+            "artifact_id": "art_a1823ff7b25045159dc00e3110d32b0b",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_a75d3fa6085942e5be49f1f5ec56c002",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 141,
+            "version_label": "v141"
+          }
+        },
+        "artifact_art_a1ed3583a5d344b8a549f1e34d1c3e3a": {
+          "document_id": "artifact_art_a1ed3583a5d344b8a549f1e34d1c3e3a",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 140,
+          "version_label": "v140",
+          "metadata": {
+            "artifact_id": "art_a1ed3583a5d344b8a549f1e34d1c3e3a",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_9f6407fc4dcb4925a720956dadd737a8",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 140,
+            "version_label": "v140"
           }
         },
         "artifact_art_a5b60b9f78944cc2aaf68e7b605c5a12": {
@@ -15055,6 +15535,29 @@
             "version_label": "v15"
           }
         },
+        "artifact_art_dcc705b003114909b0544b41f13c0dd2": {
+          "document_id": "artifact_art_dcc705b003114909b0544b41f13c0dd2",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 147,
+          "version_label": "v147",
+          "metadata": {
+            "artifact_id": "art_dcc705b003114909b0544b41f13c0dd2",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_b2475e5a6822442ebc9c23da3c7e21d1",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 147,
+            "version_label": "v147"
+          }
+        },
         "artifact_art_dde02f7e4a4548b495e570c37ca9f015": {
           "document_id": "artifact_art_dde02f7e4a4548b495e570c37ca9f015",
           "source": "shipment-template.xlsx",
@@ -15377,6 +15880,29 @@
             "version_label": "v24"
           }
         },
+        "artifact_art_f14f29b51c414236b8db11207a1a745b": {
+          "document_id": "artifact_art_f14f29b51c414236b8db11207a1a745b",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 136,
+          "version_label": "v136",
+          "metadata": {
+            "artifact_id": "art_f14f29b51c414236b8db11207a1a745b",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_10923240671d47789a5c0a7be2f88824",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 136,
+            "version_label": "v136"
+          }
+        },
         "artifact_art_f26d2894815f41ee9c32dc0296c9178d": {
           "document_id": "artifact_art_f26d2894815f41ee9c32dc0296c9178d",
           "source": "ocr_result",
@@ -15469,6 +15995,29 @@
             "version_label": "v60"
           }
         },
+        "artifact_art_f47b3f648ee1400f8dfb0c30e7f997c6": {
+          "document_id": "artifact_art_f47b3f648ee1400f8dfb0c30e7f997c6",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 142,
+          "version_label": "v142",
+          "metadata": {
+            "artifact_id": "art_f47b3f648ee1400f8dfb0c30e7f997c6",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_dbad92c54eeb44239f45a428cf91261b",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 142,
+            "version_label": "v142"
+          }
+        },
         "artifact_art_f56f688e38c74f50bef385dee02652d7": {
           "document_id": "artifact_art_f56f688e38c74f50bef385dee02652d7",
           "source": "shipment-template.xlsx",
@@ -15536,6 +16085,29 @@
             "tenant_id": "tenant-a",
             "document_version": 115,
             "version_label": "v115"
+          }
+        },
+        "artifact_art_f83515a803d64d8a85fad3562c6f8d71": {
+          "document_id": "artifact_art_f83515a803d64d8a85fad3562c6f8d71",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 131,
+          "version_label": "v131",
+          "metadata": {
+            "artifact_id": "art_f83515a803d64d8a85fad3562c6f8d71",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_16c29d603dc2499798dd65b6b22995c8",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 131,
+            "version_label": "v131"
           }
         },
         "artifact_art_fa9ebd9c37b04c2b94b17869b58c9f11": {
@@ -23204,14 +23776,462 @@
           },
           "source_url": "shipment-template.xlsx",
           "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 268,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_a1ed3583a5d344b8a549f1e34d1c3e3a",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 140,
+            "version_label": "v140",
+            "artifact_id": "art_a1ed3583a5d344b8a549f1e34d1c3e3a",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_9f6407fc4dcb4925a720956dadd737a8",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 269,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_03ba6126ae184cc48b5443f5c4af5b69",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 130,
+            "version_label": "v130",
+            "artifact_id": "art_03ba6126ae184cc48b5443f5c4af5b69",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_2b0da96fabdf48a8b0421a91923d3332",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 270,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_a1823ff7b25045159dc00e3110d32b0b",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 141,
+            "version_label": "v141",
+            "artifact_id": "art_a1823ff7b25045159dc00e3110d32b0b",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_a75d3fa6085942e5be49f1f5ec56c002",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 271,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_f83515a803d64d8a85fad3562c6f8d71",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 131,
+            "version_label": "v131",
+            "artifact_id": "art_f83515a803d64d8a85fad3562c6f8d71",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_16c29d603dc2499798dd65b6b22995c8",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 272,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_f47b3f648ee1400f8dfb0c30e7f997c6",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 142,
+            "version_label": "v142",
+            "artifact_id": "art_f47b3f648ee1400f8dfb0c30e7f997c6",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_dbad92c54eeb44239f45a428cf91261b",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 273,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_563efe258aad4368af647a5b487de576",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 132,
+            "version_label": "v132",
+            "artifact_id": "art_563efe258aad4368af647a5b487de576",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_ef43590611bf494eb4382c563ebdd270",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 274,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_7d18be248eaf42968a2fbaaae1f971b8",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 143,
+            "version_label": "v143",
+            "artifact_id": "art_7d18be248eaf42968a2fbaaae1f971b8",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_8aeec30f3bfb41439ead5003cc5770e6",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 275,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_6e20bfb659b944d0b420305b0a0a6138",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 133,
+            "version_label": "v133",
+            "artifact_id": "art_6e20bfb659b944d0b420305b0a0a6138",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_189f7dea7ee14570adf6a0c2d2f55c7c",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 276,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_955a2dc375b342fcb669ded8317f9bc2",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 144,
+            "version_label": "v144",
+            "artifact_id": "art_955a2dc375b342fcb669ded8317f9bc2",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_c6368b54124344e79e37fbc60eed5d99",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 277,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_17386fd481734417bc22f1bacc88ce84",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 134,
+            "version_label": "v134",
+            "artifact_id": "art_17386fd481734417bc22f1bacc88ce84",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_66c20e4e338f4cf89aacc81f399dd0d2",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 278,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_1c3aee48bfea45be8d302c68f5dee471",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 145,
+            "version_label": "v145",
+            "artifact_id": "art_1c3aee48bfea45be8d302c68f5dee471",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_e59318219c7246da90d092575530bc71",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 279,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_8ed22f948015478eaf2664e5ae1507f6",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 135,
+            "version_label": "v135",
+            "artifact_id": "art_8ed22f948015478eaf2664e5ae1507f6",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_da4aa95208ba407fbea55e8d7a3885bc",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 280,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_689c72c008b24f1bbdd53eae01a43cec",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 146,
+            "version_label": "v146",
+            "artifact_id": "art_689c72c008b24f1bbdd53eae01a43cec",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_e9f785381916463e9387fe875bde639c",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 281,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_f14f29b51c414236b8db11207a1a745b",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 136,
+            "version_label": "v136",
+            "artifact_id": "art_f14f29b51c414236b8db11207a1a745b",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_10923240671d47789a5c0a7be2f88824",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 282,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_dcc705b003114909b0544b41f13c0dd2",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 147,
+            "version_label": "v147",
+            "artifact_id": "art_dcc705b003114909b0544b41f13c0dd2",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_b2475e5a6822442ebc9c23da3c7e21d1",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 283,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "user_tenant-a",
+            "document_id": "artifact_art_3152606dfdef4d6895fb542e0f8a20d6",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 137,
+            "version_label": "v137",
+            "artifact_id": "art_3152606dfdef4d6895fb542e0f8a20d6",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_3b761429794d4a3dbc03718f36ee7cde",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
         }
       ],
       "index": {
         "schema_version": 2,
         "retriever": "hybrid_bm25_vector",
         "reranker": "lexical_overlap_v1",
-        "document_count": 268,
-        "chunk_count": 268,
+        "document_count": 284,
+        "chunk_count": 284,
         "embedding_count": 0,
         "embedding_persisted": false,
         "vector_backend": {
@@ -23219,20 +24239,20 @@
           "dataset_id": "user_tenant-a",
           "backend": "sqlite_vector",
           "created_at": 1781869000.041301,
-          "updated_at": 1781978765.459339,
-          "chunk_count": 268,
+          "updated_at": 1782062134.58254,
+          "chunk_count": 284,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
         "vector_backend_name": "sqlite_vector",
-        "vector_backend_chunk_count": 268,
+        "vector_backend_chunk_count": 284,
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
-        "vector_backend_synced_chunks": 268,
-        "vector_backend_synced_at": "2026-06-20T18:06:05.464882Z",
+        "vector_backend_synced_chunks": 284,
+        "vector_backend_synced_at": "2026-06-21T17:15:34.588749Z",
         "vector_backend_error": "",
-        "updated_at": "2026-06-20T18:06:05.465142Z"
+        "updated_at": "2026-06-21T17:15:34.589081Z"
       },
       "rebuild_jobs": {}
     },
@@ -23446,6 +24466,29 @@
             "version_label": "v29"
           }
         },
+        "artifact_art_3f2e61cd08314f57a7d9eba50a8e0dca": {
+          "document_id": "artifact_art_3f2e61cd08314f57a7d9eba50a8e0dca",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 60,
+          "chunk_count": 1,
+          "tenant_id": "u",
+          "version": 36,
+          "version_label": "v36",
+          "metadata": {
+            "artifact_id": "art_3f2e61cd08314f57a7d9eba50a8e0dca",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_cf9f344f2b9e42f08a686720a6e2332a",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u",
+            "document_version": 36,
+            "version_label": "v36"
+          }
+        },
         "artifact_art_3f4e2e9e662e4160a8149d5a63776b77": {
           "document_id": "artifact_art_3f4e2e9e662e4160a8149d5a63776b77",
           "source": "excel_import_records",
@@ -23469,6 +24512,29 @@
             "version_label": "v22"
           }
         },
+        "artifact_art_4d80d0d2f85446c7a34d49a1ff238f27": {
+          "document_id": "artifact_art_4d80d0d2f85446c7a34d49a1ff238f27",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 60,
+          "chunk_count": 1,
+          "tenant_id": "u",
+          "version": 39,
+          "version_label": "v39",
+          "metadata": {
+            "artifact_id": "art_4d80d0d2f85446c7a34d49a1ff238f27",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_9d83806debc143a79b2158b0f5d2b574",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u",
+            "document_version": 39,
+            "version_label": "v39"
+          }
+        },
         "artifact_art_4fad227a3ba74cb5a8c5374e6e6eaf08": {
           "document_id": "artifact_art_4fad227a3ba74cb5a8c5374e6e6eaf08",
           "source": "excel_import_records",
@@ -23490,6 +24556,29 @@
             "tenant_id": "u",
             "document_version": 5,
             "version_label": "v5"
+          }
+        },
+        "artifact_art_501e4cbcfa674b8eaba5ae9d8a6c8bc1": {
+          "document_id": "artifact_art_501e4cbcfa674b8eaba5ae9d8a6c8bc1",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 60,
+          "chunk_count": 1,
+          "tenant_id": "u",
+          "version": 37,
+          "version_label": "v37",
+          "metadata": {
+            "artifact_id": "art_501e4cbcfa674b8eaba5ae9d8a6c8bc1",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_537c3a6f68bd40cca2533891fc402294",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u",
+            "document_version": 37,
+            "version_label": "v37"
           }
         },
         "artifact_art_51f3f6e28e164c2fbebf6a961626def5": {
@@ -23858,6 +24947,29 @@
             "tenant_id": "u",
             "document_version": 3,
             "version_label": "v3"
+          }
+        },
+        "artifact_art_93003a7ae87c423090ea0d072a94c682": {
+          "document_id": "artifact_art_93003a7ae87c423090ea0d072a94c682",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 60,
+          "chunk_count": 1,
+          "tenant_id": "u",
+          "version": 38,
+          "version_label": "v38",
+          "metadata": {
+            "artifact_id": "art_93003a7ae87c423090ea0d072a94c682",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_25fd8f0592374dd185e0774a68eb3a19",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u",
+            "document_version": 38,
+            "version_label": "v38"
           }
         },
         "artifact_art_94f0b47150034db2ba010e6bbc00cacb": {
@@ -25025,14 +26137,126 @@
           },
           "source_url": "excel_import_records",
           "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"客户\"}, {\"name\": \"产品\"}, {\"name\": \"单价\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 35,
+          "char_start": 0,
+          "char_end": 60,
+          "metadata": {
+            "dataset_id": "user_u",
+            "document_id": "artifact_art_3f2e61cd08314f57a7d9eba50a8e0dca",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u",
+            "document_version": 36,
+            "version_label": "v36",
+            "artifact_id": "art_3f2e61cd08314f57a7d9eba50a8e0dca",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_cf9f344f2b9e42f08a686720a6e2332a",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"客户\"}, {\"name\": \"产品\"}, {\"name\": \"单价\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 36,
+          "char_start": 0,
+          "char_end": 60,
+          "metadata": {
+            "dataset_id": "user_u",
+            "document_id": "artifact_art_501e4cbcfa674b8eaba5ae9d8a6c8bc1",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u",
+            "document_version": 37,
+            "version_label": "v37",
+            "artifact_id": "art_501e4cbcfa674b8eaba5ae9d8a6c8bc1",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_537c3a6f68bd40cca2533891fc402294",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"客户\"}, {\"name\": \"产品\"}, {\"name\": \"单价\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 37,
+          "char_start": 0,
+          "char_end": 60,
+          "metadata": {
+            "dataset_id": "user_u",
+            "document_id": "artifact_art_93003a7ae87c423090ea0d072a94c682",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u",
+            "document_version": 38,
+            "version_label": "v38",
+            "artifact_id": "art_93003a7ae87c423090ea0d072a94c682",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_25fd8f0592374dd185e0774a68eb3a19",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"客户\"}, {\"name\": \"产品\"}, {\"name\": \"单价\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 38,
+          "char_start": 0,
+          "char_end": 60,
+          "metadata": {
+            "dataset_id": "user_u",
+            "document_id": "artifact_art_4d80d0d2f85446c7a34d49a1ff238f27",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u",
+            "document_version": 39,
+            "version_label": "v39",
+            "artifact_id": "art_4d80d0d2f85446c7a34d49a1ff238f27",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_9d83806debc143a79b2158b0f5d2b574",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
         }
       ],
       "index": {
         "schema_version": 2,
         "retriever": "hybrid_bm25_vector",
         "reranker": "lexical_overlap_v1",
-        "document_count": 35,
-        "chunk_count": 35,
+        "document_count": 39,
+        "chunk_count": 39,
         "embedding_count": 0,
         "embedding_persisted": false,
         "vector_backend": {
@@ -25040,26 +26264,49 @@
           "dataset_id": "user_u",
           "backend": "sqlite_vector",
           "created_at": 1781882167.630595,
-          "updated_at": 1781978760.532311,
-          "chunk_count": 35,
+          "updated_at": 1782062129.0199978,
+          "chunk_count": 39,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
         "vector_backend_name": "sqlite_vector",
-        "vector_backend_chunk_count": 35,
+        "vector_backend_chunk_count": 39,
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
-        "vector_backend_synced_chunks": 35,
-        "vector_backend_synced_at": "2026-06-20T18:06:00.533389Z",
+        "vector_backend_synced_chunks": 39,
+        "vector_backend_synced_at": "2026-06-21T17:15:29.021159Z",
         "vector_backend_error": "",
-        "updated_at": "2026-06-20T18:06:00.533492Z"
+        "updated_at": "2026-06-21T17:15:29.021269Z"
       },
       "rebuild_jobs": {}
     },
     "user_u1": {
       "dataset_id": "user_u1",
       "documents": {
+        "artifact_art_00d32c7b91fb498e8d295ec01429bee1": {
+          "document_id": "artifact_art_00d32c7b91fb498e8d295ec01429bee1",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 78,
+          "version_label": "v78",
+          "metadata": {
+            "artifact_id": "art_00d32c7b91fb498e8d295ec01429bee1",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_14ec28381f79433b8bf7409e92dd7286",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 78,
+            "version_label": "v78"
+          }
+        },
         "artifact_art_09517d8d64304eb9a91ee35b30ce4db1": {
           "document_id": "artifact_art_09517d8d64304eb9a91ee35b30ce4db1",
           "source": "excel_import_records",
@@ -25428,6 +26675,29 @@
             "version_label": "v53"
           }
         },
+        "artifact_art_5593cd713203427c8ce7320aa46fdde5": {
+          "document_id": "artifact_art_5593cd713203427c8ce7320aa46fdde5",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 76,
+          "version_label": "v76",
+          "metadata": {
+            "artifact_id": "art_5593cd713203427c8ce7320aa46fdde5",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_bbd0e05b74d242d0847a49b55b5f02c9",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 76,
+            "version_label": "v76"
+          }
+        },
         "artifact_art_5b97199871bc472797c51d3cc326cfb4": {
           "document_id": "artifact_art_5b97199871bc472797c51d3cc326cfb4",
           "source": "excel_import_records",
@@ -25518,6 +26788,29 @@
             "tenant_id": "u1",
             "document_version": 42,
             "version_label": "v42"
+          }
+        },
+        "artifact_art_6d8411689bc142129efb60ecac811b39": {
+          "document_id": "artifact_art_6d8411689bc142129efb60ecac811b39",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 75,
+          "version_label": "v75",
+          "metadata": {
+            "artifact_id": "art_6d8411689bc142129efb60ecac811b39",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_310c35b593b04362931da4541b5063f9",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 75,
+            "version_label": "v75"
           }
         },
         "artifact_art_6e35248d2840458b9469aa3d4e5c589e": {
@@ -25679,6 +26972,29 @@
             "tenant_id": "u1",
             "document_version": 44,
             "version_label": "v44"
+          }
+        },
+        "artifact_art_7c845d3e04a246fc9b073a75be0d7775": {
+          "document_id": "artifact_art_7c845d3e04a246fc9b073a75be0d7775",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 74,
+          "version_label": "v74",
+          "metadata": {
+            "artifact_id": "art_7c845d3e04a246fc9b073a75be0d7775",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_76562ab1552944759a95ceb4ac2f1e83",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 74,
+            "version_label": "v74"
           }
         },
         "artifact_art_866461398d364c0a870f12f9ca8337f3": {
@@ -25865,6 +27181,29 @@
             "version_label": "v17"
           }
         },
+        "artifact_art_91da231115964f11b0d500cf8f4dd9e0": {
+          "document_id": "artifact_art_91da231115964f11b0d500cf8f4dd9e0",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 77,
+          "version_label": "v77",
+          "metadata": {
+            "artifact_id": "art_91da231115964f11b0d500cf8f4dd9e0",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_e9e553fa7710429ab829ba7e532b3576",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 77,
+            "version_label": "v77"
+          }
+        },
         "artifact_art_9300585cec8f462f9610d114abc36dac": {
           "document_id": "artifact_art_9300585cec8f462f9610d114abc36dac",
           "source": "excel_import_records",
@@ -25955,6 +27294,29 @@
             "tenant_id": "u1",
             "document_version": 6,
             "version_label": "v6"
+          }
+        },
+        "artifact_art_99098df15dce43dcbf3ff3df995b481b": {
+          "document_id": "artifact_art_99098df15dce43dcbf3ff3df995b481b",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 80,
+          "version_label": "v80",
+          "metadata": {
+            "artifact_id": "art_99098df15dce43dcbf3ff3df995b481b",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_41527b1468c948bda91c22340ed1ba12",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 80,
+            "version_label": "v80"
           }
         },
         "artifact_art_9f6ff8be8dce4f22b4790564c2396580": {
@@ -26417,6 +27779,29 @@
             "version_label": "v39"
           }
         },
+        "artifact_art_d1bde9d7dad64d9fa1af410da593c9b2": {
+          "document_id": "artifact_art_d1bde9d7dad64d9fa1af410da593c9b2",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 73,
+          "version_label": "v73",
+          "metadata": {
+            "artifact_id": "art_d1bde9d7dad64d9fa1af410da593c9b2",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_efb7a750e2ec443e8a39052268d7131a",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 73,
+            "version_label": "v73"
+          }
+        },
         "artifact_art_d3d0e42074a249f3863d93cc5f26f13c": {
           "document_id": "artifact_art_d3d0e42074a249f3863d93cc5f26f13c",
           "source": "excel_import_records",
@@ -26484,6 +27869,29 @@
             "tenant_id": "u1",
             "document_version": 21,
             "version_label": "v21"
+          }
+        },
+        "artifact_art_e049726807034b8bb87f8450d7b4f37a": {
+          "document_id": "artifact_art_e049726807034b8bb87f8450d7b4f37a",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 79,
+          "version_label": "v79",
+          "metadata": {
+            "artifact_id": "art_e049726807034b8bb87f8450d7b4f37a",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_7c10f0d94412499c84d627ea53ec6135",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 79,
+            "version_label": "v79"
           }
         },
         "artifact_art_e0c8a5b1002f4650b3f37986b3241aaf": {
@@ -28733,14 +30141,238 @@
           },
           "source_url": "excel_import_records",
           "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 72,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_d1bde9d7dad64d9fa1af410da593c9b2",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 73,
+            "version_label": "v73",
+            "artifact_id": "art_d1bde9d7dad64d9fa1af410da593c9b2",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_efb7a750e2ec443e8a39052268d7131a",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 73,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_7c845d3e04a246fc9b073a75be0d7775",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 74,
+            "version_label": "v74",
+            "artifact_id": "art_7c845d3e04a246fc9b073a75be0d7775",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_76562ab1552944759a95ceb4ac2f1e83",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 74,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_6d8411689bc142129efb60ecac811b39",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 75,
+            "version_label": "v75",
+            "artifact_id": "art_6d8411689bc142129efb60ecac811b39",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_310c35b593b04362931da4541b5063f9",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 75,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_5593cd713203427c8ce7320aa46fdde5",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 76,
+            "version_label": "v76",
+            "artifact_id": "art_5593cd713203427c8ce7320aa46fdde5",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_bbd0e05b74d242d0847a49b55b5f02c9",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 76,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_91da231115964f11b0d500cf8f4dd9e0",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 77,
+            "version_label": "v77",
+            "artifact_id": "art_91da231115964f11b0d500cf8f4dd9e0",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_e9e553fa7710429ab829ba7e532b3576",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 77,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_00d32c7b91fb498e8d295ec01429bee1",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 78,
+            "version_label": "v78",
+            "artifact_id": "art_00d32c7b91fb498e8d295ec01429bee1",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_14ec28381f79433b8bf7409e92dd7286",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 78,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_e049726807034b8bb87f8450d7b4f37a",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 79,
+            "version_label": "v79",
+            "artifact_id": "art_e049726807034b8bb87f8450d7b4f37a",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_7c10f0d94412499c84d627ea53ec6135",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 79,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_99098df15dce43dcbf3ff3df995b481b",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 80,
+            "version_label": "v80",
+            "artifact_id": "art_99098df15dce43dcbf3ff3df995b481b",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_41527b1468c948bda91c22340ed1ba12",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
         }
       ],
       "index": {
         "schema_version": 2,
         "retriever": "hybrid_bm25_vector",
         "reranker": "lexical_overlap_v1",
-        "document_count": 72,
-        "chunk_count": 72,
+        "document_count": 80,
+        "chunk_count": 80,
         "embedding_count": 0,
         "embedding_persisted": false,
         "vector_backend": {
@@ -28748,20 +30380,20 @@
           "dataset_id": "user_u1",
           "backend": "sqlite_vector",
           "created_at": 1781862909.5152361,
-          "updated_at": 1781978760.5339892,
-          "chunk_count": 72,
+          "updated_at": 1782062129.021821,
+          "chunk_count": 80,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
         "vector_backend_name": "sqlite_vector",
-        "vector_backend_chunk_count": 72,
+        "vector_backend_chunk_count": 80,
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
-        "vector_backend_synced_chunks": 72,
-        "vector_backend_synced_at": "2026-06-20T18:06:00.535612Z",
+        "vector_backend_synced_chunks": 80,
+        "vector_backend_synced_at": "2026-06-21T17:15:29.023602Z",
         "vector_backend_error": "",
-        "updated_at": "2026-06-20T18:06:00.535722Z"
+        "updated_at": "2026-06-21T17:15:29.023999Z"
       },
       "rebuild_jobs": {}
     }

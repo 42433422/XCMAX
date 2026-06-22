@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from app.domain.value_objects import ContactInfo
+from app.domain.value_objects import Address, ContactInfo
 
 
 @dataclass
@@ -22,9 +22,11 @@ class Customer:
         return {
             "id": self.id,
             "customer_name": self.customer_name,
-            "contact_person": self.contact_info.person,
+            "contact_person": self.contact_info.name,
             "contact_phone": self.contact_info.phone,
-            "contact_address": self.contact_info.address,
+            "contact_address": (
+                self.contact_info.address.to_full_string() if self.contact_info.address else ""
+            ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -35,7 +37,11 @@ class Customer:
     ) -> "Customer":
         return cls(
             customer_name=customer_name,
-            contact_info=ContactInfo(person=contact_person, phone=phone, address=address),
+            contact_info=ContactInfo(
+                name=contact_person,
+                phone=phone,
+                address=Address.from_string(address) if address else None,
+            ),
         )
 
 
@@ -61,7 +67,9 @@ class PurchaseUnit:
 
     def get_contact_info(self) -> ContactInfo:
         return ContactInfo(
-            person=self.contact_person, phone=self.contact_phone, address=self.address
+            name=self.contact_person,
+            phone=self.contact_phone,
+            address=Address.from_string(self.address) if self.address else None,
         )
 
     def apply_discount(self, original_price: float) -> float:

@@ -244,7 +244,7 @@ def _strip_bearer(value: str) -> str:
     return token
 
 
-def _market_auth_token() -> str:
+def _market_auth_token(user_id: str | None = None) -> str:
     token = _strip_bearer(
         os.environ.get("MODEL_USAGE_MARKET_AUTH_TOKEN")
         or os.environ.get("XCAGI_MARKET_AUTH_TOKEN")
@@ -256,7 +256,14 @@ def _market_auth_token() -> str:
     try:
         from app.fastapi_routes.market_account import latest_session_market_token
 
-        return _strip_bearer(latest_session_market_token())
+        # 多用户环境按 user_id 过滤，防止 fallback 串号
+        uid_int: int | None = None
+        if user_id:
+            try:
+                uid_int = int(str(user_id).strip())
+            except (TypeError, ValueError):
+                uid_int = None
+        return _strip_bearer(latest_session_market_token(user_id=uid_int))
     except (AttributeError, ImportError, OSError, RuntimeError):
         return ""
 
@@ -333,7 +340,7 @@ def _apply_market_wallet_debit(
     if cost_units <= 0:
         return "unmetered", {"status": "not_required", "user_id": uid, "cost_units": 0}
     amount = _market_amount_for_cost_units(cost_units)
-    token = _market_auth_token()
+    token = _market_auth_token(user_id=user_id)
     request_id = (usage_key or f"usage_{uuid.uuid4().hex}")[:128]
     preauth_payload = {
         "amount": _money_str(amount),
@@ -420,7 +427,7 @@ def _apply_market_wallet_refund(
     }
     data, err = _market_post_json(
         "/api/wallet/ai/refund",
-        token=_market_auth_token(),
+        token=_market_auth_token(user_id=user_id),
         payload=payload,
     )
     base_payload = {

@@ -10,6 +10,13 @@ import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.db.ModInfoCacheEntity
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
+import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupDto
+import com.xiuci.xcagi.mobile.core.model.AiGroupMemberBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupMessageBody
+import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
+import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
+import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.MarketAuthResponse
@@ -1041,6 +1048,23 @@ class XcagiRepository @Inject constructor(
             return
         }
 
+        if (conversationId == PinnedIds.CLAUDE) {
+            streamClaudeSuperEmployeeChat(
+                message = message,
+                onToken = { t ->
+                    acc.append(t)
+                    onToken(t)
+                },
+                onDone = onDone,
+                onError = onError,
+            )
+            val finalText = acc.toString()
+            if (finalText.isNotBlank()) {
+                cacheChatMessage(sessionId = sessionId, role = "assistant", text = finalText)
+            }
+            return
+        }
+
         val useCloud = !isPcReachable()
         if (useCloud) {
             val relayId = sessionStore.relayDesktopId()
@@ -1165,8 +1189,95 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    // 超级员工-Claude：与 Codex 同构（排比 Para 多设备派工），仅工具/端点不同。
+    private suspend fun streamClaudeSuperEmployeeChat(
+        message: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        try {
+            val statusPrefix = "已提交到超级员工-Claude，正在执行"
+            onToken(statusPrefix)
+            var emitted = statusPrefix
+
+            val response = fhd().postClaudeSuperEmployeeMessage(
+                body = ClaudeSuperEmployeeMobileMessageBody(
+                    message = message,
+                    body = message,
+                    context = mapOf(
+                        "source" to "mobile_chat",
+                        "client_surface" to "mobile",
+                        "mode" to "code",
+                    ),
+                ),
+            )
+            if (!response.success) {
+                onError(response.message.ifBlank { "超级员工-Claude 调用失败" })
+                return
+            }
+
+            val requestId = extractDispatchRequestId(response.data)
+            val taskId = extractTaskId(response.data)
+            val immediate = extractCodexMessageText(response.data, requestId, taskId)
+            if (immediate.isNotBlank()) {
+                val immediateTrimmed = immediate.trim()
+                val delta = immediateTrimmed.removePrefix(emitted)
+                if (delta.isNotBlank()) {
+                    onToken(delta)
+                    emitted = immediateTrimmed
+                }
+                onDone(immediateTrimmed)
+                return
+            }
+
+            var finalText = ""
+            repeat(60) {
+                delay(1000)
+                val polled = fetchMatchingClaudeMessage(requestId, taskId)
+                if (polled.isNotBlank()) {
+                    finalText = polled.trim()
+                    if (finalText != emitted) {
+                        val delta = finalText.removePrefix(emitted)
+                        if (delta.isNotBlank()) {
+                            onToken(delta)
+                        }
+                        emitted = finalText
+                    }
+                    onDone(finalText)
+                    return
+                }
+                val progressText = "已提交到超级员工-Claude，正在执行 $requestId"
+                if (progressText != emitted) {
+                    onToken("\n$progressText")
+                    emitted = progressText
+                }
+            }
+
+            finalText = "已提交到超级员工-Claude，任务将在电脑端执行后回写。"
+            onDone(finalText)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onError(e.message ?: "超级员工-Claude 调用失败")
+        }
+    }
+
     private suspend fun fetchLatestCodexMessage(): String =
         fetchMatchingCodexMessage(requestId = null, taskId = null)
+
+    private suspend fun fetchMatchingClaudeMessage(
+        requestId: String?,
+        taskId: String?,
+    ): String {
+        return try {
+            val response = fhd().getClaudeSuperEmployeeMessages(80)
+            if (!response.success) return ""
+            extractCodexMessageFromList(response.data?.get("messages"), requestId, taskId)
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     private suspend fun fetchMatchingCodexMessage(
         requestId: String?,
@@ -1180,6 +1291,74 @@ class XcagiRepository @Inject constructor(
             ""
         }
     }
+
+    // ── AI 群聊 ──
+    suspend fun loadAiGroups(): Result<List<AiGroupDto>> = aiGroupCall {
+        fhd().getAiGroups().let { if (it.success) Result.success(it.data?.groups.orEmpty()) else fail(it) }
+    }
+
+    suspend fun createAiGroup(name: String): Result<AiGroupDto?> = aiGroupCall {
+        fhd().createAiGroup(AiGroupCreateBody(name)).let {
+            if (it.success) Result.success(it.data?.group) else fail(it)
+        }
+    }
+
+    suspend fun loadAiGroupMessages(groupId: String): Result<List<AiGroupMessageDto>> = aiGroupCall {
+        fhd().getAiGroupMessages(groupId).let {
+            if (it.success) Result.success(it.data?.messages.orEmpty()) else fail(it)
+        }
+    }
+
+    suspend fun postAiGroupMessage(
+        groupId: String,
+        message: String,
+        mentions: List<String> = emptyList(),
+        senderName: String = "我",
+    ): Result<AiGroupPostData> = aiGroupCall {
+        fhd().postAiGroupMessage(
+            groupId,
+            AiGroupMessageBody(message = message, sender_name = senderName, mentions = mentions),
+        ).let { if (it.success) Result.success(it.data ?: AiGroupPostData()) else fail(it) }
+    }
+
+    suspend fun addAiGroupMember(
+        groupId: String,
+        employeeId: String,
+        modId: String,
+        name: String,
+        avatar: String,
+        summary: String,
+    ): Result<AiGroupDto?> = aiGroupCall {
+        fhd().addAiGroupMember(
+            groupId,
+            AiGroupMemberBody(
+                employee_id = employeeId,
+                mod_id = modId,
+                name = name,
+                avatar = avatar,
+                summary = summary,
+            ),
+        ).let { if (it.success) Result.success(it.data?.group) else fail(it) }
+    }
+
+    suspend fun removeAiGroupMember(groupId: String, employeeId: String): Result<AiGroupDto?> =
+        aiGroupCall {
+            fhd().removeAiGroupMember(groupId, employeeId).let {
+                if (it.success) Result.success(it.data?.group) else fail(it)
+            }
+        }
+
+    private fun <T> fail(env: com.xiuci.xcagi.mobile.core.model.MobileEnvelope<*>): Result<T> =
+        Result.failure(Exception(env.message.ifBlank { "群聊请求失败" }))
+
+    private suspend fun <T> aiGroupCall(block: suspend () -> Result<T>): Result<T> =
+        try {
+            syncRouterFromStore()
+            preferCloudIfLanUnreachable()
+            block()
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
 
     suspend fun loadCodexSuperEmployeeMessages(limit: Int = 80): Result<List<Pair<String, String>>> =
         try {
@@ -1209,6 +1388,40 @@ class XcagiRepository @Inject constructor(
                             } else ""
                         }.orEmpty()
                         markConversationActivity(PinnedIds.CODEX, latestTs, preview)
+                    }
+                Result.success(codexMessagesToPairs(rawMessages))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    suspend fun loadClaudeSuperEmployeeMessages(limit: Int = 80): Result<List<Pair<String, String>>> =
+        try {
+            syncRouterFromStore()
+            preferCloudIfLanUnreachable()
+            val response = fhd().getClaudeSuperEmployeeMessages(limit)
+            if (!response.success) {
+                Result.failure(Exception(response.message.ifBlank { "加载超级员工会话失败" }))
+            } else {
+                val rawMessages = response.data?.get("messages")
+                val rows = codexMessageRows(rawMessages)
+                rows
+                    .mapNotNull { row ->
+                        ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"])
+                    }
+                    .maxOrNull()
+                    ?.let { latestTs ->
+                        val latestRow = rows.maxByOrNull { row ->
+                            ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"]) ?: 0L
+                        }
+                        val preview = latestRow?.let { row ->
+                            val role = row["role"]?.toString()?.trim()?.lowercase().orEmpty()
+                            val body = row["body"]?.toString()?.trim().orEmpty()
+                            if (body.isNotBlank() && role in setOf("user", "assistant") && !isCodexSchedulerNotice(row)) {
+                                formatMessagePreview(role, body)
+                            } else ""
+                        }.orEmpty()
+                        markConversationActivity(PinnedIds.CLAUDE, latestTs, preview)
                     }
                 Result.success(codexMessagesToPairs(rawMessages))
             }
@@ -1291,8 +1504,8 @@ class XcagiRepository @Inject constructor(
         if (role != "assistant") return false
         if (isCodexSchedulerNotice(row)) return false
         val kind = row["kind"]?.toString()?.trim()?.lowercase().orEmpty()
-        return kind == "codex_result" || kind.isBlank()
-            || kind == "codex_direct"
+        // 兼容 codex_result/codex_direct 与 claude_result/claude_direct（及无 kind 的直答）。
+        return kind.isBlank() || kind.endsWith("_result") || kind.endsWith("_direct")
     }
 
     private fun isCodexSchedulerNotice(row: Map<String, Any?>): Boolean {

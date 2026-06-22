@@ -18,6 +18,7 @@ from typing import Any
 
 import httpx
 
+from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.utils.path_utils import get_app_data_dir
 
@@ -108,6 +109,8 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
         "capabilities": {
             "codex": True,
             "codex_cli": True,
+            "claude": True,
+            "claude_cli": True,
             "desktop": True,
             "host": host,
             "port": int(port),
@@ -234,7 +237,14 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     ).strip()
     if not message:
         return {"error": "任务缺少 message"}
-    if not kind.startswith("codex"):
+    # 中继泛化：按 kind 前缀选择超级员工(codex.* / claude.*)，本地执行后回写。
+    if kind.startswith("claude"):
+        service: Any = ClaudeSuperEmployeeService()
+        tool_label = "Claude"
+    elif kind.startswith("codex"):
+        service = CodexSuperEmployeeService()
+        tool_label = "Codex"
+    else:
         return {"error": f"暂不支持的任务类型：{kind}"}
     user_id = int(task.get("created_by_user_id") or payload.get("user_id") or 1)
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
@@ -246,7 +256,6 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         "target_devices": ["all"],
     }
     try:
-        service = CodexSuperEmployeeService()
         result = service.invoke(
             user_id=user_id,
             message=message,
@@ -257,7 +266,7 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         if dispatch_status == "completed":
             return {"ok": True, "codex": result, "_relay_status": "completed"}
         if dispatch.get("accepted") is not True:
-            reason = str(dispatch.get("reason") or "Codex/MCP 调度器当前不可用").strip()
+            reason = str(dispatch.get("reason") or f"{tool_label}/MCP 调度器当前不可用").strip()
             return {
                 "error": reason,
                 "codex": result,
@@ -283,7 +292,7 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
             time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
         suffix = f"（task_id={task_id}）" if task_id else ""
         return {
-            "error": f"Codex 已派发，但在 {timeout:g} 秒内未回写{suffix}",
+            "error": f"{tool_label} 已派发，但在 {timeout:g} 秒内未回写{suffix}",
             "codex": result,
             "_relay_status": "blocked",
         }
@@ -302,7 +311,8 @@ def _terminal_codex_message(
         if str(row.get("role") or "").strip().lower() != "assistant":
             continue
         kind = str(row.get("kind") or "").strip().lower()
-        if kind not in {"codex_result", "codex_direct"}:
+        # 兼容 codex_result/codex_direct 与 claude_result/claude_direct。
+        if not (kind.endswith("_result") or kind.endswith("_direct")):
             continue
         row_request = str(row.get("dispatch_request_id") or row.get("request_id") or "").strip()
         row_task = str(row.get("task_id") or "").strip()

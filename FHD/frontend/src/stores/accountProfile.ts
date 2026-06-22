@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { authApi, type AccountKind } from '@/api/auth';
+import { authApi, type AccountKind, type AccountTier } from '@/api/auth';
 import {
   invalidateEnterpriseSessionCache,
   validateEnterpriseSessionCached,
@@ -55,6 +55,12 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const localUserId = ref<number | null>(null);
   const impersonatingMarketUserId = ref<number | null>(null);
   const impersonatingUsername = ref('');
+  // 账号体系真相源（前端只读展示）：身份 / 等级 / 预算 / 已授权行业 / 会员
+  const tier = ref<AccountKind | null>(null);
+  const accountTier = ref<AccountTier | null>(null);
+  const budgetRange = ref('');
+  const entitledIndustries = ref<string[]>([]);
+  const marketMembershipTier = ref<string | null>(null);
   const loaded = ref(false);
 
   const isAdminAccount = computed(
@@ -98,6 +104,18 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     impersonatingMarketUserId.value =
       imp === null || imp === undefined || imp === '' ? null : Number(imp);
     impersonatingUsername.value = String(data.impersonating_username || '').trim();
+    const t = String(data.tier || '').trim();
+    tier.value = t === 'personal' || t === 'enterprise' || t === 'admin' ? t : null;
+    const at = String(data.account_tier || '').trim();
+    accountTier.value =
+      at === 'normal' || at === 'pro' || at === 'max' || at === 'ultra' ? at : null;
+    budgetRange.value = String(data.budget_range || '').trim();
+    entitledIndustries.value = Array.isArray(data.entitled_industries)
+      ? (data.entitled_industries as unknown[]).map((x) => String(x))
+      : [];
+    const mmt = data.market_membership_tier;
+    marketMembershipTier.value =
+      mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim();
     loaded.value = true;
     syncTenantScopedStoresFromProfile(
       tenantId.value,
@@ -160,6 +178,11 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     localUserId.value = null;
     impersonatingMarketUserId.value = null;
     impersonatingUsername.value = '';
+    tier.value = null;
+    accountTier.value = null;
+    budgetRange.value = '';
+    entitledIndustries.value = [];
+    marketMembershipTier.value = null;
     loaded.value = false;
     setRuntimeTenantStorageScopeInput(null);
     refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' });
@@ -176,6 +199,11 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     localUserId,
     impersonatingMarketUserId,
     impersonatingUsername,
+    tier,
+    accountTier,
+    budgetRange,
+    entitledIndustries,
+    marketMembershipTier,
     loaded,
     isAdminAccount,
     isImpersonating,

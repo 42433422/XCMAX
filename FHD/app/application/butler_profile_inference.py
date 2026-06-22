@@ -19,6 +19,10 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from app.application.butler_identity_catalog import (
+    DEFAULT_MBTI_EI,
+    DEFAULT_MBTI_JP,
+    DEFAULT_MBTI_SN,
+    DEFAULT_MBTI_TF,
     derive_mbti_type,
     pick_primary_identity,
 )
@@ -136,10 +140,10 @@ class ButlerProfileInference:
         self._apply_rules(features, result)
 
         # === 计算新 MBTI 分数 ===
-        current_ei = int(current_profile.get("mbti_ei") or 65)
-        current_sn = int(current_profile.get("mbti_sn") or 60)
-        current_tf = int(current_profile.get("mbti_tf") or 70)
-        current_jp = int(current_profile.get("mbti_jp") or 60)
+        current_ei = int(current_profile.get("mbti_ei") or DEFAULT_MBTI_EI)
+        current_sn = int(current_profile.get("mbti_sn") or DEFAULT_MBTI_SN)
+        current_tf = int(current_profile.get("mbti_tf") or DEFAULT_MBTI_TF)
+        current_jp = int(current_profile.get("mbti_jp") or DEFAULT_MBTI_JP)
 
         new_ei = _clamp(current_ei + result.mbti_ei_delta)
         new_sn = _clamp(current_sn + result.mbti_sn_delta)
@@ -227,10 +231,10 @@ def apply_inference(
     if not result.new_mbti_type:
         return
 
-    current_ei = int(current_profile.get("mbti_ei") or 65)
-    current_sn = int(current_profile.get("mbti_sn") or 60)
-    current_tf = int(current_profile.get("mbti_tf") or 70)
-    current_jp = int(current_profile.get("mbti_jp") or 60)
+    current_ei = int(current_profile.get("mbti_ei") or DEFAULT_MBTI_EI)
+    current_sn = int(current_profile.get("mbti_sn") or DEFAULT_MBTI_SN)
+    current_tf = int(current_profile.get("mbti_tf") or DEFAULT_MBTI_TF)
+    current_jp = int(current_profile.get("mbti_jp") or DEFAULT_MBTI_JP)
 
     new_ei = _clamp(current_ei + result.mbti_ei_delta)
     new_sn = _clamp(current_sn + result.mbti_sn_delta)
