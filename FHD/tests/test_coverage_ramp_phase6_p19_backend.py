@@ -1462,21 +1462,22 @@ class TestRunMarketFirstLogin:
         assert err is not None
 
     @pytest.mark.asyncio
-    async def test_enterprise_account_kind_mismatch(self):
-        # account_kind hint mismatch is now just a warning — login proceeds.
-        # Patch internals to avoid DB access.
+    async def test_enterprise_account_kind_mismatch_is_ignored(self):
+        # 行为变更：account_kind hint 与市场身份不一致不再拒绝登录，仅记录告警，
+        # 实际档位由 User.tier 派生（见 finalize_enterprise_login）。此处断言
+        # 市场已通过时即使入口 hint 与市场身份不匹配也会继续完成本地登录。
         from app.application.enterprise_login_flow import run_market_first_login
 
+        local_result = {"success": True, "session_id": "s9", "user": {"id": 1}}
         with (
             patch(
                 "app.application.enterprise_login_flow.ensure_local_user_after_market",
-                new=AsyncMock(return_value=({"success": True, "session_id": "s"}, None)),
+                AsyncMock(return_value=(local_result, None)),
             ),
             patch(
                 "app.application.enterprise_login_flow.finalize_enterprise_login",
-                new=AsyncMock(return_value={"success": True}),
+                AsyncMock(return_value=local_result),
             ),
-            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
         ):
             result, err = await run_market_first_login(
                 username="alice",
@@ -1488,6 +1489,7 @@ class TestRunMarketFirstLogin:
                 jit_create_fn=MagicMock(),
                 market_user_email_from_raw=MagicMock(),
             )
+        assert result is not None
         assert err is None
 
     @pytest.mark.asyncio

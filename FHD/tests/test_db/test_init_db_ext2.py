@@ -667,6 +667,12 @@ class TestEnsureRuntimeAuthBootstrapDeep:
     def test_postgresql_url_calls_pg_bootstrap(self):
         from app.db.init_db import ensure_runtime_auth_bootstrap
 
+        # The postgres branch fans out to three helpers (see init_db.py
+        # ensure_runtime_auth_bootstrap else-branch): ensure_postgresql_auth_bootstrap
+        # + ensure_user_preferences_bootstrap + ensure_neuro_event_log_bootstrap.
+        # Mock ALL of them so no real PostgreSQL connection (port 5432) is attempted
+        # on machines without a local PG — previously ensure_neuro_event_log_bootstrap
+        # was left unpatched and tried to connect, failing only off-CI.
         with (
             patch(
                 "app.fastapi_app.sqlite_paths.resolve_effective_database_url",
@@ -675,11 +681,12 @@ class TestEnsureRuntimeAuthBootstrapDeep:
             patch("app.fastapi_app.sqlite_paths.is_sqlite_url", return_value=False),
             patch("app.db.init_db.ensure_postgresql_auth_bootstrap") as mock_pg,
             patch("app.db.init_db.ensure_user_preferences_bootstrap") as mock_pref,
-            patch("app.db.init_db.ensure_neuro_event_log_bootstrap"),
+            patch("app.db.init_db.ensure_neuro_event_log_bootstrap") as mock_neuro,
         ):
             ensure_runtime_auth_bootstrap(None)
             mock_pg.assert_called_once()
             mock_pref.assert_called_once()
+            mock_neuro.assert_called_once()
 
 
 # ========================= _seed_sqlite_rbac_defaults ====================
