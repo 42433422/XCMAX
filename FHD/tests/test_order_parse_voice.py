@@ -2,7 +2,7 @@ import pytest
 
 
 def test_parse_order_text_voice_shipment_generate():
-    from app.routes.tools import _parse_order_text
+    from app.application.facades.tools_facade import _parse_order_text
 
     text = "七彩乐园的一桶酒吧零三的规格28"
     result = _parse_order_text(text)
@@ -30,7 +30,7 @@ def test_intent_recognition_shipment_generate_from_voice_style():
 
 
 def test_parse_order_text_missing_bucket_should_ask():
-    from app.routes.tools import _parse_order_text
+    from app.application.facades.tools_facade import _parse_order_text
 
     text = "打印一下七彩乐园的9803规格28"
     result = _parse_order_text(text)
@@ -50,7 +50,7 @@ def test_intent_recognition_print_model_spec_missing_bucket():
 
 
 def test_parse_order_text_colloquial_any_order():
-    from app.routes.tools import _parse_order_text
+    from app.application.facades.tools_facade import _parse_order_text
 
     text = "哎，给我打印一下七彩乐园的发货单，嗯，编号9803，规格二十八一共三桶。"
     result = _parse_order_text(text)
@@ -64,7 +64,7 @@ def test_parse_order_text_colloquial_any_order():
 
 
 def test_parse_order_text_missing_spec_should_ask():
-    from app.routes.tools import _parse_order_text
+    from app.application.facades.tools_facade import _parse_order_text
 
     text = "打印一下七彩乐园发货单，编号9803，一共三桶"
     result = _parse_order_text(text)
@@ -90,7 +90,7 @@ def test_intent_recognition_colloquial_should_prefer_shipment():
     ],
 )
 def test_parse_order_text_colloquial_qty_verbs_should_succeed(text):
-    from app.routes.tools import _parse_order_text
+    from app.application.facades.tools_facade import _parse_order_text
 
     result = _parse_order_text(text)
 

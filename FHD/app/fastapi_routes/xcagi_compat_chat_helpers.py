@@ -22,7 +22,11 @@ from fastapi import HTTPException, Request
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from app.application.workflow.legacy_chat_adapter import chat_stream_sse_events
+from app.application.agent_orchestrator.chat_trace import (
+    attach_chat_trace_run,
+    finalize_legacy_chat_run,
+    start_legacy_chat_run,
+)
 from app.domain.ai.tier import runtime_context_with_tier
 from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
@@ -30,6 +34,7 @@ from app.domain.context.session_context import (
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
+from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -150,6 +155,8 @@ class XcagiCompatChatBody(BaseModel):
         default=None,
         description="兼容旧客户端字段；当前版本不需要数据库写入授权。",
     )
+    user_id: str | None = None
+    source: str | None = None
 
 
 class XcagiCompatChatBatchBody(BaseModel):
@@ -240,15 +247,40 @@ def _xcagi_compat_reply_payload(
 
     tool_data: dict = {}
     last_result: dict = {}
+    reply_records: list[dict[str, Any]] = []
+    if isinstance(reply, dict):
+        raw_reply_records = reply.get("legacy_tool_records") or reply.get("_tool_records")
+        if isinstance(raw_reply_records, list):
+            reply_records = [item for item in raw_reply_records if isinstance(item, dict)]
     try:
-        from app.application.workflow.legacy_chat_adapter import get_last_tool_result
+        if reply_records:
+            last_record = reply_records[-1]
+            raw_output = last_record.get("output")
+            raw = dict(raw_output) if isinstance(raw_output, dict) else {}
+            raw.setdefault(
+                "tool_key", last_record.get("tool_id") or last_record.get("tool_name") or ""
+            )
+            raw.setdefault(
+                "tool_name", last_record.get("tool_name") or last_record.get("tool_id") or ""
+            )
+            raw.setdefault("tool_call_id", last_record.get("tool_call_id") or "")
+            raw.setdefault("tool_params", dict(last_record.get("params") or {}))
+            raw["_tool_records"] = reply_records
+        else:
+            from app.legacy.chat.legacy_chat_adapter import get_last_tool_result
 
-        raw = get_last_tool_result()
+            raw = get_last_tool_result()
         if isinstance(raw, dict) and raw:
             last_result = raw
+            raw_records = raw.get("_tool_records")
+            records = raw_records if isinstance(raw_records, list) else []
+            if records:
+                tool_data["legacy_tool_records"] = records
             from app.application.tools import flatten_tool_result_dict_for_client
 
             tool_data = flatten_tool_result_dict_for_client(raw)
+            if records:
+                tool_data["legacy_tool_records"] = records
             errs = raw.get("errors")
             if isinstance(errs, list) and errs:
                 preview = errs[:5]
@@ -508,6 +540,15 @@ def _sse_event_line(payload: dict) -> bytes:
     return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
 
 
+def _sse_payload_with_run_id(payload: dict[str, Any], run_id: str | None) -> dict[str, Any]:
+    if not run_id:
+        return payload
+    enriched = dict(payload)
+    enriched["run_id"] = run_id
+    enriched["agent_run_id"] = run_id
+    return enriched
+
+
 def _thinking_steps_from_planner_stream_text(merged: str) -> str | None:
     if not (merged or "").strip():
         return None
@@ -597,10 +638,19 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     if intr is not None:
         cleared = runtime_context_after_workflow_interrupt(runtime_context)
         yield _sse_event_line({"type": "token", "text": intr})
+        payload = _xcagi_compat_reply_payload(intr, runtime_context_update=cleared)
+        payload = attach_chat_trace_run(
+            payload,
+            message=body.message,
+            runtime_context=cleared,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
         yield _sse_event_line(
             {
                 "type": "done",
-                "result": _xcagi_compat_reply_payload(intr, runtime_context_update=cleared),
+                "result": payload,
             }
         )
         return
@@ -611,17 +661,52 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
     llm_client = create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
+    pre_run = None
+    planner_runtime_context = dict(runtime_context or {})
+    try:
+        pre_run = start_legacy_chat_run(
+            message=body.message,
+            runtime_context=planner_runtime_context,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
+        planner_runtime_context["run_id"] = pre_run.run_id
+        planner_runtime_context["agent_run_id"] = pre_run.run_id
+    except RECOVERABLE_ERRORS:
+        logger.debug("legacy stream planner AgentRun pre-create skipped", exc_info=True)
     try:
         halted_for_write_token = False
         for ev in _xcagi_guarded_planner_stream_events(
             body,
-            runtime_context=runtime_context,
+            runtime_context=planner_runtime_context,
             workspace_root=workspace_root,
             client=llm_client,
         ):
             et = ev.get("type")
             if et == "error":
-                yield _sse_event_line(ev)
+                if pre_run is not None:
+                    payload = {
+                        "success": False,
+                        "message": str(ev.get("message") or "流式 planner 执行失败"),
+                        "response": str(ev.get("message") or "流式 planner 执行失败"),
+                        "data": {
+                            "error": str(ev.get("message") or "流式 planner 执行失败"),
+                            "status_code": ev.get("status_code"),
+                        },
+                    }
+                    finalize_legacy_chat_run(
+                        pre_run.run_id,
+                        payload,
+                        message=body.message,
+                        runtime_context=planner_runtime_context,
+                        user_id=body.user_id,
+                        source=body.source,
+                        channel="compat_chat_stream",
+                    )
+                yield _sse_event_line(
+                    _sse_payload_with_run_id(ev, getattr(pre_run, "run_id", None))
+                )
                 return
             if et == "token":
                 text = str(ev.get("text") or "")
@@ -629,7 +714,32 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                     reply_parts.append(text)
                 yield _sse_event_line(ev)
             elif et == "requires_token":
-                yield _sse_event_line(ev)
+                if pre_run is not None:
+                    payload = {
+                        "success": True,
+                        "requires_token": True,
+                        "token_name": ev.get("token_name"),
+                        "token_description": ev.get("token_description"),
+                        "message": ev.get("message"),
+                        "response": ev.get("message"),
+                        "data": {
+                            "requires_token": True,
+                            "token_name": ev.get("token_name"),
+                            "token_description": ev.get("token_description"),
+                        },
+                    }
+                    finalize_legacy_chat_run(
+                        pre_run.run_id,
+                        payload,
+                        message=body.message,
+                        runtime_context=planner_runtime_context,
+                        user_id=body.user_id,
+                        source=body.source,
+                        channel="compat_chat_stream",
+                    )
+                yield _sse_event_line(
+                    _sse_payload_with_run_id(ev, getattr(pre_run, "run_id", None))
+                )
                 halted_for_write_token = True
                 break
             elif et == "done":
@@ -646,20 +756,80 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 or "修茈市场"
             ).rstrip("/")
             msg = f"修茈平台未返回内容，请确认已登录且 {market} 可访问。"
-            yield _sse_event_line({"type": "error", "message": msg})
+            if pre_run is not None:
+                payload = {
+                    "success": False,
+                    "message": msg,
+                    "response": msg,
+                    "data": {"error": msg},
+                }
+                finalize_legacy_chat_run(
+                    pre_run.run_id,
+                    payload,
+                    message=body.message,
+                    runtime_context=planner_runtime_context,
+                    user_id=body.user_id,
+                    source=body.source,
+                    channel="compat_chat_stream",
+                )
+            yield _sse_event_line(
+                _sse_payload_with_run_id(
+                    {"type": "error", "message": msg}, getattr(pre_run, "run_id", None)
+                )
+            )
             return
         thinking = _thinking_steps_from_planner_stream_text(merged)
         if thinking:
             done_reply: str | dict = {"response": merged, "thinking_steps": thinking}
         else:
             done_reply = merged
-        yield _sse_event_line({"type": "done", "result": _xcagi_compat_reply_payload(done_reply)})
+        payload = _xcagi_compat_reply_payload(done_reply)
+        if pre_run is not None:
+            payload = finalize_legacy_chat_run(
+                pre_run.run_id,
+                payload,
+                message=body.message,
+                runtime_context=planner_runtime_context,
+                user_id=body.user_id,
+                source=body.source,
+                channel="compat_chat_stream",
+            )
+        else:
+            payload = attach_chat_trace_run(
+                payload,
+                message=body.message,
+                runtime_context=runtime_context,
+                user_id=body.user_id,
+                source=body.source,
+                channel="compat_chat_stream",
+            )
+        yield _sse_event_line({"type": "done", "result": payload})
     except RECOVERABLE_ERRORS as e:
         exc = _xcagi_chat_http_exc(e)
-        yield _sse_event_line(
-            {
-                "type": "error",
-                "message": exc.detail if isinstance(exc.detail, str) else str(exc.detail),
-                "status_code": exc.status_code,
+        message = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        if pre_run is not None:
+            payload = {
+                "success": False,
+                "message": message,
+                "response": message,
+                "data": {"error": message, "status_code": exc.status_code},
             }
+            finalize_legacy_chat_run(
+                pre_run.run_id,
+                payload,
+                message=body.message,
+                runtime_context=planner_runtime_context,
+                user_id=body.user_id,
+                source=body.source,
+                channel="compat_chat_stream",
+            )
+        yield _sse_event_line(
+            _sse_payload_with_run_id(
+                {
+                    "type": "error",
+                    "message": message,
+                    "status_code": exc.status_code,
+                },
+                getattr(pre_run, "run_id", None),
+            )
         )

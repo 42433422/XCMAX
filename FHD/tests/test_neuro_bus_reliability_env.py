@@ -61,6 +61,7 @@ def test_production_profile_all_reliability_layers(monkeypatch) -> None:
         "XCAGI_NEURO_BUS_LIFELINE",
         "XCAGI_NEURO_BUS_DLQ_AUTO",
         "XCAGI_NEURO_BUS_SLA_LOG",
+        "XCAGI_NEURO_BUS_RETRY",
     ):
         monkeypatch.setenv(name, "1")
     bus = NeuroBus(enable_metrics=False)
@@ -73,6 +74,8 @@ def test_production_profile_all_reliability_layers(monkeypatch) -> None:
         assert st["lifeline"] is True
         assert st["dlq_auto"] is True
         assert st["sla_log"] is True
+        assert st["sla_controller"] is True
+        assert st["retry"] is True
         assert st.get("trace_sample_rate") == 0.1
     finally:
         _shutdown_executor(bus)

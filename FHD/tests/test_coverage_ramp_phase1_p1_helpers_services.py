@@ -168,7 +168,7 @@ def test_require_login_user_authenticated() -> None:
     assert err is None
 
 
-@patch("app.routes.tools.execute_registered_workflow_tool")
+@patch("app.application.facades.tools_facade.execute_registered_workflow_tool")
 def test_dispatch_tool_for_approval(mock_exec: MagicMock) -> None:
     mock_exec.return_value = {"success": True}
     out = _dispatch_tool_for_approval(tool_id="t1", action="run", params={})

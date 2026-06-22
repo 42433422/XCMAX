@@ -75,23 +75,18 @@
         "xcagi-erp-domain-bridge",
         "xcagi-planner-excel-tools"
       ],
-      "optional_host_mod_ids": ["xcagi-approval-bridge"]
+      "optional_host_mod_ids": ["xcagi-approval-bridge", "xcagi-customer-service-bridge"],
+      "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     },
     "电商": {
       "summary": "电商零售：侧栏基础线装齐后，订单类 Mod 可按需安装。",
       "host_mod_ids": [
         "xcagi-erp-domain-bridge",
-        "xcagi-planner-excel-tools"
+        "xcagi-planner-excel-tools",
+        "xcagi-customer-service-bridge"
       ],
-      "optional_host_mod_ids": ["xcagi-customer-service-bridge"]
-    },
-    "烤禽": {
-      "summary": "烤禽冷链：侧栏基础线装齐后，配送类 Mod 可按需安装。",
-      "host_mod_ids": [
-        "xcagi-erp-domain-bridge",
-        "xcagi-planner-excel-tools"
-      ],
-      "optional_host_mod_ids": []
+      "optional_host_mod_ids": ["xcagi-approval-bridge"],
+      "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     },
     "餐饮": {
       "summary": "餐饮门店：侧栏基础线装齐后，食材订货 Mod 可按需安装。",
@@ -99,7 +94,8 @@
         "xcagi-erp-domain-bridge",
         "xcagi-planner-excel-tools"
       ],
-      "optional_host_mod_ids": []
+      "optional_host_mod_ids": ["xcagi-customer-service-bridge"],
+      "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     },
     "物流": {
       "summary": "物流运单：侧栏基础线装齐后，运单类 Mod 可按需安装。",
@@ -107,7 +103,8 @@
         "xcagi-erp-domain-bridge",
         "xcagi-planner-excel-tools"
       ],
-      "optional_host_mod_ids": []
+      "optional_host_mod_ids": ["xcagi-approval-bridge"],
+      "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     }
   }
 }

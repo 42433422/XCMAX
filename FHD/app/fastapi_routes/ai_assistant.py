@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-assistant-compat"])
 
+_TRACE_MAX_STRING = 500
+_TRACE_SECRET_KEYS = {"audiobase64", "audio_base64", "key", "token", "password", "secret"}
+
 
 def _ok(data: Any = None, **extra: Any) -> dict[str, Any]:
     out: dict[str, Any] = {"success": True}
@@ -35,6 +38,74 @@ def _fail(message: str, status: int = 400, **extra: Any) -> JSONResponse:
     payload: dict[str, Any] = {"success": False, "message": message}
     payload.update(extra)
     return JSONResponse(payload, status_code=status)
+
+
+def _trace_safe_value(value: Any, *, key: str = "", depth: int = 0) -> Any:
+    lowered = key.lower()
+    if lowered in _TRACE_SECRET_KEYS:
+        text = str(value or "")
+        return {"redacted": True, "length": len(text)}
+    if depth >= 4:
+        return str(value)[:_TRACE_MAX_STRING]
+    if isinstance(value, str):
+        if len(value) <= _TRACE_MAX_STRING:
+            return value
+        return value[:_TRACE_MAX_STRING] + "...[truncated]"
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    if isinstance(value, dict):
+        return {
+            str(k): _trace_safe_value(v, key=str(k), depth=depth + 1)
+            for k, v in list(value.items())[:40]
+        }
+    if isinstance(value, (list, tuple)):
+        return [_trace_safe_value(item, depth=depth + 1) for item in list(value)[:20]]
+    return str(value)[:_TRACE_MAX_STRING]
+
+
+def _trace_ai_assistant_route(
+    payload: dict[str, Any],
+    *,
+    route: str,
+    action: str,
+    body: dict[str, Any] | None = None,
+    channel: str = "ai_assistant_compat",
+) -> dict[str, Any]:
+    if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
+        return payload
+    try:
+        from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
+
+        message = str(payload.get("message") or action)
+        safe_payload = _trace_safe_value(payload)
+        safe_body = _trace_safe_value(body or {})
+        run = create_chat_trace_run(
+            {
+                "success": bool(payload.get("success", False)),
+                "response": message,
+                "data": {"text": message, "route_result": safe_payload},
+            },
+            message=f"AI assistant compat {action}",
+            runtime_context={
+                "route": route,
+                "source": "ai_assistant_compat",
+                "action": action,
+                "request": safe_body,
+            },
+            user_id=str(
+                (body or {}).get("user_id") or (body or {}).get("userId") or "ai-assistant"
+            ),
+            source="ai_assistant_compat",
+            channel=channel,
+            intent="ai_assistant_compat_route",
+        )
+        traced = dict(payload)
+        traced["run_id"] = run.run_id
+        traced["agent_run_id"] = run.run_id
+        return traced
+    except Exception:  # noqa: BLE001 - route tracing must not break legacy compat endpoints
+        logger.exception("failed to attach AgentRun trace to ai_assistant compat route")
+        return payload
 
 
 def _shipment_svc():
@@ -79,7 +150,7 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
         return _fail("请输入订单信息", 400)
 
     try:
-        from app.routes.tools import _parse_order_text
+        from app.application.facades.tools_facade import _parse_order_text
 
         parsed = _parse_order_text(order_text)
         if not parsed.get("success"):
@@ -98,24 +169,35 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
         )
 
         if not result.get("success"):
-            return JSONResponse(result, status_code=500)
+            traced = _trace_ai_assistant_route(
+                dict(result),
+                route="/api/generate",
+                action="generate_shipment_document",
+                body=payload,
+            )
+            return JSONResponse(traced, status_code=500)
 
         file_path = result.get("file_path")
         doc_name = result.get("doc_name") or (os.path.basename(file_path) if file_path else None)
         download_url = f"/api/shipment/download/{doc_name}" if doc_name else None
 
-        return _ok(
-            {
-                "doc_name": doc_name,
-                "file_path": file_path,
-                "download_url": download_url,
-                "order_number": result.get("order_number"),
-                "total_amount": result.get("total_amount"),
-                "total_quantity": result.get("total_quantity"),
-            },
-            message="发货单生成成功",
-            filename=doc_name,
-            file_path=file_path,
+        return _trace_ai_assistant_route(
+            _ok(
+                {
+                    "doc_name": doc_name,
+                    "file_path": file_path,
+                    "download_url": download_url,
+                    "order_number": result.get("order_number"),
+                    "total_amount": result.get("total_amount"),
+                    "total_quantity": result.get("total_quantity"),
+                },
+                message="发货单生成成功",
+                filename=doc_name,
+                file_path=file_path,
+            ),
+            route="/api/generate",
+            action="generate_shipment_document",
+            body=payload,
         )
     except RECOVERABLE_ERRORS as e:
         logger.error("兼容 /api/generate 失败: %s", e, exc_info=True)
@@ -156,9 +238,14 @@ def compat_purchase_units_create(payload: dict[str, Any] = Body(default_factory=
 
     exists = find_purchase_unit(unit_name=unit_name)
     if exists:
-        return _ok(
-            {"id": exists["id"], "unit_name": exists["unit_name"]},
-            message="已存在",
+        return _trace_ai_assistant_route(
+            _ok(
+                {"id": exists["id"], "unit_name": exists["unit_name"]},
+                message="已存在",
+            ),
+            route="/api/purchase_units",
+            action="purchase_unit_create",
+            body=payload,
         )
 
     with get_db() as db:
@@ -170,7 +257,12 @@ def compat_purchase_units_create(payload: dict[str, Any] = Body(default_factory=
         )
         db.add(unit)
         db.commit()
-        return _ok({"id": unit.id, "unit_name": unit.unit_name}, message="添加成功")
+        return _trace_ai_assistant_route(
+            _ok({"id": unit.id, "unit_name": unit.unit_name}, message="添加成功"),
+            route="/api/purchase_units",
+            action="purchase_unit_create",
+            body=payload,
+        )
 
 
 @router.put("/api/purchase_units/{unit_id}")
@@ -192,7 +284,12 @@ def compat_purchase_units_update(
         if "address" in payload:
             unit.address = payload.get("address") or ""
         db.commit()
-        return _ok({"id": unit.id, "unit_name": unit.unit_name}, message="更新成功")
+        return _trace_ai_assistant_route(
+            _ok({"id": unit.id, "unit_name": unit.unit_name}, message="更新成功"),
+            route="/api/purchase_units/{unit_id}",
+            action="purchase_unit_update",
+            body={"unit_id": unit_id, **dict(payload or {})},
+        )
 
 
 @router.delete("/api/purchase_units/{unit_id}")
@@ -203,7 +300,12 @@ def compat_purchase_units_delete(unit_id: int):
     deleted = query_service.delete(PurchaseUnit, id=unit_id)
     if deleted == 0:
         return _fail("购买单位不存在", 404)
-    return _ok(message="删除成功")
+    return _trace_ai_assistant_route(
+        _ok(message="删除成功"),
+        route="/api/purchase_units/{unit_id}",
+        action="purchase_unit_delete",
+        body={"unit_id": unit_id},
+    )
 
 
 @router.get("/api/purchase_units/by_name/{unit_name}")
@@ -286,7 +388,13 @@ def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(def
 
     result = _printer_svc().print_document(file_path, printer_name=printer_name)
     status = 200 if result.get("success") else 400
-    return JSONResponse(result, status_code=status)
+    traced = _trace_ai_assistant_route(
+        dict(result),
+        route="/api/print/{filename}",
+        action="print_shipment_file",
+        body={"filename": filename, **dict(payload or {})},
+    )
+    return JSONResponse(traced, status_code=status)
 
 
 @router.post("/api/print-last")
@@ -339,10 +447,22 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
             quantity=quantity,
         )
         status = 200 if result.get("success") else 400
-        return JSONResponse(result, status_code=status)
+        traced = _trace_ai_assistant_route(
+            dict(result),
+            route="/api/print/single_label",
+            action="print_single_label",
+            body=payload,
+        )
+        return JSONResponse(traced, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.error("single_label 打印失败: %s", e, exc_info=True)
-        return JSONResponse({"success": False, "message": f"打印失败: {e}"}, status_code=500)
+        traced = _trace_ai_assistant_route(
+            {"success": False, "message": f"打印失败: {e}"},
+            route="/api/print/single_label",
+            action="print_single_label",
+            body=payload,
+        )
+        return JSONResponse(traced, status_code=500)
 
 
 @router.post("/api/tts")
@@ -377,7 +497,7 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
             pitch=pitch,
         )
 
-        return JSONResponse(
+        traced = _trace_ai_assistant_route(
             {
                 "success": True,
                 "message": "ok",
@@ -387,15 +507,22 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
                     "speakerId": speaker_id,
                     "lang": tts_payload.get("lang") or lang,
                 },
-            }
+            },
+            route="/api/tts",
+            action="tts_synthesize",
+            body=payload,
         )
+        return JSONResponse(traced)
     except RECOVERABLE_ERRORS as e:
         logger.warning("Edge TTS 不可用，回退浏览器语音: %s", e)
-        return JSONResponse(
+        traced = _trace_ai_assistant_route(
             {
                 "success": False,
                 "message": "TTS 服务未启用，将使用浏览器语音",
                 "data": {},
             },
-            status_code=200,
+            route="/api/tts",
+            action="tts_synthesize",
+            body=payload,
         )
+        return JSONResponse(traced, status_code=200)

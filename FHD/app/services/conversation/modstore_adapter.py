@@ -221,15 +221,27 @@ class ModstorePlatformAdapter:
             except RECOVERABLE_ERRORS:
                 request_auth = ""
 
-        auth_token = (
-            kwargs.get("auth_token")
-            or os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
-            or _strip_bearer_prefix(request_auth)
-        )
+        # 优先级：显式 kwargs > 请求头 market token > MODSTORE_AUTH_TOKEN 环境变量 > Session。
+        # 请求头 token 必须优先于环境变量：移动端携带自己的有效 market token 时，
+        # 服务器上过期/无效的 MODSTORE_AUTH_TOKEN 不能覆盖它，否则会用过期 token → 401。
+        request_token = _strip_bearer_prefix(request_auth)
+        env_token = os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
+        auth_token = ""
+        token_source = "env"
+        if kwargs.get("auth_token"):
+            auth_token = kwargs["auth_token"]
+            token_source = "request" if request is not None else "env"
+        elif request_token:
+            auth_token = request_token
+            token_source = "request"
+        elif env_token:
+            auth_token = env_token
+            token_source = "env"
 
         if not auth_token and (session_id or request):
             try:
                 from app.fastapi_routes.market_account import (
+                    _user_id_from_session,
                     latest_session_market_token,
                     session_id_from_request,
                     session_market_token,
@@ -243,6 +255,7 @@ class ModstorePlatformAdapter:
                     token_from_session = session_market_token(effective_session_id)
                     if token_from_session:
                         auth_token = token_from_session
+                        token_source = "session"
                         logger.debug(
                             "从FHD Session [%s...] 获取到平台Token (长度: %s)",
                             effective_session_id[:8],
@@ -256,9 +269,12 @@ class ModstorePlatformAdapter:
                 else:
                     logger.warning("无法获取有效的Session ID")
                 if not auth_token:
-                    latest_token = latest_session_market_token()
+                    # 多用户环境按 user_id 过滤，防止 fallback 串号
+                    fallback_user_id = _user_id_from_session(effective_session_id)
+                    latest_token = latest_session_market_token(user_id=fallback_user_id)
                     if latest_token:
                         auth_token = latest_token
+                        token_source = "session"
                         logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
             except ImportError as e:
                 logger.error("无法导入market_account模块: %s", e)
@@ -271,9 +287,7 @@ class ModstorePlatformAdapter:
             **{k: v for k, v in kwargs.items() if k not in ("platform_url", "auth_token")},
         )
 
-        instance._source = (
-            "session" if auth_token and not os.environ.get("MODSTORE_AUTH_TOKEN") else "env"
-        )
+        instance._source = token_source if auth_token else "env"
 
         return instance
 
@@ -460,16 +474,22 @@ class ModstorePlatformAdapter:
 
             result = response.json()
 
-            # 性能监控
+            # 性能监控（解析真实 token 用量，之前硬编码 token_count=0）
             try:
                 from app.neuro_bus.application_neuro_bridge import (
                     neuro_notify_ai_model_roundtrip,
                 )
 
+                raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+                raw_total = 0
+                try:
+                    raw_total = int(raw_usage.get("total_tokens") or 0)
+                except (TypeError, ValueError):
+                    raw_total = 0
                 neuro_notify_ai_model_roundtrip(
                     model=f"modstore:{effective_provider}/{effective_model}",
                     latency_ms=latency_ms,
-                    token_count=0,
+                    token_count=raw_total,
                     user_id=str(self.user_id or ""),
                 )
             except RECOVERABLE_ERRORS:
@@ -594,10 +614,16 @@ class ModstorePlatformAdapter:
         try:
             from app.neuro_bus.application_neuro_bridge import neuro_notify_ai_model_roundtrip
 
+            raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+            raw_total = 0
+            try:
+                raw_total = int(raw_usage.get("total_tokens") or 0)
+            except (TypeError, ValueError):
+                raw_total = 0
             neuro_notify_ai_model_roundtrip(
                 model=f"modstore:{effective_provider}/{effective_model}",
                 latency_ms=latency_ms,
-                token_count=0,
+                token_count=raw_total,
                 user_id=str(self.user_id or ""),
             )
         except RECOVERABLE_ERRORS:

@@ -38,6 +38,9 @@
         <button :class="{ active: activeTab === 'allHands' }" @click="activeTab = 'allHands'">
           员工大会
         </button>
+        <button :class="{ active: activeTab === 'tokenUsage' }" @click="activeTab = 'tokenUsage'; loadTokenUsage()">
+          Token 消耗
+        </button>
       </div>
 
       <section v-if="activeTab === 'modules'" class="card">
@@ -249,6 +252,178 @@
           </section>
         </div>
       </section>
+
+      <section v-if="activeTab === 'tokenUsage'" class="card token-usage-card">
+        <div class="section-title">
+          <h3>Token 消耗仪表盘</h3>
+          <button class="btn btn-secondary btn-sm" :disabled="tokenUsageLoading" @click="loadTokenUsage">
+            {{ tokenUsageLoading ? '采集中...' : '刷新用量' }}
+          </button>
+        </div>
+        <p class="section-note">
+          聚合 FHD 本地账本、Cursor、Codex、Trae 四个来源的 token 用量。
+          <span v-if="tokenUsageData?.collected_at" class="sync-time">采集时间 {{ tokenUsageData.collected_at }}</span>
+        </p>
+        <p v-if="tokenUsageError" class="error-hint">{{ tokenUsageError }}</p>
+
+        <div v-if="tokenUsageLoading && !tokenUsageData" class="empty-hint">正在采集各来源 token 用量...</div>
+
+        <template v-else-if="tokenUsageData">
+          <!-- 顶部 KPI 大卡片 -->
+          <div class="tu-kpi-row">
+            <div class="tu-kpi-card tu-kpi-total">
+              <div class="tu-kpi-icon">Σ</div>
+              <div class="tu-kpi-body">
+                <span class="tu-kpi-label">总 Token</span>
+                <span class="tu-kpi-value">{{ formatTokenCount(tokenUsageData.grand_total_tokens) }}</span>
+                <span class="tu-kpi-sub">{{ tokenUsageData.grand_total_tokens.toLocaleString() }} tokens</span>
+              </div>
+            </div>
+            <div class="tu-kpi-card tu-kpi-prompt">
+              <div class="tu-kpi-icon">→</div>
+              <div class="tu-kpi-body">
+                <span class="tu-kpi-label">输入 Prompt</span>
+                <span class="tu-kpi-value">{{ formatTokenCount(tokenUsageData.grand_prompt_tokens) }}</span>
+                <span class="tu-kpi-sub">占比 {{ pctOf(tokenUsageData.grand_prompt_tokens, tokenUsageData.grand_total_tokens) }}%</span>
+              </div>
+            </div>
+            <div class="tu-kpi-card tu-kpi-completion">
+              <div class="tu-kpi-icon">←</div>
+              <div class="tu-kpi-body">
+                <span class="tu-kpi-label">输出 Completion</span>
+                <span class="tu-kpi-value">{{ formatTokenCount(tokenUsageData.grand_completion_tokens) }}</span>
+                <span class="tu-kpi-sub">占比 {{ pctOf(tokenUsageData.grand_completion_tokens, tokenUsageData.grand_total_tokens) }}%</span>
+              </div>
+            </div>
+            <div class="tu-kpi-card tu-kpi-cost">
+              <div class="tu-kpi-icon">$</div>
+              <div class="tu-kpi-body">
+                <span class="tu-kpi-label">总费用（估算）</span>
+                <span class="tu-kpi-value">${{ totalCostUsd.toFixed(2) }}</span>
+                <span class="tu-kpi-sub">{{ (totalCostUsd * 7.2).toFixed(0) }} CNY</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 来源占比堆叠条形图 -->
+          <div class="tu-share-block">
+            <div class="tu-share-title">
+              <span>来源占比</span>
+              <span class="tu-share-total">共 {{ formatTokenCount(tokenUsageData.grand_total_tokens) }}</span>
+            </div>
+            <div class="tu-share-bar">
+              <div
+                v-for="(src, key) in tokenUsageData.sources"
+                :key="key"
+                v-show="src.available && src.total_tokens > 0"
+                class="tu-share-seg"
+                :class="'tu-src-' + key"
+                :style="{ width: pctOf(src.total_tokens, tokenUsageData.grand_total_tokens) + '%' }"
+                :title="sourceTitle(key as string) + ': ' + formatTokenCount(src.total_tokens) + ' (' + pctOf(src.total_tokens, tokenUsageData.grand_total_tokens) + '%)'"
+              ></div>
+            </div>
+            <div class="tu-share-legend">
+              <div
+                v-for="(src, key) in tokenUsageData.sources"
+                :key="key"
+                v-show="src.available"
+                class="tu-legend-item"
+              >
+                <span class="tu-legend-dot" :class="'tu-src-' + key"></span>
+                <span class="tu-legend-name">{{ sourceTitle(key as string) }}</span>
+                <span class="tu-legend-val">{{ formatTokenCount(src.total_tokens) }}</span>
+                <span class="tu-legend-pct" v-if="src.total_tokens > 0">{{ pctOf(src.total_tokens, tokenUsageData.grand_total_tokens) }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 来源详情卡片 -->
+          <div class="token-sources-grid">
+            <div
+              v-for="(src, key) in tokenUsageData.sources"
+              :key="key"
+              class="token-source-block"
+              :class="['tu-src-card-' + key, { 'source-unavailable': !src.available }]"
+            >
+              <div class="token-source-head">
+                <div class="tu-src-title-row">
+                  <span class="tu-src-badge" :class="'tu-src-' + key"></span>
+                  <h4>{{ sourceTitle(key as string) }}</h4>
+                </div>
+                <span v-if="src.available" class="pill ok">可用</span>
+                <span v-else class="pill warn">不可用</span>
+              </div>
+              <p class="token-source-desc">{{ src.source }}</p>
+              <p v-if="!src.available" class="token-source-reason">{{ src.reason }}</p>
+              <template v-else>
+                <div class="token-source-stats">
+                  <div class="stat-row stat-row-big">
+                    <span>总 Token</span>
+                    <strong>{{ formatTokenCount(src.total_tokens) }}</strong>
+                  </div>
+                  <div v-if="key === 'cursor'" class="stat-row">
+                    <span>费用</span>
+                    <strong>${{ ((src.cost_cents || 0) / 100).toFixed(2) }}</strong>
+                  </div>
+                  <div v-if="key === 'codex'" class="stat-row">
+                    <span>缓存命中</span>
+                    <strong>{{ formatTokenCount(src.cached_tokens) }}</strong>
+                  </div>
+                  <div v-if="key === 'codex'" class="stat-row">
+                    <span>推理 Token</span>
+                    <strong>{{ formatTokenCount(src.reasoning_tokens) }}</strong>
+                  </div>
+                  <div v-if="key === 'codex'" class="stat-row">
+                    <span>估算费用</span>
+                    <strong>${{ Number(src.estimated_cost_usd || 0).toFixed(2) }}</strong>
+                  </div>
+                  <div v-if="key === 'trae'" class="stat-row">
+                    <span>累计聊天轮次</span>
+                    <strong>{{ src.total_chat_turns }}</strong>
+                  </div>
+                  <div v-if="key === 'trae'" class="stat-row">
+                    <span>估算费用</span>
+                    <strong>${{ Number(src.estimated_cost_usd || 0).toFixed(2) }}</strong>
+                  </div>
+                  <div v-if="key === 'mimo'" class="stat-row">
+                    <span>Credits 用量</span>
+                    <strong>{{ Number(src.credits_used || 0).toLocaleString() }} / {{ Number(src.credits_quota || 0).toLocaleString() }}</strong>
+                  </div>
+                  <div v-if="key === 'mimo'" class="stat-row">
+                    <span>使用率</span>
+                    <strong>{{ src.usage_percent }}%</strong>
+                  </div>
+                  <div v-if="key === 'local'" class="stat-row">
+                    <span>记录数</span>
+                    <strong>{{ src.records }}</strong>
+                  </div>
+                </div>
+                <p v-if="key === 'trae' || key === 'mimo'" class="token-source-note">{{ src.note }}</p>
+                <!-- 按模型横向柱状图 -->
+                <div v-if="src.by_model && Object.keys(src.by_model).length" class="tu-model-chart">
+                  <div class="tu-model-chart-title">按模型分布 ({{ Object.keys(src.by_model).length }})</div>
+                  <div
+                    v-for="[model, info] in topModels(src.by_model, 6)"
+                    :key="model"
+                    class="tu-model-bar-row"
+                  >
+                    <span class="tu-model-name" :title="String(model)">{{ String(model) }}</span>
+                    <div class="tu-model-bar-track">
+                      <div
+                        class="tu-model-bar-fill"
+                        :class="'tu-src-' + key"
+                        :style="{ width: modelBarWidth(info, key as string) + '%' }"
+                      ></div>
+                    </div>
+                    <span class="tu-model-val">{{ formatModelTotal(info, key as string) }}</span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+        <p v-else class="empty-hint">点击「刷新用量」采集各来源 token 数据。</p>
+      </section>
     </div>
   </div>
 </template>
@@ -260,10 +435,14 @@ import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sani
 
 type AnyRow = Record<string, any>
 
-const activeTab = ref<'modules' | 'digests' | 'allHands'>('modules')
+const activeTab = ref<'modules' | 'digests' | 'allHands' | 'tokenUsage'>('modules')
 const refreshing = ref(false)
 
 const modules = ref<AnyRow[]>([])
+
+const tokenUsageData = ref<AnyRow | null>(null)
+const tokenUsageLoading = ref(false)
+const tokenUsageError = ref('')
 
 const digestRecords = ref<AnyRow[]>([])
 const digestDetail = ref<AnyRow | null>(null)
@@ -700,9 +879,137 @@ async function refreshActiveTab() {
   try {
     if (activeTab.value === 'modules') await loadModules()
     else if (activeTab.value === 'digests') await loadDigestRecords()
+    else if (activeTab.value === 'tokenUsage') await loadTokenUsage()
   } finally {
     refreshing.value = false
   }
+}
+
+async function loadTokenUsage() {
+  tokenUsageLoading.value = true
+  tokenUsageError.value = ''
+  try {
+    const res = await api.get<any>('/api/xcmax/admin/token-usage')
+    tokenUsageData.value = res && typeof res === 'object' ? res : null
+  } catch (e) {
+    tokenUsageError.value = e instanceof Error ? e.message : String(e)
+    tokenUsageData.value = null
+  } finally {
+    tokenUsageLoading.value = false
+  }
+}
+
+function formatTokenCount(n: number | undefined): string {
+  const v = Number(n || 0)
+  if (v >= 100_000_000) return (v / 100_000_000).toFixed(2) + ' 亿'
+  if (v >= 10_000_000) return (v / 10_000_000).toFixed(2) + ' 千万'
+  if (v >= 10_000) return (v / 10_000).toFixed(2) + ' 万'
+  return v.toLocaleString()
+}
+
+function sourceTitle(key: string): string {
+  const map: Record<string, string> = {
+    local: 'FHD 本地账本',
+    cursor: 'Cursor',
+    codex: 'Codex',
+    trae: 'Trae',
+  }
+  return map[key] || key
+}
+
+function modelColumns(key: string): string[] {
+  if (key === 'cursor') return ['input', 'output', 'cache_read', 'cache_write', 'cents']
+  if (key === 'codex') return ['input', 'cached', 'output', 'reasoning', 'total']
+  if (key === 'local') return ['total', 'count', 'cost']
+  return ['total']
+}
+
+function modelColumnLabel(col: string): string {
+  const map: Record<string, string> = {
+    input: '输入',
+    output: '输出',
+    cached: '缓存',
+    cache_read: '缓存读',
+    cache_write: '缓存写',
+    reasoning: '推理',
+    total: '总量',
+    count: '次数',
+    cents: '费用(¢)',
+    cost: '成本单位',
+  }
+  return map[col] || col
+}
+
+function formatModelCell(col: string, info: AnyRow): string {
+  const v = info[col]
+  if (v === undefined || v === null) return '—'
+  if (col === 'cents') return Number(v).toFixed(2)
+  if (col === 'cost') return Number(v).toFixed(2)
+  return formatTokenCount(Number(v))
+}
+
+const totalCostUsd = computed(() => {
+  const data = tokenUsageData.value
+  if (!data) return 0
+  // 优先用后端聚合的 grand_cost_usd，否则前端兜底计算
+  if (typeof data.grand_cost_usd === 'number') return data.grand_cost_usd
+  const sources = data.sources || {}
+  return Object.entries(sources).reduce((sum, [key, src]: [string, AnyRow]) => {
+    if (!src?.available) return sum
+    if (key === 'cursor') return sum + (src.cost_cents || 0) / 100
+    if (key === 'codex') {
+      const prompt = Number(src.prompt_tokens || 0)
+      const cached = Number(src.cache_read_tokens || 0)
+      const output = Number(src.completion_tokens || 0)
+      const reasoning = Number(src.reasoning_tokens || 0)
+      const uncached = Math.max(0, prompt - cached)
+      return sum + uncached * 5 / 1e6 + cached * 1.25 / 1e6 + (output + reasoning) * 10 / 1e6
+    }
+    if (key === 'trae') {
+      const prompt = Number(src.prompt_tokens || 0)
+      const output = Number(src.completion_tokens || 0)
+      return sum + (prompt + output) * 5 / 7.2 / 1e6
+    }
+    return sum
+  }, 0)
+})
+
+function pctOf(part: number, total: number): string {
+  const t = Number(total || 0)
+  if (t <= 0) return '0'
+  return ((Number(part || 0) / t) * 100).toFixed(1)
+}
+
+function topModels(byModel: AnyRow, n: number): [string, AnyRow][] {
+  return Object.entries(byModel)
+    .sort((a, b) => modelTotalForSort(b[1]) - modelTotalForSort(a[1]))
+    .slice(0, n)
+}
+
+function modelTotalForSort(info: AnyRow): number {
+  // 优先用 total_tokens / total 字段（Codex 有 total，FHD 本地有 total_tokens）
+  if (info.total_tokens) return Number(info.total_tokens)
+  if (info.total) return Number(info.total)
+  // Cursor 没有 total，需计算 input + output + cache_read + cache_write
+  const input = Number(info.input || 0)
+  const output = Number(info.output || 0)
+  const cacheRead = Number(info.cache_read || 0)
+  const cacheWrite = Number(info.cache_write || 0)
+  if (input || output || cacheRead || cacheWrite) {
+    return input + output + cacheRead + cacheWrite
+  }
+  return 0
+}
+
+function modelBarWidth(info: AnyRow, key: string): number {
+  const byModel = tokenUsageData.value?.sources?.[key]?.by_model
+  if (!byModel) return 0
+  const max = Math.max(...Object.values(byModel).map((i: AnyRow) => modelTotalForSort(i)), 1)
+  return Math.max((modelTotalForSort(info) / max) * 100, 2)
+}
+
+function formatModelTotal(info: AnyRow, _key: string): string {
+  return formatTokenCount(modelTotalForSort(info))
 }
 
 function stopDigestPolling() {
@@ -753,6 +1060,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .server-functions-view {
   min-height: 100vh;
+  overflow-y: auto;
   background: linear-gradient(135deg, #edf5fb 0%, #e7eef6 100%);
 }
 
@@ -1325,5 +1633,344 @@ onBeforeUnmount(() => {
   .allhands-controls {
     grid-template-columns: 1fr;
   }
+}
+
+.token-usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* 来源配色 */
+.tu-src-local { background: #7c3aed; }
+.tu-src-cursor { background: #1890ff; }
+.tu-src-codex { background: #10b981; }
+.tu-src-trae { background: #f59e0b; }
+.tu-src-mimo { background: #ec4899; }
+
+/* KPI 大卡片 */
+.tu-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .tu-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tu-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 76, 129, 0.1);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 76, 129, 0.06);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.tu-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(15, 76, 129, 0.12);
+}
+
+.tu-kpi-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.tu-kpi-total .tu-kpi-icon { background: linear-gradient(135deg, #667eea, #764ba2); }
+.tu-kpi-prompt .tu-kpi-icon { background: linear-gradient(135deg, #1890ff, #0050b3); }
+.tu-kpi-completion .tu-kpi-icon { background: linear-gradient(135deg, #10b981, #047857); }
+.tu-kpi-cost .tu-kpi-icon { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+.tu-kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tu-kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(23, 32, 51, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tu-kpi-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #172033;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.tu-kpi-sub {
+  font-size: 11px;
+  color: rgba(23, 32, 51, 0.45);
+}
+
+/* 来源占比堆叠条形图 */
+.tu-share-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 76, 129, 0.08);
+}
+
+.tu-share-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(23, 32, 51, 0.7);
+}
+
+.tu-share-total {
+  font-weight: 600;
+  color: rgba(23, 32, 51, 0.5);
+}
+
+.tu-share-bar {
+  display: flex;
+  height: 28px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #e5e7eb;
+  gap: 2px;
+}
+
+.tu-share-seg {
+  height: 100%;
+  min-width: 2px;
+  transition: opacity 0.2s;
+}
+
+.tu-share-seg:hover {
+  opacity: 0.85;
+}
+
+.tu-share-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.tu-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(23, 32, 51, 0.7);
+}
+
+.tu-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.tu-legend-name {
+  font-weight: 600;
+}
+
+.tu-legend-val {
+  color: rgba(23, 32, 51, 0.5);
+}
+
+.tu-legend-pct {
+  font-weight: 700;
+  color: #172033;
+}
+
+/* 来源详情卡片 */
+.token-sources-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .token-sources-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.token-source-block {
+  border: 1px solid rgba(15, 76, 129, 0.12);
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 3px solid #ccc;
+}
+
+.tu-src-card-local { border-top-color: #7c3aed; }
+.tu-src-card-cursor { border-top-color: #1890ff; }
+.tu-src-card-codex { border-top-color: #10b981; }
+.tu-src-card-trae { border-top-color: #f59e0b; }
+.tu-src-card-mimo { border-top-color: #ec4899; }
+
+.token-source-block.source-unavailable {
+  background: #fafafa;
+  opacity: 0.78;
+}
+
+.token-source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tu-src-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tu-src-badge {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.token-source-head h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: #172033;
+}
+
+.token-source-desc {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(23, 32, 51, 0.55);
+}
+
+.token-source-reason {
+  margin: 0;
+  font-size: 12px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.token-source-note {
+  margin: 0;
+  font-size: 12px;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.token-source-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: rgba(23, 32, 51, 0.75);
+}
+
+.stat-row-big {
+  padding: 8px 12px;
+  background: #f0f7ff;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.stat-row-big strong {
+  color: #1890ff;
+  font-size: 1.05rem;
+}
+
+.stat-row strong {
+  color: #172033;
+  font-weight: 800;
+}
+
+/* 按模型横向柱状图 */
+.tu-model-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(15, 76, 129, 0.12);
+}
+
+.tu-model-chart-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(23, 32, 51, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tu-model-bar-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 70px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.tu-model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(23, 32, 51, 0.7);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+
+.tu-model-bar-track {
+  height: 16px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tu-model-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  min-width: 2px;
+  transition: width 0.4s ease;
+}
+
+.tu-model-val {
+  text-align: right;
+  font-weight: 700;
+  color: #172033;
+  font-size: 11px;
 }
 </style>

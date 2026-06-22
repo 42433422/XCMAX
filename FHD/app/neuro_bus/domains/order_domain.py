@@ -8,8 +8,8 @@ import logging
 from decimal import Decimal
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
+from app.neuro_bus.domains.order_domain_handlers import register_order_domain_handlers
 from app.neuro_bus.events.base import EventPriority
-from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
 logger = logging.getLogger(__name__)
 
@@ -37,28 +37,7 @@ class OrderNeuroDomain(NeuroDomain):
 
     def _setup_handlers(self):
         """设置默认处理器"""
-
-        @self.on("order.created", priority=1, channel=DomainChannel.RELIABLE)
-        async def on_order_created(event):
-            order_id = event.payload.get("order_id")
-            logger.info("Order created: %s", order_id)
-            bump_domain_handler_metric("order.created")
-
-        @self.on("order.paid", priority=0, channel=DomainChannel.RELIABLE)
-        async def on_order_paid(event):
-            order_id = event.payload.get("order_id")
-            amount = event.payload.get("amount")
-            logger.info("Order paid: %s, amount=%s", order_id, amount)
-            from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
-
-            bump_domain_handler_metric("order.paid")
-
-        @self.on("order.shipped", priority=1, channel=DomainChannel.STANDARD)
-        async def on_order_shipped(event):
-            order_id = event.payload.get("order_id")
-            shipment_id = event.payload.get("shipment_id")
-            logger.info("Order shipped: %s, shipment=%s", order_id, shipment_id)
-            bump_domain_handler_metric("order.shipped")
+        register_order_domain_handlers(self)
 
     async def initialize(self):
         logger.info("OrderNeuroDomain initialized")

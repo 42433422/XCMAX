@@ -75,6 +75,12 @@
       "host_module": "app.neuro_bus.domains.conversation_domain_handlers",
       "register_fn": "register_conversation_domain_handlers",
       "optional": true
+    },
+    {
+      "domain_id": "application_consumers",
+      "host_module": "app.neuro_bus.domains.application_event_consumers",
+      "register_fn": "register_application_event_consumers",
+      "optional": true
     }
   ]
 }

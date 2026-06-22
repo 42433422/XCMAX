@@ -1,10 +1,10 @@
 {
   "_note": "覆盖率棘轮基线（只升不降）。行 floor 见 pyproject.toml fail_under；此处存分支 floor 与前端各项 floor。由 coverage_ratchet.py --bump 维护。",
-  "backend_branch_floor": 70,
+  "backend_branch_floor": 73,
   "frontend_floors": {
-    "lines": 73,
-    "branches": 68,
-    "functions": 64,
-    "statements": 73
+    "lines": 89,
+    "branches": 79,
+    "functions": 77,
+    "statements": 89
   }
 }

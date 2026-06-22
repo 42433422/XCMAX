@@ -155,7 +155,7 @@ class TestXcagiCompatReplyPayloadExtended:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={
                     "error": "ERR001",
                     "message": "失败原因",
@@ -177,7 +177,7 @@ class TestXcagiCompatReplyPayloadExtended:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={
                     "errors": ["err1", "err2", "err3", "err4", "err5", "err6"],
                     "success": False,
@@ -192,7 +192,7 @@ class TestXcagiCompatReplyPayloadExtended:
 
     def test_tool_result_unavailable(self):
         with patch(
-            "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
             side_effect=RuntimeError("unavailable"),
             create=True,
         ):

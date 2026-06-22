@@ -97,7 +97,7 @@ class TestResolveWsUserId:
             patch(
                 "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False
             ),
-            patch("app.application.facades.session_facade.get_session_service") as mock_get_ss,
+            patch("app.services.get_session_service") as mock_get_ss,
         ):
             mock_ss = MagicMock()
             mock_ss.validate_session.return_value = mock_user
@@ -115,7 +115,7 @@ class TestResolveWsUserId:
             patch(
                 "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False
             ),
-            patch("app.application.facades.session_facade.get_session_service") as mock_get_ss,
+            patch("app.services.get_session_service") as mock_get_ss,
         ):
             mock_ss = MagicMock()
             mock_ss.validate_session.return_value = None

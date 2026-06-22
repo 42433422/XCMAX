@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from app.db.models.user import Session as UserSession
 from app.db.session import get_db
+from app.di.registry import get_service_registry
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.time import utc_now_naive
 
@@ -89,8 +90,6 @@ class SessionService(NeuroEventPublisherMixin):
 
 
 def get_session_service() -> "SessionService":
-    from app.di.registry import get_service_registry
-
     return get_service_registry().session_service
 
 

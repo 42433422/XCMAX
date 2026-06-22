@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from io import BytesIO
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Query
@@ -29,6 +30,61 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-kitten"])
+
+
+def _trace_kitten_route(
+    payload: dict[str, Any],
+    *,
+    route: str,
+    message: str,
+    body: dict[str, Any] | None = None,
+    intent: str = "kitten_analysis",
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+
+    request_body = body if isinstance(body, dict) else {}
+    metadata = (
+        request_body.get("metadata") if isinstance(request_body.get("metadata"), dict) else {}
+    )
+    tenant_id = str(
+        request_body.get("tenant_id")
+        or request_body.get("tenantId")
+        or metadata.get("tenant_id")
+        or ""
+    ).strip()
+    user_id = str(
+        request_body.get("user_id")
+        or request_body.get("userId")
+        or metadata.get("user_id")
+        or tenant_id
+        or "ai-kitten-route"
+    ).strip()
+    return attach_chat_trace_run(
+        payload,
+        message=message,
+        runtime_context={
+            "route": route,
+            "source": "ai_kitten_route",
+            "tenant_id": tenant_id,
+            "dataset_id": str(
+                request_body.get("dataset_id")
+                or request_body.get("rag_dataset_id")
+                or metadata.get("dataset_id")
+                or ""
+            ).strip(),
+        },
+        user_id=user_id,
+        source="ai_kitten_route",
+        channel="ai_kitten_route",
+        intent=intent,
+    )
+
+
+def _agent_run_headers(payload: dict[str, Any], headers: dict[str, str]) -> dict[str, str]:
+    run_id = str(payload.get("run_id") or payload.get("agent_run_id") or "").strip()
+    if run_id:
+        headers["X-Agent-Run-Id"] = run_id
+    return headers
 
 
 @router.get("/api/ai/kitten/business-snapshot")
@@ -211,14 +267,32 @@ def ai_kitten_financial_report(body: dict = Body(default_factory=dict)):
             metadata=metadata,
         )
         if save_result.get("success"):
-            return {
+            return _trace_kitten_route(
+                {
+                    "success": True,
+                    "response": "财务报告已生成并保存",
+                    "analysis_id": save_result.get("id"),
+                    "data": analysis_data,
+                    "saved_to": save_result.get("filename"),
+                    "message": "财务报告已生成并保存",
+                },
+                route="/api/ai/kitten/financial/report",
+                message="生成小猫财务报告",
+                body=payload,
+                intent="kitten_financial_report",
+            )
+        return _trace_kitten_route(
+            {
                 "success": True,
-                "analysis_id": save_result.get("id"),
+                "response": "财务报告已生成（保存失败）",
                 "data": analysis_data,
-                "saved_to": save_result.get("filename"),
-                "message": "财务报告已生成并保存",
-            }
-        return {"success": True, "data": analysis_data, "message": "财务报告已生成（保存失败）"}
+                "message": "财务报告已生成（保存失败）",
+            },
+            route="/api/ai/kitten/financial/report",
+            message="生成小猫财务报告",
+            body=payload,
+            intent="kitten_financial_report",
+        )
     except RECOVERABLE_ERRORS as e:
         logger.exception("kitten financial: %s", e)
         return JSONResponse(
@@ -235,10 +309,34 @@ def ai_kitten_report_export(body: dict = Body(default_factory=dict)):
         report = service.build_report(body or {})
         file_name = str(report.get("file_name") or "小猫分析报告.xlsx")
         content = report.get("content") or b""
+        trace_payload = _trace_kitten_route(
+            {
+                "success": True,
+                "response": "小猫分析 Excel 报告已导出",
+                "data": {
+                    "text": "小猫分析 Excel 报告已导出",
+                    "document": {
+                        "file_name": file_name,
+                        "download_url": "/api/ai/kitten/report/export",
+                        "mime_type": (
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        ),
+                        "summary": "小猫分析 Excel 报告",
+                    },
+                },
+            },
+            route="/api/ai/kitten/report/export",
+            message="导出小猫分析 Excel 报告",
+            body=body or {},
+            intent="kitten_report_export",
+        )
         return StreamingResponse(
             BytesIO(content),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+            headers=_agent_run_headers(
+                trace_payload,
+                {"Content-Disposition": f'attachment; filename="{file_name}"'},
+            ),
         )
     except RECOVERABLE_ERRORS as e:
         logger.exception("kitten export: %s", e)
@@ -253,10 +351,34 @@ def ai_kitten_report_export_docx(body: dict = Body(default_factory=dict)):
         report = build_kitten_docx(body or {})
         file_name = str(report.get("file_name") or "小猫分析报告.docx")
         content = report.get("content") or b""
+        trace_payload = _trace_kitten_route(
+            {
+                "success": True,
+                "response": "小猫分析 Word 报告已导出",
+                "data": {
+                    "text": "小猫分析 Word 报告已导出",
+                    "document": {
+                        "file_name": file_name,
+                        "download_url": "/api/ai/kitten/report/export-docx",
+                        "mime_type": (
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        ),
+                        "summary": "小猫分析 Word 报告",
+                    },
+                },
+            },
+            route="/api/ai/kitten/report/export-docx",
+            message="导出小猫分析 Word 报告",
+            body=body or {},
+            intent="kitten_report_export_docx",
+        )
         return StreamingResponse(
             BytesIO(content),
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+            headers=_agent_run_headers(
+                trace_payload,
+                {"Content-Disposition": f'attachment; filename="{file_name}"'},
+            ),
         )
     except RECOVERABLE_ERRORS as e:
         logger.exception("kitten docx export: %s", e)
@@ -290,8 +412,29 @@ def kitten_document_generate(body: dict = Body(default_factory=dict)):
             "doc.xlsx" if fmt == "xlsx" else "doc.docx"
         )
         disp = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(file_name)}"
+        trace_payload = _trace_kitten_route(
+            {
+                "success": True,
+                "response": "办公文档已生成",
+                "data": {
+                    "text": "办公文档已生成",
+                    "document": {
+                        "file_name": file_name,
+                        "download_url": "/api/ai/kitten/document/generate",
+                        "mime_type": mime,
+                        "summary": prompt,
+                    },
+                },
+            },
+            route="/api/ai/kitten/document/generate",
+            message=prompt,
+            body=payload,
+            intent="kitten_document_generate",
+        )
         return StreamingResponse(
-            BytesIO(content), media_type=mime, headers={"Content-Disposition": disp}
+            BytesIO(content),
+            media_type=mime,
+            headers=_agent_run_headers(trace_payload, {"Content-Disposition": disp}),
         )
     except RuntimeError as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=503)

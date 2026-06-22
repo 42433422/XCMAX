@@ -148,11 +148,55 @@ const xcmaxMarketProxy = {
       throw e
     }
   },
-  executeEmployeeTask: (employeeId: string, task: string, inputData: unknown) =>
-    marketReq(`employees/${encodeURIComponent(employeeId)}/execute`, {
-      method: 'POST',
-      body: { task, input_data: inputData ?? {} },
-    }),
+  executeEmployeeTask: async (employeeId: string, task: string, inputData: unknown) => {
+    const body = { task, input_data: inputData ?? {} }
+    const marketExecute = () =>
+      marketReq(`employees/${encodeURIComponent(employeeId)}/execute`, {
+        method: 'POST',
+        body,
+      })
+    if (!(await isLocalDutyApiAvailable())) return marketExecute()
+    try {
+      return await api.post(`${LOCAL_PREFIX}/employees/${encodeURIComponent(employeeId)}/execute`, body)
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        localDutyApiAvailable = false
+        return marketExecute()
+      }
+      throw e
+    }
+  },
+  localEmployeeCronJobs: () =>
+    api.get(`${LOCAL_PREFIX}/employee-cron/jobs`) as Promise<unknown>,
+  localRunEmployeeCronJob: (jobId: string, payload?: { task?: string; input_data?: unknown }) =>
+    api.post(`${LOCAL_PREFIX}/employee-cron/jobs/${encodeURIComponent(jobId)}/run`, payload ?? {}) as Promise<unknown>,
+  selfMaintenanceRuntimeStatus: async (limit = 80) => {
+    const q = `limit=${encodeURIComponent(String(limit))}`
+    try {
+      return await api.get(`${LOCAL_PREFIX}/ops/self-maintenance/status?${q}`)
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        return marketReq(`ops/self-maintenance/status?${q}`)
+      }
+      throw e
+    }
+  },
+  selfMaintenanceGovernanceReview: async (payload: { note?: string } = {}) => {
+    try {
+      return await api.post(`${LOCAL_PREFIX}/ops/self-maintenance/governance-review`, payload)
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        return marketReq('ops/self-maintenance/governance-review', {
+          method: 'POST',
+          body: payload,
+        })
+      }
+      throw e
+    }
+  },
   llmStatus: () => marketReq('llm/status'),
   llmResolveChatDefault: () => marketReq('llm/resolve-chat-default'),
   llmChat: (provider: string, model: string, messages: unknown[], maxTokens = 1024) =>

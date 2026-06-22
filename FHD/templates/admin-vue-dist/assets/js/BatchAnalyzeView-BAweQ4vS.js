@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-qgy01mZ2.js";import{a1 as a,t,a2 as o}from"./index-C1axxMiF.js";const m=a({__name:"BatchAnalyzeView",setup(i){return(n,r)=>(t(),o(e,{"mod-id":"xcagi-erp-domain-bridge",view:"BatchAnalyzeView",title:"ERP 业务页"}))}});export{m as default};

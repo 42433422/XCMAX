@@ -6,7 +6,11 @@
 
 本页是 **18 份可直接执行** 的文档索引；更全的分层见 [`DOCUMENTATION_MAP.md`](DOCUMENTATION_MAP.md)。
 
-> **当前产品线口径**：`FHD/` 是 **企业桌面 ERP + AI 主交付线**。网站侧 AI 员工商店在仓根 `成都修茈科技有限公司/`，移动 AI 协同 App 在 `mobile-android/`，个人版暂停新增投入。跨线 SSOT 见仓根 [`specs/product-lines-3-plus-2.md`](../../specs/product-lines-3-plus-2.md)。阶段推进使用 v10-A/B/C/D，不 bump 产品版本。
+> **当前产品线口径**：`FHD/` 是 **企业桌面 ERP + AI 主交付线**。网站侧 AI 员工商店在仓根 `成都修茈科技有限公司/`，移动 AI 协同 App 在 `mobile-android/`，个人版暂停新增投入。跨线规范见仓根 [`specs/product-lines-3-plus-2.md`](../../specs/product-lines-3-plus-2.md)。阶段推进使用 v10-A/B/C/D，不 bump 产品版本。
+
+### 登记索引
+
+任何文档声称 SSOT（唯一真相源）必须在 [`SSOT_INDEX.md`](./SSOT_INDEX.md) 登记。冲突时以 SSOT_INDEX.md 为准。`scripts/dev/docs_ssot_lint.py` 会在 CI 中检测未登记或冲突的 SSOT 声明。
 
 ---
 
@@ -58,7 +62,7 @@ make e2e                        # Playwright（见 frontend/e2e/）
 |---|------|------|
 | 9 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 系统架构与设计决策 |
 | 10 | [`FEATURE_MAP.md`](FEATURE_MAP.md) | 功能边界与目录职责 |
-| 11 | [`guides/MOD_AUTHORING_GUIDE.md`](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发与 SSOT（`FHD/mods/`） |
+| 11 | [`guides/MOD_AUTHORING_GUIDE.md`](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发规范（`FHD/mods/` 为唯一编辑源） |
 | 12 | [`guides/PLATFORM_SHELL.md`](guides/PLATFORM_SHELL.md) | 宿主壳与 edition |
 | 13 | [`MIGRATION_REGISTRY.md`](MIGRATION_REGISTRY.md) | 迁移与入口统一登记 |
 
@@ -158,6 +162,6 @@ FHD_API_IMAGE_DIGEST=sha256:... \
 - 仓根地图：[`README.md`](../../README.md)
 - **发版检查清单**：[`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md)（tag `FHD/v*` → CVM + K8s + 客户端）
 - **国际化**：[`docs/I18N_ROLLOUT.md`](I18N_ROLLOUT.md) · 前端 `src/i18n/`（zh-CN / en-US）；`localStorage.xcagi_locale` 切换
-- CI SSOT：[`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)
+- CI 规范：[`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)
 - OpenAPI：启动后 `http://127.0.0.1:5000/docs`
-- Android **签约级**（双 SKU）：`guides/MOBILE_ANDROID.md` · 与 [`VERSION.md`](VERSION.md) 对齐
+- Android **签约级（双 SKU）**：`guides/MOBILE_ANDROID.md` · 与 [`VERSION.md`](VERSION.md) 对齐

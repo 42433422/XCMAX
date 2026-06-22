@@ -380,6 +380,7 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.templates_api",
     "modstore_server.sandbox_api",
     "modstore_server.employee_status_api",
+    "modstore_server.self_maintenance_loop_api",
     "modstore_server.on_demand_orchestrate_api",
     "modstore_server.inbound_webhook_api",
     "modstore_server.author_earnings",

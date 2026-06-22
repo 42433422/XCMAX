@@ -1,0 +1,12 @@
+{
+  "after": "Read the existing loop memory source of truth by default and format timestamped unresolved risks into prompt signals.",
+  "before": "Add collector env knobs but rely on an unwired caller to pass memory.",
+  "created_at": "2026-06-18T20:54:04.620967+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T205404Z-fix-evolution-signal-collector-loop-memory-support-is-ineffective.json"
+  },
+  "pattern": "default_real_memory_producer_for_prompt_signals",
+  "schema_version": 1,
+  "summary": "当生产调用方没有注入点时，提示信号收集器应默认读取真实 SSOT 记忆。"
+}

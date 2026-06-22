@@ -117,7 +117,7 @@ def test_execute_customers_ensure_exists(mock_get: MagicMock) -> None:
 
 
 @patch("app.bootstrap.get_shipment_app_service")
-@patch("app.routes.tools._parse_order_text")
+@patch("app.application.facades.tools_facade._parse_order_text")
 def test_execute_shipment_generate_tool(mock_parse: MagicMock, mock_ship: MagicMock) -> None:
     from app.application.workflow.planner import _execute_shipment_generate_tool
 

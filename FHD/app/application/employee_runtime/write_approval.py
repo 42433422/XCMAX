@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from typing import Any
 
-from app.application.employee_runtime.tool_scope import WRITE_TOOLS
+from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -19,17 +20,29 @@ def build_write_approval_gate(
 ):
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
-    写库类工具（``import_excel_to_database`` / ``products_bulk_import``）需满足其一：
+    写库类工具（``import_excel_to_database`` / ``products_bulk_import``）与代码修改工具
+    （``patch_file`` / ``write_file``）需满足其一：
     - 输入 ``approved_write=True`` / ``allow_write=True``
-    - ApprovalGatedEngine 评估为 auto-approve（strategy=auto，演示/CLI）
+    - 输入 ``write_token`` / ``approval_token`` 匹配 ``FHD_DB_WRITE_TOKEN``
+    - ApprovalGatedEngine 生成人工审批请求后，由审批工作台放行
     """
     payload = dict(input_data or {})
 
     def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         name = str(tool_name or "").strip()
-        if name not in WRITE_TOOLS:
+        if name not in WRITE_TOOLS and name not in CODE_WRITE_TOOLS:
             return {"ok": True}
         if payload.get("approved_write") or payload.get("allow_write"):
+            return {"ok": True}
+        configured_token = str(os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip()
+        supplied_token = str(
+            payload.get("write_token")
+            or payload.get("approval_token")
+            or (args or {}).get("write_token")
+            or (args or {}).get("approval_token")
+            or ""
+        ).strip()
+        if configured_token and supplied_token and supplied_token == configured_token:
             return {"ok": True}
         try:
             from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
@@ -51,7 +64,7 @@ def build_write_approval_gate(
                 risk_level="high",
             )
             gated = ApprovalGatedEngine(WorkflowEngine(lambda **kw: {"success": True}))
-            decision = gated.evaluate_plan(plan, runtime_context=payload, strategy="auto")
+            decision = gated.evaluate_plan(plan, runtime_context=payload, strategy="interactive")
             if decision.all_approved and not decision.any_rejected:
                 return {"ok": True}
             if decision.pending_approval:

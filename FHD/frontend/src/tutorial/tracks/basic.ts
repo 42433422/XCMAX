@@ -166,26 +166,6 @@ export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
       assistantTab: 'assistant',
     }),
     createStep({
-      id: 'tab-one-click',
-      title: '一键托管',
-      description: '请点击「一键托管」，在「工作流员工选择」中用开关启用需要的 AI 员工。',
-      targetSelector:
-        '[data-tutorial-spotlight="assistant-panel"] .assistant-tab[data-tutorial-id="tab-one-click"]',
-      actionType: 'click',
-      routeName: 'chat',
-      assistantTab: 'oneClick',
-    }),
-    createStep({
-      id: 'tab-lobster',
-      title: '龙虾托管',
-      description: '请点击「龙虾托管」，同样可通过开关选择参与托管的 AI 员工。',
-      targetSelector:
-        '[data-tutorial-spotlight="assistant-panel"] .assistant-tab[data-tutorial-id="tab-lobster"]',
-      actionType: 'click',
-      routeName: 'chat',
-      assistantTab: 'lobster',
-    }),
-    createStep({
       id: 'settings-entry',
       title: settingsLabel,
       description: `请点击侧栏底部「${settingsLabel}」，确认配置入口可正常访问`,

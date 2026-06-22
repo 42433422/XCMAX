@@ -45,7 +45,9 @@ class TestGetCustomersSession:
 class TestResetCustomersEngine:
     def test_calls_invalidate(self):
         mock_registry = MagicMock()
-        with patch("app.di.registry.get_service_registry", return_value=mock_registry):
+        with patch(
+            "app.application.customer_app_service.get_service_registry", return_value=mock_registry
+        ):
             reset_customers_engine()
             mock_registry.invalidate_customer_application_service.assert_called_once()
 
@@ -601,6 +603,8 @@ class TestGetCustomerAppService:
     def test_returns_service(self):
         mock_registry = MagicMock()
         mock_registry.customer_application_service = MagicMock()
-        with patch("app.di.registry.get_service_registry", return_value=mock_registry):
+        with patch(
+            "app.application.customer_app_service.get_service_registry", return_value=mock_registry
+        ):
             result = get_customer_app_service()
             assert result is not None

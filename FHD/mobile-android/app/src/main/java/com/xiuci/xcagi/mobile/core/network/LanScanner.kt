@@ -1,5 +1,6 @@
 package com.xiuci.xcagi.mobile.core.network
 
+import com.xiuci.xcagi.mobile.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,7 +19,7 @@ class LanScanner @Inject constructor() {
         .readTimeout(2, TimeUnit.SECONDS)
         .build()
 
-    suspend fun scanSubnet(prefix: String, port: Int = 5000): List<String> = withContext(Dispatchers.IO) {
+    suspend fun scanSubnet(prefix: String, port: Int = BuildConfig.FHD_DEFAULT_PORT): List<String> = withContext(Dispatchers.IO) {
         coroutineScope {
             (1..254).map { host ->
                 async {
@@ -29,7 +30,7 @@ class LanScanner @Inject constructor() {
         }
     }
 
-    fun probeHealth(host: String, port: Int = 5000): Boolean {
+    fun probeHealth(host: String, port: Int = BuildConfig.FHD_DEFAULT_PORT): Boolean {
         return try {
             val url = "http://$host:$port/api/health"
             val req = Request.Builder().url(url).get().build()

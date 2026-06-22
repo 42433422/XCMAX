@@ -2,7 +2,7 @@
   <div class="nc">
     <div class="nc-head">
       <div class="nc-head-l">
-        <h1 class="nc-title">通知</h1>
+        <h1 class="nc-title">通知中心</h1>
         <span v-if="totalUnread > 0" class="nc-badge">{{ totalUnread }}</span>
       </div>
       <div class="nc-head-r">
@@ -26,9 +26,7 @@
 
     <div v-if="err" class="nc-err">{{ err }}</div>
 
-    <div v-if="loading" class="nc-loading">
-      <div class="nc-spin" />
-    </div>
+    <div v-if="loading" class="nc-loading">加载中</div>
 
     <div v-else-if="items.length" class="nc-list">
       <div
@@ -53,7 +51,7 @@
           <p class="nc-desc" :class="{ 'nc-desc--clip': !expandedItems.has(n.id) }" @click.stop="toggleItem(n.id)">{{ n.content }}</p>
         </div>
 
-        <button v-if="!n.is_read" type="button" class="nc-read" @click.stop="markOne(n.id)" title="标为已读">
+        <button v-if="!n.is_read" type="button" class="nc-read" @click.stop="markOne(n.id)" title="标为已读">标为已读
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8.5 6.5 12 13 4.5"/></svg>
         </button>
       </div>

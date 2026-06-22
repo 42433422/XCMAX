@@ -126,6 +126,93 @@ def _collect_performance_signals() -> List[Dict[str, str]]:
         return []
 
 
+def _collect_loop_memory_signals(limit: int = 12) -> List[Dict[str, str]]:
+    """Read real self-maintenance loop memory and expose unresolved risks."""
+
+    try:
+        from modstore_server.self_maintenance_policy import load_loop_memory
+
+        memory = load_loop_memory()
+    except Exception:
+        logger.debug("collect loop memory signals failed", exc_info=True)
+        return []
+    if not isinstance(memory, dict) or not memory:
+        return []
+
+    signals: List[Dict[str, str]] = []
+    parse_error = str(memory.get("_parse_error") or "").strip()
+    if parse_error:
+        signals.append(
+            {
+                "kind": "loop_memory",
+                "signal": "loop_memory_parse_error",
+                "detail": parse_error[:240],
+            }
+        )
+
+    last_decision = memory.get("last_policy_decision")
+    if isinstance(last_decision, dict):
+        action = str(last_decision.get("action") or "")
+        reason = str(last_decision.get("reason") or "")
+        if action or reason:
+            signals.append(
+                {
+                    "kind": "loop_memory",
+                    "signal": "last_policy_decision",
+                    "action": action,
+                    "reason": reason,
+                    "run_id": str(memory.get("last_run", {}).get("run_id") or ""),
+                    "completed_at": str(memory.get("last_run", {}).get("completed_at") or ""),
+                }
+            )
+
+    open_items = memory.get("open_items")
+    if isinstance(open_items, list):
+        for item in open_items[-limit:]:
+            if not isinstance(item, dict):
+                continue
+            signals.append(
+                {
+                    "kind": "loop_memory",
+                    "signal": str(item.get("kind") or "open_item"),
+                    "action": str(item.get("action") or ""),
+                    "reason": str(item.get("reason") or ""),
+                    "run_id": str(item.get("run_id") or ""),
+                    "task_id": str(item.get("task_id") or item.get("para_task_id") or ""),
+                    "branch": str(item.get("branch") or ""),
+                    "created_at": str(item.get("created_at") or ""),
+                    "detail": json.dumps(item, ensure_ascii=False, sort_keys=True)[:360],
+                }
+            )
+
+    recent_runs = memory.get("recent_runs")
+    if isinstance(recent_runs, list):
+        for item in recent_runs[-5:]:
+            if not isinstance(item, dict):
+                continue
+            action = str(item.get("action") or "")
+            status = str(item.get("status") or "")
+            if action not in {"await_human_strategy_approval", "stop"} and status not in {
+                "failed",
+                "completed_waiting_human_strategy",
+            }:
+                continue
+            signals.append(
+                {
+                    "kind": "loop_memory",
+                    "signal": "recent_run_risk",
+                    "action": action,
+                    "status": status,
+                    "run_id": str(item.get("run_id") or ""),
+                    "branch": str(item.get("branch") or ""),
+                    "completed_at": str(item.get("completed_at") or ""),
+                    "detail": json.dumps(item, ensure_ascii=False, sort_keys=True)[:360],
+                }
+            )
+
+    return signals[:limit]
+
+
 def collect_evolution_signals(
     *,
     lookback_hours: Optional[int] = None,
@@ -136,13 +223,18 @@ def collect_evolution_signals(
     pytest_items = _collect_pytest_failures(root=root)
     incident_items = _collect_runtime_anomalies(lookback_hours=hours)
     perf_items = _collect_performance_signals()
+    loop_memory_items = _collect_loop_memory_signals()
 
     return {
         "lookback_hours": hours,
+        "loop_memory_signals": loop_memory_items,
         "pytest_failures": pytest_items,
         "runtime_anomalies": incident_items,
         "performance_signals": perf_items,
-        "total_count": len(pytest_items) + len(incident_items) + len(perf_items),
+        "total_count": len(pytest_items)
+        + len(incident_items)
+        + len(perf_items)
+        + len(loop_memory_items),
     }
 
 
@@ -175,6 +267,19 @@ def format_evolution_signals_for_prompt(signals: Dict[str, Any]) -> str:
         lines.append("### 性能 / 部署探针")
         for it in ps[:8]:
             lines.append(f"- {it.get('signal', '?')}: {it.get('detail', '')}")
+        lines.append("")
+
+    lm = signals.get("loop_memory_signals") or []
+    if lm:
+        lines.append("### 自维护 loop 记忆")
+        for it in lm[:12]:
+            timestamp = it.get("created_at") or it.get("completed_at") or "no-ts"
+            reason = it.get("reason") or it.get("status") or it.get("detail") or ""
+            run_id = it.get("run_id") or ""
+            branch = it.get("branch") or ""
+            lines.append(
+                f"- {timestamp} `{it.get('signal', '?')}` run={run_id} branch={branch}: {reason}"
+            )
         lines.append("")
 
     return "\n".join(lines).strip()

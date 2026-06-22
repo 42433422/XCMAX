@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -75,7 +76,7 @@ fun ConnectScreen(
         onBack: (() -> Unit)? = null,
 ) {
         Column(
-                Modifier.fillMaxSize().background(Color.White).imePadding(),
+                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding(),
         ) {
                 WeTopBar(title = "Agent 远程控制", onBack = onBack)
 
@@ -93,13 +94,13 @@ fun ConnectScreen(
                                 tint = Color.Unspecified,
                         )
                         Text(
-                                "Agent 远程控制",
+                                "XCAGI 手机控制端",
                                 fontSize = MaterialTheme.typography.headlineSmall.fontSize,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                                "绑定电脑后，手机可远程操控电脑执行任务、运行命令，如同你的 AI Agent 助手。",
+                                "绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。",
                                 fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
@@ -125,7 +126,12 @@ private enum class AuthLoginMode {
 }
 
 @Composable
-fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
+fun AuthScreen(
+        vm: AppViewModel,
+        onRegister: () -> Unit,
+        onDone: () -> Unit,
+        onScan: () -> Unit,
+) {
         var loginMode by remember { mutableStateOf(AuthLoginMode.PASSWORD) }
         var user by remember { mutableStateOf("") }
         var pass by remember { mutableStateOf("") }
@@ -152,35 +158,35 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 autoLogin = sessionStore.isAutoLogin()
         }
         val isEnterprise = ProductSkuConfig.isEnterprise
-        val title = if (isEnterprise) "XCAGI 企业版" else "XCAGI 个人版"
+        val title = if (isEnterprise) "XCAGI 手机控制端" else "XCAGI 个人版"
         val subtitle =
                 if (isEnterprise) {
-                        "智能协同，助力企业经营"
+                        "连接服务器后台、企业工作台和电脑执行端"
                 } else {
                         "与官网 MODstore 同一账号，登录后可同步能力。"
                 }
 
         Column(
                 Modifier.fillMaxSize()
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                         .imePadding()
                         .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
         ) {
                 // ── Logo + 标题区（截图对齐） ──
-                Spacer(Modifier.height(60.dp))
+                Spacer(Modifier.height(26.dp))
                 WeAvatar(
-                        size = 96.dp,
+                        size = 72.dp,
                         content = {
                                 Icon(
                                         painter = painterResource(R.mipmap.ic_launcher_foreground),
                                         contentDescription = null,
-                                        modifier = Modifier.size(68.dp),
+                                        modifier = Modifier.size(50.dp),
                                         tint = Color.Unspecified,
                                 )
                         },
                 )
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
                         title,
                         fontSize = 22.sp,
@@ -195,25 +201,27 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
 
                 // ── 密码 / 手机号登录切换 ──
                 Row(
                         Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                         LoginTab(
                                 label = "密码登录",
                                 selected = loginMode == AuthLoginMode.PASSWORD,
                                 onClick = { loginMode = AuthLoginMode.PASSWORD },
+                                modifier = Modifier.weight(1f),
                         )
                         LoginTab(
                                 label = "手机号登录",
                                 selected = loginMode == AuthLoginMode.PHONE,
                                 onClick = { loginMode = AuthLoginMode.PHONE },
+                                modifier = Modifier.weight(1f),
                         )
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(14.dp))
 
                 androidx.compose.runtime.LaunchedEffect(codeCooldown) {
                         if (codeCooldown > 0) {
@@ -222,17 +230,12 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         }
                 }
 
-                // ── 管理员切换（企业版） ──
                 if (isEnterprise && loginMode == AuthLoginMode.PASSWORD) {
-                        Text(
-                                if (adminMode) "切换为普通账号" else "管理员账号登录",
-                                fontSize = MaterialTheme.typography.labelMedium.fontSize,
-                                fontWeight = FontWeight.Medium,
-                                color = XcagiTheme.extra.brandBlue,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.clickable { adminMode = !adminMode },
+                        AccountKindSegment(
+                                adminMode = adminMode,
+                                onAdminModeChange = { adminMode = it },
                         )
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(14.dp))
                 }
 
                 // ── 输入框 ──
@@ -283,7 +286,7 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         )
                 }
 
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(18.dp))
 
                 // ── 登录错误提示 ──
                 if (loginError != null) {
@@ -324,10 +327,18 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                                                                 adminMode,
                                                                 rememberPass,
                                                                 autoLogin
-                                                        ) {
+                                                        ) { ok, error ->
                                                                 loggingIn = false
-                                                                if (it) onDone()
-                                                                else loginError = "用户名或密码错误"
+                                                                if (ok) onDone()
+                                                                else {
+                                                                        loginError =
+                                                                                error
+                                                                                        ?: if (adminMode) {
+                                                                                                "服务器后台账号或密码错误"
+                                                                                        } else {
+                                                                                                "用户名或密码错误"
+                                                                                        }
+                                                                }
                                                         }
                                                 AuthLoginMode.PHONE ->
                                                         vm.loginPhone(phone, otpCode) {
@@ -340,16 +351,26 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         contentAlignment = Alignment.Center,
                 ) {
                         Text(
-                                if (loggingIn) "登录中…" else "登录",
+                                if (loggingIn) {
+                                        "登录中…"
+                                } else if (loginMode == AuthLoginMode.PASSWORD && adminMode) {
+                                        "进入服务器后台"
+                                } else if (loginMode == AuthLoginMode.PASSWORD && isEnterprise) {
+                                        "进入企业工作台"
+                                } else {
+                                        "登录"
+                                },
                                 fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                                 fontWeight = FontWeight.Medium,
                                 color = if (canLogin) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                 }
+                Spacer(Modifier.height(12.dp))
+                LoginScanButton(onClick = onScan)
 
                 // ── 记住密码 / 免登录（密码模式） ──
                 if (loginMode == AuthLoginMode.PASSWORD) {
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(10.dp))
                         Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -380,11 +401,11 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         )
                 }
 
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(18.dp))
 
                 // ── 协议勾选（截图：蓝色勾选框+文字） ──
                 Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 16.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                 ) {
                         Box(
@@ -483,9 +504,9 @@ private fun LoginInputBox(
         Box(
                 Modifier.fillMaxWidth()
                         .padding(horizontal = 24.dp)
-                        .height(48.dp)
+                        .height(46.dp)
                         .clip(MaterialTheme.shapes.small)
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                         .border(
                                 BorderStroke(
                                         1.dp,
@@ -532,9 +553,9 @@ private fun LoginPasswordBox(
         ) {
                 Box(
                         Modifier.fillMaxWidth()
-                                .height(48.dp)
+                                .height(46.dp)
                                 .clip(MaterialTheme.shapes.small)
-                                .background(Color.White)
+                                .background(MaterialTheme.colorScheme.surface)
                                 .border(
                                         BorderStroke(
                                                 1.dp,
@@ -595,7 +616,7 @@ private fun LoginTab(
         modifier: Modifier = Modifier,
 ) {
         Column(
-                modifier.clickable(onClick = onClick).padding(vertical = 8.dp),
+                modifier.clickable(onClick = onClick).padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
         ) {
                 Text(
@@ -606,7 +627,7 @@ private fun LoginTab(
                                 if (selected) MaterialTheme.colorScheme.onSurface
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Box(
                         Modifier.fillMaxWidth()
                                 .height(2.5.dp)
@@ -614,6 +635,64 @@ private fun LoginTab(
                                 .background(
                                         if (selected) XcagiTheme.extra.brandBlue else Color.Transparent
                                 ),
+                )
+        }
+}
+
+@Composable
+private fun AccountKindSegment(
+        adminMode: Boolean,
+        onAdminModeChange: (Boolean) -> Unit,
+) {
+        Row(
+                Modifier.fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.outlineVariant,
+                                RoundedCornerShape(18.dp),
+                        )
+                        .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+                AccountKindSegmentItem(
+                        label = "服务器后台",
+                        selected = adminMode,
+                        onClick = { onAdminModeChange(true) },
+                        modifier = Modifier.weight(1f),
+                )
+                AccountKindSegmentItem(
+                        label = "企业工作台",
+                        selected = !adminMode,
+                        onClick = { onAdminModeChange(false) },
+                        modifier = Modifier.weight(1f),
+                )
+        }
+}
+
+@Composable
+private fun AccountKindSegmentItem(
+        label: String,
+        selected: Boolean,
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier,
+) {
+        Box(
+                modifier.height(36.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (selected) XcagiTheme.extra.brandBlue else Color.Transparent)
+                        .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center,
+        ) {
+                Text(
+                        label,
+                        fontSize = MaterialTheme.typography.labelLarge.fontSize,
+                        fontWeight = FontWeight.Medium,
+                        color =
+                                if (selected) Color.White
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
         }
 }
@@ -708,7 +787,7 @@ private fun LoginSecondaryButton(
                         .height(48.dp)
                         .clip(MaterialTheme.shapes.small)
                         .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                         .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center,
         ) {
@@ -716,6 +795,42 @@ private fun LoginSecondaryButton(
                         text,
                         fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+        }
+}
+
+@Composable
+private fun LoginScanButton(
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier,
+) {
+        Row(
+                modifier.fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .border(
+                                0.5.dp,
+                                XcagiTheme.extra.brandBlue.copy(alpha = 0.35f),
+                                RoundedCornerShape(22.dp),
+                        )
+                        .background(XcagiTheme.extra.brandBlue.copy(alpha = 0.06f))
+                        .clickable(onClick = onClick),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+        ) {
+                Icon(
+                        Icons.Default.QrCodeScanner,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = XcagiTheme.extra.brandBlue,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                        "扫码绑定/登录",
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                        fontWeight = FontWeight.Medium,
+                        color = XcagiTheme.extra.brandBlue,
                 )
         }
 }

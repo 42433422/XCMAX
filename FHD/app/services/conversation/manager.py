@@ -54,12 +54,16 @@ class AIConversationService(
 
             # 优先级2: 直连模式（OpenAI兼容适配器）
             if not self.modstore_adapter:
+                from app.infrastructure.llm.providers.credentials import (
+                    resolve_default_chat_model,
+                    resolve_default_openai_provider,
+                    resolve_openai_env_credentials,
+                )
                 from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
 
-                llm_provider = os.environ.get("LLM_PROVIDER", "xiaomi").lower().strip()
-                llm_model = os.environ.get("LLM_MODEL", None)
-                llm_api_key = os.environ.get(f"{llm_provider.upper()}_API_KEY", None)
-                llm_base_url = os.environ.get(f"{llm_provider.upper()}_BASE_URL", None)
+                llm_provider = resolve_default_openai_provider()
+                llm_model = resolve_default_chat_model()
+                llm_api_key, llm_base_url = resolve_openai_env_credentials()
 
                 self.llm_adapter = OpenAICompatibleAdapter(
                     provider=llm_provider,
@@ -113,10 +117,13 @@ class AIConversationService(
         else:
             logger.warning("DeepSeek API Key 未配置（降级路径不可用）")
 
-        from app.infrastructure.llm.providers.credentials import default_chat_completions_url
+        from app.infrastructure.llm.providers.credentials import (
+            default_chat_completions_url,
+            resolve_default_chat_model,
+        )
 
         self.api_url = default_chat_completions_url()
-        self.model = "deepseek-chat"
+        self.model = resolve_default_chat_model()
 
         # 记录最终使用的模式
         self._llm_mode = llm_init_mode
@@ -155,6 +162,7 @@ class AIConversationService(
         self.user_preference_service = get_user_preference_service()
         self._deepseek_async_client: Any = None
         self._deepseek_async_loop: Any = None
+        self.persona_service = None  # 默认 None，由外部注入
 
     def add_to_history(self, user_id: str, role: str, content: str) -> bool:
         context = self.contexts.get(user_id)
@@ -335,17 +343,96 @@ class AIConversationService(
 _ai_conversation_service: AIConversationService | None = None
 
 
+class _InMemoryPersonaRepository:
+    """内存版 persona 仓储：无 DB/Redis 环境下的 fallback。
+
+    画像不持久化，进程内缓存；冷启动时 PersonaService 会创建默认画像。
+    L1 规则推断 + prompt 生成仍正常工作，仅 L2/L3 缓存和跨会话画像不保留。
+    """
+
+    def __init__(self):
+        self._store: dict[str, Any] = {}
+        self._events: dict[str, list[dict]] = {}
+
+    async def find_by_user_id(self, user_id: str):
+        return self._store.get(user_id)
+
+    async def save(self, profile):
+        self._store[profile.user_id] = profile
+        return profile
+
+    async def delete(self, user_id: str) -> bool:
+        return self._store.pop(user_id, None) is not None
+
+    async def append_event(self, user_id: str, event_type: str, event_data: dict) -> None:
+        self._events.setdefault(user_id, []).append({"type": event_type, "data": event_data})
+
+    async def list_recent_events(self, user_id: str, limit: int = 20) -> list[dict]:
+        return self._events.get(user_id, [])[-limit:]
+
+
+def _build_persona_repository():
+    """构造持久化 persona 仓储（Redis 热缓存 + DB 冷存储）。
+
+    PersonaRepositoryImpl 内部已对 Redis/DB 不可用做优雅降级；仅当构造本身失败时
+    才回退纯内存仓储，确保对话流人格永不因持久化层缺失而中断。
+    """
+    try:
+        from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
+
+        return PersonaRepositoryImpl()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Persona 持久化仓储不可用，降级内存仓储: %s", exc)
+        return _InMemoryPersonaRepository()
+
+
+def _create_persona_service():
+    """创建 PersonaService 实例（持久化仓储 + L1/L2/L3 三层推断）。
+
+    - 持久化：PersonaRepositoryImpl（Redis-first + DB），画像跨重启存活。
+    - L1：RuleInferencer（同步实时）。
+    - L2：EmbeddingInferencer；未配置 XCAGI_EMBEDDING_API_KEY 时返回中性值自动待命。
+    - L3：LlmInferencer，复用主对话 LLM 客户端（PersonaLlmClient 适配器）。
+    """
+    from app.infrastructure.persona.embedding_client import EmbeddingClient
+    from app.infrastructure.persona.llm_client_adapter import PersonaLlmClient
+    from app.services.persona.axes_fuser import AxesFuser
+    from app.services.persona.embedding_inferencer import EmbeddingInferencer
+    from app.services.persona.identity_resolver import IdentityResolver
+    from app.services.persona.llm_inferencer import LlmInferencer
+    from app.services.persona.param_mapper import PersonaParamMapper
+    from app.services.persona.persona_service import PersonaService
+    from app.services.persona.prompt_builder import PersonaPromptBuilder
+    from app.services.persona.rapport_calculator import RapportCalculator
+    from app.services.persona.rule_inferencer import RuleInferencer
+
+    identity_resolver = IdentityResolver()
+    return PersonaService(
+        repo=_build_persona_repository(),
+        rule_inferencer=RuleInferencer(),
+        embedding_inferencer=EmbeddingInferencer(EmbeddingClient()),
+        llm_inferencer=LlmInferencer(PersonaLlmClient()),
+        axes_fuser=AxesFuser(),
+        rapport_calculator=RapportCalculator(),
+        identity_resolver=identity_resolver,
+        prompt_builder=PersonaPromptBuilder(identity_resolver),
+        param_mapper=PersonaParamMapper(),
+    )
+
+
 def get_ai_conversation_service() -> AIConversationService:
     global _ai_conversation_service
     if _ai_conversation_service is None:
         _ai_conversation_service = AIConversationService()
+        _ai_conversation_service.persona_service = _create_persona_service()
     return _ai_conversation_service
 
 
 def init_ai_conversation_service() -> AIConversationService:
     global _ai_conversation_service
     _ai_conversation_service = AIConversationService()
-    logger.info("AI 对话服务已初始化")
+    _ai_conversation_service.persona_service = _create_persona_service()
+    logger.info("AI 对话服务已初始化（已注入 PersonaService）")
     return _ai_conversation_service
 
 

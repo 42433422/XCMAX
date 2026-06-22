@@ -1,53 +1,14 @@
-# -*- coding: utf-8 -*-
+# CI SSOT: generated from FHD/config/duty_roster.json + mods/_employees/*/manifest.json — DO NOT EDIT BY HAND
 """远端 Catalog 行是否应对 XCAGI 商店展示（与 AI 市场 /api/market/catalog 对齐）。"""
 
 from __future__ import annotations
 
 from typing import Any
 
-# 与 modstore_server.duty_roster.YUANGON_AREAS 编制矩阵一致（内部运维岗，非公开市场商品）
-_PLANNED_DUTY_EMPLOYEE_IDS: frozenset[str] = frozenset(
-    {
-        "site-content-editor",
-        "seo-sitemap-curator",
-        "flask-entry-keeper",
-        "nginx-config-engineer",
-        "push-update-context-officer",
-        "deploy-release-officer",
-        "security-secrets-guard",
-        "log-monitor-incident",
-        "retention-officer",
-        "dbops-engineer",
-        "modstore-backend-api",
-        "employee-pack-curator",
-        "payment-billing-reconciler",
-        "market-frontend-dev",
-        "workbench-ux-stylist",
-        "vibe-coding-maintainer",
-        "mods-and-eskill-curator",
-        "change-request-auditor",
-        "daily-orchestrator",
-        "intake-dispatcher",
-        "task-router-officer",
-        "test-qa-runner",
-        "doc-knowledge-curator",
-        "employee-interview-assistant",
-        "employee-pack-quality-interviewer",
-        "intent-analyst",
-        "employee-planner",
-        "artifact-generator",
-        "quality-validator",
-        "miniapp-builder",
-        "script-binder",
-        "workflow-automator",
-        "pack-registrar",
-        "sandbox-tester",
-        "code-validator",
-        "self-checker",
-        "host-checker",
-        "hex-quality-assessor",
-    }
-)
+from app.mod_sdk.duty_roster import all_planned_duty_employee_ids
+
+# 编制内全部岗位 ID（运行时从 FHD/config/duty_roster.json 派生，不再硬编码）
+_PLANNED_DUTY_EMPLOYEE_IDS: frozenset[str] = all_planned_duty_employee_ids()
 
 
 def is_internal_duty_catalog_id(pkg_id: str) -> bool:

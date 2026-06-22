@@ -149,6 +149,19 @@ class ApprovalService:
                             "created": (request.created_at or datetime.now()).isoformat(),
                         },
                     )
+            # P2 NeuroBus: 广播审批创建事件
+            try:
+                from app.neuro_bus.application_neuro_bridge import (
+                    neuro_notify_approval_changed,
+                )
+
+                neuro_notify_approval_changed(
+                    "created",
+                    approval_id=request.request_id,
+                    flow_id="",
+                )
+            except RECOVERABLE_ERRORS:
+                logger.debug("neuro_notify_approval_changed skipped", exc_info=True)
         except RECOVERABLE_ERRORS as e:
             logger.debug("AI 审批持久化到 DB 失败（非致命）: %s", e)
 
@@ -293,6 +306,21 @@ def process_approval_timeouts() -> dict[str, Any]:
 
             if results:
                 db.commit()
+                # P2 NeuroBus: 广播审批超时事件
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_approval_changed,
+                    )
+
+                    for r in results:
+                        action = "approved" if r.get("action") == "auto_approve" else "rejected"
+                        neuro_notify_approval_changed(
+                            action,
+                            approval_id=r.get("request_id", ""),
+                            decision=r.get("note", ""),
+                        )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_approval_changed skipped", exc_info=True)
     except RECOVERABLE_ERRORS as e:
         logger.error("审批超时处理失败: %s", e, exc_info=True)
         return {"success": False, "error": str(e), "processed": 0}

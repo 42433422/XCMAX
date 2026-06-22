@@ -67,6 +67,13 @@ def _safe_loads(raw: str, default: Any = None) -> Any:
         return default if default is not None else {}
 
 
+def _ensure_context_table(session: Any) -> None:
+    try:
+        ProjectContextMemo.__table__.create(bind=session.get_bind(), checkfirst=True)
+    except Exception:
+        logger.debug("project_context_memos ensure table failed", exc_info=True)
+
+
 def upsert_memo(
     *,
     scope: str,
@@ -83,6 +90,7 @@ def upsert_memo(
     try:
         sf = get_session_factory()
         with sf() as session:
+            _ensure_context_table(session)
             row = (
                 session.query(ProjectContextMemo)
                 .filter_by(scope=scope, scope_key=scope_key, key=key)
@@ -124,6 +132,7 @@ def get_memos(
     try:
         sf = get_session_factory()
         with sf() as session:
+            _ensure_context_table(session)
             q = session.query(ProjectContextMemo).filter(
                 ProjectContextMemo.scope == scope,
                 ProjectContextMemo.scope_key == scope_key,
@@ -156,6 +165,7 @@ def append_event(
     try:
         sf = get_session_factory()
         with sf() as session:
+            _ensure_context_table(session)
             row = (
                 session.query(ProjectContextMemo)
                 .filter_by(scope=scope, scope_key=scope_key, key=key)
@@ -200,6 +210,184 @@ def _project_key_from_input(input_data: Dict[str, Any]) -> str:
         if v:
             return str(v)[:512]
     return ""
+
+
+def _list_from_value(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    return [value]
+
+
+def _load_previous_loop_memory(input_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(input_data, dict):
+        return {}
+    for key in (
+        "previous_loop_memory",
+        "self_maintenance_loop_memory",
+        "loop_memory",
+        "loop_memory_json",
+    ):
+        raw = input_data.get(key)
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str) and raw.strip():
+            parsed = _safe_loads(raw, {})
+            if isinstance(parsed, dict):
+                return parsed
+    return {}
+
+
+def _resolved_run_ids(input_data: Optional[Dict[str, Any]]) -> List[str]:
+    if not isinstance(input_data, dict):
+        return []
+    raw = input_data.get("resolved_run_ids") or input_data.get("closed_run_ids")
+    return [str(item) for item in _list_from_value(raw) if str(item or "").strip()]
+
+
+def _dedupe_followups(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        key = (
+            str(item.get("source_run_id") or ""),
+            str(item.get("step") or ""),
+            str(item.get("kind") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def _followups_from_loop_memory(memory: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not isinstance(memory, dict):
+        return []
+    followups: List[Dict[str, Any]] = []
+    open_items = memory.get("open_items")
+    if isinstance(open_items, list):
+        for item in open_items:
+            if not isinstance(item, dict):
+                continue
+            run_id = str(item.get("run_id") or item.get("source_run_id") or "").strip()
+            kind = str(item.get("kind") or "loop_open_item")
+            steps = _list_from_value(item.get("steps"))
+            if not steps:
+                steps = [item.get("step") or kind]
+            for step in steps:
+                step_name = str(step or kind).strip()
+                if not run_id or not step_name:
+                    continue
+                followups.append(
+                    {
+                        "created_at": _now_iso(),
+                        "kind": kind,
+                        "reason": item.get("reason"),
+                        "source": "previous_loop_memory.open_items",
+                        "source_run_id": run_id,
+                        "status": "open",
+                        "step": step_name,
+                    }
+                )
+    recent_runs = memory.get("recent_runs")
+    if isinstance(recent_runs, list):
+        for run in recent_runs:
+            if not isinstance(run, dict):
+                continue
+            if str(run.get("status") or "") not in {"failed", "abandoned_stale"}:
+                continue
+            run_id = str(run.get("run_id") or "").strip()
+            if not run_id:
+                continue
+            followups.append(
+                {
+                    "branch": run.get("branch"),
+                    "created_at": _now_iso(),
+                    "kind": "failed_run",
+                    "reason": run.get("action") or "failed",
+                    "source": "previous_loop_memory.recent_runs",
+                    "source_run_id": run_id,
+                    "status": "open",
+                    "step": "run",
+                }
+            )
+    return _dedupe_followups(followups)
+
+
+def _update_self_maintenance_followups(
+    *,
+    employee_id: str,
+    input_data: Optional[Dict[str, Any]],
+    status: str,
+) -> None:
+    memory = _load_previous_loop_memory(input_data)
+    resolved = set(_resolved_run_ids(input_data))
+    if not memory and not resolved:
+        return
+
+    scope_key = str(employee_id or "")[:128]
+    current = get_memos(
+        scope="employee",
+        scope_key=scope_key,
+        keys=["open_followups", "closed_followups"],
+    )
+    open_followups = current.get("open_followups")
+    if not isinstance(open_followups, list):
+        open_followups = []
+    closed_followups = current.get("closed_followups")
+    if not isinstance(closed_followups, list):
+        closed_followups = []
+
+    incoming = _followups_from_loop_memory(memory)
+    combined_open = _dedupe_followups([*open_followups, *incoming])
+    remaining_open: List[Dict[str, Any]] = []
+    newly_closed: List[Dict[str, Any]] = []
+
+    for item in combined_open:
+        source_run_id = str(item.get("source_run_id") or "")
+        if source_run_id and source_run_id in resolved:
+            closed = dict(item)
+            closed["closed_at"] = _now_iso()
+            closed["closed_by_status"] = status
+            closed["status"] = "closed"
+            newly_closed.append(closed)
+            continue
+        remaining_open.append(item)
+
+    closed_followups = _dedupe_followups([*closed_followups, *newly_closed])[-100:]
+    remaining_open = _dedupe_followups(remaining_open)[-100:]
+    next_focus: Dict[str, Any]
+    if remaining_open:
+        next_focus = {
+            "status": "open",
+            "item": remaining_open[0],
+            "open_count": len(remaining_open),
+        }
+    else:
+        next_focus = {"status": "clear", "open_count": 0}
+
+    upsert_memo(
+        scope="employee",
+        scope_key=scope_key,
+        key="open_followups",
+        value=remaining_open,
+    )
+    upsert_memo(
+        scope="employee",
+        scope_key=scope_key,
+        key="closed_followups",
+        value=closed_followups,
+    )
+    upsert_memo(
+        scope="employee",
+        scope_key=scope_key,
+        key="next_self_maintenance_focus",
+        value=next_focus,
+    )
 
 
 def gather_for_employee(
@@ -283,6 +471,11 @@ def record_execution_outcome(
                 event={"employee_id": employee_id, **emp_payload},
                 max_keep=50,
             )
+        _update_self_maintenance_followups(
+            employee_id=employee_id,
+            input_data=input_data,
+            status=status,
+        )
     except Exception:
         logger.debug("record_execution_outcome failed", exc_info=True)
 

@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-06-18T22:35:50.961643+00:00",
+  "fix_diff": "cr_narrow_ci: expand copytree ignore patterns for .devfleet/.trae/coverage/dist/data/vector_data/*.sqlite, cleanup TemporaryDirectory on overlay exceptions, return failed_step=overlay_prepare with structured steps when overlay prep fails. self_maintenance_loop_runner: review/QA prompts now include target branch, base branch, repo URL, fetch instruction, and warning not to inspect the report-only task branch; Para input also carries review_target_branch/base/repo.",
+  "kind": "fix",
+  "metadata": {
+    "component": "cr_narrow_ci,self_maintenance_loop_runner",
+    "run_id": "36b812a6-dfab-4c00-8ee6-e975ff93f9cc"
+  },
+  "root_cause": "cr_narrow_ci 复制了过宽的目录树，并允许覆盖准备异常在没有结构化验证步骤的情况下逃逸。仅报告的审查/QA 提示未固定 repo/base/target branch 的拉取语义，导致 QA 可能比较仅报告工作区分支而非 employee 代码分支。",
+  "schema_version": 1,
+  "symptom": "自维护审查/QA 阻塞了窄范围 CI 覆盖分支：覆盖准备缺少结构化失败清理，复制了运行时 DB/状态，且仅报告 QA 检查了自己的空分支而非目标分支。"
+}

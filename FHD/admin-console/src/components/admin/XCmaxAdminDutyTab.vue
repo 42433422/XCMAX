@@ -1,7 +1,7 @@
 <template>
   <div class="xcmax-admin-duty">
     <div class="duty-actions">
-      <router-link class="btn btn-primary btn-sm" :to="{ name: 'duty-roster-graph' }">
+      <router-link class="btn btn-primary btn-sm" :to="{ name: 'duty-roster-graph', query: { view: 'department' } }">
         <i class="fa fa-sitemap" aria-hidden="true"></i>
         打开日更全链路编制图
       </router-link>

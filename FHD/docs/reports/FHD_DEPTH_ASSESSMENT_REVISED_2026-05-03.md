@@ -1,7 +1,10 @@
 # FHD (XCAGI) 项目深度评估报告（修订版）
 
+> **注**：本文件中的覆盖率数据已退役，SSOT 指向 [COVERAGE_RAMP.md](./COVERAGE_RAMP.md)。
+> 本文件保留作为深度评估的历史快照。最后更新：2026-06-20。
+
 > **⚠️ 本文档为 2026-05-03 历史评估**。覆盖率等数字已过期。
-> **当前 SSOT**（2026-06-17）：[`metrics/coverage-dual-summary.json`](../metrics/coverage-dual-summary.json)（HEAD **52.74%** 行 / WIP **74.56%**）、[`CLAIMED_VS_ACTUAL.md`](../CLAIMED_VS_ACTUAL.md)、[`reports/COVERAGE_RAMP.md`](COVERAGE_RAMP.md)。
+> **覆盖率 SSOT 已收敛至 [`reports/COVERAGE_RAMP.md`](COVERAGE_RAMP.md)**，本文件覆盖率章节不再维护。
 
 > 评估日期：2026-05-03  
 > 评估范围：`FHD` 仓库根目录 `app/`、`frontend/`、`k8s/`、`pyproject.toml` 等  
@@ -13,7 +16,7 @@
 
 ### 1.1 覆盖率门槛
 
-**证据**：根目录 [`pyproject.toml`](../../pyproject.toml) 与 [`XCAGI/pyproject.toml`](../../XCAGI/pyproject.toml) 中 `[tool.coverage.report]` 的 `fail_under`（当前 **52%**）。
+**证据**：根目录 [`pyproject.toml`](../../pyproject.toml) 与 [`XCAGI/pyproject.toml`](../../XCAGI/pyproject.toml) 中 `[tool.coverage.report]` 的 `fail_under`（**当前 84，2026 棘轮维护值**[^fail-under-52]）。
 
 **结论**：门槛偏低、近半代码未强制覆盖的风险判断**仍然成立**。
 
@@ -144,8 +147,10 @@ README 中的性能数字若无自动化复现，仍建议 Locust/k6/Lighthouse 
 | K8s 无探针 | **有误**：`deployment.yaml` 已配置 |
 | TS 未 strict | **部分有误**：`tsconfig.json` 已 `strict: true` |
 | 无 API 限流 | **收窄**：有路由级内存限流，缺全站/Redis 中间件 |
-| fail_under 52、mypy、SQLite、双入口、无 lockfile | **维持成立** |
+| fail_under（84 棘轮维护值[^fail-under-52]）、mypy、SQLite、双入口、无 lockfile | **维持成立** |
 
 ---
 
 *修订归档：与计划「FHD 评估报告核实与后续改进」对齐；请勿编辑本文件作为计划正文回写。*
+
+[^fail-under-52]: 历史 `fail_under = 52%` 已退役。当前由覆盖率棘轮维护至 **84**（行覆盖率 floor），见 [`pyproject.toml`](../../pyproject.toml) `fail_under` 与 [`metrics/coverage-dual-summary.json`](../../metrics/coverage-dual-summary.json) `ratchet_floors`。

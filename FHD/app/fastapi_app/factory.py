@@ -15,6 +15,7 @@ from app.infrastructure.mods.mod_auth import ModContextMiddleware
 from app.middleware.auth_rate_limit import AuthRateLimitMiddleware
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
+from app.middleware.industry_context import IndustryContextMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.xss_sanitizer import XSSSanitizerMiddleware
 from app.security import LanCidrGuard, LanLicenseGuard
@@ -28,6 +29,7 @@ from .cors import (
 from .lifespan import lifespan
 from .middleware_extra import register_extra_middleware, register_prometheus_metrics
 from .static_mounts import (
+    mount_admin_console_static,
     mount_vue_dist_assets_dir,
     mount_vue_dist_public_static,
     mount_xcmax_dashboard_static,
@@ -99,6 +101,7 @@ def create_fastapi_app(
         app.add_middleware(CORSMiddleware, **_cors_kw)
 
     app.add_middleware(ModContextMiddleware)
+    app.add_middleware(IndustryContextMiddleware)
     app.add_middleware(LanLicenseGuard)
     app.add_middleware(LanCidrGuard)
     app.add_middleware(GlobalRateLimitMiddleware)
@@ -137,6 +140,7 @@ def create_fastapi_app(
         logger.warning("Mod extensions staged load failed (lifespan may retry): %s", e)
 
     mount_xcmax_dashboard_static(app)
+    mount_admin_console_static(app)
     mount_vue_dist_public_static(app)
     mount_vue_dist_assets_dir(app)
 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -43,12 +45,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 
 internal object FixedPartnerKinds {
     const val ASSISTANT = "assistant"
     const val CUSTOMER_SERVICE = "cs"
+    const val CODEX = "codex"
+    const val CLAUDE = "claude"
 }
 
 private data class FixedPartnerProfileSpec(
@@ -59,7 +65,7 @@ private data class FixedPartnerProfileSpec(
     val source: String,
     val abilityLabels: List<String>,
     val circleLabels: List<String>,
-    val avatarText: String,
+    val avatarFallback: AppAvatarFallback,
     val avatarColor: Color,
 )
 
@@ -69,10 +75,13 @@ fun FixedPartnerProfileScreen(
     partnerKind: String,
     onBack: () -> Unit,
     onOpenChat: () -> Unit,
+    onOpenCircle: () -> Unit,
 ) {
     val csInfo by vm.csInfo.collectAsState()
     val assistantAvatarColor = XcagiTheme.extra.brandBlue
     val customerServiceAvatarColor = XcagiTheme.extra.weChatOnline
+    val codexAvatarColor = XcagiTheme.extra.n700
+    val claudeAvatarColor = XcagiTheme.extra.momentAccent
 
     LaunchedEffect(partnerKind) {
         if (partnerKind == FixedPartnerKinds.CUSTOMER_SERVICE) {
@@ -86,12 +95,16 @@ fun FixedPartnerProfileScreen(
             csInfo,
             assistantAvatarColor,
             customerServiceAvatarColor,
+            codexAvatarColor,
+            claudeAvatarColor,
         ) {
             fixedPartnerProfileSpec(
                 partnerKind = partnerKind,
                 csInfo = csInfo,
                 assistantAvatarColor = assistantAvatarColor,
                 customerServiceAvatarColor = customerServiceAvatarColor,
+                codexAvatarColor = codexAvatarColor,
+                claudeAvatarColor = claudeAvatarColor,
             )
         }
     if (spec == null) {
@@ -120,8 +133,8 @@ fun FixedPartnerProfileScreen(
             item {
                 Spacer(Modifier.height(10.dp))
                 FixedPartnerCirclePreview(
-                    labels = spec.circleLabels,
-                    accentColor = spec.avatarColor,
+                    spec = spec,
+                    onClick = onOpenCircle,
                 )
             }
 
@@ -151,6 +164,15 @@ fun FixedPartnerProfileScreen(
                     onClick = onOpenChat,
                 )
             }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                FixedPartnerActionRow(
+                    text = "进入 AI 交流圈",
+                    icon = Icons.Default.Forum,
+                    onClick = onOpenCircle,
+                )
+            }
         }
     }
 }
@@ -160,8 +182,34 @@ private fun fixedPartnerProfileSpec(
     csInfo: CsInfoDto?,
     assistantAvatarColor: Color,
     customerServiceAvatarColor: Color,
+    codexAvatarColor: Color,
+    claudeAvatarColor: Color,
 ): FixedPartnerProfileSpec? =
     when (partnerKind) {
+        FixedPartnerKinds.CODEX ->
+            FixedPartnerProfileSpec(
+                name = "超级员工-Codex",
+                alias = "全设备协同 · 排比派工",
+                accountId = "XCAGI-CODEX",
+                summary = "把开发、测试、打包、提交类任务派发到在线的 Codex 工作设备协同完成；普通问题可直接对话。",
+                source = "XCAGI 超级员工 · Codex 通道",
+                abilityLabels = listOf("多设备派工", "开发任务", "测试验证", "打包提交"),
+                circleLabels = listOf("派工", "协同", "开发"),
+                avatarFallback = AppAvatarFallback.CODEX,
+                avatarColor = codexAvatarColor,
+            )
+        FixedPartnerKinds.CLAUDE ->
+            FixedPartnerProfileSpec(
+                name = "超级员工-Claude",
+                alias = "全设备协同 · 排比派工",
+                accountId = "XCAGI-CLAUDE",
+                summary = "与 Codex 同构的超级员工，把任务派发到在线 Claude 工作设备；派工不可用时回退本机 Claude 直答。",
+                source = "XCAGI 超级员工 · Claude 通道",
+                abilityLabels = listOf("多设备派工", "开发任务", "测试验证", "本地直答"),
+                circleLabels = listOf("派工", "协同", "开发"),
+                avatarFallback = AppAvatarFallback.CLAUDE,
+                avatarColor = claudeAvatarColor,
+            )
         FixedPartnerKinds.ASSISTANT ->
             FixedPartnerProfileSpec(
                 name = "小C助理",
@@ -171,7 +219,7 @@ private fun fixedPartnerProfileSpec(
                 source = "XCAGI 企业版内置伙伴",
                 abilityLabels = listOf("智能对话", "快速模式", "深度分析", "拍照识图"),
                 circleLabels = listOf("对话", "分析", "识图"),
-                avatarText = "C",
+                avatarFallback = AppAvatarFallback.ASSISTANT,
                 avatarColor = assistantAvatarColor,
             )
         FixedPartnerKinds.CUSTOMER_SERVICE ->
@@ -183,7 +231,7 @@ private fun fixedPartnerProfileSpec(
                 source = "企业服务通道",
                 abilityLabels = listOf("服务咨询", "进度跟进", "问题反馈", "人工协同"),
                 circleLabels = listOf("服务", "协同", "反馈"),
-                avatarText = "客",
+                avatarFallback = AppAvatarFallback.CUSTOMER_SERVICE,
                 avatarColor = customerServiceAvatarColor,
             )
         else -> null
@@ -215,6 +263,7 @@ private fun FixedPartnerProfileTopBar(onBack: () -> Unit) {
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
+        windowInsets = WindowInsets(0.dp),
     )
 }
 
@@ -228,28 +277,12 @@ private fun FixedPartnerHeader(spec: FixedPartnerProfileSpec) {
             Modifier.padding(start = 28.dp, end = 24.dp, top = 34.dp, bottom = 34.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(76.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(spec.avatarColor.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(spec.avatarColor),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        spec.avatarText,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
+            AppAvatar(
+                fallback = spec.avatarFallback,
+                size = 76.dp,
+                shape = MaterialTheme.shapes.small,
+                contentDescription = spec.name,
+            )
             Spacer(Modifier.width(18.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -326,41 +359,66 @@ private fun FixedPartnerPlainCell(
 
 @Composable
 private fun FixedPartnerCirclePreview(
-    labels: List<String>,
-    accentColor: Color,
+    spec: FixedPartnerProfileSpec,
+    onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Row(
-            Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "介绍预览",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.width(96.dp),
-            )
-            Row(
-                Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                labels.take(3).forEach { label ->
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(MaterialTheme.shapes.extraSmall)
-                            .background(accentColor.copy(alpha = 0.14f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            label.take(2),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = accentColor,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Forum,
+                    contentDescription = null,
+                    tint = XcagiTheme.extra.momentAccent,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "AI交流圈",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "进入交流圈 · 查看 ${spec.name} 的动态与能力更新",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            val labels = spec.circleLabels.take(3)
+            if (labels.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.padding(start = 30.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    labels.forEach { label ->
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(MaterialTheme.shapes.extraSmall)
+                                .background(spec.avatarColor.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                label.take(2),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = spec.avatarColor,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
             }

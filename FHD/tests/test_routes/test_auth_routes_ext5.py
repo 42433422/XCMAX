@@ -1526,13 +1526,18 @@ class TestAuthOidcCallbackAdditional:
                 return_value=(True, None),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
             patch(
-                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                "app.application.enterprise_login_flow.finalize_auth_after_oidc",
                 new=AsyncMock(return_value={"session_id": "sid"}),
             ),
         ):
@@ -1564,13 +1569,18 @@ class TestAuthOidcCallbackAdditional:
                 return_value=(True, None),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                "app.application.enterprise_login_flow.finalize_auth_after_oidc",
                 new=AsyncMock(return_value={"session_id": "sid"}),
             ),
         ):
@@ -1601,13 +1611,18 @@ class TestAuthOidcCallbackAdditional:
                 return_value=(True, None),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                "app.application.enterprise_login_flow.finalize_auth_after_oidc",
                 new=AsyncMock(return_value={"session_id": "sid"}),
             ),
         ):

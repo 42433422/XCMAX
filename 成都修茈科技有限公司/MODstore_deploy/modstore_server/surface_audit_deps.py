@@ -54,6 +54,13 @@ def _repo_root() -> Path:
 
 def _fhd_root() -> Path:
     candidates: List[Path] = []
+    explicit = (
+        os.environ.get("XCAGI_FHD_ROOT")
+        or os.environ.get("MODSTORE_DAILY_FHD_ROOT")
+        or ""
+    ).strip()
+    if explicit:
+        candidates.append(Path(explicit).expanduser().resolve())
     mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
     if mono:
         candidates.append(Path(mono).expanduser().resolve() / "FHD")
@@ -74,14 +81,32 @@ def _modstore_deploy_root() -> Path:
     return local if local.is_dir() else deploy
 
 
+def _runtime_state_root() -> Optional[Path]:
+    for key in ("MODSTORE_RUNTIME_STATE_ROOT", "MODSTORE_RUNTIME_DIR"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw:
+            return Path(raw).expanduser().resolve()
+    return None
+
+
 def _pids_dir() -> Path:
-    d = _repo_root() / ".xcmax-pids"
+    raw = (os.environ.get("MODSTORE_SURFACE_AUDIT_PIDS_DIR") or "").strip()
+    if raw:
+        d = Path(raw).expanduser().resolve()
+    else:
+        root = _runtime_state_root()
+        d = (root / "surface-audit-pids") if root is not None else (_repo_root() / ".xcmax-pids")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def _logs_dir() -> Path:
-    d = _repo_root() / ".xcmax-logs"
+    raw = (os.environ.get("MODSTORE_SURFACE_AUDIT_LOG_DIR") or "").strip()
+    if raw:
+        d = Path(raw).expanduser().resolve()
+    else:
+        root = _runtime_state_root()
+        d = (root / "surface-audit-logs") if root is not None else (_repo_root() / ".xcmax-logs")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -521,8 +546,8 @@ def stop_surface_audit_ephemeral() -> Dict[str, Any]:
             _kill_pid_file(pid_file.stem, pid_file)
             stopped.append(pid_file.stem)
 
-    fhd = _fhd_root()
-    emu_pid = fhd / "data" / "surface_audit" / ".android-emulator.pid"
+    emu_pid_raw = (os.environ.get("XCAGI_ANDROID_EMULATOR_PID_FILE") or "").strip()
+    emu_pid = Path(emu_pid_raw).expanduser().resolve() if emu_pid_raw else (_fhd_root() / "data" / "surface_audit" / ".android-emulator.pid")
     if emu_pid.is_file():
         _kill_pid_file("android-emulator", emu_pid)
         stopped.append("android-emulator")

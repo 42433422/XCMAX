@@ -88,6 +88,8 @@ mkdir -p "$STAGING/scripts/deploy/lib" "$STAGING/docker"
 cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/fhd-apply-release.sh" \
   "$SCRIPT_DIR/fhd-apply-release-compose.sh" \
+  "$SCRIPT_DIR/fhd-install-online-update-cron.sh" \
+  "$SCRIPT_DIR/online_update_daemon.py" \
   "$STAGING/scripts/deploy/"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" "$STAGING/scripts/deploy/lib/"
 cp "$FHD_ROOT/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"

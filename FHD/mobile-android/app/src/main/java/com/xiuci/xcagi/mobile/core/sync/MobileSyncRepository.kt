@@ -3,6 +3,7 @@ package com.xiuci.xcagi.mobile.core.sync
 import com.google.gson.Gson
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
 import com.xiuci.xcagi.mobile.core.db.ApprovalCacheEntity
+import com.xiuci.xcagi.mobile.core.db.ChatCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.im.ImRepository
@@ -117,6 +118,21 @@ class MobileSyncRepository @Inject constructor(
                     "im_message" -> imRepo.applySyncMessage(payload, entityId, changeCreatedAt)
                     "im_read_state" -> imRepo.applySyncReadState(payload, entityId, changeCreatedAt)
                 }
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            val aiChanges = (data["ai_changes"] as? List<Map<String, Any?>>) ?: emptyList()
+            aiChanges.forEach { row ->
+                val sessionId = row["session_id"]?.toString() ?: return@forEach
+                val role = row["role"]?.toString() ?: return@forEach
+                val content = row["content"]?.toString() ?: return@forEach
+                db.chatDao().insert(
+                    ChatCacheEntity(
+                        session_id = sessionId,
+                        role = role,
+                        text = content,
+                    ),
+                )
             }
 
             Result.success(

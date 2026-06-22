@@ -25,3 +25,4 @@ export { mediaApi } from './media';
 export { systemApi } from './system';
 export { intentPackagesApi } from './intentPackages';
 export { privateDbAssistantApi } from './privateDbAssistant';
+export { memoryV2Api } from './memoryV2';

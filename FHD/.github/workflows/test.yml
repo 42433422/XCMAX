@@ -10,6 +10,11 @@ on:
       - "tests/**"
       - "frontend/**"
       - "deploy/requirements*.txt"
+      - "pyproject.toml"
+      - "metrics/coverage-dual-summary.json"
+      - "metrics/coverage_ratchet_baseline.json"
+      - "FHD/scripts/ci/check_coverage_ssot.py"
+      - "FHD/scripts/ci/guard_temp_scripts.py"
       - "FHD/scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-test.yml"
   pull_request:
@@ -19,6 +24,11 @@ on:
       - "tests/**"
       - "frontend/**"
       - "deploy/requirements*.txt"
+      - "pyproject.toml"
+      - "metrics/coverage-dual-summary.json"
+      - "metrics/coverage_ratchet_baseline.json"
+      - "FHD/scripts/ci/check_coverage_ssot.py"
+      - "FHD/scripts/ci/guard_temp_scripts.py"
       - "FHD/scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-test.yml"
   workflow_dispatch:
@@ -84,6 +94,9 @@ jobs:
 
       - name: Verify v10 version anchors
         run: python scripts/dev/verify_version_anchors.py
+
+      - name: Validate coverage SSOT metadata
+        run: python scripts/ci/check_coverage_ssot.py
 
       - name: Layer debt ratchet (services/ frozen, routes→application only)
         run: python scripts/dev/check_layer_ratchet.py

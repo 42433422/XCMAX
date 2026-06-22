@@ -12,9 +12,12 @@ import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+
+if TYPE_CHECKING:
+    from app.neuro_bus.sla_collector import SLACollector
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +73,17 @@ class SLAMonitor:
     监控单个操作的 SLA 合规性
     """
 
-    def __init__(self, sla_timeout: SLATimeout, operation_name: str):
+    def __init__(
+        self,
+        sla_timeout: SLATimeout,
+        operation_name: str,
+        level: SLALevel | None = None,
+        collector: "SLACollector | None" = None,
+    ):
         self._sla = sla_timeout
         self._operation_name = operation_name
+        self._level = level if level is not None else _derive_level(sla_timeout)
+        self._collector = collector
         self._start_time = time.time()
         self._finished = False
 
@@ -110,11 +121,32 @@ class SLAMonitor:
                 f"target: {self._sla.target_ms}ms"
             )
 
+        # 触发采集器记录
+        if self._collector is not None and self._level is not None:
+            self._collector.record(
+                level=self._level,
+                operation=self._operation_name,
+                latency_ms=result["elapsed_ms"],
+                sla_target_ms=self._sla.target_ms,
+                sla_hit=result["status"] != "violated",
+            )
+
         return result
 
     def is_violated(self) -> bool:
         """检查是否已违反 SLA"""
         return self.check()["status"] == "violated"
+
+
+def _derive_level(sla_timeout: SLATimeout) -> SLALevel | None:
+    """根据 SLATimeout 配置推导 SLALevel（用于未显式传 level 的场景）。"""
+    if sla_timeout is SLAConfig.REFLEX:
+        return SLALevel.REFLEX
+    if sla_timeout is SLAConfig.SUBCONSCIOUS:
+        return SLALevel.SUBCONSCIOUS
+    if sla_timeout is SLAConfig.CONSCIOUS:
+        return SLALevel.CONSCIOUS
+    return None
 
 
 class SLAController:

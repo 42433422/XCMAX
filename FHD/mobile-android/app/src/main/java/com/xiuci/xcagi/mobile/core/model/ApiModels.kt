@@ -9,6 +9,33 @@ data class MobileEnvelope<T>(
     val data: T? = null,
 )
 
+data class AiCircleComment(
+    val id: Int = 0,
+    val author_name: String = "",
+    val body: String = "",
+    val created_at: String = "",
+)
+
+data class AiCirclePost(
+    val id: Int = 0,
+    val author_kind: String = "",
+    val author_user_id: Int? = null,
+    val employee_id: String? = null,
+    val author_name: String = "",
+    val author_avatar: String? = null,
+    val body: String = "",
+    val source_type: String = "",
+    val created_at: String = "",
+    val like_count: Int = 0,
+    val liked_by_me: Boolean = false,
+    val comments: List<AiCircleComment> = emptyList(),
+)
+
+data class AiCircleListData(
+    val items: List<AiCirclePost> = emptyList(),
+    val count: Int = 0,
+)
+
 data class UserDto(
     val id: Int = 0,
     val username: String = "",
@@ -16,6 +43,7 @@ data class UserDto(
     val email: String = "",
     val role: String = "",
     val is_active: Boolean = true,
+    val avatar_url: String? = null,
 )
 
 data class MobileLoginData(
@@ -25,6 +53,74 @@ data class MobileLoginData(
     val refresh_token: String? = null,
     val account_kind: String? = null,
     val expires_in: Int? = null,
+    val market_access_token: String? = null,
+    val market_refresh_token: String? = null,
+    val market_is_admin: Boolean = false,
+    val market_is_enterprise: Boolean = false,
+)
+
+data class CodexSuperEmployeeMobileMessageBody(
+    val body: String = "",
+    val message: String = "",
+    val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
+)
+
+data class ClaudeSuperEmployeeMobileMessageBody(
+    val body: String = "",
+    val message: String = "",
+    val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
+)
+
+// ── AI 群聊 ──
+data class AiGroupMemberDto(
+    val employee_id: String = "",
+    val mod_id: String = "",
+    val name: String = "",
+    val avatar: String = "",
+    val summary: String = "",
+)
+
+data class AiGroupDto(
+    val id: String = "",
+    val name: String = "",
+    val department_key: String = "",
+    val member_count: Int = 0,
+    val members: List<AiGroupMemberDto> = emptyList(),
+    val last_message_preview: String = "",
+    val last_message_at: String = "",
+)
+
+data class AiGroupMessageDto(
+    val id: String = "",
+    val group_id: String = "",
+    val role: String = "ai",
+    val sender_id: String = "",
+    val sender_name: String = "",
+    val sender_avatar: String = "",
+    val body: String = "",
+    val created_at: String = "",
+)
+
+data class AiGroupListData(val groups: List<AiGroupDto> = emptyList())
+data class AiGroupWrap(val group: AiGroupDto? = null)
+data class AiGroupMessagesData(val messages: List<AiGroupMessageDto> = emptyList())
+data class AiGroupPostData(
+    val group: AiGroupDto? = null,
+    val messages: List<AiGroupMessageDto> = emptyList(),
+)
+
+data class AiGroupCreateBody(val name: String = "")
+data class AiGroupMemberBody(
+    val employee_id: String = "",
+    val mod_id: String = "",
+    val name: String = "",
+    val avatar: String = "",
+    val summary: String = "",
+)
+data class AiGroupMessageBody(
+    val message: String = "",
+    val sender_name: String = "我",
+    val mentions: List<String> = emptyList(),
 )
 
 data class MeData(
@@ -161,6 +257,7 @@ data class ModInfo(
     val author: String = "",
     val primary: Boolean = false,
     val industry: ModIndustry? = null,
+    val avatar_url: String? = null,
     val frontend_menu: List<ModMenuItem> = emptyList(),
     val menu_overrides: List<ModMenuOverride> = emptyList(),
     val workflow_employees: List<WorkflowEmployeeInfo> = emptyList(),
@@ -174,6 +271,18 @@ data class WorkflowEmployeeInfo(
     val api_base_path: String = "",
     val phone_channel: String = "",
     val workflow_placeholder: Boolean = false,
+    val profile_source: String = "",
+    val market_connected: Boolean = false,
+    val market_pkg_id: String = "",
+    val market_name: String = "",
+    val market_description: String = "",
+    val market_version: String = "",
+    val market_author: String = "",
+    val market_industry: String = "",
+    val market_material_category: String = "",
+    val market_license_scope: String = "",
+    val market_security_level: String = "",
+    val market_avatar: String? = null,
 )
 
 data class ModMenuItem(
@@ -193,4 +302,55 @@ data class ModMenuOverride(
 data class ModIndustry(
     val id: String = "",
     val name: String = "",
+)
+
+data class AdminMobileEmployeeInfo(
+    val id: String = "",
+    val name: String = "",
+    val label: String = "",
+    val title: String = "",
+    val description: String = "",
+    val panel_summary: String = "",
+    val version: String = "",
+    val industry: String = "",
+    val yuangon_area: String = "",
+    val employee_scope: String = "",
+    val employee_source: String = "",
+    val is_duty_employee: Boolean = false,
+    val is_store_employee: Boolean = false,
+    val status: String = "",
+    val api_base_path: String = "",
+    val phone_channel: String = "",
+    val profile_source: String = "",
+    val market_connected: Boolean = false,
+    val market_pkg_id: String = "",
+    val market_name: String = "",
+    val market_description: String = "",
+    val market_version: String = "",
+    val market_author: String = "",
+    val market_industry: String = "",
+    val market_material_category: String = "",
+    val market_license_scope: String = "",
+    val market_security_level: String = "",
+    val market_avatar: String? = null,
+)
+
+data class AdminMobileFeature(
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val category: String = "",
+    val method: String = "GET",
+    val api_path: String = "",
+)
+
+data class AdminMobileHomeData(
+    val account_kind: String = "",
+    val employees: List<AdminMobileEmployeeInfo> = emptyList(),
+    val employee_count: Int = 0,
+    val features: List<AdminMobileFeature> = emptyList(),
+    val feature_count: Int = 0,
+    val market_connected: Boolean = false,
+    val market_profile_count: Int = 0,
+    val market_error: String = "",
 )

@@ -180,6 +180,49 @@ class TestLLMWorkflowPlanner:
         # Should have medium risk since add operations are medium
         assert plan.risk_level in ("low", "medium", "high")
 
+    def test_plan_injects_active_memory_v2_into_context_and_metadata(self):
+        planner = self._make_planner()
+        memory_summary = (
+            '【MemoryV2】已确认记忆:\n1. type=preference; key=favorite_customer; value="ACME"'
+        )
+        captured_context = {}
+
+        def fake_react(plan_id, user_id, message, tool_registry, context):
+            captured_context.update(context)
+            return PlanGraph(
+                plan_id=plan_id,
+                intent="product_query",
+                nodes=[
+                    WorkflowNode(
+                        node_id="n1",
+                        tool_id="products",
+                        action="query",
+                        params={"keyword": "ACME 5003"},
+                    )
+                ],
+                metadata={"memory_v2_summary": context["memory_v2"]["summary"]},
+            )
+
+        mock_memory = Mock()
+        mock_memory.format_memory_v2_for_prompt.return_value = memory_summary
+        with (
+            patch.object(planner, "_plan_with_react_multiagent", side_effect=fake_react),
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="full",
+            ),
+            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
+            patch(
+                "app.services.user_memory_service.get_user_memory_service",
+                return_value=mock_memory,
+            ),
+        ):
+            plan = planner.plan("u1", "查询上次客户的5003", get_tool_registry(), {})
+
+        assert captured_context["memory_v2"]["summary"] == memory_summary
+        assert "favorite_customer" in plan.metadata["memory_v2_summary"]
+        mock_memory.format_memory_v2_for_prompt.assert_called_once_with(user_id="u1", max_items=6)
+
 
 # ========================= _validate_required_params =====================
 

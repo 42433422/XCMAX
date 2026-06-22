@@ -19,8 +19,8 @@ from app.fastapi_routes.mounts import (
     register_neuro_migration_routes,
     register_neuro_routes,
 )
-from app.fastapi_routes.mounts.legacy_gap import register_legacy_gap_routers
 from app.fastapi_routes.registry import RouteRegistry
+from app.legacy.routes.legacy_gap import register_legacy_gap_routers
 
 logger = logging.getLogger(__name__)
 

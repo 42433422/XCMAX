@@ -22,6 +22,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import ai_assistant
 from app.infrastructure.skills.template_manager.template_manager import (
     create_template,
@@ -108,7 +109,7 @@ def test_compat_ai_generate_whitespace_only_order_text_returns_400() -> None:
 
 def test_compat_ai_generate_parse_failure_returns_400() -> None:
     client = _ai_assistant_client()
-    with patch("app.routes.tools._parse_order_text") as mock_parse:
+    with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse:
         mock_parse.return_value = {"success": False, "message": "格式错误"}
         resp = client.post("/api/generate", json={"order_text": "乱七八糟"})
     assert resp.status_code == 400
@@ -119,7 +120,7 @@ def test_compat_ai_generate_parse_failure_returns_400() -> None:
 
 def test_compat_ai_generate_parse_success_but_empty_products_returns_400() -> None:
     client = _ai_assistant_client()
-    with patch("app.routes.tools._parse_order_text") as mock_parse:
+    with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse:
         mock_parse.return_value = {
             "success": True,
             "unit_name": "",
@@ -135,7 +136,7 @@ def test_compat_ai_generate_parse_success_but_empty_products_returns_400() -> No
 def test_compat_ai_generate_service_failure_returns_500() -> None:
     client = _ai_assistant_client()
     with (
-        patch("app.routes.tools._parse_order_text") as mock_parse,
+        patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
         patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
     ):
         mock_parse.return_value = {
@@ -161,7 +162,7 @@ def test_compat_ai_generate_service_failure_returns_500() -> None:
 def test_compat_ai_generate_success_returns_doc_info() -> None:
     client = _ai_assistant_client()
     with (
-        patch("app.routes.tools._parse_order_text") as mock_parse,
+        patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
         patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
     ):
         mock_parse.return_value = {
@@ -192,10 +193,50 @@ def test_compat_ai_generate_success_returns_doc_info() -> None:
     assert body["filename"] == "foo.docx"
 
 
+def test_compat_ai_generate_success_attaches_agent_run() -> None:
+    client = _ai_assistant_client()
+    repo = InMemoryAgentRunRepository()
+    with (
+        patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
+        patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        mock_parse.return_value = {
+            "success": True,
+            "unit_name": "甲公司",
+            "products": [{"name": "漆", "quantity": 1, "price": 10}],
+        }
+        mock_svc = MagicMock()
+        mock_svc.generate_shipment_document.return_value = {
+            "success": True,
+            "file_path": "/tmp/shipment/foo.docx",
+            "doc_name": "foo.docx",
+            "order_number": "ORD-1",
+            "total_amount": 10.0,
+            "total_quantity": 1,
+        }
+        mock_svc_get.return_value = mock_svc
+        resp = client.post("/api/generate", json={"order_text": "甲公司 漆 1 10"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    run_id = body["run_id"]
+    assert body["agent_run_id"] == run_id
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.intent == "ai_assistant_compat_route"
+    assert run.metadata["channel"] == "ai_assistant_compat"
+    assert run.metadata["runtime_context"]["route"] == "/api/generate"
+    assert run.metadata["runtime_context"]["action"] == "generate_shipment_document"
+
+
 def test_compat_ai_generate_recoverable_error_returns_500() -> None:
     client = _ai_assistant_client()
     with (
-        patch("app.routes.tools._parse_order_text") as mock_parse,
+        patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
         patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
     ):
         mock_parse.return_value = {
@@ -363,6 +404,40 @@ def test_compat_purchase_units_create_new_unit_success() -> None:
     assert kwargs["contact_person"] == "p"
     assert kwargs["contact_phone"] == "123"
     assert kwargs["address"] == "addr"
+
+
+def test_compat_purchase_units_create_attaches_agent_run() -> None:
+    client = _ai_assistant_client()
+    repo = InMemoryAgentRunRepository()
+    mock_db = MagicMock()
+    mock_unit = MagicMock()
+    mock_unit.id = 99
+    mock_unit.unit_name = "新公司"
+    with (
+        patch(
+            "app.application.facades.query_facade.find_purchase_unit",
+            return_value=None,
+        ),
+        patch("app.db.session.get_db") as mock_get_db,
+        patch("app.db.models.PurchaseUnit", return_value=mock_unit),
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        mock_get_db.return_value.__enter__.return_value = mock_db
+        mock_get_db.return_value.__exit__.return_value = False
+        resp = client.post("/api/purchase_units", json={"unit_name": "新公司"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    run_id = body["run_id"]
+    assert body["agent_run_id"] == run_id
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.intent == "ai_assistant_compat_route"
+    assert run.metadata["runtime_context"]["route"] == "/api/purchase_units"
+    assert run.metadata["runtime_context"]["action"] == "purchase_unit_create"
 
 
 def test_compat_purchase_units_update_not_found_returns_404() -> None:
@@ -873,6 +948,36 @@ def test_compat_tts_success_returns_audio_payload() -> None:
     assert call_kwargs["lang"] == "zh"  # 应被 lower()
     assert call_kwargs["voice"] == "v1"
     assert call_kwargs["speaker_id"] == 1
+
+
+def test_compat_tts_trace_redacts_audio_payload() -> None:
+    client = _ai_assistant_client()
+    repo = InMemoryAgentRunRepository()
+    with (
+        patch(
+            "app.application.facades.tts_facade.synthesize_to_data_uri",
+            return_value={"audioBase64": "SECRET_AUDIO_BASE64", "voice": "zh", "lang": "zh"},
+        ),
+        patch("app.application.facades.tts_facade.trigger_common_tts_warmup", return_value=None),
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        resp = client.post("/api/tts", json={"text": "测试语音"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["data"]["audioBase64"] == "SECRET_AUDIO_BASE64"
+    run_id = body["run_id"]
+    assert body["agent_run_id"] == run_id
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.metadata["runtime_context"]["route"] == "/api/tts"
+    assert run.metadata["runtime_context"]["action"] == "tts_synthesize"
+    serialized = str(run.to_dict())
+    assert "SECRET_AUDIO_BASE64" not in serialized
+    assert "redacted" in serialized
 
 
 def test_compat_tts_recoverable_error_falls_back_to_browser_voice() -> None:

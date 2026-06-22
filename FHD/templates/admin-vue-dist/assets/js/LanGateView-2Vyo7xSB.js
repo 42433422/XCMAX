@@ -1,0 +1,1 @@
+import{a1 as t,ah as s,t as c,v as r,E as n,b0 as o,c as p,$ as _}from"./index-C1axxMiF.js";const d={class:"lan-gate-page"},i=t({__name:"LanGateView",setup(u){const e=s(),a=p(()=>e.query.redirect||"/");return(l,m)=>(c(),r("div",d,[n(o,{variant:"page","redirect-path":a.value},null,8,["redirect-path"])]))}}),f=_(i,[["__scopeId","data-v-3110b2ab"]]);export{f as default};

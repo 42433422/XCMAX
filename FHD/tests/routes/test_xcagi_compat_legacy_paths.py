@@ -15,6 +15,25 @@ from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.fastapi_routes.xcagi_compat import router
 
 
+def _collect_paths(app: FastAPI) -> list[str]:
+    paths: set[str] = set()
+
+    def _walk(routes):
+        for route in routes:
+            # FastAPI 0.138+ 用 _IncludedRouter 包装 include_router 的路由，
+            # 实际路径在 original_router.routes 中；旧版直接展开为 Route。
+            orig = getattr(route, "original_router", None)
+            if orig is not None:
+                _walk(getattr(orig, "routes", []))
+            else:
+                path = getattr(route, "path", None)
+                if path:
+                    paths.add(path)
+
+    _walk(app.routes)
+    return sorted(paths)
+
+
 @pytest.fixture
 def client() -> TestClient:
     app = FastAPI()
@@ -47,7 +66,7 @@ class TestRouterEvents:
 class TestRouterAggregation:
     def test_includes_subrouters(self, client: TestClient) -> None:
         # The aggregated router should have at least the legacy endpoints
-        routes = [r.path for r in iter_effective_routes(client.app.routes)]
+        routes = _collect_paths(client.app)
         # Loose assertion: at least one route under /api/...
         assert any(p.startswith("/api/") for p in routes) or any(
             "compat" in p or "v1" in p or "v2" in p for p in routes

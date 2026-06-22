@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from typing import Any
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
@@ -39,6 +40,75 @@ _INTENT_PACKAGES_STATE: dict[str, bool] = {
 }
 
 
+def _attach_unified_chat_run(
+    payload: dict[str, Any],
+    *,
+    message: str,
+    request: Request,
+    body: dict[str, Any],
+    channel: str,
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+
+    runtime_context = body.get("context") if isinstance(body.get("context"), dict) else {}
+    runtime_context = {
+        **runtime_context,
+        "route": "/api/ai/chat-unified",
+        "channel": channel,
+        "client_host": request.client.host if request.client else "",
+        "mode": body.get("mode"),
+    }
+    return attach_chat_trace_run(
+        payload,
+        message=message,
+        runtime_context=runtime_context,
+        user_id=body.get("user_id"),
+        source=(body.get("source") or "").strip().lower(),
+        channel=channel,
+        intent="chat_unified_alias",
+    )
+
+
+def _trace_intent_test_run(
+    payload: dict[str, Any],
+    *,
+    message: str,
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
+        return payload
+    try:
+        from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
+
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        run = create_chat_trace_run(
+            {
+                **payload,
+                "response": str(
+                    data.get("primary_intent") or data.get("tool_key") or "intent recognized"
+                ),
+            },
+            message=message,
+            runtime_context={
+                "route": "/api/ai/intent/test",
+                "source": "ai_intent_route",
+                "primary_intent": str(data.get("primary_intent") or ""),
+                "tool_key": str(data.get("tool_key") or ""),
+            },
+            user_id=str(body.get("user_id") or body.get("userId") or "ai-intent-route"),
+            source="ai_intent_route",
+            channel="intent_test_route",
+            intent="intent_recognition",
+        )
+    except Exception:  # noqa: BLE001 - tracing must not break intent recognition
+        logger.exception("failed to attach AgentRun trace to intent test route")
+        return payload
+    traced = dict(payload)
+    traced["run_id"] = run.run_id
+    traced["agent_run_id"] = run.run_id
+    return traced
+
+
 @router.get("/api/ai/test")
 def ai_test():
     return {"success": True, "message": "AI 聊天服务运行正常", "timestamp": time.time()}
@@ -46,7 +116,7 @@ def ai_test():
 
 @router.post("/api/ai/chat-unified")
 def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=dict)):
-    from app.routes.ai_chat import unified_chat_single_payload
+    from app.application.ai_chat_helpers import unified_chat_single_payload
 
     message = (body.get("message", "") or "").strip()
     if not message:
@@ -60,12 +130,22 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
         body.get("context") or {},
     )
     status = int(payload.pop("_http_status", 200))
+    payload = _attach_unified_chat_run(
+        payload,
+        message=message,
+        request=request,
+        body=body,
+        channel="chat_unified_alias",
+    )
     return JSONResponse(payload, status_code=status)
 
 
 @router.post("/api/ai/chat-unified/batch")
 def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_factory=dict)):
-    from app.routes.ai_chat import normalize_batch_messages_payload, unified_chat_single_payload
+    from app.application.ai_chat_helpers import (
+        normalize_batch_messages_payload,
+        unified_chat_single_payload,
+    )
 
     messages = normalize_batch_messages_payload(body)
     if not messages:
@@ -85,6 +165,13 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
         status = int(payload.pop("_http_status", 200))
         if status >= 400:
             payload["_http_status"] = status
+        payload = _attach_unified_chat_run(
+            payload,
+            message=msg,
+            request=request,
+            body=body,
+            channel="chat_unified_batch_alias",
+        )
         results.append(payload)
     ok = all(bool(r.get("success")) for r in results if isinstance(r, dict))
     return {"success": ok, "results": results, "count": len(results), "batch": True}
@@ -92,13 +179,14 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
 
 @router.post("/api/ai/intent/test")
 def ai_intent_test(body: dict = Body(default_factory=dict)):
-    from app.routes.ai_chat import recognize_intents
+    from app.application.ai_chat_helpers import recognize_intents
 
     message = body.get("message", "")
     if not message:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
     try:
-        return {"success": True, "data": recognize_intents(message)}
+        payload = {"success": True, "data": recognize_intents(message)}
+        return _trace_intent_test_run(payload, message=message, body=body or {})
     except RECOVERABLE_ERRORS as e:
         return JSONResponse(
             {"success": False, "message": f"意图识别失败：{str(e)}"}, status_code=500

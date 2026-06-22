@@ -10,6 +10,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
 # ---------------------------------------------------------------------------
 # System routes
 # ---------------------------------------------------------------------------
@@ -241,6 +243,41 @@ def test_ai_message_save_ok(mock_get: MagicMock, conversation_client: TestClient
     )
     assert r.status_code == 200
     assert r.json()["message_id"] == 99
+
+
+@patch("app.application.facades.conversation_facade.get_conversation_service")
+def test_ai_message_save_attaches_agent_run(
+    mock_get: MagicMock, conversation_client: TestClient
+) -> None:
+    repo = InMemoryAgentRunRepository()
+    mock_get.return_value.save_message.return_value = 99
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        r = conversation_client.post(
+            "/api/ai/message/save",
+            json={
+                "session_id": "s1",
+                "role": "bot",
+                "content": "hi",
+                "user_id": 1,
+                "intent": "smalltalk",
+            },
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    run_id = body["run_id"]
+    assert body["agent_run_id"] == run_id
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.user_id == "1"
+    assert run.intent == "conversation_message_save"
+    assert run.metadata["channel"] == "ai_message_save"
+    assert run.metadata["runtime_context"]["route"] == "/api/ai/message/save"
+    assert run.metadata["runtime_context"]["request"]["role"] == "bot"
+    assert run.metadata["runtime_context"]["request"]["content_preview"] == "hi"
 
 
 def test_ai_message_save_bot_role_normalized(

@@ -8,8 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Mock the RAG imports before importing the target, then restore the real module
-# so collection of package-level RAG tests is not polluted.
+# Mock the missing RAG imports before importing the module
 rag_mock = types.ModuleType("app.infrastructure.rag")
 rag_mock.HybridRetriever = MagicMock
 rag_mock.SemanticChunker = MagicMock
@@ -17,8 +16,10 @@ rag_mock.RetrievedChunk = MagicMock
 rag_mock.get_default_embedder = MagicMock(return_value=None)
 rag_mock.is_rag_enabled = MagicMock(return_value=False)
 rag_mock.RagService = MagicMock
+# Force override in case another test already loaded a partial mock
 _original_rag = sys.modules.get("app.infrastructure.rag")
 sys.modules["app.infrastructure.rag"] = rag_mock
+
 try:
     from app.fastapi_routes.knowledge_v1 import (
         IngestRequest,

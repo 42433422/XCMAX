@@ -27,11 +27,10 @@ try:
 except ImportError:
     pytest.skip("distillation_trainer dependencies unavailable", allow_module_level=True)
 
-torch_available = True
-try:
-    import torch
-except ImportError:
-    torch_available = False
+from app.services import distillation_trainer as _distillation_module
+
+torch = _distillation_module.torch
+torch_available = torch is not None
 
 
 # ---------------------------------------------------------------------------

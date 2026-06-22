@@ -125,6 +125,11 @@ def _manifest_from_employee_yaml(
         merged_actions = dict(actions_in)
         merged_actions["handlers"] = _normalize_action_handlers(actions_in.get("handlers"))
         config_v2["actions"] = merged_actions
+    else:
+        # Yuangon roles without an explicit action are knowledge workers, not file
+        # converters.  The legacy scaffold fallback is direct_python + XLSX and
+        # produces a manifest/runtime mismatch for ordinary engineering roles.
+        config_v2["actions"] = {"handlers": ["llm_md", "echo"]}
 
     scope_raw = _clean_list(data.get("scope_globs"))
     forbid_raw = _clean_list(data.get("forbidden_globs"))
@@ -219,7 +224,10 @@ def main() -> int:
         print("PyYAML is required. Install MODstore web dependencies first.", file=sys.stderr)
         return 2
 
-    yuangon_dir = (args.repo_root / "yuangon").resolve()
+    from modstore_server.yuangon_paths import resolve_yuangon_repo_root
+
+    resolved_repo_root = resolve_yuangon_repo_root(args.repo_root)
+    yuangon_dir = (resolved_repo_root / "yuangon").resolve()
     employee_files = sorted(yuangon_dir.glob("**/employee.yaml"))
     if not employee_files:
         print(f"No employee.yaml files found under {yuangon_dir}", file=sys.stderr)
@@ -233,8 +241,8 @@ def main() -> int:
     session_factory = get_session_factory()
     with session_factory() as db:
         author = (
-            db.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-        )  # noqa: E712
+            db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+        )
         author = author or db.query(User).order_by(User.id.asc()).first()
         if not author:
             print("No user exists in DB; cannot determine author_id.", file=sys.stderr)

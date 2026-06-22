@@ -30,7 +30,7 @@
 3. `wechat-contacts`
 4. `print`
 5. `settings`
-6. `chat/tools` 去除双绑定 — **chat.js 已从 index.html 移除；Vue 为 SSOT**
+6. `chat/tools` 去除双绑定 — **chat.js 已从 index.html 移除；Vue 为唯一实现**
 
 ## 依赖说明
 

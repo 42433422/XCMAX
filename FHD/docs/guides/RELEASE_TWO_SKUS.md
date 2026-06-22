@@ -54,9 +54,9 @@ post 验收会硬性检查 Windows 后端 exe、`product-sku.json`、staged mods
 
 | 变量 | 示例 |
 |------|------|
-| `XCAGI_UPDATE_SSH_HOST` | `update.xcagi.com` 或服务器 IP |
-| `XCAGI_UPDATE_SSH_USER` | `deploy` |
-| `XCAGI_UPDATE_SSH_PATH` | `/var/www/update/releases/stable` |
+| `XCAGI_UPDATE_SSH_HOST` | `119.27.178.147` |
+| `XCAGI_UPDATE_SSH_USER` | `root` |
+| `XCAGI_UPDATE_SSH_PATH` | `/var/www/update` |
 | `XCAGI_UPDATE_SSH_KEY` | `C:\Users\you\.ssh\id_ed25519` |
 
 ```powershell
@@ -66,10 +66,10 @@ powershell -File scripts/package/upload-release-skus.ps1 -Version 10.0.0
 
 远端目录结构：
 
-```
-/releases/stable/personal/XCAGI-Personal-Setup-10.0.0-x64.exe
-/releases/stable/personal/latest.yml
-/releases/stable/enterprise/...
+```text
+/var/www/update/personal/XCAGI-Personal-Setup-10.0.0-x64.exe
+/var/www/update/personal/latest.yml
+/var/www/update/xcagi-v10.0.0/enterprise/...
 ```
 
 **勿上传**无 `-ProductSku` 的 legacy `XCAGI-Setup-*.exe` 到 `personal/`，以免 ERP 源码重新暴露。
@@ -80,7 +80,7 @@ powershell -File scripts/package/upload-release-skus.ps1 -Version 10.0.0
 
 ```env
 VITE_XCAGI_DOWNLOAD_VERSION=10.0.0
-VITE_XCAGI_DOWNLOAD_BASE_URL=https://update.xcagi.com/releases/stable
+VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v10.0.0
 ```
 
 重建并部署 market 前端后，下载页两卡（个人版 / 企业版）指向上述 URL。

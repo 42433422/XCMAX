@@ -1,70 +1,26 @@
 """
-FastAPI 生命周期集成
+FastAPI 集成
 
-NeuroBus 与 FastAPI 生命周期绑定
-- 启动时初始化
-- 关闭时清理
-- 健康检查
+NeuroBus 与 FastAPI 的健康检查/统计端点集成。
+
+注：应用生命周期由 ``app/fastapi_app/lifespan.py`` 统一管理，
+    此处不再提供重复的 lifespan 工厂（历史 ``setup_neurobus_lifespan``
+    与 ``create_fastapi_app_with_neurobus`` 已移除，避免与生产 lifespan 冲突）。
 """
 
 import logging
-from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
 
 from app.domain.neuro.processors.coordinator import get_processor_coordinator
-from app.mod_sdk.neuro_bus_runtime import (
-    get_neuro_bus_health_runtime,
-    run_lifespan_setup,
-    run_lifespan_teardown,
-)
+from app.mod_sdk.neuro_bus_runtime import get_neuro_bus_health_runtime
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.bus_setup import get_neuro_bus_manager
 from app.neuro_bus.domains.base import get_domain_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def setup_neurobus_lifespan(app: FastAPI):
-    """
-    NeuroBus 生命周期管理器
-
-    用法:
-        @asynccontextmanager
-        async def lifespan(app: FastAPI):
-            async with setup_neurobus_lifespan(app):
-                # 其他初始化
-                yield
-
-        app = FastAPI(lifespan=lifespan)
-    """
-    logger.info("NeuroBus: Starting initialization...")
-
-    try:
-        await run_lifespan_setup()
-        logger.info("NeuroBus core started (mod runtime bundle when facade enabled)")
-
-        get_processor_coordinator()
-        logger.info("ProcessorCoordinator ready")
-
-        manager = get_neuro_bus_manager()
-        app.state.neuro_bus_manager = manager
-
-        logger.info("NeuroBus: Ready for events")
-
-        yield
-
-    finally:
-        logger.info("NeuroBus: Starting shutdown...")
-        try:
-            await run_lifespan_teardown()
-            logger.info("NeuroBus core stopped")
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("NeuroBus shutdown error: %s", e)
-        logger.info("NeuroBus: Shutdown complete")
 
 
 def get_neurobus_health() -> dict[str, Any]:
@@ -98,6 +54,14 @@ def get_neurobus_health() -> dict[str, Any]:
         except RECOVERABLE_ERRORS:
             pass
 
+        # 添加认知层 / 潜意识层 / 进化层统计（Phase 2-4 接线）
+        try:
+            from app.domain.neuro.register_cognition_handlers import get_cognition_stats
+
+            health["cognition"] = get_cognition_stats()
+        except RECOVERABLE_ERRORS:
+            pass
+
         return health
 
     except RECOVERABLE_ERRORS as e:
@@ -105,9 +69,6 @@ def get_neurobus_health() -> dict[str, Any]:
             "status": "error",
             "error": str(e),
         }
-
-
-# 便捷函数
 
 
 def add_neurobus_routes(app: FastAPI):
@@ -132,34 +93,3 @@ def add_neurobus_routes(app: FastAPI):
             return {"error": str(e)}
 
     logger.info("NeuroBus routes added")
-
-
-def create_fastapi_app_with_neurobus(title: str = "XCAGI with Neuro-DDD", **kwargs) -> FastAPI:
-    """
-    创建带 NeuroBus 集成的 FastAPI 应用
-
-    这是一个工厂函数，创建预配置 NeuroBus 的 FastAPI 应用
-    """
-
-    @asynccontextmanager
-    async def combined_lifespan(app: FastAPI):
-        # NeuroBus 生命周期
-        async with setup_neurobus_lifespan(app):
-            # 应用特定的生命周期
-            if "lifespan" in kwargs:
-                async with kwargs["lifespan"](app):
-                    yield
-            else:
-                yield
-
-    # 创建应用
-    app = FastAPI(
-        title=title,
-        lifespan=combined_lifespan,
-        **{k: v for k, v in kwargs.items() if k != "lifespan"},
-    )
-
-    # 添加路由
-    add_neurobus_routes(app)
-
-    return app

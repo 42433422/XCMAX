@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
-from app.domain.shipment.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
+from app.legacy.domain.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
 
 
 class TestShipmentItem:

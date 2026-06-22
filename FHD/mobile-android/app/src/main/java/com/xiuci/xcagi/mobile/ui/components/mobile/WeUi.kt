@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -123,25 +124,22 @@ fun WeTopBarCircleAction(
 
 @Composable
 fun WeTopBarAvatarAction(
-    text: String,
+    imageSource: Any? = null,
+    fallback: AppAvatarFallback,
     onClick: () -> Unit,
-    containerColor: Color,
     modifier: Modifier = Modifier,
-    contentColor: Color = Color.White,
 ) {
     Box(
         modifier
             .size(32.dp)
-            .clip(CircleShape)
-            .background(containerColor)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text.take(2),
-            style = MaterialTheme.typography.labelMedium,
-            color = contentColor,
-            fontWeight = FontWeight.SemiBold,
+        AppAvatar(
+            imageSource = imageSource,
+            fallback = fallback,
+            size = 32.dp,
+            shape = CircleShape,
         )
     }
 }
@@ -261,6 +259,7 @@ fun WeTopBar(
             navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
             actionIconContentColor = MaterialTheme.colorScheme.onSurface,
         ),
+        windowInsets = WindowInsets(0.dp),
     )
 }
 
@@ -1442,6 +1441,7 @@ fun WeBottomNavBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberHaptics()
     Box(
         modifier
             .fillMaxWidth()
@@ -1465,50 +1465,55 @@ fun WeBottomNavBar(
             ) {
                 items.forEach { item ->
                     val selected = currentRoute == item.route
-                    Column(
+                    Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(
-                                if (selected) XcagiTheme.extra.n50 else Color.Transparent,
-                            )
-                            .clickable { onSelect(item.route) },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
+                            .fillMaxHeight(),
+                        onClick = {
+                            if (item.route != currentRoute) haptics.tap()
+                            onSelect(item.route)
+                        },
+                        shape = RoundedCornerShape(24.dp),
+                        color = if (selected) XcagiTheme.extra.n50 else Color.Transparent,
                     ) {
-                        BadgedBox(
-                            badge = {
-                                if (item.badge > 0) {
-                                    Badge(
-                                        containerColor = XcagiTheme.extra.danger,
-                                        contentColor = Color.White,
-                                    ) {
-                                        Text(if (item.badge > 99) "99+" else "${item.badge}")
-                                    }
-                                }
-                            },
+                        Column(
+                            modifier = Modifier.fillMaxHeight(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                         ) {
-                            Icon(
-                                item.icon,
-                                contentDescription = item.label,
-                                modifier = Modifier.size(23.dp),
-                                tint =
+                            BadgedBox(
+                                badge = {
+                                    if (item.badge > 0) {
+                                        Badge(
+                                            containerColor = XcagiTheme.extra.danger,
+                                            contentColor = Color.White,
+                                        ) {
+                                            Text(if (item.badge > 99) "99+" else "${item.badge}")
+                                        }
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    item.icon,
+                                    contentDescription = item.label,
+                                    modifier = Modifier.size(23.dp),
+                                    tint =
+                                        if (selected) XcagiTheme.extra.brandBlue
+                                        else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                item.label,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                ),
+                                color =
                                     if (selected) XcagiTheme.extra.brandBlue
-                                    else MaterialTheme.colorScheme.onSurface,
+                                    else XcagiTheme.extra.n600,
+                                maxLines = 1,
                             )
                         }
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            item.label,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            ),
-                            color =
-                                if (selected) XcagiTheme.extra.brandBlue
-                                else XcagiTheme.extra.n600,
-                            maxLines = 1,
-                        )
                     }
                 }
             }

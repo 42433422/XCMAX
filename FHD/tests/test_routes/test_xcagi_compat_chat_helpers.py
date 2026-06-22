@@ -320,7 +320,7 @@ class TestXcagiChatHttpExc:
 class TestXcagiCompatReplyPayload:
     def test_string_reply(self):
         with patch(
-            "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
             return_value=None,
             create=True,
         ):
@@ -330,7 +330,7 @@ class TestXcagiCompatReplyPayload:
 
     def test_dict_reply(self):
         with patch(
-            "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
             return_value=None,
             create=True,
         ):
@@ -342,7 +342,7 @@ class TestXcagiCompatReplyPayload:
 
     def test_dict_reply_text_key(self):
         with patch(
-            "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
             return_value=None,
             create=True,
         ):
@@ -351,7 +351,7 @@ class TestXcagiCompatReplyPayload:
 
     def test_with_runtime_context(self):
         with patch(
-            "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
             return_value=None,
             create=True,
         ):
@@ -360,7 +360,7 @@ class TestXcagiCompatReplyPayload:
 
     def test_with_kitten_attachments(self):
         with patch(
-            "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
             return_value=None,
             create=True,
         ):
@@ -369,7 +369,7 @@ class TestXcagiCompatReplyPayload:
 
     def test_kitten_attachments_none_skipped(self):
         with patch(
-            "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
             return_value=None,
             create=True,
         ):

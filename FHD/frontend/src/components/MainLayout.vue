@@ -277,19 +277,20 @@ const viewTitlesBase = {
   'template-preview': '模板库',
   console: '模板库',
   settings: '系统设置',
-  im: '消息',
+  im: '信息',
+  'ai-groups': 'AI群聊',
   tools: '工具表',
   'other-tools': '员工视图',
   'employee-workflow': '员工工作台',
   'workflow-employee-space': '员工空间',
-  'workflow-visualization': '流程全景',
+  'workflow-visualization': '流程可视化',
   purchase: '耗材申领',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
   'chat-debug': '对话调试',
   'enterprise-customer-service': '外部客服',
   'internal-customer-service': '内部客服',
-  'admin-entitlements': '用户 Mod 管理',
+  'admin-entitlements': '用户管理',
   'xcmax-admin': '服务器后台总览',
   'automation-policy': '自动化方针',
   'duty-time-architecture': '同时完成时间架构',
@@ -546,11 +547,9 @@ const ensureSidebarExpandedForTutorial = () => {
 }
 
 const scheduleSidebarAutoCollapse = () => {
-  if (isAnyTutorialActive.value || !isSidebarFeatureEnabled.value || sidebarCollapsed.value) {
-    clearSidebarCollapseTimer()
-    return
-  }
   clearSidebarCollapseTimer()
+  if (isAnyTutorialActive.value) return
+  if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   sidebarCollapseTimer = window.setTimeout(() => {
     if (isAnyTutorialActive.value) return
     sidebarCollapsed.value = true

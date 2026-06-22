@@ -29,6 +29,31 @@ vi.mock('@/api/im', () => ({
   imWebSocketUrl: vi.fn(() => 'ws://localhost/ws'),
   markImRead: vi.fn().mockResolvedValue({}),
 }))
+vi.mock('@/api/codexSuperEmployee', () => ({
+  fetchCodexSuperEmployeeMessages: vi.fn().mockResolvedValue([]),
+  sendCodexSuperEmployeeMessage: vi.fn().mockResolvedValue({
+    dispatch: { request_id: 'req-1', status: 'queued', queued: true },
+    messages: [
+      {
+        id: 'm-user',
+        role: 'user',
+        body: '修复登录问题',
+        created_at: '2026-06-19T00:00:00Z',
+        status: 'sent',
+        dispatch_request_id: 'req-1',
+      },
+      {
+        id: 'm-codex',
+        role: 'system',
+        body: '已进入软件内 Codex 调用队列，等待跨设备调度器接走。',
+        created_at: '2026-06-19T00:00:01Z',
+        status: 'queued',
+        kind: 'dispatcher',
+        dispatch_request_id: 'req-1',
+      },
+    ],
+  }),
+}))
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }))
@@ -77,12 +102,14 @@ class MockWebSocket {
 
 describe('ImMessengerView.vue', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.stubGlobal('WebSocket', MockWebSocket as unknown as typeof WebSocket)
     MockWebSocket.instances = []
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it('shows enterprise dedicated cs as pinned fixed contact', async () => {
@@ -106,5 +133,114 @@ describe('ImMessengerView.vue', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('企业专属客服')
     expect(wrapper.text()).not.toContain('还没有会话')
+  })
+
+  it('shows Codex super employee in admin information console without xiao c or enterprise cs', async () => {
+    const { authApi } = await import('@/api/auth')
+    const { createDirectConversation } = await import('@/api/im')
+    const {
+      fetchCodexSuperEmployeeMessages,
+      sendCodexSuperEmployeeMessage,
+    } = await import('@/api/codexSuperEmployee')
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
+    vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
+      data: {
+        user: { id: 1 },
+        account_kind: 'admin',
+        market_is_admin: true,
+      },
+    } as Awaited<ReturnType<typeof authApi.getCurrentUser>>)
+
+    const wrapper = mount(ImMessengerView, {
+      global: { stubs: { RouterLink: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('企业专属客服')
+    expect(wrapper.text()).not.toContain('小C助理')
+    expect(wrapper.text()).toContain('固定员工')
+    expect(wrapper.text()).toContain('超级员工-Codex')
+    expect(wrapper.text()).toContain('全设备协同调度')
+    expect(wrapper.text()).toContain('Codex')
+    expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
+    expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
+
+    await wrapper.find('.im-conv-item--pinned').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('跨设备协作开发员工')
+    expect(wrapper.text()).toContain('全设备 Codex')
+    expect(createDirectConversation).not.toHaveBeenCalled()
+
+    const input = wrapper.find('.im-compose--codex input')
+    await input.setValue('修复登录问题')
+    await wrapper.find('.im-compose--codex button').trigger('click')
+    await flushPromises()
+
+    expect(sendCodexSuperEmployeeMessage).toHaveBeenCalledWith(
+      '修复登录问题',
+      {
+        source: 'admin_im',
+        client_surface: 'admin_console',
+        target_devices: ['all'],
+      },
+      { scope: 'admin' },
+    )
+    expect(wrapper.text()).toContain('Codex 已收到')
+    expect(wrapper.text()).not.toContain('调度器')
+    expect(wrapper.text()).not.toContain('调用队列')
+    expect(wrapper.find('.im-system-call-row.is-streaming').exists()).toBe(true)
+
+    await input.setValue('继续验证回车调用')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(sendCodexSuperEmployeeMessage).toHaveBeenCalledWith(
+      '继续验证回车调用',
+      {
+        source: 'admin_im',
+        client_surface: 'admin_console',
+        target_devices: ['all'],
+      },
+      { scope: 'admin' },
+    )
+  })
+
+  it('shows Codex super employee for mobile admin information and uses mobile API scope', async () => {
+    const { authApi } = await import('@/api/auth')
+    const {
+      fetchCodexSuperEmployeeMessages,
+      sendCodexSuperEmployeeMessage,
+    } = await import('@/api/codexSuperEmployee')
+    vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
+      data: {
+        user: { id: 1 },
+        account_kind: 'admin',
+        market_is_admin: true,
+      },
+    } as Awaited<ReturnType<typeof authApi.getCurrentUser>>)
+
+    const wrapper = mount(ImMessengerView, {
+      global: { stubs: { RouterLink: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('固定员工')
+    expect(wrapper.text()).toContain('超级员工-Codex')
+    expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'mobile' })
+
+    const input = wrapper.find('.im-compose--codex input')
+    await input.setValue('手机上调用 Codex')
+    await wrapper.find('.im-compose--codex button').trigger('click')
+    await flushPromises()
+
+    expect(sendCodexSuperEmployeeMessage).toHaveBeenCalledWith(
+      '手机上调用 Codex',
+      {
+        source: 'mobile_im',
+        client_surface: 'mobile',
+        target_devices: ['all'],
+      },
+      { scope: 'mobile' },
+    )
   })
 })

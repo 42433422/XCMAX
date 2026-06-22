@@ -67,6 +67,38 @@ async def test_maintenance_sync_forwards_limit() -> None:
     assert data["added"] == 5
 
 
+@pytest.mark.asyncio
+async def test_maintenance_sync_desktop_fallback_when_modstore_unavailable(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    svc = TimeRailAppService()
+    with patch(
+        "app.application.modstore_local_client.modstore_post",
+        new_callable=AsyncMock,
+        side_effect=ConnectionError("modstore down"),
+    ):
+        data = await svc.maintenance_sync(limit=3)
+    assert data["ok"] is True
+    assert data["degraded"] is True
+    assert data["source"] == "fhd-degraded"
+    assert data["added"] == 3
+    assert data["limit"] == 3
+    assert data["total_missing"] >= data["added"]
+    assert "modstore down" in data["reason"]
+
+
+@pytest.mark.asyncio
+async def test_maintenance_sync_non_desktop_keeps_modstore_error(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "0")
+    svc = TimeRailAppService()
+    with patch(
+        "app.application.modstore_local_client.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"ok": False, "error": "remote maintenance failed"},
+    ):
+        data = await svc.maintenance_sync(limit=3)
+    assert data == {"ok": False, "error": "remote maintenance failed"}
+
+
 def test_get_time_rail_app_service_singleton() -> None:
     a = get_time_rail_app_service()
     b = get_time_rail_app_service()

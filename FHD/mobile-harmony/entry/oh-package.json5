@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "10.0.0",
+  "description": "XCAGI Enterprise HarmonyOS entry module",
+  "main": "",
+  "author": "Xiuci",
+  "license": "UNLICENSED",
+  "dependencies": {}
+}

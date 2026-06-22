@@ -29,7 +29,8 @@
     "test:e2e:p0": "playwright test e2e/smoke.spec.ts e2e/critical-paths.spec.ts e2e/plan2026-skeleton.spec.ts",
     "test:e2e:smoke": "playwright test e2e/smoke.spec.ts",
     "test:smoke:5001": "playwright test e2e/smoke.spec.ts",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "gen:types": "bash scripts/gen-types.sh"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.6",
@@ -73,6 +74,7 @@
     "eslint-plugin-vue": "^9.28.0",
     "globals": "^17.6.0",
     "jsdom": "^24.1.0",
+    "openapi-typescript": "^7.4.4",
     "prettier": "^3.3.3",
     "typescript": "^5.5.4",
     "unplugin-auto-import": "^19.3.0",

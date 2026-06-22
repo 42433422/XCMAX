@@ -56,6 +56,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     """
 
     PROVIDER_DEFAULT_URLS: Dict[str, str] = {
+        "xcauto": "https://xiu-ci.com/v1",
+        "xiuci": "https://xiu-ci.com/v1",
         "deepseek": "https://api.deepseek.com",
         "xiaomi": "https://token-plan-cn.xiaomimimo.com",
         "openai": "https://api.openai.com",
@@ -78,6 +80,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     }
 
     DEFAULT_MODELS: Dict[str, str] = {
+        "xcauto": "xcauto-account",
+        "xiuci": "xcauto-account",
         "xiaomi": "mimo-v2.5-pro",
         "deepseek": "deepseek-chat",
         "openai": "gpt-4o-mini",
@@ -100,6 +104,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     }
 
     ENV_KEY_MAPPING: Dict[str, List[str]] = {
+        "xcauto": ["XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "OPENAI_API_KEY"],
+        "xiuci": ["XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "OPENAI_API_KEY"],
         "xiaomi": ["XIAOMI_API_KEY", "MIMO_API_KEY", "XIAOMI_MIMO_API_KEY"],
         "deepseek": ["DEEPSEEK_API_KEY"],
         "openai": ["OPENAI_API_KEY"],

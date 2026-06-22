@@ -160,12 +160,107 @@ def _build_template_vibe_markdowns(
     *,
     employees: List[Dict[str, Any]],
     ctx: Dict[str, Any],
+    digest_excerpt: str = "",
+    meeting_excerpt: str = "",
+    surface_audit_excerpt: str = "",
 ) -> Tuple[str, str]:
-    """无 Bench LLM 或合成失败时的确定性兜底（仍产出双清单并带版本号）。"""
+    """无 Bench LLM 或合成失败时的确定性清单。
+
+    只根据摘要/员工大会/巡检中的明确事实产出任务；没有事实信号时不再为全员生成
+    ``暂无 recent_failures`` 泛任务，避免自进化链路派发空补丁。
+    """
     update_lines: List[str] = []
     patch_lines: List[str] = []
+    emp_by_id = {str(e.get("employee_id") or ""): e for e in employees if e.get("employee_id")}
+    evidence = "\n".join(
+        x.strip()
+        for x in (digest_excerpt, meeting_excerpt, surface_audit_excerpt)
+        if str(x or "").strip()
+    )
+    evidence_lower = evidence.lower()
+
+    def _emp_section(pid: str, fallback_name: str = "") -> Tuple[str, str, str]:
+        emp = emp_by_id.get(pid) or {}
+        name = str(emp.get("name") or fallback_name or pid)
+        pack_ver = str(emp.get("pack_version") or _employee_pack_version(pid) or "—")
+        scope = emp.get("scope_globs") if isinstance(emp.get("scope_globs"), list) else []
+        scope_txt = "、".join(f"`{s}`" for s in scope[:6]) or "（manifest 未声明 scope）"
+        return name, pack_ver, scope_txt
+
+    def _add_update(pid: str, fallback_name: str, items: List[str]) -> None:
+        name, pack_ver, scope_txt = _emp_section(pid, fallback_name)
+        update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
+        update_lines.append(f"- scope：{scope_txt}")
+        update_lines.extend(items)
+        update_lines.append("")
+
+    def _add_patch(pid: str, fallback_name: str, items: List[str]) -> None:
+        name, pack_ver, scope_txt = _emp_section(pid, fallback_name)
+        patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
+        patch_lines.append(f"- scope：{scope_txt}")
+        patch_lines.extend(items)
+        patch_lines.append("")
+
+    ps_title_issue = (
+        "智能对话 - xcagi" in evidence_lower
+        and ("标题" in evidence or "title" in evidence_lower or "元数据" in evidence)
+    )
+    if ps_title_issue:
+        ps_items = [
+            "- **P1** 修复 P-S 页面标题/Head 管理：巡检显示多个业务路由标题均渲染为「智能对话 - XCAGI」，需按当前 route 写入正确 title",
+            "- **P2** 增加路由标题一致性断言，覆盖 `/ai-ecosystem`、`/products`、`/customers`、`/orders`、`/inventory`、`/settings` 等巡检页面",
+        ]
+        _add_patch("vibe-coding-maintainer", "Vibe Coding 维护员", ps_items)
+        _add_patch(
+            "fhd-core-maintainer",
+            "FHD Core 维护员",
+            [
+                "- **P1** 审核前端全局标题服务/路由元数据契约，确保页面切换时不会复用首页标题",
+                "- **P2** 将标题契约写入 P-S 巡检 runbook，避免后续页面新增时漏配 metadata",
+            ],
+        )
+        _add_update(
+            "test-qa-runner",
+            "测试执行员",
+            [
+                "- **P2** 把 P-S title/route 对照表纳入每日巡检验收项，失败时生成可定位的页面清单",
+            ],
+        )
+
+    if any(x in evidence for x in ("ERR_CONNECTION_CLOSED", "ERR_HTTP2_PING_FAILED")):
+        _add_patch(
+            "marketing-site-builder",
+            "营销站点构建员",
+            [
+                "- **P1** 排查 P-W 静态站资源加载失败：巡检记录包含 ERR_CONNECTION_CLOSED / ERR_HTTP2_PING_FAILED，需定位 CDN、HTTP/2 或资源引用问题",
+                "- **P2** 为 P-W 资源加载失败补充可重复巡检页面清单与回归步骤",
+            ],
+        )
+
+    if "404" in evidence and "catalog" in evidence_lower:
+        _add_patch(
+            "market-frontend-dev",
+            "市场前端开发员",
+            [
+                "- **P1** 修复 AI 员工商品页 catalog 404：巡检提到 catalog/40、catalog/50、catalog/41 等商品链接异常",
+                "- **P2** 增加商品详情页存在性检查，避免市场入口指向不存在 SKU",
+            ],
+        )
+
+    if "403" in evidence and ("沙箱" in evidence or "sandbox" in evidence_lower):
+        _add_update(
+            "sandbox-tester",
+            "沙箱测试员",
+            [
+                "- **P2** 复核沙箱测试页 403 是否符合权限预期；若是预期行为，将巡检断言改为认证态校验",
+            ],
+        )
+
+    # recent_failures 是硬事实信号；只为有失败的员工生成补丁，不再为无失败员工生成空泛任务。
     for emp in employees:
         pid = str(emp.get("employee_id") or "")
+        if not pid:
+            continue
         name = str(emp.get("name") or pid)
         pack_ver = str(emp.get("pack_version") or "—")
         scope = emp.get("scope_globs") if isinstance(emp.get("scope_globs"), list) else []
@@ -177,11 +272,9 @@ def _build_template_vibe_markdowns(
         )
         domain = str(emp.get("domain") or "").strip()
 
-        # 优先级分级（即使兜底模板也要有梯度，避免「全是 P2」）：
-        # - 本岗有近期失败：该域在出问题 → 契约核对升 P0
-        # - depends_on 契约/联调漂移：跨员工集成风险 → P1
-        # - handler 注册一致性 / README 补齐：本岗维护 → P2
         has_failures = bool(failures)
+        if not has_failures:
+            continue
         dep_pr = "P0" if has_failures else "P1"
         update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
         update_lines.append(f"- 职责域：{domain or '（见 manifest）'}")
@@ -196,55 +289,59 @@ def _build_template_vibe_markdowns(
             update_lines.append("- **P2** 复核 handlers 注册与 yuangon 目录结构一致")
             for h in handlers[:3]:
                 update_lines.append(f"  - handler `{h}`")
-        if not depends and not handlers:
-            # 无依赖/无 handler：纯文档补齐，最低优先级 P2（有失败则提到 P1 让其进入待办前列）
-            readme_pr = "P1" if has_failures else "P2"
-            update_lines.append(
-                f"- **{readme_pr}** 补齐岗位 README / runbook（依据 manifest 与 yuangon 节选）"
-            )
         update_lines.append("")
 
         patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
         patch_lines.append(f"- scope：{scope_txt}")
-        if failures:
-            # 每员工最多输出 2 条 distinct 失败，优先 failed/error，附瞬断说明
-            _TRANSIENT_KEYWORDS = (
-                "disconnected",
-                "timeout",
-                "timed out",
-                "connection",
-                "remotedisconnected",
-            )
-            shown = 0
-            for fail in failures[:2]:
-                if isinstance(fail, dict):
-                    msg = str(
-                        fail.get("message") or fail.get("error") or fail.get("summary") or fail
-                    )
-                    fail_status = str(fail.get("status") or "")
-                    fail_task = str(fail.get("task") or "")
-                else:
-                    msg = str(fail)
-                    fail_status = ""
-                    fail_task = ""
-                msg_lower = msg.lower()
-                is_transient = any(kw in msg_lower for kw in _TRANSIENT_KEYWORDS)
-                if is_transient:
-                    suffix = "（基础设施/LLM 瞬断，优先重试而非改代码）"
-                    patch_lines.append(
-                        f"- **P0** 修复近期失败：{fail_task[:80] or msg[:160]}{suffix}"
-                    )
-                else:
-                    patch_lines.append(f"- **P0** 修复近期失败：{msg[:240]}")
-                shown += 1
-        else:
-            patch_lines.append(
-                "- **P2** 暂无 recent_failures；按摘要「待审改动 / pytest」段落人工复核是否需要补丁"
-            )
+        _TRANSIENT_KEYWORDS = (
+            "disconnected",
+            "timeout",
+            "timed out",
+            "connection",
+            "remotedisconnected",
+        )
+        for fail in failures[:2]:
+            if isinstance(fail, dict):
+                msg = str(fail.get("message") or fail.get("error") or fail.get("summary") or fail)
+                fail_task = str(fail.get("task") or "")
+            else:
+                msg = str(fail)
+                fail_task = ""
+            msg_lower = msg.lower()
+            is_transient = any(kw in msg_lower for kw in _TRANSIENT_KEYWORDS)
+            if is_transient:
+                suffix = "（基础设施/LLM 瞬断，优先重试而非改代码）"
+                patch_lines.append(
+                    f"- **P0** 修复近期失败：{fail_task[:80] or msg[:160]}{suffix}"
+                )
+            else:
+                patch_lines.append(f"- **P0** 修复近期失败：{msg[:240]}")
         patch_lines.append("")
 
-    updates_body = "\n".join(update_lines).strip() or "（无在岗员工快照）"
-    patches_body = "\n".join(patch_lines).strip() or "（无在岗员工快照）"
+    if not update_lines and employees:
+        for emp in employees[:12]:
+            pid = str(emp.get("employee_id") or "").strip()
+            if not pid:
+                continue
+            name, pack_ver, scope_txt = _emp_section(pid)
+            update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
+            update_lines.append(f"- scope：{scope_txt}")
+            update_lines.append("- 当前无明确证据驱动更新；保留员工版本快照用于审计。")
+            update_lines.append("")
+
+    if not patch_lines and employees:
+        for emp in employees[:12]:
+            pid = str(emp.get("employee_id") or "").strip()
+            if not pid:
+                continue
+            name, pack_ver, scope_txt = _emp_section(pid)
+            patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
+            patch_lines.append(f"- scope：{scope_txt}")
+            patch_lines.append("- 当前无明确证据驱动补丁；不派发空补丁。")
+            patch_lines.append("")
+
+    updates_body = "\n".join(update_lines).strip() or "（无证据驱动更新）"
+    patches_body = "\n".join(patch_lines).strip() or "（无证据驱动补丁）"
     return (
         _apply_version_stamp("updates", updates_body, ctx),
         _apply_version_stamp("patches", patches_body, ctx),
@@ -256,6 +353,9 @@ def _finalize_vibe_result(
     synth: Dict[str, Any],
     employees: List[Dict[str, Any]],
     ctx: Dict[str, Any],
+    digest_excerpt: str = "",
+    meeting_excerpt: str = "",
+    surface_audit_excerpt: str = "",
 ) -> Dict[str, Any]:
     """合成成功后打版本戳；自动模式在 LLM 不可用时走模板兜底。"""
     if synth.get("ok"):
@@ -282,7 +382,13 @@ def _finalize_vibe_result(
             "synthesizer": "llm",
         }
 
-    updates, patches = _build_template_vibe_markdowns(employees=employees, ctx=ctx)
+    updates, patches = _build_template_vibe_markdowns(
+        employees=employees,
+        ctx=ctx,
+        digest_excerpt=digest_excerpt,
+        meeting_excerpt=meeting_excerpt,
+        surface_audit_excerpt=surface_audit_excerpt,
+    )
     patches, backlog_meta = _merge_event_backlog_into_patches(patches)
     return {
         "ok": True,
@@ -727,7 +833,14 @@ async def build_digest_vibe_prep(
     )
 
     completed_at = datetime.now(timezone.utc).isoformat()
-    finalized = _finalize_vibe_result(synth=synth, employees=employees, ctx=version_ctx)
+    finalized = _finalize_vibe_result(
+        synth=synth,
+        employees=employees,
+        ctx=version_ctx,
+        digest_excerpt=digest_excerpt,
+        meeting_excerpt=meeting_excerpt,
+        surface_audit_excerpt=surface_excerpt,
+    )
     if not finalized.get("ok"):
         return {
             "ok": False,

@@ -84,7 +84,9 @@ class TestResetCustomersEngine:
     def test_reset_calls_invalidate(self):
         """Test that reset_customers_engine calls invalidate on registry."""
         mock_registry = MagicMock()
-        with patch("app.di.registry.get_service_registry", return_value=mock_registry):
+        with patch(
+            "app.application.customer_app_service.get_service_registry", return_value=mock_registry
+        ):
             reset_customers_engine()
         mock_registry.invalidate_customer_application_service.assert_called_once()
 
@@ -1320,6 +1322,8 @@ class TestGetCustomerAppService:
         mock_registry = MagicMock()
         mock_service = MagicMock()
         mock_registry.customer_application_service = mock_service
-        with patch("app.di.registry.get_service_registry", return_value=mock_registry):
+        with patch(
+            "app.application.customer_app_service.get_service_registry", return_value=mock_registry
+        ):
             result = get_customer_app_service()
         assert result is mock_service

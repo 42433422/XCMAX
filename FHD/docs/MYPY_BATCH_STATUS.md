@@ -1,6 +1,6 @@
 # mypy 分批解禁状态（v10 线内）
 
-SSOT：[pyproject.toml](../pyproject.toml) `[tool.mypy]`。
+配置源：[pyproject.toml](../pyproject.toml) `[tool.mypy]`。
 
 ## 当前策略（Phase 9 · 2026-06-13）
 

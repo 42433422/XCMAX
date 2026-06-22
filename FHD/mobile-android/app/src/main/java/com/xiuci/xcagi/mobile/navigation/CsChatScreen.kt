@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -74,8 +76,29 @@ fun CsChatScreen(
     val streaming by vm.csStreaming.collectAsState()
     val csInfo by vm.csInfo.collectAsState()
     var input by remember { mutableStateOf("") }
+    var showVoiceSheet by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // 录音权限请求
+    val recordPermissionLauncher =
+            androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                if (granted) showVoiceSheet = true
+                else vm.snack("需要麦克风权限才能使用语音输入")
+            }
+
+    fun startVoiceInput() {
+        val hasPermission =
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.RECORD_AUDIO,
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (hasPermission) showVoiceSheet = true
+        else recordPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+    }
 
     LaunchedEffect(Unit) {
         launch { vm.loadCsInfo() }
@@ -84,6 +107,16 @@ fun CsChatScreen(
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+    }
+
+    // 语音输入 BottomSheet
+    if (showVoiceSheet) {
+        com.xiuci.xcagi.mobile.core.speech.VoiceInputSheet(
+                onResult = { text ->
+                    input = if (input.isBlank()) text else "$input $text"
+                },
+                onDismiss = { showVoiceSheet = false },
+        )
     }
 
     Scaffold(
@@ -132,12 +165,12 @@ fun CsChatScreen(
                 },
                 actions = {
                     WeTopBarAvatarAction(
-                        text = csInfo?.name?.trim()?.take(1)?.ifBlank { "客" } ?: "客",
+                        fallback = AppAvatarFallback.CUSTOMER_SERVICE,
                         onClick = onOpenProfile,
-                        containerColor = XcagiTheme.extra.weChatOnline,
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                windowInsets = WindowInsets(0.dp),
             )
         },
         bottomBar = {
@@ -153,6 +186,7 @@ fun CsChatScreen(
                 },
                 onStop = { vm.stopCsStream() },
                 streaming = streaming,
+                onVoice = { startVoiceInput() },
             )
         },
     ) { padding ->
@@ -308,6 +342,7 @@ private fun WeChatStyleInputBarForCs(
     onSend: () -> Unit,
     onStop: () -> Unit,
     streaming: Boolean,
+    onVoice: () -> Unit = {},
 ) {
     // 提前提取颜色变量，drawBehind 内不能调用 @Composable
     val dividerColor = XcagiTheme.extra.weChatDivider
@@ -332,12 +367,12 @@ private fun WeChatStyleInputBarForCs(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // 语音按钮（预留）
+            // 语音按钮
             Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .clickable { /* TODO: voice */ },
+                    .clickable { onVoice() },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

@@ -82,10 +82,9 @@ mkdir -p "${XCAGI_DATA_DIR}/data"
   # 本地开发：关闭全站/认证限流，避免 HMR 刷新与登录调试触发 429
   export XCAGI_GLOBAL_RATE_LIMIT=0
   export XCAGI_AUTH_RATE_LIMIT=0
-  # run_fastapi --desktop 默认 xiu-ci.com；本地开发须显式走 MODstore :8788 + 演示 shim
-  if [[ "${XCAGI_USE_REMOTE_MARKET:-0}" != "1" ]]; then
-    export XCAGI_USE_LOCAL_MARKET=1
-  fi
+  # LLM 请求默认走远程服务器（xiu-ci.com），本地不配 LLM / Java 支付服务
+  # 如需本地 MODstore 调试，显式设置 XCAGI_USE_REMOTE_MARKET=0
+  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-1}"
   exec "${PY}" run_fastapi.py --desktop --headless --host 127.0.0.1 --port "${API_PORT}" --data-dir "${XCAGI_DATA_DIR}"
 ) &
 BACKEND_PID=$!

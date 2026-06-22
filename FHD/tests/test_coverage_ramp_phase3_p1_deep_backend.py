@@ -1,5 +1,5 @@
 """COVERAGE_RAMP Phase 3 round 1: workflow/planner deep branches, price_list_export,
-ai_chat_v2, service_bridge + excel_extract routes, compat_db writes."""
+service_bridge + excel_extract routes, compat_db writes."""
 
 from __future__ import annotations
 
@@ -16,10 +16,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 
-from app.application.ai_chat_app_service_v2 import (
-    AiChatAppServiceV2,
-    get_ai_chat_app_service_v2,
-)
 from app.application.tools.workflow import (
     execute_workflow_tool,
     handle_excel_analysis,
@@ -471,35 +467,6 @@ def test_header_text_from_cell() -> None:
     cell = MagicMock()
     cell.text = "  单价  "
     assert _header_text(cell) == "单价"
-
-
-# ---------------------------------------------------------------------------
-# ai_chat_app_service_v2
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_ai_chat_v2_execute_command() -> None:
-    svc = AiChatAppServiceV2()
-    with patch.object(svc._bus, "publish") as mock_pub:
-        out = await svc.execute_command("chat", {"message": "hi"})
-    assert out["success"] is True
-    assert "event_id" in out
-    mock_pub.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_ai_chat_v2_execute_command_failure() -> None:
-    svc = AiChatAppServiceV2()
-    with patch.object(svc._bus, "publish", side_effect=RuntimeError("bus down")):
-        out = await svc.execute_command("chat", {})
-    assert out["success"] is False
-
-
-def test_get_ai_chat_app_service_v2_singleton() -> None:
-    a = get_ai_chat_app_service_v2()
-    b = get_ai_chat_app_service_v2()
-    assert a is b
 
 
 # ---------------------------------------------------------------------------

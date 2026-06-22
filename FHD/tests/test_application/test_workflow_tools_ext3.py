@@ -380,12 +380,24 @@ class TestExecuteWorkflowToolAdditionalHandlers:
                 "app.services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="pickup_tok",
             ),
+            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+            ),
+            patch(
+                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                return_value=None,
+            ),
         ):
             result = execute_workflow_tool(
                 "generate_office_document", {"user_request": "test doc", "output_format": "docx"}
             )
         parsed = json.loads(result)
         assert parsed["success"] is True
+        assert parsed["artifacts"][0]["artifact_type"] == "office_document"
+        assert parsed["artifacts"][0]["name"] == "test.docx"
+        assert parsed["artifacts"][0]["uri"] == "/api/ai/kitten/document/pickup/pickup_tok"
 
     def test_generate_office_document_missing_request(self):
         from app.application.tools.workflow import execute_workflow_tool

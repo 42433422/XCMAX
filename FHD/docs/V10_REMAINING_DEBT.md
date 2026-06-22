@@ -8,7 +8,7 @@
 | P1 限流 / NDJSON | 桌面与 Helm 默认开启；整机中间件测试 |
 | P2 SLA / Helm | `sla-probe.yml`、`helm lint` + `envFrom` |
 | Shim 删除 | 删除 22 个 `legacy_*` / `xcagi_compat_*` shim；保留 `xcagi_compat.py` |
-| **路由 SSOT** | `RouteRegistry` + `mounts/*`；去重 `aibiz_terminal`；legacy_gap 不再默认双挂 |
+| **路由登记** | `RouteRegistry` + `mounts/*`；去重 `aibiz_terminal`；legacy_gap 不再默认双挂 |
 | **Redis 安全** | 无 pickle；token 锁 |
 | **K8s 基线** | SecurityContext / PDB / NetworkPolicy |
 | **session 缓存** | `ThreadSafeLRUCache` + 可选 Redis 后端 |
@@ -27,5 +27,5 @@ CI 门禁：`python scripts/dev/verify_no_legacy_shims.py`
 
 ## 可选后续
 
-- chat.js 物理删除（当前：生产构建已不加载；Vue `useChatView` 为 SSOT）
+- chat.js 物理删除（当前：生产构建已不加载；Vue `useChatView` 为唯一实现）
 - 全量 API `ok` → `success` 迁移（已提供 `response_envelope.py`）

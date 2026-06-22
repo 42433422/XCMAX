@@ -1,0 +1,12 @@
+{
+  "after": "Normalize deploy prefixes before routing and fail closed on recent review/QA risk states.",
+  "before": "Policy and CI routing matched raw rel_path and partial memory states.",
+  "created_at": "2026-06-18T23:04:30.944570+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T230430Z-fix-self-maintenance-loop-still-fails-after-target-branch.json"
+  },
+  "pattern": "normalize_repo_relative_paths_before_policy_or_ci_routing",
+  "schema_version": 1,
+  "summary": "自维护门禁在推断测试前必须规范化仓库路径形态，且仅标记的批准对最近的人工策略风险记忆必须失败即关闭。"
+}

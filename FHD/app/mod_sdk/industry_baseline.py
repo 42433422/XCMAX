@@ -247,9 +247,38 @@ def filter_onboarding_catalog_for_entitlements(
             row["selectable"] = False
             demoted.append(row)
 
-    preview_pkgs = [
-        dict(p) if isinstance(p, dict) else p for p in (catalog.get("preview_packages") or [])
+    preview_pkgs: list[Any] = []
+    for pkg in catalog.get("preview_packages") or []:
+        if not isinstance(pkg, dict):
+            preview_pkgs.append(pkg)
+            continue
+        iid = str(pkg.get("industry_id") or "").strip()
+        row = dict(pkg)
+        if iid and iid not in open_by_id and industry_entitled_for_client_mods(iid, entitled):
+            row["selectable"] = True
+            open_pkgs.append(row)
+            open_by_id.add(iid)
+        else:
+            preview_pkgs.append(row)
+    preview_ids = {
+        str(p.get("industry_id") or "").strip() for p in preview_pkgs if isinstance(p, dict)
+    }
+    for row in demoted:
+        iid = str(row.get("industry_id") or "").strip()
+        if iid and iid in preview_ids:
+            continue
+        preview_pkgs.append(row)
+        if iid:
+            preview_ids.add(iid)
+    out = dict(catalog)
+    out["open_packages"] = open_pkgs
+    out["preview_packages"] = preview_pkgs
+    out["open_industry_ids"] = [
+        str(p.get("industry_id") or "").strip()
+        for p in open_pkgs
+        if isinstance(p, dict) and str(p.get("industry_id") or "").strip()
     ]
+    return out
     try:
         from app.mod_sdk.host_profile import load_industry_presets_document
 

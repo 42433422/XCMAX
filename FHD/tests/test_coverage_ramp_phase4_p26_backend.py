@@ -365,7 +365,7 @@ def test_excel_import_success(
 
 
 def test_resolve_chat_model_for_client_modstore() -> None:
-    from app.application.workflow.legacy_chat_adapter import _resolve_chat_model_for_client
+    from app.legacy.chat.legacy_chat_adapter import _resolve_chat_model_for_client
 
     client = SimpleNamespace(
         is_modstore_openai_compatible=True,

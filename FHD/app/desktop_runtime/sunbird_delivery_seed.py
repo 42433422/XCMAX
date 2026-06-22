@@ -56,7 +56,11 @@ def _has_seed_payload(path: Path) -> bool:
 
 
 def _roster_candidates(data_root: Path) -> list[Path]:
-    return [root / "config" / ROSTER_FILENAME for root in _seed_root_candidates(data_root)]
+    root = data_root.resolve()
+    return [
+        root / "config" / ROSTER_FILENAME,
+        root.parent / "config" / ROSTER_FILENAME,
+    ]
 
 
 def _marker_path(data_root: Path) -> Path:

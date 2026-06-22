@@ -659,7 +659,7 @@ class TestTemplatesDelete:
 class TestTemplatesCreate:
     def test_success(self, client: TestClient):
         with patch(
-            "app.routes.document_templates_compat.run_archive_template_create",
+            "app.fastapi_routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": True}, 200),
         ):
             r = client.post("/api/templates/create", json={"name": "test"})
@@ -669,7 +669,7 @@ class TestTemplatesCreate:
 class TestTemplatesUpdate:
     def test_success(self, client: TestClient):
         with patch(
-            "app.routes.document_templates_compat.run_archive_template_update",
+            "app.fastapi_routes.document_templates_compat.run_archive_template_update",
             return_value=({"success": True}, 200),
         ):
             r = client.post("/api/templates/update", json={"id": 1, "name": "updated"})
@@ -726,7 +726,8 @@ class TestSkillsInfo:
 class TestSkillsExecute:
     def test_success(self, client: TestClient):
         with patch(
-            "app.routes.tools.run_archive_tools_execute", return_value=({"success": True}, 200)
+            "app.application.facades.tools_facade.run_archive_tools_execute",
+            return_value=({"success": True}, 200),
         ):
             r = client.post("/api/skills/execute", json={"skill_id": "s1"})
             assert r.status_code == 200
@@ -735,7 +736,8 @@ class TestSkillsExecute:
 class TestToolsExecute:
     def test_success(self, client: TestClient):
         with patch(
-            "app.routes.tools.run_archive_tools_execute", return_value=({"success": True}, 200)
+            "app.application.facades.tools_facade.run_archive_tools_execute",
+            return_value=({"success": True}, 200),
         ):
             r = client.post("/api/tools/execute", json={"tool_id": "t1"})
             assert r.status_code == 200

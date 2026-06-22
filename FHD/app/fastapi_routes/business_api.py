@@ -10,7 +10,7 @@ import os
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
@@ -46,18 +46,18 @@ class PrintLabelBody(BaseModel):
 
 
 @router.post("/print/label")
-async def business_print_label(body: PrintLabelBody, _: BusinessKeyDep) -> dict[str, Any]:
-    from app.neuro_bus.domains.print_domain import get_print_domain
-
-    job_id = (body.job_id or "").strip() or str(uuid.uuid4())
-    dom = get_print_domain()
-    ok = dom.emit_job_submitted(
-        job_id=job_id,
-        document_name=body.document_name,
-        printer_id=body.printer_id,
-        copies=max(1, int(body.copies or 1)),
+async def business_print_label(
+    request: Request,
+    body: PrintLabelBody,
+    _: BusinessKeyDep,
+) -> dict[str, Any]:
+    run = _run_business_event_agent(
+        request=request,
+        action="print_label",
+        params=body.model_dump(),
+        route_path="/api/business/print/label",
     )
-    return {"success": bool(ok), "job_id": job_id, "event": "print.job.submitted"}
+    return _agent_node_output(run, "business_event_print_label")
 
 
 class InventoryUpdateBody(BaseModel):
@@ -71,18 +71,18 @@ class InventoryUpdateBody(BaseModel):
 
 
 @router.post("/inventory/update")
-async def business_inventory_update(body: InventoryUpdateBody, _: BusinessKeyDep) -> dict[str, Any]:
-    from app.neuro_bus.domains.inventory_domain import get_inventory_domain
-
-    dom = get_inventory_domain()
-    ok = dom.emit_stock_changed(
-        product_id=body.product_id.strip(),
-        warehouse_id=body.warehouse_id.strip(),
-        delta=int(body.delta),
-        reason=body.reason,
-        new_quantity=int(body.new_quantity),
+async def business_inventory_update(
+    request: Request,
+    body: InventoryUpdateBody,
+    _: BusinessKeyDep,
+) -> dict[str, Any]:
+    run = _run_business_event_agent(
+        request=request,
+        action="inventory_update",
+        params=body.model_dump(),
+        route_path="/api/business/inventory/update",
     )
-    return {"success": bool(ok), "event": "inventory.changed"}
+    return _agent_node_output(run, "business_event_inventory_update")
 
 
 class OcrRecognizeBody(BaseModel):
@@ -94,19 +94,161 @@ class OcrRecognizeBody(BaseModel):
     user_id: str = "system"
 
 
-@router.post("/ocr/recognize")
-async def business_ocr_recognize(body: OcrRecognizeBody, _: BusinessKeyDep) -> dict[str, Any]:
-    from app.neuro_bus.domains.ocr_domain import get_ocr_domain
+def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    if not output:
+        for step in getattr(run, "steps", []) or []:
+            if str(getattr(step, "node_id", "")) == node_id:
+                output = dict(getattr(step, "output", {}) or {})
+                break
+    if not output:
+        output = {"success": getattr(run, "status", "") == "completed"}
+    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
+        output["message"] = getattr(run, "error", "")
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    return output
 
+
+def _business_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
+    return str(
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or payload.get("user_id")
+        or payload.get("userId")
+        or "business-api"
+    ).strip()
+
+
+def _run_business_event_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+) -> Any:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("business_event") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        raise HTTPException(status_code=400, detail=f"unregistered business event action: {action}")
+
+    node_id = f"business_event_{action}"
+    user_id = _business_agent_user_id(request, params)
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 发布业务事件 business_event.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="business_event",
+                action=action,
+                params=dict(params or {}),
+                risk=str(action_meta.get("risk") or "high"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Publish business event {action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "high"),
+        metadata={"source": "business_api", "route": route_path},
+    )
+    runtime_context = {
+        "source": "business_api",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+    }
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=f"Business event: {action}",
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "business-api",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    return run
+
+
+def _run_business_ocr_request_agent(
+    *,
+    request: Request,
+    request_id: str,
+    image_url: str,
+    ocr_type: str,
+    user_id: str,
+) -> Any:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(
+        plan_id="business_ocr_request",
+        intent="business_ocr_request",
+        todo_steps=["通过 AgentOrchestrator 发布业务 OCR 请求"],
+        nodes=[
+            WorkflowNode(
+                node_id="business_ocr_request",
+                tool_id="ocr",
+                action="request",
+                params={
+                    "request_id": request_id,
+                    "image_url": image_url,
+                    "ocr_type": ocr_type,
+                    "user_id": user_id,
+                },
+                risk="low",
+                idempotent=True,
+                description="Publish a business OCR request through the unified Agent runtime.",
+            )
+        ],
+        risk_level="low",
+        metadata={"source": "business_api", "route": "/api/business/ocr/recognize"},
+    )
+    return AgentOrchestrator().start_run_from_plan(
+        user_id=user_id,
+        message=f"Business OCR request: {image_url}",
+        plan=plan,
+        runtime_context={
+            "source": "business_api",
+            "request_path": str(request.url.path),
+            "request_id": request_id,
+            "user_id": user_id,
+        },
+    )
+
+
+@router.post("/ocr/recognize")
+async def business_ocr_recognize(
+    request: Request,
+    body: OcrRecognizeBody,
+    _: BusinessKeyDep,
+) -> dict[str, Any]:
     rid = (body.request_id or "").strip() or str(uuid.uuid4())
-    dom = get_ocr_domain()
-    ok = dom.emit_ocr_requested(
+    user_id = body.user_id.strip() or "system"
+    run = _run_business_ocr_request_agent(
+        request=request,
         request_id=rid,
         image_url=body.image_url.strip(),
         ocr_type=(body.ocr_type or "general").strip(),
-        user_id=body.user_id.strip() or "system",
+        user_id=user_id,
     )
-    return {"success": bool(ok), "request_id": rid, "event": "ocr.requested"}
+    return _agent_node_output(run, "business_ocr_request")
 
 
 class ShipmentCreateBody(BaseModel):
@@ -119,19 +261,24 @@ class ShipmentCreateBody(BaseModel):
 
 
 @router.post("/shipment/create")
-async def business_shipment_create(body: ShipmentCreateBody, _: BusinessKeyDep) -> dict[str, Any]:
-    from app.neuro_bus.application_neuro_bridge import publish_neuro_event
-
+async def business_shipment_create(
+    request: Request,
+    body: ShipmentCreateBody,
+    _: BusinessKeyDep,
+) -> dict[str, Any]:
     payload = {
         "unit_name": body.unit_name.strip(),
         "items": body.items,
         "contact_person": body.contact_person.strip(),
         "contact_phone": body.contact_phone.strip(),
     }
-    ok = publish_neuro_event("shipment.created", payload, "shipment")
-    if not ok:
-        logger.info("business shipment.create: neuro publish skipped or failed (stack off?)")
-    return {"success": bool(ok), "published": ok, "event": "shipment.created"}
+    run = _run_business_event_agent(
+        request=request,
+        action="shipment_create",
+        params=payload,
+        route_path="/api/business/shipment/create",
+    )
+    return _agent_node_output(run, "business_event_shipment_create")
 
 
 @router.get("/health")

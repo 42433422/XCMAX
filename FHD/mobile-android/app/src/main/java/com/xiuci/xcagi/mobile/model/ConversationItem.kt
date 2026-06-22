@@ -17,10 +17,6 @@ data class ConversationItem(
     val timestamp: Long,
 
     // ── 头像 ──
-    val avatarType: AvatarType,
-    val avatarIcon: Int? = null,
-    val avatarLetter: Char? = null,
-    val avatarColor: Color? = null,
     val avatarUrl: String? = null,
 
     // ── 状态 ──
@@ -36,14 +32,16 @@ data class ConversationItem(
 enum class ConversationType {
     PINNED_CS,            // 固定：专属客服（仅 enterprise）
     PINNED_ASSISTANT,     // 固定：小C助理
+    PINNED_CODEX,         // 固定：超级员工-Codex
+    PINNED_CLAUDE,        // 固定：超级员工-Claude
     AI_TASK,              // AI 任务会话
     SYSTEM_NOTIFICATION,  // 系统通知
 }
-
-enum class AvatarType { ICON, LETTER, URL }
 
 /** 固定联系人 ID 常量 */
 object PinnedIds {
     const val CS = "pinned:cs"
     const val ASSISTANT = "pinned:assistant"
+    const val CODEX = "pinned:codex"
+    const val CLAUDE = "pinned:claude"
 }

@@ -1,0 +1,14 @@
+{
+  "created_at": "2026-06-18T21:28:29.472762+00:00",
+  "fix_diff": "diff --git a/devfleet.db b/devfleet.db\n+update tool_statuses\n+set current_task=NULL, status='idle'\n+where device_id='48acf8c9-3549-442d-8838-0849ee2dc50d' and tool_name='codex';\n",
+  "kind": "fix",
+  "metadata": {
+    "files": [
+      "DevFleet sqlite tool_statuses"
+    ],
+    "source": "codex_direct_fix"
+  },
+  "root_cause": "手动/旧任务失败更新了 sub_tasks/tasks 但未清除 codex 的 tool_statuses.current_task。",
+  "schema_version": 1,
+  "symptom": "设备显示 codex 空闲但 currentTask 仍指向失败的旧任务，阻塞了新调度的可见性"
+}

@@ -59,9 +59,22 @@ class ModNeuroBusRuntimeAdapter:
         return bool(bus.publish(ev))
 
     def health(self) -> dict[str, Any]:
-        from app.neuro_bus.integrations.fastapi_integration import get_neurobus_health
+        # 注意：不能委托回 get_neurobus_health()，否则会形成
+        # get_neurobus_health → get_neuro_bus_health_runtime → bundle["health"]
+        # → get_neurobus_health 的无限递归（RecursionError）。
+        # 直接返回 bus manager 的基础健康信息，由上层 get_neurobus_health()
+        # 负责聚合 components/reliability/processors。
+        from app.neuro_bus.bus import get_neuro_bus
+        from app.neuro_bus.bus_setup import get_neuro_bus_manager
 
-        return get_neurobus_health()
+        manager = get_neuro_bus_manager()
+        base = manager.get_health() if manager else {}
+        bus = get_neuro_bus()
+        if bus:
+            stats = bus.get_stats()
+            if isinstance(base, dict):
+                base = {**base, "running": bus.is_running, "queue_size": stats.get("queue_size", 0)}
+        return base if isinstance(base, dict) else {"status": "unknown"}
 
 
 __all__ = ["ModNeuroBusRuntimeAdapter", "PROVIDER_ID", "RUNTIME_KIND"]

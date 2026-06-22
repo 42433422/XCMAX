@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 BUSINESS_DOMAINS: tuple[str, ...] = (
+    "agent",
     "auth",
     "conversation",
     "customer",
@@ -29,6 +30,7 @@ BUSINESS_DOMAINS: tuple[str, ...] = (
 )
 
 DOMAIN_TO_DIR: dict[str, str] = {
+    "agent": "app/fastapi_routes/domains/agent/",
     "auth": "app/fastapi_routes/domains/auth/",
     "conversation": "app/fastapi_routes/domains/conversation/",
     "customer": "app/fastapi_routes/domains/customer/",
@@ -83,6 +85,7 @@ def _doc(domain: str, module: str, note: str = "") -> LegacyRoute:
 
 
 LEGACY_ROUTE_REGISTRY: tuple[LegacyRoute, ...] = (
+    _doc("agent", "app.fastapi_routes.domains.agent.routes", "Agent 运行/计划/执行"),
     _doc("auth", "app.fastapi_routes.domains.auth.routes", "认证/授权"),
     _doc(
         "conversation",

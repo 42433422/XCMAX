@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-06-18T23:38:18.876048+00:00",
+  "fix_diff": "Added HIGH_RISK_REPORT_RE for standalone FAIL/QA: FAIL lines and added high-risk terms for do not merge, blocking QA findings, and recommendation: do not merge. Added regression test_high_risk_report_detects_standalone_qa_fail so QA FAIL cannot pass auto-merge policy.",
+  "kind": "fix",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "run_id": "84c3aaf5-d3ff-420f-a31b-4680451cebbd"
+  },
+  "root_cause": "高风险报告解析器只匹配 result: fail 等短语，未检测独立的 FAIL 行、阻塞性 QA 发现或 recommendation: do not merge。",
+  "schema_version": 1,
+  "symptom": "自维护策略自动合并了一个分支，尽管仅报告的 QA 输出以 FAIL 开头并建议不要合并。"
+}

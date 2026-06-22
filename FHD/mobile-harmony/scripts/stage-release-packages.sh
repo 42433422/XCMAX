@@ -6,16 +6,20 @@ ANDROID_VERSION="10.0.0"
 HARMONY_ARTIFACT=""
 APK_PATH=""
 SKIP_ZIP=0
+ALLOW_MISSING_HARMONY=0
 
 usage() {
   cat <<'USAGE'
 Usage: stage-release-packages.sh [--version <10.0.0>] [--android-version <10.0.0>] \
-  [--harmony-artifact <path>] [--apk-path <path>] [--skip-zip]
+  [--harmony-artifact <path>] [--apk-path <path>] [--skip-zip] [--allow-missing-harmony]
 
 生成鸿蒙企业版发布目录（企业版-only）：
   - release/packages-v${VERSION}/enterprise/
   - release/packages-v${VERSION}/企业版/
   - release/XCAGI-Enterprise-Mobile-Packages-v${VERSION}.zip（可选）
+
+默认必须提供企业版鸿蒙 .hap/.hsp。只有临时验证 Android 分发目录时，才显式传
+--allow-missing-harmony。
 USAGE
   exit 1
 }
@@ -43,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-zip)
       SKIP_ZIP=1
+      shift
+      ;;
+    --allow-missing-harmony)
+      ALLOW_MISSING_HARMONY=1
       shift
       ;;
     *)
@@ -157,19 +165,13 @@ resolve_harmony_artifact() {
 emit_readme() {
   local dir="$1"
   local harmony_file="$2"
-  local harmony_status
-  if [[ -z "$harmony_file" ]]; then
-    harmony_status="未提供"
-  else
-    harmony_status="$(basename "$harmony_file")"
-  fi
 
   cat <<EOF_README > "${dir}/README.txt"
 XCAGI 企业版 (Enterprise) v${VERSION}
 
   本目录仅含企业版 Android APK 与鸿蒙安装包，不含个人版。
   Android: XCAGI-Enterprise-Android-${ANDROID_VERSION}.apk
-  鸿蒙（企业版）: ${harmony_status}
+  鸿蒙（企业版）: $(basename "$harmony_file")
   包名: com.xiuci.xcagi.mobile.enterprise
 
   备注：Windows 安装包不在本目录输出。
@@ -221,20 +223,59 @@ if [[ -n "${HARMONY_SRC}" && -f "${HARMONY_SRC}" ]]; then
   cp -f "${HARMONY_SRC}" "${ENTERPRISE_DIR_ZH}/${HARMONY_TARGET}"
   log_info "已纳入鸿蒙包（企业版）：${HARMONY_TARGET}"
 else
-  log_info "未检测到鸿蒙包，跳过（企业版可选）"
+  if [[ "${ALLOW_MISSING_HARMONY}" -eq 1 ]]; then
+    HARMONY_TARGET="未提供（仅用于临时 Android 分发验证）"
+    log_info "未检测到鸿蒙包，按 --allow-missing-harmony 跳过"
+  else
+    cat >&2 <<EOF_ERROR
+Missing enterprise HarmonyOS artifact.
+
+Provide one of:
+  - --harmony-artifact <path-to-hap-or-hsp>
+  - FHD_HARMONY_HAP_PATH=<path-to-hap-or-hsp>
+  - a .hap/.hsp under ${MODULE_ROOT}/artifacts
+
+Use --allow-missing-harmony only for temporary Android-only packaging checks.
+EOF_ERROR
+    exit 1
+  fi
 fi
 
 emit_readme "${ENTERPRISE_DIR}" "${HARMONY_TARGET}"
-emit_mobile_version_note "${ENTERPRISE_DIR}" "${HARMONY_TARGET:-未提供}"
+emit_mobile_version_note "${ENTERPRISE_DIR}" "${HARMONY_TARGET}"
 cp -f "${ENTERPRISE_DIR}/README.txt" "${ENTERPRISE_DIR_ZH}/README.txt"
 cp -f "${ENTERPRISE_DIR}/MOBILE_VERSION.md" "${ENTERPRISE_DIR_ZH}/MOBILE_VERSION.md"
 
 if [[ "${SKIP_ZIP}" -eq 0 ]]; then
-  if command -v zip >/dev/null 2>&1; then
-    (cd "${REPO_ROOT}" && zip -qr "release/XCAGI-Enterprise-Mobile-Packages-v${VERSION}.zip" "release/packages-v${VERSION}/enterprise" "release/packages-v${VERSION}/企业版")
+  if command -v python3 >/dev/null 2>&1; then
+    rm -f "${ZIP_PATH}"
+    ZIP_PATH="${ZIP_PATH}" REPO_ROOT="${REPO_ROOT}" VERSION="${VERSION}" python3 <<'PY'
+import os
+import zipfile
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+zip_path = Path(os.environ["ZIP_PATH"])
+version = os.environ["VERSION"]
+sources = [
+    repo_root / "release" / f"packages-v{version}" / "enterprise",
+    repo_root / "release" / f"packages-v{version}" / "企业版",
+]
+
+with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+    for source in sources:
+        for path in sorted(source.rglob("*")):
+            arcname = path.relative_to(repo_root).as_posix()
+            if path.is_dir():
+                info = zipfile.ZipInfo(arcname.rstrip("/") + "/")
+                info.external_attr = 0o40755 << 16
+                archive.writestr(info, b"")
+            else:
+                archive.write(path, arcname)
+PY
     log_info "已生成归档：${ZIP_PATH}"
   else
-    log_info "zip 未安装，跳过归档压缩"
+    log_info "python3 未安装，跳过归档压缩"
   fi
 fi
 

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-PRESET_IDS = ("通用", "涂料", "考勤", "烤禽", "批发", "电商", "餐饮", "物流")
+PRESET_IDS = ("通用", "涂料", "考勤", "批发", "电商", "餐饮", "物流")
 
 _PRESETS: Dict[str, Dict[str, Any]] = {
     "通用": {
@@ -23,11 +23,6 @@ _PRESETS: Dict[str, Dict[str, Any]] = {
         "id": "考勤",
         "name": "考勤/排班",
         "scenario": "员工考勤、排班、请假加班与考勤表打印。",
-    },
-    "烤禽": {
-        "id": "烤禽",
-        "name": "烤禽/熟食",
-        "scenario": "烤禽加工、冷链出货、门店与批发配送。",
     },
     "批发": {
         "id": "批发",

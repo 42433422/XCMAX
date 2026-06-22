@@ -136,7 +136,14 @@ class HybridRetriever:
         self._chunks = list(chunks)
         self._chunk_texts = [c.text for c in chunks]
         self._bm25.fit(self._chunk_texts)
-        if self._embedder is not None:
+        precomputed = [
+            (c.metadata or {}).get("_embedding")
+            for c in chunks
+            if isinstance((c.metadata or {}).get("_embedding"), list)
+        ]
+        if len(precomputed) == len(chunks) and chunks:
+            self._embeddings = [[float(value) for value in embedding] for embedding in precomputed]
+        elif self._embedder is not None:
             try:
                 self._embeddings = [self._embedder(c.text) for c in chunks]
             except RECOVERABLE_ERRORS as e:

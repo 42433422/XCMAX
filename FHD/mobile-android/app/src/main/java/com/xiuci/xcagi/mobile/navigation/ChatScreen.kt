@@ -1,20 +1,16 @@
 package com.xiuci.xcagi.mobile.navigation
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,24 +18,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,11 +50,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -64,9 +66,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -74,25 +78,56 @@ import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.ChatSuggestion
+import com.xiuci.xcagi.mobile.model.PinnedIds
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
+import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
+import com.xiuci.xcagi.mobile.core.speech.VoiceInputSheet
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 
-// ── 微信风格色值（保留作为装饰性常量，未在新设计系统中使用） ──
-// 已迁移至 XcagiTheme.extra.weChatGreen / MaterialTheme.colorScheme
-private val WeChatBubbleBg = Color(0xFFF5F5F5)    // AI 气泡灰底（保留兼容）
+// ── IM 风格色值 ──
+// 全部走主题：用户气泡/发送键/光标用 XcagiTheme.extra，背景/文字/边框用 MaterialTheme.colorScheme，
+// 明暗双主题对比度由主题令牌保证（见 Theme.kt 的 chatUserBubble / chatUserBubbleText / weChatOnline）。
 
-data class ChatTopProfileAvatar(
-    val text: String,
-    val containerColor: Color,
-    val contentColor: Color = Color.White,
-)
+/** 聊天背景色（深色模式下用深蓝灰，浅色用微信灰） */
+@Composable
+private fun imChatBg() = MaterialTheme.colorScheme.background
+
+/** 顶栏/输入栏背景 */
+@Composable
+private fun imBarBg() = MaterialTheme.colorScheme.surface
+
+/** 分隔线 */
+@Composable
+private fun imDivider() = MaterialTheme.colorScheme.outlineVariant
+
+/** 输入框边框 */
+@Composable
+private fun imInputBorder() = MaterialTheme.colorScheme.outline
+
+/** 主文字色 */
+@Composable
+private fun imTextPrimary() = MaterialTheme.colorScheme.onSurface
+
+/** 次要文字色 */
+@Composable
+private fun imTextSecondary() = MaterialTheme.colorScheme.onSurfaceVariant
+
+/** 时间戳色 */
+@Composable
+private fun imTimestamp() = MaterialTheme.colorScheme.onSurfaceVariant
 
 private data class EmployeeConversationRef(
     val modId: String,
@@ -107,67 +142,89 @@ private fun parseEmployeeConversationRef(conversationId: String?): EmployeeConve
     return EmployeeConversationRef(modId = parts[1], employeeId = parts[2])
 }
 
-private val chatModes = listOf(
-    WeModeOption("fast", "快速", Icons.Default.Bolt, "即时响应"),
-    WeModeOption("expert", "深度", Icons.Default.AutoAwesome, "深度分析"),
-    WeModeOption("vision", "识图", Icons.Default.PhotoCamera, "图片识别"),
-)
+internal fun isCodexConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.CODEX
+
+internal fun isClaudeConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.CLAUDE
+
+internal fun chatAvatarFallback(
+    conversationId: String?,
+    hasEmployeeProfile: Boolean,
+): AppAvatarFallback =
+    when {
+        isCodexConversation(conversationId) -> AppAvatarFallback.CODEX
+        isClaudeConversation(conversationId) -> AppAvatarFallback.CLAUDE
+        hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
+        else -> AppAvatarFallback.ASSISTANT
+    }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(
     vm: AppViewModel,
-    conversationId: String? = null,          // 新增：会话 ID，null 表示 AI 对话模式
-    conversationTitle: String = "小C助理",   // 新增：顶部栏标题，默认"小C助理"
+    conversationId: String? = null,
+    conversationTitle: String = "小C助理",
     onBack: (() -> Unit)? = null,
     onOpenMod: (String) -> Unit = {},
     onOpenOcr: () -> Unit = {},
-    profileAvatar: ChatTopProfileAvatar? = null,
     onOpenProfile: (() -> Unit)? = null,
     onOpenEmployeeProfile: (String, String) -> Unit = { _, _ -> },
 ) {
     val messages by vm.chatMessages.collectAsState()
     val streaming by vm.streaming.collectAsState()
-    val connectionChip by vm.chatConnectionChip.collectAsState()
-    val isAgent by vm.isAgentControlActive.collectAsState()
-    val isCloud by vm.isCloudMode.collectAsState()
-    val suggestions by vm.chatSuggestions.collectAsState()
     val syncStale by vm.syncStaleHint.collectAsState()
     val chatAction by vm.chatAction.collectAsState()
+    val suggestions by vm.chatSuggestions.collectAsState()
+    val userAvatarSource by vm.userAvatarSource.collectAsState()
     var input by remember { mutableStateOf("") }
-    var chatMode by remember { mutableStateOf("fast") }
-    var deepThinking by remember { mutableStateOf(false) }
-    var smartSearch by remember { mutableStateOf(false) }
-    var showMoreSheet by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showMoreSheet by remember { mutableStateOf(false) }
+    var showVoiceSheet by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // 录音权限请求
+    val recordPermissionLauncher =
+            rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                if (granted) showVoiceSheet = true
+                else vm.snack("需要麦克风权限才能使用语音输入")
+            }
+
+    fun startVoiceInput() {
+        val hasPermission =
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+        if (hasPermission) showVoiceSheet = true
+        else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
     val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
+    val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
+    val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
     val employeeProfile =
         remember(employeeRef, employees) {
-            employeeRef?.let { employees.findEmployee(it.modId, it.employeeId) }
+            employeeRef?.let { ref -> employees.findEmployee(ref.modId, ref.employeeId) }
         }
-    val resolvedTitle = employeeProfile?.name ?: conversationTitle
-    val resolvedProfileAvatar =
-        employeeProfile?.let {
-            ChatTopProfileAvatar(
-                text = it.avatarText,
-                containerColor = aiEmployeeAvatarColor(it.key),
-            )
-        } ?: profileAvatar
-
-    LaunchedEffect(chatMode) { deepThinking = chatMode == "expert" }
+    val resolvedTitle =
+        when {
+            employeeProfile != null -> employeeProfile.name
+            codexConversation -> "超级员工-Codex"
+            claudeConversation -> "超级员工-Claude"
+            else -> conversationTitle
+        }
+    val aiAvatarFallback = chatAvatarFallback(conversationId, employeeProfile != null)
 
     LaunchedEffect(Unit) {
-        vm.loadChatCache()
+        vm.loadChatCache(conversationId)
         if (suggestions.isEmpty()) vm.loadHomeHub()
     }
 
     LaunchedEffect(employeeRef?.modId, employeeRef?.employeeId) {
-        if (employeeRef != null) {
-            vm.refreshModInfos()
-        }
+        if (employeeRef != null) vm.refreshModInfos()
     }
 
     LaunchedEffect(messages.size, streaming) {
@@ -178,46 +235,35 @@ fun ChatScreen(
         val text = input.trim()
         if (text.isBlank() && !streaming) return
         if (streaming) { vm.stopChat(); return }
-        when (chatMode) {
-            "vision" -> { onOpenOcr(); return }
-            else -> {
-                val prefix = buildString {
-                    if (deepThinking) append("[深度思考] ")
-                    if (smartSearch) append("[智能搜索] ")
-                }
-                vm.sendChat(prefix + text)
-                input = ""
-            }
-        }
+        vm.sendChat(text, conversationId)
+        input = ""
     }
 
-    // ── 更多能力 BottomSheet ──
+    // 语音输入 BottomSheet
+    if (showVoiceSheet) {
+        VoiceInputSheet(
+                onResult = { text ->
+                    input = if (input.isBlank()) text else "$input $text"
+                },
+                onDismiss = { showVoiceSheet = false },
+        )
+    }
+
+    // 更多 BottomSheet
     if (showMoreSheet) {
-        ModalBottomSheet(
+        androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showMoreSheet = false },
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface,
         ) {
             Column(Modifier.padding(bottom = Spacing.xxl)) {
                 Text(
-                    "更多能力",
+                    "更多",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
                     modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
                 )
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 WeCellGroup {
-                    WeCell(
-                        title = "深度思考",
-                        subtitle = if (deepThinking) "已开启" else "关闭",
-                        showArrow = false,
-                        trailing = {
-                            androidx.compose.material3.Switch(
-                                checked = deepThinking,
-                                onCheckedChange = { deepThinking = it; if (it) chatMode = "expert" },
-                            )
-                        },
-                        onClick = { deepThinking = !deepThinking; if (deepThinking) chatMode = "expert" },
-                    )
                     WeCell(
                         title = "OCR 拍照识别",
                         iconTint = MaterialTheme.colorScheme.secondary,
@@ -231,67 +277,50 @@ fun ChatScreen(
         }
     }
 
-    // ── 提示条 ──
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = imChatBg(),
         topBar = {
-            WeTopBar(
+            ImTopBar(
                 title = resolvedTitle,
                 onBack = onBack,
-                customActions = {
-                    val clickAction = when {
-                        employeeProfile != null -> {
-                            { onOpenEmployeeProfile(employeeProfile.modId, employeeProfile.employeeId) }
-                        }
-                        resolvedProfileAvatar != null && onOpenProfile != null -> onOpenProfile
-                        else -> null
-                    }
-                    if (resolvedProfileAvatar != null && clickAction != null) {
-                        WeTopBarAvatarAction(
-                            text = resolvedProfileAvatar.text,
-                            onClick = clickAction,
-                            containerColor = resolvedProfileAvatar.containerColor,
-                            contentColor = resolvedProfileAvatar.contentColor,
-                        )
+                onVideoCall = { vm.snack("视频通话功能即将上线") },
+                onMore = {
+                    val ref = employeeRef
+                    if (ref != null) {
+                        onOpenEmployeeProfile(ref.modId, ref.employeeId)
+                    } else if (onOpenProfile != null) {
+                        onOpenProfile.invoke()
+                    } else {
+                        showMoreSheet = true
                     }
                 },
             )
         },
         bottomBar = {
-            WeChatStyleInputBar(
+            ImInputBar(
                 value = input,
                 onValueChange = { input = it },
-                placeholder = when {
-                    deepThinking -> "深度思考模式，输入复杂问题..."
-                    smartSearch -> "智能搜索，输入关键词..."
-                    else -> "发消息"
-                },
                 onSend = { submitMessage() },
                 onStop = { vm.stopChat() },
                 streaming = streaming,
-                onVoice = { vm.snack("语音输入功能即将上线，敬请期待") },
+                onVoice = { startVoiceInput() },
                 onMore = { showMoreSheet = true },
-                onDeepThinking = { deepThinking = !deepThinking; if (deepThinking) chatMode = "expert" },
-                deepThinking = deepThinking,
-                onSmartSearch = { smartSearch = !smartSearch },
-                smartSearch = smartSearch,
             )
         },
     ) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .background(MaterialTheme.colorScheme.background), // 微信聊天背景灰
+                .padding(padding),
         ) {
-            // ── 提示条 ──
+            // 同步提示条
             if (syncStale) {
                 Surface(
-                    color = XcagiTheme.extra.warning.copy(alpha = 0.1f),
+                    color = XcagiTheme.extra.warning.copy(alpha = 0.08f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        "数据同步中，部分内容可能延迟。",
+                        "数据同步中...",
                         style = MaterialTheme.typography.bodySmall,
                         color = XcagiTheme.extra.warning,
                         modifier = Modifier.padding(horizontal = Spacing.lg, vertical = 6.dp),
@@ -299,7 +328,7 @@ fun ChatScreen(
                 }
             }
 
-            // ── 快捷操作条 ──
+            // 快捷操作条
             chatAction?.let { action ->
                 Row(
                     Modifier
@@ -317,446 +346,456 @@ fun ChatScreen(
                 }
             }
 
-            // ── 消息区 ──
-            if (messages.isEmpty()) {
-                ChatEmptyState(
-                    chatMode = chatMode,
-                    onModeSelect = { chatMode = it },
-                    modeHint = chatModes.firstOrNull { it.id == chatMode }?.hint.orEmpty(),
-                    suggestions = suggestions,
-                    streaming = streaming,
-                    onSuggestionClick = { prompt -> input = prompt; vm.sendChat(prompt) },
-                )
-            } else {
+            if (messages.isNotEmpty()) {
                 LazyColumn(
                     Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
                     state = listState,
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
-                    items(messages) { (role, text) ->
-                        val isLastAssistant = messages.lastIndex == messages.indexOfFirst { it.first == "assistant" && it.second == text }
-                        WeChatBubble(
+                    itemsIndexed(messages) { index, pair ->
+                        val (role, text) = pair
+                        val isLastAssistant =
+                            index == messages.indexOfLast { it.first == "assistant" }
+                        ImBubble(
                             role = role,
                             text = text,
                             isStreaming = streaming && isLastAssistant && role == "assistant",
+                            showAvatar = isUserOrFirstInGroup(messages, index, role),
+                            aiAvatarUrl = employeeProfile?.avatarUrl,
+                            aiAvatarFallback = aiAvatarFallback,
+                            userAvatarUrl = userAvatarSource,
                         )
                     }
-
                 }
+            } else {
+                ChatEmptyState(
+                    title = resolvedTitle,
+                    aiAvatarUrl = employeeProfile?.avatarUrl,
+                    aiAvatarFallback = aiAvatarFallback,
+                    suggestions = suggestions,
+                    onSuggestionClick = { prompt -> vm.sendChat(prompt, conversationId) },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
             }
         }
     }
 }
 
-// ── 微信风格消息气泡 ──
-@Composable
-private fun WeChatBubble(role: String, text: String, isStreaming: Boolean = false) {
+/** 判断是否显示头像：用户消息始终显示；对方消息仅每组第一条显示 */
+private fun isUserOrFirstInGroup(messages: List<Pair<String, String>>, index: Int, role: String): Boolean {
     val isUser = role == "user"
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Top,
-    ) {
-        // AI 头像
-        if (!isUser) {
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(XcagiTheme.extra.brandBlue),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    painter = painterResource(R.mipmap.ic_launcher_foreground),
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = Color.White,
-                )
-            }
-            Spacer(Modifier.size(Spacing.sm))
-        }
+    if (isUser) return true // 用户消息每条都显示头像
+    if (index == 0) return true
+    return messages[index - 1].first != role // 角色切换时显示
+}
 
-        // 气泡
-        Box(
-            Modifier
-                .widthIn(max = 260.dp)
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 8.dp,
-                        topEnd = 8.dp,
-                        bottomStart = if (isUser) 8.dp else 2.dp,
-                        bottomEnd = if (isUser) 2.dp else 8.dp,
-                    )
-                )
-                .background(if (isUser) XcagiTheme.extra.weChatGreen else MaterialTheme.colorScheme.surface),
-            contentAlignment = Alignment.Center,
-        ) {
+// ══════════════════════════════════════════
+//  IM 风格顶部栏（仿飞书/微信）
+// ══════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImTopBar(
+    title: String,
+    onBack: (() -> Unit)?,
+    onVideoCall: () -> Unit,
+    onMore: () -> Unit,
+) {
+    Surface(
+        color = imBarBg(),
+        shadowElevation = 0.dp,
+    ) {
+        Column {
             Row(
-                Modifier.padding(horizontal = Spacing.md, vertical = 9.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .padding(horizontal = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                if (isStreaming && !isUser) {
-                    val infiniteTransition = rememberInfiniteTransition(label = "cursor")
-                    val cursorAlpha by infiniteTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(530),
-                            repeatMode = RepeatMode.Reverse,
-                        ),
+                // 返回（更精致的箭头）
+                IconButton(
+                    onClick = { onBack?.invoke() },
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = imTextPrimary(),
+                        modifier = Modifier.size(24.dp),
                     )
-                    Text(
-                        "▌",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = XcagiTheme.extra.brandBlue.copy(alpha = cursorAlpha),
+                }
+                // 标题（左对齐，更现代）
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 17.sp,
+                        letterSpacing = 0.5.sp,
+                    ),
+                    fontWeight = FontWeight.Medium,
+                    color = imTextPrimary(),
+                    modifier = Modifier.weight(1f).padding(start = 4.dp),
+                )
+                // 视频通话
+                IconButton(
+                    onClick = onVideoCall,
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Videocam,
+                        contentDescription = "视频",
+                        tint = imTextPrimary(),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                // 更多
+                IconButton(
+                    onClick = onMore,
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    Icon(
+                        Icons.Default.MoreHoriz,
+                        contentDescription = "更多",
+                        tint = imTextPrimary(),
+                        modifier = Modifier.size(22.dp),
                     )
                 }
             }
+            // 精致底部分隔线（0.5dp）
+            HorizontalDivider(thickness = 0.5.dp, color = imDivider())
+        }
+    }
+}
+
+// ══════════════════════════════════════════
+//  IM 风格消息气泡（仿微信：左白右绿+圆角头像+弹性动画）
+// ══════════════════════════════════════════
+@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
+@Composable
+private fun ImBubble(
+    role: String,
+    text: String,
+    isStreaming: Boolean = false,
+    showAvatar: Boolean = true,
+    aiAvatarUrl: String? = null,
+    aiAvatarFallback: AppAvatarFallback = AppAvatarFallback.ASSISTANT,
+    userAvatarUrl: String? = null,
+) {
+    val isUser = role == "user"
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow,
+                ),
+            )
+            .padding(
+                top = if (showAvatar) 12.dp else 4.dp,
+                bottom = 4.dp,
+            ),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Top,
+    ) {
+        // 对方头像
+        if (!isUser) {
+            if (showAvatar) {
+                AppAvatar(
+                    imageSource = aiAvatarUrl,
+                    fallback = aiAvatarFallback,
+                    size = 40.dp,
+                    shape = RoundedCornerShape(8.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+            } else {
+                Spacer(Modifier.width(48.dp))
+            }
+        }
+
+        // 气泡（微信同款圆角 + 精致阴影）
+        Surface(
+            modifier = Modifier.widthIn(max = 260.dp),
+            shape = RoundedCornerShape(
+                topStart = if (isUser) 12.dp else 4.dp,
+                topEnd = if (isUser) 4.dp else 12.dp,
+                bottomStart = 12.dp,
+                bottomEnd = 12.dp,
+            ),
+            color = if (isUser) XcagiTheme.extra.chatUserBubble else MaterialTheme.colorScheme.surface,
+            shadowElevation = 1.dp,
+            tonalElevation = 0.5.dp,
+        ) {
+            Text(
+                text = buildString { append(text); if (isStreaming) append("\u200B▌") },
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                ),
+                color = if (isUser) XcagiTheme.extra.chatUserBubbleText else imTextPrimary(),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            )
         }
 
         // 用户头像
         if (isUser) {
-            Spacer(Modifier.size(Spacing.sm))
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "我",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
+            if (showAvatar) {
+                Spacer(Modifier.width(8.dp))
+                AppAvatar(
+                    imageSource = userAvatarUrl,
+                    fallback = AppAvatarFallback.USER,
+                    size = 40.dp,
+                    shape = RoundedCornerShape(8.dp),
                 )
+            } else {
+                Spacer(Modifier.width(48.dp))
             }
         }
     }
 }
 
-// ── 微信风格输入栏 ──
+// ══════════════════════════════════════════
+//  IM 风格输入栏（仿微信：精致圆角+常驻发送+按压动画）
+// ══════════════════════════════════════════
 @Composable
-private fun WeChatStyleInputBar(
+private fun ImInputBar(
     value: String,
     onValueChange: (String) -> Unit,
-    placeholder: String,
     onSend: () -> Unit,
     onStop: () -> Unit,
     streaming: Boolean,
     modifier: Modifier = Modifier,
     onVoice: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
-    onDeepThinking: (() -> Unit)? = null,
-    deepThinking: Boolean = false,
-    onSmartSearch: (() -> Unit)? = null,
-    smartSearch: Boolean = false,
 ) {
-    val dividerColor = MaterialTheme.colorScheme.outlineVariant
-    Column(
-        modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .drawBehind {
-                drawLine(dividerColor, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 0.5.dp.toPx())
-            },
+    val haptics = rememberHaptics()
+    Surface(
+        color = imBarBg(),
+        modifier = modifier.fillMaxWidth(),
     ) {
-        // ── 功能标签行 ──
-        if (onDeepThinking != null || onSmartSearch != null) {
+        Column {
+            // 顶部分隔线
+            HorizontalDivider(thickness = 0.5.dp, color = imDivider())
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                if (onDeepThinking != null) {
-                    WeInputChip(
-                        label = "深度思考",
-                        selected = deepThinking,
-                        onClick = onDeepThinking,
-                    )
+                // 语音按钮（精致图标）
+                if (onVoice != null) {
+                    IconButton(onClick = onVoice, modifier = Modifier.size(38.dp)) {
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = "语音",
+                            tint = imTextPrimary(),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
-                if (onSmartSearch != null) {
-                    WeInputChip(
-                        label = "智能搜索",
-                        selected = smartSearch,
-                        onClick = onSmartSearch,
-                    )
-                }
-            }
-        }
 
-        // ── 输入行 ──
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.sm, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            // 语音按钮
-            if (onVoice != null) {
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onVoice),
-                    contentAlignment = Alignment.Center,
+                // 输入框（微信风格：圆角矩形+浅灰背景）
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.weight(1f).height(38.dp),
                 ) {
-                    Icon(
-                        Icons.Default.Mic,
-                        contentDescription = "语音",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
-
-            // 输入框（weight 必须在 Row 直接子元素 Surface 上）
-            Surface(
-                shape = MaterialTheme.shapes.extraSmall,
-                color = MaterialTheme.colorScheme.background,
-                border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.weight(1f),
-            ) {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = Spacing.sm),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    decorationBox = { inner ->
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                            if (value.isEmpty()) {
-                                Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        modifier = Modifier.padding(horizontal = 12.dp).fillMaxSize(),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = imTextPrimary(),
+                            fontSize = 15.sp,
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(XcagiTheme.extra.weChatOnline),
+                        decorationBox = { inner ->
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                                if (value.isEmpty()) {
+                                    Text(
+                                        "发消息",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                        color = imTextSecondary(),
+                                    )
+                                }
+                                inner()
                             }
-                            inner()
-                        }
-                    },
-                )
-            }
-
-            // 发送/停止按钮（始终显示蓝圆）
-            Surface(
-                shape = CircleShape,
-                color = XcagiTheme.extra.brandBlue,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clickable { if (streaming) onStop() else onSend() },
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
-                        contentDescription = if (streaming) "停止" else "发送",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp),
+                        },
                     )
                 }
-            }
 
-            // 更多按钮
-            if (onMore != null) {
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onMore),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Default.MoreHoriz,
-                        contentDescription = "更多",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ── 功能标签 Chip ──
-@Composable
-private fun WeInputChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val bg by animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background,
-        animationSpec = tween(200),
-    )
-    val fg by animateColorAsState(
-        if (selected) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.outline,
-        animationSpec = tween(200),
-    )
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = bg,
-        modifier = Modifier.clickable(onClick = onClick),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 10.dp, vertical = Spacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            if (selected) {
-                Icon(
-                    Icons.Default.Bolt,
-                    contentDescription = null,
-                    modifier = Modifier.size(12.dp),
-                    tint = fg,
+                // 发送/停止（常驻显示，微信风格圆角按钮+按压动画）
+                var pressed by remember { mutableStateOf(false) }
+                val scale by animateFloatAsState(
+                    targetValue = if (pressed) 0.92f else 1f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                    label = "sendScale",
                 )
-            }
-            Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = fg)
-            if (selected) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = null,
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (streaming) MaterialTheme.colorScheme.errorContainer else XcagiTheme.extra.weChatOnline,
                     modifier = Modifier
-                        .size(10.dp)
-                        .clickable(onClick = onClick),
-                    tint = fg,
-                )
-            }
-        }
-    }
-}
-
-// ── 空状态（微信风格居中 + 桌面端快捷建议） ──
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ChatEmptyState(
-    chatMode: String,
-    onModeSelect: (String) -> Unit,
-    modeHint: String,
-    suggestions: List<ChatSuggestion>,
-    streaming: Boolean,
-    onSuggestionClick: (String) -> Unit,
-) {
-    val modeLabel = chatModes.firstOrNull { it.id == chatMode }?.label ?: "快速"
-    val displaySuggestions = suggestions.take(4)
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = Spacing.xl),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Spacer(Modifier.weight(1f))
-
-        // Logo
-        Box(
-            Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(XcagiTheme.extra.brandBlue.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(R.mipmap.ic_launcher_foreground),
-                contentDescription = null,
-                modifier = Modifier.size(36.dp),
-                tint = XcagiTheme.extra.brandBlue,
-            )
-        }
-        Spacer(Modifier.height(Spacing.md))
-        Text(
-            "智能对话 · ${modeLabel}模式",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(Modifier.height(Spacing.xs))
-        Text(
-            modeHint.ifBlank { "输入问题开始对话" },
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.outline,
-        )
-        Spacer(Modifier.height(Spacing.xl))
-
-        // 模式切换
-        WeModeCapsule(
-            options = chatModes,
-            selectedId = chatMode,
-            onSelect = onModeSelect,
-        )
-
-        // 快捷建议（桌面端风格）
-        if (displaySuggestions.isNotEmpty()) {
-            Spacer(Modifier.height(Spacing.xxl))
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
-                displaySuggestions.forEach { s ->
-                    Surface(
-                        modifier = Modifier
-                            .clip(MaterialTheme.shapes.large)
-                            .clickable { if (!streaming) onSuggestionClick(s.prompt) },
-                        color = MaterialTheme.colorScheme.surface,
-                        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                    ) {
-                        Text(
-                            text = s.label,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = Spacing.sm),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        .size(38.dp)
+                        .scale(scale)
+                        .pointerInput(streaming) {
+                            detectTapGestures(
+                                onPress = {
+                                    pressed = true
+                                    awaitRelease()
+                                    pressed = false
+                                },
+                                onTap = {
+                                    if (streaming) { haptics.tap(); onStop() }
+                                    else { haptics.confirm(); onSend() }
+                                },
+                            )
+                        },
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
+                            contentDescription = if (streaming) "停止" else "发送",
+                            tint = if (streaming) MaterialTheme.colorScheme.error else Color.White,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
     }
 }
 
-// ── AI 员工列表页（微信聊天列表风格，独立页面） ──
-@OptIn(ExperimentalMaterial3Api::class)
+// ══════════════════════════════════════════
+//  空状态：AI 头像 + 问候 + 建议气泡
+// ══════════════════════════════════════════
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChatEmptyState(
+    title: String,
+    aiAvatarUrl: String?,
+    aiAvatarFallback: AppAvatarFallback,
+    suggestions: List<ChatSuggestion>,
+    onSuggestionClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    Box(modifier, contentAlignment = Alignment.TopCenter) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 56.dp, start = Spacing.xl, end = Spacing.xl),
+        ) {
+            AppAvatar(
+                imageSource = aiAvatarUrl,
+                fallback = aiAvatarFallback,
+                size = 72.dp,
+                shape = RoundedCornerShape(20.dp),
+            )
+            Spacer(Modifier.height(Spacing.md))
+            Text(
+                "你好，我是 $title",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                color = imTextPrimary(),
+            )
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                "有什么我可以帮你的？",
+                style = MaterialTheme.typography.bodyMedium,
+                color = imTextSecondary(),
+            )
+            if (suggestions.isNotEmpty()) {
+                Spacer(Modifier.height(Spacing.lg))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    suggestions.forEach { s ->
+                        ChatSuggestionChip(
+                            label = s.label,
+                            onClick = { haptics.tap(); onSuggestionClick(s.prompt) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatSuggestionChip(label: String, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = XcagiTheme.extra.momentChipBg,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = XcagiTheme.extra.momentAccent,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        )
+    }
+}
+
+// ══════════════════════════════════════════
+//  AI 员工列表页（IM 列表风格，不变）
+// ══════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun AiEmployeeListScreen(
     vm: AppViewModel,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     onSelect: (String, String) -> Unit,
+    onScan: () -> Unit = {},
 ) {
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredEmployees = remember(employees, searchQuery) {
+        if (searchQuery.isBlank()) employees
+        else employees.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+                it.modName.contains(searchQuery, ignoreCase = true) ||
+                it.employeeId.contains(searchQuery, ignoreCase = true)
+        }
+    }
 
     LaunchedEffect(Unit) { vm.refreshModInfos() }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = imChatBg(),
         topBar = {
             androidx.compose.material3.TopAppBar(
                 title = {
                     Text(
-                        "AI 员工${employees.size.takeIf { it > 0 }?.let { "($it)" }.orEmpty()}",
+                        "AI员工${filteredEmployees.size.takeIf { it > 0 }?.let { "($it)" }.orEmpty()}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = imTextPrimary(),
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { vm.refreshModInfos(showError = true) }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "刷新AI员工")
+                    }
+                    IconButton(onClick = onScan) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "扫码绑定")
                     }
                 },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
+                windowInsets = WindowInsets(0.dp),
             )
         },
     ) { padding ->
@@ -769,14 +808,48 @@ fun AiEmployeeListScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.SmartToy,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(XcagiTheme.extra.brandBlue.copy(alpha = 0.10f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(34.dp),
+                            tint = XcagiTheme.extra.brandBlue,
+                        )
+                    }
                     Spacer(Modifier.height(Spacing.md))
-                    Text("暂无 AI 员工", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        "暂无 AI 员工",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = imTextPrimary(),
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(
+                        "扫码绑定企业端或登录管理端后，员工会自动同步到这里。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = imTextSecondary(),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                    )
+                    Spacer(Modifier.height(Spacing.lg))
+                    Button(
+                        onClick = onScan,
+                        colors = ButtonDefaults.buttonColors(containerColor = XcagiTheme.extra.brandBlue),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("扫码绑定")
+                    }
                 }
             }
         } else {
@@ -785,11 +858,41 @@ fun AiEmployeeListScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                items(employees, key = { it.key }) { employee ->
+                // 搜索框（复用会话列表页同款样式）
+                item {
+                    SearchBarField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        onClear = { searchQuery = "" },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.md, vertical = 8.dp),
+                    )
+                }
+                // 搜索无结果提示
+                if (filteredEmployees.isEmpty() && searchQuery.isNotEmpty()) {
+                    item {
+                        Box(
+                            Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "未找到匹配的 AI 员工",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = imTextSecondary(),
+                            )
+                        }
+                    }
+                }
+                itemsIndexed(
+                    items = filteredEmployees,
+                    key = { index, employee -> "${employee.key}:$index" },
+                ) { _, employee ->
                     Surface(
                         color = MaterialTheme.colorScheme.surface,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .animateItemPlacement()
                             .clickable { onSelect(employee.modId, employee.employeeId) },
                     ) {
                         Row(
@@ -798,59 +901,65 @@ fun AiEmployeeListScreen(
                                 .padding(horizontal = Spacing.md, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // 彩色头像（首字）
-                            val avatarColors = listOf(
-                                Color(0xFF4A90D9), Color(0xFFE74C3C), Color(0xFF2ECC71),
-                                Color(0xFFF39C12), Color(0xFF9B59B6), Color(0xFF1ABC9C),
-                                Color(0xFFE67E22), Color(0xFF3498DB),
+                            AppAvatar(
+                                imageSource = employee.avatarUrl,
+                                fallback = AppAvatarFallback.AI_EMPLOYEE,
+                                size = 44.dp,
+                                shape = MaterialTheme.shapes.extraSmall,
+                                contentDescription = employee.name,
                             )
-                            val avatarColor = avatarColors[kotlin.math.abs(employee.key.hashCode()) % avatarColors.size]
-                            Box(
-                                Modifier
-                                    .size(48.dp)
-                                    .clip(MaterialTheme.shapes.extraSmall)
-                                    .background(avatarColor),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    employee.avatarText,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                )
-                            }
                             Spacer(Modifier.width(Spacing.md))
 
-                            // 名称 + 描述
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     employee.name,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    color = imTextPrimary(),
                                     maxLines = 1,
                                 )
                                 Spacer(Modifier.height(3.dp))
                                 Text(
                                     employee.summary,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.outline,
+                                    color = imTextSecondary(),
+                                    maxLines = 1,
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    employee.contactLine(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = XcagiTheme.extra.brandBlue,
                                     maxLines = 1,
                                 )
                             }
 
-                            // 右箭头
                             Icon(
                                 Icons.Default.ChevronRight,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                tint = imTextSecondary(),
                                 modifier = Modifier.size(20.dp),
                             )
                         }
                     }
-                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 72.dp))
+                    HorizontalDivider(thickness = 0.5.dp, color = imDivider(), modifier = Modifier.padding(start = 68.dp))
                 }
             }
         }
     }
 }
+
+private fun AiEmployeeProfile.contactLine(): String =
+    listOf(
+        phoneChannel.contactChannelLabel(),
+        employeeId.takeIf { it.isNotBlank() }?.let { "AI号 $it" }.orEmpty(),
+        apiBasePath.takeIf { it.isNotBlank() }?.let { "入口 $it" }.orEmpty(),
+    ).filter { it.isNotBlank() }.joinToString(" · ")
+
+private fun String.contactChannelLabel(): String =
+    when (trim()) {
+        "admin-duty" -> "管理端工作台"
+        "mobile", "mobile-chat" -> "手机端会话"
+        "" -> ""
+        else -> trim()
+    }

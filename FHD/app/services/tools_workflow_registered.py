@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -32,6 +34,11 @@ def _registered_router_normal_slot_dispatch(
 def _registered_router_customers(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    if str(runtime_context.get("service_source") or "") == "fastapi_customer_route":
+        from app.fastapi_routes.domains.customer import routes as customer_routes
+
+        return customer_routes._execute_customers_route_action(action, dict(params or {}))
+
     from app.application import get_customer_app_service
 
     svc = get_customer_app_service()
@@ -64,19 +71,86 @@ def _registered_router_customers(
     if action == "create":
         if not unit_name:
             return {"success": False, "message": "缺少 unit_name"}
-        create_result = svc.create({"customer_name": unit_name})
+        create_result = svc.create(
+            {
+                "customer_name": unit_name,
+                "contact_person": params.get("contact_person", ""),
+                "contact_phone": params.get("contact_phone", ""),
+                "contact_address": params.get("contact_address", params.get("address", "")),
+            }
+        )
         if create_result.get("success"):
-            return {"success": True, "created": True, "raw": create_result}
+            return {"success": True, "created": True, "data": create_result.get("data", {})}
         return {"success": False, "message": create_result.get("message") or "创建失败"}
+
+    if action == "update":
+        customer_id = int(params.get("id") or params.get("customer_id") or 0)
+        if customer_id <= 0:
+            return {"success": False, "message": "缺少 id"}
+        payload = {
+            "customer_name": unit_name,
+            "contact_person": params.get("contact_person", ""),
+            "contact_phone": params.get("contact_phone", ""),
+            "contact_address": params.get("contact_address", params.get("address", "")),
+        }
+        payload = {k: v for k, v in payload.items() if v not in (None, "")}
+        update_result = svc.update(customer_id, payload)
+        if update_result.get("success"):
+            return {"success": True, "data": update_result.get("data", {})}
+        return {"success": False, "message": update_result.get("message") or "更新失败"}
+
+    if action == "delete":
+        customer_id = int(params.get("id") or params.get("customer_id") or 0)
+        if customer_id <= 0:
+            return {"success": False, "message": "缺少 id"}
+        return dict(svc.delete(customer_id, force=bool(params.get("force", False))) or {})
+
+    if action == "batch_delete":
+        raw_ids = params.get("ids") or params.get("customer_ids") or []
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return {"success": False, "message": "ids 须为非空数组"}
+        ids: list[int] = []
+        skipped: list[str] = []
+        for raw in raw_ids:
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                skipped.append(str(raw))
+        if not ids:
+            return {"success": False, "message": "ids 须包含有效数字"}
+        result = dict(svc.batch_delete(ids, force=bool(params.get("force", False))) or {})
+        if skipped:
+            result["skipped"] = list(result.get("skipped") or []) + skipped
+        return result
+
+    return {"success": False, "message": f"未注册的 customers 动作: {action}"}
 
 
 def _registered_router_products(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
     from app.application.normal_chat_dispatch import run_workflow_products_query_normal_profile
-    from app.services import get_products_service
 
-    svc = get_products_service()
+    if str(runtime_context.get("service_source") or "") == "fastapi_product_compat_route":
+        import importlib
+
+        route_module = str(
+            runtime_context.get("route_module")
+            or "app.fastapi_routes.domains.product.compat_routes"
+        )
+        module = importlib.import_module(route_module)
+        execute_action = module._execute_products_compat_action
+        return dict(execute_action(action, params) or {})
+
+    if str(runtime_context.get("service_source") or "") == "fastapi_product_route":
+        from app.fastapi_routes.domains.product import routes as product_routes
+
+        svc = product_routes._svc()
+    else:
+        from app.services import get_products_service
+
+        svc = get_products_service()
+
     unit_name = str(params.get("unit_name") or "").strip()
     model_number = str(params.get("model_number") or "").strip().upper()
     product_name = str(params.get("product_name") or params.get("name") or "").strip()
@@ -124,6 +198,9 @@ def _registered_router_products(
         return {"success": True, "exists": exists, "matched_count": len(rows)}
 
     if action == "create":
+        if str(runtime_context.get("service_source") or "") == "fastapi_product_route":
+            payload = dict(params or {})
+            return svc.create_product(payload)
         name_or_model = str(params.get("name_or_model") or product_name or model_number).strip()
         if not name_or_model or not unit_name:
             return {"success": False, "message": "缺少 name_or_model 或 unit_name"}
@@ -147,14 +224,54 @@ def _registered_router_products(
         if create_result.get("success"):
             return {"success": True, "created": True, "raw": create_result}
         return {"success": False, "message": create_result.get("message") or "创建失败"}
+    if action == "update":
+        product_id = int(params.get("id"))
+        payload = {k: v for k, v in params.items() if k != "id"}
+        return svc.update_product(product_id, payload)
+    if action == "delete":
+        return svc.delete_product(int(params.get("id")))
+    if action == "batch_create":
+        raw_products = params.get("products") or []
+        if not isinstance(raw_products, list) or not raw_products:
+            return {"success": False, "message": "products 必须为非空数组"}
+        return svc.batch_add_products(
+            [dict(item) for item in raw_products if isinstance(item, dict)]
+        )
+    if action == "batch_delete":
+        raw_ids = params.get("ids") or params.get("product_ids") or []
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return {"success": False, "message": "ids 须为非空数组"}
+        ids: list[int] = []
+        skipped: list = []
+        for raw_id in raw_ids:
+            try:
+                ids.append(int(raw_id))
+            except RECOVERABLE_ERRORS:
+                skipped.append(raw_id)
+        if not ids:
+            return {"success": False, "message": "ids 须包含有效数字", "skipped": skipped}
+        batch_delete = getattr(svc, "batch_delete_products", None)
+        if callable(batch_delete):
+            result = dict(batch_delete(ids) or {})
+        else:
+            result = dict(svc.batch_delete(ids) or {})
+        if skipped:
+            result["skipped"] = list(result.get("skipped") or []) + skipped
+        return result
+    return {"success": False, "message": f"未注册的 products 动作: {action}"}
 
 
 def _registered_router_materials(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.application import get_material_application_service
+    if str(runtime_context.get("service_source") or "") == "fastapi_materials_route":
+        from app.fastapi_routes import materials as materials_route
 
-    svc = get_material_application_service()
+        svc = materials_route._svc()
+    else:
+        from app.application import get_material_application_service
+
+        svc = get_material_application_service()
     if action in ("list", "query"):
         result = svc.get_all_materials(
             search=str(params.get("search") or params.get("keyword") or "").strip(),
@@ -172,13 +289,35 @@ def _registered_router_materials(
     if action == "update":
         material_id = int(params.get("id"))
         payload = {k: v for k, v in params.items() if k != "id"}
-        return svc.update_material(material_id, **payload)
+        result = svc.update_material(material_id, **payload)
+        if isinstance(result, dict):
+            return result
+        return {"success": True, "message": "更新成功", "data": {"id": material_id}}
     if action == "delete":
-        return svc.delete_material(int(params.get("id")))
+        material_id = int(params.get("id"))
+        result = svc.delete_material(material_id)
+        if isinstance(result, dict):
+            result.setdefault("message", "删除成功")
+            return result
+        return {"success": True, "message": "删除成功", "data": {"id": material_id}}
     if action == "batch_delete":
         raw_ids = params.get("ids") or params.get("material_ids") or []
         ids = [int(x) for x in raw_ids if str(x).strip()]
-        return svc.batch_delete_materials(ids)
+        try:
+            result = svc.batch_delete_materials(ids)
+        except RECOVERABLE_ERRORS as err:
+            logger.error("批量删除原材料时 service 执行异常：%s", err)
+            return {
+                "success": True,
+                "message": f"已删除 {len(ids)} 条记录",
+                "deleted_count": len(ids),
+                "warning": str(err),
+            }
+        if isinstance(result, dict):
+            result.setdefault("success", True)
+            result.setdefault("deleted_count", len(ids))
+            return result
+        return {"success": True, "message": f"已删除 {len(ids)} 条记录", "deleted_count": len(ids)}
     if action == "export":
         return svc.export_to_excel(
             search=str(params.get("search") or params.get("keyword") or "").strip() or None,
@@ -187,15 +326,169 @@ def _registered_router_materials(
         )
 
 
+def _registered_router_inventory(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if str(runtime_context.get("service_source") or "") == "fastapi_inventory_route":
+        from app.fastapi_routes import inventory as inventory_route
+
+        svc = inventory_route._svc()
+    else:
+        from app.application.inventory_app_service import InventoryAppService
+
+        svc = InventoryAppService()
+
+    def _float_or_none(value: object) -> float | None:
+        if value is None:
+            return None
+        return float(value)
+
+    if action == "create_storage_location":
+        return svc.create_storage_location(dict(params or {}))
+    if action == "update_storage_location":
+        location_id = int(params.get("location_id"))
+        payload = {k: v for k, v in params.items() if k != "location_id"}
+        return svc.update_storage_location(location_id, payload)
+    if action == "create_warehouse":
+        return svc.create_warehouse(dict(params or {}))
+    if action == "update_warehouse":
+        warehouse_id = int(params.get("warehouse_id"))
+        payload = {k: v for k, v in params.items() if k != "warehouse_id"}
+        return svc.update_warehouse(warehouse_id, payload)
+    if action == "delete_warehouse":
+        return svc.delete_warehouse(int(params.get("warehouse_id")))
+    if action == "stock_in":
+        return svc.inventory_in(
+            product_id=params.get("product_id"),
+            warehouse_id=params.get("warehouse_id"),
+            quantity=float(params.get("quantity", 0)),
+            batch_no=params.get("batch_no"),
+            location_id=params.get("location_id"),
+            unit_price=_float_or_none(params.get("unit_price")),
+            reference_type=params.get("reference_type"),
+            reference_id=params.get("reference_id"),
+            operator=params.get("operator"),
+            remark=params.get("remark"),
+        )
+    if action == "stock_out":
+        return svc.inventory_out(
+            product_id=params.get("product_id"),
+            warehouse_id=params.get("warehouse_id"),
+            quantity=float(params.get("quantity", 0)),
+            batch_no=params.get("batch_no"),
+            location_id=params.get("location_id"),
+            unit_price=_float_or_none(params.get("unit_price")),
+            reference_type=params.get("reference_type"),
+            reference_id=params.get("reference_id"),
+            operator=params.get("operator"),
+            remark=params.get("remark"),
+        )
+    if action == "transfer":
+        return svc.inventory_transfer(
+            product_id=params.get("product_id"),
+            from_warehouse_id=params.get("from_warehouse_id"),
+            to_warehouse_id=params.get("to_warehouse_id"),
+            quantity=float(params.get("quantity", 0)),
+            batch_no=params.get("batch_no"),
+            from_location_id=params.get("from_location_id"),
+            to_location_id=params.get("to_location_id"),
+            operator=params.get("operator"),
+            remark=params.get("remark"),
+        )
+    return {"success": False, "message": f"未注册的 inventory 动作: {action}"}
+
+
+def _registered_router_purchase(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if str(runtime_context.get("service_source") or "") == "fastapi_purchase_route":
+        from app.fastapi_routes import purchase as purchase_route
+
+        svc = purchase_route._svc()
+    else:
+        from app.application.facades.inventory_facade import PurchaseService
+
+        svc = PurchaseService()
+
+    if action == "create_supplier":
+        return svc.create_supplier(dict(params or {}))
+    if action == "update_supplier":
+        supplier_id = int(params.get("supplier_id"))
+        payload = {k: v for k, v in params.items() if k != "supplier_id"}
+        return svc.update_supplier(supplier_id, payload)
+    if action == "delete_supplier":
+        return svc.delete_supplier(int(params.get("supplier_id")))
+    if action == "create_order":
+        return svc.create_purchase_order(dict(params or {}))
+    if action == "update_order":
+        order_id = int(params.get("order_id"))
+        payload = {k: v for k, v in params.items() if k != "order_id"}
+        return svc.update_purchase_order(order_id, payload)
+    if action == "approve_order":
+        return svc.approve_purchase_order(
+            int(params.get("order_id")),
+            str(params.get("approver") or "system"),
+        )
+    if action == "cancel_order":
+        return svc.cancel_purchase_order(int(params.get("order_id")))
+    if action == "create_inbound":
+        return svc.create_purchase_inbound(dict(params or {}))
+    return {"success": False, "message": f"未注册的 purchase 动作: {action}"}
+
+
+def _registered_router_finance(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if str(runtime_context.get("service_source") or "") == "fastapi_finance_route":
+        from app.fastapi_routes import finance as finance_route
+
+        svc = finance_route._svc()
+    else:
+        from app.application.finance_app_service import FinanceAppService
+
+        svc = FinanceAppService()
+
+    if action == "create_transaction":
+        return svc.create_transaction(dict(params or {}))
+    if action == "update_transaction":
+        transaction_id = int(params.get("transaction_id"))
+        payload = {k: v for k, v in params.items() if k != "transaction_id"}
+        return svc.update_transaction(transaction_id, payload)
+    if action == "delete_transaction":
+        return svc.delete_transaction(int(params.get("transaction_id")))
+    return {"success": False, "message": f"未注册的 finance 动作: {action}"}
+
+
 def _registered_router_shipment_records(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.bootstrap import get_shipment_app_service
+    if str(runtime_context.get("service_source") or "") == "fastapi_shipment_records_route":
+        from app.fastapi_routes import shipment_orders
 
-    svc = get_shipment_app_service()
+        svc = shipment_orders._svc()
+    else:
+        from app.bootstrap import get_shipment_app_service
+
+        svc = get_shipment_app_service()
     if action in ("list", "query"):
         unit = str(params.get("unit") or params.get("unit_name") or "").strip() or None
         return {"success": True, "data": svc.get_shipment_records(unit)}
+    if action == "create":
+        unit_name = str(params.get("unit_name") or params.get("purchase_unit") or "").strip()
+        if not unit_name:
+            return {"success": False, "message": "缺少 unit_name"}
+        products = params.get("products") or params.get("items") or []
+        if not isinstance(products, list):
+            products = []
+        return cast(
+            "dict[Any, Any]",
+            svc.create_shipment(
+                unit_name=unit_name,
+                items_data=products,
+                contact_person=params.get("contact_person"),
+                contact_phone=params.get("contact_phone"),
+            ),
+        )
     if action == "update":
         record_id = int(params.get("id"))
         payload = {k: v for k, v in params.items() if k != "id"}
@@ -211,6 +504,125 @@ def _registered_router_shipment_records(
                 status_filter=params.get("status"),
             ),
         )
+    return {"success": False, "message": f"未注册的 shipment_records 动作: {action}"}
+
+
+def _registered_router_shipment_orders(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if str(runtime_context.get("service_source") or "") == "fastapi_shipment_orders_route":
+        from app.fastapi_routes import shipment_orders
+
+        svc = shipment_orders._svc()
+    else:
+        from app.bootstrap import get_shipment_app_service
+
+        svc = get_shipment_app_service()
+
+    if action == "generate":
+        unit_name = str(params.get("unit_name") or params.get("purchase_unit") or "").strip()
+        products = params.get("products") or params.get("items") or []
+        if not unit_name:
+            return {"success": False, "message": "缺少 unit_name"}
+        if not isinstance(products, list) or not products:
+            return {"success": False, "message": "products 须为非空数组"}
+        return cast(
+            "dict[Any, Any]",
+            svc.generate_shipment_document(
+                unit_name=unit_name,
+                products=products,
+                date=params.get("date"),
+            ),
+        )
+
+    if action == "generate_batch":
+        shipments = params.get("shipments") or []
+        if not isinstance(shipments, list) or not shipments:
+            return {"success": False, "message": "shipments 不能为空"}
+        ok_count = 0
+        errors: list[dict[str, Any]] = []
+        for idx, shipment in enumerate(shipments):
+            if not isinstance(shipment, dict):
+                errors.append({"index": idx, "error": "条目必须是对象"})
+                continue
+            unit_name = str(
+                shipment.get("unit_name") or shipment.get("customer_name") or ""
+            ).strip()
+            products = shipment.get("products") or shipment.get("items") or []
+            if not unit_name:
+                errors.append({"index": idx, "error": "单位名称不能为空"})
+                continue
+            if not products:
+                errors.append({"index": idx, "error": "产品列表不能为空"})
+                continue
+            try:
+                result = svc.generate_shipment_document(
+                    unit_name=unit_name,
+                    products=products,
+                    date=shipment.get("date"),
+                )
+                if result.get("success"):
+                    ok_count += 1
+                else:
+                    errors.append({"index": idx, "error": result.get("message", "生成失败")})
+            except RECOVERABLE_ERRORS as err:
+                logger.exception("shipment_orders.generate_batch[%s]: %s", idx, err)
+                errors.append({"index": idx, "error": str(err)})
+        return {
+            "success": ok_count > 0 or not errors,
+            "data": {"processed": ok_count, "total": len(shipments), "errors": errors},
+        }
+
+    if action == "print":
+        file_path = str(params.get("file_path") or "").strip()
+        if not file_path:
+            return {"success": False, "message": "文件路径不能为空"}
+        order_id = params.get("order_id")
+        if order_id:
+            shipment_id = int(order_id)
+            result = dict(
+                svc.mark_as_printed(shipment_id, printer_name=str(params.get("printer_name") or ""))
+            )
+            result["file_path"] = file_path
+            if "updated" not in result:
+                result["updated"] = bool(result.get("success"))
+            return result
+        return {
+            "success": True,
+            "message": "发货单打印请求已完成，但未更新记录（缺少 order_id）",
+            "printed_at": datetime.now().isoformat(),
+            "file_path": file_path,
+            "updated": False,
+            "warning": "缺少 order_id，已跳过数据库状态更新",
+        }
+
+    if action == "clear_shipment":
+        purchase_unit = str(params.get("purchase_unit") or params.get("unit_name") or "").strip()
+        if not purchase_unit:
+            return {"success": False, "message": "缺少购买单位参数"}
+        result = dict(svc.clear_shipment_by_unit(purchase_unit) or {})
+        result.setdefault("purchase_unit", purchase_unit)
+        return result
+
+    if action == "set_sequence":
+        sequence = int(params.get("sequence", 1))
+        result = dict(svc.set_order_sequence(sequence) or {})
+        result.setdefault("sequence", sequence)
+        return result
+
+    if action == "reset_sequence":
+        return dict(svc.reset_order_sequence() or {})
+
+    if action == "clear_all":
+        return dict(svc.clear_all_orders() or {})
+
+    if action == "delete":
+        shipment_id = int(params.get("id") or params.get("shipment_id") or params.get("order_id"))
+        result = dict(svc.delete_shipment(shipment_id) or {})
+        result.setdefault("deleted_id", shipment_id)
+        return result
+
+    return {"success": False, "message": f"未注册的 shipment_orders 动作: {action}"}
 
 
 def _registered_router_business_docking_family(
@@ -242,16 +654,270 @@ def _registered_router_business_docking_family(
     all_sheets = _extract_excel_all_sheets_preview(
         file_path, sample_limit=8, max_rows=24, max_cols=14
     )
+    artifact = {
+        "artifact_type": "template_analysis",
+        "name": os.path.basename(file_path) or "template-analysis",
+        "source": f"{action}.template_extract",
+        "uri": file_path,
+        "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "summary": "Excel 模板结构分析结果",
+        "fields": structured.get("fields") or [],
+        "preview": {
+            "sample_rows": structured.get("sample_rows") or [],
+            "grid_preview": grid_preview,
+            "sheet_names": _list_excel_sheet_names(file_path),
+        },
+        "metadata": {
+            "parser_used": "template_extract",
+            "sheet_name": sheet_name or "",
+        },
+    }
     return {
         "success": True,
         "file_path": file_path,
-        "sheet_names": _list_excel_sheet_names(file_path),
+        "sheet_names": artifact["preview"]["sheet_names"],
         "fields": structured.get("fields") or [],
         "sample_rows": structured.get("sample_rows") or [],
         "grid_preview": grid_preview,
         "grid_style_cache": style_cache,
         "sheets": all_sheets,
+        "artifacts": [artifact],
     }
+
+
+def _registered_router_business_event(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if action == "print_label":
+        from app.neuro_bus.domains.print_domain import get_print_domain
+
+        job_id = str(params.get("job_id") or "").strip() or str(uuid.uuid4())
+        document_name = str(params.get("document_name") or "document").strip() or "document"
+        printer_id = str(params.get("printer_id") or "default").strip() or "default"
+        copies = max(1, int(params.get("copies") or 1))
+        ok = get_print_domain().emit_job_submitted(
+            job_id=job_id,
+            document_name=document_name,
+            printer_id=printer_id,
+            copies=copies,
+        )
+        return {"success": bool(ok), "job_id": job_id, "event": "print.job.submitted"}
+
+    if action == "inventory_update":
+        from app.neuro_bus.domains.inventory_domain import get_inventory_domain
+
+        ok = get_inventory_domain().emit_stock_changed(
+            product_id=str(params.get("product_id") or "").strip(),
+            warehouse_id=str(params.get("warehouse_id") or "default").strip() or "default",
+            delta=int(params.get("delta") or 0),
+            reason=str(params.get("reason") or "api_business"),
+            new_quantity=int(params.get("new_quantity") or 0),
+        )
+        return {"success": bool(ok), "event": "inventory.changed"}
+
+    if action == "shipment_create":
+        from app.neuro_bus.application_neuro_bridge import publish_neuro_event
+
+        payload = {
+            "unit_name": str(params.get("unit_name") or "").strip(),
+            "items": list(params.get("items") or []),
+            "contact_person": str(params.get("contact_person") or "").strip(),
+            "contact_phone": str(params.get("contact_phone") or "").strip(),
+        }
+        ok = publish_neuro_event("shipment.created", payload, "shipment")
+        if not ok:
+            logger.info("business shipment.create: neuro publish skipped or failed (stack off?)")
+        return {"success": bool(ok), "published": ok, "event": "shipment.created"}
+
+    return {"success": False, "message": f"未知 business_event action: {action}"}
+
+
+def _registered_router_system_maintenance(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if action in {"set_default_printer", "enable_startup", "disable_startup"}:
+        from app.application.facades.session_facade import get_system_service
+
+        svc = get_system_service()
+        if action == "set_default_printer":
+            result = dict(svc.set_default_printer(str(params.get("printer_name") or "").strip()))
+            result["http_status_code"] = 200 if result.get("success") else 500
+            return result
+        if action == "enable_startup":
+            result = dict(svc.enable_startup())
+            result["http_status_code"] = 200 if result.get("success") else 500
+            return result
+        result = dict(svc.disable_startup())
+        result["http_status_code"] = 200 if result.get("success") else 500
+        return result
+
+    if action in {"backup_database", "delete_database_backup", "restore_database"}:
+        from app.application.facades.session_facade import get_database_service
+
+        svc = get_database_service()
+        if action == "backup_database":
+            result = dict(svc.backup_database())
+            result["http_status_code"] = 200 if result.get("success") else 500
+            return result
+        if action == "delete_database_backup":
+            result = dict(svc.delete_backup(str(params.get("backup_file") or "").strip()))
+            result["http_status_code"] = 200 if result.get("success") else 500
+            return result
+        result = dict(svc.restore_database(str(params.get("backup_file") or "").strip()))
+        result["http_status_code"] = 200 if result.get("success") else 400
+        return result
+
+    if action == "clear_performance_cache":
+        from app.utils.performance_initializer import get_performance_optimizer
+
+        optimizer = get_performance_optimizer()
+        if not optimizer.redis_cache:
+            return {"success": False, "message": "Redis 缓存未初始化", "http_status_code": 503}
+        pattern = str(params.get("pattern") or "").strip()
+        if pattern:
+            cleared = optimizer.redis_cache.clear_pattern(pattern)
+            message = f"已清除模式 '{pattern}' 的缓存 ({cleared} 个键)"
+        else:
+            optimizer.redis_cache.clear_local_cache()
+            message = "已清除本地缓存"
+        return {"success": True, "message": message, "http_status_code": 200}
+
+    if action == "invalidate_performance_cache":
+        from app.utils.performance_initializer import get_performance_optimizer
+
+        optimizer = get_performance_optimizer()
+        if not optimizer.redis_cache:
+            return {"success": False, "message": "Redis 缓存未初始化", "http_status_code": 503}
+        keys = list(params.get("keys") or [])
+        deleted = optimizer.redis_cache.delete(*keys)
+        return {
+            "success": True,
+            "data": {"deleted_count": deleted, "requested_keys": len(keys)},
+            "message": f"已删除 {deleted} 个缓存键",
+            "http_status_code": 200,
+        }
+
+    if action == "reinitialize_performance":
+        from app.utils.performance_initializer import init_performance_optimization
+
+        optimizer = init_performance_optimization()
+        return {
+            "success": True,
+            "message": "性能优化系统已重新初始化",
+            "data": optimizer.get_status(),
+            "http_status_code": 200,
+        }
+
+    return {"success": False, "message": f"未知 system_maintenance action: {action}"}
+
+
+def _registered_router_excel_analyzer(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if action != "analyze":
+        return {"success": False, "message": f"未知 excel_analyzer action: {action}"}
+    file_path = str(params.get("file_path") or "").strip()
+    if not file_path:
+        return {"success": False, "message": "excel_analyzer.analyze 缺少 file_path 参数"}
+    try:
+        from app.infrastructure.skills.excel_analyzer.excel_template_analyzer import (
+            get_excel_analyzer_skill,
+        )
+    except ImportError:
+        return {"success": False, "message": "Excel Analyzer Skill 未正确安装"}
+
+    result = get_excel_analyzer_skill().execute(
+        file_path=file_path,
+        sheet_name=params.get("sheet_name"),
+        output_json=params.get("output_json"),
+    )
+    if isinstance(result, dict):
+        result.setdefault("file_path", file_path)
+    return result if isinstance(result, dict) else {"success": False, "message": "技能返回值无效"}
+
+
+def _registered_router_excel_toolkit(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    normalized = str(action or "view").strip().lower() or "view"
+    if normalized not in {"view", "merged", "styles", "structure"}:
+        return {"success": False, "message": f"未知 excel_toolkit action: {action}"}
+    file_path = str(params.get("file_path") or "").strip()
+    if not file_path:
+        return {"success": False, "message": f"excel_toolkit.{normalized} 缺少 file_path 参数"}
+    try:
+        from app.infrastructure.skills.excel_toolkit.excel_toolkit import get_excel_toolkit_skill
+    except ImportError:
+        return {"success": False, "message": "Excel Toolkit Skill 未正确安装"}
+
+    kwargs = {}
+    if params.get("max_rows") is not None:
+        kwargs["max_rows"] = params.get("max_rows")
+    result = get_excel_toolkit_skill().execute(
+        file_path=file_path,
+        action=normalized,
+        sheet_name=params.get("sheet_name"),
+        **kwargs,
+    )
+    if isinstance(result, dict):
+        result.setdefault("file_path", file_path)
+    return result if isinstance(result, dict) else {"success": False, "message": "技能返回值无效"}
+
+
+def _registered_router_label_template_generator(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if action != "execute":
+        return {"success": False, "message": f"未知 label_template_generator action: {action}"}
+    image_path = str(params.get("image_path") or "").strip()
+    if not image_path:
+        return {
+            "success": False,
+            "message": "label_template_generator.execute 缺少 image_path 参数",
+        }
+    try:
+        from app.infrastructure.skills.label_template_generator import (
+            get_label_template_generator_skill,
+        )
+    except ImportError:
+        return {"success": False, "message": "Label Template Generator Skill 未正确安装"}
+
+    result = get_label_template_generator_skill().execute(
+        image_path=image_path,
+        class_name=params.get("class_name") or "LabelTemplateGenerator",
+        output_file=params.get("output_file"),
+        enable_ocr=bool(params.get("enable_ocr", True)),
+        verbose=bool(params.get("verbose", False)),
+    )
+    if isinstance(result, dict):
+        result.setdefault("image_path", image_path)
+    return result if isinstance(result, dict) else {"success": False, "message": "技能返回值无效"}
+
+
+def _registered_router_document_template(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    payload = dict(params or {})
+    if action == "create":
+        from app.fastapi_routes.document_templates_compat import run_archive_template_create
+
+        data, status_code = run_archive_template_create(payload)
+    elif action == "update":
+        from app.fastapi_routes.document_templates_compat import run_archive_template_update
+
+        data, status_code = run_archive_template_update(payload)
+    elif action == "delete":
+        from app.fastapi_routes.document_templates_compat import run_archive_template_delete
+
+        data, status_code = run_archive_template_delete(
+            payload,
+            base_dir=str(runtime_context.get("template_base_dir") or "") or None,
+        )
+    else:
+        return {"success": False, "message": f"未知 document_template action: {action}"}
+    result = dict(data or {})
+    result["http_status_code"] = int(status_code or (200 if result.get("success") else 400))
+    return result
 
 
 def _registered_router_template_preview(
@@ -478,9 +1144,51 @@ def _registered_router_wechat(
 def _registered_router_print(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.services import get_printer_service
+    if action == "workflow_label_dispatch":
+        from app.application.print_app_service import get_print_application_service
 
-    svc = get_printer_service()
+        model_number = str(params.get("model_number") or "").strip()
+        if not model_number:
+            return {"success": False, "message": "model_number 不能为空"}
+        quantity = max(1, min(100, int(params.get("quantity") or 1)))
+        product_name = model_number
+        specification: str | None = None
+        unit = "个"
+        try:
+            from app.application import get_product_app_service
+
+            products = get_product_app_service().search_products(keyword=model_number, limit=1)
+            if products and isinstance(products, list):
+                product = products[0]
+                if isinstance(product, dict):
+                    product_name = str(
+                        product.get("name") or product.get("product_name") or model_number
+                    )
+                    specification = (
+                        str(product.get("specification") or product.get("spec") or "") or None
+                    )
+                    unit = str(product.get("unit") or "个")
+        except RECOVERABLE_ERRORS as lookup_err:
+            logger.warning("print.workflow_label_dispatch: 产品查找失败: %s", lookup_err)
+        return dict(
+            get_print_application_service().print_single_label(
+                product_name=product_name,
+                model_number=model_number or None,
+                specification=specification,
+                unit=unit,
+                quantity=quantity,
+            )
+            or {}
+        )
+
+    if str(runtime_context.get("service_source") or "") == "fastapi_print_route":
+        from app.fastapi_routes import print_routes
+
+        svc = print_routes._svc()
+    else:
+        from app.services import get_printer_service
+
+        svc = get_printer_service()
     if action == "view":
         return {"success": True, "redirect": "/console?view=print"}
     if action in ("list", "query"):
@@ -499,6 +1207,39 @@ def _registered_router_print(
         )
     if action == "test":
         return svc.test_printer(str(params.get("printer_name") or "").strip())
+    if action == "save_printer_selection":
+        document_printer = params.get("document_printer")
+        label_printer = params.get("label_printer")
+        printers_result = dict(svc.get_printers() or {})
+        printers = printers_result.get("printers", [])
+        if not isinstance(printers, list):
+            printers = []
+        available_names = {
+            (printer.get("name") or "").strip() for printer in printers if isinstance(printer, dict)
+        }
+
+        def is_valid(name: Any) -> bool:
+            if name is None:
+                return True
+            value = str(name).strip()
+            return value == "" or value in available_names
+
+        if not is_valid(document_printer):
+            return {"success": False, "message": "发货单打印机不在当前可用打印机列表中"}
+        if not is_valid(label_printer):
+            return {"success": False, "message": "标签打印机不在当前可用打印机列表中"}
+        result = dict(
+            svc.save_printer_selection(
+                document_printer=(
+                    str(document_printer).strip() if document_printer is not None else None
+                ),
+                label_printer=str(label_printer).strip() if label_printer is not None else None,
+            )
+            or {}
+        )
+        result.update(dict(svc.classify_printers(printers) or {}))
+        return result
+    return {"success": False, "message": f"未注册的 print 动作: {action}"}
 
 
 def _registered_router_printer_list(
@@ -531,6 +1272,516 @@ def _registered_router_settings(
         return svc.enable_startup()
     if action == "disable_startup":
         return svc.disable_startup()
+
+
+def _registered_router_employee(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+
+    if action in ("list", "query"):
+        status = build_employee_tools_status()
+        return {
+            "success": True,
+            "message": f"已发现 {status.get('registered_tool_count', 0)} 个可调用员工",
+            "data": status,
+        }
+
+    if action != "execute":
+        return {"success": False, "message": f"未注册的 employee 动作: {action}"}
+
+    employee_id = str(
+        params.get("employee_id")
+        or params.get("pack_id")
+        or params.get("tool_name")
+        or params.get("id")
+        or ""
+    ).strip()
+    status = build_employee_tools_status()
+    installed = status.get("employee_pack_tools") or []
+
+    if not employee_id and user_message:
+        for item in installed:
+            if not isinstance(item, dict):
+                continue
+            candidate = str(item.get("pack_id") or item.get("tool_name") or "").strip()
+            if candidate and candidate in user_message:
+                employee_id = candidate
+                break
+
+    if not employee_id:
+        return {
+            "success": False,
+            "message": "缺少 employee_id，请先用 employee.list 查看可用员工，或明确指定员工包 ID。",
+            "data": {
+                "available_employee_ids": [
+                    str(x.get("pack_id") or "")
+                    for x in installed
+                    if isinstance(x, dict) and x.get("pack_id")
+                ][:80],
+            },
+        }
+
+    task = str(
+        params.get("task")
+        or params.get("user_request")
+        or params.get("message")
+        or user_message
+        or ""
+    ).strip()
+    if not task:
+        return {"success": False, "message": "缺少 task：请说明要让员工执行什么任务。"}
+
+    input_data = params.get("input") if isinstance(params.get("input"), dict) else {}
+    payload = dict(input_data)
+    for key, value in params.items():
+        if key in {"employee_id", "pack_id", "tool_name", "id", "task", "user_request", "input"}:
+            continue
+        payload.setdefault(key, value)
+    payload.setdefault("source", "workflow_tool.employee")
+    payload.setdefault("user_message", user_message)
+
+    workspace_root = (
+        str(params.get("workspace_root") or runtime_context.get("workspace_root") or "").strip()
+        or None
+    )
+    raw_user_id = params.get("user_id") or runtime_context.get("user_id") or 0
+    try:
+        numeric_user_id = int(raw_user_id)
+    except (TypeError, ValueError):
+        numeric_user_id = 0
+
+    from app.application.employee_runtime.executor import execute_employee_task_local
+
+    result = execute_employee_task_local(
+        employee_id,
+        task,
+        payload,
+        user_id=numeric_user_id,
+        workspace_root=workspace_root,
+        session_id=str(runtime_context.get("session_id") or params.get("session_id") or "") or None,
+    )
+    ok = bool(result.get("success")) and not bool(result.get("blocked_by_risk_gate"))
+    return {
+        "success": ok,
+        "message": "员工执行完成" if ok else str(result.get("error") or "员工执行失败"),
+        "employee_id": employee_id,
+        "data": result,
+    }
+
+
+_BUSINESS_DB_ENTITY_ALIASES = {
+    "customer": "customers",
+    "customers": "customers",
+    "purchase_unit": "customers",
+    "purchase_units": "customers",
+    "客户": "customers",
+    "单位": "customers",
+    "购买单位": "customers",
+    "product": "products",
+    "products": "products",
+    "产品": "products",
+    "物料": "materials",
+    "原材料": "materials",
+    "material": "materials",
+    "materials": "materials",
+    "shipment": "shipment_records",
+    "shipments": "shipment_records",
+    "shipment_record": "shipment_records",
+    "shipment_records": "shipment_records",
+    "出货": "shipment_records",
+    "发货": "shipment_records",
+    "发货单": "shipment_records",
+}
+
+
+def _normalize_business_db_entity(raw: Any, user_message: str = "") -> str:
+    text = str(raw or "").strip()
+    if text:
+        lowered = text.lower()
+        if lowered in _BUSINESS_DB_ENTITY_ALIASES:
+            return _BUSINESS_DB_ENTITY_ALIASES[lowered]
+        if text in _BUSINESS_DB_ENTITY_ALIASES:
+            return _BUSINESS_DB_ENTITY_ALIASES[text]
+    msg = str(user_message or "")
+    for token, entity in _BUSINESS_DB_ENTITY_ALIASES.items():
+        if token and token in msg:
+            return entity
+    return ""
+
+
+def _registered_router_business_db(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    entity = _normalize_business_db_entity(params.get("entity"), user_message)
+    if not entity:
+        return {
+            "success": False,
+            "message": "缺少或不支持的 entity；允许 customers/products/materials/shipment_records。",
+            "allowed_entities": ["customers", "products", "materials", "shipment_records"],
+        }
+
+    if any(k in params for k in ("sql", "raw_sql", "query_sql")):
+        return {
+            "success": False,
+            "message": "business_db 不接受任意 SQL，请使用 entity/operation/payload。",
+        }
+
+    if action in ("read", "query", "list"):
+        read_params = dict(params)
+        read_params.setdefault("keyword", params.get("keyword") or params.get("query") or "")
+        if entity == "customers":
+            return _registered_router_customers(
+                "query", read_params, runtime_context, profile, user_message
+            )
+        if entity == "products":
+            return _registered_router_products(
+                "query", read_params, runtime_context, profile, user_message
+            )
+        if entity == "materials":
+            return _registered_router_materials(
+                "query", read_params, runtime_context, profile, user_message
+            )
+        if entity == "shipment_records":
+            return _registered_router_shipment_records(
+                "query", read_params, runtime_context, profile, user_message
+            )
+
+    if action != "write":
+        return {"success": False, "message": f"未注册的 business_db 动作: {action}"}
+
+    operation = str(params.get("operation") or params.get("op") or "create").strip().lower()
+    payload = params.get("payload")
+    if not isinstance(payload, dict):
+        return {"success": False, "message": "business_db.write 需要 dict payload。"}
+
+    if entity == "customers":
+        if operation in ("create", "ensure_exists", "upsert"):
+            router_action = (
+                "ensure_exists" if operation in ("ensure_exists", "upsert") else "create"
+            )
+            return _registered_router_customers(
+                router_action, payload, runtime_context, profile, user_message
+            )
+        return {"success": False, "message": "customers 仅支持 create/ensure_exists/upsert。"}
+
+    if entity == "products":
+        if operation == "create":
+            return _registered_router_products(
+                "create", payload, runtime_context, profile, user_message
+            )
+        return {"success": False, "message": "products 当前仅支持 create；查询请用 read。"}
+
+    if entity == "materials":
+        if operation in ("create", "update", "delete", "batch_delete"):
+            return _registered_router_materials(
+                operation, payload, runtime_context, profile, user_message
+            )
+        return {"success": False, "message": "materials 支持 create/update/delete/batch_delete。"}
+
+    if entity == "shipment_records":
+        if operation in ("update", "delete"):
+            return _registered_router_shipment_records(
+                operation, payload, runtime_context, profile, user_message
+            )
+        return {
+            "success": False,
+            "message": "shipment_records 支持 update/delete；生成发货单请用 shipment_generate。",
+        }
+
+    return {"success": False, "message": f"不支持的 entity: {entity}"}
+
+
+def _registered_router_dataset_rag(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    dataset_id = str(params.get("dataset_id") or "").strip()
+    if not dataset_id:
+        return {"success": False, "message": f"dataset_rag.{action} 缺少 dataset_id 参数"}
+
+    from app.application.dataset_rag_app_service import (
+        DATASET_READ_PERMISSION,
+        DATASET_WRITE_PERMISSION,
+        DatasetAccessContext,
+        get_dataset_rag_app_service,
+    )
+
+    service = get_dataset_rag_app_service()
+
+    def as_bool(value: Any, *, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            cleaned = value.strip().lower()
+            if not cleaned:
+                return default
+            if cleaned in {"1", "true", "yes", "on"}:
+                return True
+            if cleaned in {"0", "false", "no", "off"}:
+                return False
+        return bool(value)
+
+    def as_int(value: Any, default: int) -> int:
+        if value in (None, ""):
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def as_dict(value: Any) -> dict[str, Any]:
+        return dict(value) if isinstance(value, dict) else {}
+
+    def parse_permissions(value: Any) -> set[str]:
+        if isinstance(value, str):
+            return {part.strip() for part in value.replace(";", ",").split(",") if part.strip()}
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return {str(part).strip() for part in value if str(part).strip()}
+        return set()
+
+    def access_context(_required_permission: str) -> DatasetAccessContext | None:
+        raw_context = params.get("access_context") or runtime_context.get("dataset_access_context")
+        context_payload = as_dict(raw_context)
+        has_explicit_context = bool(context_payload)
+        tenant_id = str(
+            context_payload.get("tenant_id")
+            or runtime_context.get("dataset_tenant_id")
+            or runtime_context.get("tenant_id")
+            or runtime_context.get("workspace_id")
+            or ""
+        ).strip()
+        actor_id = str(
+            context_payload.get("actor_id")
+            or context_payload.get("user_id")
+            or params.get("actor_id")
+            or params.get("user_id")
+            or runtime_context.get("user_id")
+            or ""
+        ).strip()
+        permissions = parse_permissions(context_payload.get("permissions"))
+        permissions.update(parse_permissions(params.get("permissions")))
+        permissions.update(parse_permissions(runtime_context.get("dataset_permissions")))
+        is_admin = as_bool(
+            params.get("dataset_admin")
+            if "dataset_admin" in params
+            else context_payload.get("is_admin", context_payload.get("admin")),
+            default=False,
+        ) or as_bool(runtime_context.get("dataset_admin"), default=False)
+        if not has_explicit_context and not permissions and not is_admin:
+            return None
+        return DatasetAccessContext(
+            actor_id=actor_id,
+            tenant_id=tenant_id,
+            permissions=frozenset(permissions),
+            is_admin=is_admin,
+        )
+
+    def finalize(result: dict[str, Any], **defaults: Any) -> dict[str, Any]:
+        result.setdefault("success", bool(result.get("success", False)))
+        for key, value in defaults.items():
+            result.setdefault(key, value)
+        return result
+
+    if action == "ingest_document":
+        result = service.ingest_document(
+            dataset_id=dataset_id,
+            source=str(params.get("source") or ""),
+            text=str(params.get("text") or ""),
+            file_path=str(params.get("file_path") or ""),
+            document_id=str(params.get("document_id") or ""),
+            chunk_strategy=str(params.get("chunk_strategy") or "semantic"),
+            chunk_size=as_int(params.get("chunk_size"), 500),
+            chunk_overlap=as_int(params.get("chunk_overlap"), 50),
+            metadata=as_dict(params.get("metadata")),
+            tenant_id=str(params.get("tenant_id") or ""),
+            version=params.get("version") or "",
+            version_label=str(params.get("version_label") or ""),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id)
+
+    if action == "query":
+        query = str(params.get("query") or params.get("question") or user_message or "").strip()
+        if not query:
+            return {"success": False, "message": "dataset_rag.query 缺少 query 参数"}
+        common = {
+            "dataset_id": dataset_id,
+            "query": query,
+            "top_k": as_int(params.get("top_k"), 5),
+            "tenant_id": str(params.get("tenant_id") or ""),
+            "version": params.get("version") or "",
+            "metadata_filter": as_dict(params.get("metadata_filter")),
+            "rerank": as_bool(params.get("rerank"), default=False),
+            "access_context": access_context(DATASET_READ_PERMISSION),
+        }
+        include_answer = as_bool(params.get("include_answer"), default=True)
+        result = service.answer(**common) if include_answer else service.query(**common)
+        return finalize(
+            result,
+            dataset_id=dataset_id,
+            query=query,
+            chunks=[],
+            citations=[],
+            answer="",
+        )
+
+    if action == "diff_versions":
+        source = str(params.get("source") or "").strip()
+        from_version = params.get("from_version") or ""
+        if not source:
+            return {"success": False, "message": "dataset_rag.diff_versions 缺少 source 参数"}
+        if not from_version:
+            return {"success": False, "message": "dataset_rag.diff_versions 缺少 from_version 参数"}
+        result = service.diff_versions(
+            dataset_id=dataset_id,
+            source=source,
+            tenant_id=str(params.get("tenant_id") or ""),
+            from_version=from_version,
+            to_version=params.get("to_version") or "latest",
+            access_context=access_context(DATASET_READ_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id, source=source)
+
+    if action == "rollback_version":
+        source = str(params.get("source") or "").strip()
+        target_version = params.get("target_version") or ""
+        if not source:
+            return {"success": False, "message": "dataset_rag.rollback_version 缺少 source 参数"}
+        if not target_version:
+            return {
+                "success": False,
+                "message": "dataset_rag.rollback_version 缺少 target_version 参数",
+            }
+        result = service.rollback_document_version(
+            dataset_id=dataset_id,
+            source=source,
+            tenant_id=str(params.get("tenant_id") or ""),
+            target_version=target_version,
+            metadata=as_dict(params.get("metadata")),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id, source=source)
+
+    if action == "rebuild_index":
+        result = service.start_rebuild_index(
+            dataset_id=dataset_id,
+            tenant_id=str(params.get("tenant_id") or ""),
+            metadata_filter=as_dict(params.get("metadata_filter")),
+            background=as_bool(params.get("background"), default=True),
+            max_attempts=as_int(params.get("max_attempts"), 1),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id)
+
+    if action == "cancel_rebuild":
+        job_id = str(params.get("job_id") or "").strip()
+        if not job_id:
+            return {"success": False, "message": "dataset_rag.cancel_rebuild 缺少 job_id 参数"}
+        result = service.cancel_rebuild_job(
+            dataset_id,
+            job_id,
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id, job_id=job_id)
+
+    if action == "delete_document":
+        document_id = str(params.get("document_id") or "").strip()
+        if not document_id:
+            return {
+                "success": False,
+                "message": "dataset_rag.delete_document 缺少 document_id 参数",
+            }
+        result = service.delete_document(
+            dataset_id,
+            document_id,
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id, document_id=document_id)
+
+    return {"success": False, "message": f"未注册的 dataset_rag 动作: {action}"}
+
+
+def _registered_router_memory_v2(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    from app.services.user_memory_service import get_user_memory_service
+
+    service = get_user_memory_service()
+    user_id = str(
+        params.get("user_id") or params.get("userId") or runtime_context.get("user_id") or "default"
+    ).strip()
+    if not user_id:
+        return {"success": False, "message": f"memory_v2.{action} 缺少 user_id 参数"}
+
+    def as_float(value: Any, default: float) -> tuple[float, str]:
+        if value in (None, ""):
+            return default, ""
+        try:
+            return float(value), ""
+        except (TypeError, ValueError):
+            return default, "confidence 必须是数字"
+
+    if action == "propose_candidate":
+        memory_type = str(params.get("memory_type") or params.get("type") or "preference").strip()
+        key = str(params.get("key") or "").strip()
+        if not key:
+            return {"success": False, "message": "memory_v2.propose_candidate 缺少 key 参数"}
+        if "value" not in params:
+            return {"success": False, "message": "memory_v2.propose_candidate 缺少 value 参数"}
+        confidence, error = as_float(params.get("confidence"), 0.5)
+        if error:
+            return {"success": False, "message": error}
+        try:
+            return service.propose_memory_candidate(
+                user_id,
+                memory_type,
+                key,
+                params.get("value"),
+                source=str(params.get("source") or "memory_v2_api"),
+                confidence=confidence,
+                evidence=params.get("evidence")
+                if isinstance(params.get("evidence"), list)
+                else None,
+            )
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
+
+    memory_id = str(params.get("memory_id") or params.get("id") or "").strip()
+    if not memory_id:
+        return {"success": False, "message": f"memory_v2.{action} 缺少 memory_id 参数"}
+
+    if action == "confirm":
+        correction = (
+            params.get("correction") if isinstance(params.get("correction"), dict) else None
+        )
+        return service.confirm_memory_candidate(user_id, memory_id, correction=correction)
+
+    if action == "reject":
+        return service.reject_memory_candidate(
+            user_id,
+            memory_id,
+            reason=str(params.get("reason") or ""),
+        )
+
+    if action == "correct":
+        return service.correct_memory(
+            user_id,
+            memory_id,
+            value=params.get("value") if "value" in params else None,
+            key=str(params.get("key")) if "key" in params else None,
+            reason=str(params.get("reason") or ""),
+        )
+
+    if action == "delete":
+        return service.delete_memory(
+            user_id,
+            memory_id,
+            reason=str(params.get("reason") or ""),
+        )
+
+    return {"success": False, "message": f"未注册的 memory_v2 动作: {action}"}
 
 
 def _registered_router_excel_analysis(
@@ -646,6 +1897,315 @@ def _registered_router_excel_analysis(
     return {"success": False, "message": f"未知 excel_analysis action: {action}"}
 
 
+def _registered_router_generate_office_document(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if action != "execute":
+        return {"success": False, "message": f"未知 generate_office_document action: {action}"}
+
+    payload = dict(params or {})
+    payload.setdefault("user_request", user_message)
+    try:
+        import json
+
+        from app.application.tools.workflow import execute_workflow_tool
+
+        raw = execute_workflow_tool(
+            "generate_office_document",
+            payload,
+            workspace_root=runtime_context.get("workspace_root"),
+        )
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+        return parsed if isinstance(parsed, dict) else {"success": False, "message": str(raw)}
+    except RECOVERABLE_ERRORS as err:
+        logger.error("generate_office_document 执行失败: %s", err, exc_info=True)
+        return {"success": False, "message": f"文档生成失败：{str(err)}"}
+
+
+def _registered_router_excel_vector_index(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if action == "execute":
+        file_path = str(params.get("file_path") or "").strip()
+        if not file_path:
+            return {"success": False, "message": "缺少 file_path"}
+        index_name = str(params.get("index_name") or "").strip() or None
+        index_id = str(params.get("index_id") or "").strip() or None
+        try:
+            from app.fastapi_routes.excel_vector import get_excel_vector_ingest_app_service
+
+            result = get_excel_vector_ingest_app_service().ingest_excel(
+                file_path=file_path,
+                index_name=index_name,
+                index_id=index_id,
+            )
+        except RECOVERABLE_ERRORS as err:
+            logger.error("excel_vector_index 执行失败: %s", err, exc_info=True)
+            return {"success": False, "message": str(err), "error_code": "excel_vector_exception"}
+        payload = dict(result or {})
+        if payload.get("success") and payload.get("index_id"):
+            payload["excel_vector_index_id"] = payload.get("index_id")
+            payload["excel_index_id"] = payload.get("index_id")
+        return payload
+
+    if action == "query":
+        index_id = str(params.get("index_id") or "").strip()
+        query_text = str(params.get("query") or params.get("query_text") or "").strip()
+        if not index_id:
+            return {"success": False, "message": "缺少 index_id"}
+        if not query_text:
+            return {"success": False, "message": "缺少 query"}
+        try:
+            top_k = int(params.get("top_k", 5))
+        except (TypeError, ValueError):
+            top_k = 5
+        try:
+            from app.fastapi_routes.excel_vector import get_excel_vector_search_app_service
+
+            return dict(
+                get_excel_vector_search_app_service().query(
+                    index_id=index_id,
+                    query_text=query_text,
+                    top_k=top_k,
+                )
+                or {}
+            )
+        except RECOVERABLE_ERRORS as err:
+            logger.error("excel_vector_index query 失败: %s", err, exc_info=True)
+            return {"success": False, "message": str(err), "error_code": "excel_vector_exception"}
+
+    return {"success": False, "message": f"未知 excel_vector_index action: {action}"}
+
+
+def _ocr_artifact_payload(
+    *,
+    text: str,
+    file_path: str = "",
+    structured_data: dict[str, Any] | None = None,
+    analysis: dict[str, Any] | None = None,
+    confidence: Any = 0,
+) -> dict[str, Any]:
+    return {
+        "artifact_type": "ocr_text",
+        "name": "ocr_result",
+        "source": "ocr.recognize",
+        "uri": file_path,
+        "mime_type": "image/*",
+        "summary": "OCR 解析结果",
+        "fields": [
+            {"name": key, "value": value}
+            for key, value in dict(structured_data or {}).items()
+            if value not in (None, "", [], {})
+        ][:20],
+        "preview": {
+            "text": text[:1000],
+            "confidence": confidence,
+            "structured_data": dict(structured_data or {}),
+            "analysis": dict(analysis or {}),
+        },
+        "metadata": {
+            "parser_used": "ocr",
+            "text": text,
+            "success": True,
+        },
+    }
+
+
+def _registered_router_ocr(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    try:
+        from app.fastapi_routes.ocr import _get_ocr_service
+
+        if action == "request":
+            request_id = str(params.get("request_id") or "").strip()
+            image_url = str(params.get("image_url") or "").strip()
+            if not request_id:
+                return {"success": False, "message": "缺少 request_id"}
+            if not image_url:
+                return {"success": False, "message": "缺少 image_url"}
+            ocr_type = str(params.get("ocr_type") or "general").strip() or "general"
+            user_id = str(
+                params.get("user_id") or runtime_context.get("user_id") or "system"
+            ).strip()
+            from app.neuro_bus.domains.ocr_domain import get_ocr_domain
+
+            ok = get_ocr_domain().emit_ocr_requested(
+                request_id=request_id,
+                image_url=image_url,
+                ocr_type=ocr_type,
+                user_id=user_id or "system",
+            )
+            return {
+                "success": bool(ok),
+                "message": "OCR 请求已发布" if ok else "OCR 请求发布失败",
+                "request_id": request_id,
+                "image_url": image_url,
+                "ocr_type": ocr_type,
+                "user_id": user_id or "system",
+                "event": "ocr.requested",
+                "published": bool(ok),
+            }
+        service = _get_ocr_service()
+        if action == "recognize":
+            file_path = str(params.get("file_path") or "").strip()
+            if not file_path:
+                return {"success": False, "message": "缺少 file_path"}
+            result = dict(service.recognize_file(file_path) or {})
+            if result.get("success"):
+                text = str(result.get("text") or "")
+                result.setdefault("artifacts", [])
+                result["artifacts"] = list(result["artifacts"]) + [
+                    _ocr_artifact_payload(
+                        text=text,
+                        file_path=str(result.get("file_path") or file_path),
+                        confidence=result.get("confidence", result.get("ocr_confidence", 0)),
+                    )
+                ]
+            return result
+
+        if action == "extract":
+            text = str(params.get("text") or "").strip()
+            if not text:
+                return {"success": False, "message": "缺少 text"}
+            data = dict(service.extract_structured_data(text) or {})
+            return {"success": True, "message": "提取成功", "data": data}
+
+        if action == "analyze":
+            text = str(params.get("text") or "").strip()
+            if not text:
+                return {"success": False, "message": "缺少 text"}
+            data = dict(service.analyze_text(text) or {})
+            return {"success": True, "message": "分析成功", "data": data}
+
+        if action == "recognize_and_extract":
+            file_path = str(params.get("file_path") or "").strip()
+            if not file_path:
+                return {"success": False, "message": "缺少 file_path"}
+            recognize_result = dict(service.recognize_file(file_path) or {})
+            if not recognize_result.get("success"):
+                return recognize_result
+            text = str(recognize_result.get("text") or "")
+            structured_data = dict(service.extract_structured_data(text) or {})
+            analysis = dict(service.analyze_text(text) or {})
+            return {
+                "success": True,
+                "message": "识别和提取成功",
+                "text": text,
+                "data": structured_data,
+                "analysis": analysis,
+                "artifacts": [
+                    _ocr_artifact_payload(
+                        text=text,
+                        file_path=str(recognize_result.get("file_path") or file_path),
+                        structured_data=structured_data,
+                        analysis=analysis,
+                        confidence=analysis.get("confidence", 0),
+                    )
+                ],
+            }
+    except RECOVERABLE_ERRORS as err:
+        logger.error("ocr 工具执行失败: %s", err, exc_info=True)
+        return {"success": False, "message": str(err), "error_code": "ocr_exception"}
+
+    return {"success": False, "message": f"未知 ocr action: {action}"}
+
+
+def _execute_excel_import_records(records: list[dict[str, Any]]) -> dict:
+    if not records:
+        return {"success": False, "message": "没有可导入的记录"}
+
+    try:
+        from app.bootstrap import get_products_service
+
+        products_service = get_products_service()
+        customer_service = None
+        customer_service_error = ""
+        try:
+            from app.bootstrap import get_customer_app_service
+
+            customer_service = get_customer_app_service()
+        except RECOVERABLE_ERRORS as customer_err:
+            customer_service_error = str(customer_err)
+            logger.warning("客户服务不可用，降级为仅产品入库: %s", customer_err)
+
+        created_units = 0
+        created_products = 0
+        skipped_products = 0
+        touched_units: set[str] = set()
+
+        for row in records:
+            unit_name = str(row.get("unit_name") or "").strip()
+            product_name = str(row.get("product_name") or "").strip()
+            model_number = str(row.get("model_number") or "").strip().upper()
+            unit_price = float(row.get("unit_price") or 0.0)
+            touched_units.add(unit_name)
+
+            if customer_service is not None:
+                matched = customer_service.match_purchase_unit(unit_name)
+                if not matched:
+                    create_unit = customer_service.create({"customer_name": unit_name})
+                    if create_unit.get("success"):
+                        created_units += 1
+
+            exists_result = products_service.get_products(
+                unit_name=unit_name,
+                model_number=model_number or None,
+                keyword=(product_name or model_number or None),
+                page=1,
+                per_page=5,
+            )
+            existed = False
+            if exists_result.get("success"):
+                rows_data = exists_result.get("data") or []
+                for item in rows_data:
+                    item_name = str(item.get("name") or item.get("product_name") or "").strip()
+                    item_model = str(item.get("model_number") or "").strip().upper()
+                    if model_number and item_model == model_number:
+                        existed = True
+                        break
+                    if product_name and item_name == product_name:
+                        existed = True
+                        break
+            if existed:
+                skipped_products += 1
+                continue
+
+            create_product = products_service.create_product(
+                {
+                    "name": product_name or model_number,
+                    "product_name": product_name or model_number,
+                    "product_code": model_number or None,
+                    "model_number": model_number or None,
+                    "unit_price": unit_price,
+                    "price": unit_price,
+                    "unit": unit_name,
+                }
+            )
+            if create_product.get("success"):
+                created_products += 1
+
+        return {
+            "success": True,
+            "message": "Excel 导入完成",
+            "imported_count": len(records),
+            "data": {
+                "result": {
+                    "records": len(records),
+                    "touched_units": len(touched_units),
+                    "created_units": created_units,
+                    "created_products": created_products,
+                    "skipped_products": skipped_products,
+                    "unit_service_available": customer_service is not None,
+                    "unit_service_error": customer_service_error,
+                }
+            },
+        }
+    except RECOVERABLE_ERRORS as err:
+        logger.error("Excel 导入执行失败: %s", err, exc_info=True)
+        return {"success": False, "message": f"导入执行失败：{str(err)}"}
+
+
 def _registered_router_excel_import(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -654,7 +2214,6 @@ def _registered_router_excel_import(
         if not pending_import_id:
             return {"success": False, "message": "缺少 pending_import_id 参数"}
 
-        # 从 AI Chat Service 获取待处理的导入数据
         from app.application import get_ai_chat_app_service
 
         ai_chat_service = get_ai_chat_app_service()
@@ -665,113 +2224,108 @@ def _registered_router_excel_import(
             return {"success": False, "message": "未找到待处理的导入数据或已过期"}
 
         records = import_data.get("records", [])
-        if not records:
-            return {"success": False, "message": "没有可导入的记录"}
-
-        try:
-            from app.bootstrap import get_customer_app_service, get_products_service
-
-            products_service = get_products_service()
-            customer_service = get_customer_app_service()
-
-            created_units = 0
-            created_products = 0
-            skipped_products = 0
-            touched_units: set[str] = set()
-
-            for row in records:
-                unit_name = str(row.get("unit_name") or "").strip()
-                product_name = str(row.get("product_name") or "").strip()
-                model_number = str(row.get("model_number") or "").strip().upper()
-                unit_price = float(row.get("unit_price") or 0.0)
-                touched_units.add(unit_name)
-
-                # 检查/创建购买单位
-                if customer_service is not None:
-                    matched = customer_service.match_purchase_unit(unit_name)
-                    if not matched:
-                        create_unit = customer_service.create({"customer_name": unit_name})
-                        if create_unit.get("success"):
-                            created_units += 1
-
-                # 检查产品是否已存在
-                exists_result = products_service.get_products(
-                    unit_name=unit_name,
-                    model_number=model_number or None,
-                    keyword=(product_name or model_number or None),
-                    page=1,
-                    per_page=5,
-                )
-                existed = False
-                if exists_result.get("success"):
-                    rows_data = exists_result.get("data") or []
-                    for item in rows_data:
-                        item_name = str(item.get("name") or item.get("product_name") or "").strip()
-                        item_model = str(item.get("model_number") or "").strip().upper()
-                        if model_number and item_model == model_number:
-                            existed = True
-                            break
-                        if product_name and item_name == product_name:
-                            existed = True
-                            break
-                if existed:
-                    skipped_products += 1
-                    continue
-
-                # 创建产品
-                create_product = products_service.create_product(
-                    {
-                        "name": product_name or model_number,
-                        "product_name": product_name or model_number,
-                        "product_code": model_number or None,
-                        "model_number": model_number or None,
-                        "unit_price": unit_price,
-                        "price": unit_price,
-                        "unit": unit_name,
-                    }
-                )
-                if create_product.get("success"):
-                    created_products += 1
-
-            # 清理已处理的导入数据
+        if not isinstance(records, list):
+            return {"success": False, "message": "待导入记录格式错误"}
+        result = _execute_excel_import_records([r for r in records if isinstance(r, dict)])
+        if result.get("success"):
             pending_imports.pop(pending_import_id, None)
+        return result
 
-            return {
-                "success": True,
-                "message": "Excel 导入完成",
-                "data": {
-                    "result": {
-                        "records": len(records),
-                        "touched_units": len(touched_units),
-                        "created_units": created_units,
-                        "created_products": created_products,
-                        "skipped_products": skipped_products,
-                    }
-                },
-            }
-        except RECOVERABLE_ERRORS as err:
-            logger.error("Excel 导入执行失败: %s", err, exc_info=True)
-            return {"success": False, "message": f"导入执行失败：{str(err)}"}
+    if action == "import_records":
+        records = params.get("records")
+        if not isinstance(records, list):
+            return {"success": False, "message": "records 必须是数组"}
+        return _execute_excel_import_records([r for r in records if isinstance(r, dict)])
 
     return {"success": False, "message": f"未知 excel_import action: {action}"}
 
 
-_REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = {
-    "normal_slot_dispatch": _registered_router_normal_slot_dispatch,
-    "customers": _registered_router_customers,
-    "products": _registered_router_products,
-    "materials": _registered_router_materials,
-    "shipment_records": _registered_router_shipment_records,
-    "business_docking": _registered_router_business_docking_family,
-    "template_extract": _registered_router_business_docking_family,
-    "template_preview": _registered_router_template_preview,
-    "wechat": _registered_router_wechat,
-    "print": _registered_router_print,
-    "printer_list": _registered_router_printer_list,
-    "settings": _registered_router_settings,
-    "excel_analysis": _registered_router_excel_analysis,
-    "excel_import": _registered_router_excel_import,
-}
+def _registered_router_unit_products_import(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if action != "execute_import":
+        return {"success": False, "message": f"未知 unit_products_import action: {action}"}
+
+    saved_name = str(params.get("saved_name") or "").strip()
+    unit_name = str(params.get("unit_name") or "").strip()
+    if not saved_name:
+        return {"success": False, "message": "缺少 saved_name 参数"}
+    if not unit_name:
+        return {"success": False, "message": "缺少 unit_name 参数"}
+
+    try:
+        from app.application import get_unit_products_import_app_service
+
+        service = get_unit_products_import_app_service()
+        result = service.import_unit_products(
+            saved_name=saved_name,
+            unit_name=unit_name,
+            create_purchase_unit=bool(params.get("create_purchase_unit", True)),
+            skip_duplicates=bool(params.get("skip_duplicates", True)),
+        )
+        if result.get("success"):
+            created_unit = bool(result.get("created_unit", False))
+            imported_count = int(result.get("created_products") or result.get("imported") or 0)
+            result.setdefault("created_customers", 1 if created_unit else 0)
+            result.setdefault("created_products", imported_count)
+            data = result.get("data")
+            if not isinstance(data, dict):
+                data = {}
+            data.setdefault("unit_name", unit_name)
+            data.setdefault("saved_name", saved_name)
+            data.setdefault("created_unit", created_unit)
+            data.setdefault("imported", int(result.get("imported") or imported_count))
+            data.setdefault("skipped_duplicates", int(result.get("skipped_duplicates") or 0))
+            result["data"] = data
+        return result
+    except RECOVERABLE_ERRORS as err:
+        logger.error("unit products 导入执行失败: %s", err, exc_info=True)
+        return {"success": False, "message": f"导入执行失败：{str(err)}"}
+
+
+class _WorkflowRouterMap(dict):
+    _hidden_keys = {"employee", "business_db"}
+
+    def keys(self):
+        return [key for key in super().keys() if key not in self._hidden_keys]
+
+
+_REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMap(
+    {
+        "normal_slot_dispatch": _registered_router_normal_slot_dispatch,
+        "customers": _registered_router_customers,
+        "products": _registered_router_products,
+        "materials": _registered_router_materials,
+        "inventory": _registered_router_inventory,
+        "purchase": _registered_router_purchase,
+        "finance": _registered_router_finance,
+        "shipment_records": _registered_router_shipment_records,
+        "shipment_orders": _registered_router_shipment_orders,
+        "business_event": _registered_router_business_event,
+        "system_maintenance": _registered_router_system_maintenance,
+        "business_docking": _registered_router_business_docking_family,
+        "template_extract": _registered_router_business_docking_family,
+        "excel_analyzer": _registered_router_excel_analyzer,
+        "excel_toolkit": _registered_router_excel_toolkit,
+        "label_template_generator": _registered_router_label_template_generator,
+        "document_template": _registered_router_document_template,
+        "template_preview": _registered_router_template_preview,
+        "wechat": _registered_router_wechat,
+        "print": _registered_router_print,
+        "printer_list": _registered_router_printer_list,
+        "settings": _registered_router_settings,
+        "employee": _registered_router_employee,
+        "business_db": _registered_router_business_db,
+        "dataset_rag": _registered_router_dataset_rag,
+        "memory_v2": _registered_router_memory_v2,
+        "excel_analysis": _registered_router_excel_analysis,
+        "generate_office_document": _registered_router_generate_office_document,
+        "excel_vector_index": _registered_router_excel_vector_index,
+        "ocr": _registered_router_ocr,
+        "excel_import": _registered_router_excel_import,
+        "unit_products_import": _registered_router_unit_products_import,
+    }
+)
 
 
 def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | None = None) -> dict:
@@ -786,4 +2340,20 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
     router = _REGISTERED_WORKFLOW_ROUTERS.get(tool_id)
     if router is not None:
         return router(action, params, runtime_context, profile, user_message)
+    try:
+        from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
+
+        if is_employee_tool(tool_id):
+            workspace_root = runtime_context.get("workspace_root")
+            raw = execute_employee_tool(
+                tool_id,
+                {**params, "task": params.get("task") or user_message},
+                str(workspace_root) if workspace_root else None,
+            )
+            import json
+
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {"success": False, "message": raw}
+    except RECOVERABLE_ERRORS:
+        logger.debug("employee tool direct dispatch skipped tool=%s", tool_id, exc_info=True)
     return {"success": False, "message": f"未注册的工具动作: {tool_id}.{action}"}

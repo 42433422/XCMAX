@@ -35,6 +35,7 @@ from app.application.workflow import (
     WorkflowEngine,
     get_approval_service,
 )
+from app.di.registry import get_service_registry
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import resolve_fhd_repo_root
@@ -477,7 +478,7 @@ class AIChatApplicationService:
         if not isinstance(grid_rows, list):
             return ""
         try:
-            from app.routes.template_grid_core import _extract_inline_customer_hits_from_cell
+            from app.application.template_grid_core import _extract_inline_customer_hits_from_cell
         except RECOVERABLE_ERRORS:
             return ""
         for row in grid_rows[:22]:
@@ -550,7 +551,7 @@ class AIChatApplicationService:
             path = Path(fp)
             if path.is_file():
                 try:
-                    from app.routes.template_grid_core import _extract_customer_hint_from_excel
+                    from app.application.template_grid_core import _extract_customer_hint_from_excel
 
                     doc_unit = str(
                         _extract_customer_hint_from_excel(str(path), sheet) or ""
@@ -727,11 +728,11 @@ class AIChatApplicationService:
         try:
             pd0 = preview_data if isinstance(preview_data, dict) else {}
             if str(pd0.get("parse_mode") or "").strip().lower() == "rectangular":
-                from app.routes.template_grid_core import _extract_rectangular_excel_preview
+                from app.application.template_grid_core import _extract_rectangular_excel_preview
 
                 structured = _extract_rectangular_excel_preview(str(path), sheet_name=sheet)
             else:
-                from app.routes.template_grid_core import _extract_structured_excel_preview
+                from app.application.template_grid_core import _extract_structured_excel_preview
 
                 structured = _extract_structured_excel_preview(
                     str(path),
@@ -818,18 +819,58 @@ class AIChatApplicationService:
         表头 → 客户/名称/型号/单价 四角色：词条来自 ``resources/config/ai_db_field_index.json`` 中
         ``products`` 各列的 ``excel_synonyms_zh`` / ``api_aliases``，可按业务增删而无需改 Python。
         """
+        empty_roles = {
+            "unit_name": "",
+            "product_name": "",
+            "model_number": "",
+            "unit_price": "",
+        }
         try:
             from app.services.ai_db_schema_index import match_excel_import_roles_from_field_index
 
-            return cast("dict[str, str]", match_excel_import_roles_from_field_index(list(keys)))
+            roles = cast("dict[str, str]", match_excel_import_roles_from_field_index(list(keys)))
         except RECOVERABLE_ERRORS as err:
             logger.debug("字段索引表头匹配失败，回退空映射: %s", err)
-            return {
-                "unit_name": "",
-                "product_name": "",
-                "model_number": "",
-                "unit_price": "",
-            }
+            roles = dict(empty_roles)
+
+        roles = {**empty_roles, **dict(roles or {})}
+        for key in keys:
+            text = str(key or "").strip()
+            normalized = re.sub(r"[\s:_：\-_/（）()]+", "", text).lower()
+            if not normalized:
+                continue
+            if normalized in {
+                "客户",
+                "客户名",
+                "客户名称",
+                "客户全称",
+                "购买单位",
+                "购货单位",
+                "单位名称",
+                "公司",
+                "公司名称",
+                "厂名",
+            }:
+                roles["unit_name"] = text
+                continue
+            if normalized in {
+                "产品",
+                "产品名",
+                "产品名称",
+                "商品",
+                "商品名称",
+                "品名",
+                "名称",
+                "物料名称",
+            }:
+                roles["product_name"] = text
+                continue
+            if normalized in {"型号", "规格型号", "产品型号", "编码", "产品编码", "model", "sku"}:
+                roles["model_number"] = text
+                continue
+            if normalized in {"单价", "价格", "产品单价", "销售单价", "报价", "unitprice", "price"}:
+                roles["unit_price"] = text
+        return roles
 
     def _fallback_excel_product_name_column(
         self,
@@ -971,11 +1012,19 @@ class AIChatApplicationService:
         if not records:
             return {}
         try:
-            api_key = str(getattr(self.ai_service, "api_key", "") or "").strip()
-            from app.infrastructure.llm.providers.credentials import default_chat_completions_url
+            from app.infrastructure.llm.providers.credentials import (
+                default_chat_completions_url,
+                resolve_default_chat_model,
+                resolve_openai_env_credentials,
+            )
 
-            api_url = str(getattr(self.ai_service, "api_url", "") or default_chat_completions_url())
-            model = str(getattr(self.ai_service, "model", "") or "deepseek-chat")
+            env_api_key, env_base_url = resolve_openai_env_credentials()
+            api_key = str(getattr(self.ai_service, "api_key", "") or env_api_key or "").strip()
+            api_url = str(getattr(self.ai_service, "api_url", "") or "").strip()
+            if not api_url and env_base_url:
+                api_url = f"{env_base_url.rstrip('/')}/chat/completions"
+            api_url = api_url or default_chat_completions_url()
+            model = str(getattr(self.ai_service, "model", "") or resolve_default_chat_model())
             if not api_key:
                 return {}
 
@@ -1452,6 +1501,160 @@ class AIChatApplicationService:
             )
         )
 
+    @staticmethod
+    def _looks_like_explicit_workflow_tool_intent(text: str) -> bool:
+        t = str(text or "").strip()
+        if not t:
+            return False
+        lower = t.lower()
+        employee_mentioned = any(k in t for k in ("员工", "调用", "交给")) or "employee" in lower
+        employee_action = any(k in t for k in ("调用", "执行", "运行", "交给", "让")) or any(
+            k in lower for k in ("call", "run", "execute", "employee")
+        )
+        if employee_mentioned and employee_action:
+            return True
+
+        db_mentioned = (
+            any(k in t for k in ("数据库", "查库", "读库", "写库"))
+            or "database" in lower
+            or bool(re.search(r"\bdb\b", lower))
+        )
+        if not db_mentioned:
+            return False
+        db_object = any(k in t for k in ("客户", "单位", "产品", "物料", "原材料", "发货", "出货"))
+        db_action = any(
+            k in t
+            for k in (
+                "查",
+                "读",
+                "读取",
+                "写",
+                "写入",
+                "新增",
+                "添加",
+                "创建",
+                "更新",
+                "删除",
+            )
+        ) or any(k in lower for k in ("read", "query", "write", "create", "update", "delete"))
+        return db_object and db_action
+
+    @staticmethod
+    def _attach_deterministic_workflow_trace(
+        payload: dict[str, Any],
+        *,
+        user_id: str,
+        message: str,
+        source: str | None,
+        context: dict[str, Any] | None,
+        intent: str,
+        file_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+        except RECOVERABLE_ERRORS:
+            logger.exception("AgentRun 追踪模块不可用，跳过 deterministic workflow trace")
+            return payload
+
+        runtime_context = dict(context or {}) if isinstance(context, dict) else {}
+        runtime_context["workflow_intent"] = intent
+        runtime_context["workflow_trace_mode"] = "deterministic_shortcut"
+        if isinstance(file_context, dict) and file_context:
+            runtime_context["file_context"] = file_context
+        return attach_chat_trace_run(
+            payload,
+            message=message,
+            runtime_context=runtime_context,
+            user_id=user_id,
+            source=source,
+            channel="deterministic_workflow",
+            intent=intent,
+        )
+
+    def _start_deterministic_import_agent_run(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        source: str | None,
+        context: dict[str, Any] | None,
+        file_context: dict[str, Any] | None,
+        plan,
+        thinking_steps: str,
+    ) -> dict[str, Any]:
+        from app.application.agent_orchestrator import AgentOrchestrator
+
+        runtime_ctx = self._merge_tool_runtime_context(user_id, message, context)
+        runtime_ctx["source"] = str(source or "").strip()
+        runtime_ctx["workflow_trace_mode"] = "agent_orchestrator"
+        runtime_ctx["deterministic_workflow"] = True
+        if isinstance(file_context, dict) and file_context:
+            runtime_ctx["file_context"] = dict(file_context)
+
+        agent_run = AgentOrchestrator().start_run_from_plan(
+            user_id=user_id,
+            message=message,
+            plan=plan,
+            runtime_context=runtime_ctx,
+            auto_execute=True,
+        )
+        if agent_run.status != "waiting_user":
+            return self._format_agent_run_response(
+                plan,
+                agent_run,
+                thinking_steps=thinking_steps,
+                user_message=str(message or ""),
+            )
+
+        blocking_nodes = [step.node_id for step in agent_run.steps if step.status == "waiting_user"]
+        artifact_payloads = [
+            artifact.to_dict() for artifact in getattr(agent_run, "artifacts", []) or []
+        ]
+        self._pending_workflows[user_id] = {
+            "plan": plan,
+            "runtime_context": runtime_ctx,
+            "pending_id": uuid.uuid4().hex,
+            "agent_run_id": agent_run.run_id,
+            "thinking_steps": thinking_steps,
+            "approval_required": False,
+            "approval_nodes": [],
+        }
+        todo_text = "\n".join(f"- {step}" for step in (getattr(plan, "todo_steps", None) or []))
+        response_text = (
+            "我已生成导入工作流计划：\n"
+            f"{thinking_steps}\n\n"
+            f"{todo_text}\n\n"
+            f"检测到写库步骤（{', '.join(blocking_nodes) or 'import'}），"
+            "回复「确认」继续执行，回复「取消」终止。"
+        )
+        return {
+            "success": True,
+            "message": "处理完成",
+            "response": response_text,
+            "run_id": agent_run.run_id,
+            "agent_run_id": agent_run.run_id,
+            "data": {
+                "text": response_text,
+                "action": "workflow_confirmation_required",
+                "run_id": agent_run.run_id,
+                "agent_run_id": agent_run.run_id,
+                "data": {
+                    "run_id": agent_run.run_id,
+                    "agent_run_id": agent_run.run_id,
+                    "plan_id": plan.plan_id,
+                    "intent": plan.intent,
+                    "thinking_steps": thinking_steps,
+                    "todo": plan.todo_steps,
+                    "artifact_count": len(artifact_payloads),
+                    "artifacts": artifact_payloads,
+                    "blocking_nodes": blocking_nodes,
+                    "reason": "导入会写入业务数据库，需确认后执行",
+                    "approval_required": False,
+                    "approval_nodes": [],
+                },
+            },
+        }
+
     def _try_handle_dynamic_workflow(
         self,
         user_id: str,
@@ -1460,11 +1663,16 @@ class AIChatApplicationService:
         context: dict[str, Any],
         file_context: dict[str, Any],
     ) -> dict[str, Any] | None:
-        if not self._is_pro_source(source):
-            return None
-
         text = str(message or "").strip()
         if not text:
+            return None
+        explicit_workflow_tool_intent = self._looks_like_explicit_workflow_tool_intent(text)
+        has_pending_workflow = user_id in self._pending_workflows
+        if (
+            not self._is_pro_source(source)
+            and not explicit_workflow_tool_intent
+            and not has_pending_workflow
+        ):
             return None
 
         merged_file_ctx = {}
@@ -1481,14 +1689,23 @@ class AIChatApplicationService:
                 merged_file_ctx.get("unit_name") or merged_file_ctx.get("unit_name_guess") or ""
             ).strip()
             if not saved_name:
-                return {
+                payload = {
                     "success": True,
                     "message": "处理完成",
                     "response": "已识别导入意图，但缺少源文件上下文。请先上传并分析 .db 文件。",
                     "data": {"text": "请先上传并分析 .db 文件。", "action": "followup", "data": {}},
                 }
+                return self._attach_deterministic_workflow_trace(
+                    payload,
+                    user_id=user_id,
+                    message=message,
+                    source=source,
+                    context=context,
+                    file_context=merged_file_ctx,
+                    intent="import_unit_products_db",
+                )
             if not unit_name:
-                return {
+                payload = {
                     "success": True,
                     "message": "处理完成",
                     "response": "已识别导入意图，请补充客户名称后继续导入。",
@@ -1498,6 +1715,15 @@ class AIChatApplicationService:
                         "data": {"missing_fields": ["unit_name"]},
                     },
                 }
+                return self._attach_deterministic_workflow_trace(
+                    payload,
+                    user_id=user_id,
+                    message=message,
+                    source=source,
+                    context=context,
+                    file_context=merged_file_ctx,
+                    intent="import_unit_products_db",
+                )
 
             todo_lines = [
                 "检查客户是否存在，不存在则自动创建",
@@ -1505,55 +1731,74 @@ class AIChatApplicationService:
                 "按单位+型号/名称去重后导入产品",
                 "返回导入结果（新增/跳过/失败）",
             ]
-            try:
-                from app.application import get_unit_products_import_app_service
+            from app.application.workflow.types import PlanGraph, WorkflowNode
 
-                service = get_unit_products_import_app_service()
-                result = service.import_unit_products(
-                    saved_name=saved_name,
-                    unit_name=unit_name,
-                    create_purchase_unit=True,
-                    skip_duplicates=True,
-                )
-                if not result.get("success"):
-                    return {
-                        "success": False,
-                        "message": result.get("message") or "导入失败",
-                    }
-                response_text = (
-                    "导入完成：\n"
-                    f"- 客户：{result.get('unit_name')}\n"
-                    f"- 是否新建单位：{'是' if result.get('created_unit') else '否'}\n"
-                    f"- 导入产品数：{result.get('imported', 0)}\n"
-                    f"- 跳过重复：{result.get('skipped_duplicates', 0)}"
-                )
-                return {
-                    "success": True,
-                    "message": "处理完成",
-                    "response": response_text,
-                    "data": {
-                        "text": response_text,
-                        "action": "workflow_done",
-                        "data": {
-                            "intent": "import_unit_products_db",
-                            "thinking_steps": "已识别文件导入意图并执行单位+产品自动入库流程",
-                            "todo": todo_lines,
-                            "result": result,
+            plan = PlanGraph(
+                plan_id=f"plan_unit_products_import_{uuid.uuid4().hex[:12]}",
+                intent="import_unit_products_db",
+                todo_steps=todo_lines,
+                nodes=[
+                    WorkflowNode(
+                        node_id="import_unit_products",
+                        tool_id="unit_products_import",
+                        action="execute_import",
+                        params={
+                            "saved_name": saved_name,
+                            "unit_name": unit_name,
+                            "create_purchase_unit": True,
+                            "skip_duplicates": True,
                         },
-                    },
-                }
-            except RECOVERABLE_ERRORS as err:
-                logger.error("文件导入工作流执行失败: %s", err, exc_info=True)
-                return {
-                    "success": False,
-                    "message": f"导入失败：{str(err)}",
-                }
+                        risk="medium",
+                        idempotent=False,
+                        description="从已分析 .db 文件导入单位和产品",
+                    )
+                ],
+                risk_level="medium",
+                metadata={
+                    "source": "deterministic_file_import",
+                    "artifacts": [
+                        {
+                            "artifact_type": "database_file",
+                            "name": saved_name,
+                            "source": "file_analysis",
+                            "summary": f"unit_products_db 导入源文件，目标客户：{unit_name}",
+                            "fields": [
+                                {"name": "saved_name", "value": saved_name},
+                                {"name": "unit_name", "value": unit_name},
+                                {
+                                    "name": "suggested_use",
+                                    "value": merged_file_ctx.get("suggested_use"),
+                                },
+                            ],
+                            "metadata": {
+                                "suggested_use": merged_file_ctx.get("suggested_use"),
+                                "unit_name_guess": merged_file_ctx.get("unit_name_guess"),
+                            },
+                        }
+                    ],
+                },
+            )
+            thinking_steps = self._build_workflow_thinking_steps(
+                plan,
+                "unit_products 导入会写入客户和产品数据库，需用户确认",
+            )
+            return self._start_deterministic_import_agent_run(
+                user_id=user_id,
+                message=message,
+                source=source,
+                context=context,
+                file_context=merged_file_ctx,
+                plan=plan,
+                thinking_steps=thinking_steps,
+            )
 
         # 无分析结果时短指令勿走 LLM（混合 normal 画像下否则会长时间阻塞在 DeepSeek）
-        if not self._excel_analysis_payload_present(
-            context
-        ) and self._looks_like_short_excel_import_command(text):
-            return {
+        if (
+            not self._excel_analysis_payload_present(context)
+            and self._looks_like_short_excel_import_command(text)
+            and not explicit_workflow_tool_intent
+        ):
+            payload = {
                 "success": True,
                 "message": "处理完成",
                 "response": (
@@ -1566,6 +1811,15 @@ class AIChatApplicationService:
                     "data": {"intent": "excel_import_missing_context"},
                 },
             }
+            return self._attach_deterministic_workflow_trace(
+                payload,
+                user_id=user_id,
+                message=message,
+                source=source,
+                context=context,
+                file_context=merged_file_ctx,
+                intent="excel_import_missing_context",
+            )
 
         # 下列分支为「规则入库捷径」：关键词 + excel_analysis 即写库，不经过本轮主对话模型的端到端推理。
         # 默认由前端 context.excel_import_ai_decides 跳过本分支，改走主链路使模型/Planner 拥有入库决策权。
@@ -1603,7 +1857,7 @@ class AIChatApplicationService:
                     "请在下一条消息中明确指定，例如：「导入数据库，价格用调价前列」或「…单价取调价后那一列」。\n"
                     f"当前识别到的部分列名：{cols_preview}"
                 )
-                return {
+                payload = {
                     "success": True,
                     "message": "处理完成",
                     "response": followup_text,
@@ -1620,6 +1874,15 @@ class AIChatApplicationService:
                         },
                     },
                 }
+                return self._attach_deterministic_workflow_trace(
+                    payload,
+                    user_id=user_id,
+                    message=message,
+                    source=source,
+                    context=context,
+                    file_context=merged_file_ctx,
+                    intent="excel_import_to_db",
+                )
             if not records:
                 followup_text = (
                     "我已读取到 Excel 上下文，但未解析到可入库的单位/产品记录。\n"
@@ -1627,7 +1890,7 @@ class AIChatApplicationService:
                 )
                 if summary:
                     followup_text += f"\n上下文摘要:\n{summary[:500]}"
-                return {
+                payload = {
                     "success": True,
                     "message": "处理完成",
                     "response": followup_text,
@@ -1643,135 +1906,80 @@ class AIChatApplicationService:
                         },
                     },
                 }
-
-            try:
-                from app.bootstrap import get_products_service
-
-                products_service = get_products_service()
-                customer_service = None
-                customer_service_error = ""
-                try:
-                    from app.bootstrap import get_customer_app_service
-
-                    customer_service = get_customer_app_service()
-                except RECOVERABLE_ERRORS as customer_err:
-                    customer_service_error = str(customer_err)
-                    logger.warning("客户服务不可用，降级为仅产品入库: %s", customer_err)
-
-                created_units = 0
-                created_products = 0
-                skipped_products = 0
-                touched_units: set[str] = set()
-
-                for row in records:
-                    unit_name = str(row.get("unit_name") or "").strip()
-                    product_name = str(row.get("product_name") or "").strip()
-                    model_number = str(row.get("model_number") or "").strip().upper()
-                    unit_price = float(row.get("unit_price") or 0.0)
-                    touched_units.add(unit_name)
-
-                    if customer_service is not None:
-                        matched = customer_service.match_purchase_unit(unit_name)
-                        if not matched:
-                            create_unit = customer_service.create({"customer_name": unit_name})
-                            if create_unit.get("success"):
-                                created_units += 1
-
-                    exists_result = products_service.get_products(
-                        unit_name=unit_name,
-                        model_number=model_number or None,
-                        keyword=(product_name or model_number or None),
-                        page=1,
-                        per_page=5,
-                    )
-                    existed = False
-                    if exists_result.get("success"):
-                        rows = exists_result.get("data") or []
-                        for item in rows:
-                            item_name = str(
-                                item.get("name") or item.get("product_name") or ""
-                            ).strip()
-                            item_model = str(item.get("model_number") or "").strip().upper()
-                            if model_number and item_model == model_number:
-                                existed = True
-                                break
-                            if product_name and item_name == product_name:
-                                existed = True
-                                break
-                    if existed:
-                        skipped_products += 1
-                        continue
-
-                    create_product = products_service.create_product(
-                        {
-                            "name": product_name or model_number,
-                            "product_name": product_name or model_number,
-                            "product_code": model_number or None,
-                            "model_number": model_number or None,
-                            "unit_price": unit_price,
-                            "price": unit_price,
-                            "unit": unit_name,
-                        }
-                    )
-                    if create_product.get("success"):
-                        created_products += 1
-
-                units_hint = ""
-                if touched_units:
-                    preview = "、".join(sorted(touched_units))[:200]
-                    units_hint = f"\n- Excel 中的客户：{preview}"
-                explain_customers = ""
-                if created_units == 0 and touched_units:
-                    explain_customers = (
-                        "\n说明：上述客户在数据库中均已存在（或已精确/模糊匹配到已有客户），"
-                        "因此「客户总数」不会增加；若新增了产品，请到产品页按对应单位筛选查看。"
-                    )
-                elif created_units > 0:
-                    explain_customers = "\n说明：已新建客户，客户列表中的客户总数应相应增加。"
-
-                response_text = (
-                    "已按聊天请求完成 Excel 入库：\n"
-                    f"- 解析记录数：{len(records)}\n"
-                    f"- 涉及客户数：{len(touched_units)}\n"
-                    f"- 新增客户：{created_units}\n"
-                    f"- 新增产品：{created_products}\n"
-                    f"- 跳过重复产品：{skipped_products}"
-                    f"{units_hint}"
-                    f"{explain_customers}"
+                return self._attach_deterministic_workflow_trace(
+                    payload,
+                    user_id=user_id,
+                    message=message,
+                    source=source,
+                    context=context,
+                    file_context=merged_file_ctx,
+                    intent="excel_import_to_db",
                 )
-                if customer_service is None and customer_service_error:
-                    response_text += "\n- 客户服务不可用，已降级为仅产品入库"
-                return {
-                    "success": True,
-                    "message": "处理完成",
-                    "response": response_text,
-                    "data": {
-                        "text": response_text,
-                        "action": "workflow_done",
-                        "data": {
-                            "intent": "excel_import_to_db",
-                            "import_pipeline": "deterministic_shortcut",
-                            "import_pipeline_zh": "服务端规则入库（非本轮大模型端到端决策）",
-                            "thinking_steps": "已基于 Excel 上下文完成字段映射、单位校验与产品入库执行",
-                            "todo": todo_lines,
-                            "result": {
-                                "records": len(records),
-                                "touched_units": len(touched_units),
-                                "created_units": created_units,
-                                "created_products": created_products,
-                                "skipped_products": skipped_products,
-                                "unit_service_available": customer_service is not None,
-                                "unit_service_error": customer_service_error,
-                            },
+
+            from app.application.workflow.types import PlanGraph, WorkflowNode
+
+            plan = PlanGraph(
+                plan_id=f"plan_excel_import_{uuid.uuid4().hex[:12]}",
+                intent="excel_import_to_db",
+                todo_steps=todo_lines,
+                nodes=[
+                    WorkflowNode(
+                        node_id="import_excel_records",
+                        tool_id="excel_import",
+                        action="import_records",
+                        params={
+                            "records": records,
+                            "source": "deterministic_shortcut",
                         },
-                    },
-                }
-            except RECOVERABLE_ERRORS as err:
-                logger.error("Excel 上下文入库执行失败: %s", err, exc_info=True)
-                return {
-                    "success": False,
-                    "message": f"入库失败：{str(err)}",
-                }
+                        risk="medium",
+                        idempotent=False,
+                        description="将 Excel 解析记录写入客户和产品数据库",
+                    )
+                ],
+                risk_level="medium",
+                metadata={
+                    "source": "deterministic_excel_import",
+                    "artifacts": [
+                        {
+                            "artifact_type": "excel_records",
+                            "name": str(
+                                excel_analysis.get("file_name")
+                                or excel_analysis.get("template_name")
+                                or "excel_import_records"
+                            ),
+                            "source": "excel_analysis",
+                            "uri": str(excel_analysis.get("file_path") or ""),
+                            "summary": summary or f"Excel 入库记录 {len(records)} 条",
+                            "fields": [
+                                {"name": name}
+                                for name in field_names[:40]
+                                if str(name or "").strip()
+                            ],
+                            "preview": {
+                                "record_count": len(records),
+                                "sample_records": records[:3],
+                            },
+                            "metadata": {
+                                "import_pipeline": "deterministic_shortcut",
+                                "sheet_name": excel_analysis.get("sheet_name"),
+                            },
+                        }
+                    ],
+                },
+            )
+            thinking_steps = self._build_workflow_thinking_steps(
+                plan,
+                "Excel 入库会写入客户和产品数据库，需用户确认",
+            )
+            return self._start_deterministic_import_agent_run(
+                user_id=user_id,
+                message=message,
+                source=source,
+                context=context,
+                file_context=merged_file_ctx,
+                plan=plan,
+                thinking_steps=thinking_steps,
+            )
 
         from app.application.normal_chat_dispatch import (
             build_customers_query_response_dict,
@@ -1784,7 +1992,7 @@ class AIChatApplicationService:
         )
 
         profile = resolve_tool_execution_profile(context if isinstance(context, dict) else {})
-        if profile == "normal":
+        if profile == "normal" and not explicit_workflow_tool_intent:
             rr = route_normal_mode_message(text)
             if rr.get("intent") == "product_query":
                 pq = build_product_query_response_dict(rr)
@@ -1920,6 +2128,24 @@ class AIChatApplicationService:
                         },
                     }
 
+                agent_run_id = str(pending.get("agent_run_id") or "").strip()
+                if agent_run_id:
+                    from app.application.agent_orchestrator import AgentOrchestrator
+
+                    agent_run = AgentOrchestrator().continue_run(
+                        agent_run_id,
+                        approved_by=user_id,
+                        runtime_context=runtime_ctx,
+                    )
+                    self._pending_workflows.pop(user_id, None)
+                    if agent_run is not None:
+                        return self._format_agent_run_response(
+                            plan,
+                            agent_run,
+                            thinking_steps=str(pending.get("thinking_steps") or ""),
+                            user_message=str(runtime_ctx.get("message") or ""),
+                        )
+
                 run_result = self.workflow_engine.run(
                     plan=plan, runtime_context=runtime_ctx, max_retries=1
                 )
@@ -1944,7 +2170,7 @@ class AIChatApplicationService:
 
         # 普通工具画像（含「普通界面 + 专业意图」）：未命中槽位时勿走 LLM 工作流规划，避免长时间阻塞在 plan()；
         # 交给下方主对话链路（DeepSeek 等），体验与普通聊天一致。
-        if profile == "normal":
+        if profile == "normal" and not explicit_workflow_tool_intent:
             return None
 
         # 专业界面默认画像：发货单/开单句式与普通版槽位路由一致时，勿让 LLM 工作流规划抢先返回
@@ -1956,7 +2182,7 @@ class AIChatApplicationService:
                 # 订单句若能被 _parse_order_text 结构化，直接下发 shipment_generate / toolCall，
                 # 避免再走意图识别（槽位空→追问）或主模型只回文本导致前端从不调用 /api/tools/execute。
                 try:
-                    from app.routes.tools import _parse_order_text
+                    from app.application.facades.tools_facade import _parse_order_text
 
                     parsed_quick = _parse_order_text(text)
                 except RECOVERABLE_ERRORS:
@@ -1981,7 +2207,7 @@ class AIChatApplicationService:
                 return None
 
         # 动态规划：不依赖关键词硬编码决策
-        from app.routes.tools import get_workflow_tool_registry
+        from app.application.facades.tools_facade import get_workflow_tool_registry
 
         tool_registry = get_workflow_tool_registry()
         plan = self.workflow_planner.plan(
@@ -1993,6 +2219,9 @@ class AIChatApplicationService:
 
         decision = self.risk_gate.evaluate(plan=plan, context=context)
         runtime_ctx = self._merge_tool_runtime_context(user_id, message, context)
+        runtime_ctx["source"] = str(source or "").strip()
+        runtime_ctx["workflow_trace_mode"] = "agent_orchestrator"
+        runtime_ctx["dynamic_workflow"] = True
         thinking_steps = self._build_workflow_thinking_steps(
             plan=plan, decision_reason=decision.reason
         )
@@ -2004,11 +2233,100 @@ class AIChatApplicationService:
             approval_node_names = [f"{n.tool_id}.{n.action}" for n in approval_required_nodes]
             approval_info = "\n以下操作需要审批后执行：" + "、".join(approval_node_names)
 
+        use_agentic = bool((runtime_ctx.get("excel_analysis") or {}).get("file_path"))
+        if not has_approval_requirement and not use_agentic:
+            from app.application.agent_orchestrator import AgentOrchestrator
+
+            agent_run = AgentOrchestrator().start_run_from_plan(
+                user_id=user_id,
+                message=message,
+                plan=plan,
+                runtime_context=runtime_ctx,
+                auto_execute=True,
+            )
+            if agent_run.status != "waiting_user":
+                return self._format_agent_run_response(
+                    plan,
+                    agent_run,
+                    thinking_steps=thinking_steps,
+                    user_message=str(message or ""),
+                )
+            blocking_nodes = [
+                step.node_id
+                for step in getattr(agent_run, "steps", []) or []
+                if step.status == "waiting_user"
+            ]
+            self._pending_workflows[user_id] = {
+                "plan": plan,
+                "runtime_context": runtime_ctx,
+                "pending_id": uuid.uuid4().hex,
+                "agent_run_id": agent_run.run_id,
+                "thinking_steps": thinking_steps,
+                "approval_required": False,
+                "approval_nodes": [],
+            }
+            todo_text = "\n".join(f"- {step}" for step in (plan.todo_steps or []))
+            reason = decision.reason or "工具策略要求用户确认"
+            response_text = (
+                "我已根据语义生成动态工作流计划：\n"
+                f"{thinking_steps}\n\n"
+                f"{todo_text}\n\n"
+                f"检测到需确认步骤（{', '.join(blocking_nodes) or 'workflow'}），"
+                "回复「确认」继续执行，回复「取消」终止。"
+            )
+            return {
+                "success": True,
+                "message": "处理完成",
+                "response": response_text,
+                "run_id": agent_run.run_id,
+                "agent_run_id": agent_run.run_id,
+                "data": {
+                    "text": response_text,
+                    "action": "workflow_confirmation_required",
+                    "run_id": agent_run.run_id,
+                    "agent_run_id": agent_run.run_id,
+                    "data": {
+                        "run_id": agent_run.run_id,
+                        "agent_run_id": agent_run.run_id,
+                        "plan_id": plan.plan_id,
+                        "intent": plan.intent,
+                        "thinking_steps": thinking_steps,
+                        "todo": plan.todo_steps,
+                        "blocking_nodes": blocking_nodes,
+                        "reason": reason,
+                        "approval_required": False,
+                        "approval_nodes": [],
+                    },
+                },
+            }
+
+        agent_run_id = ""
+        if decision.requires_confirmation and not has_approval_requirement:
+            from app.application.agent_orchestrator import AgentOrchestrator
+
+            agent_run = AgentOrchestrator().start_run_from_plan(
+                user_id=user_id,
+                message=message,
+                plan=plan,
+                runtime_context=runtime_ctx,
+                auto_execute=True,
+            )
+            if agent_run.status != "waiting_user":
+                return self._format_agent_run_response(
+                    plan,
+                    agent_run,
+                    thinking_steps=thinking_steps,
+                    user_message=str(message or ""),
+                )
+            agent_run_id = agent_run.run_id
+
         if decision.requires_confirmation or has_approval_requirement:
             self._pending_workflows[user_id] = {
                 "plan": plan,
                 "runtime_context": runtime_ctx,
                 "pending_id": uuid.uuid4().hex,
+                "agent_run_id": agent_run_id,
+                "thinking_steps": thinking_steps,
                 "approval_required": has_approval_requirement,
                 "approval_nodes": [
                     {
@@ -2029,7 +2347,7 @@ class AIChatApplicationService:
                 "回复「确认」继续执行，回复「取消」终止。"
                 f"{approval_info if has_approval_requirement else ''}"
             )
-            return {
+            payload: dict[str, Any] = {
                 "success": True,
                 "message": "处理完成",
                 "response": response_text,
@@ -2051,8 +2369,29 @@ class AIChatApplicationService:
                     },
                 },
             }
+            if agent_run_id:
+                payload["run_id"] = agent_run_id
+                payload["agent_run_id"] = agent_run_id
+                payload["data"]["run_id"] = agent_run_id
+                payload["data"]["agent_run_id"] = agent_run_id
+                payload["data"]["data"]["run_id"] = agent_run_id
+                payload["data"]["data"]["agent_run_id"] = agent_run_id
+            return payload
 
-        use_agentic = bool((runtime_ctx.get("excel_analysis") or {}).get("file_path"))
+        agentic_pre_run = None
+        if use_agentic:
+            try:
+                agentic_pre_run = self._start_agentic_workflow_agent_run(
+                    user_id=user_id,
+                    message=message,
+                    plan=plan,
+                    runtime_context=runtime_ctx,
+                )
+                runtime_ctx["run_id"] = agentic_pre_run.run_id
+                runtime_ctx["agent_run_id"] = agentic_pre_run.run_id
+            except RECOVERABLE_ERRORS:
+                logger.debug("Agentic workflow AgentRun pre-create skipped", exc_info=True)
+
         run_result = self.workflow_engine.run(
             plan=plan,
             runtime_context=runtime_ctx,
@@ -2061,6 +2400,21 @@ class AIChatApplicationService:
             tool_registry=tool_registry,
             user_id=user_id,
         )
+        if use_agentic:
+            agent_run = self._bridge_agentic_workflow_result_to_agent_run(
+                user_id=user_id,
+                message=message,
+                plan=plan,
+                run_result=run_result,
+                runtime_context=runtime_ctx,
+                agent_run=agentic_pre_run,
+            )
+            return self._format_agent_run_response(
+                plan,
+                agent_run,
+                thinking_steps=thinking_steps,
+                user_message=str(message or ""),
+            )
         return self._format_workflow_run_response(
             plan,
             run_result,
@@ -2080,6 +2434,7 @@ class AIChatApplicationService:
 
         metadata = getattr(plan, "metadata", {}) or {}
         user_memory_rag_summary = str(metadata.get("user_memory_rag_summary") or "").strip()
+        memory_v2_summary = str(metadata.get("memory_v2_summary") or "").strip()
         tool_probe_outputs = metadata.get("tool_probe_outputs") or []
         if not isinstance(tool_probe_outputs, list):
             tool_probe_outputs = []
@@ -2102,8 +2457,11 @@ class AIChatApplicationService:
             if user_memory_rag_summary
             else ""
         )
+        memory_v2_block = (
+            f"3.6) Memory v2 已确认记忆:\n{memory_v2_summary}\n" if memory_v2_summary else ""
+        )
         probe_block = (
-            "3.6) 工具探测概览:\n"
+            "3.7) 工具探测概览:\n"
             + ("\n".join(probe_lines) if probe_lines else "- 无成功探测结果")
             + "\n"
         )
@@ -2112,7 +2470,7 @@ class AIChatApplicationService:
             f"1) 意图理解: {plan.intent}\n"
             "2) 计划生成: 基于工具注册表构建可执行节点图\n"
             f"3) 风险判断: {decision_reason}\n"
-            f"{memory_block}{probe_block}"
+            f"{memory_block}{memory_v2_block}{probe_block}"
             "4) 执行编排: 按依赖顺序执行节点并传递上下文\n"
             f"5) 节点图:\n{nodes_text}"
         )
@@ -2141,9 +2499,484 @@ class AIChatApplicationService:
                     n = str(row.get("name") or row.get("product_name") or "").strip()
                     if m:
                         return m
-                    if n:
-                        return n
+                if n:
+                    return n
         return str(user_message or "").strip()
+
+    def _start_agentic_workflow_agent_run(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        plan,
+        runtime_context: dict[str, Any],
+    ):
+        from app.application.agent_orchestrator.run_models import AgentRun
+        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+
+        repository = get_agent_run_repository()
+        run = AgentRun(
+            user_id=str(user_id or ""),
+            message=str(message or ""),
+            status="running",
+            plan_id=str(getattr(plan, "plan_id", "") or ""),
+            intent=str(getattr(plan, "intent", "") or "agentic_workflow"),
+            metadata={
+                "runtime_context": dict(runtime_context or {}),
+                "trace_mode": "agentic_loop_bridge",
+                "plan": {
+                    "todo_steps": list(getattr(plan, "todo_steps", []) or []),
+                    "risk_level": str(getattr(plan, "risk_level", "") or ""),
+                    "metadata": dict(getattr(plan, "metadata", {}) or {}),
+                },
+            },
+        )
+        run.add_event("run.created", "Agentic workflow run 已创建")
+        run.add_event(
+            "planner.completed",
+            "Agentic workflow 计划已接管",
+            {
+                "plan_id": run.plan_id,
+                "intent": run.intent,
+                "source": "workflow_engine.agentic_loop",
+            },
+        )
+        run.add_event(
+            "agentic_loop.started",
+            "Agentic workflow loop 开始执行",
+            {"observed": True},
+        )
+        return repository.save(run)
+
+    def _bridge_agentic_workflow_result_to_agent_run(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        plan,
+        run_result,
+        runtime_context: dict[str, Any],
+        agent_run=None,
+    ):
+        from app.application.agent_orchestrator.run_models import (
+            AgentRun,
+            AgentStep,
+            ToolCall,
+            artifact_from_dict,
+        )
+        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+        repository = get_agent_run_repository()
+        runtime_ctx = dict(runtime_context or {})
+        run = agent_run
+        if run is None:
+            run = AgentRun(
+                user_id=str(user_id or ""),
+                message=str(message or ""),
+                status="running",
+                plan_id=str(getattr(plan, "plan_id", "") or ""),
+                intent=str(getattr(plan, "intent", "") or "agentic_workflow"),
+                metadata={
+                    "runtime_context": dict(runtime_ctx),
+                    "trace_mode": "agentic_loop_bridge",
+                    "plan": {
+                        "todo_steps": list(getattr(plan, "todo_steps", []) or []),
+                        "risk_level": str(getattr(plan, "risk_level", "") or ""),
+                        "metadata": dict(getattr(plan, "metadata", {}) or {}),
+                    },
+                },
+            )
+            run.add_event("run.created", "Agentic workflow run 已创建")
+            run.add_event(
+                "planner.completed",
+                "Agentic workflow 计划已接管",
+                {
+                    "plan_id": run.plan_id,
+                    "intent": run.intent,
+                    "source": "workflow_engine.agentic_loop",
+                },
+            )
+            run.add_event(
+                "agentic_loop.started",
+                "Agentic workflow loop 开始执行",
+                {"observed": True},
+            )
+        run.metadata["runtime_context"] = dict(runtime_ctx)
+        run.metadata["trace_mode"] = "agentic_loop_bridge"
+        run.add_event(
+            "agentic_loop.completed",
+            str(getattr(run_result, "message", "") or "AgenticLoop 已完成"),
+            {"observed": True},
+        )
+
+        node_outputs: dict[str, Any] = {}
+        for result in getattr(run_result, "node_results", []) or []:
+            spec = get_tool_action_spec(result.tool_id, result.action)
+            status = "completed" if bool(getattr(result, "success", False)) else "failed"
+            step = AgentStep(
+                node_id=str(result.node_id or f"agent_{result.tool_id}_{result.action}"),
+                tool_id=str(result.tool_id or ""),
+                action=str(getattr(spec, "action", "") or result.action or ""),
+                params=dict(getattr(result, "params", {}) or {}),
+                risk=str(getattr(spec, "risk", "") or "medium"),
+                idempotent=bool(getattr(spec, "idempotent", False)),
+                description="agentic loop observed tool execution",
+                status=status,
+                output=dict(getattr(result, "output", {}) or {}),
+                error=str(getattr(result, "error", "") or ""),
+                started_at=str(getattr(result, "started_at", "") or ""),
+                finished_at=str(getattr(result, "finished_at", "") or ""),
+                duration_ms=int(getattr(result, "duration_ms", 0) or 0),
+            )
+            if status == "failed" and not step.error:
+                step.error = self._workflow_output_message(step.output) or "tool failed"
+            call = ToolCall(
+                step_id=step.step_id,
+                node_id=step.node_id,
+                tool_id=step.tool_id,
+                action=step.action,
+                params=dict(step.params or {}),
+                status="completed" if status == "completed" else "failed",
+                output=dict(step.output or {}),
+                error=step.error,
+                cost_units=int(getattr(spec, "cost_units", 0) or 0),
+                permission=str(getattr(spec, "permission", "") or ""),
+                started_at=step.started_at or "",
+                finished_at=step.finished_at or "",
+                duration_ms=step.duration_ms,
+                metadata={
+                    "observed": True,
+                    "trace_mode": "agentic_loop_bridge",
+                    "retryable": bool(getattr(result, "retryable", True)),
+                    "retries": int(getattr(result, "retries", 0) or 0),
+                    "recovery_hint": str(getattr(result, "recovery_hint", "") or ""),
+                },
+            )
+            run.steps.append(step)
+            run.tool_calls.append(call)
+            node_outputs[step.node_id] = step.output
+            run.add_event(
+                "tool.started",
+                f"观察到 agentic 工具 {step.tool_id}.{step.action}",
+                {
+                    "step_id": step.step_id,
+                    "node_id": step.node_id,
+                    "call_id": call.call_id,
+                    "cost_units": call.cost_units,
+                    "permission": call.permission,
+                    "observed": True,
+                },
+            )
+            run.add_event(
+                "tool.completed" if status == "completed" else "tool.failed",
+                f"记录 agentic 工具 {step.tool_id}.{step.action}",
+                {
+                    "step_id": step.step_id,
+                    "node_id": step.node_id,
+                    "call_id": call.call_id,
+                    "duration_ms": step.duration_ms,
+                    "cost_units": call.cost_units,
+                    "observed": True,
+                    "error": step.error,
+                },
+            )
+            for artifact_payload in self._iter_agentic_artifact_payloads(step.output):
+                artifact = artifact_from_dict(artifact_payload)
+                if not artifact.artifact_type:
+                    continue
+                artifact.source = artifact.source or f"{step.tool_id}.{step.action}"
+                artifact.metadata = {
+                    **dict(artifact.metadata or {}),
+                    "step_id": step.step_id,
+                    "call_id": call.call_id,
+                    "trace_mode": "agentic_loop_bridge",
+                }
+                run.artifacts.append(artifact)
+                run.add_event(
+                    "artifact.attached",
+                    f"Artifact 已附加: {artifact.artifact_type}",
+                    {
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_type": artifact.artifact_type,
+                        "name": artifact.name,
+                        "source": artifact.source,
+                    },
+                )
+
+        cost_units_total = sum(int(call.cost_units or 0) for call in run.tool_calls)
+        run.metadata["tool_call_count"] = len(run.tool_calls)
+        run.metadata["cost_units_total"] = cost_units_total
+        run.metadata["artifact_count"] = len(run.artifacts)
+        run.final_output = {
+            "node_outputs": node_outputs,
+            "tool_calls": [call.to_dict() for call in run.tool_calls],
+            "artifacts": [artifact.to_dict() for artifact in run.artifacts],
+            "cost_units_total": cost_units_total,
+            "workflow_result": {
+                "success": bool(getattr(run_result, "success", False)),
+                "message": str(getattr(run_result, "message", "") or ""),
+                "workflow_status": dict(
+                    (getattr(run_result, "final_context", {}) or {}).get("workflow_status") or {}
+                ),
+            },
+        }
+        run.status = "completed" if bool(getattr(run_result, "success", False)) else "failed"
+        if run.status == "failed":
+            run.error = str(getattr(run_result, "message", "") or "Agentic workflow failed")
+            run.add_event("run.failed", run.error, run.final_output)
+        else:
+            run.add_event("run.completed", "Agentic workflow run 执行完成", run.final_output)
+        return repository.save(run)
+
+    @staticmethod
+    def _iter_agentic_artifact_payloads(output: dict[str, Any]) -> list[dict[str, Any]]:
+        if not isinstance(output, dict):
+            return []
+        artifacts = output.get("artifacts")
+        if artifacts is None:
+            artifacts = output.get("artifact")
+        if isinstance(artifacts, dict):
+            return [artifacts]
+        if isinstance(artifacts, list):
+            return [item for item in artifacts if isinstance(item, dict)]
+        return []
+
+    @staticmethod
+    def _agent_plan_can_auto_execute(plan) -> bool:
+        nodes = getattr(plan, "nodes", None)
+        if not isinstance(nodes, (list, tuple)) or not nodes:
+            return False
+        try:
+            from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+        except RECOVERABLE_ERRORS:
+            return False
+        for node in nodes:
+            spec = get_tool_action_spec(getattr(node, "tool_id", ""), getattr(node, "action", ""))
+            risk = str(getattr(spec, "risk", "") or getattr(node, "risk", "") or "").lower()
+            idempotent = bool(getattr(spec, "idempotent", getattr(node, "idempotent", False)))
+            if risk != "low" or not idempotent:
+                return False
+        return True
+
+    def _format_agent_run_response(
+        self,
+        plan,
+        agent_run,
+        thinking_steps: str = "",
+        user_message: str = "",
+    ) -> dict[str, Any]:
+        lines = [
+            f"工作流: {plan.intent}",
+            f"计划ID: {plan.plan_id}",
+            f"RunID: {agent_run.run_id}",
+        ]
+        if thinking_steps:
+            lines.append(thinking_steps)
+        if plan.todo_steps:
+            lines.append("TODO:")
+            lines.extend([f"- {x}" for x in plan.todo_steps])
+        lines.append("执行结果:")
+
+        node_params_by_id = {
+            str(getattr(node, "node_id", "")): (getattr(node, "params", None) or {})
+            for node in (getattr(plan, "nodes", None) or [])
+        }
+        for step in getattr(agent_run, "steps", []) or []:
+            if step.status == "completed":
+                item = type(
+                    "AgentNodeResult",
+                    (),
+                    {
+                        "node_id": step.node_id,
+                        "success": True,
+                        "tool_id": step.tool_id,
+                        "action": step.action,
+                        "output": step.output,
+                        "error": "",
+                    },
+                )()
+                lines.extend(
+                    self._format_workflow_tool_success_line(
+                        item,
+                        node_params_by_id.get(str(step.node_id), {}),
+                    )
+                )
+            else:
+                lines.append(f"- {step.node_id}: {step.status}（{step.error or '未完成'}）")
+
+        success = agent_run.status == "completed"
+        cost_units_total = int((agent_run.metadata or {}).get("cost_units_total") or 0)
+        tool_call_count = int((agent_run.metadata or {}).get("tool_call_count") or 0)
+        artifact_payloads = [
+            artifact.to_dict() for artifact in getattr(agent_run, "artifacts", []) or []
+        ]
+        if tool_call_count:
+            lines.append(f"工具调用: {tool_call_count} 次，成本单位: {cost_units_total}")
+        if artifact_payloads:
+            lines.append(f"Artifacts: {len(artifact_payloads)} 个")
+        response_text = "\n".join(lines)
+        payload: dict[str, Any] = {
+            "success": success,
+            "message": "处理完成" if success else "处理失败",
+            "response": response_text,
+            "run_id": agent_run.run_id,
+            "agent_run_id": agent_run.run_id,
+            "data": {
+                "text": response_text,
+                "action": "workflow_done" if success else "workflow_failed",
+                "run_id": agent_run.run_id,
+                "agent_run_id": agent_run.run_id,
+                "data": {
+                    "run_id": agent_run.run_id,
+                    "agent_run_id": agent_run.run_id,
+                    "plan_id": plan.plan_id,
+                    "intent": plan.intent,
+                    "thinking_steps": thinking_steps,
+                    "todo": plan.todo_steps,
+                    "agent_status": agent_run.status,
+                    "tool_call_count": tool_call_count,
+                    "cost_units_total": cost_units_total,
+                    "artifact_count": len(artifact_payloads),
+                    "artifacts": artifact_payloads,
+                    "tool_calls": [
+                        {
+                            "call_id": call.call_id,
+                            "step_id": call.step_id,
+                            "node_id": call.node_id,
+                            "tool_id": call.tool_id,
+                            "action": call.action,
+                            "status": call.status,
+                            "cost_units": call.cost_units,
+                            "duration_ms": call.duration_ms,
+                            "permission": call.permission,
+                        }
+                        for call in getattr(agent_run, "tool_calls", []) or []
+                    ],
+                    "node_results": [
+                        {
+                            "node_id": step.node_id,
+                            "success": step.status == "completed",
+                            "tool_id": step.tool_id,
+                            "action": step.action,
+                            "message": step.error or self._workflow_output_message(step.output),
+                            "output_preview": self._workflow_output_preview(step.output),
+                            "duration_ms": step.duration_ms,
+                        }
+                        for step in getattr(agent_run, "steps", []) or []
+                    ],
+                },
+            },
+        }
+        if success and any(
+            step.status == "completed" and step.tool_id == "products" and step.action == "query"
+            for step in getattr(agent_run, "steps", []) or []
+        ):
+            payload["autoAction"] = {
+                "type": "show_products_float",
+                "feature": "products",
+                "query": str(user_message or "").strip(),
+            }
+        return payload
+
+    @staticmethod
+    def _workflow_output_preview(output: Any, max_chars: int = 700) -> str:
+        if output is None:
+            return ""
+        value = output
+        if isinstance(output, dict):
+            value = {
+                k: v
+                for k, v in output.items()
+                if k
+                in {
+                    "success",
+                    "message",
+                    "error",
+                    "employee_id",
+                    "exists",
+                    "created",
+                    "unit_name",
+                    "matched_count",
+                    "redirect",
+                }
+            }
+            data = output.get("data")
+            if isinstance(data, list):
+                value["row_count"] = len(data)
+                value["rows"] = data[:5]
+            elif isinstance(data, dict):
+                value["data"] = {
+                    k: v
+                    for k, v in data.items()
+                    if k
+                    in {
+                        "summary",
+                        "result",
+                        "error",
+                        "success",
+                        "registered_tool_count",
+                        "available_employee_ids",
+                    }
+                } or str(data)[:260]
+            elif data is not None:
+                value["data"] = data
+            raw = output.get("raw")
+            if raw is not None and "data" not in value:
+                value["raw"] = str(raw)[:260]
+        try:
+            text = json.dumps(value, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            text = str(value)
+        text = text.strip()
+        if len(text) > max_chars:
+            return text[:max_chars] + "..."
+        return text
+
+    @staticmethod
+    def _workflow_output_message(output: Any) -> str:
+        if not isinstance(output, dict):
+            return ""
+        return str(output.get("message") or output.get("error") or "").strip()
+
+    def _format_workflow_tool_success_line(
+        self,
+        item,
+        node_params: dict[str, Any],
+    ) -> list[str]:
+        output = getattr(item, "output", None)
+        out = output if isinstance(output, dict) else {}
+        message = self._workflow_output_message(out)
+        preview = self._workflow_output_preview(out)
+
+        if item.tool_id == "employee":
+            if item.action in ("list", "query"):
+                data = out.get("data") if isinstance(out.get("data"), dict) else {}
+                count = data.get("registered_tool_count", 0)
+                line = f"- {item.node_id}: 成功（发现 {count} 个可调用员工）"
+            else:
+                employee_id = str(
+                    out.get("employee_id") or node_params.get("employee_id") or "-"
+                ).strip()
+                suffix = f": {message}" if message else ""
+                line = f"- {item.node_id}: 成功（员工 {employee_id}{suffix}）"
+            return [line, f"    · 结果预览: {preview}"] if preview else [line]
+
+        if item.tool_id == "business_db":
+            entity = str(node_params.get("entity") or out.get("entity") or "-").strip()
+            operation = str(node_params.get("operation") or item.action or "").strip()
+            if item.action in ("read", "query", "list"):
+                rows = out.get("data")
+                count = len(rows) if isinstance(rows, list) else 0
+                line = f"- {item.node_id}: 成功（{entity} 查询 {count} 条）"
+            else:
+                suffix = f": {message}" if message else ""
+                line = f"- {item.node_id}: 成功（{entity}.{operation}{suffix}）"
+            return [line, f"    · 结果预览: {preview}"] if preview else [line]
+
+        if message:
+            return [f"- {item.node_id}: 成功（{message}）"]
+        return [f"- {item.node_id}: 成功"]
 
     def _format_workflow_run_response(
         self,
@@ -2159,6 +2992,13 @@ class AIChatApplicationService:
             lines.append("TODO:")
             lines.extend([f"- {x}" for x in plan.todo_steps])
         lines.append("执行结果:")
+        plan_nodes = getattr(plan, "nodes", None)
+        if not isinstance(plan_nodes, (list, tuple)):
+            plan_nodes = []
+        node_params_by_id = {
+            str(getattr(node, "node_id", "")): (getattr(node, "params", None) or {})
+            for node in plan_nodes
+        }
         for item in run_result.node_results:
             if item.success and item.tool_id == "products" and item.action == "query":
                 rows = (item.output or {}).get("data") or []
@@ -2176,9 +3016,26 @@ class AIChatApplicationService:
                         u = str(row.get("unit") or "").strip() or "-"
                         lines.append(f"    · {m} / {name} / ￥{format_money(p)} / 单位:{u}")
             elif item.success:
-                lines.append(f"- {item.node_id}: 成功")
+                node_params = node_params_by_id.get(str(item.node_id), {})
+                lines.extend(self._format_workflow_tool_success_line(item, node_params))
             else:
                 lines.append(f"- {item.node_id}: 失败（{item.error}）")
+                retryable = getattr(item, "retryable", True)
+                retryable = retryable if isinstance(retryable, bool) else True
+                try:
+                    retries = int(getattr(item, "retries", 0) or 0)
+                except (TypeError, ValueError):
+                    retries = 0
+                if retryable and retries:
+                    lines.append(f"    · 已自动重试: {retries} 次")
+                elif not retryable:
+                    lines.append("    · 未自动重试: 非幂等或中高风险操作")
+                raw_recovery_hint = getattr(item, "recovery_hint", "")
+                recovery_hint = (
+                    raw_recovery_hint.strip() if isinstance(raw_recovery_hint, str) else ""
+                )
+                if recovery_hint:
+                    lines.append(f"    · 恢复建议: {recovery_hint}")
         if run_result.message:
             lines.append(f"说明: {run_result.message}")
         response_text = "\n".join(lines)
@@ -2200,10 +3057,25 @@ class AIChatApplicationService:
                             "success": r.success,
                             "tool_id": r.tool_id,
                             "action": r.action,
-                            "message": r.error,
+                            "message": r.error or self._workflow_output_message(r.output),
+                            "output_preview": self._workflow_output_preview(r.output),
+                            "retries": getattr(r, "retries", 0),
+                            "retryable": getattr(r, "retryable", True),
+                            "recovery_hint": getattr(r, "recovery_hint", ""),
+                            "duration_ms": getattr(r, "duration_ms", 0),
                         }
                         for r in run_result.node_results
                     ],
+                    "workflow_status": getattr(run_result, "final_context", {}).get(
+                        "workflow_status", {}
+                    )
+                    if isinstance(getattr(run_result, "final_context", {}), dict)
+                    else {},
+                    "workflow_trace": getattr(run_result, "final_context", {}).get(
+                        "workflow_trace", []
+                    )
+                    if isinstance(getattr(run_result, "final_context", {}), dict)
+                    else [],
                 },
             },
         }
@@ -2260,7 +3132,7 @@ class AIChatApplicationService:
         self, tool_id: str, action: str, params: dict[str, Any]
     ) -> dict[str, Any]:
         try:
-            from app.routes.tools import execute_registered_workflow_tool
+            from app.application.facades.tools_facade import execute_registered_workflow_tool
 
             return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
         except RECOVERABLE_ERRORS as err:
@@ -2395,7 +3267,7 @@ class AIChatApplicationService:
 
             # pro 模式优先从原消息解析整单，保留完整 products[]。
             try:
-                from app.routes.tools import _parse_order_text
+                from app.application.facades.tools_facade import _parse_order_text
 
                 parsed_order = _parse_order_text(original_message or "")
                 if parsed_order.get("success"):
@@ -2597,7 +3469,7 @@ class AIChatApplicationService:
 
         if is_add_intent and unit_name:
             try:
-                from app.routes.tools import execute_registered_workflow_tool
+                from app.application.facades.tools_facade import execute_registered_workflow_tool
 
                 created = execute_registered_workflow_tool(
                     tool_id="customers",
@@ -2717,8 +3589,8 @@ class AIChatApplicationService:
     ) -> dict[str, Any]:
         """执行发货单生成"""
         try:
+            from app.application.facades.tools_facade import _parse_order_text
             from app.bootstrap import get_shipment_app_service
-            from app.routes.tools import _parse_order_text
 
             order_text = parsed_params.get("order_text") or ai_result.get("text", "")
             parsed = _parse_order_text(order_text)
@@ -2782,6 +3654,4 @@ class AIChatApplicationService:
 
 def get_ai_chat_app_service() -> AIChatApplicationService:
     """获取 AI 聊天应用服务单例"""
-    from app.di.registry import get_service_registry
-
     return get_service_registry().ai_chat_application_service

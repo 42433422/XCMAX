@@ -190,7 +190,7 @@ class PrinterAutomation:
             if self.original_default and self.current_printer != self.original_default:
                 try:
                     self.set_default_printer(self.original_default)
-                except:
+                except Exception:
                     pass
 
             return {"success": False, "message": f"自动化打印失败: {str(e)}"}

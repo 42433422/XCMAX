@@ -21,10 +21,29 @@ sla:
   retry_max: 2
   escalate_to_human: true
 llm_default: auto
-skills: []
+capabilities:
+  - partner.catalog.curate
+  - catalog.contract.audit
+
+skills:
+  - skills/skill-ecosystem-joint-catalog-officer.md
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on:
 - employee-pack-curator
 - modstore-backend-api
+examples:
+  - title: "联合 Catalog 策展员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次联合 Catalog 策展员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
+
 changelog:
 - version: 1.0.0
   date: '2026-06-03'

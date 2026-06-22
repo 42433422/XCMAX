@@ -25,6 +25,7 @@ Focus on REMAINING uncovered lines:
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -57,6 +58,13 @@ def _mock_user_no_username():
     return user
 
 
+def _mock_pairing_request(host_header: str = "127.0.0.1:5112", hostname: str = "127.0.0.1"):
+    return SimpleNamespace(
+        headers={"host": host_header},
+        url=SimpleNamespace(hostname=hostname),
+    )
+
+
 # ---------------------------------------------------------------------------
 # CS endpoints — get_cs_info
 # ---------------------------------------------------------------------------
@@ -82,7 +90,7 @@ class TestGetCsInfo:
             data = result
         # Phase 1 demo data
         assert data.get("data", {}).get("cs_available") is True
-        assert data.get("data", {}).get("cs_name") == "修茈客服"
+        assert data.get("data", {}).get("cs_name") == "小C助理"
         assert data.get("data", {}).get("cs_online") is True
         assert data.get("data", {}).get("cs_avatar") is None
 
@@ -123,15 +131,8 @@ class TestPostCsMessage:
     async def test_authorized_empty_body(self, ext_mod):
         mock_request = MagicMock()
         result = await ext_mod.post_cs_message(request=mock_request, body={}, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
-        if hasattr(result, "body"):
-            import json
-
-            data = json.loads(result.body)
-        else:
-            data = result
-        # Even with empty body, a message_id is generated
-        assert "message_id" in data.get("data", {})
+        # 空消息体应返回 400
+        assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_authorized_body_with_extra_fields(self, ext_mod):
@@ -150,6 +151,17 @@ class TestPostCsMessage:
 
 
 class TestGetCsMessages:
+    @pytest.fixture(autouse=True)
+    def _isolate_db(self):
+        """Mock get_db 返回空 session，避免前序测试持久化 ServiceRequest 污染。"""
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+        mock_db.get_bind.return_value = MagicMock()
+        with patch("app.db.session.get_db") as mock_get_db:
+            mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
+            mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
+            yield
+
     @pytest.mark.asyncio
     async def test_unauthorized_returns_401(self, ext_mod):
         mock_request = MagicMock()
@@ -524,10 +536,10 @@ class TestMobilePairingIssueAdditional:
             patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"),
             patch(
                 "app.security.mobile_pairing.issue_pairing_nonce",
-                return_value={"nonce": "n", "host": "10.0.0.5", "port": 5000},
+                return_value={"nonce": "n", "host": "10.0.0.5", "port": 5112},
             ),
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(body, _mock_pairing_request())
         assert hasattr(result, "body") or isinstance(result, dict)
 
     @pytest.mark.asyncio
@@ -540,7 +552,10 @@ class TestMobilePairingIssueAdditional:
                 return_value={"nonce": "n", "host": "10.0.0.5", "port": 8080},
             ),
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(
+                body,
+                _mock_pairing_request("localhost:8080", "localhost"),
+            )
         assert hasattr(result, "body") or isinstance(result, dict)
 
     @pytest.mark.asyncio
@@ -550,7 +565,10 @@ class TestMobilePairingIssueAdditional:
             "app.security.mobile_pairing.issue_pairing_nonce",
             return_value={"nonce": "n", "host": "example.com", "port": 443},
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(
+                body,
+                _mock_pairing_request("example.com:443", "example.com"),
+            )
         assert hasattr(result, "body") or isinstance(result, dict)
 
 
@@ -803,8 +821,13 @@ class TestMobileAuthOidcExchangeAdditional2:
                 return_value=(True, "rt"),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
         ):
@@ -826,13 +849,18 @@ class TestMobileAuthOidcExchangeAdditional2:
                 return_value=(True, "rt"),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                "app.application.enterprise_login_flow.finalize_auth_after_oidc",
                 new=AsyncMock(
                     return_value={
                         "user": {"id": 1, "username": "alice"},
@@ -865,13 +893,18 @@ class TestMobileAuthOidcExchangeAdditional2:
                 return_value=(True, "rt"),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
             patch(
-                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                "app.application.enterprise_login_flow.finalize_auth_after_oidc",
                 new=AsyncMock(
                     return_value={
                         "user": {"id": 1, "username": "alice"},
@@ -905,8 +938,13 @@ class TestMobileAuthOidcExchangeAdditional2:
                 return_value=(True, "rt"),
             ),
             patch(
-                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+                "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
         ):
@@ -930,14 +968,20 @@ class TestMobileAuthOidcExchangeAdditional2:
 class TestMobileModItemsAdditional2:
     def test_none_return_from_list_all_mods(self, ext_mod):
         """Test when list_all_mods returns None."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = None
             items = ext_mod._mobile_mod_items()
         assert items == []
 
     def test_mixed_dict_and_object_mods(self, ext_mod):
         """Test mix of dict and object mods."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             obj_mod = MagicMock()
             obj_mod.id = "obj-1"
             obj_mod.name = "Object Mod"
@@ -954,7 +998,10 @@ class TestMobileModItemsAdditional2:
 
     def test_dict_mod_with_only_title(self, ext_mod):
         """Test dict mod that only has title (no id, mod_id, or name)."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"title": "Title Only Mod"},
             ]
@@ -964,7 +1011,10 @@ class TestMobileModItemsAdditional2:
 
     def test_dict_mod_with_id_and_title(self, ext_mod):
         """Test dict mod with id and title (no name)."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "mod-1", "title": "Title Mod"},
             ]
@@ -975,7 +1025,10 @@ class TestMobileModItemsAdditional2:
 
     def test_object_mod_with_all_none_attrs(self, ext_mod):
         """Test object mod where all attributes are None."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mod = MagicMock()
             mod.id = None
             mod.name = None
@@ -988,7 +1041,10 @@ class TestMobileModItemsAdditional2:
 
     def test_dict_mod_with_empty_string_id(self, ext_mod):
         """Test dict mod with empty string id and empty mod_id."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "", "mod_id": "", "name": "No ID"},
             ]
@@ -997,7 +1053,10 @@ class TestMobileModItemsAdditional2:
 
     def test_dict_mod_with_whitespace_id(self, ext_mod):
         """Test dict mod with whitespace-only id."""
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
+        ):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "   ", "name": "Whitespace ID"},
             ]

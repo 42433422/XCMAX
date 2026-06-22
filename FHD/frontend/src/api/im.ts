@@ -1,4 +1,4 @@
-import { apiFetch } from '@/utils/apiBase';
+import { apiFetch, getApiBase } from '@/utils/apiBase';
 
 export type ImConversationSummary = {
   id: number;
@@ -121,9 +121,15 @@ export async function markImRead(conversationId: number, lastMessageId: number):
 }
 
 export function imWebSocketUrl(): string {
-  const base =
-    typeof window !== 'undefined' && window.location?.host
-      ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+  const apiBase = getApiBase().replace(/\/$/, '');
+  if (/^https?:\/\//i.test(apiBase)) {
+    return `${apiBase.replace(/^http/i, 'ws')}/ws/im`;
+  }
+
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin.replace(/^http/i, 'ws')
       : 'ws://127.0.0.1:5000';
-  return `${base}/ws/im`;
+  const prefix = apiBase ? (apiBase.startsWith('/') ? apiBase : `/${apiBase}`) : '';
+  return `${origin}${prefix}/ws/im`;
 }

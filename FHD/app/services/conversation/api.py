@@ -11,6 +11,20 @@ logger = logging.getLogger(__name__)
 
 _ai_response_cache = get_ai_response_cache()
 
+LEGACY_BASE_PROMPT = """你是一个专业的业务助手，服务于使用 XCAGI 系统的用户。
+你的职责：
+1. 友好、专业地回答用户问题
+2. 协助用户处理发货单、产品、客户等业务
+3. 提供清晰、简洁的回答
+4. 如果不确定，请诚实地告知用户
+
+XCAGI 系统主要功能：
+- 发货单生成和管理
+- 产品和客户管理
+- 订单处理
+- 文件上传和导出
+- 数据查询和统计"""
+
 
 def _make_ai_response_cache_key(message: str, context_hash: str = "") -> str:
     import hashlib
@@ -18,6 +32,52 @@ def _make_ai_response_cache_key(message: str, context_hash: str = "") -> str:
     return hashlib.sha256(
         f"ai_response:v1:{context_hash}:{message.strip().lower()}".encode()
     ).hexdigest()
+
+
+def _coerce_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _build_llm_trace(provider: Any, result: dict[str, Any], latency_ms: float) -> dict[str, Any]:
+    from app.infrastructure.billing.model_usage import estimate_llm_cost_units
+
+    adapter = getattr(provider, "_adapter", None)
+    provider_id = str(getattr(provider, "provider_id", "") or "")
+    provider_name = str(
+        getattr(adapter, "provider_name", "")
+        or getattr(provider, "provider_name", "")
+        or provider_id
+    )
+    model = str(
+        result.get("model")
+        or getattr(adapter, "model_name", "")
+        or getattr(provider, "model_name", "")
+        or ""
+    )
+    usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+    prompt_tokens = _coerce_int(usage.get("prompt_tokens"))
+    completion_tokens = _coerce_int(usage.get("completion_tokens"))
+    total_tokens = _coerce_int(usage.get("total_tokens"))
+    cost_units = estimate_llm_cost_units(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
+    return {
+        "provider_id": provider_id,
+        "provider": provider_name,
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "latency_ms": round(float(latency_ms), 2),
+        "cost_units": cost_units,
+        "billing_status": "metered" if cost_units else "unmetered",
+        "billing_source": "estimated_token_units",
+    }
 
 
 class ApiMixin(NeuroEventPublisherMixin):
@@ -103,16 +163,47 @@ class ApiMixin(NeuroEventPublisherMixin):
                 **kwargs,
             )
             if result:
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                trace = _build_llm_trace(provider, result, latency_ms)
+                result["_xcagi_trace"] = trace
+                self._last_llm_trace = trace
+                # 持久化 token 用量到本地账本（供 llm-ops-engineer 查询）
+                try:
+                    from app.infrastructure.billing.model_usage import (
+                        record_model_usage,
+                    )
+
+                    record_model_usage(
+                        provider_id=trace["provider_id"],
+                        provider=trace["provider"],
+                        model=trace["model"],
+                        prompt_tokens=trace["prompt_tokens"],
+                        completion_tokens=trace["completion_tokens"],
+                        total_tokens=trace["total_tokens"],
+                        cost_units=trace["cost_units"],
+                        billing_status=trace["billing_status"],
+                        billing_source=trace["billing_source"],
+                        source="conversation_service",
+                        user_id=str(
+                            getattr(
+                                getattr(self, "modstore_adapter", None),
+                                "user_id",
+                                "",
+                            )
+                            or ""
+                        ),
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("record_model_usage failed", exc_info=True)
                 try:
                     from app.neuro_bus.application_neuro_bridge import (
                         neuro_notify_ai_model_roundtrip,
                     )
 
-                    usage = result.get("usage") or {}
                     neuro_notify_ai_model_roundtrip(
-                        model=provider.provider_id,
-                        latency_ms=(time.perf_counter() - t0) * 1000.0,
-                        token_count=int(usage.get("total_tokens") or 0),
+                        model=trace["model"] or trace["provider_id"],
+                        latency_ms=latency_ms,
+                        token_count=trace["total_tokens"],
                         user_id=str(
                             getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""
                         ),
@@ -161,6 +252,38 @@ class ApiMixin(NeuroEventPublisherMixin):
             result = response.json()
 
             if result.get("choices") and len(result["choices"]) > 0:
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                # 解析真实 token 用量（之前硬编码 token_count=0）
+                usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+                prompt_tokens = _coerce_int(usage.get("prompt_tokens"))
+                completion_tokens = _coerce_int(usage.get("completion_tokens"))
+                total_tokens = _coerce_int(usage.get("total_tokens"))
+                # 持久化 token 用量到本地账本
+                try:
+                    from app.infrastructure.billing.model_usage import (
+                        estimate_llm_cost_units,
+                        record_model_usage,
+                    )
+
+                    cost_units = estimate_llm_cost_units(
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                    )
+                    record_model_usage(
+                        provider_id="deepseek-legacy",
+                        provider="deepseek",
+                        model=str(self.model or ""),
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        cost_units=cost_units,
+                        billing_status="metered" if cost_units else "unmetered",
+                        billing_source="estimated_token_units",
+                        source="conversation_service.deepseek_legacy",
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("record_model_usage failed", exc_info=True)
                 try:
                     from app.neuro_bus.application_neuro_bridge import (
                         neuro_notify_ai_model_roundtrip,
@@ -168,8 +291,8 @@ class ApiMixin(NeuroEventPublisherMixin):
 
                     neuro_notify_ai_model_roundtrip(
                         model=self.model,
-                        latency_ms=(time.perf_counter() - t0) * 1000.0,
-                        token_count=0,
+                        latency_ms=latency_ms,
+                        token_count=total_tokens,
                         user_id="",
                     )
                 except RECOVERABLE_ERRORS:
@@ -317,6 +440,29 @@ class ApiMixin(NeuroEventPublisherMixin):
             },
         }
 
+    def _build_system_prompt_with_persona(
+        self,
+        user_id: str,
+        message: str,
+        history: list[dict],
+        industry: str,
+        context_prompt: str,
+    ) -> str:
+        """使用 persona 生成 system prompt。
+
+        若 persona_service 不可用，回退到 LEGACY_BASE_PROMPT。
+
+        Returns:
+            str: system prompt 字符串。
+        """
+        if not getattr(self, "persona_service", None):
+            # Fallback：无 persona 服务时用旧 prompt
+            return LEGACY_BASE_PROMPT + ("\n\n" + context_prompt if context_prompt else "")
+
+        # 同步路径：直接调用 build_prompt 生成 prompt
+        # 注意：异步完整流程（含 persona 更新）请使用 build_prompt_from_message
+        return self.persona_service.build_prompt(None, context_prompt)
+
     async def _call_ai(
         self, message: str, context: ConversationContext, intent_result: dict[str, Any]
     ) -> dict[str, Any]:
@@ -337,22 +483,19 @@ class ApiMixin(NeuroEventPublisherMixin):
                 "data": {"model": current_model, "cached": True, "intent": intent_result},
             }
 
-        base_prompt = """你是一个专业的业务助手，服务于使用 XCAGI 系统的用户。
-你的职责：
-1. 友好、专业地回答用户问题
-2. 协助用户处理发货单、产品、客户等业务
-3. 提供清晰、简洁的回答
-4. 如果不确定，请诚实地告知用户
-
-XCAGI 系统主要功能：
-- 发货单生成和管理
-- 产品和客户管理
-- 订单处理
-- 文件上传和导出
-- 数据查询和统计"""
-
         context_prompt = self._build_context_prompt(context)
-        system_prompt = base_prompt + ("\n\n" + context_prompt if context_prompt else "")
+
+        if getattr(self, "persona_service", None):
+            _req_ctx = (context.metadata or {}).get("request_context") or {}
+            system_prompt, _persona_params = await self.persona_service.build_prompt_from_message(
+                user_id=context.user_id,
+                message=message,
+                history=context.conversation_history or [],
+                industry=_req_ctx.get("industry", "通用"),
+                context_prompt=context_prompt,
+            )
+        else:
+            system_prompt = LEGACY_BASE_PROMPT + ("\n\n" + context_prompt if context_prompt else "")
 
         messages = [{"role": "system", "content": system_prompt}]
 
@@ -395,7 +538,13 @@ XCAGI 系统主要功能：
             _ai_response_cache.set(cache_key, ai_reply)
 
             # 获取当前使用的模型和供应商信息
-            if hasattr(self, "modstore_adapter") and self.modstore_adapter:
+            llm_trace = dict(response.get("_xcagi_trace") or {})
+            if llm_trace:
+                current_model = str(llm_trace.get("model") or self.model)
+                current_provider = str(
+                    llm_trace.get("provider") or llm_trace.get("provider_id") or ""
+                )
+            elif hasattr(self, "modstore_adapter") and self.modstore_adapter:
                 current_model = f"modstore:{self.modstore_adapter.default_model}"
                 current_provider = "modstore-platform"
             elif (
@@ -413,6 +562,7 @@ XCAGI 系统主要功能：
                 "data": {
                     "model": current_model,
                     "provider": current_provider,
+                    "llm_trace": llm_trace,
                     "usage": response.get("usage", {}),
                     "intent": intent_result,
                 },

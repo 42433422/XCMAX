@@ -13,6 +13,7 @@ import sqlite3
 import uuid
 from typing import Any, cast
 
+from app.di.registry import get_service_registry
 from app.infrastructure.db.sql_identifiers import (
     quote_sqlite_identifier,
     resolve_products_table,
@@ -115,8 +116,11 @@ class FileAnalysisService:
                 table_columns = {}
                 for t in focus_tables:
                     try:
-                        cols = cur.execute(f"PRAGMA table_info('{t}')").fetchall()
+                        quoted = quote_sqlite_identifier(t)
+                        cols = cur.execute(f"PRAGMA table_info({quoted})").fetchall()
                         table_columns[t] = [c[1] for c in cols if c and len(c) >= 2]
+                    except ValueError:
+                        table_columns[t] = []
                     except RECOVERABLE_ERRORS:
                         table_columns[t] = []
 
@@ -226,6 +230,4 @@ instrument_application_service_class(FileAnalysisService)
 
 def get_file_analysis_app_service() -> FileAnalysisService:
     """获取文件分析服务单例"""
-    from app.di.registry import get_service_registry
-
     return get_service_registry().file_analysis_application_service

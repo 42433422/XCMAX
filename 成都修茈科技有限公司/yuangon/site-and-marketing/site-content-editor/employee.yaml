@@ -6,36 +6,38 @@ owner: admin
 area: site-and-marketing
 
 scope_globs:
-  - index.html
-  - about.html
-  - cases.html
-  - services.html
-  - solutions.html
-  - news.html
-  - contact.html
-  - honors.html
-  - case-edu.html
-  - case-manufacture.html
-  - case-park.html
-  - excel-to-ai.html
-  - styles.css
-  - main.js
-  - news.json
-  - activities.json
-  - assets/**
+  - ./developer.html
+  - ./download-release.json
+  - ./index.html
+  - ./about.html
+  - ./cases.html
+  - ./services.html
+  - ./solutions.html
+  - ./news.html
+  - ./contact.html
+  - ./honors.html
+  - ./case-edu.html
+  - ./case-manufacture.html
+  - ./case-park.html
+  - ./excel-to-ai.html
+  - ./styles.css
+  - ./main.js
+  - ./news.json
+  - ./activities.json
+  - ./assets/**
   # 根 Vite 工具链（与 MODstore_deploy/market 是两套，不要混用）
-  - src/**
-  - package.json
-  - package-lock.json
-  - vite.config.ts
-  - tsconfig.json
-  - tsconfig.node.json
-  - tsconfig.strict.json
-  - tsconfig.strict-baseline.json
-  - eslint.config.js
-  - .prettierrc
-  - .prettierignore
-  - env.d.ts
+  - ./src/**
+  - ./package.json
+  - ./package-lock.json
+  - ./vite.config.ts
+  - ./tsconfig.json
+  - ./tsconfig.node.json
+  - ./tsconfig.strict.json
+  - ./tsconfig.strict-baseline.json
+  - ./eslint.config.js
+  - ./.prettierrc
+  - ./.prettierignore
+  - ./env.d.ts
 
 forbidden_globs:
   - app.py
@@ -64,11 +66,27 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - static.page.update
+
 skills:
   - skills/skill-static-page-update.md
 
-depends_on:
-  - seo-sitemap-curator   # 内容变更后通知 SEO 员工更新 sitemap
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
+depends_on: []
+
+examples:
+  - title: "静态站内容编辑员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次静态站内容编辑员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

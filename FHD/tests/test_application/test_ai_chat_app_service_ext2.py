@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
@@ -134,6 +135,40 @@ class TestInferExcelColumnRolesWithLLM:
             result = service._infer_excel_column_roles_with_llm(records)
         assert isinstance(result, dict)
 
+    def test_uses_xcauto_credentials_when_ai_service_has_no_deepseek_key(self, monkeypatch):
+        service = _make_service()
+        service.ai_service = Mock(api_key="", api_url="", model="")
+        monkeypatch.setenv("XCAUTO_API_KEY", "pat-xcauto")
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        records = [{"客户": "星光贸易", "产品": "面漆", "型号": "5003", "报价": "12.5"}]
+        raw = {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"unit_name":"客户","product_name":"产品",'
+                            '"model_number":"型号","unit_price":"报价"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+        with patch("app.application.ai_chat_app_service.httpx.post") as post:
+            post.return_value.status_code = 200
+            post.return_value.json.return_value = raw
+            result = service._infer_excel_column_roles_with_llm(records)
+
+        assert result == {
+            "unit_name": "客户",
+            "product_name": "产品",
+            "model_number": "型号",
+            "unit_price": "报价",
+        }
+        assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer pat-xcauto"
+        assert post.call_args.kwargs["json"]["model"] == "xcauto-account"
+        assert post.call_args.args[0] == "https://xiu-ci.com/v1/chat/completions"
+
 
 # ========================= _extract_excel_import_records ==================
 
@@ -223,6 +258,7 @@ class TestExtractExcelImportRecords:
 class TestTryHandleDynamicWorkflowExtended:
     def test_pro_import_with_db_file_success(self):
         service = _make_service()
+        repo = InMemoryAgentRunRepository()
         ctx = {
             "file_analysis": {
                 "suggested_use": "unit_products_db",
@@ -239,16 +275,52 @@ class TestTryHandleDynamicWorkflowExtended:
             "imported": 5,
             "skipped_duplicates": 1,
         }
-        with patch(
-            "app.application.get_unit_products_import_app_service",
-            return_value=mock_import_svc,
+        with (
+            patch(
+                "app.application.get_unit_products_import_app_service",
+                return_value=mock_import_svc,
+            ),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
         assert result["success"] is True
-        assert "导入完成" in result["response"]
+        assert result["data"]["action"] == "workflow_confirmation_required"
+        assert result["data"]["run_id"] == result["run_id"]
+        assert result["data"]["data"]["artifact_count"] == 1
+        assert result["data"]["data"]["artifacts"][0]["artifact_type"] == "database_file"
+        run = repo.get(result["run_id"])
+        assert run is not None
+        assert run.intent == "import_unit_products_db"
+        assert run.status == "waiting_user"
+
+        with (
+            patch(
+                "app.application.get_unit_products_import_app_service",
+                return_value=mock_import_svc,
+            ),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
+            completed = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
+        assert completed["success"] is True
+        assert completed["run_id"] == result["run_id"]
+        assert completed["data"]["data"]["tool_call_count"] == 1
+        assert completed["data"]["data"]["cost_units_total"] == 2
+        run = repo.get(result["run_id"])
+        assert run is not None
+        assert run.status == "completed"
+        assert run.artifacts[0].artifact_type == "database_file"
+        assert "tool.started" in [event.event_type for event in run.events]
+        assert run.final_output["node_outputs"]["import_unit_products"]["imported"] == 5
 
     def test_pro_import_with_db_file_failure(self):
         service = _make_service()
+        repo = InMemoryAgentRunRepository()
         ctx = {
             "file_analysis": {
                 "suggested_use": "unit_products_db",
@@ -262,15 +334,31 @@ class TestTryHandleDynamicWorkflowExtended:
             "success": False,
             "message": "导入出错",
         }
-        with patch(
-            "app.application.get_unit_products_import_app_service",
-            return_value=mock_import_svc,
+        with (
+            patch(
+                "app.application.get_unit_products_import_app_service",
+                return_value=mock_import_svc,
+            ),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
-        assert result["success"] is False
+            failed = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
+        assert result["success"] is True
+        assert result["run_id"]
+        assert result["data"]["action"] == "workflow_confirmation_required"
+        assert failed["success"] is False
+        assert failed["run_id"] == result["run_id"]
+        run = repo.get(result["run_id"])
+        assert run is not None
+        assert run.intent == "import_unit_products_db"
+        assert run.status == "failed"
 
     def test_pro_import_with_db_file_exception(self):
         service = _make_service()
+        repo = InMemoryAgentRunRepository()
         ctx = {
             "file_analysis": {
                 "suggested_use": "unit_products_db",
@@ -279,28 +367,51 @@ class TestTryHandleDynamicWorkflowExtended:
             },
             "file_context": {},
         }
-        with patch(
-            "app.application.get_unit_products_import_app_service",
-            side_effect=ImportError("no module"),
+        with (
+            patch(
+                "app.application.get_unit_products_import_app_service",
+                side_effect=ImportError("no module"),
+            ),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
-        assert result["success"] is False
+            failed = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
+        assert result["success"] is True
+        assert result["data"]["action"] == "workflow_confirmation_required"
+        assert failed["success"] is False
+        assert failed["run_id"] == result["run_id"]
 
     def test_pro_excel_deterministic_import_no_records(self):
         service = _make_service()
+        repo = InMemoryAgentRunRepository()
         ctx = {
             "excel_analysis": {
                 "summary": "test",
                 "fields": [{"label": "产品名称"}],
             }
         }
-        with patch.object(service, "_extract_excel_import_records", return_value=([], None)):
+        with (
+            patch.object(service, "_extract_excel_import_records", return_value=([], None)),
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
             result = service._try_handle_dynamic_workflow("u1", "导入数据库", "pro", ctx, {})
         assert result is not None
         assert "未解析到" in result["response"] or "未识别" in result["response"]
+        run = repo.get(result["run_id"])
+        assert run is not None
+        assert run.intent == "excel_import_to_db"
+        assert run.status == "completed"
+        assert run.metadata["runtime_context"]["workflow_trace_mode"] == "deterministic_shortcut"
 
     def test_pro_excel_deterministic_import_success(self):
         service = _make_service()
+        repo = InMemoryAgentRunRepository()
         ctx = {
             "excel_analysis": {
                 "summary": "test",
@@ -327,13 +438,45 @@ class TestTryHandleDynamicWorkflowExtended:
             patch.object(service, "_extract_excel_import_records", return_value=(records, None)),
             patch("app.bootstrap.get_products_service", return_value=mock_products_svc),
             patch("app.bootstrap.get_customer_app_service", return_value=mock_customer_svc),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入数据库", "pro", ctx, {})
         assert result["success"] is True
-        assert "入库" in result["response"]
+        assert result["data"]["action"] == "workflow_confirmation_required"
+        assert result["data"]["run_id"] == result["run_id"]
+        assert result["data"]["data"]["artifact_count"] == 1
+        assert result["data"]["data"]["artifacts"][0]["artifact_type"] == "excel_records"
+        run = repo.get(result["run_id"])
+        assert run is not None
+        assert run.intent == "excel_import_to_db"
+        assert run.status == "waiting_user"
+
+        with (
+            patch("app.bootstrap.get_products_service", return_value=mock_products_svc),
+            patch("app.bootstrap.get_customer_app_service", return_value=mock_customer_svc),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
+            completed = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
+        assert completed["success"] is True
+        assert completed["run_id"] == result["run_id"]
+        assert completed["data"]["data"]["tool_call_count"] == 1
+        assert completed["data"]["data"]["cost_units_total"] == 2
+        run = repo.get(result["run_id"])
+        assert run is not None
+        assert run.status == "completed"
+        assert run.artifacts[0].preview["record_count"] == 1
+        output = run.final_output["node_outputs"]["import_excel_records"]
+        assert output["data"]["result"]["created_products"] == 1
 
     def test_pro_excel_deterministic_import_customer_unavailable(self):
         service = _make_service()
+        repo = InMemoryAgentRunRepository()
         ctx = {
             "excel_analysis": {
                 "summary": "test",
@@ -356,10 +499,19 @@ class TestTryHandleDynamicWorkflowExtended:
             patch.object(service, "_extract_excel_import_records", return_value=(records, None)),
             patch("app.bootstrap.get_products_service", return_value=mock_products_svc),
             patch("app.bootstrap.get_customer_app_service", side_effect=ImportError("no module")),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "导入数据库", "pro", ctx, {})
+            completed = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result["success"] is True
-        assert "客户服务不可用" in result["response"]
+        assert completed["success"] is True
+        run = repo.get(result["run_id"])
+        assert run is not None
+        output = run.final_output["node_outputs"]["import_excel_records"]
+        assert output["data"]["result"]["unit_service_available"] is False
 
     def test_pro_excel_deterministic_import_skip_deterministic(self):
         service = _make_service()
@@ -739,7 +891,7 @@ class TestDispatchWorkflowTool:
     def test_exception(self):
         service = _make_service()
         with patch(
-            "app.routes.tools.execute_registered_workflow_tool",
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
             side_effect=ImportError("no module"),
         ):
             result = service._dispatch_workflow_tool("products", "query", {})

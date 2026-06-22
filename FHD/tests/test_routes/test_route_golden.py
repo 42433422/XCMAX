@@ -31,10 +31,19 @@ def essential_app() -> FastAPI:
 
 def _collect_paths(app: FastAPI) -> list[str]:
     paths: set[str] = set()
-    for route in iter_effective_routes(app.routes):
-        path = route.path
-        if path:
-            paths.add(path)
+    for route in app.routes:
+        # FastAPI 0.138+ 用 _IncludedRouter 包装 include_router 的路由，
+        # 实际路径在 original_router.routes 中；旧版直接展开为 Route。
+        orig = getattr(route, "original_router", None)
+        if orig is not None:
+            for sub in getattr(orig, "routes", []):
+                p = getattr(sub, "path", None)
+                if p:
+                    paths.add(p)
+        else:
+            path = getattr(route, "path", None)
+            if path:
+                paths.add(path)
     return sorted(paths)
 
 

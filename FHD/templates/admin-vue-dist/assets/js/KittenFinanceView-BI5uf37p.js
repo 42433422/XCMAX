@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-qgy01mZ2.js";import{a1 as t,t as a,a2 as n}from"./index-C1axxMiF.js";const _=t({__name:"KittenFinanceView",setup(i){return(o,c)=>(a(),n(e,{"mod-id":"xcagi-model-payment-bridge",view:"KittenFinanceView",title:"模型支付"}))}});export{_ as default};

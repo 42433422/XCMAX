@@ -8,7 +8,7 @@ import {
 const WORKFLOW_VIZ_MOD_PATH = `/mod/${CORE_WORKFLOW_MOD_ID}/workflow-visualization`
 const OTHER_TOOLS_MOD_PATH = `/mod/${OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID}/other-tools`
 
-/** 流程全景 / 工作流可视化页路由（Mod 门面开启时走物理视图路径） */
+/** 流程可视化页路由（Mod 门面开启时走物理视图路径） */
 export function resolveWorkflowVisualizationLocation(): RouteLocationRaw {
   if (readCoreWorkflowModPagesEnabled()) {
     return { path: WORKFLOW_VIZ_MOD_PATH }

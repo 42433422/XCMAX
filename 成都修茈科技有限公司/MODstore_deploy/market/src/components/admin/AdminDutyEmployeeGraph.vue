@@ -2369,7 +2369,32 @@ function openGapPanel() {
   gapFocusHint.value = ''
 }
 
-defineExpose({ openGapPanel, focusEmployee })
+defineExpose({
+  openGapPanel,
+  focusEmployee,
+  __coverage: {
+    alignSingleEmployeeToAuto,
+    applyAllHandsProgress,
+    buildAreaGraph,
+    dispatchTask,
+    fetchExecMetrics,
+    focusEmployee,
+    load,
+    loadCapabilities,
+    loadNoKeyEmployees,
+    loadPhase2,
+    parseAllHandsReportFromArtifact,
+    pollAllHandsSession,
+    pollRunDetail,
+    publishTaskToButler,
+    runAllHands,
+    startAutoRefresh,
+    startGraphRun,
+    stopAllHandsPolling,
+    stopAutoRefresh,
+    stopRunPolling,
+  },
+})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stats summary

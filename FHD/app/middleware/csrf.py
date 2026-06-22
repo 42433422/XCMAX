@@ -42,6 +42,8 @@ def _csrf_exempt_public_auth(scope: Scope) -> bool:
         or path.endswith("/api/mobile/v1/auth/oidc/exchange")
         or path.endswith("/api/mobile/v1/auth/qr/confirm")
         or path.endswith("/api/market/send-phone-code")
+        or path.endswith("/api/xcmax/admin/login")
+        or path.endswith("/api/xcmax/admin/logout")
     )
 
 
@@ -96,6 +98,9 @@ class CSRFMiddleware:
                 return
             path = (scope.get("path") or "").rstrip("/")
             if path.startswith("/api/mobile/v1/pairing/"):
+                await self.app(scope, receive, send)
+                return
+            if path.startswith("/api/mobile/v1/relay/"):
                 await self.app(scope, receive, send)
                 return
 

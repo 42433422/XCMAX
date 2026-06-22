@@ -17,9 +17,70 @@ from app.application.employee_runtime.loader import (
     DIRECT_PYTHON_RUNTIME_MISSING_MSG,
     pack_has_direct_python_runtime,
 )
+from app.mod_sdk.employee_specialized_tools import get_employee_tools, handle_specialized
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]:
+    """构建注入真实工具的 ctx（call_llm / http_get / http_post / specialized_tools）。
+
+    补齐员工 run() 期望但原本缺失的 ctx 能力，让员工真正干活而非只靠 LLM 提示词。
+    """
+    ctx: dict[str, Any] = {
+        "employee_id": employee_id,
+        "workspace_root": workspace_root,
+        "logger": logging.getLogger(f"employee.{employee_id}"),
+        "specialized_tools": get_employee_tools(employee_id),
+    }
+
+    async def _call_llm(
+        messages: list[dict[str, Any]], max_tokens: int = 4000, temperature: float = 0.7
+    ) -> dict[str, Any]:
+        try:
+            from app.mod_sdk.mod_employee_llm import mod_employee_complete
+
+            result = await mod_employee_complete(
+                messages=messages, max_tokens=max_tokens, temperature=temperature
+            )
+            if isinstance(result, dict) and result.get("success"):
+                return {"ok": True, "content": result.get("content", "")}
+            return {
+                "ok": False,
+                "error": result.get("error", "LLM 调用失败")
+                if isinstance(result, dict)
+                else "未知错误",
+            }
+        except Exception as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
+            return {"ok": False, "error": repr(exc)}
+
+    async def _http_request(method: str, url: str, **kw: Any) -> dict[str, Any]:
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=kw.pop("timeout", 30)) as client:
+                resp = await client.request(method, url, **kw)
+                try:
+                    body = resp.json()
+                except Exception:  # noqa: BLE001  JSON 解析失败降级为文本
+                    body = resp.text
+                return {"ok": resp.is_success, "status": resp.status_code, "body": body}
+        except Exception as exc:  # noqa: BLE001  HTTP 调用边界：异常转结构化结果
+            return {"ok": False, "error": repr(exc)}
+
+    async def _http_get(url: str, **kw: Any) -> dict[str, Any]:
+        return await _http_request("GET", url, **kw)
+
+    async def _http_post(url: str, json_body: Any = None, **kw: Any) -> dict[str, Any]:
+        if json_body is not None:
+            kw["json"] = json_body
+        return await _http_request("POST", url, **kw)
+
+    ctx["call_llm"] = _call_llm
+    ctx["http_get"] = _http_get
+    ctx["http_post"] = _http_post
+    return ctx
 
 
 def _get_section(config: dict[str, Any], key: str) -> dict[str, Any]:
@@ -216,11 +277,16 @@ def _action_direct_python_module(
             payload[key] = reasoning[key]
     payload.setdefault("task", task)
     payload.setdefault("workspace_root", str(workspace_root or os.getcwd()))
-    ctx = {
-        "employee_id": employee_id,
-        "workspace_root": payload["workspace_root"],
-        "logger": logging.getLogger(f"employee.{employee_id}"),
-    }
+    ctx = _build_enriched_ctx(employee_id, payload["workspace_root"])
+    # 拦截 specialized handler：直接走专属工具调度，不调用员工 run()
+    if str(payload.get("handler") or "").strip() == "specialized":
+        spec_out = _run_maybe_async(handle_specialized, employee_id, payload, ctx)
+        if isinstance(spec_out, dict):
+            return {
+                "handler": "specialized",
+                "ok": bool(spec_out.get("ok", True)),
+                "output": spec_out,
+            }
     out = _run_maybe_async(run_fn, payload, ctx)
     if isinstance(out, dict):
         return {
@@ -283,6 +349,25 @@ def _actions_fhd(
 ) -> dict[str, Any]:
     actions_cfg = _normalize_actions_cfg(config)
     handlers = _handler_list(actions_cfg)
+    # 专属工具拦截：input_data.handler=specialized 时直接走专属工具调度，
+    # 不受 manifest 声明的 handlers 限制（让 llm_md/echo 类员工也能用专属工具）
+    raw_input = reasoning.get("input") if isinstance(reasoning, dict) else None
+    if isinstance(raw_input, dict) and str(raw_input.get("handler") or "").strip() == "specialized":
+        ws = str(workspace_root or os.getcwd())
+        spec_ctx = _build_enriched_ctx(employee_id, ws)
+        spec_out = _run_maybe_async(handle_specialized, employee_id, raw_input, spec_ctx)
+        return {
+            "task": task,
+            "handlers": ["specialized"],
+            "outputs": [
+                {
+                    "handler": "specialized",
+                    "ok": bool(spec_out.get("ok", True)) if isinstance(spec_out, dict) else True,
+                    "output": spec_out,
+                }
+            ],
+            "summary": "executed specialized handler",
+        }
     outputs: list[dict[str, Any]] = []
     for handler in handlers:
         if handler == "echo":

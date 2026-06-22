@@ -10,7 +10,11 @@ from fastapi import APIRouter, Body, Header, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.errors import ErrorCode, PaymentError
-from app.infrastructure.billing.saas_plans import list_saas_plans, plan_by_id
+from app.infrastructure.billing.saas_plans import (
+    list_saas_plans,
+    plan_by_id,
+    pricing_plans_for_budget,
+)
 from app.infrastructure.payment import alipay as mp_ali
 from app.infrastructure.payment import order_store as mp_orders
 from app.infrastructure.payment.payment_sot import (
@@ -76,13 +80,16 @@ def _plan_by_id(plan_id: str) -> dict[str, Any] | None:
 
 
 @router.get("/plans")
-def get_plans():
+def get_plans(budget_range: str = ""):
+    budget = (budget_range or "").strip()
+    saas_plans = pricing_plans_for_budget(budget if budget else None)
     return JSONResponse(
         {
             "success": True,
             "data": {
-                "plans": _all_plans(),
+                "plans": list(_DEMO_PLANS) + saas_plans,
                 "integration": _integration_flags(),
+                "budget_range": budget or None,
             },
         }
     )
@@ -361,6 +368,33 @@ def entitlements():
     items = mp_orders.list_entitlements()
     return JSONResponse(
         {"success": True, "data": {"entitlements": items, "backend": model_payment_backend()}}
+    )
+
+
+@router.get("/usage")
+def usage(limit: int = 50, run_id: str = "", user_id: str = ""):
+    """AI 用量账本：AgentRun/XCauto/工具/员工成本审计与钱包扣费对账入口。"""
+    from app.infrastructure.billing.model_usage import (
+        get_model_wallet,
+        list_model_usage_entries,
+        model_usage_ledger_path,
+        model_usage_wallet_backend,
+    )
+
+    items = list_model_usage_entries(limit=limit, run_id=run_id, user_id=user_id)
+    wallet = get_model_wallet(user_id) if user_id else None
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {
+                "entries": items,
+                "count": len(items),
+                "wallet": wallet,
+                "wallet_backend": model_usage_wallet_backend(),
+                "ledger_path": str(model_usage_ledger_path()),
+                "backend": model_payment_backend(),
+            },
+        }
     )
 
 

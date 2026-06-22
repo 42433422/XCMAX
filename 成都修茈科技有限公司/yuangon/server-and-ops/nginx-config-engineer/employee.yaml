@@ -6,11 +6,11 @@ owner: admin
 area: server-and-ops
 
 scope_globs:
-  - nginx-xiu-ci.conf
-  - nginx-xiu-ci-root.conf
-  - nginx-default.conf
-  - xiu-ci.com_nginx.zip
-  - _nginx_extract/**
+  - ./nginx-xiu-ci.conf
+  - ./nginx-xiu-ci-root.conf
+  - ./nginx-default.conf
+  - ./xiu-ci.com_nginx.zip
+  - ./_nginx_extract/**
   - MODstore_deploy/docs/nginx-*.conf
   - MODstore_deploy/docs/runbooks/nginx-*.md
   - MODstore_deploy/market/nginx.conf
@@ -19,7 +19,6 @@ forbidden_globs:
   - "*.py"
   - "*.vue"
   - "*.ts"
-  - MODstore_deploy/**
   - vibe-coding/**
   - _local_secrets/**
 
@@ -38,6 +37,9 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - nginx.config.check
+
 skills:
   - skills/skill-nginx-config-check.md
 
@@ -48,6 +50,13 @@ actions:
 
 depends_on:
   - security-secrets-guard # TLS/密钥策略与 Nginx 证书引用对齐
+
+examples:
+  - title: "Nginx 配置工程师岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次Nginx 配置工程师职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

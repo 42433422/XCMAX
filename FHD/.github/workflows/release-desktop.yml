@@ -59,6 +59,28 @@ jobs:
         with:
           name: xcagi-desktop-windows
           path: artifacts
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            FHD/scripts/dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cryptography
+        run: pip install --quiet cryptography
+      - name: Sign update metadata (Ed25519)
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::notice::No XCAGI_UPDATE_ED25519_PRIVATE_KEY secret — skipping metadata signing."
+            exit 0
+          fi
+          find artifacts -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
+            echo "Signing: $f"
+            python FHD/scripts/dev/sign_update_metadata.py "$f"
+          done
       - name: Upload installers to update server
         continue-on-error: true
         timeout-minutes: 10
@@ -139,6 +161,28 @@ jobs:
         with:
           name: xcagi-desktop-macos
           path: artifacts
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            FHD/scripts/dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cryptography
+        run: pip install --quiet cryptography
+      - name: Sign update metadata (Ed25519)
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::notice::No XCAGI_UPDATE_ED25519_PRIVATE_KEY secret — skipping metadata signing."
+            exit 0
+          fi
+          find artifacts -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
+            echo "Signing: $f"
+            python FHD/scripts/dev/sign_update_metadata.py "$f"
+          done
       - name: Upload macOS installers to update server
         continue-on-error: true
         timeout-minutes: 10

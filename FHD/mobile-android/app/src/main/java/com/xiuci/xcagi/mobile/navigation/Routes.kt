@@ -1,5 +1,7 @@
 package com.xiuci.xcagi.mobile.navigation
 
+import android.net.Uri
+
 object Routes {
     const val LEGAL = "legal"
     const val SPLASH = "splash"
@@ -9,9 +11,9 @@ object Routes {
     const val AUTH_AUTO_LOGIN = "auth_auto_login"
     const val REGISTER = "register"
     const val HOME_HUB = "home_hub"
-    /** 4 Tab：工作（审批 + 业务聚合入口） */
+    /** 4 Tab：AI 员工通讯录。路由名沿用 work 以兼容旧跳转和巡检。 */
     const val WORK = "work"
-    /** 4 Tab：发现（扫码 / OCR / 连接能力） */
+    /** 4 Tab：探索（AI交流圈优先，扫码 / OCR / 通知作为工具入口） */
     const val DISCOVER = "discover"
     const val PROFILE = "profile"
     /** @deprecated 仅高级入口保留，不再作为底栏 Tab */
@@ -46,9 +48,13 @@ object Routes {
     const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val SCAN_QR = "scan_qr"
-    /** AI 员工列表页（从聊天页右上角 + 号进入） */
+    /** AI 员工列表页。列表只来自当前账号的企业端/管理端生态。 */
     const val AI_EMPLOYEES = "ai_employees"
     const val AI_CIRCLE = "ai_circle"
+    /** AI 群聊列表（默认 6 部门群 + 自定义群） */
+    const val AI_GROUPS = "ai_groups"
+    /** AI 群聊会话（当前群由 ViewModel.currentGroup 持有） */
+    const val AI_GROUP_CHAT = "ai_group_chat"
     const val AI_EMPLOYEE_PROFILE = "ai_employee/{modId}/{employeeId}"
     fun aiEmployeeProfile(modId: String, employeeId: String) = "ai_employee/$modId/$employeeId"
     /** 智慧分析（Kitten Analyzer） */
@@ -59,4 +65,10 @@ object Routes {
     const val BRAIN = "brain"
     /** 员工商店 / 能力库 */
     const val MOD_STORE = "mod_store"
+    /** 通知与公告 */
+    const val NOTIFICATIONS = "notifications"
+
+    /** 通用 WebView（探索 Tab 桌面工具入口，打开桌面端页面） */
+    const val WEB_VIEW = "web_view?url={url}&title={title}"
+    fun webView(url: String, title: String): String = "web_view?url=${Uri.encode(url)}&title=${Uri.encode(title)}"
 }

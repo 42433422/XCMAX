@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-06-18T23:04:30.944210+00:00",
+  "fix_diff": "Added _strip_modstore_deploy_prefix() and use deploy-relative paths for overlay placement and related-test inference. Added regression for monorepo root + MODstore_deploy/modstore_server path that must run smoke pytest. Extended loop_memory_requires_executable_change() to require executable changes after await_human_strategy_approval review/QA risks and recent human-strategy runs. Added ops_staged_auto_approve regression that marker-only self_maintenance_loop_status.py is rejected under review_or_qa_reported_risk memory.",
+  "kind": "fix",
+  "metadata": {
+    "component": "cr_narrow_ci,self_maintenance_policy,ops_staged_auto_approve",
+    "run_id": "e7a2510f-ce0d-4cb2-a6b7-b7938160b226"
+  },
+  "root_cause": "路径处理使用原始 rel_path 进行覆盖/测试推断，导致带 MODstore_deploy/ 前缀的 monorepo 根目录输入绕过 modstore_server 冒烟回退或产生双重前缀的覆盖路径。loop_memory_requires_executable_change 只考虑 stop/open_items，未考虑 await_human_strategy_approval/最近的 completed_waiting_human_strategy 状态。",
+  "schema_version": 1,
+  "symptom": "自维护循环在 target-branch 提示修复后仍失败：窄范围 CI 对带前缀的 MODstore_deploy 路径丢失冒烟回退，且仅标记的门禁对最近的审查/QA 风险记忆未执行失败即关闭。"
+}

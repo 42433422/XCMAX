@@ -22,8 +22,8 @@ from fastapi import HTTPException, Request
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
 from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
-from app.application.workflow.legacy_chat_adapter import chat_stream_sse_events
 from app.domain.ai.tier import runtime_context_with_tier
 from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
@@ -31,6 +31,7 @@ from app.domain.context.session_context import (
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
+from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,8 @@ class XcagiCompatChatBody(BaseModel):
         default=None,
         description="兼容旧客户端字段；当前版本不需要数据库写入授权。",
     )
+    user_id: str | None = None
+    source: str | None = None
 
 
 class XcagiCompatChatBatchBody(BaseModel):
@@ -240,15 +243,40 @@ def _xcagi_compat_reply_payload(
 
     tool_data: dict = {}
     last_result: dict = {}
+    reply_records: list[dict[str, Any]] = []
+    if isinstance(reply, dict):
+        raw_reply_records = reply.get("legacy_tool_records") or reply.get("_tool_records")
+        if isinstance(raw_reply_records, list):
+            reply_records = [item for item in raw_reply_records if isinstance(item, dict)]
     try:
-        from app.application.workflow.legacy_chat_adapter import get_last_tool_result
+        if reply_records:
+            last_record = reply_records[-1]
+            raw_output = last_record.get("output")
+            raw = dict(raw_output) if isinstance(raw_output, dict) else {}
+            raw.setdefault(
+                "tool_key", last_record.get("tool_id") or last_record.get("tool_name") or ""
+            )
+            raw.setdefault(
+                "tool_name", last_record.get("tool_name") or last_record.get("tool_id") or ""
+            )
+            raw.setdefault("tool_call_id", last_record.get("tool_call_id") or "")
+            raw.setdefault("tool_params", dict(last_record.get("params") or {}))
+            raw["_tool_records"] = reply_records
+        else:
+            from app.legacy.chat.legacy_chat_adapter import get_last_tool_result
 
-        raw = get_last_tool_result()
+            raw = get_last_tool_result()
         if isinstance(raw, dict) and raw:
             last_result = raw
+            raw_records = raw.get("_tool_records")
+            records = raw_records if isinstance(raw_records, list) else []
+            if records:
+                tool_data["legacy_tool_records"] = records
             from app.application.tools import flatten_tool_result_dict_for_client
 
             tool_data = flatten_tool_result_dict_for_client(raw)
+            if records:
+                tool_data["legacy_tool_records"] = records
             errs = raw.get("errors")
             if isinstance(errs, list) and errs:
                 preview = errs[:5]
@@ -609,10 +637,19 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     if intr is not None:
         cleared = runtime_context_after_workflow_interrupt(runtime_context)
         yield _sse_event_line({"type": "token", "text": intr})
+        payload = _xcagi_compat_reply_payload(intr, runtime_context_update=cleared)
+        payload = attach_chat_trace_run(
+            payload,
+            message=body.message,
+            runtime_context=cleared,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
         yield _sse_event_line(
             {
                 "type": "done",
-                "result": _xcagi_compat_reply_payload(intr, runtime_context_update=cleared),
+                "result": payload,
             }
         )
         return
@@ -665,7 +702,16 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             done_reply: str | dict = {"response": merged, "thinking_steps": thinking}
         else:
             done_reply = merged
-        yield _sse_event_line({"type": "done", "result": _xcagi_compat_reply_payload(done_reply)})
+        payload = _xcagi_compat_reply_payload(done_reply)
+        payload = attach_chat_trace_run(
+            payload,
+            message=body.message,
+            runtime_context=runtime_context,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
+        yield _sse_event_line({"type": "done", "result": payload})
     except RECOVERABLE_ERRORS as e:
         exc = _xcagi_chat_http_exc(e)
         yield _sse_event_line(

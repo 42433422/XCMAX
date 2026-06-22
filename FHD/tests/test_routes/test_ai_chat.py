@@ -80,7 +80,7 @@ def mock_recognize_intents(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
             "intent_hints": ["生成发货单"],
         }
     )
-    monkeypatch.setattr("app.routes.ai_chat.recognize_intents", fake)
+    monkeypatch.setattr("app.application.ai_chat_helpers.recognize_intents", fake)
     return fake
 
 
@@ -109,7 +109,7 @@ def test_intent_test_missing_message(client: TestClient) -> None:
 
 def test_intent_test_recognizer_raises(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.routes.ai_chat.recognize_intents",
+        "app.application.ai_chat_helpers.recognize_intents",
         MagicMock(side_effect=Exception("意图识别错误")),
     )
     r = client.post("/api/ai/intent/test", json={"message": "测试"})
@@ -134,7 +134,7 @@ def mock_chat_single(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
             "response": "测试回复",
         }
     )
-    monkeypatch.setattr("app.routes.ai_chat.unified_chat_single_payload", fake)
+    monkeypatch.setattr("app.application.ai_chat_helpers.unified_chat_single_payload", fake)
     return fake
 
 
@@ -178,7 +178,7 @@ def test_chat_unified_respects_explicit_http_status(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.routes.ai_chat.unified_chat_single_payload",
+        "app.application.ai_chat_helpers.unified_chat_single_payload",
         MagicMock(
             return_value={
                 "success": False,
@@ -204,7 +204,7 @@ def test_chat_unified_get_is_not_allowed(client: TestClient) -> None:
 
 def test_chat_unified_batch_empty(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.routes.ai_chat.normalize_batch_messages_payload",
+        "app.application.ai_chat_helpers.normalize_batch_messages_payload",
         MagicMock(return_value=[]),
     )
     r = client.post("/api/ai/chat-unified/batch", json={"messages": []})
@@ -214,7 +214,7 @@ def test_chat_unified_batch_empty(client: TestClient, monkeypatch: pytest.Monkey
 
 def test_chat_unified_batch_too_many(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.routes.ai_chat.normalize_batch_messages_payload",
+        "app.application.ai_chat_helpers.normalize_batch_messages_payload",
         MagicMock(return_value=[f"m{i}" for i in range(25)]),
     )
     r = client.post("/api/ai/chat-unified/batch", json={"messages": ["x"] * 25})
@@ -224,11 +224,11 @@ def test_chat_unified_batch_too_many(client: TestClient, monkeypatch: pytest.Mon
 
 def test_chat_unified_batch_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.routes.ai_chat.normalize_batch_messages_payload",
+        "app.application.ai_chat_helpers.normalize_batch_messages_payload",
         MagicMock(return_value=["a", "b", "c"]),
     )
     monkeypatch.setattr(
-        "app.routes.ai_chat.unified_chat_single_payload",
+        "app.application.ai_chat_helpers.unified_chat_single_payload",
         MagicMock(
             side_effect=lambda *a, **kw: {
                 "success": True,

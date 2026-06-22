@@ -1,0 +1,35 @@
+{
+  "baseline_id": "initial-current-known-failures-2026-06-18",
+  "created_at": "2026-06-18T23:37:10+00:00",
+  "notes": "Initial clean baseline from the first real report-only QA pass. QA must fail only for new failures beyond this baseline and should refresh allowed_failure_nodeids when a clean full-test collection is available.",
+  "openapi": {
+    "allowed_error_count": 0,
+    "allowed_info_count": 49,
+    "allowed_patterns": [
+      "routes=1076 ops=1028",
+      "warn=1819",
+      "info=49"
+    ],
+    "allowed_warn_count": 1819
+  },
+  "pytest": {
+    "allowed_error_count": 32,
+    "allowed_error_nodeids": [],
+    "allowed_failure_count": 80,
+    "allowed_failure_nodeids": [],
+    "allowed_failure_patterns": [
+      "PermissionError",
+      "sidebar_menu_manager.py",
+      "outside this workspace"
+    ],
+    "source_run_id": "84c3aaf5-d3ff-420f-a31b-4680451cebbd"
+  },
+  "ruff": {
+    "allowed_error_count": 63,
+    "allowed_patterns": [
+      "ruff check app",
+      "63 errors"
+    ]
+  },
+  "schema_version": 1
+}

@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-planner-excel-tools"
+RUNTIME_MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-planner-excel-tools"
+SOURCE_MOD_DIR = REPO / "mods" / "xcagi-planner-excel-tools"
+MOD_DIR = RUNTIME_MOD_DIR if (RUNTIME_MOD_DIR / "manifest.json").is_file() else SOURCE_MOD_DIR
 if not (MOD_DIR / "manifest.json").is_file():
     pytest.skip(
         "xcagi-planner-excel-tools is a runtime-only mod (not in tracked source roots)",
@@ -127,6 +129,8 @@ def test_native_generate_office_document(monkeypatch):
     parsed = json.loads(raw or "{}")
     assert parsed.get("success") is True
     assert "/api/ai/kitten/document/pickup/tok-test-123" in str(parsed.get("download_url"))
+    assert parsed["artifacts"][0]["uri"] == parsed["download_url"]
+    assert parsed["artifacts"][0]["artifact_type"] == "office_document"
     assert parsed.get("source") == "mod:xcagi-planner-excel-tools"
 
 

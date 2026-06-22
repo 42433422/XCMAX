@@ -1,4 +1,6 @@
-import { req, authHeaders, requestBlob, requestStreamBlob, requestStreamResponse } from './shared'
+import { req, authHeaders, requestBlob, requestStreamBlob } from './shared'
+
+const requestStreamResponse = (url: string, init: RequestInit = {}) => fetch(url, init)
 
 export const workbench = {
   workbenchWebSearch: (body: { query: string; max_results?: number; max_chars?: number }) =>

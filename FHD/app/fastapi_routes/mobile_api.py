@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
@@ -39,14 +40,43 @@ def _user_public_dict(user) -> dict[str, Any]:
     from app.utils.user_avatar_storage import public_avatar_url
 
     return {
-        "id": user.id,
-        "username": user.username,
-        "display_name": user.display_name,
-        "email": user.email,
-        "role": user.role,
-        "is_active": user.is_active,
+        "id": int(getattr(user, "id", 0) or 0),
+        "username": str(getattr(user, "username", "") or ""),
+        "display_name": str(getattr(user, "display_name", "") or ""),
+        "email": str(getattr(user, "email", "") or ""),
+        "role": str(getattr(user, "role", "") or ""),
+        "is_active": bool(getattr(user, "is_active", True)),
         "avatar_url": public_avatar_url(getattr(user, "wx_avatar_url", None)),
     }
+
+
+def _mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
+    """JWT-only fallback for physical relay sessions when the user table is stale.
+
+    Server relay pairing proves access to the desktop settings QR.  The cloud
+    relay can therefore keep using the signed mobile JWT even if a deployed
+    server has an older or mismatched local ``users`` table.
+    """
+    if not payload or payload.get("typ") != "access":
+        return None
+    uid = int(payload.get("user_id") or 0)
+    if uid <= 0:
+        return None
+    account_kind = str(payload.get("account_kind") or "").strip().lower()
+    session_id = str(payload.get("session_id") or "").strip()
+    if account_kind not in {"admin", "admin_portal"} and not session_id.startswith("mobile-relay-"):
+        return None
+    username = str(payload.get("username") or "").strip() or "mobile"
+    role = "admin" if account_kind in {"admin", "admin_portal"} else "enterprise"
+    return SimpleNamespace(
+        id=uid,
+        username=username,
+        display_name=username,
+        email="",
+        role=role,
+        is_active=True,
+        wx_avatar_url=None,
+    )
 
 
 async def get_mobile_user(
@@ -57,13 +87,42 @@ async def get_mobile_user(
     from app.db.models import User
     from app.db.session import get_db
 
-    uid = user_id_from_mobile_bearer(authorization)
-    if uid is not None:
-        with get_db() as db:
-            user = db.query(User).filter(User.id == uid).first()
-            if user and user.is_active:
-                return user
+    authorization_value = authorization or ""
+    jwt_payload = None
+    if authorization_value.startswith("Bearer "):
+        jwt_payload = verify_mobile_jwt(authorization_value[7:].strip())
+    uid = user_id_from_mobile_bearer(authorization_value)
+    if uid is None and authorization_value.startswith("Bearer "):
         return None
+    if uid is not None:
+        try:
+            with get_db() as db:
+                user = db.query(User).filter(User.id == uid).first()
+                if user and user.is_active:
+                    jwt_account_kind = (
+                        str((jwt_payload or {}).get("account_kind") or "").strip().lower()
+                    )
+                    jwt_admin = jwt_account_kind in {"admin", "admin_portal"}
+                    user_role = str(getattr(user, "role", "") or "").strip()
+                    if jwt_admin and user_role not in {"admin", "super_admin", "owner"}:
+                        fallback = _mobile_user_from_jwt_payload(jwt_payload or {})
+                        if fallback is not None:
+                            return fallback
+                    _ = (
+                        user.id,
+                        user.username,
+                        user.display_name,
+                        user.email,
+                        user.role,
+                        user.is_active,
+                        getattr(user, "wx_avatar_url", None),
+                    )
+                    if hasattr(db, "expunge"):
+                        db.expunge(user)
+                    return user
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("mobile user db lookup failed, falling back to JWT: %s", exc)
+        return _mobile_user_from_jwt_payload(jwt_payload or {})
 
     from app.infrastructure.auth.dependencies import resolve_session_user
 
@@ -96,6 +155,12 @@ def _web_login_error_message(payload: dict[str, Any]) -> str:
     return str(payload.get("message") or "登录失败").strip() or "登录失败"
 
 
+def _should_retry_mobile_admin_login(message: str, account_kind: str) -> bool:
+    if account_kind.strip().lower() in {"admin", "admin_portal"}:
+        return False
+    return "管理员账号不能从企业账号入口登录" in message or "管理员入口登录" in message
+
+
 @router.post("/auth/login")
 async def mobile_auth_login(body: MobileLoginRequest):
     """与 Web ``POST /api/auth/login`` 共用认证逻辑（市场校验、JIT、account_kind、市场 token）。"""
@@ -125,16 +190,32 @@ async def mobile_auth_login(body: MobileLoginRequest):
     payload, status = _parse_web_auth_login_response(web_resp)
     if not payload.get("success"):
         message = _web_login_error_message(payload)
-        code = status if status >= 400 else 401
-        return JSONResponse(
-            format_mobile_response(
-                data={"error": message, "error_id": payload.get("error_id")},
-                message=message,
-                success=False,
-                code=code,
-            ),
-            status_code=code,
-        )
+        if _should_retry_mobile_admin_login(message, account_kind):
+            web_resp = await auth_login(
+                request,
+                {
+                    "username": body.username.strip(),
+                    "password": body.password,
+                    "account_kind": "admin",
+                },
+            )
+            payload, status = _parse_web_auth_login_response(web_resp)
+            account_kind = "admin"
+            if payload.get("success"):
+                message = ""
+            else:
+                message = _web_login_error_message(payload)
+        if not payload.get("success"):
+            code = status if status >= 400 else 401
+            return JSONResponse(
+                format_mobile_response(
+                    data={"error": message, "error_id": payload.get("error_id")},
+                    message=message,
+                    success=False,
+                    code=code,
+                ),
+                status_code=code,
+            )
 
     session_id = str(payload.get("session_id") or "").strip()
     user_raw = payload.get("user")
@@ -299,18 +380,27 @@ async def mobile_me(request: Request, user=Depends(get_mobile_user)):
     from app.application.session_account_meta import load_session_account_meta
 
     auth_app = get_auth_app_service()
-    permissions = auth_app.get_user_permissions(user)
+    try:
+        permissions = auth_app.get_user_permissions(user)
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover - production schema drift guard
+        logger.warning("mobile me permissions fallback: %s", exc)
+        role = str(getattr(user, "role", "") or "").strip()
+        permissions = ["*"] if role in {"admin", "super_admin", "owner"} else []
     sid = ""
+    jwt_meta: dict[str, Any] = {}
     auth_hdr = request.headers.get("Authorization") or ""
     if auth_hdr.startswith("Bearer "):
         payload = verify_mobile_jwt(auth_hdr[7:].strip())
         if payload:
             sid = str(payload.get("session_id") or "")
+            account_kind = str(payload.get("account_kind") or "").strip()
+            if account_kind:
+                jwt_meta["account_kind"] = account_kind
     if not sid:
         from app.infrastructure.auth.dependencies import session_id_from_request
 
         sid = session_id_from_request(request)
-    meta = load_session_account_meta(sid) if sid else {}
+    meta = (load_session_account_meta(sid) if sid else {}) or jwt_meta
 
     mods_summary: list[dict[str, str]] = []
     try:

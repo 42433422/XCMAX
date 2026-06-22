@@ -2,8 +2,8 @@
   <div class="page-view admin-entitlements-view">
     <div class="page-content">
       <header class="admin-entitlements-head">
-        <h2>用户 Mod 管理</h2>
-        <p class="muted">为市场用户分配客户 Mod 权益，或进入代管模式代为配置。</p>
+        <h2>用户管理</h2>
+        <p class="muted">管理用户等级与行业，分配客户 Mod 权益，或进入代管模式代为配置。</p>
       </header>
 
       <div v-if="loadError" class="admin-entitlements-alert" role="alert">{{ loadError }}</div>
@@ -24,105 +24,239 @@
         {{ localStatusError }}
       </div>
 
-      <div class="admin-entitlements-layout">
-        <aside class="admin-user-list">
-          <div class="admin-user-list__toolbar">
-            <input
-              v-model="userFilter"
-              type="search"
-              class="admin-user-search"
-              placeholder="搜索用户名 / 邮箱"
-            >
+      <section class="admin-user-toolbar" aria-label="用户筛选">
+        <div class="admin-user-toolbar__search">
+          <input
+            v-model="userFilter"
+            type="search"
+            class="admin-user-search"
+            placeholder="搜索用户名 / 邮箱"
+          >
+        </div>
+        <div class="admin-user-toolbar__filters">
+          <select v-model="tierFilter" class="admin-user-filter-select" aria-label="按等级筛选">
+            <option value="">全部等级</option>
+            <option v-for="t in TIER_OPTIONS" :key="t.value" :value="t.value">
+              {{ t.label }}（{{ tierStats[t.value] || 0 }}）
+            </option>
+          </select>
+          <select v-model="industryFilter" class="admin-user-filter-select" aria-label="按行业筛选">
+            <option value="">全部行业</option>
+            <option v-for="id in INDUSTRY_PRESET_IDS" :key="id" :value="id">{{ id }}</option>
+          </select>
+          <span class="admin-user-toolbar__count muted">
+            共 {{ filteredUsers.length }} / {{ users.length }} 人
+          </span>
+        </div>
+      </section>
+
+      <section v-if="filteredUsers.length" class="admin-user-grid" aria-label="用户卡片列表">
+        <article
+          v-for="u in filteredUsers"
+          :key="u.id"
+          class="admin-user-card"
+          :class="[
+            `admin-user-card--${resolveTier(u)}`,
+            { active: selectedUserId === u.id },
+          ]"
+          tabindex="0"
+          role="button"
+          @click="selectUser(u)"
+          @keydown.enter.prevent="selectUser(u)"
+          @keydown.space.prevent="selectUser(u)"
+        >
+          <div class="admin-user-card__bar" aria-hidden="true"></div>
+          <div class="admin-user-card__body">
+            <div class="admin-user-card__head">
+              <span class="admin-user-card__name">{{ u.username }}</span>
+              <span
+                class="admin-tier-tag"
+                :class="`admin-tier-tag--${resolveTier(u)}`"
+              >{{ tierLabel(u) }}</span>
+            </div>
+            <dl class="admin-user-card__meta">
+              <div class="admin-user-card__row">
+                <dt>行业</dt>
+                <dd>{{ u.industry_id || '通用' }}</dd>
+              </div>
+              <div class="admin-user-card__row">
+                <dt>Mod</dt>
+                <dd>{{ (u.mod_ids || []).length }} 个</dd>
+              </div>
+              <div class="admin-user-card__row admin-user-card__row--balance">
+                <dt>余额</dt>
+                <dd>{{ walletBalance(u) }}</dd>
+              </div>
+              <div class="admin-user-card__row admin-user-card__row--email">
+                <dt>邮箱</dt>
+                <dd>{{ u.email || '—' }}</dd>
+              </div>
+            </dl>
+            <div class="admin-user-card__foot">
+              <span class="muted">ID {{ u.id }}</span>
+              <span v-if="u.is_enterprise" class="admin-user-card__badge">企业</span>
+            </div>
           </div>
-          <ul v-if="filteredUsers.length" class="admin-user-list__items">
-            <li
-              v-for="u in filteredUsers"
-              :key="u.id"
-              class="admin-user-row"
-              :class="{ active: selectedUserId === u.id }"
-            >
-              <button type="button" class="admin-user-row__btn" @click="selectUser(u)">
-                <span class="admin-user-row__name">{{ u.username }}</span>
-                <span class="admin-user-row__meta muted">
-                  <span v-if="u.is_admin">管理员</span>
-                  <span v-else-if="u.is_enterprise">企业</span>
-                  <span v-else>普通</span>
-                  · {{ (u.mod_ids || []).length }} Mod
-                </span>
-              </button>
-            </li>
-          </ul>
-          <p v-else class="muted admin-user-list__empty">暂无用户</p>
-        </aside>
+        </article>
+      </section>
+      <p v-else class="muted admin-user-grid__empty">没有匹配的用户</p>
 
-        <section v-if="selectedUser" class="admin-user-detail">
-          <header class="admin-user-detail__head">
-            <div>
-              <h3>{{ selectedUser.username }}</h3>
-              <p class="muted">ID {{ selectedUser.id }} · {{ selectedUser.email || '无邮箱' }}</p>
-            </div>
-            <div class="admin-user-detail__actions">
-              <label class="admin-flag">
-                <input
-                  type="checkbox"
-                  :checked="selectedUser.is_enterprise"
-                  @change="toggleEnterprise($event)"
-                >
-                企业用户
-              </label>
-              <button
-                type="button"
-                class="btn btn-primary btn-sm"
-                :disabled="impersonateLoading"
-                @click="startImpersonate"
+      <section v-if="selectedUser" class="admin-user-detail" aria-label="用户详情">
+        <header class="admin-user-detail__head">
+          <div>
+            <h3>{{ selectedUser.username }}</h3>
+            <p class="muted">ID {{ selectedUser.id }} · {{ selectedUser.email || '无邮箱' }}</p>
+          </div>
+          <div class="admin-user-detail__actions">
+            <label class="admin-flag">
+              <input
+                type="checkbox"
+                :checked="selectedUser.is_enterprise"
+                @change="toggleEnterprise($event)"
               >
-                {{ impersonateLoading ? '进入中…' : '进入代管' }}
-              </button>
-            </div>
-          </header>
+              企业用户
+            </label>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="impersonateLoading"
+              @click="startImpersonate"
+            >
+              {{ impersonateLoading ? '进入中…' : '进入代管' }}
+            </button>
+          </div>
+        </header>
 
-          <div class="admin-mod-panel">
-            <h4>已绑定客户 Mod</h4>
-            <div v-if="userModIds.length" class="admin-mod-chips">
-              <span v-for="mid in userModIds" :key="mid" class="admin-mod-chip">
-                {{ modLabel(mid) }}
-                <small :class="['admin-mod-install', isModInstalled(mid) ? 'is-installed' : '']">
-                  {{ modInstallText(mid) }}
-                </small>
-                <button type="button" class="admin-mod-chip__remove" @click="unbindMod(mid)">×</button>
+        <section class="admin-user-profile" aria-label="用户账号体系">
+          <div class="admin-user-profile__row">
+            <label class="admin-user-profile__field">
+              <span class="admin-user-profile__label">等级</span>
+              <select v-model="profileEditing.tier" class="admin-user-profile__select">
+                <option v-for="t in TIER_OPTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
+              </select>
+            </label>
+            <label class="admin-user-profile__field">
+              <span class="admin-user-profile__label">行业</span>
+              <select v-model="profileEditing.industry_id" class="admin-user-profile__select">
+                <option v-for="id in INDUSTRY_PRESET_IDS" :key="id" :value="id">{{ id }}</option>
+              </select>
+            </label>
+            <label v-if="isEnterpriseProfile" class="admin-user-profile__field">
+              <span class="admin-user-profile__label">账号等级</span>
+              <select v-model="profileEditing.account_tier" class="admin-user-profile__select">
+                <option value="">未设</option>
+                <option v-for="t in ACCOUNT_TIER_OPTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
+              </select>
+            </label>
+            <label v-if="isEnterpriseProfile" class="admin-user-profile__field">
+              <span class="admin-user-profile__label">预算</span>
+              <select v-model="profileEditing.budget_range" class="admin-user-profile__select">
+                <option value="">未填</option>
+                <option v-for="b in BUDGET_RANGE_OPTIONS" :key="b" :value="b">{{ b }}</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="profileSaving"
+              @click="saveProfile"
+            >
+              {{ profileSaving ? '保存中…' : '保存' }}
+            </button>
+          </div>
+          <div class="admin-user-profile__row admin-user-profile__entitled">
+            <span class="admin-user-profile__label">已授权行业</span>
+            <label
+              v-for="id in INDUSTRY_PRESET_IDS"
+              :key="id"
+              class="admin-user-profile__chip"
+            >
+              <input type="checkbox" :value="id" v-model="profileEditing.entitled_industries" />
+              <span>{{ id }}</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="admin-entitlement-chain" aria-label="授权联动闭环">
+          <div class="admin-entitlement-chain__intro">
+            <div>
+              <strong>账号 → Mod → AI 员工 → 设备执行</strong>
+              <span class="muted">这里的绑定会决定企业端、手机端和信息页能看到并调用哪些员工。</span>
+            </div>
+            <div class="admin-chain-actions">
+              <a class="btn btn-secondary btn-sm" href="/admin/im">打开信息</a>
+              <a class="btn btn-secondary btn-sm" href="/admin/settings">设备绑定</a>
+            </div>
+          </div>
+          <div class="admin-chain-grid">
+            <div v-for="card in selectedChainCards" :key="card.label" class="admin-chain-card">
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+              <small>{{ card.detail }}</small>
+            </div>
+          </div>
+          <div v-if="selectedMissingModIds.length" class="admin-chain-warning" role="status">
+            已授权但本机未安装：{{ selectedMissingModIds.map(modLabel).join('、') }}。手机端不会拿到这些 Mod 下的员工。
+          </div>
+          <div class="admin-chain-employees">
+            <div class="admin-chain-employees__head">
+              <strong>授权后会同步的 AI 员工</strong>
+              <span class="muted">{{ selectedWorkflowEmployees.length }} 个</span>
+            </div>
+            <div v-if="selectedWorkflowEmployees.length" class="admin-chain-employee-list">
+              <span
+                v-for="emp in selectedWorkflowEmployees"
+                :key="`${emp.modId}:${emp.id}`"
+                class="admin-chain-employee-chip"
+                :title="emp.summary || emp.modName"
+              >
+                {{ emp.label }}
+                <small>{{ emp.modName }}</small>
               </span>
             </div>
-            <p v-else class="muted">尚未绑定客户 Mod</p>
-
-            <h4>可分配 Mod</h4>
-            <div class="admin-mod-assign">
-              <select v-model="modToBind" class="admin-mod-select">
-                <option value="">选择 Mod…</option>
-                <option
-                  v-for="m in assignableMods"
-                  :key="m.id"
-                  :value="m.id"
-                  :disabled="userModIds.includes(m.id)"
-                >
-                  {{ m.name || m.id }} · {{ modInstallText(m.id) }}
-                </option>
-              </select>
-              <button
-                type="button"
-                class="btn btn-secondary btn-sm"
-                :disabled="!modToBind || binding"
-                @click="bindMod"
-              >
-                {{ binding ? '绑定中…' : '绑定' }}
-              </button>
-            </div>
+            <p v-else class="muted admin-chain-empty">
+              当前账号的已安装 Mod 还没有暴露 workflow_employees；绑定并安装带员工的 Mod 后，会出现在信息页和手机端 AI 员工列表。
+            </p>
           </div>
         </section>
 
-        <section v-else class="admin-user-detail admin-user-detail--empty muted">
-          请选择左侧用户
-        </section>
-      </div>
+        <div class="admin-mod-panel">
+          <h4>已绑定客户 Mod</h4>
+          <div v-if="userModIds.length" class="admin-mod-chips">
+            <span v-for="mid in userModIds" :key="mid" class="admin-mod-chip">
+              {{ modLabel(mid) }}
+              <small :class="['admin-mod-install', isModInstalled(mid) ? 'is-installed' : '']">
+                {{ modInstallText(mid) }}
+              </small>
+              <button type="button" class="admin-mod-chip__remove" @click="unbindMod(mid)">×</button>
+            </span>
+          </div>
+          <p v-else class="muted">尚未绑定客户 Mod</p>
+
+          <h4>可分配 Mod</h4>
+          <div class="admin-mod-assign">
+            <select v-model="modToBind" class="admin-mod-select">
+              <option value="">选择 Mod…</option>
+              <option
+                v-for="m in assignableMods"
+                :key="m.id"
+                :value="m.id"
+                :disabled="userModIds.includes(m.id)"
+              >
+                {{ m.name || m.id }} · {{ modInstallText(m.id) }}
+              </option>
+            </select>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              :disabled="!modToBind || binding"
+              @click="bindMod"
+            >
+              {{ binding ? '绑定中…' : '绑定' }}
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -132,6 +266,7 @@ import { computed, onMounted, ref } from 'vue';
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin';
 import { appAlert } from '@/utils/appDialog';
 import { apiFetch } from '@/utils/apiBase';
+import { INDUSTRY_PRESET_IDS } from '@/constants/industryPresets';
 
 type AdminUser = {
   id: number;
@@ -140,16 +275,59 @@ type AdminUser = {
   is_admin?: boolean;
   is_enterprise?: boolean;
   mod_ids?: string[];
+  tier?: string;
+  industry_id?: string;
+  account_tier?: string;
+  budget_range?: string;
+  entitled_industries?: string[];
+};
+
+type LocalProfile = {
+  tier: string;
+  industry_id: string;
+  account_tier?: string;
+  budget_range?: string;
+  entitled_industries?: string[];
+};
+
+type WalletRow = {
+  id?: number;
+  user_id?: number;
+  balance?: number | string | null;
+  updated_at?: string;
 };
 
 type AssignableMod = { id: string; name?: string };
-type LocalModRow = { id?: string; name?: string; version?: string; is_installed?: boolean };
+type WorkflowEmployeeRow = {
+  id?: string;
+  label?: string;
+  name?: string;
+  title?: string;
+  panel_title?: string;
+  panel_summary?: string;
+};
+type LocalModRow = {
+  id?: string;
+  name?: string;
+  version?: string;
+  is_installed?: boolean;
+  workflow_employees?: WorkflowEmployeeRow[];
+};
+type EntitlementEmployeePreview = {
+  id: string;
+  label: string;
+  modId: string;
+  modName: string;
+  summary: string;
+};
 
 const users = ref<AdminUser[]>([]);
 const assignableMods = ref<AssignableMod[]>([]);
 const selectedUserId = ref<number | null>(null);
 const userModIds = ref<string[]>([]);
 const userFilter = ref('');
+const tierFilter = ref('');
+const industryFilter = ref('');
 const loadError = ref('');
 const modToBind = ref('');
 const binding = ref(false);
@@ -159,20 +337,68 @@ const localStatusError = ref('');
 const installedMods = ref<LocalModRow[]>([]);
 const syncStatus = ref<Record<string, unknown> | null>(null);
 
+// 用户钱包余额（远端 market /api/admin/wallets，按 user_id 索引）
+const walletMap = ref<Map<number, WalletRow>>(new Map());
+
+// 用户账号体系（本地持久化，按 username 合并远端用户列表）
+const userProfiles = ref<Record<string, LocalProfile>>({});
+const profileEditing = ref<{
+  tier: string;
+  industry_id: string;
+  account_tier: string;
+  budget_range: string;
+  entitled_industries: string[];
+}>({ tier: '', industry_id: '', account_tier: '', budget_range: '', entitled_industries: [] });
+const profileSaving = ref(false);
+
+const TIER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'personal', label: '个人' },
+  { value: 'enterprise', label: '企业' },
+  { value: 'admin', label: '管理员' },
+];
+const ACCOUNT_TIER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'normal', label: '普通' },
+  { value: 'pro', label: 'Pro' },
+  { value: 'max', label: 'Max' },
+  { value: 'ultra', label: 'Ultra' },
+];
+const BUDGET_RANGE_OPTIONS = ['5 万以内', '5–20 万', '20–50 万', '50 万以上'];
+
+function resolveTier(u: AdminUser): string {
+  return u.tier || (u.is_admin ? 'admin' : u.is_enterprise ? 'enterprise' : 'personal');
+}
+
+function tierLabel(u: AdminUser): string {
+  return TIER_OPTIONS.find((t) => t.value === resolveTier(u))?.label || '个人';
+}
+
 const selectedUser = computed(() =>
   users.value.find((u) => u.id === selectedUserId.value) || null,
 );
+// 账号等级仅企业用户可设
+const isEnterpriseProfile = computed(() => profileEditing.value.tier === 'enterprise');
 
 const filteredUsers = computed(() => {
   const q = userFilter.value.trim().toLowerCase();
-  if (!q) return users.value;
-  return users.value.filter(
-    (u) =>
+  const tier = tierFilter.value;
+  const industry = industryFilter.value;
+  return users.value.filter((u) => {
+    if (tier && resolveTier(u) !== tier) return false;
+    if (industry && (u.industry_id || '通用') !== industry) return false;
+    if (!q) return true;
+    return (
       u.username.toLowerCase().includes(q) ||
       String(u.email || '')
         .toLowerCase()
-        .includes(q),
-  );
+        .includes(q)
+    );
+  });
+});
+
+const tierStats = computed(() => {
+  const stats: Record<string, number> = { personal: 0, enterprise: 0, admin: 0 };
+  for (const u of users.value) stats[resolveTier(u)] = (stats[resolveTier(u)] || 0) + 1;
+  return stats;
 });
 
 const installedModMap = computed(() => {
@@ -185,6 +411,68 @@ const installedModMap = computed(() => {
 });
 
 const installedModIds = computed(() => new Set(installedModMap.value.keys()));
+
+const selectedInstalledMods = computed(() =>
+  userModIds.value
+    .map((id) => installedModMap.value.get(String(id || '').trim()))
+    .filter((row): row is LocalModRow => Boolean(row)),
+);
+
+const selectedMissingModIds = computed(() =>
+  userModIds.value.filter((id) => !installedModMap.value.has(String(id || '').trim())),
+);
+
+const selectedWorkflowEmployees = computed<EntitlementEmployeePreview[]>(() => {
+  const seen = new Set<string>();
+  const rows: EntitlementEmployeePreview[] = [];
+  for (const mod of selectedInstalledMods.value) {
+    const modId = String(mod.id || '').trim();
+    const modName = modLabel(modId);
+    for (const employee of mod.workflow_employees || []) {
+      const id = String(employee?.id || '').trim();
+      if (!id || seen.has(`${modId}:${id}`)) continue;
+      seen.add(`${modId}:${id}`);
+      rows.push({
+        id,
+        label: String(
+          employee.label || employee.name || employee.title || employee.panel_title || id,
+        ).trim(),
+        modId,
+        modName,
+        summary: String(employee.panel_summary || '').trim(),
+      });
+    }
+  }
+  return rows;
+});
+
+const selectedChainCards = computed(() => {
+  const modTotal = userModIds.value.length;
+  const installedTotal = selectedInstalledMods.value.length;
+  const employeeTotal = selectedWorkflowEmployees.value.length;
+  return [
+    {
+      label: '账号权益',
+      value: selectedUser.value?.is_enterprise ? '企业账号' : '普通账号',
+      detail: `${modTotal} 个客户 Mod 权益`,
+    },
+    {
+      label: '本机落地',
+      value: `${installedTotal}/${modTotal} 可用`,
+      detail: selectedMissingModIds.value.length ? '存在未安装 Mod' : '本机安装状态可用',
+    },
+    {
+      label: '信息/手机',
+      value: `${employeeTotal} 个员工`,
+      detail: '进入信息页、员工空间和手机 AI 员工列表',
+    },
+    {
+      label: '设备执行',
+      value: employeeTotal ? '可派工' : '待补员工',
+      detail: '手机可经局域网或服务器中继把任务派到电脑执行',
+    },
+  ];
+});
 
 const syncLastText = computed(() => {
   const raw = String(syncStatus.value?.last_sync_at || '').trim();
@@ -256,7 +544,27 @@ async function refreshLocalStatus() {
 async function loadUsers() {
   const res = await xcmaxAdminApi.listUsers();
   const data = res as { users?: AdminUser[]; data?: { users?: AdminUser[] } };
-  users.value = data.users || data.data?.users || [];
+  const list = data.users || data.data?.users || [];
+  // 合并本地 tier/industry_id（按 username 匹配）
+  try {
+    const profRes = await xcmaxAdminApi.getUserProfiles();
+    const profBody = profRes as { data?: Record<string, LocalProfile> };
+    const profiles = profBody.data || {};
+    userProfiles.value = profiles;
+    for (const u of list) {
+      const p = profiles[u.username];
+      if (p) {
+        u.tier = p.tier;
+        u.industry_id = p.industry_id;
+        u.account_tier = p.account_tier;
+        u.budget_range = p.budget_range;
+        u.entitled_industries = p.entitled_industries;
+      }
+    }
+  } catch {
+    // profile 加载失败不阻断用户列表
+  }
+  users.value = list;
 }
 
 async function loadAssignable() {
@@ -265,9 +573,41 @@ async function loadAssignable() {
   assignableMods.value = data.mods || data.data?.mods || [];
 }
 
+async function loadWallets() {
+  try {
+    const res = await xcmaxAdminApi.listWallets();
+    const body = res as { items?: WalletRow[]; data?: { items?: WalletRow[] } };
+    const items = body.items || body.data?.items || [];
+    const m = new Map<number, WalletRow>();
+    for (const w of items) {
+      if (w && typeof w.user_id === 'number') m.set(w.user_id, w);
+    }
+    walletMap.value = m;
+  } catch {
+    // 钱包加载失败不阻断页面
+    walletMap.value = new Map();
+  }
+}
+
+function walletBalance(u: AdminUser): string {
+  const w = walletMap.value.get(u.id);
+  if (!w || w.balance === null || w.balance === undefined) return '—';
+  const n = typeof w.balance === 'string' ? parseFloat(w.balance) : w.balance;
+  if (Number.isNaN(n)) return '—';
+  return `¥${n.toFixed(2)}`;
+}
+
 async function selectUser(u: AdminUser) {
   selectedUserId.value = u.id;
   modToBind.value = '';
+  // 初始化等级/行业编辑态：无本地 profile 时按远端标志推断默认值
+  profileEditing.value = {
+    tier: u.tier || (u.is_admin ? 'admin' : u.is_enterprise ? 'enterprise' : 'personal'),
+    industry_id: u.industry_id || '通用',
+    account_tier: u.account_tier || '',
+    budget_range: u.budget_range || '',
+    entitled_industries: Array.isArray(u.entitled_industries) ? [...u.entitled_industries] : [],
+  };
   try {
     const res = await xcmaxAdminApi.listUserMods(u.id);
     const data = res as { mod_ids?: string[]; data?: { mod_ids?: string[] } };
@@ -275,6 +615,41 @@ async function selectUser(u: AdminUser) {
   } catch (e) {
     userModIds.value = [...(u.mod_ids || [])];
     await appAlert(`加载用户 Mod 失败：${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+async function saveProfile() {
+  if (!selectedUser.value) return;
+  profileSaving.value = true;
+  try {
+    // 当前行业必须在已授权集合内（与后端校验一致）：自动并入避免 422
+    const entitled = [...profileEditing.value.entitled_industries];
+    if (
+      profileEditing.value.industry_id &&
+      !entitled.includes(profileEditing.value.industry_id)
+    ) {
+      entitled.push(profileEditing.value.industry_id);
+    }
+    const isEnterprise = profileEditing.value.tier === 'enterprise';
+    await xcmaxAdminApi.setUserProfile(selectedUser.value.id, {
+      username: selectedUser.value.username,
+      tier: profileEditing.value.tier,
+      industry_id: profileEditing.value.industry_id,
+      account_tier: isEnterprise ? profileEditing.value.account_tier || undefined : undefined,
+      budget_range: profileEditing.value.budget_range || undefined,
+      entitled_industries: entitled,
+    });
+    selectedUser.value.tier = profileEditing.value.tier;
+    selectedUser.value.industry_id = profileEditing.value.industry_id;
+    selectedUser.value.account_tier = isEnterprise ? profileEditing.value.account_tier : '';
+    selectedUser.value.budget_range = profileEditing.value.budget_range;
+    selectedUser.value.entitled_industries = entitled;
+    profileEditing.value.entitled_industries = entitled;
+    await appAlert('已保存');
+  } catch (e) {
+    await appAlert(`保存失败：${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    profileSaving.value = false;
   }
 }
 
@@ -337,7 +712,7 @@ async function startImpersonate() {
 
 onMounted(async () => {
   try {
-    await Promise.all([loadUsers(), loadAssignable(), refreshLocalStatus()]);
+    await Promise.all([loadUsers(), loadAssignable(), refreshLocalStatus(), loadWallets()]);
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e);
   }
@@ -347,8 +722,9 @@ onMounted(async () => {
 <style scoped>
 .admin-entitlements-view .page-content {
   padding: 20px 24px 40px;
-  max-width: 1100px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .admin-entitlements-head h2 {
@@ -382,73 +758,220 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
-.admin-entitlements-layout {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 16px;
-  margin-top: 16px;
-  min-height: 420px;
-}
-
-.admin-user-list {
+/* 顶部筛选工具栏 */
+.admin-user-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 12px 14px;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   background: #fff;
-  overflow: hidden;
+}
+
+.admin-user-toolbar__search {
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+
+.admin-user-toolbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
 .admin-user-search {
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 12px;
-  border: none;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
   font-size: 13px;
+  background: #f8fafc;
 }
 
-.admin-user-list__items {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 520px;
-  overflow-y: auto;
+.admin-user-search:focus {
+  outline: none;
+  border-color: #1e3a5f;
+  background: #fff;
 }
 
-.admin-user-row__btn {
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
+.admin-user-filter-select {
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  min-width: 110px;
+}
+
+.admin-user-toolbar__count {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 卡片网格 */
+.admin-user-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.admin-user-grid__empty {
+  padding: 32px 12px;
+  text-align: center;
+  border: 1px dashed #d6e0e8;
+  border-radius: 12px;
+  background: #f8fafc;
+  margin-bottom: 20px;
+}
+
+.admin-user-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
   cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  outline: none;
 }
 
-.admin-user-row.active .admin-user-row__btn,
-.admin-user-row__btn:hover {
-  background: #f3f4f6;
+.admin-user-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
 }
 
-.admin-user-row__name {
-  display: block;
+.admin-user-card:focus-visible {
+  border-color: #1e3a5f;
+  box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.18);
+}
+
+.admin-user-card.active {
+  border-color: #1e3a5f;
+  box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.25);
+}
+
+.admin-user-card__bar {
+  height: 4px;
+  width: 100%;
+  background: #64748b;
+}
+
+.admin-user-card--personal .admin-user-card__bar { background: #64748b; }
+.admin-user-card--enterprise .admin-user-card__bar { background: #1e3a5f; }
+.admin-user-card--admin .admin-user-card__bar { background: #92400e; }
+
+.admin-user-card__body {
+  padding: 12px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.admin-user-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-user-card__name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.admin-user-row__meta {
+.admin-user-card__meta {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-user-card__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-size: 12px;
 }
 
+.admin-user-card__row dt {
+  color: #94a3b8;
+  min-width: 32px;
+  margin: 0;
+}
+
+.admin-user-card__row dd {
+  margin: 0;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-card__row--email dd {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.admin-user-card__row--balance dd {
+  color: #16803c;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.admin-user-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e7eb;
+  font-size: 11px;
+}
+
+.admin-user-card__badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #1e3a5f;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* 用户等级标签 */
+.admin-tier-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+}
+.admin-tier-tag--personal { background: #64748b; }
+.admin-tier-tag--enterprise { background: #1e3a5f; }
+.admin-tier-tag--admin { background: #92400e; }
+
+/* 详情区 */
 .admin-user-detail {
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   background: #fff;
   padding: 16px 18px;
-}
-
-.admin-user-detail--empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .admin-user-detail__head {
@@ -471,6 +994,159 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* 用户等级/行业编辑区 */
+.admin-user-profile {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+.admin-user-profile__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.admin-user-profile__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.admin-user-profile__label {
+  font-size: 12px;
+  color: #64748b;
+}
+.admin-user-profile__select {
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+  min-width: 100px;
+}
+.admin-user-profile__entitled {
+  margin-top: 10px;
+  align-items: center;
+}
+.admin-user-profile__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #334155;
+  background: #fff;
+  cursor: pointer;
+}
+.admin-user-profile__chip input {
+  margin: 0;
+}
+
+.admin-entitlement-chain {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid #dce7f5;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.admin-entitlement-chain__intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.admin-entitlement-chain__intro strong,
+.admin-entitlement-chain__intro span {
+  display: block;
+}
+
+.admin-chain-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-chain-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-chain-card {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dbe6f3;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-chain-card span,
+.admin-chain-card small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.admin-chain-card strong {
+  display: block;
+  margin: 4px 0;
+  color: #111827;
+  font-size: 15px;
+}
+
+.admin-chain-warning {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+}
+
+.admin-chain-employees {
+  margin-top: 12px;
+}
+
+.admin-chain-employees__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.admin-chain-employee-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-chain-employee-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #eef6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.admin-chain-employee-chip small {
+  color: #64748b;
+}
+
+.admin-chain-empty {
+  margin: 0;
+  font-size: 12px;
 }
 
 .admin-mod-chips {
@@ -525,7 +1201,21 @@ onMounted(async () => {
 }
 
 @media (max-width: 900px) {
-  .admin-entitlements-layout {
+  .admin-user-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+
+  .admin-chain-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-entitlement-chain__intro {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-user-grid {
     grid-template-columns: 1fr;
   }
 }

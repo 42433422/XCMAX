@@ -2,7 +2,7 @@
 
 > **范围**：从 V0（1 条只读链 demo）升级到 V1（**多场景写操作 + 审批门控 + RAG + 端到端业务**）。  
 > **依赖**：[`ai-agent-v0-plan.md`](ai-agent-v0-plan.md) 闭环（✅ 2026-06-05）。  
-> **SSOT 对照**：[`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md) V1 段（✅ 2026-06-05 已写入）。  
+> **声称对照**：[`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md) V1 段（✅ 2026-06-05 已写入）。  
 > **状态（2026-06-05）**：Phase 1-4 全部代码 + 留证闭环。Phase 4.1 Mod 商店 + Phase 4.2 ERP 端到端 JSON 已落盘 `docs/evidence/ai-agent-v1/`。
 
 ---
@@ -43,7 +43,7 @@
 
 - 不替代现有 `/api/approval` 工作台（V1 与之并用）
 - 不做 UI（V1 仅 CLI 演示 + API；UI 留给 V1.1）
-- 不改业务域 14 路由 SSOT
+- 不改业务域 14 路由登记
 - 不依赖 staging（T36–T37）
 
 ---
@@ -130,7 +130,7 @@
 - `app/application/workflow/risk_gate.py`（V0）
 - `app/application/workflow/approval_service.py`（已有）
 - `app/routes/tools.py`（V0 工具注册表）
-- `resources/config/approval_config.yaml`（审批规则 SSOT）
+- `resources/config/approval_config.yaml`（审批规则配置源）
 
 ---
 
@@ -188,7 +188,7 @@ Week 8-9 Phase 4.1-4.3 端到端 + 录屏 + CLAIMED 收口
 
 ---
 
-## 6. 自动化脚本（SSOT）
+## 6. 自动化脚本
 
 ```bash
 # Phase 1 验证

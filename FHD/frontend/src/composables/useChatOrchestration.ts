@@ -19,6 +19,7 @@ import { useExcelAnalysis } from './useExcelAnalysis'
 import { isStartPrintMessage, detectRuntimeModeCommand } from '../utils/textParser'
 import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
 import productsApi from '../api/products'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { fetchShipmentRecordsForUnit, summarizeShipmentRecordsForAudit } from '@/utils/shipmentMgmtPostPrint'
 import { isCoreWorkflowModInstalled } from '@/constants/coreWorkflowMod'
@@ -30,7 +31,46 @@ import { useChatExcelContext } from './useChatExcelContext'
 import { useChatRequest } from './useChatRequest'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
+import { useAgentRunEventSync } from './useAgentRunEvents'
 import type { UseChatViewOptions } from './useChatView'
+import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import { asArray, asRecord, asString } from '@/utils/typeGuards'
+
+type XcagiChatWindow = Window & {
+  __VUE_CHAT_FILL__?: (value: string) => boolean
+  setWorkModeFromChat?: (enabled: boolean) => void
+  setMonitorModeFromChat?: (enabled: boolean) => void
+  refreshWorkModeMonitorList?: () => void
+  legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
+  isProTaskAcquisitionMessage?: (message: string) => boolean
+  jarvisSendMessage?: (message: string) => void
+}
+
+type DynamicShipmentTask = ShipmentTask & Record<string, unknown>
+
+function getXcagiWindow(): XcagiChatWindow {
+  return window as XcagiChatWindow
+}
+
+function asShipmentTask(value: unknown): DynamicShipmentTask {
+  const row = asRecord(value)
+  return {
+    ...row,
+    type: asString(row.type),
+  } as DynamicShipmentTask
+}
+
+function asPlannerPayload(value: unknown): ChatPlannerPayload {
+  return asRecord(value) as ChatPlannerPayload
+}
+
+function asAutoAction(value: unknown): ChatAutoAction {
+  return asRecord(value) as ChatAutoAction
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : asString(err, fallback)
+}
 
 function isDatabaseTokenRequirement(tokenName?: unknown, tokenDescription?: unknown): boolean {
   const raw = `${String(tokenName || '')} ${String(tokenDescription || '')}`.toUpperCase()
@@ -90,7 +130,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const latestAssistantPush = ref<{ title: string; description: string } | null>(null)
   const proRuntimeTask = ref<{ title: string; statusText: string; statusClass: string; description: string } | null>(null)
   const chatMessagesRef = ref<HTMLElement | null>(null)
-  let persistTaskPanelStateForSession: (targetSessionId?: string) => void = () => {}
+  let persistTaskPanelStateForSession: (targetSessionId?: string) => void = () => { }
 
   const {
     taskList,
@@ -135,7 +175,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   const executeRemoteChatRoundRef: {
     fn: (msgs: string[], opts?: { fromWriteUnlock?: boolean }) => Promise<void>
-  } = { fn: async () => {} }
+  } = { fn: async () => { } }
 
   const dbGate = useChatDbTokenGate({
     sessionId,
@@ -177,6 +217,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     attachContextSummaryToLastAiMessage,
     syncTaskFromChatResponse,
   } = responseAttach
+
+  const { syncAgentRunFromPayload } = useAgentRunEventSync({
+    upsertTask,
+    getLastAiMessageRef,
+  })
 
   const chatRequest = useChatRequest({
     messages,
@@ -309,7 +354,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             || String(persistedPath || '').split(/[\\/]/).pop()
             || 'excel.xlsx'
           const prefix = `@uploads/${displayFileName} `
-          const fillInput = (window as unknown).__VUE_CHAT_FILL__
+          const fillInput = getXcagiWindow().__VUE_CHAT_FILL__
           if (typeof fillInput === 'function' && fillInput(prefix)) return
 
           // 兜底：当宿主未注入 __VUE_CHAT_FILL__ 时，仍尝试直接写 DOM。
@@ -370,8 +415,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   )
 
   setOnMultimodalFileChangeCallback(onMultimodalFileChange)
-  const taskTableColumns = computed(() => getTaskTableColumns(currentTask.value as unknown))
-  const taskTableItems = computed(() => getTaskTableItems(currentTask.value as unknown))
+  const taskTableColumns = computed(() =>
+    currentTask.value ? getTaskTableColumns(currentTask.value) : []
+  )
+  const taskTableItems = computed(() =>
+    currentTask.value ? getTaskTableItems(currentTask.value) : []
+  )
   const taskOrderNumber = computed(() => getTaskOrderNumber(currentTask.value))
   /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
   async function runShipmentMgmtAfterPrintSuccess(ctx: {
@@ -522,8 +571,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   function applyProRuntimeMode(actionType: string, enabled: boolean): boolean {
     if (!isProMode.value) return false
     const shouldEnable = enabled !== false
-    const toggleWorkMode = (window as unknown).setWorkModeFromChat
-    const toggleMonitorMode = (window as unknown).setMonitorModeFromChat
+    const toggleWorkMode = getXcagiWindow().setWorkModeFromChat
+    const toggleMonitorMode = getXcagiWindow().setMonitorModeFromChat
 
     if (actionType === 'show_monitor') {
       if (typeof toggleMonitorMode === 'function') {
@@ -540,8 +589,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       toggleWorkMode(shouldEnable)
     }
 
-    if (shouldEnable && typeof (window as unknown).refreshWorkModeMonitorList === 'function') {
-      ;(window as unknown).refreshWorkModeMonitorList()
+    const refreshMonitorList = getXcagiWindow().refreshWorkModeMonitorList
+    if (shouldEnable && typeof refreshMonitorList === 'function') {
+      refreshMonitorList()
     }
 
     window.dispatchEvent(new CustomEvent('xcagi:pro-runtime-mode-changed', {
@@ -570,7 +620,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (!t || t.type !== 'shipment_generate' || t.completed) return
     orderNumberFetching.value = true
     try {
-      await hydrateTaskOrderNumber(t as unknown, { force: true })
+      await hydrateTaskOrderNumber(t, { force: true })
     } finally {
       orderNumberFetching.value = false
     }
@@ -582,16 +632,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     t.customOrderNumber = value
   }
 
-  function shouldAutoRunTask(task: unknown): boolean {
-    if (!task || task?.completed) return false
-    const taskType = String(task?.type || '').trim().toLowerCase()
+  function shouldAutoRunTask(task: ShipmentTask | null): boolean {
+    if (!task || task.completed) return false
+    const taskType = String(task.type || '').trim().toLowerCase()
     if (taskType === 'excel_import') return true
     if (taskType.includes('excel') && taskType.includes('import')) return true
 
     const toolId = String(
-      task?.payload?.tool_id
-      || task?.payload?.params?.tool_id
-      || task?.tool_id
+      task.payload?.tool_id
+      || task.payload?.params?.tool_id
+      || task.tool_id
       || ''
     ).trim().toLowerCase()
     if (toolId === 'import_excel_to_database' || toolId === 'excel_import') return true
@@ -599,31 +649,31 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     return false
   }
 
-  function scheduleAutoConfirmTask(task: unknown): void {
-    if (!task || task?.completed || !task?.api_url) return
+  function scheduleAutoConfirmTask(task: DynamicShipmentTask): void {
+    if (!task || task.completed || !task.api_url) return
     if (task.__xcagiAutoConfirmScheduled) return
     task.__xcagiAutoConfirmScheduled = true
     window.setTimeout(() => {
       if (currentTask.value !== task) return
-      if (isExecuting.value || task?.completed) return
+      if (isExecuting.value || task.completed) return
       void confirmTask()
     }, 0)
   }
 
   function showTaskConfirm(task: unknown) {
-    const nextTask = { ...(task || {}) }
+    const nextTask = asShipmentTask(task)
     currentTask.value = nextTask
     if (shouldAutoRunTask(nextTask)) {
       scheduleAutoConfirmTask(nextTask)
     }
 
-    if (nextTask?.type !== 'shipment_generate' || nextTask?.completed) return
+    if (nextTask.type !== 'shipment_generate' || nextTask.completed) return
 
     const existingOrderNo = String(
-      nextTask?.customOrderNumber
-      || nextTask?.order_number
-      || nextTask?.data?.order_number
-      || nextTask?.document?.order_number
+      nextTask.customOrderNumber
+      || nextTask.order_number
+      || nextTask.data?.order_number
+      || nextTask.document?.order_number
       || ''
     ).trim()
 
@@ -633,16 +683,17 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
 
     nextTask.customOrderNumber = ''
-    hydrateTaskOrderNumber(nextTask as unknown).catch(() => {})
-    enrichShipmentPreviewProducts(nextTask as unknown).catch(() => {})
+    hydrateTaskOrderNumber(nextTask).catch(() => { })
+    enrichShipmentPreviewProducts(nextTask).catch(() => { })
   }
 
   function emitAssistantPush(payload: unknown = {}) {
+    const row = asRecord(payload)
     const detail = {
-      title: String(payload.title || '任务推送').trim(),
-      description: String(payload.description || '').trim(),
-      feature: payload.feature || '',
-      query: payload.query || ''
+      title: String(row.title || '任务推送').trim(),
+      description: String(row.description || '').trim(),
+      feature: row.feature || '',
+      query: row.query || ''
     }
     latestAssistantPush.value = detail
     window.dispatchEvent(new CustomEvent('xcagi:assistant-push', { detail }))
@@ -654,14 +705,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (tutorialStore.isActive && tutorialStore.currentStep?.assistantTab) {
       return
     }
-    if (!task || task.completed) return
+    const row = asShipmentTask(task)
+    const action = asAutoAction(autoAction)
+    if (!row || row.completed) return
     const toolId = String(
-      task?.payload?.tool_id || task?.payload?.params?.tool_id || ''
+      row.payload?.tool_id || row.payload?.params?.tool_id || ''
     ).trim()
     const isShipment =
-      task.type === 'shipment_generate' || toolId === 'shipment_generate'
+      row.type === 'shipment_generate' || toolId === 'shipment_generate'
     if (!isShipment) return
-    const at = String(autoAction?.type || '').trim()
+    const at = String(action.type || '').trim()
     if (at === 'show_products' || at === 'show_products_float') return
     window.dispatchEvent(
       new CustomEvent('xcagi:close-assistant-float', { detail: { reason: 'shipment_task_confirm' } })
@@ -686,25 +739,31 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
   function buildTaskCompletedDescription(successMsg: string, data: unknown): string {
+    const row = asRecord(data)
+    const nestedData = asRecord(row.data)
+    const document = asRecord(row.document || nestedData.document)
     const parts = [successMsg || '任务执行成功']
-    const docName = data?.doc_name || data?.data?.doc_name || data?.document?.filename
-    const orderNo = data?.order_number || data?.data?.order_number || data?.document?.order_number
-    const filePath = data?.file_path || data?.data?.file_path || data?.document?.filepath
-    const labels = Array.isArray(data?.labels) ? data.labels : (Array.isArray(data?.data?.labels) ? data.data.labels : [])
+    const docName = row.doc_name || nestedData.doc_name || document.filename
+    const orderNo = row.order_number || nestedData.order_number || document.order_number
+    const filePath = row.file_path || nestedData.file_path || document.filepath
+    const labels = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
     if (docName) parts.push(`文档：${docName}`)
     if (orderNo) parts.push(`单号：${orderNo}`)
-    if (typeof data?.record_id !== 'undefined' && data?.record_id !== null) parts.push(`记录ID：${data.record_id}`)
-    if (typeof data?.order_id !== 'undefined' && data?.order_id !== null) parts.push(`订单ID：${data.order_id}`)
+    if (typeof row.record_id !== 'undefined' && row.record_id !== null) parts.push(`记录ID：${row.record_id}`)
+    if (typeof row.order_id !== 'undefined' && row.order_id !== null) parts.push(`订单ID：${row.order_id}`)
     if (labels.length) parts.push(`标签：${labels.length} 张`)
     if (filePath) parts.push(`路径：${filePath}`)
     return parts.join('；')
   }
 
   function buildShipmentDownloadUrl(data: unknown): string {
-    const directUrl = data?.download_url || data?.data?.download_url
+    const row = asRecord(data)
+    const nestedData = asRecord(row.data)
+    const document = asRecord(row.document || nestedData.document)
+    const directUrl = row.download_url || nestedData.download_url
     if (directUrl && typeof directUrl === 'string') return directUrl
 
-    const docName = data?.doc_name || data?.data?.doc_name || data?.document?.filename
+    const docName = row.doc_name || nestedData.doc_name || document.filename
     if (!docName || typeof docName !== 'string') return ''
 
     return `/api/shipment/download/${encodeURIComponent(docName)}`
@@ -719,26 +778,25 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   function extractShipmentExecutionContext(data: unknown) {
-    const filePath = data?.file_path || data?.data?.file_path || data?.document?.filepath || ''
+    const row = asRecord(data)
+    const nestedData = asRecord(row.data)
+    const document = asRecord(row.document || nestedData.document)
+    const filePath = asString(row.file_path || nestedData.file_path || document.filepath)
     const purchaseUnit = String(
-      data?.purchase_unit
-      ?? data?.data?.purchase_unit
-      ?? data?.document?.purchase_unit
+      row.purchase_unit
+      ?? nestedData.purchase_unit
+      ?? document.purchase_unit
       ?? ''
     ).trim()
     const orderId = normalizeRecordId(
-      data?.order_id
-      ?? data?.record_id
-      ?? data?.data?.order_id
-      ?? data?.data?.record_id
-      ?? data?.document?.order_id
-      ?? data?.document?.record_id
-      ?? data?.data?.document?.order_id
-      ?? data?.data?.document?.record_id
+      row.order_id
+      ?? row.record_id
+      ?? nestedData.order_id
+      ?? nestedData.record_id
+      ?? document.order_id
+      ?? document.record_id
     )
-    const labelsRaw = Array.isArray(data?.labels)
-      ? data.labels
-      : (Array.isArray(data?.data?.labels) ? data.data.labels : [])
+    const labelsRaw = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
 
     const labelPaths: string[] = []
     labelsRaw.forEach((label: unknown) => {
@@ -747,11 +805,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         return
       }
       if (label && typeof label === 'object') {
+        const labelRow = asRecord(label)
         const p =
-          label.file_path ||
-          label.path ||
-          label.filePath ||
-          label.filepath ||
+          labelRow.file_path ||
+          labelRow.path ||
+          labelRow.filePath ||
+          labelRow.filepath ||
           ''
         if (typeof p === 'string' && p.trim()) {
           labelPaths.push(p.trim())
@@ -777,7 +836,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (task?.type === 'shipment_generate') {
       if (!String(task?.customOrderNumber || '').trim()) {
-        await hydrateTaskOrderNumber(task as unknown)
+        await hydrateTaskOrderNumber(task)
       }
       const customOrderNumber = String(task?.customOrderNumber || '').trim()
       payload.params = { ...(payload.params || {}) }
@@ -821,14 +880,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         })
       }
 
-      const data = await result.json().catch(() => ({}))
+      const data = asRecord(await result.json().catch(() => ({})))
 
       if (data?.requires_token) {
-        if (isDatabaseTokenRequirement(data?.token_name, data?.token_description || data?.message)) {
-          return
-        }
-        handleChatRequiresToken(data?.token_name, data?.token_description || data?.message, null)
-        const tokenMsg = String(data?.message || data?.token_description || '当前操作需要二级数据库写入令牌').trim()
+        handleChatRequiresToken(
+          asString(data.token_name),
+          asString(data.token_description || data.message),
+          [],
+        )
+        const tokenMsg = String(data.message || data.token_description || '当前操作需要二级数据库写入令牌').trim()
         await addAndSaveMessage('[提示] ' + tokenMsg, 'ai')
         keepTaskCard = true
         currentTask.value = {
@@ -839,7 +899,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
 
       if (result.ok) {
-        const successMsg = data.message || data.msg || '任务执行成功'
+        const successMsg = String(data.message || data.msg || '任务执行成功')
         const shipmentDocUrl =
           task?.type === 'shipment_generate' ? buildShipmentDownloadUrl(data) : ''
         await addAndSaveMessage('[成功] ' + successMsg, 'ai', {
@@ -868,7 +928,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           ...task,
           title: `${task.title || '任务'}（已完成）`,
           description: buildTaskCompletedDescription(successMsg, data),
-          order_number: data?.order_number || data?.data?.order_number || data?.document?.order_number || '',
+          order_number:
+            asString(data.order_number) ||
+            asString(asRecord(data.data).order_number) ||
+            asString(asRecord(data.document).order_number),
           downloadUrl: task?.type === 'shipment_generate' ? buildShipmentDownloadUrl(data) : '',
           completed: true
         }
@@ -878,16 +941,17 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           handleAutoAction({ type: task.switch_view })
         }
       } else {
-        const errMsg = (data && (data.message || data.msg || data.error)) || `执行失败 (HTTP ${result.status})`
+        const errMsg = String(data.message || data.msg || data.error || `执行失败 (HTTP ${result.status})`)
         await addAndSaveMessage('[失败] 任务执行失败：' + errMsg, 'ai')
         if (shipmentTaskId) {
           failTask(shipmentTaskId, errMsg)
         }
       }
     } catch (e: unknown) {
-      await addAndSaveMessage('[失败] 任务执行失败：' + (e.message || '网络错误'), 'ai')
+      const msg = errorMessage(e, '网络错误')
+      await addAndSaveMessage('[失败] 任务执行失败：' + msg, 'ai')
       if (shipmentTaskId) {
-        failTask(shipmentTaskId, e.message || '网络错误')
+        failTask(shipmentTaskId, msg)
       }
     } finally {
       isExecuting.value = false
@@ -903,12 +967,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   function handleAutoAction(action: unknown, userMessage: string = '') {
-    console.log('[AutoAction] 触发:', action, '| 用户消息:', userMessage)
-    const type = action?.type || ''
-    const actionQuery = String(action?.query || action?.keyword || userMessage || '').trim()
+    const autoAction = asAutoAction(action)
+    console.log('[AutoAction] 触发:', autoAction, '| 用户消息:', userMessage)
+    const type = String(autoAction.type || '')
+    const actionQuery = String(autoAction.query || autoAction.keyword || userMessage || '').trim()
 
     if (type === 'set_work_mode') {
-      applyProRuntimeMode(type, action?.enabled)
+      applyProRuntimeMode(type, autoAction.enabled !== false)
     } else if (type === 'show_monitor') {
       applyProRuntimeMode(type, true)
     }
@@ -926,7 +991,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         query: actionQuery,
         forceOpen: true
       }
-      const hyd = action?.hydrateProductSearch
+      const hyd = autoAction.hydrateProductSearch
       if (hyd && Array.isArray(hyd.rows)) {
         floatDetail.hydrateProductSearch = { rows: hyd.rows, total: hyd.total }
       }
@@ -964,15 +1029,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         }))
       }
     }
-    const event = new CustomEvent('auto-action', { detail: { action, userMessage } })
+    const event = new CustomEvent('auto-action', { detail: { action: autoAction, userMessage } })
     window.dispatchEvent(event)
 
     if (!isProMode.value && ['set_work_mode', 'show_monitor'].includes(type)) {
       return
     }
 
-    if (typeof (window as unknown).legacyAutoActionHandler === 'function') {
-      ;(window as unknown).legacyAutoActionHandler(action, userMessage)
+    const legacyAutoActionHandler = getXcagiWindow().legacyAutoActionHandler
+    if (typeof legacyAutoActionHandler === 'function') {
+      legacyAutoActionHandler(autoAction, userMessage)
     }
   }
   function maybePrefetchProductAssistantFloat(userText: string) {
@@ -999,12 +1065,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const primaryText = remoteMessages[0] || ''
 
     /** 未开专业版界面且未勾选「专业意图体验」时：查产品类话术不必等 /ai/chat 或连通性探测，直接走产品列表接口 */
+    /** 管理端（admin-console）无产品库业务，不走产品快路径，避免「查询…」话术被误判为产品检索 */
     const kwFast =
       remoteMessages.length === 1 &&
-      !resolveEffectiveProModeState() &&
-      !proIntentExperienceEnabled?.value &&
-      !resolveExcelAnalysisContextForRequest() &&
-      multimodalPendingCount.value === 0
+        !isAdminConsoleSpa() &&
+        !resolveEffectiveProModeState() &&
+        !proIntentExperienceEnabled?.value &&
+        !resolveExcelAnalysisContextForRequest() &&
+        multimodalPendingCount.value === 0
         ? extractLikelyProductQueryKeyword(primaryText)
         : null
 
@@ -1019,12 +1087,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       startWaitProgressTimer()
       try {
         const resp = await productsApi.searchProducts(kwFast)
-        if (resp && (resp as unknown).success === false) {
-          throw new Error(String((resp as unknown)?.message || '产品库查询失败'))
+        const respRow = asRecord(resp)
+        if (resp && resp.success === false) {
+          throw new Error(String(resp.message || '产品库查询失败'))
         }
-        const raw = (resp as unknown)?.data ?? (resp as unknown)?.products ?? (resp as unknown)?.items
-        const rows = Array.isArray(raw) ? raw : []
-        const lines = rows.slice(0, 3).map((row: unknown) => {
+        const raw = resp.data ?? respRow.products ?? respRow.items
+        const rows = asArray<Record<string, unknown>>(raw)
+        const lines = rows.slice(0, 3).map((row) => {
           const m = String(row.model_number || '').trim()
           const n = String(row.name || row.product_name || '-').trim()
           const p = Number(row.price || 0)
@@ -1038,20 +1107,20 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const responseText = hasResults
           ? `已帮你打开产品副窗并带入「${kwFast}」。可在卡片中查看与修改。${previewSuffix}`
           : `未在产品库中找到「${kwFast}」，请确认型号或关键词后重试。`
-        const payload: unknown = {
+        const payload: ChatPlannerPayload = {
           success: true,
           response: responseText,
           ...(hasResults ? { autoAction: { type: 'show_products_float', query: kwFast } } : {})
         }
-        const mappedRows = rows.slice(0, 20).map((r: unknown) => ({
+        const mappedRows = rows.slice(0, 20).map((r) => ({
           id: r.id,
           model_number: r.model_number || '',
           name: r.name || r.product_name || '',
           price: Number(r.price || 0),
           unit: r.unit || ''
         }))
-        const totalFromApi = typeof (resp as unknown)?.total === 'number' ? (resp as unknown).total : rows.length
-        await addAndSaveMessage(payload.response, 'ai')
+        const totalFromApi = typeof respRow.total === 'number' ? respRow.total : rows.length
+        await addAndSaveMessage(payload.response || '', 'ai')
         syncTaskFromChatResponse(payload, primaryText)
         attachContextSummaryToLastAiMessage()
         attachThinkingStepsToLastAiMessage(payload)
@@ -1125,7 +1194,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const { body } = buildPlannerChatRequestPayload(primaryForStream, {
           fromWriteUnlock: !!opts?.fromWriteUnlock
         })
-        const res = await chatApi.sendChatStream(body as unknown, { signal: controller.signal })
+        const res = await chatApi.sendChatStream(
+          { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
+          Record<string, unknown>,
+          { signal: controller.signal },
+        )
         if (!res.ok) {
           throw new Error(await parseChatStreamErrorResponse(res))
         }
@@ -1142,7 +1215,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           } else if (ev.type === 'requires_token') {
             const tokenName = ev.token_name || ''
             const tokenDesc = ev.token_description || ''
-            if (isDatabaseTokenRequirement(tokenName, tokenDesc)) return
             handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
             streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
             applyPlainTextToMessageIndex(msgIndex, streamPlain)
@@ -1159,7 +1231,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         if (sseError) {
           throw new Error(sseError)
         }
-        const finalText = String((doneResult as unknown)?.response ?? streamPlain).trim() || streamPlain || '（无内容）'
+        const donePayload = asPlannerPayload(doneResult)
+        const finalText = String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）'
         applyPlainTextToMessageIndex(msgIndex, finalText)
         // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
         if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
@@ -1173,11 +1246,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           }
         }
         await saveMessage('ai', finalText)
-        const wrap =
+        const wrap: ChatPlannerPayload =
           doneResult && typeof doneResult === 'object'
-            ? (doneResult as unknown)
+            ? donePayload
             : { success: true, response: finalText }
         syncTaskFromChatResponse(wrap, primaryText)
+        await syncAgentRunFromPayload(wrap, primaryText)
         attachContextSummaryToLastAiMessage()
         attachThinkingStepsToLastAiMessage(wrap)
         attachTodoStepsToLastAiMessage(wrap)
@@ -1185,8 +1259,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         if (wrap.task) {
           showTaskConfirm(wrap.task)
           emitAssistantPush({
-            title: wrap.task.title || '新任务',
-            description: wrap.task.description || '收到一条任务，请处理'
+            title: asString(asRecord(wrap.task).title || '新任务'),
+            description: asString(asRecord(wrap.task).description || '收到一条任务，请处理')
           })
         }
         if (!wrap.task && (wrap?.autoAction?.type === 'show_products_float' || wrap?.autoAction?.type === 'show_products')) {
@@ -1200,9 +1274,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         }
       } catch (err: unknown) {
         const errText =
-          err?.name === 'AbortError'
+          err instanceof Error && err.name === 'AbortError'
             ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
-            : (err?.message || '流式对话失败')
+            : errorMessage(err, '流式对话失败')
         applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
         await saveMessage('ai', `处理失败：${errText}`)
       } finally {
@@ -1224,7 +1298,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         ? '专业意图处理中（普通界面槽位）...'
         : '正在理解你的问题...'
     )
-    let data: unknown
+    let data: ChatPlannerPayload = {}
     try {
       // 不再在发聊天前阻塞等待 /api/ai/test（最多 3s），否则「慢」往往来自这里而非 AI
       setLoadingProgress(
@@ -1235,26 +1309,29 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       startWaitProgressTimer()
       const base = resolveChatTimeoutMs(primaryText)
       const timeoutMs = Math.min(120000, remoteMessages.length <= 1 ? base : base * remoteMessages.length)
+      let rawData: unknown
       if (remoteMessages.length === 1) {
-        data = await requestChatByModeWithTimeout(remoteMessages[0], timeoutMs, {
+        rawData = await requestChatByModeWithTimeout(remoteMessages[0], timeoutMs, {
           fromWriteUnlock: !!opts?.fromWriteUnlock
         })
       } else {
-        data = await requestChatByModeBatchWithTimeout(remoteMessages, timeoutMs)
+        rawData = await requestChatByModeBatchWithTimeout(remoteMessages, timeoutMs)
       }
-      const head = remoteMessages.length === 1 ? data : data?.results?.[0]
+      data = asPlannerPayload(rawData)
+      const head = remoteMessages.length === 1 ? data : asPlannerPayload(data.results?.[0])
+      const headData = asRecord(head.data)
       setLoadingProgress('已收到响应，正在解析执行计划...')
-      if (head?.data?.action === 'workflow_confirmation_required') {
+      if (headData.action === 'workflow_confirmation_required') {
         setLoadingProgress('已生成计划，等待你确认执行...')
-      } else if (head?.data?.action === 'workflow_done') {
+      } else if (headData.action === 'workflow_done') {
         setLoadingProgress('执行完成，正在整理结果...')
-      } else if (head?.data?.action === 'workflow_failed') {
+      } else if (headData.action === 'workflow_failed') {
         setLoadingProgress('执行失败，正在整理错误信息...')
       }
     } catch (err: unknown) {
       data = {
         success: false,
-        message: err?.message || '请求失败'
+        message: errorMessage(err, '请求失败')
       }
     } finally {
       isStreamingReply.value = false
@@ -1263,43 +1340,44 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
 
     if (data.batch && Array.isArray(data.results)) {
+      const results = data.results.map((part) => asPlannerPayload(part))
       if (data.success) {
-        for (const part of data.results) {
+        for (const part of results) {
           if (part && part.success) {
-            if (part?.requires_token) {
-              if (!isDatabaseTokenRequirement(part?.token_name, part?.token_description)) {
-                handleChatRequiresToken(part?.token_name, part?.token_description, remoteMessages)
-              }
+            if (part.requires_token) {
+              handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
             }
-            await addAndSaveMessage(part.response, 'ai')
+            await addAndSaveMessage(part.response || '', 'ai')
             syncTaskFromChatResponse(part, primaryText)
+            await syncAgentRunFromPayload(part, primaryText)
           } else {
-            await addAndSaveMessage('处理失败: ' + (part?.message || '未知错误'), 'ai')
+            await addAndSaveMessage('处理失败: ' + (part.message || '未知错误'), 'ai')
           }
         }
         attachContextSummaryToLastAiMessage()
-        const lastOk = [...data.results].reverse().find((p: unknown) => p && p.success)
+        const lastOk = [...results].reverse().find((p) => p && p.success)
         if (lastOk) {
           attachThinkingStepsToLastAiMessage(lastOk)
           attachTodoStepsToLastAiMessage(lastOk)
           attachWorkflowTraceToLastAiMessage(lastOk)
         }
-        const lastTask = [...data.results].reverse().find((p: unknown) => p?.task)
+        const lastTask = [...results].reverse().find((p) => p.task)
         if (lastTask?.task) {
           showTaskConfirm(lastTask.task)
+          const taskRow = asRecord(lastTask.task)
           emitAssistantPush({
-            title: lastTask.task.title || '新任务',
-            description: lastTask.task.description || '收到一条任务，请处理'
+            title: taskRow.title || '新任务',
+            description: taskRow.description || '收到一条任务，请处理'
           })
         }
-        const lastFloat = [...data.results].reverse().find(
-          (p: unknown) =>
-            p?.autoAction?.type === 'show_products_float' || p?.autoAction?.type === 'show_products'
+        const lastFloat = [...results].reverse().find(
+          (p) =>
+            p.autoAction?.type === 'show_products_float' || p.autoAction?.type === 'show_products'
         )
         if (!lastTask?.task && lastFloat?.autoAction) {
           currentTask.value = null
         }
-        const lastAction = [...data.results].reverse().find((p: unknown) => p?.autoAction)
+        const lastAction = [...results].reverse().find((p) => p.autoAction)
         if (lastAction?.autoAction) {
           handleAutoAction(lastAction.autoAction, remoteMessages[remoteMessages.length - 1] || '')
         }
@@ -1314,12 +1392,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (data.success) {
       if (data?.requires_token) {
-        if (!isDatabaseTokenRequirement(data?.token_name, data?.token_description)) {
-          handleChatRequiresToken(data?.token_name, data?.token_description, remoteMessages)
-        }
+        handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
       }
-      await addAndSaveMessage(data.response, 'ai')
+      await addAndSaveMessage(data.response || '', 'ai')
       syncTaskFromChatResponse(data, primaryText)
+      await syncAgentRunFromPayload(data, primaryText)
       attachContextSummaryToLastAiMessage()
       attachThinkingStepsToLastAiMessage(data)
       attachTodoStepsToLastAiMessage(data)
@@ -1327,9 +1404,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
       if (data.task) {
         showTaskConfirm(data.task)
+        const taskRow = asRecord(data.task)
         emitAssistantPush({
-          title: data.task.title || '新任务',
-          description: data.task.description || '收到一条任务，请处理'
+          title: taskRow.title || '新任务',
+          description: taskRow.description || '收到一条任务，请处理'
         })
       }
       if (!data.task && (data?.autoAction?.type === 'show_products_float' || data?.autoAction?.type === 'show_products')) {
@@ -1343,7 +1421,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         maybeCloseAssistantFloatForShipmentTask(data.task, data.autoAction)
       }
     } else {
-      await addAndSaveMessage('处理失败: ' + data.message, 'ai')
+      await addAndSaveMessage('处理失败: ' + (data.message || '未知错误'), 'ai')
     }
   }
 
@@ -1356,13 +1434,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const previewModified = await handleShipmentModify(message)
     if (previewModified) return
 
+    const xcagiWindow = getXcagiWindow()
     if (
       isProMode.value &&
-      typeof (window as unknown).isProTaskAcquisitionMessage === 'function' &&
-      (window as unknown).isProTaskAcquisitionMessage(message) &&
-      typeof (window as unknown).jarvisSendMessage === 'function'
+      typeof xcagiWindow.isProTaskAcquisitionMessage === 'function' &&
+      xcagiWindow.isProTaskAcquisitionMessage(message) &&
+      typeof xcagiWindow.jarvisSendMessage === 'function'
     ) {
-      ;(window as unknown).jarvisSendMessage(message)
+      xcagiWindow.jarvisSendMessage(message)
       return
     }
 

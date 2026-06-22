@@ -5,8 +5,10 @@ XCAGI 前端兼容 API — 系统 / 认证 / 偏好 / 工具目录等杂项路�
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from app.domain.ai.tools_directory import get_tool_categories_payload, get_tools_payload
 from app.infrastructure.auth.db_token import (
@@ -174,6 +176,231 @@ def preferences_post(body: dict = Body(default_factory=dict)) -> dict:
     return {"success": True, "data": body or {}}
 
 
+def _memory_v2_service():
+    from app.services.user_memory_service import get_user_memory_service
+
+    return get_user_memory_service()
+
+
+def _memory_v2_error(payload: dict, status_code: int = 400) -> JSONResponse:
+    return JSONResponse(payload, status_code=status_code)
+
+
+def _memory_v2_agent_output(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    if not output:
+        for step in getattr(run, "steps", []) or []:
+            if str(getattr(step, "node_id", "")) == node_id:
+                output = dict(getattr(step, "output", {}) or {})
+                break
+    if not output:
+        output = {"success": getattr(run, "status", "") == "completed"}
+    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
+        output["message"] = getattr(run, "error", "")
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    return output
+
+
+def _memory_v2_user_id_from_request(request: Request, params: dict[str, Any]) -> str:
+    return str(
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or params.get("user_id")
+        or params.get("userId")
+        or "default"
+    ).strip()
+
+
+def _run_memory_v2_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+    failure_status: int,
+) -> JSONResponse:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    data = dict(params or {})
+    user_id = _memory_v2_user_id_from_request(request, data)
+    data.setdefault("user_id", user_id)
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("memory_v2") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return JSONResponse(
+            {"success": False, "message": f"未注册的 Memory v2 动作: {action}"},
+            status_code=400,
+        )
+
+    node_id = f"memory_v2_{action}"
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 执行 memory_v2.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="memory_v2",
+                action=action,
+                params=data,
+                risk=str(action_meta.get("risk") or "medium"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Execute memory_v2.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "medium"),
+        metadata={"source": "memory_v2_route", "route": route_path},
+    )
+    runtime_context = {
+        "source": "memory_v2_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+    }
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(data.get("message") or f"Memory v2 {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "memory-v2-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    payload = _memory_v2_agent_output(run, node_id)
+    status_code = 200 if payload.get("success") else failure_status
+    if payload.get("error_code") == "tool_exception":
+        status_code = 500
+    if run.status in {"waiting_user", "blocked"}:
+        status_code = 202
+    return JSONResponse(payload, status_code=status_code)
+
+
+@router.get("/memory/v2")
+@router.get("/memory/v2/", include_in_schema=False)
+def memory_v2_list(
+    user_id: str = Query(default="default"),
+    status: str | None = Query(default=None),
+    memory_type: str | None = Query(default=None),
+):
+    try:
+        svc = _memory_v2_service()
+        records = svc.list_memories(user_id, status=status, memory_type=memory_type)
+        return {
+            "success": True,
+            "user_id": user_id,
+            "memories": records,
+            "summary": svc.get_memory_v2_summary(user_id),
+        }
+    except ValueError as exc:
+        return _memory_v2_error({"success": False, "message": str(exc)}, 400)
+
+
+@router.get("/memory/v2/summary")
+@router.get("/memory/v2/summary/", include_in_schema=False)
+def memory_v2_summary(user_id: str = Query(default="default")) -> dict:
+    svc = _memory_v2_service()
+    return {
+        "success": True,
+        "user_id": user_id,
+        "summary": svc.get_memory_v2_summary(user_id),
+        "planner_context": svc.format_memory_v2_for_prompt(user_id),
+    }
+
+
+@router.post("/memory/v2/candidates")
+@router.post("/memory/v2/candidates/", include_in_schema=False)
+def memory_v2_create_candidate(request: Request, body: dict = Body(default_factory=dict)):
+    return _run_memory_v2_agent(
+        request=request,
+        action="propose_candidate",
+        params=dict(body or {}),
+        route_path="/memory/v2/candidates",
+        failure_status=400,
+    )
+
+
+@router.post("/memory/v2/{memory_id}/confirm")
+def memory_v2_confirm(
+    memory_id: str,
+    request: Request,
+    body: dict = Body(default_factory=dict),
+):
+    data = dict(body or {})
+    data["memory_id"] = memory_id
+    return _run_memory_v2_agent(
+        request=request,
+        action="confirm",
+        params=data,
+        route_path="/memory/v2/{memory_id}/confirm",
+        failure_status=404,
+    )
+
+
+@router.post("/memory/v2/{memory_id}/reject")
+def memory_v2_reject(
+    memory_id: str,
+    request: Request,
+    body: dict = Body(default_factory=dict),
+):
+    data = dict(body or {})
+    data["memory_id"] = memory_id
+    return _run_memory_v2_agent(
+        request=request,
+        action="reject",
+        params=data,
+        route_path="/memory/v2/{memory_id}/reject",
+        failure_status=404,
+    )
+
+
+@router.patch("/memory/v2/{memory_id}")
+def memory_v2_correct(
+    memory_id: str,
+    request: Request,
+    body: dict = Body(default_factory=dict),
+):
+    data = dict(body or {})
+    data["memory_id"] = memory_id
+    return _run_memory_v2_agent(
+        request=request,
+        action="correct",
+        params=data,
+        route_path="/memory/v2/{memory_id}",
+        failure_status=404,
+    )
+
+
+@router.delete("/memory/v2/{memory_id}")
+def memory_v2_delete(
+    memory_id: str,
+    request: Request,
+    user_id: str = Query(default="default"),
+    reason: str = Query(default=""),
+):
+    return _run_memory_v2_agent(
+        request=request,
+        action="delete",
+        params={"user_id": user_id, "memory_id": memory_id, "reason": reason},
+        route_path="/memory/v2/{memory_id}",
+        failure_status=404,
+    )
+
+
 @router.get("/distillation/versions")
 @router.get("/distillation/versions/", include_in_schema=False)
 def distillation_versions() -> dict:
@@ -238,6 +465,147 @@ def compat_db_tools_list(role: str | None = Query(default=None)) -> dict:
 @router.get("/tool-categories/", summary="工具分类列表（尾斜杠）", include_in_schema=False)
 def compat_tool_categories_list() -> dict:
     return get_tool_categories_payload()
+
+
+# ========== Butler Profile（拟人 Persy 系统）==========
+
+
+def _butler_profile_service():
+    from app.db import SessionLocal
+    from app.services.butler_profile_service import ButlerProfileService
+
+    db = SessionLocal()
+    return ButlerProfileService(db)
+
+
+def _resolve_user_id_int(request: Request, body: dict | None = None) -> int:
+    """从请求头或 body 解析用户 ID（整数）。默认 1。"""
+    raw = (
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or (body or {}).get("user_id")
+        or (body or {}).get("userId")
+        or "1"
+    )
+    try:
+        return int(str(raw).strip() or "1")
+    except (TypeError, ValueError):
+        return 1
+
+
+def _persona_backed_profile_view(uid: int) -> dict:
+    """方案 B（桥接合并）：persona_profile 为单一真相源。
+
+    存在 persona 画像（用户已对话过）则派生 butler 视图，使 Settings UI 与对话流
+    展示同一人格；尚无画像时回退 butler 自身默认视图。响应形状与 ``to_public_dict``
+    严格一致，前端零改动。
+    """
+    try:
+        from app.application.persona_butler_bridge import persona_view_for_user
+
+        view = persona_view_for_user(uid)
+        if view is not None:
+            return view
+    except Exception as exc:  # noqa: BLE001 - 桥接失败不应阻断 Settings 读取
+        logger.warning("persona 派生 butler 视图失败，回退 butler 默认: %s", exc)
+    return _butler_profile_service().get_profile_view(uid)
+
+
+@router.get("/butler/profile")
+@router.get("/butler/profile/", include_in_schema=False)
+def butler_profile_get(
+    request: Request,
+    user_id: str = Query(default="1"),
+) -> dict:
+    """读取当前用户的 butler profile（身份 + 四轴，不含 MBTI 原始分数）。"""
+    try:
+        uid = _resolve_user_id_int(request, {"user_id": user_id})
+        view = _persona_backed_profile_view(uid)
+        return {"success": True, "profile": view}
+    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.warning("读取 butler profile 失败: %s", exc)
+        return JSONResponse(
+            {"success": False, "message": f"读取 profile 失败: {exc}"},
+            status_code=500,
+        )
+
+
+@router.post("/butler/profile/infer")
+@router.post("/butler/profile/infer/", include_in_schema=False)
+def butler_profile_infer(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+    """手动触发 MBTI 推断。
+
+    Body 可选字段：
+    - conversations: 最近对话历史 [{"user_message": str, "assistant_message": str, "interrupted": bool, "corrected": bool}]
+    - mod_hints: MOD 所有权提示 ["考勤", "发货", ...]
+    """
+    from app.application.butler_profile_inference import (
+        ButlerProfileInference,
+        apply_inference,
+    )
+
+    try:
+        user_id = _resolve_user_id_int(request, body)
+        svc = _butler_profile_service()
+        profile = svc.get_or_create_profile(user_id)
+        current = profile.to_internal_dict()
+
+        conversations = body.get("conversations") or []
+        mod_hints = body.get("mod_hints") or []
+
+        engine = ButlerProfileInference()
+        result = engine.infer(current, conversations, mod_hints=mod_hints)
+        apply_inference(svc, user_id, result, current)
+
+        updated = svc.get_profile_view(user_id)
+        return {
+            "success": True,
+            "profile": updated,
+            "inference": {
+                "mbti_type": result.new_mbti_type,
+                "identity_changed": result.identity_changed,
+                "confidence": result.confidence,
+                "reasons": result.reasons,
+            },
+        }
+    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.warning("butler profile 推断失败: %s", exc)
+        return JSONResponse(
+            {"success": False, "message": f"推断失败: {exc}"},
+            status_code=500,
+        )
+
+
+@router.post("/butler/profile/interaction")
+@router.post("/butler/profile/interaction/", include_in_schema=False)
+def butler_profile_record_interaction(
+    request: Request, body: dict = Body(default_factory=dict)
+) -> dict:
+    """记录一次对话互动（写路径，供前端对话完成后调用）。
+
+    Body:
+    - user_message: str
+    - assistant_message: str
+    - interrupted: bool (可选)
+    - corrected: bool (可选)
+    """
+    try:
+        user_id = _resolve_user_id_int(request, body)
+        svc = _butler_profile_service()
+        svc.record_interaction(
+            user_id,
+            user_message=str(body.get("user_message") or ""),
+            assistant_message=str(body.get("assistant_message") or ""),
+            interrupted=bool(body.get("interrupted") or False),
+            corrected=bool(body.get("corrected") or False),
+        )
+        return {"success": True}
+    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.warning("记录 butler 互动失败: %s", exc)
+        return JSONResponse(
+            {"success": False, "message": f"记录互动失败: {exc}"},
+            status_code=500,
+        )
 
 
 # /api/market/llm-catalog 仅由 app.fastapi_routes.market_account 提供（见 register_all_routes 中优先挂载）。

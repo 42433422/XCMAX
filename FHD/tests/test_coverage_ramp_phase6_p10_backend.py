@@ -998,7 +998,10 @@ def test_run_blocked_by_risk_gate_returns_blocked_result() -> None:
     assert out["blocked_by_risk_gate"] is True
     assert out["result"]["summary"] == "blocked by risk middleware"
     assert out["result"]["risk_gate"] == gate
-    mock_record.assert_called_once_with("emp-1", success=False, blocked=True)
+    # 源码记录运行时附带 task/summary（供 AI Circle 活动流），summary 取 gate.reason。
+    mock_record.assert_called_once_with(
+        "emp-1", success=False, blocked=True, task="task", summary="r"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1094,7 +1097,10 @@ def test_run_direct_python_fast_path_success() -> None:
     assert out["pack"]["id"] == "emp-1"
     assert out["source"] == "employee_runtime.local"
     assert out["memory_used"] is False
-    mock_record.assert_called_once_with("emp-1", success=True)
+    # summary 由 _summarize(result) 生成：[handler] output
+    mock_record.assert_called_once_with(
+        "emp-1", success=True, task="task", summary="[direct_python] done"
+    )
     # 验证 direct_only 路径：reasoning 应包含 skipped_cognition
     actions_call = mock_actions.call_args
     reasoning = actions_call.args[1]
@@ -1157,6 +1163,70 @@ def test_run_cognition_failed_returns_cognition_failed_result() -> None:
     assert out["success"] is False
     assert out["result"]["summary"] == "cognition failed"
     assert out["result"]["cognition_error"] == "llm timeout"
+
+
+def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
+    agent = EmployeeAgent("emp-1")
+    pack = {
+        "pack_id": "emp-1",
+        "version": "1.0.0",
+        "manifest": {"name": "变更评审员"},
+        "pack_dir": "/tmp/emp-1",
+    }
+    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    reasoning_err = {"reasoning": "", "error": "llm timeout", "input": {}}
+    with (
+        patch(
+            "app.application.employee_runtime.agent.load_employee_pack_from_disk",
+            return_value=pack,
+        ),
+        patch(
+            "app.application.employee_runtime.agent.parse_employee_config_v2",
+            return_value={},
+        ),
+        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._handler_list",
+            return_value=["echo"],
+        ),
+        patch(
+            "app.application.employee_runtime.agent.gate_action_or_block",
+            return_value=gate,
+        ),
+        patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
+        patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+        patch("app.application.employee_runtime.agent.build_employee_context"),
+        patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
+        patch(
+            "app.application.employee_runtime.agent._ex._memory_light",
+            return_value={"session": {}},
+        ),
+        patch(
+            "app.application.employee_runtime.agent._ex._cognition_fhd",
+            return_value=reasoning_err,
+        ),
+        patch("app.application.employee_runtime.agent._ex._actions_fhd") as mock_actions,
+        patch("app.application.employee_runtime.metrics.record_employee_run") as mock_record,
+    ):
+        mock_scope = MagicMock()
+        mock_scope_cls.return_value = mock_scope
+        mock_mm = MagicMock()
+        mock_mm_cls.return_value = mock_mm
+        mock_mm.recall.return_value = MemoryContext()
+
+        out = agent.run(
+            "你好",
+            input_data={"source": "admin_im", "invoke_mode": "interactive_chat"},
+        )
+    assert out["success"] is True
+    assert out["degraded"] is True
+    assert out["result"]["summary"] == "interactive chat fallback"
+    assert out["result"]["cognition_error"] == "llm timeout"
+    assert out["result"]["outputs"][0]["handler"] == "interactive_chat_fallback"
+    assert "变更评审员" in out["result"]["outputs"][0]["output"]
+    mock_actions.assert_not_called()
+    # interactive_chat fallback 分支仅传 task（无 summary）。
+    mock_record.assert_called_once_with("emp-1", success=True, task="你好")
 
 
 # ---------------------------------------------------------------------------
@@ -1236,7 +1306,9 @@ def test_run_full_success_with_agent_handler() -> None:
     assert out["source"] == "employee_runtime.local"
     mock_build_tools.assert_called_once()
     mock_build_gate.assert_called_once()
-    mock_record.assert_called_once_with("emp-1", success=True)
+    mock_record.assert_called_once_with(
+        "emp-1", success=True, task="task", summary="[agent] agent done"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1312,7 +1384,7 @@ def test_run_handler_fails_publishes_trigger() -> None:
 
         out = agent.run("task", input_data={}, session_id="s1")
     assert out["success"] is False
-    mock_record.assert_called_once_with("emp-1", success=False)
+    mock_record.assert_called_once_with("emp-1", success=False, task="task", summary="[echo] boom")
     mock_publish.assert_called_once()
     call_args = mock_publish.call_args.args
     call_kwargs = mock_publish.call_args.kwargs

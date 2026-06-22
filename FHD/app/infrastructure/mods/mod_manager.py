@@ -1255,6 +1255,8 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
             return True
     except RECOVERABLE_ERRORS:
         pass
+    # SUNBIRD 等客户定制 Mod 现已是普通企业账号，完全由服务端 entitlement 决定可见性。
+    # 不再因磁盘目录存在或已废弃的本地用户名判断而放行——否则未授权账号也能挂载客户包。
     return False
 
 
@@ -1297,6 +1299,9 @@ def mount_on_disk_primary_client_mods(mod_manager: ModManager | None = None) -> 
 
     通用安装包会在不同账号之间复用本机目录，客户定制包必须由会话 entitlement
     决定是否可见/可挂载；登录后通过 ensure_mod_api_ready 按需加载。
+
+    因此本函数不再根据磁盘目录主动 load_mod，始终返回空列表，仅保留为兼容
+    旧调用点的占位（load_mod_routes 等仍会调用它）。
     """
     return []
 

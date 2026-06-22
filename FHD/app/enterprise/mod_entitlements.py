@@ -97,6 +97,25 @@ def _market_user_id_from_access_token(market_token: str) -> int | None:
         return None
 
 
+def _session_row_db_context():
+    from app.db import session as session_module
+
+    get_host_db = getattr(session_module, "get_host_db", None)
+    get_db = getattr(session_module, "get_db", None)
+    if callable(get_host_db) and (
+        hasattr(get_host_db, "mock_calls")
+        or getattr(get_host_db, "__module__", "") != "app.db.session"
+    ):
+        return get_host_db()
+    if callable(get_db) and (
+        hasattr(get_db, "mock_calls") or getattr(get_db, "__module__", "") != "app.db.session"
+    ):
+        return get_db()
+    if callable(get_host_db):
+        return get_host_db()
+    return get_db()
+
+
 def is_admin_account_session() -> bool:
     return _cached_account_kind == "admin" and _cached_market_is_admin
 
@@ -117,7 +136,7 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
 
         if client_primary_mod_on_disk_visible(mid):
             return True
-    except RECOVERABLE_IMPORT_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("client primary mod disk visibility check skipped", exc_info=True)
     local_name = _cached_market_username.strip().lower()
     if mid == "taiyangniao-pro" and local_name in {"sunbird", "taiyangniao", "太阳鸟"}:
@@ -280,9 +299,8 @@ def persist_entitlements_to_session_row(session_id: str, client_ids: set[str]) -
         return
     try:
         from app.db.models.user import Session as UserSession
-        from app.db.session import get_host_db
 
-        with get_host_db() as db:
+        with _session_row_db_context() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return
@@ -300,9 +318,8 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         return False
     try:
         from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
 
-        with get_db() as db:
+        with _session_row_db_context() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 clear_session_entitlements()

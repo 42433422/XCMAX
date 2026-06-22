@@ -21,6 +21,8 @@ Coverage scenarios per 铁律3:
 - Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, OSError)
 """
 
+# ruff: noqa: I001
+
 from __future__ import annotations
 
 import os
@@ -43,7 +45,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
@@ -3064,17 +3066,38 @@ class TestExcelAiParseSingle:
         assert response.status_code == 400
 
     def test_parse_single_success(self, excel_client):
-        with patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get:
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        with (
+            patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get,
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
             mock_parser = MagicMock()
             mock_parser.parse_single.return_value = {"success": True, "data": "parsed"}
             mock_get.return_value = mock_parser
 
             response = excel_client.post(
                 "/api/ai/parse-single",
-                json={"text": "product A 100件", "use_ai": True, "fallback_to_rule": True},
+                json={
+                    "text": "product A 100件",
+                    "use_ai": True,
+                    "fallback_to_rule": True,
+                    "user_id": "u-parse",
+                },
             )
         assert response.status_code == 200
-        assert response.json()["success"] is True
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"] == "parsed"
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.user_id == "u-parse"
+        assert run.intent == "excel_parse_single"
+        assert run.metadata["runtime_context"]["route"] == "/api/ai/parse-single"
 
     def test_parse_single_parse_failure_returns_422(self, excel_client):
         with patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get:
@@ -3102,15 +3125,32 @@ class TestExcelAiParseProducts:
         assert response.status_code == 400
 
     def test_parse_products_success(self, excel_client):
-        with patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get:
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        with (
+            patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get,
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
             mock_parser = MagicMock()
             mock_parser.parse_batch.return_value = {"success": True, "items": []}
             mock_get.return_value = mock_parser
 
             response = excel_client.post(
-                "/api/ai/parse-products", json={"texts": ["product A", "product B"]}
+                "/api/ai/parse-products",
+                json={"texts": ["product A", "product B"], "user_id": "u-batch"},
             )
         assert response.status_code == 200
+        body = response.json()
+        assert body["items"] == []
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.user_id == "u-batch"
+        assert run.intent == "excel_parse_products"
+        assert run.metadata["runtime_context"]["text_count"] == 2
 
     def test_parse_products_missing_texts_field(self, excel_client):
         response = excel_client.post("/api/ai/parse-products", json={})
@@ -3128,14 +3168,25 @@ class TestExcelAiAnalyze:
         assert response.status_code == 400
 
     def test_ai_analyze_with_query_only_returns_200(self, excel_client):
-        response = excel_client.post(
-            "/api/ai/analyze",
-            data={"query": "show me sales trend"},
-        )
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        with patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ):
+            response = excel_client.post(
+                "/api/ai/analyze",
+                data={"query": "show me sales trend"},
+            )
         assert response.status_code == 200
         body = response.json()
         assert body["success"] is True
         assert "chart_data" in body
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.intent == "excel_data_analysis"
+        assert run.metadata["runtime_context"]["route"] == "/api/ai/analyze"
 
     def test_ai_analyze_with_file(self, excel_client, tmp_dir):
         with (
@@ -3185,7 +3236,16 @@ class TestExcelAiFileAnalyze:
         assert response.status_code == 400
 
     def test_ai_file_analyze_success(self, excel_client):
-        with patch("app.application.get_file_analysis_app_service") as mock_get:
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        with (
+            patch("app.application.get_file_analysis_app_service") as mock_get,
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
             mock_service = MagicMock()
             mock_service.analyze_file.return_value = {"success": True, "data": "ok"}
             mock_get.return_value = mock_service
@@ -3196,6 +3256,85 @@ class TestExcelAiFileAnalyze:
                 files={"file": ("test.xlsx", b"fake", "application/octet-stream")},
             )
         assert response.status_code == 200
+        body = response.json()
+        assert body["data"] == "ok"
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.status == "completed"
+        assert run.intent == "file_analysis"
+        assert run.metadata["channel"] == "file_analysis_route"
+        assert run.metadata["runtime_context"]["route"] == "/api/ai/file/analyze"
+
+    def test_ai_file_analyze_pdf_ingests_dataset(self, excel_client, tmp_path, monkeypatch):
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+        from app.application.dataset_rag_app_service import (
+            get_dataset_rag_app_service,
+            reset_dataset_rag_app_service_for_tests,
+        )
+        from evals.run_agent_eval import _minimal_pdf_bytes
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
+        monkeypatch.setenv(
+            "DATASET_RAG_VECTOR_INDEX_PATH", str(tmp_path / "dataset_vectors.sqlite3")
+        )
+        reset_dataset_rag_app_service_for_tests()
+        repo = InMemoryAgentRunRepository()
+        pdf_path = tmp_path / "route_policy.pdf"
+        pdf_path.write_bytes(
+            _minimal_pdf_bytes(
+                "Route file analysis artifacts must enter Dataset RAG. "
+                "The server platform model is XCauto."
+            )
+        )
+        with (
+            patch("app.application.get_file_analysis_app_service") as mock_get,
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
+            mock_service = MagicMock()
+            mock_service.analyze_file.return_value = {
+                "success": True,
+                "parser_used": "pdfplumber",
+                "extension": ".pdf",
+                "file_path": str(pdf_path),
+                "saved_name": "route_policy.pdf",
+                "text_preview": "The server platform model is XCauto.",
+                "ai_summary": "Route PDF policy",
+            }
+            mock_get.return_value = mock_service
+
+            response = excel_client.post(
+                "/api/ai/file/analyze",
+                data={
+                    "purpose": "rag",
+                    "dataset_id": "route-docs",
+                    "tenant_id": "tenant-a",
+                    "user_id": "u-file",
+                },
+                files={"file": ("route_policy.pdf", b"fake", "application/pdf")},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.user_id == "u-file"
+        assert run.artifacts[0].artifact_type == "pdf_document"
+        assert run.metadata["dataset_ingest_count"] == 1
+        assert run.metadata["dataset_ids"] == ["route-docs"]
+        assert "dataset.ingested" in [event.event_type for event in run.events]
+
+        answer = get_dataset_rag_app_service().answer(
+            dataset_id="route-docs",
+            query="Which model should route file analysis mention?",
+            tenant_id="tenant-a",
+            top_k=2,
+        )
+        assert answer["success"] is True
+        assert "XCauto" in answer["answer"]
 
     def test_ai_file_analyze_failure_returns_400(self, excel_client):
         with patch("app.application.get_file_analysis_app_service") as mock_get:
@@ -3228,58 +3367,94 @@ class TestExcelAiSqliteImport:
     """Cover ``ai_sqlite_import_unit_products`` endpoint."""
 
     def test_sqlite_import_success(self, excel_client):
-        with patch("app.application.get_unit_products_import_app_service") as mock_get:
+        from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        with (
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            ),
+            patch("app.application.get_unit_products_import_app_service") as mock_get,
+        ):
             mock_service = MagicMock()
-            mock_service.import_unit_products.return_value = {"success": True, "imported": 5}
+            mock_service.import_unit_products.return_value = {
+                "success": True,
+                "imported": 5,
+                "created_unit": True,
+            }
             mock_get.return_value = mock_service
 
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
                 json={"saved_name": "test.xlsx", "unit_name": "Acme"},
             )
-        assert response.status_code == 200
+            assert response.status_code == 202
+            body = response.json()
+            run_id = body["run_id"]
+            run = repo.get(run_id)
+            assert run is not None
+            assert run.status == "waiting_user"
+            assert run.intent == "import_unit_products_db"
+            assert run.steps[0].tool_id == "unit_products_import"
+            assert run.steps[0].action == "execute_import"
+            mock_service.import_unit_products.assert_not_called()
+
+            completed = AgentOrchestrator(repository=repo).continue_run(
+                run_id,
+                approved_by="pytest",
+            )
+
+        assert completed is not None
+        assert completed.status == "completed"
+        mock_service.import_unit_products.assert_called_once_with(
+            saved_name="test.xlsx",
+            unit_name="Acme",
+            create_purchase_unit=True,
+            skip_duplicates=True,
+        )
+        output = completed.final_output["node_outputs"]["import_unit_products"]
+        assert output["success"] is True
+        assert output["created_customers"] == 1
+        assert output["created_products"] == 5
+        assert output["data"]["unit_name"] == "Acme"
 
     def test_sqlite_import_failure_returns_400(self, excel_client):
         with patch("app.application.get_unit_products_import_app_service") as mock_get:
-            mock_service = MagicMock()
-            mock_service.import_unit_products.return_value = {
-                "success": False,
-                "message": "invalid file",
-            }
-            mock_get.return_value = mock_service
-
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
                 json={"saved_name": "", "unit_name": ""},
             )
+        mock_get.assert_not_called()
         assert response.status_code == 400
 
     def test_sqlite_import_exception_returns_500(self, excel_client):
-        with patch("app.application.get_unit_products_import_app_service") as mock_get:
-            mock_service = MagicMock()
-            mock_service.import_unit_products.side_effect = RuntimeError("db error")
-            mock_get.return_value = mock_service
-
+        with patch(
+            "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan",
+            side_effect=RuntimeError("db error"),
+        ):
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "test.xlsx"},
+                json={"saved_name": "test.xlsx", "unit_name": "Acme"},
             )
         assert response.status_code == 500
 
     def test_sqlite_import_with_unit_name_guess(self, excel_client):
-        with patch("app.application.get_unit_products_import_app_service") as mock_get:
-            mock_service = MagicMock()
-            mock_service.import_unit_products.return_value = {"success": True}
-            mock_get.return_value = mock_service
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
+        repo = InMemoryAgentRunRepository()
+        with patch(
+            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+            return_value=repo,
+        ):
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
                 json={"saved_name": "test.xlsx", "unit_name_guess": "Guessed"},
             )
-        assert response.status_code == 200
-        # Verify unit_name_guess was used
-        args = mock_service.import_unit_products.call_args
-        assert args.kwargs.get("unit_name") == "Guessed"
+        assert response.status_code == 202
+        run = repo.get(response.json()["run_id"])
+        assert run is not None
+        assert run.steps[0].params["unit_name"] == "Guessed"
 
 
 class TestExcelSkillsAnalyze:

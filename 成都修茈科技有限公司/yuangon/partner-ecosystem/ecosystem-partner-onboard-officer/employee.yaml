@@ -21,9 +21,28 @@ sla:
   retry_max: 2
   escalate_to_human: true
 llm_default: auto
-skills: []
+capabilities:
+  - partner.onboard.validate
+  - catalog.integration.plan
+
+skills:
+  - skills/skill-ecosystem-partner-onboard-officer.md
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on:
 - modstore-backend-api
+examples:
+  - title: "生态伙伴接入员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次生态伙伴接入员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
+
 changelog:
 - version: 1.0.0
   date: '2026-06-03'

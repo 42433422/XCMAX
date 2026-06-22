@@ -1,4 +1,4 @@
-"""Tests for app.routes.ai_chat — pure helper functions."""
+"""Tests for app.application.ai_chat_helpers pure helper functions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.routes.ai_chat import (
+from app.application.ai_chat_helpers import (
     _build_number_preview_items,
     _fetch_product_meta_by_models,
     _resolve_mode_scoped_user_id,
@@ -125,7 +125,9 @@ class TestBuildNumberPreviewItems:
                 "name": "Widget",
             }
         ]
-        with patch("app.routes.ai_chat._fetch_product_meta_by_models", return_value={}):
+        with patch(
+            "app.application.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
+        ):
             result = _build_number_preview_items("TestUnit", products)
             assert len(result["items"]) == 1
             assert result["items"][0]["型号"] == "M1"
@@ -142,7 +144,9 @@ class TestBuildNumberPreviewItems:
                 "name": "Widget",
             }
         ]
-        with patch("app.routes.ai_chat._fetch_product_meta_by_models", return_value={}):
+        with patch(
+            "app.application.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
+        ):
             result = _build_number_preview_items("TestUnit", products)
             assert result["grand_total"] == 300.0
 
@@ -154,7 +158,9 @@ class TestBuildNumberPreviewItems:
                 "name": "Widget",
             }
         ]
-        with patch("app.routes.ai_chat._fetch_product_meta_by_models", return_value={}):
+        with patch(
+            "app.application.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
+        ):
             result = _build_number_preview_items("TestUnit", products)
             assert result["grand_total"] == 200.0
 
@@ -167,7 +173,7 @@ class TestBuildNumberPreviewItems:
             }
         ]
         with patch(
-            "app.routes.ai_chat._fetch_product_meta_by_models",
+            "app.application.ai_chat_helpers._fetch_product_meta_by_models",
             return_value={"M1": {"name": "Real Name", "price": 50}},
         ):
             result = _build_number_preview_items("TestUnit", products)
@@ -182,7 +188,7 @@ class TestBuildNumberPreviewItems:
             }
         ]
         with patch(
-            "app.routes.ai_chat._fetch_product_meta_by_models",
+            "app.application.ai_chat_helpers._fetch_product_meta_by_models",
             return_value={"M1": {"name": "Widget", "price": 25}},
         ):
             result = _build_number_preview_items("TestUnit", products)
@@ -197,7 +203,9 @@ class TestBuildNumberPreviewItems:
                 "name": "Widget",
             }
         ]
-        with patch("app.routes.ai_chat._fetch_product_meta_by_models", return_value={}):
+        with patch(
+            "app.application.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
+        ):
             result = _build_number_preview_items("TestUnit", products)
             assert result["items"][0]["桶数"] == 2.5
             assert result["grand_total"] == 25.0
@@ -210,7 +218,7 @@ class TestBuildShipmentPreviewResponseDict:
     def test_basic_structure(self):
         products = [{"model_number": "M1", "quantity_tins": 5, "unit_price": 10, "name": "Widget"}]
         with patch(
-            "app.routes.ai_chat._build_number_preview_items",
+            "app.application.ai_chat_helpers._build_number_preview_items",
             return_value={"items": [{"型号": "M1"}], "grand_total": 50.0},
         ):
             result = build_shipment_preview_response_dict("TestUnit", products, "order text")
@@ -221,7 +229,7 @@ class TestBuildShipmentPreviewResponseDict:
 
     def test_no_grand_total(self):
         with patch(
-            "app.routes.ai_chat._build_number_preview_items",
+            "app.application.ai_chat_helpers._build_number_preview_items",
             return_value={"items": [], "grand_total": None},
         ):
             result = build_shipment_preview_response_dict("Unit", [], "text")
@@ -229,7 +237,7 @@ class TestBuildShipmentPreviewResponseDict:
 
     def test_with_grand_total(self):
         with patch(
-            "app.routes.ai_chat._build_number_preview_items",
+            "app.application.ai_chat_helpers._build_number_preview_items",
             return_value={"items": [], "grand_total": 100.0},
         ):
             result = build_shipment_preview_response_dict("Unit", [], "text")
@@ -389,7 +397,7 @@ class TestUnifiedChatSinglePayload:
                 return_value={"intent": "shipment"},
             ),
             patch(
-                "app.routes.tools._parse_order_text",
+                "app.application.facades.tools_facade._parse_order_text",
                 return_value={
                     "success": True,
                     "unit_name": "TestUnit",
@@ -397,7 +405,7 @@ class TestUnifiedChatSinglePayload:
                 },
             ),
             patch(
-                "app.routes.ai_chat.build_shipment_preview_response_dict",
+                "app.application.ai_chat_helpers.build_shipment_preview_response_dict",
                 return_value={"success": True, "task": {"type": "shipment_generate"}},
             ),
         ):
@@ -414,7 +422,7 @@ class TestUnifiedChatSinglePayload:
                 return_value={"intent": "shipment"},
             ),
             patch(
-                "app.routes.tools._parse_order_text",
+                "app.application.facades.tools_facade._parse_order_text",
                 return_value={"success": False, "message": "订单信息不完整"},
             ),
         ):
@@ -430,7 +438,10 @@ class TestUnifiedChatSinglePayload:
                 "app.application.normal_chat_dispatch.route_normal_mode_message",
                 return_value={"intent": "shipment"},
             ),
-            patch("app.routes.tools._parse_order_text", side_effect=RuntimeError("parse error")),
+            patch(
+                "app.application.facades.tools_facade._parse_order_text",
+                side_effect=RuntimeError("parse error"),
+            ),
         ):
             result = unified_chat_single_payload("发货单", "user1", "127.0.0.1", "normal", None)
             assert result["success"] is False

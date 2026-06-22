@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -64,6 +66,57 @@ class TestFastapiDeps:
         }
         req = Request(scope)
         assert get_service_container(req) is container
+
+
+class TestRegistryArchitecture:
+    def test_bootstrap_facades_delegate_to_service_registry_without_lru_cache(self):
+        from app import bootstrap
+
+        container = ServiceContainer()
+        container._template_application_service = object()  # noqa: SLF001
+        container._materials_service = object()  # noqa: SLF001
+        container._products_service = object()  # noqa: SLF001
+        container._extract_log_service = object()  # noqa: SLF001
+        container._product_import_service = object()  # noqa: SLF001
+        set_service_registry(container)
+
+        for name in (
+            "get_template_app_service",
+            "get_materials_service",
+            "get_products_service",
+            "get_extract_log_service",
+            "get_product_import_service",
+        ):
+            assert not hasattr(getattr(bootstrap, name), "cache_info")
+
+        assert bootstrap.get_template_app_service() is container._template_application_service  # noqa: SLF001
+        assert bootstrap.get_materials_service() is container._materials_service  # noqa: SLF001
+        assert bootstrap.get_products_service() is container._products_service  # noqa: SLF001
+        assert bootstrap.get_extract_log_service() is container._extract_log_service  # noqa: SLF001
+        assert bootstrap.get_product_import_service() is container._product_import_service  # noqa: SLF001
+
+    def test_app_code_has_no_function_scoped_di_registry_imports(self):
+        app_root = Path(__file__).resolve().parents[2] / "app"
+        offenders: list[str] = []
+
+        def visit(path: Path, node: ast.AST, in_function: bool = False) -> None:
+            child_in_function = in_function or isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef)
+            )
+            if (
+                child_in_function
+                and isinstance(node, ast.ImportFrom)
+                and node.module == "app.di.registry"
+            ):
+                offenders.append(f"{path.relative_to(app_root.parent)}:{node.lineno}")
+            for child in ast.iter_child_nodes(node):
+                visit(path, child, child_in_function)
+
+        for path in sorted(app_root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            visit(path, tree)
+
+        assert offenders == []
 
     def test_falls_back_to_global_registry_when_services_missing(self):
         container = get_service_registry()

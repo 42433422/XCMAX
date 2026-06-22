@@ -268,6 +268,19 @@ class FinanceAppService:
                 db.add(txn)
                 db.commit()
                 db.refresh(txn)
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_transaction_changed,
+                    )
+
+                    neuro_notify_transaction_changed(
+                        "created",
+                        transaction_id=txn.id,
+                        amount=float(txn.amount or 0),
+                        txn_type=txn.transaction_type or "",
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_transaction_changed skipped", exc_info=True)
                 return {"success": True, "data": txn.to_dict()}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
@@ -305,6 +318,19 @@ class FinanceAppService:
                 txn.updated_at = utc_now_naive()
                 db.commit()
                 db.refresh(txn)
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_transaction_changed,
+                    )
+
+                    neuro_notify_transaction_changed(
+                        "updated",
+                        transaction_id=txn.id,
+                        amount=float(txn.amount or 0),
+                        txn_type=txn.transaction_type or "",
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_transaction_changed skipped", exc_info=True)
                 return {"success": True, "data": txn.to_dict()}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
@@ -319,8 +345,24 @@ class FinanceAppService:
                 )
                 if not txn:
                     return {"success": False, "message": "凭证不存在"}
+                _txn_id = txn.id
+                _txn_amount = float(txn.amount or 0)
+                _txn_type = txn.transaction_type or ""
                 db.delete(txn)
                 db.commit()
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_transaction_changed,
+                    )
+
+                    neuro_notify_transaction_changed(
+                        "updated",
+                        transaction_id=_txn_id,
+                        amount=_txn_amount,
+                        txn_type=_txn_type,
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_transaction_changed skipped", exc_info=True)
                 return {"success": True, "message": "凭证已删除"}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()

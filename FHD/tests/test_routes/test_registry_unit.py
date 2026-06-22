@@ -44,4 +44,18 @@ def test_apply_sorts_by_priority():
 
     app.include_router = record_include_router
     registry.apply(app)
-    assert included_paths == [["/high"], ["/low"]]
+    # FastAPI 0.138+ 用 _IncludedRouter 包装 include_router 的路由，
+    # 实际路径在 original_router.routes 中；旧版直接展开为 Route。
+    paths: list[str] = []
+    for r in app.routes:
+        orig = getattr(r, "original_router", None)
+        if orig is not None:
+            for sub in getattr(orig, "routes", []):
+                p = getattr(sub, "path", None)
+                if p:
+                    paths.append(p)
+        else:
+            p = getattr(r, "path", None)
+            if p:
+                paths.append(p)
+    assert paths.index("/high") < paths.index("/low")
