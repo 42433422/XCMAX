@@ -1,0 +1,82 @@
+{{- if .Values.api.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xcagi
+  namespace: {{ include "xcagi.namespace" . }}
+  labels:
+    {{- include "xcagi.labels" . | nindent 4 }}
+    app: xcagi
+    version: v{{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app: xcagi
+  template:
+    metadata:
+      labels:
+        {{- include "xcagi.selectorLabels" . | nindent 8 }}
+        app: xcagi
+        version: v{{ .Chart.AppVersion }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.api.containerPort | quote }}
+        prometheus.io/path: "/metrics"
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: xcagi
+          image: {{ include "xcagi.image" (dict "repository" .Values.api.image.repository "tag" .Values.api.image.tag) }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.api.containerPort }}
+              name: http
+          envFrom:
+            - configMapRef:
+                name: xcagi-config
+            {{- if or .Values.secrets.create .Values.secrets.existingSecret }}
+            - secretRef:
+                name: {{ include "xcagi.secretName" . }}
+            {{- end }}
+            {{- with .Values.api.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.api.probes.startup.path }}
+              port: {{ .Values.api.containerPort }}
+            periodSeconds: {{ .Values.api.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.api.probes.startup.failureThreshold }}
+            timeoutSeconds: {{ .Values.api.probes.startup.timeoutSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.api.probes.liveness.path }}
+              port: {{ .Values.api.containerPort }}
+            periodSeconds: {{ .Values.api.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.api.probes.readiness.path }}
+              port: {{ .Values.api.containerPort }}
+            periodSeconds: {{ .Values.api.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          {{- if .Values.api.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.api.persistence.mountPath }}
+          {{- end }}
+      {{- if .Values.api.persistence.enabled }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.api.persistence.existingClaim | default "xcagi-data" }}
+      {{- end }}
+{{- end }}

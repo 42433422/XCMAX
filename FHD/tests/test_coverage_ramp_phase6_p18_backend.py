@@ -2121,6 +2121,10 @@ class TestMobileExtEnsureMobileDeviceTable:
             patch("sqlalchemy.inspect", return_value=mock_insp),
         ):
             ext_mod._ensure_mobile_device_table()
+        # Table already present: existence is checked for the right table and
+        # no DDL is emitted on the bind (create path skipped).
+        mock_insp.has_table.assert_called_once_with("mobile_device_tokens")
+        mock_db.get_bind.return_value._run_ddl_visitor.assert_not_called()
 
     def test_table_missing_creates(self, ext_mod):
         mock_db = MagicMock()
@@ -2135,10 +2139,20 @@ class TestMobileExtEnsureMobileDeviceTable:
             patch("sqlalchemy.inspect", return_value=mock_insp),
         ):
             ext_mod._ensure_mobile_device_table()
+        # Table missing: DDL is emitted against the session bind to create it
+        # (Table.create drives bind._run_ddl_visitor with the SchemaGenerator).
+        mock_insp.has_table.assert_called_once_with("mobile_device_tokens")
+        mock_bind._run_ddl_visitor.assert_called_once()
 
     def test_recoverable_error_logged(self, ext_mod):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db down")):
-            ext_mod._ensure_mobile_device_table()
+        # RuntimeError is in RECOVERABLE_ERRORS, so it must be swallowed and
+        # logged rather than propagated to the caller.
+        with (
+            patch("app.db.session.get_db", side_effect=RuntimeError("db down")),
+            patch.object(ext_mod.logger, "warning") as mock_warning,
+        ):
+            ext_mod._ensure_mobile_device_table()  # must not raise
+        mock_warning.assert_called_once()
 
 
 class TestMobileExtGuessLanIpv4:

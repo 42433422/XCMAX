@@ -36,6 +36,25 @@ target_metadata = Base.metadata
 # Import all models to ensure they're registered with Base.metadata
 from app.db.models import *
 
+# Tables intentionally NOT modeled in the ORM (created via raw SQL in the squashed
+# baseline migration, versions/2026_06_22_baseline_squashed_schema.py). Excluded
+# from autogenerate so `alembic check` does not try to DROP them. Keep this set in
+# sync with _NON_ORM_PG_DDL in that migration.
+_NON_ORM_TABLES = {
+    "templates",
+    "template_usage_log",
+    "distillation_log",
+    "training_stats",
+    "excel_vector_chunks",
+    "excel_vector_indexes",
+}
+
+
+def _include_name(name, type_, parent_names):
+    if type_ == "table":
+        return name not in _NON_ORM_TABLES
+    return True
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -67,6 +86,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_name=_include_name,
     )
 
     with context.begin_transaction():
@@ -90,7 +110,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_name=_include_name,
         )
 
         with context.begin_transaction():

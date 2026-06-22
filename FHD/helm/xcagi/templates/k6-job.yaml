@@ -4,23 +4,55 @@ kind: Job
 metadata:
   name: k6-7day
   namespace: {{ include "xcagi.namespace" . }}
+  labels:
+    {{- include "xcagi.labels" . | nindent 4 }}
+    app: k6
 spec:
   backoffLimit: 0
   template:
+    metadata:
+      labels:
+        {{- include "xcagi.selectorLabels" . | nindent 8 }}
+        app: k6
     spec:
       restartPolicy: Never
       containers:
         - name: k6
-          image: {{ .Values.monitoring.k6.image }}
+          image: {{ include "xcagi.image" (dict "repository" .Values.monitoring.k6.image.repository "tag" .Values.monitoring.k6.image.tag) }}
+          imagePullPolicy: {{ .Values.monitoring.k6.image.pullPolicy }}
           args: [run, /scripts/k6_7d_contract.js]
           env:
+            - name: XCAGI_BASE_URL
+              value: {{ .Values.monitoring.k6.baseUrl | quote }}
             - name: K6_DURATION
               value: {{ .Values.monitoring.k6.duration | quote }}
+            - name: E2E_USER
+              value: {{ .Values.monitoring.k6.user | quote }}
+            - name: E2E_PASSWORD
+              value: {{ .Values.monitoring.k6.password | quote }}
           volumeMounts:
             - name: k6-script
               mountPath: /scripts
+          resources:
+            {{- toYaml .Values.monitoring.k6.resources | nindent 12 }}
       volumes:
         - name: k6-script
           configMap:
             name: k6-7day-contract
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k6-service
+  namespace: {{ include "xcagi.namespace" . }}
+  labels:
+    {{- include "xcagi.labels" . | nindent 4 }}
+    app: k6
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6565
+      targetPort: 6565
+  selector:
+    app: k6
 {{- end }}

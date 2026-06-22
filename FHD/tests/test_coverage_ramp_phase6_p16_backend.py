@@ -134,8 +134,10 @@ class TestInitDbInitializeDatabases:
 
         monkeypatch.setattr("app.db.init_db.get_app_data_dir", lambda: tmp_dir)
         monkeypatch.setattr("app.db.init_db._iter_seed_dirs", lambda: [])
-        # Should not raise
+        # No seed dir contains the file -> source_path stays None -> warn + continue,
+        # the target db must NOT be created.
         initialize_databases(["nonexistent.db"])
+        assert not os.path.exists(os.path.join(tmp_dir, "nonexistent.db"))
 
     def test_initialize_databases_copy_failure_logged(self, tmp_dir, monkeypatch):
         from app.db import init_db
@@ -147,9 +149,15 @@ class TestInitDbInitializeDatabases:
         _make_sqlite_db(seed_path)
         monkeypatch.setattr("app.db.init_db._iter_seed_dirs", lambda: [seed_dir])
 
-        with patch("app.db.init_db.shutil.copy2", side_effect=OSError("disk full")):
-            # Should not raise; logs warning
+        target_path = os.path.join(tmp_dir, "fail.db")
+        with patch(
+            "app.db.init_db.shutil.copy2", side_effect=OSError("disk full")
+        ) as mock_copy:
+            # copy2 raises a RECOVERABLE_ERROR -> swallowed (must not propagate).
             init_db.initialize_databases(["fail.db"])
+        # Copy was attempted seed -> target, but failed, so target must not exist.
+        mock_copy.assert_called_once_with(seed_path, target_path)
+        assert not os.path.exists(target_path)
 
     def test_initialize_databases_empty_db_files(self, tmp_dir, monkeypatch):
         from app.db.init_db import initialize_databases
@@ -201,9 +209,13 @@ class TestInitDbEnsureSqlitePerModCopies:
         monkeypatch.setattr("app.db.init_db.get_app_data_dir", lambda: tmp_dir)
         with patch(
             "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
-            lambda name, mod_id: f"products__{mod_id}.db",
-        ):
+            side_effect=lambda name, mod_id: f"products__{mod_id}.db",
+        ) as mock_suffix:
             ensure_sqlite_per_mod_database_copies(["", "  ", None])
+        # Every id is empty/whitespace/None -> skipped before the inner db loop,
+        # so the per-mod filename helper is never reached and no files are written.
+        mock_suffix.assert_not_called()
+        assert os.listdir(tmp_dir) == []
 
     def test_skips_duplicate_mod_ids(self, tmp_dir, monkeypatch):
         from app.db.init_db import ensure_sqlite_per_mod_database_copies
@@ -238,15 +250,21 @@ class TestInitDbEnsureSqlitePerModCopies:
         mother = os.path.join(tmp_dir, "products.db")
         _make_sqlite_db(mother)
 
+        dest_path = os.path.join(tmp_dir, "products__mymod.db")
         with (
             patch(
                 "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
                 lambda name, mod_id: f"products__{mod_id}.db",
             ),
-            patch("app.db.init_db.shutil.copy2", side_effect=OSError("denied")),
+            patch(
+                "app.db.init_db.shutil.copy2", side_effect=OSError("denied")
+            ) as mock_copy,
         ):
             ensure_sqlite_per_mod_database_copies(["mymod"])
-        # Should not raise; copy failed
+        # Mother db exists so a copy is attempted, but copy2 raises a RECOVERABLE_ERROR
+        # which is swallowed -> no exception propagates and the per-mod file is absent.
+        assert mock_copy.call_count == 1
+        assert not os.path.exists(dest_path)
 
 
 class TestInitDbGetDbPath:
@@ -300,14 +318,29 @@ class TestInitDbTemplateTables:
 
         db_path = os.path.join(tmp_dir, "test.db")
         init_template_tables(db_path)
-        # Second call should not raise
+        # Second call must be idempotent (CREATE TABLE IF NOT EXISTS) and leave both
+        # tables intact rather than erroring on the existing schema.
         init_template_tables(db_path)
+
+        conn = sqlite3.connect(db_path)
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name IN ('templates','template_usage_log')"
+        ).fetchall()
+        conn.close()
+        assert len(tables) == 2
 
     def test_init_template_tables_for_engine_skips_non_postgres(self, sqlite_engine):
         from app.db.init_db import init_template_tables_for_engine
 
-        # SQLite engine -> should be no-op (returns early)
+        # Non-postgres dialect -> returns before running any DDL, so no templates
+        # table is created on the engine.
         init_template_tables_for_engine(sqlite_engine)
+        with sqlite_engine.connect() as conn:
+            tables = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='templates'")
+            ).fetchall()
+            assert tables == []
 
 
 class TestInitDbAuthBootstrap:
@@ -341,8 +374,11 @@ class TestInitDbAuthBootstrap:
             "app.db.init_db._resolve_auth_bootstrap_engine",
             lambda engine=None, database_url=None: pg_engine,
         )
-        # Should be no-op
+        # Resolved engine is postgres -> function returns before inspecting/creating
+        # anything; the SQLite-only DDL path (engine.begin / connect) is never touched.
         ensure_sqlite_auth_bootstrap(pg_engine)
+        pg_engine.begin.assert_not_called()
+        pg_engine.connect.assert_not_called()
 
     def test_ensure_sqlite_auth_bootstrap_swallows_errors(self, sqlite_engine, monkeypatch):
         from app.db.init_db import ensure_sqlite_auth_bootstrap
@@ -352,8 +388,16 @@ class TestInitDbAuthBootstrap:
             lambda engine=None, database_url=None: sqlite_engine,
         )
         with patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")):
-            # swallow_errors=True -> should not raise
-            ensure_sqlite_auth_bootstrap(sqlite_engine, swallow_errors=True)
+            # swallow_errors=True -> RuntimeError is caught and the function returns
+            # None without propagating.
+            result = ensure_sqlite_auth_bootstrap(sqlite_engine, swallow_errors=True)
+        assert result is None
+        # inspect failed before any DDL, so the users table was never created.
+        with sqlite_engine.connect() as conn:
+            tables = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            ).fetchall()
+            assert tables == []
 
     def test_ensure_sqlite_auth_bootstrap_raises_when_not_swallowed(
         self, sqlite_engine, monkeypatch
@@ -446,8 +490,14 @@ class TestInitDbRuntimeAuthBootstrap:
         monkeypatch.setattr(
             "app.fastapi_app.sqlite_paths.resolve_effective_database_url", lambda: ""
         )
-        # Should be no-op
-        ensure_runtime_auth_bootstrap()
+        # Empty resolved url -> early return before either dialect branch runs.
+        with (
+            patch("app.db.init_db.ensure_sqlite_auth_bootstrap") as mock_sqlite,
+            patch("app.db.init_db.ensure_postgresql_auth_bootstrap") as mock_pg,
+        ):
+            ensure_runtime_auth_bootstrap()
+        mock_sqlite.assert_not_called()
+        mock_pg.assert_not_called()
 
     def test_runtime_auth_bootstrap_sqlite_url(self, sqlite_engine, monkeypatch):
         from app.db.init_db import ensure_runtime_auth_bootstrap
@@ -513,8 +563,9 @@ class TestInitDbSessionsColumns:
         insp = MagicMock()
         insp.get_table_names.return_value = []
         with patch("sqlalchemy.inspect", return_value=insp):
-            # Should be no-op
             ensure_sessions_market_access_token_column(fake_engine)
+        # No sessions table -> returns before any ALTER, so begin() is never opened.
+        fake_engine.begin.assert_not_called()
 
     def test_ensure_sessions_market_access_token_already_has_column(self, monkeypatch):
         from app.db.init_db import ensure_sessions_market_access_token_column
@@ -541,6 +592,8 @@ class TestInitDbSessionsColumns:
         insp.get_table_names.return_value = []
         with patch("sqlalchemy.inspect", return_value=insp):
             ensure_sessions_market_refresh_token_column(fake_engine)
+        # No sessions table -> returns before any ALTER, so begin() is never opened.
+        fake_engine.begin.assert_not_called()
 
     def test_ensure_sessions_enterprise_entitlement_no_sessions_table(self, monkeypatch):
         from app.db.init_db import ensure_sessions_enterprise_entitlement_columns
@@ -551,6 +604,8 @@ class TestInitDbSessionsColumns:
         insp.get_table_names.return_value = []
         with patch("sqlalchemy.inspect", return_value=insp):
             ensure_sessions_enterprise_entitlement_columns(fake_engine)
+        # No sessions table -> returns before any ALTER, so begin() is never opened.
+        fake_engine.begin.assert_not_called()
 
     def test_ensure_sessions_account_meta_no_sessions_table(self, monkeypatch):
         from app.db.init_db import ensure_sessions_account_meta_columns
@@ -561,6 +616,8 @@ class TestInitDbSessionsColumns:
         insp.get_table_names.return_value = []
         with patch("sqlalchemy.inspect", return_value=insp):
             ensure_sessions_account_meta_columns(fake_engine)
+        # No sessions table -> returns before any ALTER, so begin() is never opened.
+        fake_engine.begin.assert_not_called()
 
 
 class TestInitDbOtherTables:
@@ -605,8 +662,17 @@ class TestInitDbOtherTables:
     def test_ensure_product_query_indexes_no_products_table(self, sqlite_engine):
         from app.db.init_db import ensure_product_query_indexes
 
-        # No products table -> no-op
+        # No products table -> returns early, creates no indexes.
         ensure_product_query_indexes(sqlite_engine)
+        with sqlite_engine.connect() as conn:
+            indexes = {
+                row[0]
+                for row in conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='index'")
+                )
+            }
+        assert "ix_products_unit" not in indexes
+        assert "ix_products_model_number" not in indexes
 
 
 # ===========================================================================

@@ -118,10 +118,15 @@ async def test_register_with_script_returns_eskill_spec():
                 "modstore_server.employee_skill_register._llm_split_steps",
                 new=AsyncMock(return_value=[]),
             ),
+            # _register_script_in_code_store hard-requires the optional vibe_coding
+            # package; stub it so the real splitting / spec-assembly logic runs.
+            patch(
+                "modstore_server.employee_skill_register._register_script_in_code_store"
+            ) as mock_register_script,
             patch(
                 "modstore_server.employee_skill_register._upsert_eskill",
-                return_value=42,
-            ),
+                side_effect=lambda *a, **kw: 42,
+            ) as mock_upsert,
         ):
             specs = await register_employee_pack_as_eskills(
                 db,
@@ -134,11 +139,20 @@ async def test_register_with_script_returns_eskill_spec():
 
         assert isinstance(specs, list)
         assert len(specs) >= 2
+        # Real side effects (not a tautology on the mocked return value):
+        # every produced spec must have driven an _upsert_eskill DB write and a
+        # code-store registration.
+        assert mock_upsert.call_count == len(specs)
+        assert mock_register_script.call_count >= len(specs)
+        # _upsert_eskill is always called by keyword with a real vibe_skill_id.
+        for call in mock_upsert.call_args_list:
+            assert call.kwargs["vibe_skill_id"]
+            assert call.kwargs["name"]
         spec = specs[0]
         assert spec["eskill_id"] == 42
-        assert "vibe_skill_id" in spec
-        assert "name" in spec
-        assert "output_var" in spec
+        assert spec["vibe_skill_id"]
+        assert spec["name"]
+        assert spec["output_var"]
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +209,7 @@ async def test_register_multi_step_split():
                 "modstore_server.employee_skill_register._llm_split_steps",
                 new=AsyncMock(return_value=split_steps),
             ),
+            patch("modstore_server.employee_skill_register._register_script_in_code_store"),
             patch(
                 "modstore_server.employee_skill_register._upsert_eskill",
                 side_effect=lambda *a, **kw: next(upsert_id_seq),
@@ -241,6 +256,7 @@ async def test_register_manifest_skills_when_llm_split_fails():
                 "modstore_server.employee_skill_register._llm_split_steps",
                 new=AsyncMock(return_value=[]),
             ),
+            patch("modstore_server.employee_skill_register._register_script_in_code_store"),
             patch(
                 "modstore_server.employee_skill_register._upsert_eskill",
                 side_effect=lambda *a, **kw: next(upsert_id_seq),
@@ -324,91 +340,112 @@ async def test_register_vibe_unavailable_returns_empty():
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_nl_graph_result(nodes_created: int = 2) -> dict:
-    return {
-        "ok": True,
-        "nodes_created": nodes_created,
-        "edges_created": 1,
-        "sandbox_ok": True,
-        "validation_errors": [],
-        "llm_warnings": [],
-    }
+def _make_mock_db_with_workflow() -> MagicMock:
+    """MagicMock Session: Workflow 查询返回伪行，flush 给新增行赋递增 id。"""
+    wf = MagicMock()
+    wf.id = 1
+    wf.name = "测试工作流"
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = wf
+    state: dict[str, Any] = {"next_id": 1, "last": None}
+
+    def _add(obj: Any) -> None:
+        state["last"] = obj
+
+    def _flush() -> None:
+        last = state["last"]
+        if last is not None and getattr(last, "id", None) is None:
+            last.id = state["next_id"]
+            state["next_id"] += 1
+
+    db.add.side_effect = _add
+    db.flush.side_effect = _flush
+    return db
 
 
 @pytest.mark.asyncio
 async def test_preset_nodes_injected_when_llm_omits():
-    """LLM 不生成 preset eskill 节点时，apply_nl_workflow_graph 应自动补齐。"""
-    from modstore_server.workflow_nl_graph import _normalize_node
+    """LLM 不生成 preset eskill 节点时，apply_nl_workflow_graph 应真正自动补齐。
 
-    # 模拟 LLM 仅返回 start+end
-    fake_llm_nodes = [
-        {
-            "temp_id": "s1",
-            "node_type": "start",
-            "name": "开始",
-            "config": {},
-            "position_x": 0,
-            "position_y": 0,
-        },
-        {
-            "temp_id": "e1",
-            "node_type": "end",
-            "name": "结束",
-            "config": {},
-            "position_x": 440,
-            "position_y": 0,
-        },
-    ]
-    fake_edges = [{"source_temp_id": "s1", "target_temp_id": "e1", "condition": ""}]
-    fake_data = {"nodes": fake_llm_nodes, "edges": fake_edges}
+    调用真实的 apply_nl_workflow_graph（仅 mock LLM 调用 / 沙箱 / DB 会话三个外部
+    边界），让 LLM 只返回 start+end，断言生产代码自身把漏掉的预置 ESkill 节点补回，
+    并以正确的 skill_id 落库、串进 start→eskill→end 链。
+    """
+    import json as _json
 
-    preset = [
-        {"eskill_id": 7, "name": "解析输入", "output_var": "parsed"},
-        {"eskill_id": 8, "name": "业务处理", "output_var": "processed"},
-    ]
+    import modstore_server.workflow_nl_graph as g
 
-    warnings: list[str] = []
-    nodes_in = [_normalize_node(n, warnings) for n in fake_llm_nodes]
-    nodes_in = [n for n in nodes_in if n]
+    db = _make_mock_db_with_workflow()
+    user = _make_user()
 
-    edges_in = list(fake_edges)
-    seen_tid = {n["temp_id"] for n in nodes_in}
-
-    # 模拟强制补齐逻辑（复制自 apply_nl_workflow_graph 的补齐段落）
-    existing_skill_ids = {
-        str(n.get("config", {}).get("skill_id") or "")
-        for n in nodes_in
-        if n.get("node_type") == "eskill"
-    }
-    missing_presets = [p for p in preset if str(p["eskill_id"]) not in existing_skill_ids]
-
-    for idx_p, p in enumerate(missing_presets):
-        tid = f"preset_eskill_{p['eskill_id']}"
-        if tid in seen_tid:
-            continue
-        seen_tid.add(tid)
-        nodes_in.append(
-            {
-                "temp_id": tid,
-                "node_type": "eskill",
-                "name": str(p["name"])[:120],
-                "config": {
-                    "skill_id": str(p["eskill_id"]),
-                    "output_var": str(p.get("output_var") or "vibe_result"),
-                    "task": "",
-                    "input_mapping": {},
-                    "quality_gate": {},
-                    "trigger_policy": {},
-                    "force_dynamic": False,
-                    "solidify": True,
+    # LLM 仅返回 start+end，故意漏掉预置的 eskill 节点。
+    llm_payload = {
+        "workflow": {
+            "nodes": [
+                {
+                    "temp_id": "s1",
+                    "node_type": "start",
+                    "name": "开始",
+                    "config": {},
+                    "position_x": 0,
+                    "position_y": 0,
                 },
-                "position_x": 260.0 + idx_p * 240.0,
-                "position_y": 240.0,
-            }
+                {
+                    "temp_id": "e1",
+                    "node_type": "end",
+                    "name": "结束",
+                    "config": {},
+                    "position_x": 440,
+                    "position_y": 0,
+                },
+            ],
+            "edges": [{"source_temp_id": "s1", "target_temp_id": "e1", "condition": ""}],
+        }
+    }
+
+    preset = [{"eskill_id": 7, "name": "解析输入", "output_var": "parsed"}]
+
+    with (
+        patch(
+            "modstore_server.mod_scaffold_runner.resolve_llm_provider_model",
+            return_value=("openai", "gpt-4o", None),
+        ),
+        patch.object(
+            g,
+            "chat_dispatch_via_session",
+            new=AsyncMock(return_value={"ok": True, "content": _json.dumps(llm_payload)}),
+        ),
+        patch.object(g, "_eskill_catalog_lines", return_value=""),
+        patch.object(g, "_create_generated_skills", return_value={}),
+        patch.object(g, "run_workflow_sandbox", return_value={"ok": True, "errors": []}),
+    ):
+        result = await g.apply_nl_workflow_graph(
+            db,
+            user,
+            workflow_id=1,
+            brief="串接预置 ESkill",
+            provider="openai",
+            model="gpt-4o",
+            preset_eskill_nodes=preset,
         )
 
-    eskill_nodes = [n for n in nodes_in if n["node_type"] == "eskill"]
-    assert len(eskill_nodes) == 2, f"期望 2 个 eskill 节点，实际: {len(eskill_nodes)}"
-    skill_ids_in_nodes = {n["config"]["skill_id"] for n in eskill_nodes}
-    assert "7" in skill_ids_in_nodes
-    assert "8" in skill_ids_in_nodes
+    assert result["ok"] is True
+    # start + end + 自动补齐的 1 个 eskill = 3 个节点。
+    assert result["nodes_created"] == 3
+    assert any("自动插入" in w for w in result["llm_warnings"])
+
+    # 检查真正落库的节点：必须含一个 skill_id=7、名为「解析输入」的 eskill 行。
+    persisted_nodes = [
+        c.args[0]
+        for c in db.add.call_args_list
+        if getattr(c.args[0], "node_type", None) is not None
+    ]
+    node_types = [n.node_type for n in persisted_nodes]
+    assert node_types.count("eskill") == 1
+    assert "start" in node_types and "end" in node_types
+
+    eskill_row = next(n for n in persisted_nodes if n.node_type == "eskill")
+    assert eskill_row.name == "解析输入"
+    eskill_cfg = _json.loads(eskill_row.config)
+    assert eskill_cfg["skill_id"] == "7"
+    assert eskill_cfg["output_var"] == "parsed"
