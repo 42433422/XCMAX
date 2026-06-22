@@ -21,7 +21,7 @@ describe('modelPaymentApi', () => {
 
   it('getPlans calls api.get', async () => {
     await modelPaymentApi.getPlans()
-    expect(api.get).toHaveBeenCalledWith('/api/model-payment/plans')
+    expect(api.get).toHaveBeenCalledWith('/api/model-payment/plans', undefined)
   })
 
   it('checkout calls api.post with plan_id', async () => {
