@@ -142,11 +142,14 @@ class AiGroupChatService:
         self._rewrite_groups(self._replace(self._all_groups(), group))
         return self._public_group(group, None)
 
-    def get_messages(self, *, user_id: int, group_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    def get_messages(
+        self, *, user_id: int, group_id: str, limit: int = 100
+    ) -> list[dict[str, Any]]:
         rows = [
             self._public_message(r)
             for r in self._read_messages()
-            if int(r.get("user_id") or 0) == int(user_id) and str(r.get("group_id")) == str(group_id)
+            if int(r.get("user_id") or 0) == int(user_id)
+            and str(r.get("group_id")) == str(group_id)
         ]
         return rows[-max(1, min(int(limit), 300)) :]
 
@@ -293,7 +296,9 @@ class AiGroupChatService:
 
     # ── 持久化 ──
 
-    def _public_group(self, group: dict[str, Any], preview: dict[str, Any] | None) -> dict[str, Any]:
+    def _public_group(
+        self, group: dict[str, Any], preview: dict[str, Any] | None
+    ) -> dict[str, Any]:
         members = [m for m in group.get("members", []) if isinstance(m, dict)]
         return {
             "id": str(group.get("id")),

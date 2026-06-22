@@ -286,9 +286,7 @@ class ModPackage:
                     key = serialization.load_pem_private_key(f.read(), password=None)
 
                 if not isinstance(key, Ed25519PrivateKey):
-                    raise ModSignatureError(
-                        "MOD 签名要求 Ed25519 私钥，提供的私钥类型不受支持"
-                    )
+                    raise ModSignatureError("MOD 签名要求 Ed25519 私钥，提供的私钥类型不受支持")
 
                 message = build_signed_message(self.mod_id, self.version, content_hash)
                 sig = key.sign(message)
