@@ -82,6 +82,7 @@ class TestAuthenticateHappyPath:
         user.role = "user"
         user.is_active = True
         user.last_login = None
+        user.locked_until = None
         user.password = "hashed"
         user.mfa_enabled = False
         user.totp_secret = None
@@ -127,7 +128,9 @@ class TestAuthenticateHappyPath:
 
     def test_wrong_password_rejected(self) -> None:
         svc = AuthApplicationService()
-        user = MagicMock(is_active=True, password="h", mfa_enabled=False, totp_secret=None)
+        user = MagicMock(
+            is_active=True, locked_until=None, password="h", mfa_enabled=False, totp_secret=None
+        )
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = user
         with (
@@ -160,7 +163,9 @@ class TestAuthenticateHappyPath:
 
     def test_session_creation_failure(self) -> None:
         svc = AuthApplicationService()
-        user = MagicMock(is_active=True, password="h", mfa_enabled=False, totp_secret=None)
+        user = MagicMock(
+            is_active=True, locked_until=None, password="h", mfa_enabled=False, totp_secret=None
+        )
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = user
         with (

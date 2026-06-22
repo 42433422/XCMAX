@@ -40,7 +40,7 @@ def test_codex_super_employee_invoke_writes_outbox_when_dispatch_not_configured(
     assert Path(dispatch["outbox_path"]).is_file()
     assert result["employee"]["id"] == "codex-super-employee"
     assert [m["role"] for m in result["messages"]] == ["user", "system"]
-    assert "软件内 Codex 调用队列" in result["assistant_message"]["body"]
+    assert result["assistant_message"]["body"] == "思考中..."
     assert result["assistant_message"]["kind"] == "dispatcher"
 
 
@@ -380,7 +380,7 @@ def test_codex_super_employee_dispatches_to_para_codex_device(tmp_path: Path, mo
     assert dispatch["dispatcher"] == "para_api"
     assert dispatch["task_id"] == "task-1"
     assert dispatch["devices"][0]["device_id"] == "device-1"
-    assert "排比 Para/Codex 多设备调度器" in result["assistant_message"]["body"]
+    assert result["assistant_message"]["body"] == "思考中..."
     assert result["assistant_message"]["role"] == "system"
     assert any(
         item["role"] == "assistant" and "Codex 已完成修复并通过验证" in item["body"]

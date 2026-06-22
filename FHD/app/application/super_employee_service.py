@@ -1090,6 +1090,10 @@ class SuperEmployeeService:
                 return str(parent.parent)
         return str(here.parents[3])
 
+    def _cli_timeout_seconds(self) -> float:
+        """Backward-compat alias for _cli_idle_timeout_seconds (used by tests)."""
+        return self._cli_idle_timeout_seconds()
+
     def _cli_idle_timeout_seconds(self) -> float:
         # 活性检测：持续静默(无任何 stdout/stderr 输出)超过此值 → 判定卡住。
         # 只要 CLI 还在产出(stream-json 事件/进度行)就一直等，不因总时长被杀。

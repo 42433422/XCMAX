@@ -39,7 +39,7 @@ def test_claude_super_employee_invoke_writes_outbox_when_dispatch_not_configured
     assert result["employee"]["id"] == "claude-super-employee"
     assert result["employee"]["name"] == "超级员工-Claude"
     assert [m["role"] for m in result["messages"]] == ["user", "system"]
-    assert "软件内 Claude 调用队列" in result["assistant_message"]["body"]
+    assert result["assistant_message"]["body"] == "思考中..."
     assert result["assistant_message"]["kind"] == "dispatcher"
 
 
@@ -58,7 +58,7 @@ def test_claude_super_employee_answers_identity_without_dispatch(tmp_path: Path,
     result = svc.invoke(user_id=1, message="你是谁")
 
     assert result["dispatch"]["status"] == "completed"
-    assert result["dispatch"]["dispatcher"] == "claude_cli"
+    assert result["dispatch"]["dispatcher"] == "claude_code_cli"
     assert result["assistant_message"]["kind"] == CLAUDE_DIRECT_MESSAGE_KIND
     assert "真实接入" in result["assistant_message"]["body"]
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
@@ -94,7 +94,8 @@ def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, 
                             "devTool": "trae",
                             "isPrimary": False,
                             "tools": [
-                                {"toolName": "claude", "status": "idle", "currentTask": None},
+                                # CLAUDE_PROFILE.tool_name == "claude_code"
+                                {"toolName": "claude_code", "status": "idle", "currentTask": None},
                             ],
                         }
                     ]
@@ -109,8 +110,8 @@ def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, 
                         "id": "device-1",
                         "name": "Mac 工作设备",
                         "status": "online",
-                        "devTool": "claude",
-                        "tools": [{"toolName": "claude", "status": "idle"}],
+                        "devTool": "claude_code",
+                        "tools": [{"toolName": "claude_code", "status": "idle"}],
                     },
                 },
             )
@@ -162,11 +163,11 @@ def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, 
     assert dispatch["status"] == "accepted"
     assert dispatch["dispatcher"] == "para_api"
     assert dispatch["task_id"] == "task-1"
-    assert dispatch["devices"][0]["tool"] == "claude"
-    assert "排比 Para/Claude 多设备调度器" in result["assistant_message"]["body"]
+    assert dispatch["devices"][0]["tool"] == "claude_code"
+    assert result["assistant_message"]["body"] == "思考中..."
     assert any(
         item["role"] == "assistant" and "Claude 已完成修复并通过验证" in item["body"]
         for item in result["messages"]
     )
-    # 关键：设备被切换到 claude dev tool。
-    assert ("PUT", "/api/devices/device-1/dev-tool", {"devTool": "claude"}) in seen
+    # 关键：设备被切换到 claude_code dev tool。
+    assert ("PUT", "/api/devices/device-1/dev-tool", {"devTool": "claude_code"}) in seen

@@ -669,12 +669,14 @@ class TestCliReplyBody:
         assert "CLI" in result or "code" in result
 
     def test_claude_profile_reads_stdout(self, tmp_path):
+        import json as _json
+
         cli = tmp_path / "claude"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
-        svc = _make_svc(
-            tmp_path, profile=CLAUDE_PROFILE, cli_runner=_stdout_runner("claude answer")
-        )
+        # CLAUDE_PROFILE uses cli_stream_json=True, so output must be stream-json events.
+        stream_line = _json.dumps({"type": "result", "result": "claude answer"})
+        svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE, cli_runner=_stdout_runner(stream_line))
         with patch.object(svc, "_cli_path", return_value=str(cli)):
             result = svc._cli_reply_body("hi", {})
         assert "claude answer" in result
@@ -707,6 +709,9 @@ class TestCleanCliStdout:
 
 
 class TestDispatchReply:
+    # _dispatch_reply 已统一返回"思考中..."避免向用户暴露派工实现细节。
+    # 以下测试验证该方法对各种 dispatch 状态均返回约定占位语。
+
     def test_para_accepted(self, tmp_path):
         svc = _make_svc(tmp_path)
         dispatch = {
@@ -715,9 +720,7 @@ class TestDispatchReply:
             "task_id": "task123",
             "devices": [{"id": "d1"}],
         }
-        body = svc._dispatch_reply(dispatch)
-        assert "Para" in body
-        assert "task123" in body
+        assert svc._dispatch_reply(dispatch) == "思考中..."
 
     def test_para_accepted_no_task_id(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -727,32 +730,27 @@ class TestDispatchReply:
             "task_id": "",
             "devices": [{"id": "d1"}, {"id": "d2"}],
         }
-        body = svc._dispatch_reply(dispatch)
-        assert "2 台" in body
+        assert svc._dispatch_reply(dispatch) == "思考中..."
 
     def test_webhook_accepted(self, tmp_path):
         svc = _make_svc(tmp_path)
         dispatch = {"accepted": True, "dispatcher": "webhook"}
-        body = svc._dispatch_reply(dispatch)
-        assert "调度通道" in body
+        assert svc._dispatch_reply(dispatch) == "思考中..."
 
     def test_no_device_reason(self, tmp_path):
         svc = _make_svc(tmp_path)
         dispatch = {"queued": True, "reason": "para_no_online_codex_device"}
-        body = svc._dispatch_reply(dispatch)
-        assert "未发现" in body
+        assert svc._dispatch_reply(dispatch) == "思考中..."
 
     def test_queued_reason(self, tmp_path):
         svc = _make_svc(tmp_path)
         dispatch = {"queued": True, "reason": "other_reason"}
-        body = svc._dispatch_reply(dispatch)
-        assert "队列" in body
+        assert svc._dispatch_reply(dispatch) == "思考中..."
 
     def test_not_accepted_not_queued(self, tmp_path):
         svc = _make_svc(tmp_path)
         dispatch = {"accepted": False, "queued": False}
-        body = svc._dispatch_reply(dispatch)
-        assert "未完成" in body or "调度通道" in body
+        assert svc._dispatch_reply(dispatch) == "思考中..."
 
 
 # ─────────────── _should_reply_with_cli ─────────────────────────
