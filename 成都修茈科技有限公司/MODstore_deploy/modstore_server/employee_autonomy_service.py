@@ -163,6 +163,7 @@ def create_collab_thread(
     participants: Sequence[str],
     created_by_employee_id: str,
     context: Optional[Dict[str, Any]] = None,
+    emit_event: bool = True,
 ) -> Dict[str, Any]:
     pids = _dedupe_strs(participants)
     if created_by_employee_id and created_by_employee_id not in pids:
@@ -179,11 +180,12 @@ def create_collab_thread(
         session.add(row)
         session.commit()
         tid = int(row.id)
-    _publish_event(
-        "employee.collab.thread_created",
-        {"thread_id": tid, "participants": pids, "title": (title or "")[:256]},
-        source=created_by_employee_id or "system",
-    )
+    if emit_event:
+        _publish_event(
+            "employee.collab.thread_created",
+            {"thread_id": tid, "participants": pids, "title": (title or "")[:256]},
+            source=created_by_employee_id or "system",
+        )
     return {"ok": True, "thread_id": tid, "participants": pids}
 
 
@@ -194,7 +196,13 @@ def post_collab_message(
     content: str,
     mentions: Optional[Sequence[str]] = None,
     payload: Optional[Dict[str, Any]] = None,
+    emit_event: bool = True,
 ) -> Dict[str, Any]:
+    """向协作线程投递一条消息。
+
+    ``emit_event=False`` 时跳过 ``employee.collab.message_created`` 事件发布——
+    供自动化「工作汇报」批量投递使用，避免每条汇报都触发 incident 编排/派单。
+    """
     if int(thread_id or 0) <= 0:
         return {"ok": False, "error": "invalid thread_id"}
     text = str(content or "").strip()
@@ -219,17 +227,18 @@ def post_collab_message(
         session.commit()
         mid = int(row.id)
 
-    _publish_event(
-        "employee.collab.message_created",
-        {
-            "thread_id": int(thread_id),
-            "message_id": mid,
-            "sender_employee_id": sender_employee_id,
-            "mentions": mention_ids,
-            "content_excerpt": text[:500],
-        },
-        source=sender_employee_id or "system",
-    )
+    if emit_event:
+        _publish_event(
+            "employee.collab.message_created",
+            {
+                "thread_id": int(thread_id),
+                "message_id": mid,
+                "sender_employee_id": sender_employee_id,
+                "mentions": mention_ids,
+                "content_excerpt": text[:500],
+            },
+            source=sender_employee_id or "system",
+        )
 
     mention_suggestion_id: Optional[int] = None
     if mention_ids:
@@ -543,6 +552,13 @@ def dispatch_suggestion(
         },
         source="suggestion_dispatcher",
     )
+
+    try:
+        from modstore_server.employee_collab_reporter import report_suggestion_dispatched
+
+        report_suggestion_dispatched(suggestion_id=sid)
+    except Exception:
+        logger.exception("collab report (suggestion) failed sid=%s", sid)
     return {"ok": True, "suggestion_id": sid, "dispatch_result": result}
 
 
@@ -764,6 +780,14 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> Dict[str, Any]:
                     row2.completed_at = datetime.now(timezone.utc)
                     session.commit()
             failed += 1
+    if task_ids:
+        try:
+            from modstore_server.employee_collab_reporter import report_brief_task
+
+            for _tid in task_ids:
+                report_brief_task(task_id=_tid)
+        except Exception:
+            logger.exception("collab report (brief tasks) failed")
     if processed > 0:
         _publish_event(
             "employee.brief_todo.dispatched",
@@ -1054,6 +1078,14 @@ def run_employee_evolution_scan(
                 },
                 source="evolution-engine",
             )
+
+        if evolution_record_id:
+            try:
+                from modstore_server.employee_collab_reporter import report_evolution
+
+                report_evolution(evolution_record_id=evolution_record_id)
+            except Exception:
+                logger.exception("collab report (evolution) failed id=%s", evolution_record_id)
 
     return {
         "ok": True,
