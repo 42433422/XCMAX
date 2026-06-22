@@ -1324,12 +1324,6 @@ async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user))
         )
     try:
         groups = AiGroupChatService(mode=_mobile_group_mode(request)).list_groups(user_id=uid)
-        try:
-            from app.application import employee_report_feed
-
-            groups = list(groups) + await employee_report_feed.list_report_groups()
-        except Exception:  # noqa: BLE001 - 汇报合并 best-effort，失败不影响人对人群聊
-            logger.warning("ai-groups: report feed merge skipped", exc_info=True)
         return format_mobile_response(data={"groups": groups})
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_ai_groups_list")
@@ -1383,13 +1377,6 @@ async def mobile_ai_group_messages(
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    if group_id.startswith("report:"):
-        from app.application import employee_report_feed
-
-        msgs = await employee_report_feed.get_report_messages(
-            group_id=group_id, limit=limit, profiles=_ai_circle_employee_profiles()
-        )
-        return format_mobile_response(data={"messages": msgs})
     try:
         messages = AiGroupChatService(mode=_mobile_group_mode(request)).get_messages(
             user_id=uid, group_id=group_id, limit=limit
@@ -1414,11 +1401,6 @@ async def mobile_ai_group_post(
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    if group_id.startswith("report:"):
-        return JSONResponse(
-            format_mobile_response(None, "工作汇报为只读，无法发送", success=False, code=400),
-            status_code=400,
         )
     try:
         result = await AiGroupChatService(mode=_mobile_group_mode(request)).post_message(
@@ -1825,6 +1807,13 @@ async def mobile_ai_circle_posts(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     from app.application.ai_circle_service import list_posts
+
+    try:
+        from app.application import employee_circle_sync
+
+        await employee_circle_sync.sync_modstore_reports()
+    except Exception:  # noqa: BLE001 - 同步失败不影响交流圈展示
+        logger.warning("circle: modstore report sync skipped", exc_info=True)
 
     uid, _, _ = _ai_circle_user(user)
     posts = list_posts(user_id=uid, limit=limit)
