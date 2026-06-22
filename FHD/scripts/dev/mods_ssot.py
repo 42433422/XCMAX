@@ -22,12 +22,14 @@ EXPORT_ROOT = ROOT / "XCAGI" / "mods"
 
 SKIP_DIR_NAMES = frozenset({"__pycache__", "node_modules", ".git"})
 SKIP_FILE_NAMES = frozenset({".DS_Store"})
+# Binary data files ignored by XCAGI/.gitignore (*.xlsx, etc.) — skip in diff check
+SKIP_SUFFIXES = frozenset({".xlsx", ".xls", ".csv.gz"})
 
 
 def _skip_path(rel: Path) -> bool:
     if rel.name in SKIP_FILE_NAMES:
         return True
-    if rel.suffix == ".pyc":
+    if rel.suffix in (".pyc", *SKIP_SUFFIXES):
         return True
     return any(part in SKIP_DIR_NAMES for part in rel.parts)
 
