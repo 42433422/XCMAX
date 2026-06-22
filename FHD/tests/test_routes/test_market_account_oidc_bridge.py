@@ -44,6 +44,10 @@ async def test_login_market_for_oidc_profile_uses_internal_bridge(monkeypatch):
     assert bridge_call.args[0] == "POST"
     assert bridge_call.args[1] == "/api/auth/internal/sso-issue-token"
     assert bridge_call.kwargs["extra_headers"]["X-Internal-Api-Key"] == "test-internal-key"
+    # 第 3 次调用确认是用市场 JWT 拉取身份
+    me_call = proxy_mock.await_args_list[2]
+    assert me_call.args == ("GET", "/api/auth/me")
+    assert me_call.kwargs["authorization"] == "Bearer market-jwt"
 
 
 @pytest.mark.asyncio

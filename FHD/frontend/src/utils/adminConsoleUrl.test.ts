@@ -29,7 +29,16 @@ describe('adminConsoleUrl', () => {
   })
 
   it('maps local development origins to the admin console dev port', () => {
-    expect(resolveAdminConsoleHomeUrl()).toBe('http://localhost:5011/admin/xcmax-admin')
+    const original = window.location
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { protocol: 'http:', hostname: 'localhost', port: '5001', origin: 'http://localhost:5001' },
+    })
+    try {
+      expect(resolveAdminConsoleHomeUrl()).toBe('http://localhost:5011/admin/xcmax-admin')
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: original })
+    }
   })
 
   it('uses explicit admin console origin when configured', () => {

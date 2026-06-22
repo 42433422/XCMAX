@@ -1072,7 +1072,12 @@ class TestAuthOidcCallback:
             ),
             patch(
                 "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
-                new=AsyncMock(return_value={"profile": {"sub": "x", "email": "a@b.com"}, "access_token": "oidc-at"}),
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
         ):
@@ -1104,7 +1109,12 @@ class TestAuthOidcCallback:
             ),
             patch(
                 "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
-                new=AsyncMock(return_value={"profile": {"sub": "x", "email": "a@b.com"}, "access_token": "oidc-at"}),
+                new=AsyncMock(
+                    return_value={
+                        "profile": {"sub": "x", "email": "a@b.com"},
+                        "access_token": "oidc-at",
+                    }
+                ),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),

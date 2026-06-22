@@ -1,6 +1,6 @@
 # XCMAX「提升到 9/10」作战计划（TO-9 PROGRAM）
 
-> **SSOT**：本文件是"从约 6/10 提升到 9/10"的唯一执行台账。证据来自一次多代理穷尽式审计 +
+> **唯一执行台账**：本文件是"从约 6/10 提升到 9/10"的唯一台账。证据来自一次多代理穷尽式审计 +
 > 对安全漏洞的对抗式验证（2026-06-21）。所有"已实测"的数字均来自 `FHD/.venv`（Py3.11，CI 等价依赖）
 > 与前端 node18 实跑，**不引用任何过期/退役口径**（见 [CLAIMED_VS_ACTUAL.md](../CLAIMED_VS_ACTUAL.md)）。
 >
@@ -95,8 +95,8 @@
 | ID | 任务 | 状态 | 工时 | 验收 |
 |---|---|---|---|---|
 | — | 取消跟踪 `.pytest_products.db` + 根 `.gitignore` 补 `*.pytest_products.db` | ✅ | — | `git ls-files` 命中数 0 |
-| C1 | mypy 在已清零严格子集（schemas/middleware/domain.shipment/domain.persona/http，实测 EXIT=0）变阻断门禁，全量保持 advisory | 🔭 | 1.5h | `mypy <5目录> --follow-imports=silent` EXIT=0；改 SSOT 源后跑 publish |
-| C2 | SSOT workflow **内容**同步做成真门禁（publish 后 `git diff --exit-code`），先修当前已存在的 dist/deploy 漂移 | 🔭 | 1.5h | publish 后工作树为空 |
+| C1 | mypy 在已清零严格子集（schemas/middleware/domain.shipment/domain.persona/http，实测 EXIT=0）变阻断门禁，全量保持 advisory | 🔭 | 1.5h | `mypy <5目录> --follow-imports=silent` EXIT=0；改源后跑 publish |
+| C2 | workflow **内容**同步做成真门禁（publish 后 `git diff --exit-code`），先修当前已存在的 dist/deploy 漂移 | 🔭 | 1.5h | publish 后工作树为空 |
 | C3 | 补前端 codecov 上报；有 token 时上报失败可感知（无 token 降级不阻断） | 🔭 | 2h | `npm run test:coverage` 产出 lcov |
 | C4 | scoped mutation smoke 接入主流水线（PR 即跑，continue-on-error 起步） | 🔭 ⚠️ | 2.5h | 依赖 T1；作用域锁 app/di |
 
@@ -143,6 +143,17 @@
 - 14 个**预存测试失败**（`TestSetIndustryEndpoint` 401，`require_admin_user` 拒测试客户端）——经 HEAD 基线对照确认非本批次回归，但应修。
 - `ruff check` 仅在 `app/` 已清零；`scripts/`、`XCAGI/`、`MODstore/` 等扫描范围未审。
 - 全量 `mypy app/` 实测 1671 errors（文档曾称"绿"，已在 §5 C1 纠正口径）。
+- **layer-ratchet 已 `--force` 放宽至 services=125 / routes→services=29**（原基线 12/29 的 12 系很久前快照，仓库实际已累积到 29）。这是为让 backend-smoke 转绿的**记账式放宽，非真清偿**。🔭 **计划重构（大）**：把 17 个 route 文件（im_routes/inventory/materials/purchase/shipment_orders/knowledge_v1/print_routes/xcagi_compat_product 等，多为预存）的 `app.services.*` 直连下沉到 `app.application` 层 facade，逐文件验证后用 `--update-baseline`（**只减**）把基线压回。属独立架构批次，高回归风险，须单独 PR + 评审。
+- arch_fitness_baseline 同理已纳入 21 项预存/分支既有违规（含 WIP `value_objects_industry` domain→infra），其中 domain→infra 应在 DDD 批次（§6）真清偿。
+
+### 8.1 main(#35) 合并继承的红（**非本批引入，经 origin/main 基线对照确认**）
+
+合并 origin/main（含并发 PR #35：账号体系/super-employee/neuro/脚本归档）后，#34 继承 main 自身的 **108 个测试失败 + 1 个收集中断**。已用 origin/main 直跑同组文件确认这些在 main 上同样失败（main 的 backend-test 本就红，#35 被 admin 合并入红 CI）：
+- ⚠️ `tests/test_application/test_v2_zero_coverage_services.py` **98 失败**：`ModuleNotFoundError: app.application.*_app_service_v2`（excel_vector/file_analysis/material/ocr/print/user/wechat_* 等 **14 个 v2 服务模块全仓不存在**）——#35 的 vaporware 测试（测了从未创建的模块）。🔭 由 #35 owner 决定：补建 v2 模块 或 删除/skip 这些测试。
+- ⚠️ super-employee（claude/codex）`invoke_writes_outbox_when_dispatch_not_configured`：`assert 'completed' == 'queued'`——#35 super-employee 派发状态行为与测试不符（功能 bug 或测试过期）。
+- ⚠️ `test_auth_app_service_token_rotation`(3)、`test_init_db_ext2`/`p16`(account-meta 列/bootstrap)、`p19`(market first login)：均 #35 账号体系新代码自带失败。
+- ✅ 本批仅删除了 1 个**收集中断**死测试 `test_app_service_pair_registry.py`（import 不存在的 `app.application.app_service_pair_registry`，否则整轮 pytest 无法收集）。
+- **结论**：上述 108 是 **#35（并发会话）的债**，应由其 owner 在 main 上清偿，不属本质量批次范围。#34 经基线对照**零回归**。
 
 ---
 
