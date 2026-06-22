@@ -110,6 +110,13 @@ def _build_stubs() -> dict:
     return stubs
 
 
+# Save the real module (if already imported) so other test files' patches continue to work.
+# test_planner_compat_agent_trace.py is collected before this file (alphabetically) and binds
+# execute_compat_chat to the real module's globals; if we leave _pcs in sys.modules their
+# `patch("app.application.planner_compat_service.run_agent_chat", …)` targets _pcs instead of
+# the real module, causing the real chat() to run and make an HTTP connection to 127.0.0.1:8765.
+_real_pcs_module = sys.modules.get("app.application.planner_compat_service")
+
 # Install stubs before the module loads (only for absent packages)
 _STUBS = _build_stubs()
 _installed_stubs: list[str] = []
@@ -138,6 +145,10 @@ for _k in _installed_stubs:
         stub = _types.ModuleType(_k)
         stub.__path__ = []  # type: ignore[attr-defined]
         sys.modules[_k] = stub
+
+# Restore the real module so patches in other test files target the right __globals__.
+if _real_pcs_module is not None:
+    sys.modules["app.application.planner_compat_service"] = _real_pcs_module
 
 # Convenience aliases
 _derive_industry_from_session = _pcs._derive_industry_from_session
