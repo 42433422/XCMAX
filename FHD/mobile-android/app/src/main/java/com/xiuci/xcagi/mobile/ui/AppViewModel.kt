@@ -795,6 +795,51 @@ constructor(
                     .onFailure { snack(it.message ?: "删除失败", true) }
             }
 
+    // ── 会话状态（个人 AI 会话） ──
+    fun toggleConversationUnread(conversationId: String) =
+            viewModelScope.launch {
+                repo.markConversationUnread(conversationId)
+                    .onSuccess {
+                        refreshConversationUiState(conversationId)
+                        loadConversations(currentIsEnterprise())
+                    }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun toggleConversationPin(conversationId: String) =
+            viewModelScope.launch {
+                repo.toggleConversationPin(conversationId)
+                    .onSuccess { loadConversations(currentIsEnterprise()) }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun toggleConversationFollowed(conversationId: String) =
+            viewModelScope.launch {
+                repo.toggleConversationFollowed(conversationId)
+                    .onSuccess { loadConversations(currentIsEnterprise()) }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun toggleConversationHidden(conversationId: String) =
+            viewModelScope.launch {
+                repo.toggleConversationHidden(conversationId)
+                    .onSuccess { loadConversations(currentIsEnterprise()) }
+                    .onFailure { snack(it.message ?: "操作失败", true) }
+            }
+
+    fun deleteConversation(conversationId: String) =
+            viewModelScope.launch {
+                repo.deleteConversation(conversationId)
+                    .onSuccess { loadConversations(currentIsEnterprise()) }
+                    .onFailure { snack(it.message ?: "删除失败", true) }
+            }
+
+    private fun currentIsEnterprise(): Boolean = isEnterpriseEffective.value
+
+    private fun refreshConversationUiState(conversationId: String) {
+        // 本地刷新 —— 下次加载会同步；此处仅做保留以便扩展。
+    }
+
     /** 拉取钱包余额（移动端"我"页面展示）。失败时保留旧值，不弹错误。成功后写入缓存。 */
     fun loadWalletBalance() =
             viewModelScope.launch {
@@ -1385,22 +1430,25 @@ constructor(
 
     fun loadChatCache(conversationId: String? = null) =
             viewModelScope.launch {
-                if (conversationId == PinnedIds.CODEX) {
-                    repo.loadCodexSuperEmployeeMessages()
-                            .onSuccess { _chatMessages.value = it }
-                            .onFailure {
-                                snack("超级员工-Codex 历史加载失败", true)
-                                _chatMessages.value = emptyList()
-                            }
-                    return@launch
-                }
-                if (conversationId == PinnedIds.CLAUDE) {
-                    repo.loadClaudeSuperEmployeeMessages()
-                            .onSuccess { _chatMessages.value = it }
-                            .onFailure {
-                                snack("超级员工-Claude 历史加载失败", true)
-                                _chatMessages.value = emptyList()
-                            }
+                // 切换会话：取消上一个会话仍在进行的流式任务并清空，避免消息串台到当前会话。
+                chatJob?.cancel()
+                _chatMessages.value = emptyList()
+                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE) {
+                    // relay/直答的回复存在本地缓存，云端历史接口里没有(且登录过期会 401)，
+                    // 故 super-employee 会话以本地缓存为准；本地为空才取云端历史兜底。
+                    val local = repo.loadCachedChat(conversationId)
+                    if (local.isNotEmpty()) {
+                        _chatMessages.value = local
+                    } else {
+                        val remote =
+                                if (conversationId == PinnedIds.CLAUDE)
+                                        repo.loadClaudeSuperEmployeeMessages()
+                                else repo.loadCodexSuperEmployeeMessages()
+                        remote.onSuccess { _chatMessages.value = it }
+                                .onFailure { _chatMessages.value = emptyList() }
+                    }
+                    // 恢复上次未完成的中继任务：刷新/重进后续轮询，避免"任务状态丢了"。
+                    resumeRelayChat(conversationId)
                     return@launch
                 }
                 val sessionId = conversationId ?: "default"
@@ -1422,6 +1470,73 @@ constructor(
                 }
                 repo.approvals().onSuccess { _approvalPendingCount.value = it.size }
             }
+
+    /** 进入超级员工会话时，若有上次未完成的中继任务，恢复轮询并把结果续到界面+缓存。 */
+    private fun resumeRelayChat(conversationId: String) {
+        chatJob?.cancel()
+        chatJob =
+                viewModelScope.launch {
+                    if (!repo.hasInflightRelay(conversationId)) return@launch
+                    _streaming.value = true
+                    _chatMessages.value = _chatMessages.value + ("assistant" to "")
+                    var acc = ""
+                    repo.resumeRelayTask(
+                            conversationId,
+                            onToken = { t ->
+                                acc += t
+                                _chatMessages.value =
+                                        _chatMessages.value.dropLast(1) + ("assistant" to acc)
+                            },
+                            onDone = { full ->
+                                _streaming.value = false
+                                _chatMessages.value =
+                                        _chatMessages.value.dropLast(1) +
+                                                ("assistant" to full.ifBlank { acc })
+                            },
+                            onError = { e ->
+                                _streaming.value = false
+                                _chatMessages.value =
+                                        _chatMessages.value.dropLast(1) + ("assistant" to "（$e）")
+                            },
+                    )
+                }
+    }
+
+    /** 底部功能键：对某分支执行 git 操作（合并/diff/丢弃），结果作为一条助手消息续到会话。 */
+    fun gitMerge(branch: String, conversationId: String?) = runGitOp(branch, "git.merge", conversationId)
+    fun gitDiff(branch: String, conversationId: String?) = runGitOp(branch, "git.diff", conversationId)
+    fun gitDiscard(branch: String, conversationId: String?) = runGitOp(branch, "git.discard", conversationId)
+
+    private fun runGitOp(branch: String, op: String, conversationId: String?) {
+        if (branch.isBlank()) return
+        chatJob?.cancel()
+        _chatMessages.value = _chatMessages.value + ("assistant" to "")
+        _streaming.value = true
+        var acc = ""
+        chatJob =
+                viewModelScope.launch {
+                    repo.streamRelayGitOp(
+                            branch,
+                            op,
+                            onToken = { t ->
+                                acc += t
+                                _chatMessages.value =
+                                        _chatMessages.value.dropLast(1) + ("assistant" to acc)
+                            },
+                            onDone = { full ->
+                                _streaming.value = false
+                                _chatMessages.value =
+                                        _chatMessages.value.dropLast(1) +
+                                                ("assistant" to full.ifBlank { acc })
+                            },
+                            onError = { e ->
+                                _streaming.value = false
+                                _chatMessages.value =
+                                        _chatMessages.value.dropLast(1) + ("assistant" to "（$e）")
+                            },
+                    )
+                }
+    }
 
     fun sendChat(text: String, conversationId: String? = null) {
         chatJob?.cancel()

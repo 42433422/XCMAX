@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,6 +105,8 @@ fun ConversationListScreen(
     var selectedFilter by rememberSaveable { mutableStateOf(ConversationFilter.ALL) }
     // 群聊长按菜单
     var longPressGroup by remember { mutableStateOf<com.xiuci.xcagi.mobile.core.model.AiGroupDto?>(null) }
+    // 会话长按菜单
+    var longPressItem by remember { mutableStateOf<ConversationItem?>(null) }
     val haptics = rememberHaptics()
     // 保持列表滚动位置：切 tab 回来后不回到顶部
     val listState = rememberLazyListState()
@@ -131,14 +134,47 @@ fun ConversationListScreen(
             title = { Text(g.name.ifBlank { "群聊操作" }) },
             text = {
                 Column {
-                    TextButton(onClick = { vm.markGroupUnread(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text("标为未读") }
-                    TextButton(onClick = { vm.toggleGroupPin(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_pinned) "取消置顶" else "置顶聊天") }
-                    TextButton(onClick = { vm.toggleGroupFollowed(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_followed) "不再关注" else "恢复关注") }
-                    TextButton(onClick = { vm.toggleGroupHidden(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_hidden) "显示该聊天" else "不显示该聊天") }
-                    TextButton(onClick = { vm.deleteGroup(g.id); longPressGroup = null; haptics.click() }, modifier = Modifier.fillMaxWidth()) { Text("删除该聊天", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { vm.markGroupUnread(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text("标为未读") }
+                    TextButton(onClick = { vm.toggleGroupPin(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_pinned) "取消置顶" else "置顶聊天") }
+                    TextButton(onClick = { vm.toggleGroupFollowed(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_followed) "不再关注" else "恢复关注") }
+                    TextButton(onClick = { vm.toggleGroupHidden(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_hidden) "显示该聊天" else "不显示该聊天") }
+                    TextButton(onClick = { vm.deleteGroup(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text("删除该聊天", color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = { TextButton(onClick = { longPressGroup = null }) { Text("关闭") } },
+        )
+    }
+
+    // 长按会话时的操作菜单
+    longPressItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = { longPressItem = null },
+            title = { Text(item.title.ifBlank { "会话操作" }) },
+            text = {
+                Column {
+                    TextButton(
+                            onClick = { vm.toggleConversationUnread(item.id); longPressItem = null; haptics.tap() },
+                            modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (item.unreadCount > 0) "标为已读" else "标为未读") }
+                    TextButton(
+                            onClick = { vm.toggleConversationPin(item.id); longPressItem = null; haptics.tap() },
+                            modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (item.isPinned) "取消置顶" else "置顶聊天") }
+                    TextButton(
+                            onClick = { vm.toggleConversationFollowed(item.id); longPressItem = null; haptics.tap() },
+                            modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (item.isFollowed) "不再关注" else "恢复关注") }
+                    TextButton(
+                            onClick = { vm.toggleConversationHidden(item.id); longPressItem = null; haptics.tap() },
+                            modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (item.isHidden) "显示该聊天" else "不显示该聊天") }
+                    TextButton(
+                            onClick = { vm.deleteConversation(item.id); longPressItem = null; haptics.tap() },
+                            modifier = Modifier.fillMaxWidth(),
+                    ) { Text("删除该聊天", color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { longPressItem = null }) { Text("关闭") } },
         )
     }
 
@@ -211,7 +247,7 @@ fun ConversationListScreen(
                         GroupConversationRow(
                             group = group,
                             onClick = { onOpenGroup(group) },
-                            onLongClick = { haptics.longClick(); longPressGroup = group },
+                            onLongClick = { haptics.confirm(); longPressGroup = group },
                         )
                         HorizontalDivider(
                                 color = MaterialTheme.colorScheme.outlineVariant,
@@ -230,7 +266,8 @@ fun ConversationListScreen(
                                         PinnedIds.CLAUDE -> onOpenConversation(PinnedIds.CLAUDE)
                                         else -> onOpenConversation(item.id)
                                     }
-                                }
+                                },
+                                onLongClick = { haptics.confirm(); longPressItem = item },
                         )
                         HorizontalDivider(
                                 color = MaterialTheme.colorScheme.outlineVariant,
@@ -705,15 +742,24 @@ private fun EcosystemSyncHint(onRefresh: () -> Unit) {
 // ═══════════════════════════════════════════
 // 会话单元格 — 核心组件
 // ═══════════════════════════════════════════
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
+private fun ConversationCell(
+        item: ConversationItem,
+        onClick: () -> Unit,
+        onLongClick: (() -> Unit)? = null,
+) {
     val hasUnread = item.unreadCount > 0
     val timestampText = formatTimestamp(item.timestamp)
     val visibleBadge = item.badgeText?.takeUnless { it == timestampText }
+    val dimmed = item.isHidden || !item.isFollowed
 
     Surface(
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+            color = if (item.isPinned) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth().then(
+                    if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                    else Modifier.clickable(onClick = onClick)
+            ),
     ) {
         Row(
                 Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 11.dp),
@@ -784,7 +830,7 @@ private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
                             text = item.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = if (item.isHidden) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f) else if (!item.isFollowed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),

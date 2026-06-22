@@ -228,11 +228,30 @@ abstract class XcagiDatabase : RoomDatabase() {
     abstract fun conversationListStateDao(): ConversationListStateDao
 
     companion object {
+        // 幂等守卫：install -r 保留旧 DB 时，列可能已存在，无条件 ADD COLUMN 会抛
+        // "duplicate column name" 致开屏闪退。加列前先用 PRAGMA 检查列是否存在。
+        private fun hasColumn(
+            database: SupportSQLiteDatabase,
+            table: String,
+            column: String,
+        ): Boolean {
+            database.query("PRAGMA table_info(`$table`)").use { cursor ->
+                val nameIdx = cursor.getColumnIndex("name")
+                if (nameIdx < 0) return false
+                while (cursor.moveToNext()) {
+                    if (column == cursor.getString(nameIdx)) return true
+                }
+            }
+            return false
+        }
+
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE chat_cache ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default'"
-                )
+                if (!hasColumn(database, "chat_cache", "session_id")) {
+                    database.execSQL(
+                        "ALTER TABLE chat_cache ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default'"
+                    )
+                }
             }
         }
 
@@ -258,9 +277,11 @@ abstract class XcagiDatabase : RoomDatabase() {
 
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE mod_info_cache ADD COLUMN employeesJson TEXT NOT NULL DEFAULT '[]'"
-                )
+                if (!hasColumn(database, "mod_info_cache", "employeesJson")) {
+                    database.execSQL(
+                        "ALTER TABLE mod_info_cache ADD COLUMN employeesJson TEXT NOT NULL DEFAULT '[]'"
+                    )
+                }
             }
         }
 
@@ -289,9 +310,11 @@ abstract class XcagiDatabase : RoomDatabase() {
 
         val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE conversation_list_state ADD COLUMN last_message_preview TEXT NOT NULL DEFAULT ''"
-                )
+                if (!hasColumn(database, "conversation_list_state", "last_message_preview")) {
+                    database.execSQL(
+                        "ALTER TABLE conversation_list_state ADD COLUMN last_message_preview TEXT NOT NULL DEFAULT ''"
+                    )
+                }
             }
         }
     }

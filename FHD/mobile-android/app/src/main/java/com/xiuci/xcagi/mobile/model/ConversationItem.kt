@@ -23,6 +23,8 @@ data class ConversationItem(
     val unreadCount: Int = 0,
     val isOnline: Boolean = false,
     val isPinned: Boolean = false,
+    val isHidden: Boolean = false,
+    val isFollowed: Boolean = true,
 
     // ── 徽标 ──
     val badgeText: String? = null,

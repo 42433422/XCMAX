@@ -61,7 +61,12 @@ def _verify_merged(wt: str, base: str) -> tuple[bool, str]:
     if custom:
         try:
             r = subprocess.run(
-                custom, shell=True, cwd=wt, capture_output=True, text=True, timeout=1800
+                custom,
+                shell=True,
+                cwd=wt,
+                capture_output=True,
+                text=True,
+                timeout=1800,  # nosec B602 – operator-supplied env var, may use shell syntax
             )
             return (
                 r.returncode == 0,

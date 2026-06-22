@@ -13,16 +13,12 @@ on:
       - ".github/workflows/modstore-tests.yml"
 
 
-defaults:
-  run:
-    working-directory: FHD
-
 jobs:
   pytest:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: MODstore
+        working-directory: FHD/MODstore
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
