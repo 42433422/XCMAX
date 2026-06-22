@@ -82,10 +82,18 @@ jobs:
           pip install -e ../../../packages/xcagi_common
           mypy --no-error-summary
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (global floor — ratchet)
+        env:
+          # 诚实 floor。本地无法实测(xcagi_common 要求 Python>=3.10,沙箱仅 3.9),
+          # 取 pyproject 自承的"全量 tree 约 40%+"作保守值。这是棘轮:能挡回归、
+          # 不可下调;实测出真实数字后只能上调,不能降。必须与
+          # 成都修茈科技有限公司/.github/workflows/modstore-ci-backend-python.yml 的
+          # MODSTORE_PY_COVERAGE_FLOOR 保持一致(见 docs/coverage-gates.md)。
+          MODSTORE_PY_COVERAGE_FLOOR: '40'
         run: |
           python -m pytest tests/ -v --cov=modman --cov=modstore_server \
-            --cov-report=term-missing --cov-report=xml
+            --cov-report=term-missing --cov-report=xml \
+            --cov-fail-under=${MODSTORE_PY_COVERAGE_FLOOR}
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4

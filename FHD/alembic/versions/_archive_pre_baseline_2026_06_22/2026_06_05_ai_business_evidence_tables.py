@@ -1,7 +1,15 @@
 """AI 业务证据表：shipment_audit_events + contract_expiry_notifications
 
 Revision ID: 2026_06_05_ai_evidence
-Revises: 2026_06_02_tenant_rbac
+Revises: 2026_05_26_mobile_device_push
+
+NOTE (2026-06-22): down_revision was re-pointed from "2026_06_02_tenant_rbac"
+to "2026_05_26_mobile_device_push". The "2026_06_02_tenant_rbac" revision was
+never authored — it only ever existed as a dangling parent reference here, which
+detached this whole sub-tree (ai_evidence -> tenant_saas -> {audit_ts,
+sessions_tenant}) from the main lineage and broke ``alembic`` map loading. The
+tables created below are standalone (guarded by _table_exists), so re-attaching
+to the main spine tip is order-safe.
 """
 
 from __future__ import annotations
@@ -13,7 +21,7 @@ from alembic import op
 from sqlalchemy import inspect
 
 revision: str = "2026_06_05_ai_evidence"
-down_revision: Union[str, Sequence[str], None] = "2026_06_02_tenant_rbac"
+down_revision: Union[str, Sequence[str], None] = "2026_05_26_mobile_device_push"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

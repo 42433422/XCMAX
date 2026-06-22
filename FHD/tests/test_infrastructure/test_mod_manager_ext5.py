@@ -238,13 +238,14 @@ class TestInvokeModInitHook:
 
 class TestRegisterModHooks:
     def test_no_hooks_returns_early(self):
-        from app.infrastructure.mods.manifest import ModMetadata
         from app.infrastructure.mods.mod_manager import _register_mod_hooks
 
         metadata = MagicMock()
         metadata.hooks = {}
-        # Should not raise
-        _register_mod_hooks("m1", metadata)
+        with patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe:
+            _register_mod_hooks("m1", metadata)
+        # No hooks declared -> nothing subscribed.
+        mock_subscribe.assert_not_called()
 
     def test_no_mod_path_logs_error(self):
         from app.infrastructure.mods.mod_manager import _register_mod_hooks
@@ -252,8 +253,10 @@ class TestRegisterModHooks:
         metadata = MagicMock()
         metadata.hooks = {"event1": "backend.handler"}
         metadata.mod_path = ""
-        # Should not raise, just log
-        _register_mod_hooks("m1", metadata)
+        with patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe:
+            _register_mod_hooks("m1", metadata)
+        # Missing mod_path -> cannot resolve handlers, nothing subscribed.
+        mock_subscribe.assert_not_called()
 
     def test_invalid_spec_no_module_skipped(self):
         from app.infrastructure.mods.mod_manager import _register_mod_hooks
@@ -262,7 +265,9 @@ class TestRegisterModHooks:
         metadata.hooks = {"event1": "no_module_attr"}
         metadata.mod_path = "/tmp"
         # spec.rpartition(".") returns ("", "", "no_module_attr") - no module
-        _register_mod_hooks("m1", metadata)
+        with patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe:
+            _register_mod_hooks("m1", metadata)
+        mock_subscribe.assert_not_called()
 
     def test_handler_not_callable_skipped(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _register_mod_hooks
@@ -275,11 +280,16 @@ class TestRegisterModHooks:
         metadata.hooks = {"event1": "mymod.handler"}
         metadata.mod_path = str(tmp_path)
 
-        with patch("app.infrastructure.mods.mod_manager.import_mod_backend_py") as mock_import:
+        with (
+            patch("app.infrastructure.mods.mod_manager.import_mod_backend_py") as mock_import,
+            patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe,
+        ):
             mock_module = MagicMock()
             mock_module.handler = "not_callable"
             mock_import.return_value = mock_module
             _register_mod_hooks("m1", metadata)
+        # Resolved attribute is not callable -> handler is skipped, not subscribed.
+        mock_subscribe.assert_not_called()
 
     def test_import_error_logged(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _register_mod_hooks
@@ -288,11 +298,16 @@ class TestRegisterModHooks:
         metadata.hooks = {"event1": "mymod.handler"}
         metadata.mod_path = str(tmp_path)
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.import_mod_backend_py",
-            side_effect=ImportError("no module"),
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.import_mod_backend_py",
+                side_effect=ImportError("no module"),
+            ),
+            patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe,
         ):
+            # Import failure is a recoverable error -> swallowed, nothing subscribed.
             _register_mod_hooks("m1", metadata)
+        mock_subscribe.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -729,9 +744,13 @@ class TestRestoreEntitlementsFromSessionId:
             _restore_entitlements_from_session_id,
         )
 
-        # Should not raise
-        _restore_entitlements_from_session_id("")
-        _restore_entitlements_from_session_id(None)
+        with patch(
+            "app.enterprise.mod_entitlements.restore_entitlements_from_session_row"
+        ) as mock_restore:
+            _restore_entitlements_from_session_id("")
+            _restore_entitlements_from_session_id(None)
+        # Empty/None session id -> early return, no entitlement restore attempted.
+        mock_restore.assert_not_called()
 
     def test_recoverable_error_swallowed(self):
         from app.infrastructure.mods.mod_manager import (
@@ -741,9 +760,11 @@ class TestRestoreEntitlementsFromSessionId:
         with patch(
             "app.enterprise.mod_entitlements.restore_entitlements_from_session_row",
             side_effect=RuntimeError("db error"),
-        ):
-            # Should not raise
+        ) as mock_restore:
+            # Recoverable error must be swallowed (no propagation) ...
             _restore_entitlements_from_session_id("sid123")
+        # ... but the restore was actually attempted before failing.
+        mock_restore.assert_called_once()
 
     def test_successful_restore_with_cached(self):
         from app.infrastructure.mods.mod_manager import (
@@ -1132,26 +1153,49 @@ class TestLoadEmployeePackRoutes:
     def test_mods_disabled_returns(self):
         from app.infrastructure.mods.mod_manager import load_employee_pack_routes
 
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True):
-            load_employee_pack_routes(MagicMock(), None)
+        mm = MagicMock()
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.register_employee_pack_routes"
+            ) as mock_register,
+        ):
+            load_employee_pack_routes(MagicMock(), mm)
+        # Disabled -> no employee pack routes registered.
+        mock_register.assert_not_called()
 
     def test_no_employees_dir_returns(self, tmp_path):
         from app.infrastructure.mods.mod_manager import load_employee_pack_routes
 
         mm = MagicMock()
-        mm.mods_root = str(tmp_path)
-        load_employee_pack_routes(MagicMock(), mm)
+        mm.mods_root = str(tmp_path)  # no _employees subdir
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager.register_employee_pack_routes"
+            ) as mock_register,
+        ):
+            load_employee_pack_routes(MagicMock(), mm)
+        mock_register.assert_not_called()
 
     def test_skips_non_employee_pack(self, tmp_path):
         from app.infrastructure.mods.mod_manager import load_employee_pack_routes
 
         emp_dir = tmp_path / "_employees" / "p1"
         emp_dir.mkdir(parents=True)
+        # artifact is a plain mod, not an employee_pack -> must be skipped.
         (emp_dir / "manifest.json").write_text(json.dumps({"id": "p1", "artifact": "mod"}))
 
         mm = MagicMock()
         mm.mods_root = str(tmp_path)
-        load_employee_pack_routes(MagicMock(), mm)
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager.register_employee_pack_routes"
+            ) as mock_register,
+        ):
+            load_employee_pack_routes(MagicMock(), mm)
+        mock_register.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1163,8 +1207,13 @@ class TestLoadModBlueprints:
     def test_no_op_does_not_raise(self):
         from app.infrastructure.mods.mod_manager import load_mod_blueprints
 
-        # Should not raise
-        load_mod_blueprints(MagicMock(), None)
+        # Documented compatibility shim: it is a no-op that returns None and
+        # must NOT mount routes (routes go through load_mod_routes instead).
+        app = MagicMock()
+        result = load_mod_blueprints(app, None)
+        assert result is None
+        app.include_router.assert_not_called()
+        app.add_api_route.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1178,9 +1227,12 @@ class TestLoadModRoutes:
 
         mm = MagicMock()
         mm._loaded_mods = []
-        mm._blueprint_failures = []
+        mm._blueprint_failures = ["stale"]  # should be reset by load_mod_routes
+        app = MagicMock()
         with (
-            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"),
+            patch(
+                "app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"
+            ) as mock_mount,
             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg,
             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
@@ -1188,7 +1240,13 @@ class TestLoadModRoutes:
             registry = MagicMock()
             registry.list_mods.return_value = []
             mock_reg.return_value = registry
-            load_mod_routes(MagicMock(), mm)
+            load_mod_routes(app, mm)
+        # The unconditional on-disk client mount still runs ...
+        mock_mount.assert_called_once_with(mm)
+        # ... blueprint failures are reset ...
+        assert mm._blueprint_failures == []
+        # ... and with an empty registry no per-mod HTTP routers are mounted.
+        app.include_router.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1285,11 +1343,13 @@ class TestLoadModBackendNoDir:
 
         mm = ModManager(mods_root=str(tmp_path))
         mod_path = str(tmp_path / "m1")
-        os.makedirs(mod_path)
+        os.makedirs(mod_path)  # no backend/ subdir
         meta = MagicMock()
         meta.backend_entry = ""
-        # Should not raise
-        mm._load_mod_backend("m1", mod_path, meta)
+        result = mm._load_mod_backend("m1", mod_path, meta)
+        # No backend directory -> early return, nothing registered.
+        assert result is None
+        assert "m1" not in mm._backend_entry_modules
 
 
 # ---------------------------------------------------------------------------
@@ -1480,8 +1540,13 @@ class TestEnsureModsLoadedBranches:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mm = ModManager(mods_root="/tmp")
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True):
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True),
+            patch.object(mm, "load_all_mods") as mock_load,
+        ):
             mm.ensure_mods_loaded(MagicMock())
+        # Disabled -> no loading work performed.
+        mock_load.assert_not_called()
 
     def test_already_loaded_returns(self):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -1491,8 +1556,11 @@ class TestEnsureModsLoadedBranches:
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
             patch.object(mm, "_refresh_mods_root_if_needed"),
             patch.object(mm, "list_loaded_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
+        # Registry already populated -> no reload.
+        mock_load.assert_not_called()
 
     def test_no_discovered_returns(self):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -1503,8 +1571,11 @@ class TestEnsureModsLoadedBranches:
             patch.object(mm, "_refresh_mods_root_if_needed"),
             patch.object(mm, "list_loaded_mods", return_value=[]),
             patch.object(mm, "scan_mods", return_value=[]),
+            patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
+        # No manifests on disk -> nothing to load.
+        mock_load.assert_not_called()
 
     def test_throttled_returns(self):
         import time
@@ -1518,8 +1589,11 @@ class TestEnsureModsLoadedBranches:
             patch.object(mm, "_refresh_mods_root_if_needed"),
             patch.object(mm, "list_loaded_mods", return_value=[]),
             patch.object(mm, "scan_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
+        # Within the 1.5s throttle window -> load is skipped.
+        mock_load.assert_not_called()
 
     def test_max_attempts_reached(self):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -1531,19 +1605,26 @@ class TestEnsureModsLoadedBranches:
             patch.object(mm, "_refresh_mods_root_if_needed"),
             patch.object(mm, "list_loaded_mods", return_value=[]),
             patch.object(mm, "scan_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
+        # Attempt budget exhausted -> load is skipped.
+        mock_load.assert_not_called()
 
     def test_recoverable_error_swallowed(self):
         from app.infrastructure.mods.mod_manager import ModManager
 
         mm = ModManager(mods_root="/tmp")
-        with patch(
-            "app.infrastructure.mods.mod_manager.is_mods_disabled",
-            side_effect=RuntimeError("err"),
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.is_mods_disabled",
+                side_effect=RuntimeError("err"),
+            ),
+            patch.object(mm, "load_all_mods") as mock_load,
         ):
-            # Should not raise
+            # Recoverable error is swallowed (does not propagate) and no load runs.
             mm.ensure_mods_loaded(MagicMock())
+        mock_load.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

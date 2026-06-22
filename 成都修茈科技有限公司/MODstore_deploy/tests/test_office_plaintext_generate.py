@@ -68,7 +68,10 @@ async def test_resolve_generate_spec_from_txt_file(tmp_path: Path) -> None:
         {},
     )
     assert is_word_structured(spec)
-    assert not warnings or any("降级" in w or True for w in warnings)
+    # skip_llm short-circuits to the heuristic path -> no degradation warnings.
+    assert warnings == []
+    # The plain text is carried through verbatim into the structured spec.
+    assert "纯文本生成测试" in spec["plain_text"]
 
 
 @pytest.mark.asyncio

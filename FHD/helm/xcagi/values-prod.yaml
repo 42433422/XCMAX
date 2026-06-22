@@ -1,0 +1,53 @@
+# Production overrides. NOT runnable as-is — fill every CHANGEME and pre-create
+# the Secret referenced by secrets.existingSecret first.
+#
+#   kubectl create secret generic xcagi-prod-secrets -n xcagi \
+#     --from-literal=ADMIN_USERNAME=admin \
+#     --from-literal=ADMIN_PASSWORD='<strong>' \
+#     --from-literal=DATABASE_URL='postgresql+psycopg://xcagi:<pw>@<host>:5432/xcagi'
+#   helm install xcagi FHD/helm/xcagi -n xcagi --create-namespace \
+#     -f FHD/helm/xcagi/values-prod.yaml
+
+global:
+  namespace: xcagi
+
+# Namespace managed by `helm --create-namespace`, not the chart.
+createNamespace: false
+
+# Private registry pull secret (pre-create it in the namespace).
+imagePullSecrets:
+  - name: xcagi-registry        # CHANGEME
+
+api:
+  image:
+    repository: registry.example.com/xcagi/fhd-api   # CHANGEME
+    tag: ""                     # CHANGEME — pin an immutable tag, never "latest"
+    pullPolicy: IfNotPresent
+  replicas: 3
+  service:
+    type: ClusterIP             # front with an Ingress/LoadBalancer, not NodePort
+  # External Postgres → no PVC needed. (For prod-on-SQLite set persistence.enabled
+  # instead and leave DATABASE_URL on sqlite.)
+  persistence:
+    enabled: false
+  config:
+    # Run migrations from the squashed baseline on a real database.
+    FHD_SKIP_ALEMBIC: "0"
+    # DATABASE_URL carries credentials → provided by the Secret below, which wins
+    # over this ConfigMap value (secretRef is applied after configMapRef). Left
+    # blank here so no real DSN ever lands in the ConfigMap.
+    DATABASE_URL: ""
+    XCAGI_GUNICORN_WORKERS: "4"
+
+secrets:
+  # Don't commit prod creds — reference a Secret created out-of-band that carries
+  # ADMIN_USERNAME, ADMIN_PASSWORD and DATABASE_URL.
+  create: false
+  existingSecret: "xcagi-prod-secrets"   # CHANGEME
+
+monitoring:
+  # Grafana admin password should come from a Secret in prod; rotate this.
+  grafana:
+    adminPassword: "CHANGEME"
+  k6:
+    enabled: false

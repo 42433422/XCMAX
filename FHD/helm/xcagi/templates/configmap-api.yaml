@@ -1,0 +1,16 @@
+{{- if .Values.api.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xcagi-config
+  namespace: {{ include "xcagi.namespace" . }}
+  labels:
+    {{- include "xcagi.labels" . | nindent 4 }}
+    app: xcagi
+data:
+  {{- range $k, $v := .Values.api.config }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  # ADMIN_USERNAME / ADMIN_PASSWORD intentionally live in the Secret
+  # (templates/secret.yaml), not here — never put credentials in a ConfigMap.
+{{- end }}

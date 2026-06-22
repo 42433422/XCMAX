@@ -726,7 +726,8 @@ def test_default_purchase_unit_for_import() -> None:
 
 def test_guess_default_purchase_unit() -> None:
     ea = {"file_name": "甲公司报价.xlsx"}
-    assert AIChatApplicationService._guess_default_purchase_unit(ea) in ("", "甲公司报价") or True
+    # Strips the "报价" suffix then matches the "公司" company token -> "甲公司".
+    assert AIChatApplicationService._guess_default_purchase_unit(ea) == "甲公司"
 
 
 def test_customer_hint_from_preview_grid() -> None:
