@@ -8,20 +8,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from app.services.intent_trainer import (
-        HAS_YAML,
-        ID_TO_LABEL,
-        INTENT_LABELS,
-        LABEL_TO_ID,
-        IntentDataset,
-        IntentExample,
-        compute_metrics,
-        load_training_data,
-        split_data,
-    )
-except ImportError:
-    pytest.skip("intent_trainer 依赖不可用", allow_module_level=True)
+# intent_trainer 已改为可选导入重型 ML 栈（torch/transformers），模块本身始终可导入。
+# 纯逻辑（标签/数据加载/切分/指标/len）在无 ML 栈的环境（含 CI）真实运行；仅需张量的用例
+# 用 @skipif(not HAS_TORCH) 显式跳过——不再因 ImportError 把整个文件 module-level 静默跳过。
+from app.services.intent_trainer import (
+    HAS_TORCH,
+    HAS_YAML,
+    ID_TO_LABEL,
+    INTENT_LABELS,
+    LABEL_TO_ID,
+    IntentDataset,
+    IntentExample,
+    compute_metrics,
+    load_training_data,
+    split_data,
+)
 
 
 class TestIntentLabels:
@@ -66,6 +67,7 @@ class TestIntentDataset:
         ds = IntentDataset([], mock_tokenizer)
         assert len(ds) == 0
 
+    @pytest.mark.skipif(not HAS_TORCH, reason="torch 未安装（重型 ML 依赖，CI 默认不装）")
     def test_getitem_returns_dict(self):
         import torch
 
@@ -82,6 +84,7 @@ class TestIntentDataset:
         assert "labels" in item
         assert item["labels"].item() == LABEL_TO_ID["greet"]
 
+    @pytest.mark.skipif(not HAS_TORCH, reason="torch 未安装（重型 ML 依赖，CI 默认不装）")
     def test_getitem_unknown_label(self):
         import torch
 
