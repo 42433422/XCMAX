@@ -326,10 +326,20 @@ class TestGenerateSignature:
         (tmp_path / "code.py").write_text("pass", encoding="utf-8")
         return ModPackage(str(tmp_path))
 
+    def _members(self, pkg):
+        """构造 (arcname, 磁盘路径) 成员列表，模拟 create_package 收集的内容。"""
+        members = []
+        for root, _, files in os.walk(pkg.mod_path):
+            for filename in files:
+                fp = os.path.join(root, filename)
+                rel = os.path.relpath(fp, pkg.mod_path)
+                members.append((os.path.join(pkg.mod_id, rel), fp))
+        return members
+
     def test_signature_without_private_key(self, tmp_path):
         """无私钥时生成空签名"""
         pkg = self._make_pkg(tmp_path)
-        sig = pkg._generate_signature(private_key=None)
+        sig = pkg._generate_signature(self._members(pkg), private_key=None)
         assert sig["signature"] == ""
         assert "warning" in sig
         assert sig["algorithm"] == "sha256"
@@ -340,20 +350,20 @@ class TestGenerateSignature:
         """XCAGI_MOD_SIGNER 环境变量"""
         monkeypatch.setenv("XCAGI_MOD_SIGNER", "test-signer")
         pkg = self._make_pkg(tmp_path)
-        sig = pkg._generate_signature(private_key=None)
+        sig = pkg._generate_signature(self._members(pkg), private_key=None)
         assert sig["signer"] == "test-signer"
 
     def test_signature_default_signer(self, tmp_path, monkeypatch):
         """默认 signer 为 unknown"""
         monkeypatch.delenv("XCAGI_MOD_SIGNER", raising=False)
         pkg = self._make_pkg(tmp_path)
-        sig = pkg._generate_signature(private_key=None)
+        sig = pkg._generate_signature(self._members(pkg), private_key=None)
         assert sig["signer"] == "unknown"
 
     def test_signature_with_missing_private_key_file(self, tmp_path):
         """私钥文件不存在时签名失败但不抛异常"""
         pkg = self._make_pkg(tmp_path)
-        sig = pkg._generate_signature(private_key="/nonexistent/key.pem")
+        sig = pkg._generate_signature(self._members(pkg), private_key="/nonexistent/key.pem")
         assert sig["signature"] == ""
 
     def test_signature_with_cryptography_import_error(self, tmp_path):
@@ -364,7 +374,7 @@ class TestGenerateSignature:
         key_file.write_text("not a real key", encoding="utf-8")
 
         with patch.dict("sys.modules", {"cryptography": None}):
-            sig = pkg._generate_signature(private_key=str(key_file))
+            sig = pkg._generate_signature(self._members(pkg), private_key=str(key_file))
         assert sig["signature"] == ""
 
 
@@ -449,12 +459,12 @@ class TestExtractPackage:
             ModPackage.extract_package(zip_path, target_dir, verify_signature=False)
 
     def test_extract_with_mod_id_subdir(self, tmp_path):
-        """解压后存在 mod_id 子目录时使用子目录路径"""
-        # Create a package via ModPackage which stores files under {mod_id}/ prefix.
-        # After extraction, manifest.json is at target_dir/sub-mod/manifest.json.
-        # The extract_package code first checks target_dir/manifest.json (not found),
-        # then raises ModPackageError because it only looks at target_dir/manifest.json.
-        # This is the actual behavior of the source code.
+        """解压后 manifest 位于 mod_id 子目录时，应解析到该子目录（不再误报缺失）。
+
+        VULN-1 核心修复附带修正了 create_package(写 {mod_id}/ 前缀) 与
+        extract_package(只看顶层 manifest) 不一致的历史 bug：现在 extract 会
+        在唯一的 mod_id 子目录中找到 manifest 并以其为 mod 根目录。
+        """
         mod_dir = tmp_path / "src_mod"
         mod_dir.mkdir()
         manifest = {"id": "sub-mod", "version": "1.0.0"}
@@ -466,10 +476,13 @@ class TestExtractPackage:
         package_path = pkg.create_package(output_dir, include_signature=False)
 
         target_dir = str(tmp_path / "extracted")
-        # The source code only looks at target_dir/manifest.json, not target_dir/sub-mod/manifest.json.
-        # Since create_package stores under sub-mod/ prefix, this will raise ModPackageError.
-        with pytest.raises(ModPackageError, match="缺少 manifest.json"):
-            ModPackage.extract_package(package_path, target_dir, verify_signature=False)
+        extracted_path, returned_manifest = ModPackage.extract_package(
+            package_path, target_dir, verify_signature=False
+        )
+        assert returned_manifest["id"] == "sub-mod"
+        # mod 根目录应为 target_dir/sub-mod，且其中含 manifest.json。
+        assert os.path.basename(extracted_path) == "sub-mod"
+        assert os.path.isfile(os.path.join(extracted_path, "manifest.json"))
 
     def test_extract_target_dir_created(self, tmp_path):
         """目标目录不存在时自动创建"""
