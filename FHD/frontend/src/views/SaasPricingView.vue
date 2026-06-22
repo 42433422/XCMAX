@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { authApi } from '@/api/auth';
 import modelPaymentApi, { type ModelPaymentPlan } from '@/api/modelPayment';
 
+const BUDGET_STORAGE_KEY = 'xcagi_contact_budget';
+
 const route = useRoute();
 const router = useRouter();
 
@@ -12,6 +14,7 @@ const loading = ref(true);
 const checkoutPlanId = ref<string | null>(null);
 const errorMessage = ref('');
 const subscription = ref<Record<string, unknown> | null>(null);
+const budgetRange = ref('');
 
 const redirectPath = computed(() => {
   const raw = route.query.redirect;
@@ -19,15 +22,39 @@ const redirectPath = computed(() => {
   return typeof value === 'string' && value.startsWith('/') ? value : '/';
 });
 
+function resolveBudgetRange(): string {
+  const fromQuery = route.query.budget_range ?? route.query.budget;
+  const queryValue = Array.isArray(fromQuery) ? fromQuery[0] : fromQuery;
+  if (typeof queryValue === 'string' && queryValue.trim()) {
+    return queryValue.trim();
+  }
+  try {
+    return (localStorage.getItem(BUDGET_STORAGE_KEY) || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function isPermanentPlan(planId: string): boolean {
+  return planId.startsWith('saas-permanent-');
+}
+
+function priceUnit(plan: ModelPaymentPlan): string {
+  if (plan.id === 'saas-trial-30') return '/30天';
+  if (isPermanentPlan(plan.id)) return '/永久';
+  return '/月';
+}
+
 function formatYuan(cents: number): string {
   return (cents / 100).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 onMounted(async () => {
   document.title = '套餐与定价';
+  budgetRange.value = resolveBudgetRange();
   try {
     const [planRes, subRes] = await Promise.all([
-      modelPaymentApi.getPlans(),
+      modelPaymentApi.getPlans(budgetRange.value || undefined),
       authApi.getSubscriptionStatus().catch(() => null),
     ]);
     plans.value = (planRes?.data?.plans || []).filter((p: ModelPaymentPlan) => p.id.startsWith('saas-'));
@@ -95,7 +122,7 @@ async function goBack() {
           </div>
           <p class="saas-price">
             <span class="saas-price-num">¥{{ formatYuan(plan.amount_cents) }}</span>
-            <span class="saas-price-unit">/月</span>
+            <span class="saas-price-unit">{{ priceUnit(plan) }}</span>
           </p>
           <p class="saas-desc">{{ plan.description }}</p>
           <button
