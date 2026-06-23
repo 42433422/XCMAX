@@ -24,11 +24,16 @@ from scripts.dev.ssot_plugins.base import run_command  # noqa: E402
 REPO_ROOT = _FHD_ROOT.parent  # 仓根（publish 脚本在 scripts/dev/ 而非 FHD/scripts/dev/）
 GENERATED_PREFIX = "fhd-"
 EXTRA_GENERATED = ("modstore-",)  # 这些前缀的根 workflow 应为生成件
+# 有意的 root-only 独立 workflow：无 FHD 源、不经 publisher 生成（文件头自述
+# "直接编辑此处"），故按命名约定豁免 CI SSOT 生成头检查，避免假阳性漂移。
+STANDALONE_WORKFLOWS = frozenset({"fhd-alembic-ssot.yml"})
 
 
 def _is_generated_workflow(path: Path) -> bool:
     """判断根仓 workflow 是否应为生成件（按命名约定）。"""
     name = path.name
+    if name in STANDALONE_WORKFLOWS:
+        return False
     if name.startswith(GENERATED_PREFIX):
         return True
     return any(name.startswith(p) for p in EXTRA_GENERATED)
