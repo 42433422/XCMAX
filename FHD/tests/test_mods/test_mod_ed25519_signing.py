@@ -210,7 +210,9 @@ def test_e_require_signed_unsigned_raises(tmp_path, monkeypatch):
 
     # 不提供私钥 -> 未签名包（signature=""）。
     pkg = ModPackage(mod_dir)
-    pkg_path = pkg.create_package(str(tmp_path / "dist_e"), include_signature=True, private_key=None)
+    pkg_path = pkg.create_package(
+        str(tmp_path / "dist_e"), include_signature=True, private_key=None
+    )
 
     target = str(tmp_path / "extract_e")
     with pytest.raises(ModSignatureError):
@@ -244,7 +246,9 @@ def test_f_default_unsigned_does_not_raise(tmp_path, monkeypatch):
     monkeypatch.delenv("XCAGI_REQUIRE_SIGNED_MODS", raising=False)
 
     pkg = ModPackage(mod_dir)
-    pkg_path = pkg.create_package(str(tmp_path / "dist_f"), include_signature=True, private_key=None)
+    pkg_path = pkg.create_package(
+        str(tmp_path / "dist_f"), include_signature=True, private_key=None
+    )
 
     target = str(tmp_path / "extract_f")
     # 不得抛异常；安装主路径完成。

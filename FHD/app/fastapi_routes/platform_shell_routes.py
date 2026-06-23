@@ -94,6 +94,26 @@ async def platform_shell_employee_tools():
     return {"success": True, "data": build_employee_tools_status()}
 
 
+@router.get("/employee-ssot")
+async def platform_shell_employee_ssot():
+    """员工 & 部门系统单一真相源派生视图。
+
+    一份数据源 ``config/duty_roster.json`` 自动派生：
+    * ``admin``      —— 管理端 6 部门 + 上岗员工(编制 ∩ 已安装)。
+    * ``enterprise`` —— 企业端 4 部门(层) + 上架(商店)/未上架(宿主入门定制)员工。
+    """
+    from app.application.ops_closure_status import _installed_employee_pack_ids
+    from app.mod_sdk.employee_ssot import derive_employee_ssot
+
+    installed: set[str] = set()
+    try:
+        installed = _installed_employee_pack_ids()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("employee-ssot: 读取已安装 employee_pack 失败: %s", exc)
+
+    return {"success": True, "data": derive_employee_ssot(installed_ids=installed)}
+
+
 class OfficeSampleCleanupBody(BaseModel):
     file_paths: list[str] = Field(default_factory=list)
 

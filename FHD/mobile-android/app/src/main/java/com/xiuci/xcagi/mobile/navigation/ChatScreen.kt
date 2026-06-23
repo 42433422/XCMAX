@@ -42,6 +42,9 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CallMerge
+import androidx.compose.material.icons.filled.Difference
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,6 +73,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,7 +95,11 @@ import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 import com.xiuci.xcagi.mobile.core.speech.VoiceInputSheet
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
@@ -184,7 +192,7 @@ fun ChatScreen(
     var showVoiceSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // 录音权限请求
+    // 录音权限请求（仅 app 内识别器兜底路径用）
     val recordPermissionLauncher =
             rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
@@ -193,12 +201,48 @@ fun ChatScreen(
                 else vm.snack("需要麦克风权限才能使用语音输入")
             }
 
+    // 系统语音输入(ACTION_RECOGNIZE_SPEECH)：由系统语音引擎(如小米/讯飞)弹 UI 并回写转写。
+    // 这是「用手机自带语音」最兼容的方式——很多国产 ROM 没注册默认 RecognitionService，
+    // 程序化 SpeechRecognizer 用不了，但这个 Activity 意图能用。
+    val speechIntentLauncher =
+            rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val text = result.data
+                            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                            ?.firstOrNull()
+                            .orEmpty()
+                    if (text.isNotBlank()) {
+                        input = if (input.isBlank()) text else "$input $text"
+                    }
+                }
+            }
+
     fun startVoiceInput() {
-        val hasPermission =
-                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                        PackageManager.PERMISSION_GRANTED
-        if (hasPermission) showVoiceSheet = true
-        else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        val intent =
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(
+                            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                    )
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话…")
+                }
+        try {
+            speechIntentLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            // 无系统语音 UI → 回退到 app 内识别器(需录音权限)。
+            if (SpeechRecognizer.isRecognitionAvailable(context)) {
+                val hasPermission =
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                                PackageManager.PERMISSION_GRANTED
+                if (hasPermission) showVoiceSheet = true
+                else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else {
+                vm.snack("当前设备未提供语音输入")
+            }
+        }
     }
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
@@ -218,7 +262,26 @@ fun ChatScreen(
         }
     val aiAvatarFallback = chatAvatarFallback(conversationId, employeeProfile != null)
 
-    LaunchedEffect(Unit) {
+    // 解析"当前未处置的开发任务分支"，用于底部功能键（合并/diff/丢弃）。
+    // 单遍扫描所有助手消息：push/diff 都带 super-employee/ 分支名→记为候选；
+    // 遇到"✅已合并/已丢弃分支"→该分支已处置，清空（看完 diff 不会误清，因为 diff 仍带分支名）。
+    val gitBranch =
+        remember(messages, streaming) {
+            if (streaming) {
+                null
+            } else {
+                var candidate: String? = null
+                val re = Regex("(super-employee/[\\w./-]+)")
+                for ((role, text) in messages) {
+                    if (role != "assistant") continue
+                    re.find(text)?.let { candidate = it.groupValues[1] }
+                    if (text.contains("✅ 已合并") || text.contains("已丢弃分支")) candidate = null
+                }
+                candidate
+            }
+        }
+
+    LaunchedEffect(conversationId) {
         vm.loadChatCache(conversationId)
         if (suggestions.isEmpty()) vm.loadHomeHub()
     }
@@ -265,6 +328,15 @@ fun ChatScreen(
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 WeCellGroup {
                     WeCell(
+                        title = "新建对话",
+                        subtitle = "清空当前对话，开始新的一轮",
+                        iconTint = XcagiTheme.extra.brandBlue,
+                        iconBg = MaterialTheme.colorScheme.primaryContainer,
+                        showArrow = true,
+                        showDivider = true,
+                        onClick = { showMoreSheet = false; vm.clearChat(); input = "" },
+                    )
+                    WeCell(
                         title = "OCR 拍照识别",
                         iconTint = MaterialTheme.colorScheme.secondary,
                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
@@ -305,6 +377,14 @@ fun ChatScreen(
                 streaming = streaming,
                 onVoice = { startVoiceInput() },
                 onMore = { showMoreSheet = true },
+                gitBranch = gitBranch,
+                showDevTools = claudeConversation || codexConversation,
+                onGitMerge = { gitBranch?.let { vm.gitMerge(it, conversationId) } },
+                onGitDiff = { gitBranch?.let { vm.gitDiff(it, conversationId) } },
+                onGitDiscard = { gitBranch?.let { vm.gitDiscard(it, conversationId) } },
+                onGitHint = {
+                    vm.snack("还没有可操作的分支——在这里发一个开发任务（如\"修复…\"），跑完就能合并/查看/丢弃")
+                },
             )
         },
     ) { padding ->
@@ -371,14 +451,8 @@ fun ChatScreen(
                     }
                 }
             } else {
-                ChatEmptyState(
-                    title = resolvedTitle,
-                    aiAvatarUrl = employeeProfile?.avatarUrl,
-                    aiAvatarFallback = aiAvatarFallback,
-                    suggestions = suggestions,
-                    onSuggestionClick = { prompt -> vm.sendChat(prompt, conversationId) },
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
+                // 空状态保持纯空白，仿微信（不放建议气泡等功能按键）。
+                Spacer(Modifier.weight(1f).fillMaxWidth())
             }
         }
     }
@@ -569,6 +643,12 @@ private fun ImInputBar(
     modifier: Modifier = Modifier,
     onVoice: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
+    gitBranch: String? = null,
+    showDevTools: Boolean = false,
+    onGitMerge: () -> Unit = {},
+    onGitDiff: () -> Unit = {},
+    onGitDiscard: () -> Unit = {},
+    onGitHint: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     Surface(
@@ -578,6 +658,17 @@ private fun ImInputBar(
         Column {
             // 顶部分隔线
             HorizontalDivider(thickness = 0.5.dp, color = imDivider())
+            // 开发工具条：超级员工聊天里常驻（钉钉式输入框上方一排）。
+            // 有分支时点亮可合并/查看/丢弃；无分支置灰，点了提示先发开发任务。
+            if (showDevTools) {
+                GitActionBar(
+                    branch = gitBranch,
+                    onMerge = onGitMerge,
+                    onDiff = onGitDiff,
+                    onDiscard = onGitDiscard,
+                    onEmptyHint = onGitHint,
+                )
+            }
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -665,6 +756,99 @@ private fun ImInputBar(
                     }
                 }
             }
+        }
+    }
+}
+
+// ══════════════════════════════════════════
+//  情境功能键条（开发任务分支：合并/diff/丢弃）
+//  仿钉钉/微信：输入框上方一排快捷键，跟着场景出现、用完即走
+// ══════════════════════════════════════════
+@Composable
+private fun GitActionBar(
+    branch: String?,
+    onMerge: () -> Unit,
+    onDiff: () -> Unit,
+    onDiscard: () -> Unit,
+    onEmptyHint: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    val active = branch != null
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.CallMerge,
+                contentDescription = null,
+                tint = imTextSecondary(),
+                modifier = Modifier.size(13.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                if (active) "开发任务分支 · ${branch?.substringAfterLast('/').orEmpty()}"
+                else "开发工具 · 发任务后可合并 / 查看 / 丢弃分支",
+                style = MaterialTheme.typography.labelSmall,
+                color = imTextSecondary(),
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GitChip("查看 diff", Icons.Default.Difference, imTextPrimary(), dimmed = !active) {
+                haptics.tap(); if (active) onDiff() else onEmptyHint()
+            }
+            GitChip(
+                "合并到主干",
+                Icons.Default.CallMerge,
+                XcagiTheme.extra.weChatOnline,
+                filled = active,
+                dimmed = !active,
+            ) {
+                if (active) {
+                    haptics.confirm(); onMerge()
+                } else {
+                    haptics.tap(); onEmptyHint()
+                }
+            }
+            GitChip(
+                "丢弃",
+                Icons.Default.DeleteOutline,
+                MaterialTheme.colorScheme.error,
+                dimmed = !active,
+            ) {
+                haptics.tap(); if (active) onDiscard() else onEmptyHint()
+            }
+        }
+    }
+}
+
+@Composable
+private fun GitChip(
+    label: String,
+    icon: ImageVector,
+    tint: Color,
+    filled: Boolean = false,
+    dimmed: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val effTint = if (dimmed) tint.copy(alpha = 0.45f) else tint
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color =
+            if (filled) tint.copy(alpha = 0.12f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (dimmed) 0.3f else 0.5f),
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = effTint, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = effTint)
         }
     }
 }

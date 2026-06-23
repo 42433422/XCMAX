@@ -61,7 +61,9 @@ def test_to_dict_none_address_serializes_to_empty_string():
 
 
 def test_purchase_unit_get_contact_info_uses_name_and_address_object():
-    unit = PurchaseUnit(unit_name="仓库A", contact_person="王五", contact_phone="010", address="北京 北京")
+    unit = PurchaseUnit(
+        unit_name="仓库A", contact_person="王五", contact_phone="010", address="北京 北京"
+    )
 
     contact = unit.get_contact_info()
 

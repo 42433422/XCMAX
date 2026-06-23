@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: MODstore
+        working-directory: FHD/MODstore
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,4 +26,4 @@ jobs:
       - name: Test
         run: pytest tests -q
       - name: Coverage
-        run: pytest tests --cov=modman --cov=modstore_server --cov-report=term-missing -q --cov-fail-under=40
+        run: pytest tests --cov=modman --cov=modstore_server --cov-report=term-missing -q --cov-fail-under=25

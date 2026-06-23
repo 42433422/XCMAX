@@ -1,0 +1,346 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-06-21T17:33:04Z",
+  "git": {
+    "branch": "feat/quality-to-9",
+    "commit": "4a6aaefdd"
+  },
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "baselines": {
+    "package_size": {
+      "desktop": {
+        "status": "ok",
+        "app_path": "FHD/release/_electron-staging/mac-arm64/XCAGI.app",
+        "total_bytes": 648396800,
+        "total_human": "618.36 MB",
+        "components": [
+          {
+            "name": "Python 后端(PyInstaller 冻结)",
+            "bytes": 311209984,
+            "human": "296.79 MB"
+          },
+          {
+            "name": "Electron Frameworks(Chromium 运行时,基本固定)",
+            "bytes": 275570688,
+            "human": "262.80 MB"
+          },
+          {
+            "name": "前端 frontend(extraResource)",
+            "bytes": 59043840,
+            "human": "56.31 MB"
+          },
+          {
+            "name": "app.asar(主进程代码)",
+            "bytes": 1785856,
+            "human": "1.70 MB"
+          }
+        ],
+        "duplication": [
+          {
+            "name": "前端 vue-dist 被打包两次(后端内嵌 + frontend extraResource)",
+            "embedded_bytes": 59027456,
+            "extra_bytes": 59043840,
+            "removable_bytes": 59043840,
+            "removable_human": "56.31 MB",
+            "note": "serve 路径是后端内嵌副本(loadURL→FastAPI);frontend extraResource 仅 cache-hash fallback,可去"
+          }
+        ],
+        "top_backend_libs": [
+          {
+            "name": "resources",
+            "bytes": 63410176,
+            "human": "60.47 MB"
+          },
+          {
+            "name": "templates",
+            "bytes": 59027456,
+            "human": "56.29 MB"
+          },
+          {
+            "name": "pandas",
+            "bytes": 17666048,
+            "human": "16.85 MB"
+          },
+          {
+            "name": "libpython3.11.dylib",
+            "bytes": 17125376,
+            "human": "16.33 MB"
+          },
+          {
+            "name": "PIL",
+            "bytes": 11902976,
+            "human": "11.35 MB"
+          },
+          {
+            "name": "cryptography",
+            "bytes": 11378688,
+            "human": "10.85 MB"
+          },
+          {
+            "name": "psycopg_binary",
+            "bytes": 9969664,
+            "human": "9.51 MB"
+          },
+          {
+            "name": "lxml",
+            "bytes": 9060352,
+            "human": "8.64 MB"
+          },
+          {
+            "name": "mypy",
+            "bytes": 8216576,
+            "human": "7.84 MB"
+          },
+          {
+            "name": "pdfminer",
+            "bytes": 8204288,
+            "human": "7.82 MB"
+          },
+          {
+            "name": "mods",
+            "bytes": 6934528,
+            "human": "6.61 MB"
+          },
+          {
+            "name": "numpy",
+            "bytes": 6897664,
+            "human": "6.58 MB"
+          },
+          {
+            "name": "sqlcipher3",
+            "bytes": 6647808,
+            "human": "6.34 MB"
+          },
+          {
+            "name": "pydantic_core",
+            "bytes": 4149248,
+            "human": "3.96 MB"
+          },
+          {
+            "name": "gevent",
+            "bytes": 3895296,
+            "human": "3.71 MB"
+          }
+        ],
+        "removable_now": [
+          {
+            "name": "mypy(冻结包死代码,运行时零 import)",
+            "bytes": 8216576,
+            "human": "7.84 MB"
+          },
+          {
+            "name": "frontend 重复打包",
+            "bytes": 59043840,
+            "human": "56.31 MB"
+          }
+        ],
+        "removable_now_bytes": 67260416,
+        "projected_after_p0_quickwins_bytes": 581136384,
+        "projected_after_p0_quickwins_human": "554.21 MB"
+      },
+      "mobile": {
+        "android_apk": {
+          "path": "release/packages-v10.0.0/enterprise/XCAGI-Enterprise-Android-10.0.0.apk",
+          "bytes": 27973467,
+          "human": "26.68 MB",
+          "breakdown": [
+            {
+              "name": "lib",
+              "bytes": 21934988,
+              "human": "20.92 MB"
+            },
+            {
+              "name": "dex",
+              "bytes": 3605573,
+              "human": "3.44 MB"
+            },
+            {
+              "name": "assets",
+              "bytes": 888311,
+              "human": "867.49 KB"
+            },
+            {
+              "name": "resources.arsc",
+              "bytes": 811012,
+              "human": "792.00 KB"
+            },
+            {
+              "name": "res",
+              "bytes": 444007,
+              "human": "433.60 KB"
+            },
+            {
+              "name": "other",
+              "bytes": 46967,
+              "human": "45.87 KB"
+            },
+            {
+              "name": "kotlin",
+              "bytes": 10468,
+              "human": "10.22 KB"
+            },
+            {
+              "name": "AndroidManifest.xml",
+              "bytes": 6379,
+              "human": "6.23 KB"
+            },
+            {
+              "name": "META-INF",
+              "bytes": 1497,
+              "human": "1.46 KB"
+            }
+          ]
+        },
+        "harmony_hap": {
+          "path": "release/packages-v10.0.0/enterprise/XCAGI-Enterprise-Harmony-10.0.0.hap",
+          "bytes": 267692,
+          "human": "261.42 KB"
+        },
+        "status": "ok"
+      }
+    },
+    "startup": {
+      "desktop": {
+        "status": "no_run_captured",
+        "logs_scanned": 22,
+        "hint": "从终端启动一次桌面 app 复现埋点:cd FHD/desktop && npm run dev,关注 stdout 的 [xcagi-desktop] startup {...}"
+      },
+      "mobile": {
+        "status": "needs_device",
+        "android_cold_start": "adb shell am start -W -n com.xiuci.xcagi.mobile/.MainActivity | grep TotalTime",
+        "note": "需真机/模拟器;TotalTime(ms)为冷启口径"
+      }
+    },
+    "update_size": {
+      "status": "ok",
+      "artifacts": [
+        {
+          "file": "XCAGI-10.0.0-mac-arm64.zip",
+          "full_bytes": 329186809,
+          "full_human": "313.94 MB",
+          "blockmap_present": true,
+          "blockmap_bytes": 322314,
+          "differential_supported": true
+        },
+        {
+          "file": "XCAGI-10.0.0-mac-arm64.zip",
+          "full_bytes": 328334974,
+          "full_human": "313.12 MB",
+          "blockmap_present": true,
+          "blockmap_bytes": 321336,
+          "differential_supported": true
+        }
+      ],
+      "differential_ready": true,
+      "note": "blockmap 已生成 → electron-updater 在生成版 provider 下会自动只下增量块;下一步应实测一次跨版本更新的真实下载字节(本工具暂以全量为基线)。",
+      "measured_differential_bytes": null
+    },
+    "runtime_perf": {
+      "frontend_bundle": {
+        "status": "ok",
+        "dist_path": "FHD/templates/vue-dist",
+        "total_bytes": 59035648,
+        "total_human": "56.30 MB",
+        "js_total_bytes": 4307057,
+        "js_total_human": "4.11 MB",
+        "js_gzip_human": "1.31 MB",
+        "css_total_bytes": 644154,
+        "css_total_human": "629.06 KB",
+        "css_gzip_human": "131.86 KB",
+        "chunk_count": 114,
+        "entry_chunk": {
+          "name": "index-irOobsCK.js",
+          "bytes": 803679,
+          "gzip_bytes": 257099,
+          "human": "784.84 KB",
+          "gzip_human": "251.07 KB"
+        },
+        "top_chunks": [
+          {
+            "name": "transformers.web-6PbSn4MM.js",
+            "bytes": 925265,
+            "gzip_bytes": 238229,
+            "human": "903.58 KB",
+            "gzip_human": "232.65 KB"
+          },
+          {
+            "name": "index-irOobsCK.js",
+            "bytes": 803679,
+            "gzip_bytes": 257099,
+            "human": "784.84 KB",
+            "gzip_human": "251.07 KB"
+          },
+          {
+            "name": "KittenAnalyzerView-Bmnid_7o.js",
+            "bytes": 597835,
+            "gzip_bytes": 202210,
+            "human": "583.82 KB",
+            "gzip_human": "197.47 KB"
+          },
+          {
+            "name": "xlsx-BLGkKAvn.js",
+            "bytes": 430255,
+            "gzip_bytes": 141985,
+            "human": "420.17 KB",
+            "gzip_human": "138.66 KB"
+          },
+          {
+            "name": "YuangongStitchFullView-CQ0TY_bq.js",
+            "bytes": 244776,
+            "gzip_bytes": 80621,
+            "human": "239.04 KB",
+            "gzip_human": "78.73 KB"
+          },
+          {
+            "name": "InternalCustomerServiceView-CGbWk64R.js",
+            "bytes": 100551,
+            "gzip_bytes": 29779,
+            "human": "98.19 KB",
+            "gzip_human": "29.08 KB"
+          },
+          {
+            "name": "EmployeeWorkspaceView-Cbn2_g_R.js",
+            "bytes": 96772,
+            "gzip_bytes": 28951,
+            "human": "94.50 KB",
+            "gzip_human": "28.27 KB"
+          },
+          {
+            "name": "ImMessengerView-BzNpvnEg.js",
+            "bytes": 69101,
+            "gzip_bytes": 25103,
+            "human": "67.48 KB",
+            "gzip_human": "24.51 KB"
+          }
+        ],
+        "heavy_on_demand_candidates": [
+          {
+            "name": "ONNX Runtime WASM(离线 TTS)",
+            "bytes": 43192038,
+            "human": "41.19 MB"
+          },
+          {
+            "name": "yuangong 数据/fixtures",
+            "bytes": 26818412,
+            "human": "25.58 MB"
+          },
+          {
+            "name": "懒加载大块 transformers.web-6PbSn4MM.js(随包发布但多数用户不触发)",
+            "bytes": 925265,
+            "human": "903.58 KB"
+          },
+          {
+            "name": "懒加载大块 xlsx-BLGkKAvn.js(随包发布但多数用户不触发)",
+            "bytes": 430255,
+            "human": "420.17 KB"
+          }
+        ],
+        "manual_chunks": false,
+        "note": "vite/build.js 无 manualChunks;入口 chunk + 重资产是 P1 抓手。"
+      }
+    }
+  }
+}

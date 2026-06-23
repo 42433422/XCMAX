@@ -470,14 +470,6 @@ def compat_tool_categories_list() -> dict:
 # ========== Butler Profile（拟人 Persy 系统）==========
 
 
-def _butler_profile_service():
-    from app.db import SessionLocal
-    from app.services.butler_profile_service import ButlerProfileService
-
-    db = SessionLocal()
-    return ButlerProfileService(db)
-
-
 def _resolve_user_id_int(request: Request, body: dict | None = None) -> int:
     """从请求头或 body 解析用户 ID（整数）。默认 1。"""
     raw = (
@@ -494,21 +486,21 @@ def _resolve_user_id_int(request: Request, body: dict | None = None) -> int:
 
 
 def _persona_backed_profile_view(uid: int) -> dict:
-    """方案 B（桥接合并）：persona_profile 为单一真相源。
+    """人格视图的**唯一派生路径**：Persona-A → butler 视图（经 persona_butler_bridge）。
 
-    存在 persona 画像（用户已对话过）则派生 butler 视图，使 Settings UI 与对话流
-    展示同一人格；尚无画像时回退 butler 自身默认视图。响应形状与 ``to_public_dict``
-    严格一致，前端零改动。
+    有画像派生其画像；无画像（新用户）派生中性默认——两者走完全相同的桥逻辑。
+    **不再回退 butler 自身 ``get_profile_view``/``derive_mbti``**，确保 MBTI/四轴
+    只有桥这一处派生源（单一真相源 + 自动派生）。响应形状与 ``to_public_dict`` 一致。
     """
-    try:
-        from app.application.persona_butler_bridge import persona_view_for_user
+    from app.application.persona_butler_bridge import persona_default_view, persona_view_for_user
 
+    try:
         view = persona_view_for_user(uid)
         if view is not None:
             return view
     except Exception as exc:  # noqa: BLE001 - 桥接失败不应阻断 Settings 读取
-        logger.warning("persona 派生 butler 视图失败，回退 butler 默认: %s", exc)
-    return _butler_profile_service().get_profile_view(uid)
+        logger.warning("persona 画像读取失败，回退 persona 默认视图: %s", exc)
+    return persona_default_view(uid)
 
 
 @router.get("/butler/profile")
@@ -533,45 +525,32 @@ def butler_profile_get(
 @router.post("/butler/profile/infer")
 @router.post("/butler/profile/infer/", include_in_schema=False)
 def butler_profile_infer(request: Request, body: dict = Body(default_factory=dict)) -> dict:
-    """手动触发 MBTI 推断。
+    """刷新人格视图（**人格系统已合并：Persona-A 为单一真相源**）。
 
-    Body 可选字段：
-    - conversations: 最近对话历史 [{"user_message": str, "assistant_message": str, "interrupted": bool, "corrected": bool}]
-    - mod_hints: MOD 所有权提示 ["考勤", "发货", ...]
+    历史上此端点跑 butler MBTI 推断并写 ``butler_user_profiles``。人格合并后，对话流
+    （``build_prompt_from_message`` → ``update_on_message``）已在**每条消息**上持续更新
+    persona 画像，故本端点**不再独立推断 / 写 butler**，仅返回 persona 派生视图
+    （无画像时回退默认）。Body 中 conversations / mod_hints 已由对话流持续吸收，
+    无需在此重复喂入（避免 rapport 双计）。
     """
-    from app.application.butler_profile_inference import (
-        ButlerProfileInference,
-        apply_inference,
-    )
-
     try:
-        user_id = _resolve_user_id_int(request, body)
-        svc = _butler_profile_service()
-        profile = svc.get_or_create_profile(user_id)
-        current = profile.to_internal_dict()
-
-        conversations = body.get("conversations") or []
-        mod_hints = body.get("mod_hints") or []
-
-        engine = ButlerProfileInference()
-        result = engine.infer(current, conversations, mod_hints=mod_hints)
-        apply_inference(svc, user_id, result, current)
-
-        updated = svc.get_profile_view(user_id)
+        uid = _resolve_user_id_int(request, body)
+        view = _persona_backed_profile_view(uid)
         return {
             "success": True,
-            "profile": updated,
+            "profile": view,
             "inference": {
-                "mbti_type": result.new_mbti_type,
-                "identity_changed": result.identity_changed,
-                "confidence": result.confidence,
-                "reasons": result.reasons,
+                "mbti_type": view.get("mbti_type", ""),
+                "identity_changed": False,
+                "confidence": float(view.get("mbti_confidence") or 0.0),
+                "reasons": ["人格由对话流持续学习；MBTI 为四轴展示派生，不写回"],
+                "source": "persona",
             },
         }
     except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
-        logger.warning("butler profile 推断失败: %s", exc)
+        logger.warning("butler profile 刷新失败: %s", exc)
         return JSONResponse(
-            {"success": False, "message": f"推断失败: {exc}"},
+            {"success": False, "message": f"刷新失败: {exc}"},
             status_code=500,
         )
 
@@ -581,25 +560,17 @@ def butler_profile_infer(request: Request, body: dict = Body(default_factory=dic
 def butler_profile_record_interaction(
     request: Request, body: dict = Body(default_factory=dict)
 ) -> dict:
-    """记录一次对话互动（写路径，供前端对话完成后调用）。
+    """记录一次对话互动（**人格系统已合并：互动由对话流唯一记录**）。
 
-    Body:
-    - user_message: str
-    - assistant_message: str
-    - interrupted: bool (可选)
-    - corrected: bool (可选)
+    历史上此端点写 ``butler_user_profiles`` 的 rapport/互动计数。人格合并后，互动信号
+    统一由 SSE 对话流（``update_on_message``）喂入 persona（单一真相源）；为避免双写双计，
+    本端点**不再独立写 butler**，仅保留以兼容前端既有调用。
+
+    Body（兼容旧契约，现仅用于校验）：user_message / assistant_message / interrupted / corrected
     """
     try:
-        user_id = _resolve_user_id_int(request, body)
-        svc = _butler_profile_service()
-        svc.record_interaction(
-            user_id,
-            user_message=str(body.get("user_message") or ""),
-            assistant_message=str(body.get("assistant_message") or ""),
-            interrupted=bool(body.get("interrupted") or False),
-            corrected=bool(body.get("corrected") or False),
-        )
-        return {"success": True}
+        _resolve_user_id_int(request, body)  # 保持用户解析/错误语义
+        return {"success": True, "source": "persona"}
     except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
         logger.warning("记录 butler 互动失败: %s", exc)
         return JSONResponse(

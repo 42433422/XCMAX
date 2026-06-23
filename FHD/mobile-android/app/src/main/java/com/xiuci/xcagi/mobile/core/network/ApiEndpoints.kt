@@ -85,6 +85,20 @@ object ApiEndpoints {
     const val AI_GROUP_MESSAGES = "$BASE/ai-groups/{groupId}/messages"
     const val AI_GROUP_MEMBERS = "$BASE/ai-groups/{groupId}/members"
     const val AI_GROUP_MEMBER = "$BASE/ai-groups/{groupId}/members/{employeeId}"
+    const val AI_GROUP_PIN = "$BASE/ai-groups/{groupId}/pin"
+    const val AI_GROUP_MARK_UNREAD = "$BASE/ai-groups/{groupId}/mark-unread"
+    const val AI_GROUP_MARK_READ = "$BASE/ai-groups/{groupId}/mark-read"
+    const val AI_GROUP_FOLLOWED = "$BASE/ai-groups/{groupId}/followed"
+    const val AI_GROUP_HIDDEN = "$BASE/ai-groups/{groupId}/hidden"
+    const val AI_GROUP_DELETE = "$BASE/ai-groups/{groupId}"
+
+    // 会话状态（个人 AI 会话）
+    const val CONVERSATION_PIN = "$BASE/conversations/{conversationId}/pin"
+    const val CONVERSATION_MARK_UNREAD = "$BASE/conversations/{conversationId}/mark-unread"
+    const val CONVERSATION_MARK_READ = "$BASE/conversations/{conversationId}/mark-read"
+    const val CONVERSATION_FOLLOWED = "$BASE/conversations/{conversationId}/followed"
+    const val CONVERSATION_HIDDEN = "$BASE/conversations/{conversationId}/hidden"
+    const val CONVERSATION_DELETE = "$BASE/conversations/{conversationId}"
 
     // 钱包 / 余额
     const val WALLET_BALANCE = "$BASE/wallet/balance"

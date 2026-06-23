@@ -635,9 +635,7 @@ class TestEnsureRuntimeAuthBootstrapDeep:
         from app.db.init_db import ensure_runtime_auth_bootstrap
 
         with (
-            patch(
-                "app.fastapi_app.sqlite_paths.resolve_effective_database_url", return_value=""
-            ),
+            patch("app.fastapi_app.sqlite_paths.resolve_effective_database_url", return_value=""),
             patch("app.db.init_db.ensure_sqlite_auth_bootstrap") as mock_sqlite,
             patch("app.db.init_db.ensure_postgresql_auth_bootstrap") as mock_pg,
         ):

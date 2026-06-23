@@ -150,9 +150,7 @@ class TestInitDbInitializeDatabases:
         monkeypatch.setattr("app.db.init_db._iter_seed_dirs", lambda: [seed_dir])
 
         target_path = os.path.join(tmp_dir, "fail.db")
-        with patch(
-            "app.db.init_db.shutil.copy2", side_effect=OSError("disk full")
-        ) as mock_copy:
+        with patch("app.db.init_db.shutil.copy2", side_effect=OSError("disk full")) as mock_copy:
             # copy2 raises a RECOVERABLE_ERROR -> swallowed (must not propagate).
             init_db.initialize_databases(["fail.db"])
         # Copy was attempted seed -> target, but failed, so target must not exist.
@@ -256,9 +254,7 @@ class TestInitDbEnsureSqlitePerModCopies:
                 "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
                 lambda name, mod_id: f"products__{mod_id}.db",
             ),
-            patch(
-                "app.db.init_db.shutil.copy2", side_effect=OSError("denied")
-            ) as mock_copy,
+            patch("app.db.init_db.shutil.copy2", side_effect=OSError("denied")) as mock_copy,
         ):
             ensure_sqlite_per_mod_database_copies(["mymod"])
         # Mother db exists so a copy is attempted, but copy2 raises a RECOVERABLE_ERROR
@@ -360,6 +356,10 @@ class TestInitDbAuthBootstrap:
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
             ).fetchall()
             assert len(tables) == 1
+            admin = conn.execute(
+                text("SELECT role, tier, industry_id FROM users WHERE username = 'admin'")
+            ).one()
+            assert admin == ("admin", "admin", "通用")
 
     def test_ensure_sqlite_auth_bootstrap_skips_non_sqlite(self, monkeypatch):
         from app.db.init_db import ensure_sqlite_auth_bootstrap
@@ -671,9 +671,7 @@ class TestInitDbOtherTables:
         with sqlite_engine.connect() as conn:
             indexes = {
                 row[0]
-                for row in conn.execute(
-                    text("SELECT name FROM sqlite_master WHERE type='index'")
-                )
+                for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='index'"))
             }
         assert "ix_products_unit" not in indexes
         assert "ix_products_model_number" not in indexes

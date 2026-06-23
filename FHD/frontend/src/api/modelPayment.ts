@@ -27,11 +27,8 @@ export type ModelPaymentEntitlement = {
 
 export const modelPaymentApi = {
   getPlans: (budget_range?: string) => {
-    const params =
-      budget_range && budget_range.trim()
-        ? { budget_range: budget_range.trim() }
-        : undefined;
-    return api.get<{
+    const url = mp('/api/model-payment/plans');
+    type PlansResponse = {
       success: boolean;
       data?: {
         plans: ModelPaymentPlan[];
@@ -39,7 +36,11 @@ export const modelPaymentApi = {
         budget_range?: string | null;
       };
       message?: string;
-    }>(mp('/api/model-payment/plans'), params);
+    };
+    if (budget_range?.trim()) {
+      return api.get<PlansResponse>(url, { budget_range: budget_range.trim() });
+    }
+    return api.get<PlansResponse>(url);
   },
 
   checkout: (plan_id: string) =>

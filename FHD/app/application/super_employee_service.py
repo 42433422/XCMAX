@@ -13,11 +13,13 @@ Codex behaviour is preserved verbatim through ``CODEX_PROFILE`` so the existing
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -29,17 +31,55 @@ import httpx
 
 from app.utils.path_utils import get_app_data_dir
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_PARA_API_URL = "http://127.0.0.1:3001"
 DISPATCHER_MESSAGE_KIND = "dispatcher"
+
+# Para guest-token 模块级缓存。devfleet 对 /api/auth/guest 限 15min 30 次
+# (authLimiter)，原来每次 invoke 都新登 → 用户连发几十条消息就触发
+# "登录请求过于频繁，请稍后重试" 429。缓存按 (api_url, env_super_prefix) 隔离，
+# TTL 远短于 token 真实寿命，到期重登；任何错误立即清缓存避免脏 token。
+_PARA_TOKEN_CACHE: dict[tuple[str, str], tuple[str, float]] = {}
+_PARA_TOKEN_TTL = float(os.environ.get("MODSTORE_PARA_TOKEN_TTL_SEC") or "600")
+
 PARA_TERMINAL_TASK_STATUSES = {"completed", "failed", "merged", "merge_conflict", "cancelled"}
 TASK_ID_RE = re.compile(r"任务\s*ID[:：]\s*([A-Za-z0-9][A-Za-z0-9._:-]{5,})")
 
 # 任务类关键词：命中则走 Para 多设备派工，否则走 CLI 直答。工具无关，共享。
 _TASK_MARKERS: tuple[str, ...] = (
-    "修复", "修改", "改一下", "改成", "实现", "新增", "加一个", "接入", "打通",
-    "任务", "测试", "验证", "跑测试", "测试一下", "验证一下", "打包", "构建",
-    "build", "提交", "commit", "push", "上传git", "部署", "发布", "合并",
-    "开分支", "派工", "调用", "调用所有设备", "多设备", "回写日志", "检查当前工作区",
+    "修复",
+    "修改",
+    "改一下",
+    "改成",
+    "实现",
+    "新增",
+    "加一个",
+    "接入",
+    "打通",
+    "任务",
+    "测试",
+    "验证",
+    "跑测试",
+    "测试一下",
+    "验证一下",
+    "打包",
+    "构建",
+    "build",
+    "提交",
+    "commit",
+    "push",
+    "上传git",
+    "部署",
+    "发布",
+    "合并",
+    "开分支",
+    "派工",
+    "调用",
+    "调用所有设备",
+    "多设备",
+    "回写日志",
+    "检查当前工作区",
 )
 # 多设备分工标签，工具无关，共享。
 _SUBTASK_LABELS: tuple[str, ...] = ("需求定位与方案", "核心实现", "验证与收尾")
@@ -76,8 +116,22 @@ def _codex_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) 
 
 
 def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
-    # Claude Code 无头模式（print）：直接把回答打到 stdout，不写 last-message 文件。
-    return [cli_path, "--print", "--output-format", "text", prompt]
+    # Claude Code 无头模式（print）。stream-json：工作时持续吐事件(工具调用/文本)，
+    # 作为"还在干活"的心跳，配合 idle-timeout 实现"只要在工作就不超时"。
+    # stream-json 在 print 模式需 --verbose。acceptEdits 允许在 cwd 内改/建文件。
+    perm = (
+        os.environ.get("DEVFLEET_CLAUDE_PERMISSION_MODE") or "acceptEdits"
+    ).strip() or "acceptEdits"
+    return [
+        cli_path,
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        perm,
+        prompt,
+    ]
 
 
 @dataclass(frozen=True)
@@ -86,17 +140,18 @@ class SuperEmployeeToolProfile:
 
     employee_id: str
     employee_name: str
-    display_tool: str           # 用户可见的工具名，如 "Codex" / "Claude"
-    tool_name: str              # Para devTool / toolName，如 "codex" / "claude"
-    capability_key: str         # Para 设备能力键，如 "codex_cli" / "claude_cli"
-    storage_subdir: str         # 持久化子目录
-    result_kind: str            # 结果消息 kind
-    direct_kind: str            # 直答消息 kind
-    env_super_prefix: str       # 形如 "XCMAX_CODEX_SUPER_EMPLOYEE"
-    env_tool_prefix: str        # 形如 "XCMAX_CODEX"
-    cli_binary: str             # 可执行名，用于 shutil.which
+    display_tool: str  # 用户可见的工具名，如 "Codex" / "Claude"
+    tool_name: str  # Para devTool / toolName，如 "codex" / "claude"
+    capability_key: str  # Para 设备能力键，如 "codex_cli" / "claude_cli"
+    storage_subdir: str  # 持久化子目录
+    result_kind: str  # 结果消息 kind
+    direct_kind: str  # 直答消息 kind
+    env_super_prefix: str  # 形如 "XCMAX_CODEX_SUPER_EMPLOYEE"
+    env_tool_prefix: str  # 形如 "XCMAX_CODEX"
+    cli_binary: str  # 可执行名，用于 shutil.which
     cli_extra_candidates: tuple[str, ...] = ()
-    cli_reads_output_file: bool = True   # 是否从 --output-last-message 文件读结果
+    cli_reads_output_file: bool = True  # 是否从 --output-last-message 文件读结果
+    cli_stream_json: bool = False  # stdout 是否为 stream-json(逐事件)，需解析出最终回复
     cli_command_builder: Callable[[str, str, Path, str], list[str]] = _codex_cli_command
 
 
@@ -121,7 +176,7 @@ CLAUDE_PROFILE = SuperEmployeeToolProfile(
     employee_id="claude-super-employee",
     employee_name="超级员工-Claude",
     display_tool="Claude",
-    tool_name="claude",
+    tool_name="claude_code",
     capability_key="claude_cli",
     storage_subdir="claude_super_employee",
     result_kind="claude_result",
@@ -131,10 +186,12 @@ CLAUDE_PROFILE = SuperEmployeeToolProfile(
     cli_binary="claude",
     cli_extra_candidates=(
         os.path.expanduser("~/.claude/local/claude"),
+        os.path.expanduser("~/.local/bin/claude"),
         "/opt/homebrew/bin/claude",
         "/usr/local/bin/claude",
     ),
     cli_reads_output_file=False,
+    cli_stream_json=True,
     cli_command_builder=_claude_cli_command,
 )
 
@@ -495,15 +552,22 @@ class SuperEmployeeService:
         ).strip()
         if token:
             return token
+        cache_key = (api_url, self._p.env_super_prefix)
+        cached = _PARA_TOKEN_CACHE.get(cache_key)
+        if cached and cached[1] > time.time():
+            return cached[0]
         resp = client.post(f"{api_url}/api/auth/guest", json={})
         body = self._json_response(resp)
         if resp.status_code >= 400:
+            _PARA_TOKEN_CACHE.pop(cache_key, None)
             raise RuntimeError(
                 self._error_message(body, f"Para guest 登录失败 ({resp.status_code})")
             )
         token = str(body.get("token") or body.get("access_token") or "").strip()
         if not token:
+            _PARA_TOKEN_CACHE.pop(cache_key, None)
             raise RuntimeError("Para guest 登录未返回 token")
+        _PARA_TOKEN_CACHE[cache_key] = (token, time.time() + _PARA_TOKEN_TTL)
         return token
 
     def _para_request(
@@ -553,11 +617,7 @@ class SuperEmployeeService:
             tool = self._device_tool(item, self._p.tool_name)
             if tool and str(tool.get("status") or "") == "not_installed":
                 continue
-            if (
-                tool
-                and str(tool.get("status") or "") == "running"
-                and tool.get("currentTask")
-            ):
+            if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
                 continue
             capabilities = (
                 item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
@@ -752,24 +812,10 @@ class SuperEmployeeService:
         }
 
     def _dispatch_reply(self, dispatch: dict[str, Any]) -> str:
-        tool = self._p.display_tool
-        if dispatch.get("accepted") and dispatch.get("dispatcher") == "para_api":
-            devices = dispatch.get("devices") if isinstance(dispatch.get("devices"), list) else []
-            task_id = str(dispatch.get("task_id") or "")
-            return (
-                f"已接入排比 Para/{tool} 多设备调度器，任务已派发到 {len(devices)} 台设备。"
-                f"{f'任务 ID：{task_id}' if task_id else ''}"
-            ).strip()
-        if dispatch.get("accepted"):
-            return f"已调用全设备 {tool} 调度通道，等待执行回传。"
-        if dispatch.get("reason") == f"para_no_online_{self._p.tool_name}_device":
-            return (
-                f"未发现在线可用 {tool} 设备，任务已进入队列；"
-                f"请启动 Para 工作设备并登录 {tool} CLI 后重试。"
-            )
-        if dispatch.get("queued"):
-            return f"已进入软件内 {tool} 调用队列，等待跨设备调度器接走。"
-        return f"{tool} 调用未完成，请检查调度通道。"
+        # 统一对外提示为"思考中..."，避免暴露派工细节导致用户误以为卡住。
+        # 派工细节仍保留在 dispatch 字典中供前端/日志使用。
+        _ = dispatch  # 保留参数签名兼容性
+        return "思考中..."
 
     def _message_row(
         self,
@@ -908,6 +954,20 @@ class SuperEmployeeService:
         return match.group(1).strip() if match else ""
 
     def _should_reply_with_cli(self, text: str, context: dict[str, Any]) -> bool:
+        # 全局开关：所有 claude.invoke/codex.invoke 都走 FHD 进程内 CLI 直答，
+        # 绕开 Para 派工（watchdog token 不可用时的兜底路径）。FHD 进程继承
+        # 用户 Terminal 的 claude/codex 鉴权，无需额外配置。env: XCMAX_<TOOL>_FORCE_CLI_DIRECT=1。
+        force_direct = (
+            (
+                os.environ.get(f"{self._p.env_tool_prefix}_FORCE_CLI_DIRECT")
+                or os.environ.get("XCMAX_FORCE_CLI_DIRECT")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
+        if force_direct in {"1", "true", "yes", "on"}:
+            return True
         raw_mode = str(context.get("mode") or "").strip().lower()
         if raw_mode in {"chat", "qa", "direct", f"{self._p.tool_name}_cli"}:
             return True
@@ -919,7 +979,9 @@ class SuperEmployeeService:
         return not any(marker in normalized for marker in _TASK_MARKERS)
 
     def _cli_reply_body(self, text: str, context: dict[str, Any]) -> str:
-        if str(os.environ.get(f"{self._p.env_tool_prefix}_CLI_CHAT_ENABLED") or "1").strip().lower() in {
+        if str(
+            os.environ.get(f"{self._p.env_tool_prefix}_CLI_CHAT_ENABLED") or "1"
+        ).strip().lower() in {
             "0",
             "false",
             "off",
@@ -929,38 +991,263 @@ class SuperEmployeeService:
         cli_path = self._cli_path()
         if not cli_path:
             return ""
-        timeout = self._cli_timeout_seconds()
+        # 口袋 Claude Code：claude 生产路径走"持久会话续接 + 隔离工作区"——有上下文、能动手、
+        # 体验接近直接和 Claude Code 交互。codex / 测试注入仍走原"闲聊 or dev-loop"逻辑。
+        if (
+            self._p.cli_stream_json
+            and self._cli_runner is subprocess.run
+            and self._conversation_mode_enabled()
+        ):
+            return self._run_conversation_turn(cli_path, text, context)
+        base_cwd = self._cli_workspace(context)
+        # 闲聊→只答不改；开发任务→生产环境走 coding→view→push 闭环(隔离 worktree)，
+        # 测试注入或显式关闭(_DEV_LOOP=0)时退回"只改不推"的简单路径。
+        if not self._is_task_intent(text, context):
+            return self._run_cli_once(cli_path, self._cli_prompt(text), base_cwd)
+        if self._cli_runner is not subprocess.run or not self._dev_loop_enabled():
+            return self._run_cli_once(cli_path, self._cli_work_prompt(text, base_cwd), base_cwd)
+        return self._run_dev_task_loop(cli_path, text, base_cwd)
+
+    # ===== 口袋 Claude Code：持久会话续接 + 隔离工作区 =====
+
+    def _conversation_mode_enabled(self) -> bool:
+        raw = (
+            str(
+                os.environ.get(f"{self._p.env_tool_prefix}_CONVERSATION")
+                or os.environ.get("XCMAX_CLAUDE_CONVERSATION")
+                or "1"
+            )
+            .strip()
+            .lower()
+        )
+        return raw not in {"0", "false", "off", "disabled"}
+
+    def _session_store_path(self) -> Path:
+        return Path(get_app_data_dir()) / self._p.storage_subdir / "cli_sessions.json"
+
+    def _session_get(self, key: str) -> dict[str, Any]:
+        try:
+            data = json.loads(self._session_store_path().read_text(encoding="utf-8"))
+            rec = data.get(key) if isinstance(data, dict) else None
+            return rec if isinstance(rec, dict) else {}
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _session_set(self, key: str, value: dict[str, Any]) -> None:
+        p = self._session_store_path()
+        try:
+            data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+            if not isinstance(data, dict):
+                data = {}
+        except Exception:  # noqa: BLE001
+            data = {}
+        data[key] = value
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            logger.warning("写 session store 失败", exc_info=True)
+
+    def _session_key(self, context: dict[str, Any]) -> str:
+        """会话键：手机端是单一 pinned 会话，按工具名即可隔离 claude/codex 各自一条续接会话。"""
+        conv = str((context or {}).get("conversation_id") or "").strip()
+        return f"{self._p.tool_name}:{conv}" if conv else self._p.tool_name
+
+    def _ensure_session_workspace(self, key: str) -> tuple[str | None, str | None]:
+        """持久隔离工作区：同一会话复用一个 git worktree（不碰 live checkout、不破坏运行中的 FHD）。"""
+        rec = self._session_get(key)
+        wt = str(rec.get("workspace") or "")
+        branch = str(rec.get("branch") or "")
+        if wt and Path(wt).exists():
+            return wt, branch
+        base = self._cli_workspace({})
+        if not self._is_git_repo(base):
+            return None, None
+        slug = re.sub(r"[^a-z0-9]+", "-", key.lower()).strip("-") or "session"
+        if not branch:
+            branch = f"super-employee/{self._p.tool_name}/{slug}"
+        wt = str(Path(get_app_data_dir()) / self._p.storage_subdir / f"ws-{slug}")
+        try:
+            self._git(base, "worktree", "remove", "--force", wt, timeout=30)
+        except Exception:  # noqa: BLE001
+            pass
+        has_branch = (
+            self._git(base, "rev-parse", "--verify", "--quiet", branch, timeout=15).returncode == 0
+        )
+        if has_branch:
+            r = self._git(base, "worktree", "add", "--force", wt, branch, timeout=180)
+        else:
+            r = self._git(base, "worktree", "add", "-b", branch, wt, "HEAD", timeout=180)
+        if r.returncode != 0:
+            logger.warning("会话工作区创建失败: %s", (r.stderr or r.stdout)[:200])
+            return None, None
+        rec["workspace"] = wt
+        rec["branch"] = branch
+        self._session_set(key, rec)
+        return wt, branch
+
+    def _conversation_prompt(self, text: str, cwd: str, resuming: bool) -> str:
+        if resuming:
+            # 续接：claude 已有完整上下文 + 身份，直接发用户原话（像和同事接着聊）。
+            return text.strip()
+        return (
+            f"你是 XCMAX 内的{self._p.employee_name}，像 Claude Code 一样在项目工作区里工作："
+            "可以读取/创建/修改文件、运行命令、用 git；用户让你改代码就直接动手，不要只解释。"
+            "但普通对话直接回应即可、不要主动遍历整个项目（需要改代码时再读相关文件）；"
+            "保持上下文连续，像和同事聊天那样自然。"
+            f"\n\n工作区：{cwd}\n\n用户：{text.strip()}"
+        )
+
+    def _parse_stream_json_full(self, out: str) -> tuple[str, str]:
+        """从 stream-json 取 (最终回复, session_id)。session_id 取最后出现的(result 事件含)。"""
+        text = self._parse_claude_stream_json(out)
+        sid = ""
+        for line in out.splitlines():
+            s = line.strip()
+            if not s.startswith("{"):
+                continue
+            try:
+                ev = json.loads(s)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(ev, dict) and ev.get("session_id"):
+                sid = str(ev.get("session_id") or "")
+        return text, sid
+
+    def _conversation_perm(self) -> str:
+        # 默认 acceptEdits：可对话+读写改文件(覆盖大部分 Claude Code 用法)，但不自动跑任意命令，
+        # 避免在工程根误伤运行中的 FHD。要全自动(跑命令/git)可 env 切 bypassPermissions。
+        return (
+            os.environ.get("DEVFLEET_CLAUDE_PERMISSION_MODE") or "acceptEdits"
+        ).strip() or "acceptEdits"
+
+    def _conversation_cmd(
+        self, cli_path: str, prompt: str, resume_session_id: str | None
+    ) -> list[str]:
+        cmd = [
+            cli_path,
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            self._conversation_perm(),
+        ]
+        if resume_session_id:
+            cmd += ["--resume", resume_session_id]
+        cmd.append(prompt)
+        return cmd
+
+    def _run_conversation_turn(self, cli_path: str, text: str, context: dict[str, Any]) -> str:
+        key = self._session_key(context)
+        # 像 Claude Code 一样直接在工程根工作：零额外磁盘(不建 536M/会话的 worktree)、
+        # 改动你审了再落地(底部 git 键)。上下文靠 claude session 续接，不靠工作区隔离。
         cwd = self._cli_workspace(context)
-        prompt = self._cli_prompt(text)
+        rec = self._session_get(key)
+        session_id = str(rec.get("session_id") or "").strip()
+        idle_timeout = self._cli_idle_timeout_seconds()
+        hard_cap = self._cli_hard_cap_seconds()
+
+        def _run(prompt: str, resume: str | None) -> tuple[int, str, str, str]:
+            cmd = self._conversation_cmd(cli_path, prompt, resume)
+            return self._run_cli_idle(cmd, cwd, idle_timeout, hard_cap)
+
+        try:
+            returncode, stdout, stderr, killed = _run(
+                self._conversation_prompt(text, cwd, bool(session_id)),
+                session_id or None,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+        body, new_sid = self._parse_stream_json_full(stdout)
+        # resume 失效(会话被清/找不到)兜底：清掉 session_id，按新会话重来一次。
+        if session_id and not body and not killed:
+            low = (stderr + stdout).lower()
+            if "no conversation" in low or "session" in low or returncode != 0:
+                rec["session_id"] = ""
+                self._session_set(key, rec)
+                try:
+                    returncode, stdout, stderr, killed = _run(
+                        self._conversation_prompt(text, cwd, False), None
+                    )
+                    body, new_sid = self._parse_stream_json_full(stdout)
+                except (OSError, subprocess.SubprocessError):
+                    pass
+        if killed.startswith("idle"):
+            return f"{self._p.display_tool} 静默 {idle_timeout:g} 秒判定卡住已结束，请重试。"
+        if killed.startswith("hardcap"):
+            return f"{self._p.display_tool} 运行超过上限 {hard_cap:g} 秒已停止，请把任务拆小。"
+        if new_sid and new_sid != session_id:
+            rec["session_id"] = new_sid
+            self._session_set(key, rec)
+        if body:
+            return body
+        if returncode != 0:
+            return (
+                f"{self._p.display_tool} 本次返回失败（code {returncode}）："
+                f"{(stderr.strip() or stdout.strip())[:400]}"
+            )
+        return ""
+
+    def _run_cli_once(self, cli_path: str, prompt: str, cwd: str) -> str:
+        """运行一次 CLI 取最终回复文本（coding/闲聊共用；含测试注入与 idle-timeout 两路）。"""
+        idle_timeout = self._cli_idle_timeout_seconds()
+        hard_cap = self._cli_hard_cap_seconds()
         with tempfile.TemporaryDirectory(prefix=f"xcagi-{self._p.tool_name}-cli-") as tmp:
             output_path = Path(tmp) / "last_message.txt"
             cmd = self._p.cli_command_builder(cli_path, prompt, output_path, cwd)
-            try:
-                proc = self._cli_runner(
-                    cmd,
-                    text=True,
-                    capture_output=True,
-                    timeout=timeout,
-                )
-            except subprocess.TimeoutExpired:
+            # 注入式 runner(测试)走简单路径；生产用 idle-timeout：只要还在产出就不杀，
+            # 仅"持续静默"(卡死/挂起)或超绝对上限才结束。
+            if self._cli_runner is not subprocess.run:
+                try:
+                    proc = self._cli_runner(cmd, text=True, capture_output=True, cwd=cwd)
+                except (OSError, subprocess.SubprocessError) as exc:
+                    return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+                returncode = int(getattr(proc, "returncode", 0) or 0)
+                stdout = str(getattr(proc, "stdout", "") or "")
+                stderr = str(getattr(proc, "stderr", "") or "")
+                killed_reason = ""
+            else:
+                try:
+                    returncode, stdout, stderr, killed_reason = self._run_cli_idle(
+                        cmd, cwd, idle_timeout, hard_cap
+                    )
+                except (OSError, subprocess.SubprocessError) as exc:
+                    return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+            if killed_reason.startswith("idle"):
                 return (
-                    f"{self._p.display_tool} CLI 已接通，但本次回答超过 {timeout:g} 秒还没返回。"
-                    "请把问题拆短一点，或直接发开发任务给我派工。"
+                    f"{self._p.display_tool} CLI 静默 {idle_timeout:g} 秒无任何输出，判定卡住已结束。"
+                    "可能是网络或工具挂起，请重试。"
                 )
-            except (OSError, subprocess.SubprocessError) as exc:
-                return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+            if killed_reason.startswith("hardcap"):
+                return (
+                    f"{self._p.display_tool} CLI 运行超过上限 {hard_cap:g} 秒仍未结束，已停止。"
+                    "请把任务拆小一点再试。"
+                )
+            # stream-json(claude)：从事件流解析最终回复。
+            if self._p.cli_stream_json:
+                body = self._parse_claude_stream_json(stdout)
+                if body:
+                    return body
+                if returncode != 0:
+                    detail = (stderr.strip() or stdout.strip())[:500]
+                    return (
+                        f"{self._p.display_tool} CLI 已接入，但本次返回失败"
+                        f"（code {returncode}）：{detail}"
+                    )
+                return ""
+            # 非 stream(codex)：先读 last-message 文件，再退 stdout。
             if self._p.cli_reads_output_file and output_path.exists():
                 body = output_path.read_text(encoding="utf-8", errors="replace").strip()
                 if body:
                     return body
-            stdout = str(getattr(proc, "stdout", "") or "").strip()
-            if stdout:
-                return self._clean_cli_stdout(stdout)
-            stderr = str(getattr(proc, "stderr", "") or "").strip()
-            if getattr(proc, "returncode", 1) != 0:
+            cleaned = self._clean_cli_stdout(stdout.strip())
+            if cleaned:
+                return cleaned
+            if returncode != 0:
                 return (
                     f"{self._p.display_tool} CLI 已接入，但本次返回失败"
-                    f"（code {getattr(proc, 'returncode', 1)}）：{stderr[:500]}"
+                    f"（code {returncode}）：{stderr.strip()[:500]}"
                 )
         return ""
 
@@ -985,14 +1272,152 @@ class SuperEmployeeService:
         ).strip()
         if candidate and Path(candidate).exists():
             return candidate
-        return str(Path(__file__).resolve().parents[2])
+        # 默认根=包含 FHD 的工程根（如 ~/Desktop/XCMAX），让超级员工覆盖整个工程而非仅 FHD 子目录。
+        here = Path(__file__).resolve()
+        for parent in here.parents:
+            if parent.name == "FHD":
+                return str(parent.parent)
+        return str(here.parents[3])
 
     def _cli_timeout_seconds(self) -> float:
-        raw = os.environ.get(f"{self._p.env_tool_prefix}_CLI_TIMEOUT_SEC") or "45"
+        """Backward-compat alias for _cli_idle_timeout_seconds (used by tests)."""
+        return self._cli_idle_timeout_seconds()
+
+    def _cli_idle_timeout_seconds(self) -> float:
+        # 活性检测：持续静默(无任何 stdout/stderr 输出)超过此值 → 判定卡住。
+        # 只要 CLI 还在产出(stream-json 事件/进度行)就一直等，不因总时长被杀。
+        raw = (
+            os.environ.get(f"{self._p.env_tool_prefix}_CLI_IDLE_TIMEOUT_SEC")
+            or os.environ.get(f"{self._p.env_tool_prefix}_CLI_TIMEOUT_SEC")  # 兼容旧变量
+            or "180"
+        )
         try:
-            return max(5.0, min(120.0, float(raw)))
+            return max(15.0, float(raw))
         except (TypeError, ValueError):
-            return 45.0
+            return 180.0
+
+    def _cli_hard_cap_seconds(self) -> float:
+        # 绝对兜底(防真死循环)；<=0 表示无上限。默认 1 小时。
+        raw = os.environ.get(f"{self._p.env_tool_prefix}_CLI_HARD_CAP_SEC") or "3600"
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return 3600.0
+
+    def _cli_subprocess_env(self) -> dict[str, str] | None:
+        """给 CLI 子进程注入代理。差异化代理：FHD 本身直连自有云端 xiu-ci.com（代理会断 SSL），
+        但 claude/codex 调 api.anthropic.com 等需走代理（直连被 403 拦）。
+        仅当 XCMAX_CLI_PROXY 设了才注入；否则返回 None（继承当前环境，行为不变）。"""
+        proxy = str(os.environ.get("XCMAX_CLI_PROXY") or "").strip()
+        if not proxy:
+            return None
+        env = os.environ.copy()
+        for k in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ):
+            env[k] = proxy
+        return env
+
+    def _run_cli_idle(
+        self,
+        cmd: list[str],
+        cwd: str,
+        idle_timeout: float,
+        hard_cap: float,
+    ) -> tuple[int, str, str, str]:
+        """跑 cmd，只在「持续 idle_timeout 秒无输出」(卡住)或超 hard_cap 时才 kill；
+        只要还在产出就不杀。返回 (returncode, stdout, stderr, killed_reason)。"""
+        import threading
+
+        proc = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            text=True,
+            bufsize=1,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=self._cli_subprocess_env(),
+        )
+        out_parts: list[str] = []
+        err_parts: list[str] = []
+        last_activity = [time.monotonic()]
+        lock = threading.Lock()
+
+        def _pump(stream, sink: list[str]) -> None:
+            try:
+                for line in iter(stream.readline, ""):
+                    with lock:
+                        sink.append(line)
+                        last_activity[0] = time.monotonic()
+            except (OSError, ValueError):
+                pass
+            finally:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+
+        t_out = threading.Thread(target=_pump, args=(proc.stdout, out_parts), daemon=True)
+        t_err = threading.Thread(target=_pump, args=(proc.stderr, err_parts), daemon=True)
+        t_out.start()
+        t_err.start()
+        started = time.monotonic()
+        killed_reason = ""
+        while True:
+            try:
+                proc.wait(timeout=3)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            now = time.monotonic()
+            with lock:
+                idle = now - last_activity[0]
+            if idle_timeout > 0 and idle > idle_timeout:
+                killed_reason = f"idle:{idle_timeout:g}"
+            elif hard_cap > 0 and (now - started) > hard_cap:
+                killed_reason = f"hardcap:{hard_cap:g}"
+            if killed_reason:
+                proc.kill()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+                break
+        t_out.join(timeout=2)
+        t_err.join(timeout=2)
+        return int(proc.returncode or 0), "".join(out_parts), "".join(err_parts), killed_reason
+
+    def _parse_claude_stream_json(self, out: str) -> str:
+        """从 claude --output-format stream-json 的事件流里取最终回复。"""
+        result = ""
+        texts: list[str] = []
+        for line in out.splitlines():
+            s = line.strip()
+            if not s.startswith("{"):
+                continue
+            try:
+                ev = json.loads(s)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(ev, dict):
+                continue
+            if ev.get("type") == "result":
+                r = ev.get("result")
+                if isinstance(r, str) and r.strip():
+                    result = r.strip()
+            elif ev.get("type") == "assistant":
+                msg = ev.get("message") if isinstance(ev.get("message"), dict) else {}
+                for blk in msg.get("content") or []:
+                    if isinstance(blk, dict) and blk.get("type") == "text":
+                        t = str(blk.get("text") or "").strip()
+                        if t:
+                            texts.append(t)
+        return result or "\n".join(texts).strip()
 
     def _cli_prompt(self, text: str) -> str:
         return (
@@ -1003,6 +1428,193 @@ class SuperEmployeeService:
             "\n\n用户问题："
             f"{text.strip()}"
         )
+
+    def _is_task_intent(self, text: str, context: dict[str, Any]) -> bool:
+        """是否为开发任务（需要真改代码），与 force-direct 无关，仅看 mode/关键词。"""
+        raw_mode = str(context.get("mode") or "").strip().lower()
+        if raw_mode in {"chat", "qa", "direct", f"{self._p.tool_name}_cli"}:
+            return False
+        if raw_mode in {"code", "task", "dispatch", "dev", "develop"}:
+            return True
+        normalized = re.sub(r"\s+", "", text.strip().lower())
+        if not normalized:
+            return False
+        return any(marker in normalized for marker in _TASK_MARKERS)
+
+    def _cli_work_prompt(self, text: str, cwd: str) -> str:
+        """开发任务 prompt：授权 Claude 真正读写/修改工作区文件（配合 --permission-mode acceptEdits）。"""
+        return (
+            f"你是 XCMAX 软件内的{self._p.employee_name}，运行在项目工作区，"
+            "拥有完整的文件读写与代码修改能力。请直接动手完成下面的开发任务："
+            "按需读取、创建、修改工作区内的文件来实现需求；不要只给建议或只解释，要真正改代码。"
+            "完成后用一两句话总结你改了哪些文件、做了什么。"
+            f"\n\n工作区根目录：{cwd}"
+            "\n\n开发任务：\n"
+            f"{text.strip()}"
+        )
+
+    # ===== coding → view → push 闭环（开发任务）=====
+
+    def _dev_loop_enabled(self) -> bool:
+        raw = (
+            str(
+                os.environ.get(f"{self._p.env_tool_prefix}_DEV_LOOP")
+                or os.environ.get("XCMAX_CLAUDE_DEV_LOOP")
+                or "1"
+            )
+            .strip()
+            .lower()
+        )
+        return raw not in {"0", "false", "off", "disabled"}
+
+    def _git(self, cwd: str, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=timeout
+        )
+
+    def _is_git_repo(self, cwd: str) -> bool:
+        try:
+            r = self._git(cwd, "rev-parse", "--is-inside-work-tree", timeout=15)
+            return r.returncode == 0 and r.stdout.strip() == "true"
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _prepare_worktree(self, base_cwd: str, text: str) -> tuple[str, str] | None:
+        """从 base_cwd 的 HEAD 建独立 worktree + 新分支；失败返回 None（退回不隔离）。"""
+        if not self._is_git_repo(base_cwd):
+            return None
+        slug = re.sub(r"[^a-z0-9]+", "-", text.strip().lower())[:24].strip("-") or "task"
+        uniq = f"{os.getpid()}-{int.from_bytes(os.urandom(3), 'big'):x}"
+        branch = f"super-employee/{self._p.tool_name}/{slug}-{uniq}"
+        wt_path = str(Path(tempfile.gettempdir()) / f"xcagi-wt-{self._p.tool_name}-{uniq}")
+        try:
+            r = self._git(base_cwd, "worktree", "add", "-b", branch, wt_path, "HEAD", timeout=180)
+            if r.returncode != 0:
+                logger.warning("worktree add 失败: %s", (r.stderr or r.stdout)[:300])
+                return None
+            return wt_path, branch
+        except Exception:  # noqa: BLE001
+            logger.warning("worktree add 异常", exc_info=True)
+            return None
+
+    def _remove_worktree(self, base_cwd: str, wt_path: str) -> None:
+        try:
+            self._git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=60)
+        except Exception:  # noqa: BLE001
+            logger.warning("worktree remove 失败 %s", wt_path, exc_info=True)
+
+    def _verify_workspace(self, cwd: str) -> tuple[bool, str]:
+        """view 阶段：验证改动可编译。优先 XCMAX_CLAUDE_VERIFY_CMD；否则对改动的 .py 做语法编译。"""
+        custom = str(os.environ.get("XCMAX_CLAUDE_VERIFY_CMD") or "").strip()
+        if custom:
+            try:
+                cap = self._cli_hard_cap_seconds()
+                r = subprocess.run(
+                    custom,
+                    shell=True,  # nosec B602 – operator-supplied env var, may use shell syntax
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=(cap if cap and cap > 0 else 1800),
+                )
+                if r.returncode == 0:
+                    return True, "自定义验证命令通过"
+                return False, (r.stderr.strip() or r.stdout.strip())[:1500]
+            except Exception as e:  # noqa: BLE001
+                return False, f"验证命令异常：{str(e)[:300]}"
+        # 用 status --porcelain 枚举改动：必须含"未跟踪新文件"（claude 常新建文件，
+        # 如 PressEffect.kt 就是新建；git diff HEAD 抓不到未跟踪文件会漏验证）。
+        changed: list[str] = []
+        try:
+            st = self._git(cwd, "status", "--porcelain", "--untracked-files=all", timeout=30)
+            for ln in st.stdout.splitlines():
+                if not ln.strip():
+                    continue
+                path = ln[3:] if len(ln) > 3 else ln.strip()
+                if "->" in path:  # 重命名 old -> new
+                    path = path.split("->", 1)[1]
+                path = path.strip().strip('"')
+                if path:
+                    changed.append(path)
+        except Exception:  # noqa: BLE001
+            changed = []
+        py = [f for f in changed if f.endswith(".py")]
+        if py:
+            import py_compile
+
+            errs: list[str] = []
+            for f in py:
+                p = Path(cwd) / f
+                if not p.exists():
+                    continue
+                try:
+                    py_compile.compile(str(p), doraise=True)
+                except py_compile.PyCompileError as e:
+                    errs.append(str(e)[:400])
+            if errs:
+                return False, "Python 语法错误：\n" + "\n".join(errs)
+            return True, f"已对 {len(py)} 个改动的 .py 通过语法编译"
+        if not changed:
+            return True, "无文件改动"
+        return True, (
+            f"改动 {len(changed)} 个文件（非 .py，未做深度编译验证；"
+            "如需构建验证可设 XCMAX_CLAUDE_VERIFY_CMD）"
+        )
+
+    def _commit_and_push(self, cwd: str, branch: str, text: str) -> tuple[bool, str]:
+        """push 阶段：add + commit + push 分支到 origin。"""
+        try:
+            self._git(cwd, "add", "-A", timeout=120)
+            st = self._git(cwd, "status", "--porcelain", timeout=30)
+            if not st.stdout.strip():
+                return False, "无改动可提交"
+            title = (text.strip().splitlines() or ["开发任务"])[0][:60]
+            msg = (
+                f"{self._p.employee_name}: {title}\n\n手机超级员工自动提交（coding→view→push 闭环）"
+            )
+            c = self._git(cwd, "commit", "-m", msg, timeout=60)
+            if c.returncode != 0:
+                return False, "提交失败：" + (c.stderr.strip() or c.stdout.strip())[:300]
+            p = self._git(cwd, "push", "-u", "origin", branch, timeout=240)
+            if p.returncode != 0:
+                return False, "已本地提交，但 push 失败：" + (p.stderr.strip() or p.stdout.strip())[
+                    :300
+                ]
+            return True, f"已 push 到 origin/{branch}"
+        except Exception as e:  # noqa: BLE001
+            return False, f"git 异常：{str(e)[:300]}"
+
+    def _cli_fix_prompt(self, verify_msg: str, cwd: str) -> str:
+        return (
+            f"你刚才在工作区 {cwd} 的改动未通过验证。请直接修改文件修复下面的错误，"
+            "改到能通过为止，不要只解释。\n\n验证错误：\n" + verify_msg[:1500]
+        )
+
+    def _run_dev_task_loop(self, cli_path: str, text: str, base_cwd: str) -> str:
+        """开发任务全闭环：隔离 worktree → coding → view(验证,失败修一次) → push → 清理。"""
+        prepared = self._prepare_worktree(base_cwd, text)
+        if not prepared:
+            # 无法隔离（非 git 仓库 / worktree 冲突）→ 退回只改不推，保证仍可用。
+            return self._run_cli_once(cli_path, self._cli_work_prompt(text, base_cwd), base_cwd)
+        wt_path, branch = prepared
+        try:
+            body = self._run_cli_once(cli_path, self._cli_work_prompt(text, wt_path), wt_path)
+            ok, vmsg = self._verify_workspace(wt_path)
+            if not ok:
+                self._run_cli_once(cli_path, self._cli_fix_prompt(vmsg, wt_path), wt_path)
+                ok, vmsg = self._verify_workspace(wt_path)
+            pushed, pmsg = self._commit_and_push(wt_path, branch, text)
+            status = "✅" if (ok and pushed) else ("⚠️" if pushed else "❌")
+            tail = (
+                f"\n\n— — — 闭环结果 {status} — — —"
+                f"\n分支：{branch}"
+                f"\n验证：{'通过' if ok else '未通过'}（{vmsg[:200]}）"
+                f"\n推送：{pmsg[:200]}"
+            )
+            base = body.strip() or f"{self._p.display_tool} 已完成开发任务。"
+            return base + tail
+        finally:
+            self._remove_worktree(base_cwd, wt_path)
 
     def _clean_cli_stdout(self, stdout: str) -> str:
         lines = []
@@ -1024,10 +1636,22 @@ class SuperEmployeeService:
         tool = self._p.display_tool
         name = self._p.employee_name
         identity_prompts = {
-            "你是谁", "你是誰", "你谁", "你是哪个", "你是什么", "whoareyou", "whatareyou",
+            "你是谁",
+            "你是誰",
+            "你谁",
+            "你是哪个",
+            "你是什么",
+            "whoareyou",
+            "whatareyou",
         }
         help_prompts = {
-            "你能做什么", "你能干什么", "你会什么", "怎么用", "如何使用", "帮助", "help",
+            "你能做什么",
+            "你能干什么",
+            "你会什么",
+            "怎么用",
+            "如何使用",
+            "帮助",
+            "help",
         }
         greeting_prompts = {"你好", "在吗", "在不在", "hello", "hi"}
         slow_prompts = {"为什么这么慢", "为啥这么慢", "为什么出不来", "怎么出不来"}
@@ -1070,8 +1694,7 @@ class SuperEmployeeService:
             for item in rows
             if int(item.get("user_id") or 0) == int(user_id)
             and (
-                str(item.get("kind") or "")
-                in {self._p.direct_kind, self._p.result_kind}
+                str(item.get("kind") or "") in {self._p.direct_kind, self._p.result_kind}
                 or (
                     str(item.get("role") or "") == "assistant"
                     and str(item.get("kind") or "") != DISPATCHER_MESSAGE_KIND

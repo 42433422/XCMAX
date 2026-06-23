@@ -20,6 +20,7 @@ import httpx
 
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,18 @@ _STATE_LOCK = threading.Lock()
 _WORKER_THREAD: threading.Thread | None = None
 _STOP_EVENT = threading.Event()
 _CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
+
+# 并发执行：poll 循环只负责"认领+派发"，每个任务在独立线程里跑，
+# 避免单个长任务(开发任务可跑数分钟)堵死整条队列、导致新消息卡住。
+_INFLIGHT: set[str] = set()
+_INFLIGHT_LOCK = threading.Lock()
+
+
+def _max_concurrent() -> int:
+    try:
+        return max(1, int(os.environ.get("XCAGI_RELAY_MAX_CONCURRENT") or "3"))
+    except (TypeError, ValueError):
+        return 3
 
 
 def _relay_base_url() -> str:
@@ -184,6 +197,37 @@ def _poll_loop() -> None:
         _STOP_EVENT.wait(max(1.0, interval))
 
 
+def _complete_relay_task(
+    task: dict[str, Any],
+    relay_id: str,
+    desktop_token: str,
+    base_url: str,
+) -> None:
+    """在独立线程里执行单个任务并回写结果；不阻塞 poll 循环。"""
+    task_id = str(task.get("task_id") or "")
+    try:
+        result = _execute_task(task)
+        relay_status = str(result.pop("_relay_status", "") or "").strip()
+        if not relay_status:
+            relay_status = "failed" if result.get("error") else "completed"
+        timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
+        with httpx.Client(timeout=timeout) as client:
+            client.post(
+                _api_url(f"/api/mobile/v1/relay/desktop/tasks/{task_id}/complete", base_url),
+                json={
+                    "relay_id": relay_id,
+                    "desktop_token": desktop_token,
+                    "status": relay_status,
+                    "result": result,
+                },
+            ).raise_for_status()
+    except Exception:  # noqa: BLE001
+        logger.warning("mobile relay task %s failed", task_id, exc_info=True)
+    finally:
+        with _INFLIGHT_LOCK:
+            _INFLIGHT.discard(task_id)
+
+
 def _poll_once() -> None:
     config = _read_config()
     relay_id = str(config.get("relay_id") or "").strip()
@@ -191,11 +235,16 @@ def _poll_once() -> None:
     base_url = str(config.get("relay_base_url") or "").strip() or _relay_base_url()
     if not relay_id or not desktop_token:
         return
+    # 只认领空闲槽位数量的任务：claim 后必须有线程去跑，否则会把任务卡在 running。
+    with _INFLIGHT_LOCK:
+        free = _max_concurrent() - len(_INFLIGHT)
+    if free <= 0:
+        return
     timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(
             _api_url("/api/mobile/v1/relay/desktop/poll", base_url),
-            json={"relay_id": relay_id, "desktop_token": desktop_token, "max_tasks": 5},
+            json={"relay_id": relay_id, "desktop_token": desktop_token, "max_tasks": free},
         )
         if resp.status_code == 404:
             return
@@ -203,31 +252,32 @@ def _poll_once() -> None:
         body = resp.json()
         data = body.get("data") if isinstance(body, dict) else {}
         tasks = data.get("tasks") if isinstance(data, dict) else []
-        if not isinstance(tasks, list):
-            return
-        for task in tasks:
-            if isinstance(task, dict):
-                result = _execute_task(task)
-                relay_status = str(result.pop("_relay_status", "") or "").strip()
-                if not relay_status:
-                    relay_status = "failed" if result.get("error") else "completed"
-                client.post(
-                    _api_url(
-                        f"/api/mobile/v1/relay/desktop/tasks/{task.get('task_id')}/complete",
-                        base_url,
-                    ),
-                    json={
-                        "relay_id": relay_id,
-                        "desktop_token": desktop_token,
-                        "status": relay_status,
-                        "result": result,
-                    },
-                ).raise_for_status()
+    if not isinstance(tasks, list):
+        return
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        task_id = str(task.get("task_id") or "")
+        if not task_id:
+            continue
+        with _INFLIGHT_LOCK:
+            if task_id in _INFLIGHT:
+                continue
+            _INFLIGHT.add(task_id)
+        threading.Thread(
+            target=_complete_relay_task,
+            args=(task, relay_id, desktop_token, base_url),
+            name=f"relay-task-{task_id[:8]}",
+            daemon=True,
+        ).start()
 
 
 def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     kind = str(task.get("kind") or "codex.invoke").strip()
     payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
+    # git 操作（合并/diff/丢弃）：手机底部功能键触发，不需要 message，只需 payload.branch。
+    if kind in GIT_OP_KINDS:
+        return handle_git_op(kind, payload)
     message = str(
         payload.get("message")
         or payload.get("body")
@@ -255,6 +305,18 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         "client_surface": "mobile",
         "target_devices": ["all"],
     }
+    # 移动端聊天面固定下发 mode="code"，会把每条闲聊都强制派到 Para 多设备
+    # （"你好"/"在干嘛" 这类问候也被当成开发任务派工，回不到结果）。
+    # 这里清掉强制派工的 mode，交回内容分类器 _should_reply_with_cli：
+    # 闲聊 → 本地 CLI 直答；含"修复/测试/部署"等开发关键词 → Para 派工。
+    if str(context.get("mode") or "").strip().lower() in {
+        "code",
+        "task",
+        "dispatch",
+        "dev",
+        "develop",
+    }:
+        context.pop("mode", None)
     try:
         result = service.invoke(
             user_id=user_id,

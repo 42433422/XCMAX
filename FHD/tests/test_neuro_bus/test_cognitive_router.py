@@ -79,7 +79,11 @@ class TestCognitiveRouterRoute:
         clean_env.setenv("XCAGI_ROUTING_POLICY_ENABLED", "shadow")
 
         router = CognitiveRouter()
-        decision, trace_id = router.route("帮我查订单")
+        with patch(
+            "app.neuro_bus.routing.policy_router.predict_with_confidence",
+            return_value=(0, 0.8),
+        ):
+            decision, trace_id = router.route("帮我查订单")
 
         assert decision is None
         rows = _read_rows(log_path)
@@ -96,7 +100,11 @@ class TestCognitiveRouterRoute:
         clean_env.setenv("XCAGI_ROUTING_POLICY_CANARY_RATIO", "1.0")
 
         router = CognitiveRouter()
-        decision, trace_id = router.route("帮我查订单")
+        with patch(
+            "app.neuro_bus.routing.policy_router.predict_with_confidence",
+            return_value=(0, 0.8),
+        ):
+            decision, trace_id = router.route("帮我查订单")
 
         # MLP v2 已加载，full 模式 + canary_ratio=1.0 应返回决策
         assert decision is not None

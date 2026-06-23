@@ -17,36 +17,40 @@ export type EnterpriseOrgLayer = {
   color: string
 }
 
+export type EmployeeListing = 'listed' | 'unlisted'
+export type EnterpriseEmployeeMeta = {
+  id: string
+  label: string
+  enterprise_layer: EnterpriseOrgLayerId
+  listing: EmployeeListing
+  source: string
+  mod_id: string
+}
+
+// CI SSOT BEGIN
+/** 企业端四层 + 员工层归属/上架状态（来自 config/duty_roster.json，勿手改）。 */
 export const ENTERPRISE_ORG_LAYERS: readonly EnterpriseOrgLayer[] = [
-  {
-    id: 'tools',
-    code: 'L1',
-    label: '工具层',
-    desc: '连接、授权、技能与通用工具 Mod',
-    color: '#4f46e5',
-  },
-  {
-    id: 'execution',
-    code: 'L2',
-    label: '执行层',
-    desc: '出货、打单、单据与履约执行',
-    color: '#d97706',
-  },
-  {
-    id: 'service',
-    code: 'L3',
-    label: '服务层',
-    desc: '微信触达、客服沟通与人事服务',
-    color: '#059669',
-  },
-  {
-    id: 'management',
-    code: 'L4',
-    label: '管理层',
-    desc: '流程编排、路由协同与自治监控',
-    color: '#7c3aed',
-  },
+  { id: 'tools', code: 'L1', label: '工具层', desc: '连接、授权、技能与通用工具 Mod', color: '#4f46e5' },
+  { id: 'execution', code: 'L2', label: '执行层', desc: '出货、打单、单据与履约执行', color: '#d97706' },
+  { id: 'service', code: 'L3', label: '服务层', desc: '微信触达、客服沟通与人事服务', color: '#059669' },
+  { id: 'management', code: 'L4', label: '管理层', desc: '流程编排、路由协同与自治监控', color: '#7c3aed' },
 ] as const
+export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {
+  'wechat_contacts': { id: 'wechat_contacts', label: '企微联系人', enterprise_layer: 'service', listing: 'listed', source: 'store', mod_id: 'wechat-contacts-ai-employee' },
+  'lan_gate': { id: 'lan_gate', label: '局域网网关', enterprise_layer: 'tools', listing: 'listed', source: 'store', mod_id: 'lan-gate-ai-employee' },
+  'label_print': { id: 'label_print', label: '标签打印', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
+  'shipment_mgmt': { id: 'shipment_mgmt', label: '出货管理', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
+  'receipt_confirm': { id: 'receipt_confirm', label: '签收确认', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
+  'wechat_msg': { id: 'wechat_msg', label: '微信消息', enterprise_layer: 'service', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
+  'workflow_automator': { id: 'workflow_automator', label: '流程自动化', enterprise_layer: 'management', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
+  'task_router_officer': { id: 'task_router_officer', label: '任务派发', enterprise_layer: 'management', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
+  'daily_orchestrator': { id: 'daily_orchestrator', label: '每日编排', enterprise_layer: 'management', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
+  'excel_generate': { id: 'excel_generate', label: 'Excel 生成', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-office-employee-pack-bridge' },
+  'word_generate': { id: 'word_generate', label: 'Word 生成', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-office-employee-pack-bridge' },
+  'ppt_generate': { id: 'ppt_generate', label: 'PPT 生成', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-office-employee-pack-bridge' },
+  'pdf_generate': { id: 'pdf_generate', label: 'PDF 生成', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-office-employee-pack-bridge' },
+}
+// CI SSOT END
 
 /** @deprecated 与 ENTERPRISE_ORG_LAYERS 相同 */
 export const ENTERPRISE_ESTABLISHMENT_ZONES = ENTERPRISE_ORG_LAYERS
@@ -78,24 +82,19 @@ const MANIFEST_LAYER_ALIASES: Record<string, EnterpriseOrgLayerId> = {
   管理: 'management',
 }
 
-/** 已知 Mod 员工 id 的显式映射（优先于关键词） */
+/**
+ * 客户行业包 / 别名变体员工的层兜底（不在 SSOT ENTERPRISE_EMPLOYEES 内）。
+ * 中央平台员工的层归属一律走 SSOT（resolveEnterpriseOrgLayer 已优先查 ENTERPRISE_EMPLOYEES）；
+ * 这里只保留 SSOT 未收录的客户专属/历史别名，禁止与 SSOT 重叠（见 test_employee_ssot 守卫）。
+ */
 const EMP_ID_LAYER: Record<string, EnterpriseOrgLayerId> = {
-  label_print: 'execution',
-  shipment_mgmt: 'execution',
-  receipt_confirm: 'execution',
-  wechat_msg: 'service',
-  wechat_contacts: 'service',
-  wechat_contacts_hub: 'service',
-  wechat_phone: 'service',
-  lan_gate: 'tools',
-  lan_gate_hub: 'tools',
-  lan_gate_ai: 'tools',
-  attendance_ai: 'service',
-  coating_ai: 'service',
-  taiyangniao_attendance: 'service',
-  workflow_automator: 'management',
-  task_router_officer: 'management',
-  daily_orchestrator: 'management',
+  wechat_contacts_hub: 'service', // wechat-contacts-ai-employee 变体
+  wechat_phone: 'service', // sz-qsm-pro 客户包
+  lan_gate_hub: 'tools', // lan-gate-ai-employee 变体
+  lan_gate_ai: 'tools', // 历史别名
+  attendance_ai: 'service', // taiyangniao-pro 客户包
+  coating_ai: 'service', // sz-qsm-pro 客户包
+  taiyangniao_attendance: 'service', // 历史别名
 }
 
 function normalizeBlob(empId: string, shortName?: string, panelTitle?: string): string {
@@ -121,7 +120,12 @@ export function resolveEnterpriseOrgLayer(
   const fromManifest = normalizeEnterpriseOrgLayerId(manifestLayer)
   if (fromManifest) return fromManifest
 
-  const id = String(empId || '').trim().toLowerCase()
+  // SSOT 优先：config/duty_roster.json enterprise_employees（查表，非猜测）
+  const rawId = String(empId || '').trim()
+  const ssot = ENTERPRISE_EMPLOYEES[rawId] || ENTERPRISE_EMPLOYEES[rawId.toLowerCase()]
+  if (ssot) return ssot.enterprise_layer
+
+  const id = rawId.toLowerCase()
   if (id && EMP_ID_LAYER[id]) return EMP_ID_LAYER[id]
 
   const blob = normalizeBlob(empId, shortName, panelTitle)
