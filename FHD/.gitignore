@@ -75,6 +75,10 @@ XCAGI/data/desktop-dev/
 XCAGI/data/enterprise-desktop/
 data/model_payment_orders.json
 customer_products_final_corrected.db
+# Runtime RAG index (dataset_rag_app_service.py writes datasets.json + *.sqlite under get_app_data_dir(); pure runtime data)
+/dataset_rag/
+# Test-DB toggle state (test_db_manager runtime state; held leaked Windows local paths, not a seed)
+XCAGI/.test_db_state.json
 
 # Stray local scratch (historical)
 XCAGI/dy
