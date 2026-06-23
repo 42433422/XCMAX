@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-06-20
+> 最后更新：2026-06-23
 
 ## 登记规则
 
@@ -27,7 +27,7 @@
 | ssot-framework（SSOT 框架） | [SSOT_FRAMEWORK.md](SSOT_FRAMEWORK.md) | 统一注册表 ssot.yaml + ssot_cli 编排器 |
 | claimed-vs-actual（对外声称 vs 实测） | [CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) | 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成 |
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
-| account（账号体系） | [account_system_ssot.md](account_system_ssot.md) | 账号四维真相源：账号类型/档位/行业/租户，写入点唯一 |
+| account（账号体系） | [account_system_ssot.md](account_system_ssot.md) | 账号体系四维真相源（身份/行业/会员/账号等级）、运行时派生规则、字段写入权限矩阵、多租户隔离与账户安全 |
 
 ## 已退役 SSOT（指针化）
 
