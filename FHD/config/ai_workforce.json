@@ -18,7 +18,7 @@
       "summary": "Claude / Codex CLI 中继，多设备派工",
       "persona_shared": false,
       "can_call": ["platform"],
-      "source_of_record": "app/application/super_employee_service.py (CLAUDE_PROFILE / CODEX_PROFILE)"
+      "source_of_record": "config/ai_workforce.json#super_employees (身份); super_employee_service (CLI/派工运行配置)"
     },
     {
       "id": "platform",
@@ -54,6 +54,25 @@
         "fixed_identity_name": true,
         "identity_brief": "平台的老熟人，帮你处理杂事、指路、跨工具操作"
       }
+    }
+  },
+  "super_employees": {
+    "_doc": "超级员工(2级)身份真相源。独立人格、不纳入 Persona。运行配置(CLI命令/派工)仍在 super_employee_service。id/display_name 须与 CLAUDE_PROFILE/CODEX_PROFILE 一致(守卫校验)。",
+    "claude-super-employee": {
+      "id": "claude-super-employee",
+      "tier": "super",
+      "display_name": "超级员工-Claude",
+      "display_tool": "Claude",
+      "avatar_letter": "超",
+      "summary": "Claude 超级员工 · 多设备派工"
+    },
+    "codex-super-employee": {
+      "id": "codex-super-employee",
+      "tier": "super",
+      "display_name": "超级员工-Codex",
+      "display_tool": "Codex",
+      "avatar_letter": "超",
+      "summary": "Codex 超级员工 · 多设备派工"
     }
   },
   "contact_kinds": {
