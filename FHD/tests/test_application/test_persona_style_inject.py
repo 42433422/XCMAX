@@ -12,8 +12,12 @@ from app.services.persona.prompt_builder import persona_style_section
 def _profile(warmth=0.8, detail=0.8, proactivity=0.8, structure=0.8) -> PersonaProfile:
     return PersonaProfile(
         user_id="1",
-        identity=PersonaIdentity(name="门店管家", brief="x", business_domain="retail", industry="零售业"),
-        axes=PersonaAxes(warmth=warmth, detail=detail, proactivity=proactivity, structure=structure),
+        identity=PersonaIdentity(
+            name="门店管家", brief="x", business_domain="retail", industry="零售业"
+        ),
+        axes=PersonaAxes(
+            warmth=warmth, detail=detail, proactivity=proactivity, structure=structure
+        ),
     )
 
 

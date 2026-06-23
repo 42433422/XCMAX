@@ -61,7 +61,9 @@ def _super_entries() -> list[dict[str, Any]]:
                 "id": emp_id,
                 "kind": "super",
                 "name": str(meta.get("display_name") or emp_id),
-                "summary": str(meta.get("summary") or f"{meta.get('display_tool') or ''} 超级员工 · 多设备派工"),
+                "summary": str(
+                    meta.get("summary") or f"{meta.get('display_tool') or ''} 超级员工 · 多设备派工"
+                ),
                 "avatar": str(meta.get("avatar_letter") or "超"),
                 "route": f"super:{emp_id}",
                 "backend": emp_id,

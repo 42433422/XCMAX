@@ -26,8 +26,20 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 _FALLBACK_DOC: dict[str, Any] = {
     "schema_version": 1,
     "tiers": [
-        {"id": "assistant", "rank": 1, "label": "小C助理", "persona_shared": True, "can_call": ["super"]},
-        {"id": "super", "rank": 2, "label": "超级员工", "persona_shared": False, "can_call": ["platform"]},
+        {
+            "id": "assistant",
+            "rank": 1,
+            "label": "小C助理",
+            "persona_shared": True,
+            "can_call": ["super"],
+        },
+        {
+            "id": "super",
+            "rank": 2,
+            "label": "超级员工",
+            "persona_shared": False,
+            "can_call": ["platform"],
+        },
         {"id": "platform", "rank": 3, "label": "平台员工", "persona_shared": True, "can_call": []},
     ],
     "assistants": {
@@ -44,12 +56,18 @@ _FALLBACK_DOC: dict[str, Any] = {
     },
     "super_employees": {
         "claude-super-employee": {
-            "id": "claude-super-employee", "tier": "super",
-            "display_name": "超级员工-Claude", "display_tool": "Claude", "avatar_letter": "超",
+            "id": "claude-super-employee",
+            "tier": "super",
+            "display_name": "超级员工-Claude",
+            "display_tool": "Claude",
+            "avatar_letter": "超",
         },
         "codex-super-employee": {
-            "id": "codex-super-employee", "tier": "super",
-            "display_name": "超级员工-Codex", "display_tool": "Codex", "avatar_letter": "超",
+            "id": "codex-super-employee",
+            "tier": "super",
+            "display_name": "超级员工-Codex",
+            "display_tool": "Codex",
+            "avatar_letter": "超",
         },
     },
     "contact_kinds": {
