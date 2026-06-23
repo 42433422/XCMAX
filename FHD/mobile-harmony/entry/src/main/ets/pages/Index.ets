@@ -215,6 +215,12 @@ struct Index {
     }
   }
   private openConversation(item: ConversationSummary): void {
+    // 按 surface SSOT 派生的 route 分流:专属客服走 cs-officer(/cs) 独立通道,
+    // 不进 Persona 内联会话;小C(assistant_chat)与员工/普通会话走 ChatPage→/api/ai/chat(Persona)。
+    if (item.route === 'cs') {
+      this.activeOverlay = 'cs';
+      return;
+    }
     this.activeConversationId = item.id;
     this.activeConversationTitle = item.title;
     this.activeEmployeeKey = item.employeeKey;

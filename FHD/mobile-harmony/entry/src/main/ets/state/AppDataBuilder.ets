@@ -81,7 +81,8 @@ export function fixedToConversation(f: FixedContactDto): ConversationSummary {
     badge: badge,
     avatar: f.avatar,
     source: 'fixed',
-    employeeKey: ''
+    employeeKey: '',
+    route: f.route
   };
 }
 
