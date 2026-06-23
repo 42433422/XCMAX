@@ -131,6 +131,8 @@ export interface ConversationSummary {
   avatar: string;
   source: string;
   employeeKey: string;
+  // 后端 surface SSOT 派生的路由('assistant_chat'=小C走Persona / 'cs'=专属客服走cs-officer);员工/普通会话留空。
+  route?: string;
 }
 
 // 联系人固定区条目（后端 /contacts/fixed 派生：assistant/dedicated_cs/super）
