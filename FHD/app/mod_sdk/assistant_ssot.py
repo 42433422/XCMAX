@@ -52,6 +52,13 @@ _FALLBACK_DOC: dict[str, Any] = {
             "brief": "企业 AI 助手，处理搜索、问答和跨工具操作",
             "consult_title_suffix": "咨询",
             "persona": {"shared_engine": True, "fixed_identity_name": True, "identity_brief": ""},
+            "conversation_surfaces": {
+                "desktop": [
+                    {"id": "floating", "label": "悬浮窗"},
+                    {"id": "sidebar", "label": "侧栏智能对话", "route": "chat"},
+                ],
+                "mutual_exclusive": True,
+            },
         }
     },
     "super_employees": {
@@ -198,6 +205,19 @@ def xiaoc_consult_title() -> str:
     return f"{xiaoc_display_name()}{entity.get('consult_title_suffix') or '咨询'}"
 
 
+def xiaoc_conversation_surfaces() -> dict[str, Any]:
+    """小C智能对话的呈现入口声明：电脑端 悬浮窗 + 侧栏，二者互斥、同一会话引擎。
+
+    与 ``surface_composition``（联系人列表组成）是不同的轴：小C不进桌面消息列表，
+    但以悬浮窗 / 侧栏两种形态提供智能对话（同一 useChatView→useChatOrchestration +
+    同一 /api/ai/chat → Persona + 同一 sessionId）。fail-safe，永不返回 None。
+    """
+    cs = xiaoc().get("conversation_surfaces")
+    if isinstance(cs, dict):
+        return cs
+    return dict(_FALLBACK_DOC["assistants"]["xiaoc"].get("conversation_surfaces", {}))
+
+
 # ── 桌面端/手机端 联系人组成（surface SSOT）────────────────────────────
 
 _VALID_DEVICES = ("desktop", "mobile")
@@ -291,6 +311,7 @@ __all__ = [
     "super_employee_ids",
     "xiaoc_display_name",
     "xiaoc_consult_title",
+    "xiaoc_conversation_surfaces",
     "persona_identity_for_assistant",
     "contact_kinds",
     "dedicated_cs_label",
