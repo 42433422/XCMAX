@@ -6,11 +6,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,6 +22,7 @@ import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockButton
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeScreen
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -83,21 +82,12 @@ fun BridgeScreen(vm: AppViewModel) {
 
         WeSectionCaption(if (selectedId > 0) "回复 #$selectedId" else "回复")
         WeCellGroup {
-            OutlinedTextField(
+            WeField(
                     value = reply,
                     onValueChange = { reply = it },
-                    modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    placeholder = { androidx.compose.material3.Text("输入处理意见或补充说明") },
-                    minLines = 2,
-                    maxLines = 4,
-                    shape = RoundedCornerShape(8.dp),
-                    colors =
-                            androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                                    unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                            ),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = "输入处理意见或补充说明",
+                    singleLine = false,
             )
         }
         Spacer(Modifier.height(12.dp))

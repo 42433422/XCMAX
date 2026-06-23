@@ -97,6 +97,7 @@ import com.xiuci.xcagi.mobile.feature.web.DesktopToolWebView
 import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeDialog
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackData
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackType
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBottomNavBar
@@ -165,22 +166,16 @@ fun XcagiNavHost(
     }
 
     updatePrompt?.let { prompt ->
-        AlertDialog(
-                onDismissRequest = { if (!prompt.force) vm.dismissUpdatePrompt() },
-                title = { Text(if (prompt.force) "需要更新" else "发现新版本") },
-                text = { Text("最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。") },
-                confirmButton = {
-                    TextButton({
-                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(prompt.downloadUrl)))
-                        if (!prompt.force) vm.dismissUpdatePrompt()
-                    }) { Text("去更新") }
+        WeDialog(
+                onDismiss = { if (!prompt.force) vm.dismissUpdatePrompt() },
+                title = if (prompt.force) "需要更新" else "发现新版本",
+                message = "最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。",
+                confirmText = "去更新",
+                dismissText = if (prompt.force) null else "稍后",
+                onConfirm = {
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(prompt.downloadUrl)))
+                    if (!prompt.force) vm.dismissUpdatePrompt()
                 },
-                dismissButton =
-                        if (!prompt.force) {
-                            { TextButton({ vm.dismissUpdatePrompt() }) { Text("稍后") } }
-                        } else {
-                            null
-                        },
         )
     }
 
