@@ -114,3 +114,19 @@ domains:
     mode: verify
     check: python scripts/dev/ssot_plugins/k8s.py check
     sync: null
+
+  - name: employee-roster
+    owner: FHD/mod_sdk
+    enabled: true
+    # 编制结构（areas/departments + 企业端四层/员工）+ 员工元数据（manifest name/description）
+    ssot: FHD/config/duty_roster.json
+    derived:
+      - FHD/frontend/src/domain/yuangonDutyRoster.ts
+      - FHD/MODstore/modstore_server/duty_roster.py
+      - FHD/app/infrastructure/mods/catalog_visibility.py
+      - FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets
+      - FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts
+    mode: generate
+    # 唯一生成器 sync_duty_roster.py（5 目标）；--check 守卫漂移，对应 test_employee_ssot.py
+    check: python scripts/dev/sync_duty_roster.py --check
+    sync: python scripts/dev/sync_duty_roster.py --generate
