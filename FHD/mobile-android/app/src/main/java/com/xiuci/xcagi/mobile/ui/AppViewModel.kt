@@ -983,13 +983,10 @@ constructor(
     private fun com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo.contactSubtitle(
             source: String?,
     ): String {
-        val channel = phone_channel.contactChannelLabel()
-        val aiNo = id.takeIf { it.isNotBlank() }?.let { "AI号 $it" }.orEmpty()
-        val summary =
-                panel_summary.ifBlank {
-                    source?.let { "来自 $it" }.orEmpty()
-                }
-        return listOf(channel, aiNo, summary).filter { it.isNotBlank() }.joinToString(" · ")
+        // 微信式：副标题只显示员工简介，不堆"管理端工作台 · AI号 xxx · …"这类后台技术串。
+        return panel_summary.trim().ifBlank {
+            (source?.let { "来自 $it" } ?: phone_channel.contactChannelLabel()).trim()
+        }
     }
 
     private fun String.contactChannelLabel(): String =
