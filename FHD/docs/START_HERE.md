@@ -10,7 +10,7 @@
 
 ### 登记索引
 
-任何文档声称 SSOT（唯一真相源）必须在 [`SSOT_INDEX.md`](./SSOT_INDEX.md) 登记。冲突时以 SSOT_INDEX.md 为准。`scripts/dev/docs_ssot_lint.py` 会在 CI 中检测未登记或冲突的 SSOT 声明。
+任何文档声称 SSOT（唯一真相源）必须在 [`config/ssot.yaml`](../config/ssot.yaml) 的 `doc_registry` 段登记（人类可读的派生视图见 [`SSOT_INDEX.md`](./SSOT_INDEX.md)，由 `scripts/dev/gen_ssot_index.py` 自动生成，**请勿手改**）。冲突时以 `ssot.yaml` 为准。`scripts/dev/docs_ssot_lint.py` 会在 CI 中检测未登记或冲突的 SSOT 声明，并校验派生视图未过期。
 
 ---
 
