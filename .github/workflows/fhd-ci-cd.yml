@@ -634,12 +634,13 @@ jobs:
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
 
-  # SSOT drift gate (advisory in MVP; does not block pipeline)
+  # SSOT drift gate — BLOCKING. The unified registry (ssot_cli.py gate) is green
+  # across all enabled domains; drift here fails the pipeline. To re-introduce a
+  # domain as advisory, gate it inside ssot.yaml, not by un-blocking this job.
   ssot-drift-gate:
-    name: SSOT Drift Gate (advisory)
+    name: SSOT Drift Gate
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

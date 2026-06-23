@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-06-23
+> 最后更新：2026-06-24
 
 ## 登记规则
 
@@ -28,6 +28,8 @@
 | claimed-vs-actual（对外声称 vs 实测） | [CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) | 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成 |
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
 | account（账号体系） | [account_system_ssot.md](account_system_ssot.md) | 账号体系四维真相源（身份/行业/会员/账号等级）、运行时派生规则、字段写入权限矩阵、多租户隔离与账户安全 |
+| employee-roster（编制花名册） | [../config/duty_roster.json](../config/duty_roster.json) | 员工/部门编制唯一真相源；前端 `domain/yuangonDutyRoster.ts` 为派生件（禁止人手改）；漂移由 `tests/test_ssot_reconciliation.py` 守护 |
+| db-schema（数据库 Schema） | [../alembic/](../alembic/) | Alembic 迁移链为 schema 唯一真相源（单 head、空库 `upgrade head` 复现 ORM）；`create_all`/`ensure_*` 仅运行期兜底；结构守护见 `scripts/guard_alembic_single_head.py` + `tests/test_ssot_reconciliation.py`，CI 强制门见 `.github/workflows/fhd-alembic-ssot.yml`（SQLite parity 阻断 + PG parity report-only） |
 
 ## 已退役 SSOT（指针化）
 
