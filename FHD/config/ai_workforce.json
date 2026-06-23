@@ -53,6 +53,15 @@
         "shared_engine": true,
         "fixed_identity_name": true,
         "identity_brief": "平台的老熟人，帮你处理杂事、指路、跨工具操作"
+      },
+      "conversation_surfaces": {
+        "_doc": "小C智能对话在电脑端的两个互斥呈现入口;二者同一会话引擎(前端 useChatView→useChatOrchestration)+同一后端(/api/ai/chat→Persona)+同一 sessionId,切换 surface 不丢上下文。注意:这是「对话入口」轴,与顶层 surfaces(联系人列表组成)是不同的轴——小C不进桌面消息列表,但以悬浮窗/侧栏形态提供智能对话。",
+        "desktop": [
+          {"id": "floating", "label": "悬浮窗", "component": "frontend/src/components/FloatingChatAssistant.vue"},
+          {"id": "sidebar", "label": "侧栏智能对话", "component": "frontend/src/views/ChatView.vue", "route": "chat"}
+        ],
+        "mutual_exclusive": true,
+        "exclusive_rule": "frontend/src/components/MainLayout.vue: shouldShowFloatingChatAssistant = !isChatSidebarActive(route) —— 进侧栏(chat路由)时悬浮窗隐藏,离开则恢复"
       }
     }
   },

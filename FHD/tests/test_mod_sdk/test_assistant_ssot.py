@@ -133,6 +133,19 @@ def test_xiaoc_desktop_is_floating_not_in_message_list():
     assert "assistant" in assistant_ssot.surface_composition("mobile", "admin")
 
 
+def test_xiaoc_conversation_surfaces_floating_and_sidebar():
+    """小C智能对话=电脑端 悬浮窗 + 侧栏 两个互斥入口,同一会话引擎。
+
+    这是「对话入口」轴(≠联系人列表轴):小C不进桌面消息列表,但以悬浮窗/侧栏提供智能对话。
+    """
+    cs = assistant_ssot.xiaoc_conversation_surfaces()
+    desktop = cs.get("desktop") or []
+    assert {s.get("id") for s in desktop} == {"floating", "sidebar"}
+    assert cs.get("mutual_exclusive") is True
+    # 与"小C不进桌面消息列表"不矛盾:对话入口 ≠ 联系人条目
+    assert "assistant" not in assistant_ssot.surface_composition("desktop", "admin")
+
+
 def test_platform_employees_differ_by_side():
     """管理端平台员工(六线) ≠ 企业端平台员工(四层):来源声明必须不同。"""
     admin_src = assistant_ssot.platform_source_for_side("admin")
