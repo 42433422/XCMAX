@@ -39,6 +39,21 @@ def _pick_instruction(value: float, table: list[tuple[float, str]]) -> str:
     return table[-1][1]  # 兜底
 
 
+def persona_style_section(profile: PersonaProfile) -> str:
+    """仅生成四轴风格指令段（不含身份/上下文/安全段）。
+
+    供平台员工执行路径复用：员工保留自身岗位身份，只继承用户的人格风格。
+    """
+    axes = profile.axes
+    style_instructions = [
+        _pick_instruction(axes.warmth, _WARMTH_INSTRUCTIONS),
+        _pick_instruction(axes.detail, _DETAIL_INSTRUCTIONS),
+        _pick_instruction(axes.proactivity, _PROACTIVITY_INSTRUCTIONS),
+        _pick_instruction(axes.structure, _STRUCTURE_INSTRUCTIONS),
+    ]
+    return "；".join(style_instructions) + "。"
+
+
 class PersonaPromptBuilder:
     """Persona Prompt 生成器。
 
@@ -66,15 +81,8 @@ class PersonaPromptBuilder:
         brief = self._identity_resolver.resolve_brief(identity, profile.rapport)
         identity_section = f"你是{identity.name}，{brief}。"
 
-        # 风格段
-        axes = profile.axes
-        style_instructions = [
-            _pick_instruction(axes.warmth, _WARMTH_INSTRUCTIONS),
-            _pick_instruction(axes.detail, _DETAIL_INSTRUCTIONS),
-            _pick_instruction(axes.proactivity, _PROACTIVITY_INSTRUCTIONS),
-            _pick_instruction(axes.structure, _STRUCTURE_INSTRUCTIONS),
-        ]
-        style_section = "；".join(style_instructions) + "。"
+        # 风格段（与平台员工执行路径复用同一生成逻辑）
+        style_section = persona_style_section(profile)
 
         # 业务上下文段
         context_section = context_prompt.strip() if context_prompt else ""

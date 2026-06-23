@@ -7,6 +7,7 @@ import {
   ChatResponseData,
   CsInfo,
   MobileEnvelope,
+  MobileFixedContactsData,
   MobileHomeData,
   MobileLoginData,
   MobileMeData,
@@ -143,6 +144,13 @@ export class MobileApiClient {
   async csMessages(): Promise<ChatMessage[]> {
     const envelope = await this.request<ChatMessage[]>(ApiEndpoints.CS_MESSAGES, http.RequestMethod.GET);
     return envelope.data || [];
+  }
+
+  // 联系人固定区(按端 SSOT 派生)
+  async contactsFixed(): Promise<MobileFixedContactsData> {
+    const envelope = await this.request<MobileFixedContactsData>(
+      ApiEndpoints.CONTACTS_FIXED, http.RequestMethod.GET);
+    return envelope.data || ({ side: '', top: [], bottom: [] } as MobileFixedContactsData);
   }
 
   async csSend(message: string): Promise<ChatResponseData> {
