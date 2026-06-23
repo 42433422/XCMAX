@@ -1,6 +1,6 @@
 import { MobileApiClient } from '../api/MobileApiClient';
-import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, DutyRosterData, ModInfo, UserDto } from '../models/MobileModels';
-import { buildConversations, buildDutyRoster, buildEmployees, findEmployee } from '../state/AppDataBuilder';
+import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, DutyRosterData, FixedContactDto, ModInfo, UserDto } from '../models/MobileModels';
+import { buildConversations, buildDutyRoster, buildEmployees, composeConversations, fallbackFixedTop, findEmployee } from '../state/AppDataBuilder';
 import { NotificationManager } from '../state/NotificationManager';
 import { AboutPage } from './AboutPage';
 import { AiCirclePage } from './AiCirclePage';
@@ -57,6 +57,8 @@ struct Index {
   @Provide messages: ChatMessage[] = [{ role: 'assistant', text: '已准备连接企业端。登录后，我会按企业端已安装员工和两个固定入口展示会话。' }];
   @Provide mods: ModInfo[] = [];
   @Provide employees: AiEmployeeProfile[] = [];
+  @Provide fixedTop: FixedContactDto[] = fallbackFixedTop('enterprise');
+  @Provide fixedBottom: FixedContactDto[] = [];
   @Provide conversations: ConversationSummary[] = buildConversations([]);
   @Provide dutyRoster: DutyRosterData = emptyDutyRoster();
   // 设置模块状态：对齐 Android AppViewModel.biometricEnabled / themeMode
@@ -181,7 +183,22 @@ struct Index {
     else { const modData = await this.api.mods(); mods = modData.items || []; }
     this.mods = mods;
     this.employees = buildEmployees(mods);
-    this.conversations = buildConversations(this.employees);
+    // 固定联系人按端 SSOT 派生(后端 /contacts/fixed);旧后端/失败回退到按端兜底
+    let top: FixedContactDto[] = fallbackFixedTop(this.accountKind);
+    let bottom: FixedContactDto[] = [];
+    try {
+      const fixed = await this.api.contactsFixed();
+      if (fixed.top.length > 0) {
+        top = fixed.top;
+      }
+      bottom = fixed.bottom;
+    } catch (err) {
+      // 端点不可用:保留按端兜底(小C + 企业端专属客服),无超级员工
+      console.info('contactsFixed unavailable, using fallback: ' + this.errorMessage(err));
+    }
+    this.fixedTop = top;
+    this.fixedBottom = bottom;
+    this.conversations = composeConversations(top, this.employees, bottom);
     this.dutyRoster = buildDutyRoster(mods);
   }
   private async refreshHome(): Promise<void> {
