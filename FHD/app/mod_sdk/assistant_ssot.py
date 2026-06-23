@@ -42,6 +42,16 @@ _FALLBACK_DOC: dict[str, Any] = {
             "persona": {"shared_engine": True, "fixed_identity_name": True, "identity_brief": ""},
         }
     },
+    "super_employees": {
+        "claude-super-employee": {
+            "id": "claude-super-employee", "tier": "super",
+            "display_name": "超级员工-Claude", "display_tool": "Claude", "avatar_letter": "超",
+        },
+        "codex-super-employee": {
+            "id": "codex-super-employee", "tier": "super",
+            "display_name": "超级员工-Codex", "display_tool": "Codex", "avatar_letter": "超",
+        },
+    },
     "contact_kinds": {
         "assistant": {"label": "小C助理", "is_employee_tier": True, "tier": "assistant"},
         "super": {"label": "超级员工", "is_employee_tier": True, "tier": "super"},
@@ -144,6 +154,21 @@ def xiaoc() -> dict[str, Any]:
     return get_assistant("xiaoc")
 
 
+# ── 超级员工(2级)身份 ────────────────────────────────────────────────────
+
+
+def super_employees() -> dict[str, dict[str, Any]]:
+    """超级员工身份注册表(id → 实体)；独立人格,不纳入 Persona。"""
+    raw = load_ai_workforce_document().get("super_employees")
+    if not isinstance(raw, dict):
+        raw = _FALLBACK_DOC["super_employees"]
+    return {k: v for k, v in raw.items() if not str(k).startswith("_") and isinstance(v, dict)}
+
+
+def super_employee_ids() -> frozenset[str]:
+    return frozenset(super_employees().keys())
+
+
 def xiaoc_display_name() -> str:
     """小C助理对外展示名（统一文案源，替代各端硬编码 "小C助理"）。"""
     return str(xiaoc().get("display_name") or "小C助理")
@@ -238,6 +263,8 @@ __all__ = [
     "can_call",
     "get_assistant",
     "xiaoc",
+    "super_employees",
+    "super_employee_ids",
     "xiaoc_display_name",
     "xiaoc_consult_title",
     "persona_identity_for_assistant",

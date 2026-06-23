@@ -49,19 +49,22 @@ def _dedicated_cs_entry() -> dict[str, Any]:
 
 
 def _super_entries() -> list[dict[str, Any]]:
-    from app.application.super_employee_service import CLAUDE_PROFILE, CODEX_PROFILE
-
+    # 身份取自 ai_workforce SSOT(super_employees);运行配置仍在 super_employee_service。
+    registry = assistant_ssot.super_employees()
     out: list[dict[str, Any]] = []
-    for profile in (CLAUDE_PROFILE, CODEX_PROFILE):
+    for emp_id in ("claude-super-employee", "codex-super-employee"):
+        meta = registry.get(emp_id)
+        if not isinstance(meta, dict):
+            continue
         out.append(
             {
-                "id": profile.employee_id,
+                "id": emp_id,
                 "kind": "super",
-                "name": profile.employee_name,
-                "summary": f"{profile.display_tool} 超级员工 · 多设备派工",
-                "avatar": "超",
-                "route": f"super:{profile.employee_id}",
-                "backend": profile.employee_id,
+                "name": str(meta.get("display_name") or emp_id),
+                "summary": str(meta.get("summary") or f"{meta.get('display_tool') or ''} 超级员工 · 多设备派工"),
+                "avatar": str(meta.get("avatar_letter") or "超"),
+                "route": f"super:{emp_id}",
+                "backend": emp_id,
             }
         )
     return out

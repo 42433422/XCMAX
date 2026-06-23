@@ -141,3 +141,26 @@ def test_platform_employees_differ_by_side():
     assert admin_src.get("where") != ent_src.get("where")
     assert "departments" in admin_src.get("where", "")
     assert "enterprise_employees" in ent_src.get("where", "")
+
+
+# ── 7. 超级员工(2级)身份 SSOT ────────────────────────────────────────────
+
+
+def test_super_employees_ssot_ids():
+    assert assistant_ssot.super_employee_ids() == {
+        "claude-super-employee",
+        "codex-super-employee",
+    }
+    sup = assistant_ssot.super_employees()
+    assert sup["claude-super-employee"]["display_name"] == "超级员工-Claude"
+    assert sup["codex-super-employee"]["display_name"] == "超级员工-Codex"
+
+
+def test_super_employee_ssot_matches_service_profiles():
+    """SSOT 身份与 super_employee_service 运行 profile 不漂移(id/名一致)。"""
+    from app.application.super_employee_service import CLAUDE_PROFILE, CODEX_PROFILE
+
+    sup = assistant_ssot.super_employees()
+    for profile in (CLAUDE_PROFILE, CODEX_PROFILE):
+        assert profile.employee_id in sup
+        assert sup[profile.employee_id]["display_name"] == profile.employee_name
