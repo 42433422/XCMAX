@@ -2418,6 +2418,25 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
     return format_mobile_response(data=data)
 
 
+# ── 联系人固定区组成（surface SSOT 派生） ──
+
+
+@extension_router.get("/contacts/fixed")
+async def get_mobile_fixed_contacts(request: Request, user=Depends(get_mobile_user)):
+    """返回手机端联系人固定区(按端 SSOT 派生)。
+
+    top/bottom 以平台员工为界:渲染顺序 = top + 平台员工(动态) + bottom。
+    管理端不含专属客服(由 surface SSOT 自动 gating);两端均含小C与超级员工。
+    """
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.application.surface_contacts import mobile_fixed_contacts
+
+    return format_mobile_response(data=mobile_fixed_contacts(_mobile_group_mode(request)))
+
+
 # ── 专属客服接口（企业版手机端） ──
 
 
