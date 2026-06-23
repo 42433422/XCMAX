@@ -194,6 +194,12 @@ def contact_kinds() -> dict[str, Any]:
     return {k: v for k, v in raw.items() if not str(k).startswith("_")}
 
 
+def dedicated_cs_label() -> str:
+    """专属客服展示名(统一文案源;≠小C助理)。"""
+    meta = contact_kinds().get("dedicated_cs") or {}
+    return str(meta.get("label") or "专属客服")
+
+
 def surface_composition(device: str, side: str) -> list[str]:
     """返回某(端 side × 设备 device)联系人固定区的有序条目种类。
 
@@ -269,6 +275,7 @@ __all__ = [
     "xiaoc_consult_title",
     "persona_identity_for_assistant",
     "contact_kinds",
+    "dedicated_cs_label",
     "surface_composition",
     "contact_kind_sides",
     "platform_source_for_side",
