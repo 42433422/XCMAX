@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "_doc": "AI 员工编制单一真相源（SSOT）：三阶级模型 + 人格共享规则 + 调用链 + 小C助理身份。平台员工岗位明细仍以 config/duty_roster.json 为源；超级员工 Profile 暂以代码为源（见各 tier 的 source_of_record）。本文件由 app/mod_sdk/assistant_ssot.py 加载，禁止在各端硬编码小C身份字段。",
+  "tiers": [
+    {
+      "id": "assistant",
+      "rank": 1,
+      "label": "小C助理",
+      "summary": "电脑端智能对话入口，用户统一的 AI 助手",
+      "persona_shared": true,
+      "can_call": ["super"],
+      "source_of_record": "config/ai_workforce.json#assistants"
+    },
+    {
+      "id": "super",
+      "rank": 2,
+      "label": "超级员工",
+      "summary": "Claude / Codex CLI 中继，多设备派工",
+      "persona_shared": false,
+      "can_call": ["platform"],
+      "source_of_record": "app/application/super_employee_service.py (CLAUDE_PROFILE / CODEX_PROFILE)"
+    },
+    {
+      "id": "platform",
+      "rank": 3,
+      "label": "平台员工",
+      "summary": "六线部门花名册内的岗位 AI 员工",
+      "persona_shared": true,
+      "can_call": [],
+      "source_of_record": "config/duty_roster.json"
+    }
+  ],
+  "assistants": {
+    "xiaoc": {
+      "id": "xiaoc",
+      "tier": "assistant",
+      "display_name": "小C助理",
+      "short_name": "小C",
+      "avatar_letter": "C",
+      "brief": "企业 AI 助手，处理搜索、问答和跨工具操作",
+      "consult_title_suffix": "咨询",
+      "persona": {
+        "shared_engine": true,
+        "fixed_identity_name": true,
+        "identity_brief": "平台的老熟人，帮你处理杂事、指路、跨工具操作"
+      }
+    }
+  }
+}

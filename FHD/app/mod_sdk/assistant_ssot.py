@@ -1,0 +1,174 @@
+# -*- coding: utf-8 -*-
+"""AI 员工三阶级 + 小C助理身份 单一真相源（SSOT）加载器。
+
+真相源：``config/ai_workforce.json``。本模块是「员工系统 ↔ 人格系统」联系的唯一程序入口：
+
+- 三阶级模型：assistant（小C助理，rank 1）/ super（超级员工，rank 2）/ platform（平台员工，rank 3）。
+- 人格共享规则：assistant + platform 共享 Persona 引擎（四轴/rapport）；super 独立人格、不纳入。
+- 调用链（单向向下）：assistant → super → platform。
+- 小C身份（名字/头像/简介）：禁止在各端硬编码，一律经此读取。
+
+设计原则与 ``app.mod_sdk.duty_roster`` 同构：LRU 缓存 + 文件缺失/损坏时 fail-safe 兜底，
+保证 ``/cs/info`` 等端点即使配置缺失也返回稳定的小C身份，不抛异常。
+"""
+
+from __future__ import annotations
+
+import json
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from app.mod_sdk.host_profile import resolve_fhd_config_dir
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+# 文件缺失/损坏时的 fail-safe 兜底：与 ai_workforce.json 中的声明保持一致。
+_FALLBACK_DOC: dict[str, Any] = {
+    "schema_version": 1,
+    "tiers": [
+        {"id": "assistant", "rank": 1, "label": "小C助理", "persona_shared": True, "can_call": ["super"]},
+        {"id": "super", "rank": 2, "label": "超级员工", "persona_shared": False, "can_call": ["platform"]},
+        {"id": "platform", "rank": 3, "label": "平台员工", "persona_shared": True, "can_call": []},
+    ],
+    "assistants": {
+        "xiaoc": {
+            "id": "xiaoc",
+            "tier": "assistant",
+            "display_name": "小C助理",
+            "short_name": "小C",
+            "avatar_letter": "C",
+            "brief": "企业 AI 助手，处理搜索、问答和跨工具操作",
+            "consult_title_suffix": "咨询",
+            "persona": {"shared_engine": True, "fixed_identity_name": True, "identity_brief": ""},
+        }
+    },
+}
+
+
+def _read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        if not path.is_file():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except RECOVERABLE_ERRORS:
+        return None
+
+
+@lru_cache(maxsize=1)
+def load_ai_workforce_document() -> dict[str, Any]:
+    """加载 AI 员工编制文档；文件缺失或结构异常时回退到内置兜底。"""
+    cfg = resolve_fhd_config_dir()
+    if cfg is not None:
+        doc = _read_json(cfg / "ai_workforce.json")
+        if doc and isinstance(doc.get("tiers"), list) and isinstance(doc.get("assistants"), dict):
+            return doc
+    return _FALLBACK_DOC
+
+
+# ── 三阶级模型 ────────────────────────────────────────────────────────────
+
+
+def assistant_tiers() -> list[dict[str, Any]]:
+    """返回按 rank 升序排列的三阶级定义。"""
+    tiers = load_ai_workforce_document().get("tiers") or []
+    valid = [t for t in tiers if isinstance(t, dict) and t.get("id")]
+    return sorted(valid, key=lambda t: int(t.get("rank", 99)))
+
+
+def get_tier(tier_id: str) -> dict[str, Any] | None:
+    tid = str(tier_id or "").strip()
+    for tier in assistant_tiers():
+        if tier.get("id") == tid:
+            return tier
+    return None
+
+
+# ── 人格共享规则（员工系统 ↔ 人格系统的联系）────────────────────────────
+
+
+def persona_shared_tiers() -> frozenset[str]:
+    """返回共享 Persona 人格引擎的阶级集合（默认 assistant + platform）。"""
+    return frozenset(
+        str(t["id"]) for t in assistant_tiers() if t.get("persona_shared") and t.get("id")
+    )
+
+
+def tier_shares_persona(tier_id: str) -> bool:
+    """该阶级是否共享 Persona 人格引擎（super 返回 False）。"""
+    return str(tier_id or "").strip() in persona_shared_tiers()
+
+
+# ── 调用链（单向向下）────────────────────────────────────────────────────
+
+
+def can_call(caller_tier: str, callee_tier: str) -> bool:
+    """caller_tier 是否被允许调用 callee_tier（assistant→super→platform）。"""
+    tier = get_tier(caller_tier)
+    if tier is None:
+        return False
+    return str(callee_tier or "").strip() in (tier.get("can_call") or [])
+
+
+# ── 小C助理身份 ──────────────────────────────────────────────────────────
+
+
+def get_assistant(assistant_id: str = "xiaoc") -> dict[str, Any]:
+    """返回指定助理实体；缺失时回退到兜底中的小C。"""
+    aid = str(assistant_id or "").strip() or "xiaoc"
+    assistants = load_ai_workforce_document().get("assistants") or {}
+    entity = assistants.get(aid)
+    if isinstance(entity, dict):
+        return entity
+    return _FALLBACK_DOC["assistants"]["xiaoc"]
+
+
+def xiaoc() -> dict[str, Any]:
+    """小C助理实体（fail-safe，永不返回 None）。"""
+    return get_assistant("xiaoc")
+
+
+def xiaoc_display_name() -> str:
+    """小C助理对外展示名（统一文案源，替代各端硬编码 "小C助理"）。"""
+    return str(xiaoc().get("display_name") or "小C助理")
+
+
+def xiaoc_consult_title() -> str:
+    """小C咨询会话标题，如 "小C助理咨询"。"""
+    entity = xiaoc()
+    return f"{xiaoc_display_name()}{entity.get('consult_title_suffix') or '咨询'}"
+
+
+def persona_identity_for_assistant(assistant_id: str = "xiaoc") -> Any | None:
+    """把助理身份桥接成 Persona ``PersonaIdentity``（人格引擎用其固定名字，不被行业名覆盖）。
+
+    返回 ``None`` 表示该助理未声明固定身份（应退回 Persona 行业派生身份）。
+    懒导入 PersonaIdentity，避免模块级耦合 persona 领域层。
+    """
+    entity = get_assistant(assistant_id)
+    persona = entity.get("persona") or {}
+    if not persona.get("fixed_identity_name"):
+        return None
+    from app.domain.persona.value_objects import PersonaIdentity
+
+    return PersonaIdentity(
+        name=str(entity.get("display_name") or "小C助理"),
+        brief=str(persona.get("identity_brief") or entity.get("brief") or ""),
+        business_domain="assistant",
+        industry="",
+    )
+
+
+__all__ = [
+    "load_ai_workforce_document",
+    "assistant_tiers",
+    "get_tier",
+    "persona_shared_tiers",
+    "tier_shares_persona",
+    "can_call",
+    "get_assistant",
+    "xiaoc",
+    "xiaoc_display_name",
+    "xiaoc_consult_title",
+    "persona_identity_for_assistant",
+]

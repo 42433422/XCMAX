@@ -93,6 +93,7 @@ from app.fastapi_routes.mobile_extensions.relay_helpers import (
     _relay_admin_fallback_user,
     _relay_mobile_auth_payload,
 )
+from app.mod_sdk.assistant_ssot import xiaoc_consult_title, xiaoc_display_name
 from app.security.mobile_pairing import (
     consume_by_shortcode,
     consume_pairing_nonce,
@@ -547,7 +548,7 @@ def _persist_mobile_cs_request(
                 source_instance_id=_mobile_cs_source_id(user),
                 source_instance_name=_mobile_cs_source_name(user),
                 request_type="mobile_ai_customer_service",
-                title=msg_body[:80] or "小C助理咨询",
+                title=msg_body[:80] or xiaoc_consult_title(),
                 description=msg_body,
                 priority="normal",
                 status="pending",
@@ -2432,7 +2433,7 @@ async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
     return format_mobile_response(
         data={
             "cs_available": True,
-            "cs_name": "小C助理",
+            "cs_name": xiaoc_display_name(),
             "cs_avatar": None,
             "cs_online": True,
             "backend": EMPLOYEE_MOD_ID,
@@ -2472,7 +2473,7 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
             "form_url": "https://xiu-ci.com/market/about",
             "message": msg_body,
             "brief": (
-                "手机端用户正在和小C助理对话。请以 XCAGI 企业智能客服身份直接回复："
+                f"手机端用户正在和{xiaoc_display_name()}对话。请以 XCAGI 企业智能客服身份直接回复："
                 "先回答用户当前问题；如果需要进一步采集需求，再给出2-3个追问和需求提交链接。"
                 f"\n\n用户消息：{msg_body}"
             ),
