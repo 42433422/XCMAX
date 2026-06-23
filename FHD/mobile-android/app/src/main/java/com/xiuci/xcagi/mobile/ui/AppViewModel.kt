@@ -35,6 +35,8 @@ import com.xiuci.xcagi.mobile.core.update.PackageDeltaSpec
 import com.xiuci.xcagi.mobile.core.update.PackageUpdateResult
 import com.xiuci.xcagi.mobile.core.work.MobileSyncWorker
 import com.xiuci.xcagi.mobile.core.work.PushPollWorker
+import com.xiuci.xcagi.mobile.model.ChatMsg
+import com.xiuci.xcagi.mobile.model.ChatStatus
 import com.xiuci.xcagi.mobile.model.ConversationItem
 import com.xiuci.xcagi.mobile.model.ConversationType
 import com.xiuci.xcagi.mobile.model.CsInfoDto
@@ -259,8 +261,16 @@ constructor(
     private val _message = MutableStateFlow<UiMessage?>(null)
     val message: StateFlow<UiMessage?> = _message.asStateFlow()
 
-    private val _chatMessages = MutableStateFlow<List<Pair<String, String>>>(emptyList())
-    val chatMessages: StateFlow<List<Pair<String, String>>> = _chatMessages.asStateFlow()
+    private val _chatMessages = MutableStateFlow<List<ChatMsg>>(emptyList())
+    val chatMessages: StateFlow<List<ChatMsg>> = _chatMessages.asStateFlow()
+
+    // 长按「引用」选中的被回复消息；非空时输入框上方显示引用预览，发送后清空。
+    private val _replyTo = MutableStateFlow<ChatMsg?>(null)
+    val replyTo: StateFlow<ChatMsg?> = _replyTo.asStateFlow()
+
+    fun setReplyTo(msg: ChatMsg?) {
+        _replyTo.value = msg
+    }
 
     private val _items = MutableStateFlow<List<ListItem>>(emptyList())
     val items: StateFlow<List<ListItem>> = _items.asStateFlow()
@@ -909,6 +919,12 @@ constructor(
                 .onFailure { snack(it.message ?: "发送失败", true) }
             _groupSending.value = false
         }
+    }
+
+    /** 删除一条群消息（长按菜单「删除」）：从当前列表移除（本地视图）。 */
+    fun deleteGroupMessage(id: String) {
+        if (id.isBlank()) return
+        _groupMessages.value = _groupMessages.value.filterNot { it.id == id }
     }
 
     fun addGroupMember(
@@ -1719,25 +1735,29 @@ constructor(
                         return@launch
                     }
                     _streaming.value = true
-                    _chatMessages.value = _chatMessages.value + ("assistant" to "")
+                    _chatMessages.value =
+                        _chatMessages.value +
+                            ChatMsg("assistant", "", System.currentTimeMillis(), ChatStatus.SENDING)
                     var acc = ""
                     val resumed = repo.resumeRelayTask(
                             conversationId,
                             onToken = { t ->
                                 acc += t
                                 _chatMessages.value =
-                                        _chatMessages.value.dropLast(1) + ("assistant" to acc)
+                                    _chatMessages.value.dropLast(1) +
+                                        ChatMsg("assistant", acc, System.currentTimeMillis(), ChatStatus.SENDING)
                             },
                             onDone = { full ->
                                 _streaming.value = false
                                 _chatMessages.value =
-                                        _chatMessages.value.dropLast(1) +
-                                                ("assistant" to full.ifBlank { acc })
+                                    _chatMessages.value.dropLast(1) +
+                                        ChatMsg("assistant", full.ifBlank { acc }, System.currentTimeMillis(), ChatStatus.SENT)
                             },
                             onError = { e ->
                                 _streaming.value = false
                                 _chatMessages.value =
-                                        _chatMessages.value.dropLast(1) + ("assistant" to "（$e）")
+                                    _chatMessages.value.dropLast(1) +
+                                        ChatMsg("assistant", "（$e）", System.currentTimeMillis(), ChatStatus.FAILED)
                             },
                     )
                     if (!resumed) {
@@ -1755,7 +1775,9 @@ constructor(
     private fun runGitOp(branch: String, op: String, conversationId: String?) {
         if (branch.isBlank()) return
         chatJob?.cancel()
-        _chatMessages.value = _chatMessages.value + ("assistant" to "")
+        _chatMessages.value =
+            _chatMessages.value +
+                ChatMsg("assistant", "", System.currentTimeMillis(), ChatStatus.SENDING)
         _streaming.value = true
         var acc = ""
         chatJob =
@@ -1766,101 +1788,120 @@ constructor(
                             onToken = { t ->
                                 acc += t
                                 _chatMessages.value =
-                                        _chatMessages.value.dropLast(1) + ("assistant" to acc)
+                                    _chatMessages.value.dropLast(1) +
+                                        ChatMsg("assistant", acc, System.currentTimeMillis(), ChatStatus.SENDING)
                             },
                             onDone = { full ->
                                 _streaming.value = false
                                 _chatMessages.value =
-                                        _chatMessages.value.dropLast(1) +
-                                                ("assistant" to full.ifBlank { acc })
+                                    _chatMessages.value.dropLast(1) +
+                                        ChatMsg("assistant", full.ifBlank { acc }, System.currentTimeMillis(), ChatStatus.SENT)
                             },
                             onError = { e ->
                                 _streaming.value = false
                                 _chatMessages.value =
-                                        _chatMessages.value.dropLast(1) + ("assistant" to "（$e）")
+                                    _chatMessages.value.dropLast(1) +
+                                        ChatMsg("assistant", "（$e）", System.currentTimeMillis(), ChatStatus.FAILED)
                             },
                     )
                 }
     }
 
     fun sendChat(text: String, conversationId: String? = null) {
+        val quoted = _replyTo.value
+        _replyTo.value = null
         chatJob?.cancel()
         _chatAction.value = null
-        _chatMessages.value = _chatMessages.value + ("user" to text) + ("assistant" to "")
+        val now = System.currentTimeMillis()
+        _chatMessages.value = _chatMessages.value +
+                ChatMsg("user", text, now, ChatStatus.SENT, quote = quoted?.text?.take(120)) +
+                ChatMsg("assistant", "", now, ChatStatus.SENDING)
+        val outgoing = if (quoted != null) "引用「${quoted.text.take(200)}」\n\n$text" else text
+        runChatStream(outgoing, text, conversationId)
+    }
+
+    /** 重发最后一条消息（失败气泡旁的「重发」）。 */
+    fun resendLastChat(conversationId: String? = null) {
+        chatJob?.cancel()
+        val msgs = _chatMessages.value
+        val lastUser = msgs.lastOrNull { it.role == "user" } ?: return
+        val trimmed = if (msgs.lastOrNull()?.role == "assistant") msgs.dropLast(1) else msgs
+        _chatMessages.value = trimmed +
+                ChatMsg("assistant", "", System.currentTimeMillis(), ChatStatus.SENDING)
+        val outgoing =
+                if (lastUser.quote != null) "引用「${lastUser.quote}」\n\n${lastUser.text}"
+                else lastUser.text
+        runChatStream(outgoing, lastUser.text, conversationId)
+    }
+
+    /** 删除一条消息（长按菜单「删除」）：移出当前视图，并尽量按 ts 从本地缓存删除。 */
+    fun deleteChatMessage(index: Int, conversationId: String? = null) {
+        val msgs = _chatMessages.value
+        if (index < 0 || index >= msgs.size) return
+        val target = msgs[index]
+        _chatMessages.value = msgs.toMutableList().apply { removeAt(index) }
+        if (target.ts > 0L) {
+            viewModelScope.launch {
+                repo.deleteCachedChatMessage(conversationId ?: "default", target.ts)
+            }
+        }
+    }
+
+    private fun runChatStream(outgoing: String, userText: String, conversationId: String?) {
         _streaming.value = true
         var acc = ""
         val sessionId = conversationId ?: "default"
+        val onToken: (String) -> Unit = { t ->
+            acc += t
+            _chatMessages.value =
+                    _chatMessages.value.dropLast(1) +
+                            ChatMsg("assistant", acc, System.currentTimeMillis(), ChatStatus.SENDING)
+        }
+        val onDone: (String) -> Unit = { full ->
+            _streaming.value = false
+            val reply = full.ifBlank { acc }
+            _chatMessages.value =
+                    _chatMessages.value.dropLast(1) +
+                            ChatMsg("assistant", reply, System.currentTimeMillis(), ChatStatus.SENT)
+            inferChatAction(userText, reply)
+        }
         chatJob =
                 viewModelScope.launch {
-                    if (repo.hasNativeFhdAuth()) {
-                        // 有本地 FHD 认证，走局域网
+                    val useLan = repo.hasNativeFhdAuth()
+                    val failFallback =
+                            if (useLan) "对话暂不可用，请稍后重试"
+                            else "当前离线同步不可用，请连接电脑或稍后重试。"
+                    val onError: (String) -> Unit = { e ->
+                        // 保留原始错误到 logcat，便于排查 LLM 上游 401/SSL 超时等真实根因；
+                        // UI 层显示 productErrorMessage 改写后的友好文案，并标记为可重发的失败态。
+                        android.util.Log.e("AppViewModel", "streamChat error: $e", Exception(e))
+                        _streaming.value = false
+                        _chatMessages.value =
+                                _chatMessages.value.dropLast(1) +
+                                        ChatMsg(
+                                                "assistant",
+                                                productErrorMessage(e, failFallback),
+                                                System.currentTimeMillis(),
+                                                ChatStatus.FAILED,
+                                        )
+                    }
+                    if (useLan) {
                         repo.streamChat(
-                                text,
+                                outgoing,
                                 conversationId,
                                 sessionId,
-                                onToken = { t ->
-                                    acc += t
-                                    _chatMessages.value =
-                                            _chatMessages.value.dropLast(1) + ("assistant" to acc)
-                                },
-	                                onDone = { full ->
-	                                    _streaming.value = false
-	                                    val reply = full.ifBlank { acc }
-	                                    _chatMessages.value =
-	                                            _chatMessages.value.dropLast(1) + ("assistant" to reply)
-	                                    inferChatAction(text, reply)
-	                                },
-	                                onError = { e ->
-	                                    // 保留原始错误到 logcat，便于排查 LLM 上游 401/SSL 超时等真实根因，
-	                                    // UI 层仍显示 productErrorMessage 改写后的友好文案。
-	                                    android.util.Log.e(
-	                                        "AppViewModel",
-	                                        "streamChat error (lan): $e",
-	                                        Exception(e),
-	                                    )
-	                                    _streaming.value = false
-	                                    _chatMessages.value =
-	                                            _chatMessages.value.dropLast(1) +
-	                                                        ("assistant" to productErrorMessage(
-	                                                                e,
-	                                                                "对话暂不可用，请稍后重试",
-	                                                        ))
-	                                },
-	                        )
+                                onToken = onToken,
+                                onDone = onDone,
+                                onError = onError,
+                        )
                     } else {
-                        // 无本地认证，走云端 API
                         repo.streamChatCloud(
-                                text,
+                                outgoing,
                                 conversationId,
                                 sessionId,
-                                onToken = { t ->
-                                    acc += t
-                                    _chatMessages.value =
-                                            _chatMessages.value.dropLast(1) + ("assistant" to acc)
-                                },
-	                                onDone = { full ->
-	                                    _streaming.value = false
-	                                    val reply = full.ifBlank { acc }
-	                                    _chatMessages.value =
-	                                            _chatMessages.value.dropLast(1) + ("assistant" to reply)
-	                                    inferChatAction(text, reply)
-	                                },
-	                                onError = { e ->
-	                                    // 保留原始错误到 logcat，便于排查 LLM 上游 401/SSL 超时等真实根因，
-	                                    // UI 层仍显示 productErrorMessage 改写后的友好文案。
-	                                    android.util.Log.e(
-	                                        "AppViewModel",
-	                                        "streamChatCloud error: $e",
-	                                        Exception(e),
-	                                    )
-	                                    _streaming.value = false
-	                                    _chatMessages.value =
-	                                            _chatMessages.value.dropLast(1) +
-	                                                    ("assistant" to productErrorMessage(
-	                                                                e,
-	                                                                "当前离线同步不可用，请连接电脑或稍后重试。",
-	                                                        ))
-	                                },
+                                onToken = onToken,
+                                onDone = onDone,
+                                onError = onError,
                         )
                     }
                 }
@@ -2259,6 +2300,10 @@ constructor(
 
     fun observeImMessages(conversationId: Int) = repo.observeImMessages(conversationId)
 
+    /** 删除一条 IM 消息（长按菜单「删除」）。 */
+    fun deleteImMessage(conversationId: Int, messageId: Long) =
+            viewModelScope.launch { repo.imDeleteMessage(conversationId, messageId) }
+
     suspend fun seedImMessages(conversationId: Int): Result<Unit> =
             repo.seedImMessages(conversationId)
 
@@ -2312,6 +2357,11 @@ constructor(
             .onFailure {
                 snack(it.message ?: "客服消息发送失败", true)
             }
+    }
+
+    /** 删除一条客服消息（长按菜单「删除」）。 */
+    fun deleteCsMessage(msg: com.xiuci.xcagi.mobile.model.CsMessageItemDto) {
+        csRepository.removeMessage(msg)
     }
 
     /** 加载客服历史消息 */
