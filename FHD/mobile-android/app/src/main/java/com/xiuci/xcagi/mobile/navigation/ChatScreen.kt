@@ -73,13 +73,17 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.ChatSuggestion
+import com.xiuci.xcagi.mobile.model.ChatMsg
+import com.xiuci.xcagi.mobile.model.ChatStatus
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageActionMenu
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
@@ -172,6 +176,7 @@ fun ChatScreen(
     onOpenEmployeeProfile: (String, String) -> Unit = { _, _ -> },
 ) {
     val messages by vm.chatMessages.collectAsState()
+    val replyTo by vm.replyTo.collectAsState()
     val streaming by vm.streaming.collectAsState()
     val syncStale by vm.syncStaleHint.collectAsState()
     val chatAction by vm.chatAction.collectAsState()
@@ -297,15 +302,53 @@ fun ChatScreen(
             )
         },
         bottomBar = {
-            ImInputBar(
-                value = input,
-                onValueChange = { input = it },
-                onSend = { submitMessage() },
-                onStop = { vm.stopChat() },
-                streaming = streaming,
-                onVoice = { startVoiceInput() },
-                onMore = { showMoreSheet = true },
-            )
+            Column {
+                // 引用预览条：长按「引用」后显示被回复消息，可 ✕ 取消
+                replyTo?.let { quoted ->
+                    Surface(color = imBarBg(), modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                Modifier
+                                    .width(3.dp)
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(XcagiTheme.extra.brandBlue),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "引用 ${if (quoted.role == "user") "我" else "对方"}：${quoted.text}",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                color = imTextSecondary(),
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = { vm.setReplyTo(null) }, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "取消引用",
+                                    tint = imTextSecondary(),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+                ImInputBar(
+                    value = input,
+                    onValueChange = { input = it },
+                    onSend = { submitMessage() },
+                    onStop = { vm.stopChat() },
+                    streaming = streaming,
+                    onVoice = { startVoiceInput() },
+                    onMore = { showMoreSheet = true },
+                )
+            }
         },
     ) { padding ->
         Column(
@@ -355,18 +398,26 @@ fun ChatScreen(
                     state = listState,
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
-                    itemsIndexed(messages) { index, pair ->
-                        val (role, text) = pair
+                    itemsIndexed(messages) { index, msg ->
                         val isLastAssistant =
-                            index == messages.indexOfLast { it.first == "assistant" }
+                            index == messages.indexOfLast { it.role == "assistant" }
                         ImBubble(
-                            role = role,
-                            text = text,
-                            isStreaming = streaming && isLastAssistant && role == "assistant",
-                            showAvatar = isUserOrFirstInGroup(messages, index, role),
+                            role = msg.role,
+                            text = msg.text,
+                            ts = msg.ts,
+                            status = msg.status,
+                            quote = msg.quote,
+                            isStreaming = streaming && isLastAssistant && msg.role == "assistant",
+                            showAvatar = isUserOrFirstInGroup(messages, index, msg.role),
                             aiAvatarUrl = employeeProfile?.avatarUrl,
                             aiAvatarFallback = aiAvatarFallback,
                             userAvatarUrl = userAvatarSource,
+                            onReply = { vm.setReplyTo(msg) },
+                            onDelete = { vm.deleteChatMessage(index, conversationId) },
+                            onResend =
+                                if (msg.status == ChatStatus.FAILED) {
+                                    { vm.resendLastChat(conversationId) }
+                                } else null,
                         )
                     }
                 }
@@ -385,11 +436,11 @@ fun ChatScreen(
 }
 
 /** 判断是否显示头像：用户消息始终显示；对方消息仅每组第一条显示 */
-private fun isUserOrFirstInGroup(messages: List<Pair<String, String>>, index: Int, role: String): Boolean {
+private fun isUserOrFirstInGroup(messages: List<ChatMsg>, index: Int, role: String): Boolean {
     val isUser = role == "user"
     if (isUser) return true // 用户消息每条都显示头像
     if (index == 0) return true
-    return messages[index - 1].first != role // 角色切换时显示
+    return messages[index - 1].role != role // 角色切换时显示
 }
 
 // ══════════════════════════════════════════
@@ -477,11 +528,17 @@ private fun ImTopBar(
 private fun ImBubble(
     role: String,
     text: String,
+    ts: Long = 0L,
+    status: ChatStatus = ChatStatus.SENT,
+    quote: String? = null,
     isStreaming: Boolean = false,
     showAvatar: Boolean = true,
     aiAvatarUrl: String? = null,
     aiAvatarFallback: AppAvatarFallback = AppAvatarFallback.ASSISTANT,
     userAvatarUrl: String? = null,
+    onReply: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+    onResend: (() -> Unit)? = null,
 ) {
     val isUser = role == "user"
     Row(
@@ -515,28 +572,84 @@ private fun ImBubble(
             }
         }
 
-        // 气泡（微信同款圆角 + 精致阴影）
-        Surface(
-            modifier = Modifier.widthIn(max = 260.dp),
-            shape = RoundedCornerShape(
-                topStart = if (isUser) 12.dp else 4.dp,
-                topEnd = if (isUser) 4.dp else 12.dp,
-                bottomStart = 12.dp,
-                bottomEnd = 12.dp,
-            ),
-            color = if (isUser) XcagiTheme.extra.chatUserBubble else MaterialTheme.colorScheme.surface,
-            shadowElevation = 1.dp,
-            tonalElevation = 0.5.dp,
-        ) {
-            Text(
-                text = buildString { append(text); if (isStreaming) append("\u200B▌") },
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    lineHeight = 21.sp,
-                ),
-                color = if (isUser) XcagiTheme.extra.chatUserBubbleText else imTextPrimary(),
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            )
+        Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
+            // 气泡（微信同款圆角 + 精致阴影）；长按弹出动作菜单（复制/引用/删除）
+            MessageActionMenu(text = text, onReply = onReply, onDelete = onDelete) { longPress ->
+                Surface(
+                    modifier = Modifier
+                        .widthIn(max = 260.dp)
+                        .then(longPress),
+                    shape = RoundedCornerShape(
+                        topStart = if (isUser) 12.dp else 4.dp,
+                        topEnd = if (isUser) 4.dp else 12.dp,
+                        bottomStart = 12.dp,
+                        bottomEnd = 12.dp,
+                    ),
+                    color = if (isUser) XcagiTheme.extra.chatUserBubble else MaterialTheme.colorScheme.surface,
+                    shadowElevation = 1.dp,
+                    tonalElevation = 0.5.dp,
+                ) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        // 引用框：显示被回复消息的折叠原文
+                        if (!quote.isNullOrBlank()) {
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                            ) {
+                                Text(
+                                    text = quote,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                    color = if (isUser) XcagiTheme.extra.chatUserBubbleText.copy(alpha = 0.8f) else imTextSecondary(),
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        Text(
+                            text = buildString { append(text); if (isStreaming) append("​▌") },
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = 15.sp,
+                                lineHeight = 21.sp,
+                            ),
+                            color = if (isUser) XcagiTheme.extra.chatUserBubbleText else imTextPrimary(),
+                        )
+                    }
+                }
+            }
+
+            // 元信息：失败态显示「发送失败 · 重发」；否则显示时间戳 HH:mm
+            if (status == ChatStatus.FAILED || (ts > 0L && !isStreaming)) {
+                Row(
+                    modifier = Modifier.padding(top = 3.dp, start = 4.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (status == ChatStatus.FAILED) {
+                        Text(
+                            "发送失败",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        if (onResend != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "重发",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = XcagiTheme.extra.brandBlue,
+                                modifier = Modifier.clickable { onResend() },
+                            )
+                        }
+                    } else {
+                        Text(
+                            formatBubbleTime(ts),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = imTextSecondary(),
+                        )
+                    }
+                }
+            }
         }
 
         // 用户头像
@@ -554,6 +667,17 @@ private fun ImBubble(
             }
         }
     }
+}
+
+/** 气泡时间戳：今天显示 HH:mm，跨天显示 M/d HH:mm。 */
+private fun formatBubbleTime(ts: Long): String {
+    if (ts <= 0L) return ""
+    val now = java.util.Calendar.getInstance()
+    val msg = java.util.Calendar.getInstance().apply { timeInMillis = ts }
+    val sameDay = now.get(java.util.Calendar.YEAR) == msg.get(java.util.Calendar.YEAR) &&
+        now.get(java.util.Calendar.DAY_OF_YEAR) == msg.get(java.util.Calendar.DAY_OF_YEAR)
+    val pattern = if (sameDay) "HH:mm" else "M/d HH:mm"
+    return java.text.SimpleDateFormat(pattern, java.util.Locale.getDefault()).format(java.util.Date(ts))
 }
 
 // ══════════════════════════════════════════

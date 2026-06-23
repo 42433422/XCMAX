@@ -451,12 +451,6 @@ fun XcagiNavHost(
                                     restoreState = true
                                 }
                             },
-                            onStartGroupChat = { nav.navigate(Routes.AI_GROUP_CREATE) },
-                            onOpenGroups = { nav.navigate(Routes.AI_GROUPS) },
-                            onOpenGroup = { group ->
-                                vm.openAiGroup(group)
-                                nav.navigate(Routes.AI_GROUP_CHAT)
-                            },
                     )
                 }
                 // AI 对话 — 小C助理，走 /api/ai/chat/stream（与桌面端智能对话一致）
@@ -573,17 +567,6 @@ fun XcagiNavHost(
                     AiGroupChatScreen(
                             vm = vm,
                             onBack = { nav.popBackStack() },
-                    )
-                }
-                composable(Routes.AI_GROUP_CREATE) {
-                    AiGroupCreateScreen(
-                            vm = vm,
-                            onBack = { nav.popBackStack() },
-                            onCreated = {
-                                nav.navigate(Routes.AI_GROUP_CHAT) {
-                                    popUpTo(Routes.AI_GROUP_CREATE) { inclusive = true }
-                                }
-                            },
                     )
                 }
                 composable(

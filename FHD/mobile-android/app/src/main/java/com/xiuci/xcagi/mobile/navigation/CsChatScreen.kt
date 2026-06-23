@@ -60,6 +60,7 @@ import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageActionMenu
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -240,6 +241,8 @@ fun CsChatScreen(
                             isStreaming = streaming &&
                                 messages.indexOf(msg) == messages.lastIndex &&
                                 msg.sender == "cs",
+                            onReply = { input = "引用「" + msg.body.take(60) + "」\n" + input },
+                            onDelete = { vm.deleteCsMessage(msg) },
                         )
                     }
                 }
@@ -253,6 +256,8 @@ fun CsChatScreen(
 private fun CsMessageBubble(
     msg: com.xiuci.xcagi.mobile.model.CsMessageItemDto,
     isStreaming: Boolean = false,
+    onReply: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
     val isUser = msg.sender == "user"
     Row(
@@ -277,6 +282,7 @@ private fun CsMessageBubble(
             }
             Spacer(Modifier.size(Spacing.sm))
         }
+        MessageActionMenu(text = msg.body, onReply = onReply, onDelete = onDelete) { longPress ->
         Box(
             modifier = Modifier
                 .widthIn(max = 260.dp)
@@ -288,7 +294,8 @@ private fun CsMessageBubble(
                         bottomEnd = if (isUser) 2.dp else 8.dp,
                     ),
                 )
-                .background(if (isUser) XcagiTheme.extra.weChatGreen else MaterialTheme.colorScheme.surface),
+                .background(if (isUser) XcagiTheme.extra.weChatGreen else MaterialTheme.colorScheme.surface)
+                .then(longPress),
             contentAlignment = Alignment.Center,
         ) {
             Row(
@@ -314,6 +321,7 @@ private fun CsMessageBubble(
                     )
                 }
             }
+        }
         }
         if (isUser) {
             Spacer(Modifier.size(Spacing.sm))

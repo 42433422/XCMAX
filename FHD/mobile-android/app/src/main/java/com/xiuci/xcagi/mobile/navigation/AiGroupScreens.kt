@@ -65,6 +65,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageActionMenu
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -284,7 +285,12 @@ fun AiGroupChatScreen(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 itemsIndexed(messages, key = { _, m -> m.id }) { _, m ->
-                    GroupBubble(message = m, userAvatarUrl = userAvatar)
+                    GroupBubble(
+                        message = m,
+                        userAvatarUrl = userAvatar,
+                        onReply = { input = "引用「" + m.body.take(60) + "」\n" + input },
+                        onDelete = { vm.deleteGroupMessage(m.id) },
+                    )
                 }
                 if (sending) {
                     item { GroupTypingRow() }
@@ -295,7 +301,12 @@ fun AiGroupChatScreen(
 }
 
 @Composable
-private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
+private fun GroupBubble(
+    message: AiGroupMessageDto,
+    userAvatarUrl: String?,
+    onReply: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+) {
     val isUser = message.role == "user"
     Row(
         Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
@@ -320,24 +331,28 @@ private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
                     modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
                 )
             }
-            Surface(
-                modifier = Modifier.widthIn(max = 260.dp),
-                shape = RoundedCornerShape(
-                    topStart = if (isUser) 12.dp else 4.dp,
-                    topEnd = if (isUser) 4.dp else 12.dp,
-                    bottomStart = 12.dp,
-                    bottomEnd = 12.dp,
-                ),
-                color = if (isUser) XcagiTheme.extra.chatUserBubble else MaterialTheme.colorScheme.surface,
-                shadowElevation = 1.dp,
-                tonalElevation = 0.5.dp,
-            ) {
-                Text(
-                    message.body,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp, lineHeight = 21.sp),
-                    color = if (isUser) XcagiTheme.extra.chatUserBubbleText else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                )
+            MessageActionMenu(text = message.body, onReply = onReply, onDelete = onDelete) { longPress ->
+                Surface(
+                    modifier = Modifier
+                        .widthIn(max = 260.dp)
+                        .then(longPress),
+                    shape = RoundedCornerShape(
+                        topStart = if (isUser) 12.dp else 4.dp,
+                        topEnd = if (isUser) 4.dp else 12.dp,
+                        bottomStart = 12.dp,
+                        bottomEnd = 12.dp,
+                    ),
+                    color = if (isUser) XcagiTheme.extra.chatUserBubble else MaterialTheme.colorScheme.surface,
+                    shadowElevation = 1.dp,
+                    tonalElevation = 0.5.dp,
+                ) {
+                    Text(
+                        message.body,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp, lineHeight = 21.sp),
+                        color = if (isUser) XcagiTheme.extra.chatUserBubbleText else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    )
+                }
             }
         }
         if (isUser) {

@@ -109,6 +109,11 @@ class ImRepository @Inject constructor(
         db.imReadStateDao().clearAll()
     }
 
+    /** 删除一条 IM 消息（长按菜单「删除」）。 */
+    suspend fun removeMessage(conversationId: Int, messageId: Long) {
+        db.imMessageDao().deleteOne(conversationId, messageId)
+    }
+
     private suspend fun upsertMessage(row: ImMessageCacheEntity, syncedAt: Long = row.synced_at) {
         val existing = db.imMessageDao().get(row.conversation_id, row.message_id)
         if (existing != null && existing.synced_at > syncedAt) return

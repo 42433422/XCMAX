@@ -106,4 +106,9 @@ class CsRepository @Inject constructor(
     fun clearMessages() {
         _messages.value = emptyList()
     }
+
+    /** 删除一条客服消息（长按菜单「删除」）：按对象相等从当前列表移除。 */
+    fun removeMessage(msg: CsMessageItemDto) {
+        _messages.value = _messages.value.filterNot { it == msg }
+    }
 }

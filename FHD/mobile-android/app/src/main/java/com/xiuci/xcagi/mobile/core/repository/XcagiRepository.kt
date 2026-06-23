@@ -60,6 +60,7 @@ import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.core.network.SseChatClient
+import com.xiuci.xcagi.mobile.model.ChatMsg
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.google.gson.Gson
 import kotlinx.coroutines.delay
@@ -1360,7 +1361,7 @@ class XcagiRepository @Inject constructor(
             Result.failure(e)
         }
 
-    suspend fun loadCodexSuperEmployeeMessages(limit: Int = 80): Result<List<Pair<String, String>>> =
+    suspend fun loadCodexSuperEmployeeMessages(limit: Int = 80): Result<List<ChatMsg>> =
         try {
             syncRouterFromStore()
             preferCloudIfLanUnreachable()
@@ -1389,13 +1390,13 @@ class XcagiRepository @Inject constructor(
                         }.orEmpty()
                         markConversationActivity(PinnedIds.CODEX, latestTs, preview)
                     }
-                Result.success(codexMessagesToPairs(rawMessages))
+                Result.success(codexMessagesToChatMsgs(rawMessages))
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
 
-    suspend fun loadClaudeSuperEmployeeMessages(limit: Int = 80): Result<List<Pair<String, String>>> =
+    suspend fun loadClaudeSuperEmployeeMessages(limit: Int = 80): Result<List<ChatMsg>> =
         try {
             syncRouterFromStore()
             preferCloudIfLanUnreachable()
@@ -1423,7 +1424,7 @@ class XcagiRepository @Inject constructor(
                         }.orEmpty()
                         markConversationActivity(PinnedIds.CLAUDE, latestTs, preview)
                     }
-                Result.success(codexMessagesToPairs(rawMessages))
+                Result.success(codexMessagesToChatMsgs(rawMessages))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -1551,7 +1552,7 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    private fun codexMessagesToPairs(raw: Any?): List<Pair<String, String>> =
+    private fun codexMessagesToChatMsgs(raw: Any?): List<ChatMsg> =
         codexMessageRows(raw).mapNotNull { row ->
             val role = row["role"]?.toString()?.trim()?.lowercase().orEmpty()
             val text = row["body"]?.toString()?.trim().orEmpty()
@@ -1562,7 +1563,11 @@ class XcagiRepository @Inject constructor(
             ) {
                 null
             } else {
-                role to text
+                ChatMsg(
+                    role = role,
+                    text = text,
+                    ts = ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"]) ?: 0L,
+                )
             }
         }
 
@@ -1667,11 +1672,17 @@ class XcagiRepository @Inject constructor(
         streamChat(message, conversationId, sessionId, onToken, onDone, onError)
     }
 
-    suspend fun loadCachedChat(sessionId: String = "default"): List<Pair<String, String>> =
-        db.chatDao().getBySession(sessionId).map { it.role to it.text }
+    suspend fun loadCachedChat(sessionId: String = "default"): List<ChatMsg> =
+        db.chatDao().getBySession(sessionId).map { ChatMsg(it.role, it.text, it.ts) }
 
-    fun observeCachedChat(sessionId: String = "default"): Flow<List<Pair<String, String>>> =
-        db.chatDao().observeBySession(sessionId).map { rows -> rows.map { it.role to it.text } }
+    fun observeCachedChat(sessionId: String = "default"): Flow<List<ChatMsg>> =
+        db.chatDao().observeBySession(sessionId).map { rows -> rows.map { ChatMsg(it.role, it.text, it.ts) } }
+
+    /** 删除某会话里指定时间戳的缓存消息（长按「删除」用；ts 由 cacheChatMessage 写入，足够唯一）。 */
+    suspend fun deleteCachedChatMessage(sessionId: String, ts: Long) {
+        if (ts <= 0L) return
+        db.chatDao().deleteByTs(sessionId, ts)
+    }
 
     fun observeConversationListTimestamps(): Flow<Map<String, Long>> =
         db.conversationListStateDao().observeAll().map { rows ->
@@ -2156,6 +2167,9 @@ class XcagiRepository @Inject constructor(
 
     fun observeImMessages(conversationId: Int): Flow<List<ImMessageCacheEntity>> =
         imRepo.observeMessages(conversationId)
+
+    suspend fun imDeleteMessage(conversationId: Int, messageId: Long) =
+        imRepo.removeMessage(conversationId, messageId)
 
     suspend fun seedImMessages(conversationId: Int): Result<Unit> = try {
         syncRouterFromStore()

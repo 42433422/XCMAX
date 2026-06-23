@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.core.db.ImMessageCacheEntity
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageActionMenu
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockButton
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
@@ -150,7 +151,13 @@ fun ImMessengerScreen(
                     item { EmptyConversationHint() }
                 }
                 items(messages, key = { it.message_id }) { message ->
-                    ImMessageBubble(message)
+                    ImMessageBubble(
+                        message = message,
+                        onReply = { draft = "引用「" + message.body.take(60) + "」\n" + draft },
+                        onDelete = {
+                            conversationId?.let { vm.deleteImMessage(it, message.message_id) }
+                        },
+                    )
                 }
             }
 
@@ -215,30 +222,38 @@ private fun EmptyConversationHint() {
 }
 
 @Composable
-private fun ImMessageBubble(message: ImMessageCacheEntity) {
+private fun ImMessageBubble(
+    message: ImMessageCacheEntity,
+    onReply: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+) {
     val mine = message.sender_user_id <= 0
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = if (mine) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.fillMaxWidth(0.78f),
-        ) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
-                Text(
-                    "用户 ${message.sender_user_id}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (mine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    message.body,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                )
+        MessageActionMenu(text = message.body, onReply = onReply, onDelete = onDelete) { longPress ->
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (mine) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth(0.78f)
+                    .then(longPress),
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                    Text(
+                        "用户 ${message.sender_user_id}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (mine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.outline,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        message.body,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
     }
