@@ -160,6 +160,33 @@ class EmployeeAgent:
         return new_cfg
 
     @staticmethod
+    def _augment_config_with_persona(config: dict[str, Any], user_id: int) -> dict[str, Any]:
+        """按 SSOT(小C+平台员工共享 Persona)给员工 system_prompt 附加用户人格风格段。
+
+        只取「怎么说话」(四轴风格),保留员工自身岗位身份。fail-safe:无风格则原样返回。
+        """
+        from app.application.persona_style_inject import persona_style_for_user
+
+        style = persona_style_for_user(user_id)
+        if not style:
+            return config
+        import copy
+
+        new_cfg = copy.deepcopy(config)
+        cog = new_cfg.get("cognition")
+        if not isinstance(cog, dict):
+            cog = {}
+            new_cfg["cognition"] = cog
+        agent = cog.get("agent")
+        if not isinstance(agent, dict):
+            agent = {}
+            cog["agent"] = agent
+        base = str(agent.get("system_prompt") or "")
+        suffix = "对当前用户的沟通风格：" + style
+        agent["system_prompt"] = (base + "\n\n" + suffix) if base else suffix
+        return new_cfg
+
+    @staticmethod
     def _summarize(result: dict[str, Any]) -> str:
         outputs = result.get("outputs") if isinstance(result, dict) else None
         if not isinstance(outputs, list):
@@ -229,6 +256,7 @@ class EmployeeAgent:
             memory_mgr = EmployeeMemoryManager(scope)
             mem_ctx = memory_mgr.recall(task, user_id=user_id, session_id=session_id)
             config = self._augment_config_with_memory(config, mem_ctx)
+            config = self._augment_config_with_persona(config, user_id)
 
             build_employee_context(employee_id, payload)
             perceived = self._perceive(config, payload)
