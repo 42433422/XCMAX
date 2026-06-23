@@ -133,6 +133,23 @@ export interface ConversationSummary {
   employeeKey: string;
 }
 
+// 联系人固定区条目（后端 /contacts/fixed 派生：assistant/dedicated_cs/super）
+export interface FixedContactDto {
+  id: string;
+  kind: string;
+  name: string;
+  summary: string;
+  avatar: string;
+  route: string;
+  backend: string;
+}
+
+export interface MobileFixedContactsData {
+  side: string;
+  top: FixedContactDto[];
+  bottom: FixedContactDto[];
+}
+
 export interface AiEmployeeProfile {
   key: string;
   modId: string;
