@@ -1,9 +1,11 @@
 package com.xiuci.xcagi.mobile.navigation
 
+import com.xiuci.xcagi.mobile.model.ChatMsg
+
 /** 从超级员工助手消息中解析仍可操作（未合并/未丢弃）的开发任务分支。 */
 private val SUPER_EMPLOYEE_BRANCH_RE = Regex("(super-employee/[\\w./-]+)")
 
-fun resolveActiveGitBranches(messages: List<Pair<String, String>>): List<String> {
+private fun resolveActiveGitBranchesFromRows(messages: Iterable<Pair<String, String>>): List<String> {
     val active = LinkedHashSet<String>()
     for ((role, text) in messages) {
         if (role != "assistant") continue
@@ -24,8 +26,17 @@ fun resolveActiveGitBranches(messages: List<Pair<String, String>>): List<String>
     return active.toList()
 }
 
-fun resolveLatestGitBranch(messages: List<Pair<String, String>>): String? =
+fun resolveActiveGitBranches(messages: List<ChatMsg>): List<String> =
+    resolveActiveGitBranchesFromRows(messages.map { it.role to it.text })
+
+fun resolveActiveGitBranchesFromPairs(messages: List<Pair<String, String>>): List<String> =
+    resolveActiveGitBranchesFromRows(messages)
+
+fun resolveLatestGitBranch(messages: List<ChatMsg>): String? =
     resolveActiveGitBranches(messages).lastOrNull()
+
+fun resolveLatestGitBranchFromPairs(messages: List<Pair<String, String>>): String? =
+    resolveActiveGitBranchesFromPairs(messages).lastOrNull()
 
 fun shortGitBranchLabel(branch: String): String =
     branch.substringAfterLast('/').ifBlank { branch }

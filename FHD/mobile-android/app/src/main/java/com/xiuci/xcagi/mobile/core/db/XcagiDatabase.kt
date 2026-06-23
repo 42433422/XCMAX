@@ -57,6 +57,9 @@ interface ChatCacheDao {
 
     @Query("DELETE FROM chat_cache WHERE session_id = :sessionId")
     suspend fun clearSession(sessionId: String)
+
+    @Query("DELETE FROM chat_cache WHERE session_id = :sessionId AND ts = :ts")
+    suspend fun deleteByTs(sessionId: String, ts: Long)
 }
 
 @Dao
@@ -156,6 +159,9 @@ interface ImMessageCacheDao {
 
     @Query("DELETE FROM im_message_cache WHERE conversation_id = :conversationId")
     suspend fun clearConversation(conversationId: Int)
+
+    @Query("DELETE FROM im_message_cache WHERE conversation_id = :conversationId AND message_id = :messageId")
+    suspend fun deleteOne(conversationId: Int, messageId: Long)
 
     @Query("DELETE FROM im_message_cache")
     suspend fun clearAll()
