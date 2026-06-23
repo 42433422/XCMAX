@@ -91,3 +91,53 @@ def test_no_hardcoded_xiaoc_in_mobile_routes():
     routes = _FHD / "app" / "fastapi_routes" / "mobile_api_extensions.py"
     text = routes.read_text(encoding="utf-8")
     assert "小C助理" not in text, "mobile_api_extensions.py 仍硬编码小C名，请改用 assistant_ssot"
+
+
+# ── 6. 桌面端/手机端 联系人组成矩阵 ──────────────────────────────────────
+
+
+def test_surface_composition_matrix():
+    """四格组成与用户定义的目标矩阵一致。"""
+    assert assistant_ssot.surface_composition("desktop", "enterprise") == [
+        "platform",
+        "super",
+        "dedicated_cs",
+    ]
+    assert assistant_ssot.surface_composition("desktop", "admin") == ["platform", "super"]
+    assert assistant_ssot.surface_composition("mobile", "enterprise") == [
+        "assistant",
+        "dedicated_cs",
+        "platform",
+        "super",
+    ]
+    assert assistant_ssot.surface_composition("mobile", "admin") == [
+        "assistant",
+        "platform",
+        "super",
+    ]
+
+
+def test_dedicated_cs_enterprise_only_invariant():
+    """专属客服只在企业端出现;管理端任何端都不得含它(它就是被指向的管理端)。"""
+    assert assistant_ssot.contact_kind_sides("dedicated_cs") == ("enterprise",)
+    for device in ("desktop", "mobile"):
+        assert "dedicated_cs" not in assistant_ssot.surface_composition(device, "admin")
+        assert "dedicated_cs" in assistant_ssot.surface_composition(device, "enterprise")
+
+
+def test_xiaoc_desktop_is_floating_not_in_message_list():
+    """小C是电脑端悬浮助手,不进消息页列表;但进手机端联系人。"""
+    assert "assistant" not in assistant_ssot.surface_composition("desktop", "enterprise")
+    assert "assistant" not in assistant_ssot.surface_composition("desktop", "admin")
+    assert "assistant" in assistant_ssot.surface_composition("mobile", "enterprise")
+    assert "assistant" in assistant_ssot.surface_composition("mobile", "admin")
+
+
+def test_platform_employees_differ_by_side():
+    """管理端平台员工(六线) ≠ 企业端平台员工(四层):来源声明必须不同。"""
+    admin_src = assistant_ssot.platform_source_for_side("admin")
+    ent_src = assistant_ssot.platform_source_for_side("enterprise")
+    assert admin_src and ent_src
+    assert admin_src.get("where") != ent_src.get("where")
+    assert "departments" in admin_src.get("where", "")
+    assert "enterprise_employees" in ent_src.get("where", "")

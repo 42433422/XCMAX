@@ -24,10 +24,20 @@
       "id": "platform",
       "rank": 3,
       "label": "平台员工",
-      "summary": "六线部门花名册内的岗位 AI 员工",
+      "summary": "平台员工按端分两套(0交集):管理端=六线部门;企业端=企业四层",
       "persona_shared": true,
       "can_call": [],
-      "source_of_record": "config/duty_roster.json"
+      "source_of_record": "config/duty_roster.json",
+      "source_by_side": {
+        "admin": {
+          "where": "config/duty_roster.json#departments (六线部门, ~54)",
+          "loader": "app.mod_sdk.duty_roster.all_planned_duty_employee_ids / employee_ssot.derive_admin_duty_roster"
+        },
+        "enterprise": {
+          "where": "config/duty_roster.json#enterprise_employees (企业四层 L1-L4, ~13)",
+          "loader": "app.mod_sdk.employee_ssot.load_enterprise_employees / derive_enterprise_org"
+        }
+      }
     }
   ],
   "assistants": {
@@ -44,6 +54,50 @@
         "fixed_identity_name": true,
         "identity_brief": "平台的老熟人，帮你处理杂事、指路、跨工具操作"
       }
+    }
+  },
+  "contact_kinds": {
+    "_doc": "桌面端/手机端联系人页里可出现的条目种类。surfaces 块按(端×设备)引用这些 id。",
+    "assistant": {
+      "label": "小C助理",
+      "ref": "assistants.xiaoc",
+      "is_employee_tier": true,
+      "tier": "assistant",
+      "backend": "智能对话(Persona引擎)"
+    },
+    "super": {
+      "label": "超级员工",
+      "is_employee_tier": true,
+      "tier": "super",
+      "backend": "claude/codex super_employee_service"
+    },
+    "platform": {
+      "label": "平台员工",
+      "is_employee_tier": true,
+      "tier": "platform",
+      "backend": "按端解析(见 tiers.platform.source_by_side)"
+    },
+    "dedicated_cs": {
+      "label": "专属客服",
+      "is_employee_tier": false,
+      "kind": "support_contact",
+      "points_to": "admin",
+      "sides": ["enterprise"],
+      "backend": "IM:enterprise-cs (im_app_service ENTERPRISE_DEDICATED_CS)",
+      "_doc": "企业端指向管理端的支持联系人;管理端自身无此条目(它就是被指向方)。≠小C助理(后者是AI智能对话)。"
+    }
+  },
+  "surfaces": {
+    "_doc": "各端联系人/会话固定区组成(有序)。platform 条目按端解析为不同员工集合。",
+    "desktop": {
+      "_doc": "电脑端消息页。小C是悬浮助手(FloatingChatAssistant),不进消息页列表,故 desktop 无 assistant 条目。",
+      "enterprise": ["platform", "super", "dedicated_cs"],
+      "admin": ["platform", "super"]
+    },
+    "mobile": {
+      "_doc": "手机端联系人/会话固定区。小C助理=智能对话入口,作为联系人出现。",
+      "enterprise": ["assistant", "dedicated_cs", "platform", "super"],
+      "admin": ["assistant", "platform", "super"]
     }
   }
 }

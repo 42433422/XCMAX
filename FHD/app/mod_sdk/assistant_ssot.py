@@ -42,6 +42,22 @@ _FALLBACK_DOC: dict[str, Any] = {
             "persona": {"shared_engine": True, "fixed_identity_name": True, "identity_brief": ""},
         }
     },
+    "contact_kinds": {
+        "assistant": {"label": "小C助理", "is_employee_tier": True, "tier": "assistant"},
+        "super": {"label": "超级员工", "is_employee_tier": True, "tier": "super"},
+        "platform": {"label": "平台员工", "is_employee_tier": True, "tier": "platform"},
+        "dedicated_cs": {"label": "专属客服", "is_employee_tier": False, "sides": ["enterprise"]},
+    },
+    "surfaces": {
+        "desktop": {
+            "enterprise": ["platform", "super", "dedicated_cs"],
+            "admin": ["platform", "super"],
+        },
+        "mobile": {
+            "enterprise": ["assistant", "dedicated_cs", "platform", "super"],
+            "admin": ["assistant", "platform", "super"],
+        },
+    },
 }
 
 
@@ -139,6 +155,60 @@ def xiaoc_consult_title() -> str:
     return f"{xiaoc_display_name()}{entity.get('consult_title_suffix') or '咨询'}"
 
 
+# ── 桌面端/手机端 联系人组成（surface SSOT）────────────────────────────
+
+_VALID_DEVICES = ("desktop", "mobile")
+_VALID_SIDES = ("enterprise", "admin")
+
+
+def contact_kinds() -> dict[str, Any]:
+    """联系人条目种类定义（assistant/super/platform/dedicated_cs ...）。"""
+    raw = load_ai_workforce_document().get("contact_kinds")
+    if not isinstance(raw, dict):
+        raw = _FALLBACK_DOC["contact_kinds"]
+    return {k: v for k, v in raw.items() if not str(k).startswith("_")}
+
+
+def surface_composition(device: str, side: str) -> list[str]:
+    """返回某(端 side × 设备 device)联系人固定区的有序条目种类。
+
+    device ∈ {desktop, mobile}；side ∈ {enterprise, admin}。
+    未知入参回退到兜底；过滤掉 contact_kinds 里不存在的条目。
+    """
+    dev = str(device or "").strip().lower()
+    sd = str(side or "").strip().lower()
+    surfaces = load_ai_workforce_document().get("surfaces")
+    if not isinstance(surfaces, dict) or dev not in surfaces:
+        surfaces = _FALLBACK_DOC["surfaces"]
+    device_block = surfaces.get(dev) if isinstance(surfaces.get(dev), dict) else {}
+    raw = device_block.get(sd)
+    if not isinstance(raw, list):
+        raw = (_FALLBACK_DOC["surfaces"].get(dev, {}) or {}).get(sd, [])
+    known = contact_kinds()
+    return [str(k) for k in raw if str(k) in known]
+
+
+def contact_kind_sides(kind: str) -> tuple[str, ...]:
+    """该条目种类允许出现的端；未声明 sides 视为两端都可。"""
+    meta = contact_kinds().get(str(kind or "").strip()) or {}
+    sides = meta.get("sides")
+    if isinstance(sides, list) and sides:
+        return tuple(str(s) for s in sides)
+    return _VALID_SIDES
+
+
+def platform_source_for_side(side: str) -> dict[str, Any]:
+    """平台员工在某端解析到的来源(管理端=六线/企业端=四层)。"""
+    sd = str(side or "").strip().lower()
+    for tier in assistant_tiers():
+        if tier.get("id") == "platform":
+            by_side = tier.get("source_by_side")
+            if isinstance(by_side, dict) and isinstance(by_side.get(sd), dict):
+                return by_side[sd]
+            break
+    return {}
+
+
 def persona_identity_for_assistant(assistant_id: str = "xiaoc") -> Any | None:
     """把助理身份桥接成 Persona ``PersonaIdentity``（人格引擎用其固定名字，不被行业名覆盖）。
 
@@ -171,4 +241,8 @@ __all__ = [
     "xiaoc_display_name",
     "xiaoc_consult_title",
     "persona_identity_for_assistant",
+    "contact_kinds",
+    "surface_composition",
+    "contact_kind_sides",
+    "platform_source_for_side",
 ]
