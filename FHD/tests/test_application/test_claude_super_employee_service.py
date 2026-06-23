@@ -13,10 +13,12 @@ from app.application.claude_super_employee_service import (
 
 
 def fake_claude_runner(reply: str, seen: list[list[str]] | None = None):
+    """CLI runner for Claude. Wraps reply in stream-json since CLAUDE_PROFILE.cli_stream_json=True."""
+
     def runner(cmd, **kwargs):
         seen.append(list(cmd)) if seen is not None else None
-        # Claude CLI 走 print 模式，回答打到 stdout（不写 last-message 文件）。
-        return subprocess.CompletedProcess(cmd, 0, stdout=reply, stderr="")
+        stream_line = json.dumps({"type": "result", "result": reply})
+        return subprocess.CompletedProcess(cmd, 0, stdout=stream_line, stderr="")
 
     return runner
 
@@ -26,6 +28,7 @@ def test_claude_super_employee_invoke_writes_outbox_when_dispatch_not_configured
     monkeypatch,
 ):
     monkeypatch.setenv("XCMAX_CLAUDE_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
+    monkeypatch.setenv("XCMAX_CLAUDE_CLI_CHAT_ENABLED", "0")
     monkeypatch.delenv("XCMAX_CLAUDE_SUPER_EMPLOYEE_WEBHOOK", raising=False)
     monkeypatch.delenv("MODSTORE_PARA_DELEGATE_WEBHOOK", raising=False)
 
@@ -45,7 +48,7 @@ def test_claude_super_employee_invoke_writes_outbox_when_dispatch_not_configured
     assert result["employee"]["id"] == "claude-super-employee"
     assert result["employee"]["name"] == "超级员工-Claude"
     assert [m["role"] for m in result["messages"]] == ["user", "system"]
-    assert "软件内 Claude 调用队列" in result["assistant_message"]["body"]
+    assert result["assistant_message"]["body"] == "思考中..."
     assert result["assistant_message"]["kind"] == "dispatcher"
 
 
@@ -64,7 +67,7 @@ def test_claude_super_employee_answers_identity_without_dispatch(tmp_path: Path,
     result = svc.invoke(user_id=1, message="你是谁")
 
     assert result["dispatch"]["status"] == "completed"
-    assert result["dispatch"]["dispatcher"] == "claude_cli"
+    assert result["dispatch"]["dispatcher"] == "claude_code_cli"
     assert result["assistant_message"]["kind"] == CLAUDE_DIRECT_MESSAGE_KIND
     assert "真实接入" in result["assistant_message"]["body"]
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
@@ -100,7 +103,8 @@ def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, 
                             "devTool": "trae",
                             "isPrimary": False,
                             "tools": [
-                                {"toolName": "claude", "status": "idle", "currentTask": None},
+                                # CLAUDE_PROFILE.tool_name == "claude_code"
+                                {"toolName": "claude_code", "status": "idle", "currentTask": None},
                             ],
                         }
                     ]
@@ -115,8 +119,8 @@ def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, 
                         "id": "device-1",
                         "name": "Mac 工作设备",
                         "status": "online",
-                        "devTool": "claude",
-                        "tools": [{"toolName": "claude", "status": "idle"}],
+                        "devTool": "claude_code",
+                        "tools": [{"toolName": "claude_code", "status": "idle"}],
                     },
                 },
             )
@@ -168,11 +172,11 @@ def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, 
     assert dispatch["status"] == "accepted"
     assert dispatch["dispatcher"] == "para_api"
     assert dispatch["task_id"] == "task-1"
-    assert dispatch["devices"][0]["tool"] == "claude"
-    assert "排比 Para/Claude 多设备调度器" in result["assistant_message"]["body"]
+    assert dispatch["devices"][0]["tool"] == "claude_code"
+    assert result["assistant_message"]["body"] == "思考中..."
     assert any(
         item["role"] == "assistant" and "Claude 已完成修复并通过验证" in item["body"]
         for item in result["messages"]
     )
-    # 关键：设备被切换到 claude dev tool。
-    assert ("PUT", "/api/devices/device-1/dev-tool", {"devTool": "claude"}) in seen
+    # 关键：设备被切换到 claude_code dev tool。
+    assert ("PUT", "/api/devices/device-1/dev-tool", {"devTool": "claude_code"}) in seen

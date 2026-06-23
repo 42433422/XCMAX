@@ -2,6 +2,8 @@ package com.xiuci.xcagi.mobile.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,8 +30,17 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -49,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,9 +70,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.core.model.AiGroupDto
+import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDraft
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
@@ -68,6 +82,8 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
+import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDto
+import kotlin.math.ceil
 
 // ══════════════════════════════════════════
 //  AI 群聊列表（默认 6 部门群 + 自定义群）
@@ -82,6 +98,8 @@ fun AiGroupListScreen(
     val groups by vm.aiGroups.collectAsState()
     var showCreate by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var longPressGroup by remember { mutableStateOf<AiGroupDto?>(null) }
+    val haptics = rememberHaptics()
 
     LaunchedEffect(Unit) { vm.loadAiGroups() }
 
@@ -103,6 +121,68 @@ fun AiGroupListScreen(
                 }) { Text("创建") }
             },
             dismissButton = { TextButton(onClick = { showCreate = false }) { Text("取消") } },
+        )
+    }
+
+    longPressGroup?.let { g ->
+        AlertDialog(
+            onDismissRequest = { longPressGroup = null },
+            title = { Text(g.name.ifBlank { "群聊操作" }) },
+            text = {
+                Column {
+                    TextButton(
+                        onClick = {
+                            vm.markGroupUnread(g.id)
+                            longPressGroup = null
+                            haptics.tap()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("标为未读") }
+                    TextButton(
+                        onClick = {
+                            vm.toggleGroupPin(g.id)
+                            longPressGroup = null
+                            haptics.tap()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (g.is_pinned) "取消置顶" else "置顶聊天")
+                    }
+                    TextButton(
+                        onClick = {
+                            vm.toggleGroupFollowed(g.id)
+                            longPressGroup = null
+                            haptics.tap()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (g.is_followed) "不再关注" else "恢复关注")
+                    }
+                    TextButton(
+                        onClick = {
+                            vm.toggleGroupHidden(g.id)
+                            longPressGroup = null
+                            haptics.tap()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (g.is_hidden) "显示该聊天" else "不显示该聊天")
+                    }
+                    TextButton(
+                        onClick = {
+                            vm.deleteGroup(g.id)
+                            longPressGroup = null
+                            haptics.tap()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("删除该聊天", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { longPressGroup = null }) { Text("关闭") }
+            },
         )
     }
 
@@ -131,60 +211,160 @@ fun AiGroupListScreen(
             state = rememberLazyListState(),
         ) {
             itemsIndexed(groups, key = { _, g -> g.id }) { idx, group ->
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth().clickable { onOpenGroup(group) },
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        GroupAvatar()
-                        Spacer(Modifier.width(Spacing.md))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                group.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                group.last_message_preview.ifBlank {
-                                    if (group.member_count == 0) "还没有成员，进群把 AI 拉进来"
-                                    else "${group.member_count} 个 AI 成员"
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
-                        }
-                        if (group.member_count > 0) {
-                            Text(
-                                "${group.member_count}人",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
+                GroupConversationRow(
+                    group = group,
+                    onClick = { onOpenGroup(group) },
+                    onLongClick = { haptics.confirm(); longPressGroup = group },
+                )
                 if (idx < groups.lastIndex) {
-                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 68.dp))
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 80.dp))
                 }
             }
         }
     }
 }
 
+/** 微信式九宫格群头像：把成员头像拼成网格（最多 9 个），空群显示占位图标。 */
 @Composable
-private fun GroupAvatar() {
+internal fun GroupGridAvatar(members: List<AiGroupMemberDto>, size: androidx.compose.ui.unit.Dp) {
+    val shown = members.take(9)
+    val n = shown.size
     Box(
-        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(10.dp))
-            .background(XcagiTheme.extra.brandBlue.copy(alpha = 0.12f)),
+        modifier = Modifier.size(size).clip(RoundedCornerShape(10.dp)).background(XcagiTheme.extra.n200),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Default.Group, contentDescription = null, tint = XcagiTheme.extra.brandBlue, modifier = Modifier.size(26.dp))
+        if (n == 0) {
+            Icon(
+                Icons.Default.Group,
+                contentDescription = null,
+                tint = XcagiTheme.extra.n400,
+                modifier = Modifier.size(size * 0.52f),
+            )
+        } else {
+            val cols = if (n == 1) 1 else if (n <= 4) 2 else 3
+            val rows = ceil(n / cols.toFloat()).toInt()
+            val gap = 1.5.dp
+            val cell = (size - gap * (cols + 1)) / cols
+            Column(
+                Modifier.padding(gap),
+                verticalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                for (r in 0 until rows) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        for (c in 0 until cols) {
+                            val idx = r * cols + c
+                            if (idx < n) {
+                                AppAvatar(
+                                    imageSource = shown[idx].avatar.ifBlank { null },
+                                    fallback = AppAvatarFallback.AI_EMPLOYEE,
+                                    size = cell,
+                                    shape = RoundedCornerShape(3.dp),
+                                )
+                            } else {
+                                Spacer(Modifier.size(cell))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 群聊在「消息页」/群列表里的一行（九宫格头像 + 名字 + 预览）。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun GroupConversationRow(
+    group: AiGroupDto,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+) {
+    val dimmed = group.is_hidden || !group.is_followed
+    Surface(
+        color = if (group.is_pinned) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth().then(
+            if (onLongClick != null)
+                Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            else
+                Modifier.clickable(onClick = onClick)
+        ),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GroupGridAvatar(group.members, 52.dp)
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (group.is_pinned) {
+                        Icon(
+                            imageVector = Icons.Outlined.PushPin,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(
+                        group.name,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                        fontWeight = FontWeight.Medium,
+                        color = if (group.is_hidden) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f) else if (!group.is_followed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (group.member_count > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "(${group.member_count})",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    group.last_message_preview.ifBlank {
+                        if (group.member_count == 0) "还没有成员，进群把 AI 拉进来"
+                        else "${group.member_count} 个 AI 成员在群里"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                if (group.unread_count > 0) {
+                    Text(
+                        text = if (group.unread_count > 99) "99+" else group.unread_count.toString(),
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.error, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                    )
+                } else {
+                    Text(
+                        group.last_message_at.ifBlank { "" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
+                if (!group.is_followed && group.unread_count == 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "不再关注",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        fontSize = 10.sp,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -209,6 +389,26 @@ fun AiGroupChatScreen(
     val haptics = rememberHaptics()
     val g = group
 
+    // 系统语音输入（与主聊天一致：小米等系统语音引擎弹 UI 回写）。
+    val speechLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+                if (text.isNotBlank()) input = if (input.isBlank()) text else "$input $text"
+            }
+        }
+    fun startGroupVoice() {
+        runCatching {
+            speechLauncher.launch(
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话…")
+                },
+            )
+        }
+    }
+
     LaunchedEffect(messages.size, sending) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
@@ -231,10 +431,24 @@ fun AiGroupChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(g?.name ?: "群聊", fontWeight = FontWeight.Medium, fontSize = 17.sp, maxLines = 1)
-                        if ((g?.member_count ?: 0) > 0) {
-                            Text("${g?.member_count} 个 AI 成员", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        GroupGridAvatar(g?.members.orEmpty(), 36.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                g?.name ?: "群聊",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 17.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            if ((g?.member_count ?: 0) > 0) {
+                                Text(
+                                    "${g?.member_count} 个 AI 成员",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 },
@@ -257,6 +471,7 @@ fun AiGroupChatScreen(
                 value = input,
                 onValueChange = { input = it },
                 sending = sending,
+                onVoice = { startGroupVoice() },
                 onSend = {
                     if (g != null && input.isNotBlank()) {
                         haptics.confirm()
@@ -269,11 +484,24 @@ fun AiGroupChatScreen(
     ) { padding ->
         if (messages.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 40.dp)) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 40.dp).padding(bottom = 40.dp),
+                ) {
+                    GroupGridAvatar(g?.members.orEmpty(), 64.dp)
+                    Spacer(Modifier.height(Spacing.md))
                     Text(
-                        if ((g?.member_count ?: 0) == 0) "点右上角把 AI 员工拉进群，然后开聊" else "群里安静得很，发条消息试试",
-                        style = MaterialTheme.typography.bodyMedium,
+                        if ((g?.member_count ?: 0) == 0) "群里还没有 AI 成员" else "群里安静得很",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(
+                        if ((g?.member_count ?: 0) == 0) "点右上角把 AI 员工拉进群，然后开聊" else "发条消息，群成员会各自回复你",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
@@ -354,10 +582,36 @@ private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
 
 @Composable
 private fun GroupTypingRow() {
-    Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(XcagiTheme.extra.n200),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Group, contentDescription = null, tint = XcagiTheme.extra.n400, modifier = Modifier.size(22.dp))
+        }
         Spacer(Modifier.width(8.dp))
-        Text("AI 成员正在回复…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Surface(
+            shape = RoundedCornerShape(topStart = 4.dp, topEnd = 12.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 1.dp,
+            tonalElevation = 0.5.dp,
+        ) {
+            Row(
+                Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "AI 成员正在回复…",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -366,8 +620,10 @@ private fun GroupInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     sending: Boolean,
+    onVoice: () -> Unit,
     onSend: () -> Unit,
 ) {
+    val canSend = value.isNotBlank() && !sending
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Column {
             HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -376,15 +632,26 @@ private fun GroupInputBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onVoice),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = "语音",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.background,
                     modifier = Modifier.weight(1f).height(40.dp),
                 ) {
                     BasicTextField(
                         value = value,
                         onValueChange = onValueChange,
-                        modifier = Modifier.padding(horizontal = 12.dp).fillMaxSize(),
+                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxSize(),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
                         cursorBrush = SolidColor(XcagiTheme.extra.weChatOnline),
@@ -398,19 +665,18 @@ private fun GroupInputBar(
                         },
                     )
                 }
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = if (value.isBlank() || sending) MaterialTheme.colorScheme.surfaceVariant else XcagiTheme.extra.weChatOnline,
-                    modifier = Modifier.size(40.dp).clickable(enabled = value.isNotBlank() && !sending, onClick = onSend),
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape)
+                        .background(if (canSend) XcagiTheme.extra.weChatOnline else MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(enabled = canSend, onClick = onSend),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "发送",
-                            tint = if (value.isBlank() || sending) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "发送",
+                        tint = if (canSend) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(19.dp),
+                    )
                 }
             }
         }
@@ -476,6 +742,103 @@ private fun GroupMembersSheet(
                             }
                             Icon(Icons.Default.Add, contentDescription = "添加", tint = XcagiTheme.extra.brandBlue, modifier = Modifier.size(22.dp))
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ══════════════════════════════════════════
+//  微信式发起群聊：多选 AI 员工 → 一次建群
+// ══════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AiGroupCreateScreen(
+    vm: AppViewModel,
+    onBack: () -> Unit,
+    onCreated: () -> Unit,
+) {
+    val modInfos by vm.modInfos.collectAsState()
+    val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
+    val selectedKeys = remember { mutableStateListOf<String>() }
+    var name by remember { mutableStateOf("") }
+    var creating by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { vm.refreshModInfos() }
+    val picked = remember(selectedKeys.toList(), employees) { employees.filter { it.key in selectedKeys } }
+    val autoName = remember(picked) { picked.joinToString("、") { it.name }.take(40) }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("发起群聊", fontWeight = FontWeight.SemiBold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        enabled = selectedKeys.isNotEmpty() && !creating,
+                        onClick = {
+                            creating = true
+                            val drafts = picked.map {
+                                AiGroupMemberDraft(it.employeeId, it.modId, it.name, it.avatarUrl.orEmpty(), it.summary)
+                            }
+                            val finalName = name.ifBlank { autoName }.ifBlank { "新建群聊" }
+                            vm.createGroupWithMembers(finalName, drafts) { g ->
+                                creating = false
+                                if (g != null) onCreated()
+                            }
+                        },
+                    ) { Text(if (selectedKeys.isEmpty()) "完成" else "完成(${selectedKeys.size})") }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                windowInsets = WindowInsets(0.dp),
+            )
+        },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                placeholder = { Text(autoName.ifBlank { "群名称（可留空，自动命名）" }, maxLines = 1) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            )
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            if (employees.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "暂无可选 AI 员工，先在「AI员工」里同步",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    itemsIndexed(employees, key = { _, e -> e.key }) { _, e ->
+                        val checked = e.key in selectedKeys
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clickable { if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key) }
+                                .padding(horizontal = Spacing.md, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key) },
+                            )
+                            Spacer(Modifier.width(Spacing.sm))
+                            AppAvatar(imageSource = e.avatarUrl, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 40.dp, shape = RoundedCornerShape(8.dp))
+                            Spacer(Modifier.width(Spacing.md))
+                            Column(Modifier.weight(1f)) {
+                                Text(e.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                                Text(e.summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                        }
+                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 84.dp))
                     }
                 }
             }

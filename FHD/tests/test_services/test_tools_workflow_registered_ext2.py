@@ -100,18 +100,14 @@ class TestCustomersRouterMissingBranches:
         svc = self._mock_svc()
         svc.batch_delete.return_value = {"success": True, "deleted": 2}
         with patch("app.application.get_customer_app_service", return_value=svc):
-            result = _registered_router_customers(
-                "batch_delete", {"ids": [1, 2]}, {}, "admin", ""
-            )
+            result = _registered_router_customers("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
         assert result["success"] is True
 
     def test_batch_delete_uses_customer_ids_alias(self):
         svc = self._mock_svc()
         svc.batch_delete.return_value = {"success": True}
         with patch("app.application.get_customer_app_service", return_value=svc):
-            _registered_router_customers(
-                "batch_delete", {"customer_ids": [4, 5]}, {}, "admin", ""
-            )
+            _registered_router_customers("batch_delete", {"customer_ids": [4, 5]}, {}, "admin", "")
         svc.batch_delete.assert_called_once_with([4, 5], force=False)
 
     def test_batch_delete_empty_list(self):
@@ -145,9 +141,7 @@ class TestCustomersRouterMissingBranches:
         svc = self._mock_svc()
         svc.batch_delete.return_value = {"success": True}
         with patch("app.application.get_customer_app_service", return_value=svc):
-            _registered_router_customers(
-                "batch_delete", {"ids": [1]}, {"force": True}, "admin", ""
-            )
+            _registered_router_customers("batch_delete", {"ids": [1]}, {"force": True}, "admin", "")
         svc.batch_delete.assert_called_once()
 
     def test_unknown_action(self):
@@ -273,9 +267,7 @@ class TestProductsRouterMissingBranches:
         svc = self._svc()
         svc.batch_delete_products.return_value = {"success": True}
         with patch("app.services.get_products_service", return_value=svc):
-            result = _registered_router_products(
-                "batch_delete", {"ids": [1, 2]}, {}, "admin", ""
-            )
+            result = _registered_router_products("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
         assert result["success"] is True
 
     def test_batch_delete_products_fallback_to_batch_delete(self):
@@ -283,9 +275,7 @@ class TestProductsRouterMissingBranches:
         del svc.batch_delete_products  # ensure not callable via getattr
         svc.batch_delete = MagicMock(return_value={"success": True})
         with patch("app.services.get_products_service", return_value=svc):
-            result = _registered_router_products(
-                "batch_delete", {"ids": [3]}, {}, "admin", ""
-            )
+            result = _registered_router_products("batch_delete", {"ids": [3]}, {}, "admin", "")
         assert result["success"] is True
 
     def test_batch_delete_products_empty(self):
@@ -313,9 +303,7 @@ class TestProductsRouterMissingBranches:
         svc = self._svc()
         svc.batch_delete_products.return_value = {"success": True}
         with patch("app.services.get_products_service", return_value=svc):
-            _registered_router_products(
-                "batch_delete", {"product_ids": [5]}, {}, "admin", ""
-            )
+            _registered_router_products("batch_delete", {"product_ids": [5]}, {}, "admin", "")
         svc.batch_delete_products.assert_called_once_with([5])
 
     # exists — product_name match path ------------------------------------
@@ -606,9 +594,7 @@ class TestInventoryRouterBranches:
     def test_create_storage_location(self):
         svc = self._svc()
         svc.create_storage_location.return_value = {"success": True}
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService", return_value=svc
-        ):
+        with patch("app.application.inventory_app_service.InventoryAppService", return_value=svc):
             result = _registered_router_inventory(
                 "create_storage_location", {"name": "A-01"}, {}, "admin", ""
             )
@@ -617,9 +603,7 @@ class TestInventoryRouterBranches:
     def test_update_storage_location(self):
         svc = self._svc()
         svc.update_storage_location.return_value = {"success": True}
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService", return_value=svc
-        ):
+        with patch("app.application.inventory_app_service.InventoryAppService", return_value=svc):
             result = _registered_router_inventory(
                 "update_storage_location", {"location_id": 1, "name": "B"}, {}, "admin", ""
             )
@@ -628,9 +612,7 @@ class TestInventoryRouterBranches:
     def test_create_warehouse(self):
         svc = self._svc()
         svc.create_warehouse.return_value = {"success": True}
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService", return_value=svc
-        ):
+        with patch("app.application.inventory_app_service.InventoryAppService", return_value=svc):
             result = _registered_router_inventory(
                 "create_warehouse", {"name": "WH-1"}, {}, "admin", ""
             )
@@ -639,9 +621,7 @@ class TestInventoryRouterBranches:
     def test_update_warehouse(self):
         svc = self._svc()
         svc.update_warehouse.return_value = {"success": True}
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService", return_value=svc
-        ):
+        with patch("app.application.inventory_app_service.InventoryAppService", return_value=svc):
             result = _registered_router_inventory(
                 "update_warehouse", {"warehouse_id": 2, "name": "WH-2"}, {}, "admin", ""
             )
@@ -650,9 +630,7 @@ class TestInventoryRouterBranches:
     def test_delete_warehouse(self):
         svc = self._svc()
         svc.delete_warehouse.return_value = {"success": True}
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService", return_value=svc
-        ):
+        with patch("app.application.inventory_app_service.InventoryAppService", return_value=svc):
             result = _registered_router_inventory(
                 "delete_warehouse", {"warehouse_id": 2}, {}, "admin", ""
             )
@@ -661,9 +639,7 @@ class TestInventoryRouterBranches:
     def test_stock_in(self):
         svc = self._svc()
         svc.inventory_in.return_value = {"success": True}
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService", return_value=svc
-        ):
+        with patch("app.application.inventory_app_service.InventoryAppService", return_value=svc):
             result = _registered_router_inventory(
                 "stock_in", {"product_id": 1, "quantity": 10}, {}, "admin", ""
             )
@@ -672,9 +648,7 @@ class TestInventoryRouterBranches:
     def test_stock_out(self):
         svc = self._svc()
         svc.inventory_out.return_value = {"success": True}
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService", return_value=svc
-        ):
+        with patch("app.application.inventory_app_service.InventoryAppService", return_value=svc):
             result = _registered_router_inventory(
                 "stock_out", {"product_id": 1, "quantity": 5}, {}, "admin", ""
             )
@@ -683,9 +657,7 @@ class TestInventoryRouterBranches:
     def test_transfer(self):
         svc = self._svc()
         svc.inventory_transfer.return_value = {"success": True}
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService", return_value=svc
-        ):
+        with patch("app.application.inventory_app_service.InventoryAppService", return_value=svc):
             result = _registered_router_inventory(
                 "transfer",
                 {"product_id": 1, "from_warehouse_id": 1, "to_warehouse_id": 2, "quantity": 3},
@@ -715,9 +687,7 @@ class TestPurchaseRouterBranches:
     def test_create_supplier(self):
         svc = self._svc()
         svc.create_supplier.return_value = {"success": True}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService", return_value=svc
-        ):
+        with patch("app.application.facades.inventory_facade.PurchaseService", return_value=svc):
             result = _registered_router_purchase(
                 "create_supplier", {"name": "VendorA"}, {}, "admin", ""
             )
@@ -726,9 +696,7 @@ class TestPurchaseRouterBranches:
     def test_update_supplier(self):
         svc = self._svc()
         svc.update_supplier.return_value = {"success": True}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService", return_value=svc
-        ):
+        with patch("app.application.facades.inventory_facade.PurchaseService", return_value=svc):
             result = _registered_router_purchase(
                 "update_supplier", {"supplier_id": 1, "name": "V"}, {}, "admin", ""
             )
@@ -737,9 +705,7 @@ class TestPurchaseRouterBranches:
     def test_delete_supplier(self):
         svc = self._svc()
         svc.delete_supplier.return_value = {"success": True}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService", return_value=svc
-        ):
+        with patch("app.application.facades.inventory_facade.PurchaseService", return_value=svc):
             result = _registered_router_purchase(
                 "delete_supplier", {"supplier_id": 2}, {}, "admin", ""
             )
@@ -748,9 +714,7 @@ class TestPurchaseRouterBranches:
     def test_create_order(self):
         svc = self._svc()
         svc.create_purchase_order.return_value = {"success": True}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService", return_value=svc
-        ):
+        with patch("app.application.facades.inventory_facade.PurchaseService", return_value=svc):
             result = _registered_router_purchase(
                 "create_order", {"supplier_id": 1}, {}, "admin", ""
             )
@@ -759,9 +723,7 @@ class TestPurchaseRouterBranches:
     def test_update_order(self):
         svc = self._svc()
         svc.update_purchase_order.return_value = {"success": True}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService", return_value=svc
-        ):
+        with patch("app.application.facades.inventory_facade.PurchaseService", return_value=svc):
             result = _registered_router_purchase(
                 "update_order", {"order_id": 3, "status": "confirmed"}, {}, "admin", ""
             )
@@ -770,9 +732,7 @@ class TestPurchaseRouterBranches:
     def test_approve_order(self):
         svc = self._svc()
         svc.approve_purchase_order.return_value = {"success": True}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService", return_value=svc
-        ):
+        with patch("app.application.facades.inventory_facade.PurchaseService", return_value=svc):
             result = _registered_router_purchase(
                 "approve_order", {"order_id": 3, "approver": "boss"}, {}, "admin", ""
             )
@@ -781,21 +741,15 @@ class TestPurchaseRouterBranches:
     def test_cancel_order(self):
         svc = self._svc()
         svc.cancel_purchase_order.return_value = {"success": True}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService", return_value=svc
-        ):
+        with patch("app.application.facades.inventory_facade.PurchaseService", return_value=svc):
             result = _registered_router_purchase("cancel_order", {"order_id": 3}, {}, "admin", "")
         assert result["success"] is True
 
     def test_create_inbound(self):
         svc = self._svc()
         svc.create_purchase_inbound.return_value = {"success": True}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService", return_value=svc
-        ):
-            result = _registered_router_purchase(
-                "create_inbound", {"order_id": 3}, {}, "admin", ""
-            )
+        with patch("app.application.facades.inventory_facade.PurchaseService", return_value=svc):
+            result = _registered_router_purchase("create_inbound", {"order_id": 3}, {}, "admin", "")
         assert result["success"] is True
 
     def test_unknown_action(self):
@@ -839,9 +793,7 @@ class TestMaterialsRouterBranches:
         svc = MagicMock()
         svc.batch_delete_materials.side_effect = RuntimeError("db error")
         with patch("app.application.get_material_application_service", return_value=svc):
-            result = _registered_router_materials(
-                "batch_delete", {"ids": [1]}, {}, "admin", ""
-            )
+            result = _registered_router_materials("batch_delete", {"ids": [1]}, {}, "admin", "")
         assert result["success"] is True
         assert "db error" in result["warning"]
 
@@ -849,8 +801,6 @@ class TestMaterialsRouterBranches:
         svc = MagicMock()
         svc.batch_delete_materials.return_value = None
         with patch("app.application.get_material_application_service", return_value=svc):
-            result = _registered_router_materials(
-                "batch_delete", {"ids": [1, 2]}, {}, "admin", ""
-            )
+            result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
         assert result["success"] is True
         assert result["deleted_count"] == 2

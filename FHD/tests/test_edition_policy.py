@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+import app.mod_sdk.edition_bootstrap  # force real module load before stub injection in other test files
 from app.mod_sdk.edition_policy import (
     configure_edition_defaults,
     resolve_edition,

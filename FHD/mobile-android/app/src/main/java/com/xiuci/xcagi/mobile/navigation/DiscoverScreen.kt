@@ -97,19 +97,10 @@ fun DiscoverScreen(
                         iconTint = XcagiTheme.extra.brandBlue,
                         iconBg = MaterialTheme.colorScheme.primaryContainer,
                         showArrow = true,
-                        showDivider = true,
+                        showDivider = false,
                         onClick = onAiCircle,
                     )
-                    WeCell(
-                        title = "AI群聊",
-                        subtitle = "6 个部门群，可把多个 AI 拉进一个群一起聊",
-                        icon = Icons.Default.Group,
-                        iconTint = XcagiTheme.extra.brandBlue,
-                        iconBg = MaterialTheme.colorScheme.primaryContainer,
-                        showArrow = true,
-                        showDivider = false,
-                        onClick = { onNavigate(Routes.AI_GROUPS) },
-                    )
+                    // AI群聊 已学微信移到「消息」页（6 个部门群直接出现在会话列表），此处不再单列。
                 }
             }
 

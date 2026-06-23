@@ -70,9 +70,7 @@ def _persist_event_log(event: NeuroEvent, *, side_effect: str = "") -> int | Non
             )
             return int(row.id)
     except RECOVERABLE_ERRORS as exc:  # 总线层已隔离，这里只保证不静默丢可观测性
-        logger.warning(
-            "[ApplicationConsumers] 持久化事件失败 type=%s: %s", event.event_type, exc
-        )
+        logger.warning("[ApplicationConsumers] 持久化事件失败 type=%s: %s", event.event_type, exc)
         return None
 
 

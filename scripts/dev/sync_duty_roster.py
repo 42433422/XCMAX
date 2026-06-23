@@ -39,6 +39,8 @@ TARGETS = {
     "frontend": FHD / "frontend" / "src" / "domain" / "yuangonDutyRoster.ts",
     "catalog": FHD / "app" / "infrastructure" / "mods" / "catalog_visibility.py",
     "mobile": FHD / "mobile-harmony" / "entry" / "src" / "main" / "ets" / "models" / "MobileModels.ets",
+    # 企业端四层 + 员工层归属/上架状态（marker 区块；前端解析器优先查此表）
+    "enterprise": FHD / "frontend" / "src" / "constants" / "enterpriseWorkflowEstablishment.ts",
 }
 
 # CI SSOT 标识
@@ -453,6 +455,36 @@ def gen_mobile_areas_block(doc: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# ── 生成 enterpriseWorkflowEstablishment.ts 企业端块（marker 区块）─────────
+def gen_enterprise_block(doc: dict[str, Any]) -> str:
+    """生成企业端四层 ENTERPRISE_ORG_LAYERS + 员工 ENTERPRISE_EMPLOYEES 的 TS marker 块。"""
+    layers = doc.get("enterprise_layers") or []
+    emps = doc.get("enterprise_employees") or {}
+    lines = [
+        MARKER_BEGIN_TS,
+        "/** 企业端四层 + 员工层归属/上架状态（来自 config/duty_roster.json，勿手改）。 */",
+        "export const ENTERPRISE_ORG_LAYERS: readonly EnterpriseOrgLayer[] = [",
+    ]
+    for layer in layers:
+        lines.append(
+            f"  {{ id: {_ts_quote(layer.get('id',''))}, code: {_ts_quote(layer.get('code',''))}, "
+            f"label: {_ts_quote(layer.get('label',''))}, desc: {_ts_quote(layer.get('desc',''))}, "
+            f"color: {_ts_quote(layer.get('color',''))} }},"
+        )
+    lines.append("] as const")
+    lines.append("export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {")
+    for eid, meta in emps.items():
+        lines.append(
+            f"  {_ts_quote(eid)}: {{ id: {_ts_quote(eid)}, label: {_ts_quote(meta.get('label', eid))}, "
+            f"enterprise_layer: {_ts_quote(meta.get('enterprise_layer',''))}, "
+            f"listing: {_ts_quote(meta.get('listing',''))}, "
+            f"source: {_ts_quote(meta.get('source',''))}, mod_id: {_ts_quote(meta.get('mod_id',''))} }},"
+        )
+    lines.append("}")
+    lines.append(MARKER_END_TS)
+    return "\n".join(lines)
+
+
 # ── marker 区块替换工具 ──────────────────────────────────────────────────
 def replace_marker_block(content: str, begin_marker: str, end_marker: str, new_block: str) -> str:
     """替换文件中 marker 区块之间的内容。"""
@@ -479,6 +511,12 @@ def generate_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[
         path = TARGETS["mobile"]
         content = path.read_text(encoding="utf-8")
         new_block = gen_mobile_areas_block(doc)
+        return replace_marker_block(content, MARKER_BEGIN_TS, MARKER_END_TS, new_block)
+    if target == "enterprise":
+        # enterprise 用 marker 区块替换（保留手写解析器逻辑）
+        path = TARGETS["enterprise"]
+        content = path.read_text(encoding="utf-8")
+        new_block = gen_enterprise_block(doc)
         return replace_marker_block(content, MARKER_BEGIN_TS, MARKER_END_TS, new_block)
     raise ValueError(f"未知目标: {target}")
 

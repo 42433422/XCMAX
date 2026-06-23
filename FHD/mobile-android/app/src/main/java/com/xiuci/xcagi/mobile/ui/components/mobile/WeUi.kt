@@ -110,7 +110,7 @@ fun WeTopBarCircleAction(
             .size(32.dp)
             .clip(CircleShape)
             .border(Elevation.level1, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            .clickable(onClick = onClick),
+            .pressClickable(pressedScale = Press.ScaleStrong, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -132,7 +132,8 @@ fun WeTopBarAvatarAction(
     Box(
         modifier
             .size(32.dp)
-            .clickable(onClick = onClick),
+            .clip(CircleShape)
+            .pressClickable(pressedScale = Press.ScaleStrong, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         AppAvatar(
@@ -384,7 +385,7 @@ fun WeCell(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+                if (onClick != null) Modifier.pressClickable(onClick = onClick) else Modifier
             ),
     ) {
         Row(
@@ -939,13 +940,20 @@ fun WeAuthGreenButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
     Button(
-        onClick = onClick,
+        onClick = {
+            haptics.confirm()
+            onClick()
+        },
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.xxl)
+            .scaleOnPress(interactionSource)
             .height(48.dp),
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = MaterialTheme.shapes.small,
         colors = ButtonDefaults.buttonColors(
             containerColor = XcagiTheme.extra.brandBlue,
@@ -956,6 +964,7 @@ fun WeAuthGreenButton(
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = Elevation.none,
             disabledElevation = Elevation.none,
+            pressedElevation = Elevation.none,
         ),
     ) {
         Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
@@ -1042,13 +1051,20 @@ fun WeGreenButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
     Button(
-        onClick = onClick,
+        onClick = {
+            haptics.confirm()
+            onClick()
+        },
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.lg)
+            .scaleOnPress(interactionSource)
             .height(44.dp),
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = MaterialTheme.shapes.small,
         colors = ButtonDefaults.buttonColors(
             containerColor = XcagiTheme.extra.brandBlue,
@@ -1056,7 +1072,10 @@ fun WeGreenButton(
             disabledContainerColor = XcagiTheme.extra.brandBlue.copy(alpha = 0.4f),
             disabledContentColor = Color.White.copy(alpha = 0.7f),
         ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = Elevation.none),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = Elevation.none,
+            pressedElevation = Elevation.none,
+        ),
     ) {
         Text(text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
     }
@@ -1079,13 +1098,20 @@ fun WeBlockOutlinedButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
     OutlinedButton(
-        onClick = onClick,
+        onClick = {
+            haptics.tap()
+            onClick()
+        },
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.lg)
+            .scaleOnPress(interactionSource)
             .height(48.dp),
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = MaterialTheme.shapes.small,
     ) {
         Text(text, style = MaterialTheme.typography.bodyLarge)
@@ -1099,20 +1125,30 @@ fun WeBlockDangerButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
     Button(
-        onClick = onClick,
+        onClick = {
+            haptics.tap()
+            onClick()
+        },
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.lg)
+            .scaleOnPress(interactionSource)
             .height(48.dp),
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = MaterialTheme.shapes.small,
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = XcagiTheme.extra.danger,
         ),
         border = BorderStroke(1.dp, XcagiTheme.extra.danger),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = Elevation.none),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = Elevation.none,
+            pressedElevation = Elevation.none,
+        ),
     ) {
         Text(text, style = MaterialTheme.typography.bodyLarge)
     }
@@ -1210,7 +1246,7 @@ fun WeModeCapsule(
                 Surface(
                     modifier = Modifier
                         .clip(MaterialTheme.shapes.large)
-                        .clickable { onSelect(opt.id) },
+                        .pressClickable(pressedScale = Press.ScaleStrong) { onSelect(opt.id) },
                     color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                     tonalElevation = Elevation.none,
                     shadowElevation = Elevation.none,
@@ -1347,7 +1383,7 @@ private fun WeCircleAction(
             .size(36.dp)
             .clip(CircleShape)
             .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            .clickable(onClick = onClick),
+            .pressClickable(pressedScale = Press.ScaleStrong, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -1366,7 +1402,7 @@ private fun WeInputChip(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.pressClickable(pressedScale = Press.ScaleStrong, onClick = onClick),
         shape = MaterialTheme.shapes.large,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -1465,14 +1501,17 @@ fun WeBottomNavBar(
             ) {
                 items.forEach { item ->
                     val selected = currentRoute == item.route
+                    val itemInteraction = remember(item.route) { MutableInteractionSource() }
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight(),
+                            .fillMaxHeight()
+                            .scaleOnPress(itemInteraction, pressedScale = Press.ScaleStrong),
                         onClick = {
                             if (item.route != currentRoute) haptics.tap()
                             onSelect(item.route)
                         },
+                        interactionSource = itemInteraction,
                         shape = RoundedCornerShape(24.dp),
                         color = if (selected) XcagiTheme.extra.n50 else Color.Transparent,
                     ) {

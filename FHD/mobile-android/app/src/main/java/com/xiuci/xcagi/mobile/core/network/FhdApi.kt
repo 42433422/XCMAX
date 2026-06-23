@@ -377,6 +377,42 @@ interface FhdApi {
         @Path("employeeId") employeeId: String,
     ): MobileEnvelope<AiGroupWrap>
 
+    @PUT(ApiEndpoints.AI_GROUP_PIN)
+    suspend fun toggleAiGroupPin(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @POST(ApiEndpoints.AI_GROUP_MARK_UNREAD)
+    suspend fun markAiGroupUnread(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @POST(ApiEndpoints.AI_GROUP_MARK_READ)
+    suspend fun markAiGroupRead(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @PUT(ApiEndpoints.AI_GROUP_FOLLOWED)
+    suspend fun toggleAiGroupFollowed(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @PUT(ApiEndpoints.AI_GROUP_HIDDEN)
+    suspend fun toggleAiGroupHidden(@Path("groupId") groupId: String): MobileEnvelope<AiGroupWrap>
+
+    @DELETE(ApiEndpoints.AI_GROUP_DELETE)
+    suspend fun deleteAiGroup(@Path("groupId") groupId: String): MobileEnvelope<Map<String, Any>>
+
+    @PUT(ApiEndpoints.CONVERSATION_PIN)
+    suspend fun toggleConversationPin(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @POST(ApiEndpoints.CONVERSATION_MARK_UNREAD)
+    suspend fun markConversationUnread(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @POST(ApiEndpoints.CONVERSATION_MARK_READ)
+    suspend fun markConversationRead(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @PUT(ApiEndpoints.CONVERSATION_FOLLOWED)
+    suspend fun toggleConversationFollowed(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @PUT(ApiEndpoints.CONVERSATION_HIDDEN)
+    suspend fun toggleConversationHidden(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
+    @DELETE(ApiEndpoints.CONVERSATION_DELETE)
+    suspend fun deleteConversation(@Path("conversationId") conversationId: String): MobileEnvelope<Map<String, Any>>
+
     @GET(ApiEndpoints.WALLET_BALANCE)
     suspend fun mobileWalletBalance(): MobileEnvelope<WalletBalanceDto>
 }

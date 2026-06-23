@@ -54,9 +54,9 @@ jobs:
           ELECTRON_DISABLE_SECURITY_WARNINGS: "true"
         run: |
           npx electron --version
-          # 无显示器环境：短时启动后退出；124 = timeout 正常结束
+          # 无显示器环境：短时启动后退出；0=正常退出, 124=GNU timeout, 142=perl alarm(SIGALRM)
           perl -e 'alarm 25; exec @ARGV' npx electron . --no-sandbox || code=$?
-          if [ "${code:-0}" -eq 124 ] || [ "${code:-0}" -eq 0 ]; then
+          if [ "${code:-0}" -eq 0 ] || [ "${code:-0}" -eq 124 ] || [ "${code:-0}" -eq 142 ]; then
             echo "[smoke] electron . exited (code=${code:-0}) — OK for CI"
             exit 0
           fi

@@ -86,6 +86,10 @@ data class AiGroupDto(
     val department_key: String = "",
     val member_count: Int = 0,
     val members: List<AiGroupMemberDto> = emptyList(),
+    val is_pinned: Boolean = false,
+    val is_hidden: Boolean = false,
+    val is_followed: Boolean = true,
+    val unread_count: Int = 0,
     val last_message_preview: String = "",
     val last_message_at: String = "",
 )
@@ -107,6 +111,15 @@ data class AiGroupMessagesData(val messages: List<AiGroupMessageDto> = emptyList
 data class AiGroupPostData(
     val group: AiGroupDto? = null,
     val messages: List<AiGroupMessageDto> = emptyList(),
+)
+
+/** 建群多选时,从 AI 员工映射出的待加成员草稿(解耦 navigation 层模型)。 */
+data class AiGroupMemberDraft(
+    val employeeId: String,
+    val modId: String,
+    val name: String,
+    val avatar: String,
+    val summary: String,
 )
 
 data class AiGroupCreateBody(val name: String = "")

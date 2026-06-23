@@ -1,10 +1,10 @@
 {
-  "relay_id": "6e518f21ac594c0bab556dfc76010685",
-  "desktop_token": "fZUm8cDjlWcvgKOEYRjqP2b6PnVowDYDsflt521nPk8",
+  "relay_id": "57dd480f07f44228ad28f3ee069861fa",
+  "desktop_token": "VcxKbakNPqYsDzhiS4DxJGUohM2Wt9HJj_gR6MlccQg",
   "relay_base_url": "https://xiu-ci.com/fhd-api/",
-  "pairing_code": "411497",
-  "expires_at": "2026-06-22T17:21:58+00:00",
-  "exp": 1782148918,
-  "registered_at": 1782062518,
+  "pairing_code": "263903",
+  "expires_at": "2026-06-22T19:08:01+00:00",
+  "exp": 1782155281,
+  "registered_at": 1782068881,
   "label": "XCAGI 桌面执行端 - 4243342deMac-mini.local"
 }

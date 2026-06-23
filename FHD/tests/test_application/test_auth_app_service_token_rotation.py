@@ -82,6 +82,7 @@ class TestAuthenticateHappyPath:
         user.role = "user"
         user.is_active = True
         user.last_login = None
+        user.locked_until = None
         user.password = "hashed"
         user.mfa_enabled = False
         user.totp_secret = None

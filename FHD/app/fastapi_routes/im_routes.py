@@ -455,7 +455,9 @@ def admin_ai_groups_create(
     if denied is not None:
         return denied
     try:
-        group = AiGroupChatService().create_group(user_id=_uid(user), name=str(body.get("name") or ""))
+        group = AiGroupChatService().create_group(
+            user_id=_uid(user), name=str(body.get("name") or "")
+        )
         return {"success": True, "group": group}
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
@@ -475,7 +477,9 @@ def admin_ai_group_messages(
     if denied is not None:
         return denied
     try:
-        messages = AiGroupChatService().get_messages(user_id=_uid(user), group_id=group_id, limit=limit)
+        messages = AiGroupChatService().get_messages(
+            user_id=_uid(user), group_id=group_id, limit=limit
+        )
         return {"success": True, "messages": messages}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("admin_ai_group_messages")
