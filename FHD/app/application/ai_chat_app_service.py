@@ -1985,6 +1985,7 @@ class AIChatApplicationService:
             build_customers_query_response_dict,
             build_inventory_alert_response_dict,
             build_label_print_response_dict,
+            build_meeting_minutes_response_dict,
             build_product_query_response_dict,
             resolve_tool_execution_profile,
             route_normal_mode_message,
@@ -1994,6 +1995,10 @@ class AIChatApplicationService:
         profile = resolve_tool_execution_profile(context if isinstance(context, dict) else {})
         if profile == "normal" and not explicit_workflow_tool_intent:
             rr = route_normal_mode_message(text)
+            if rr.get("intent") == "meeting_minutes":
+                mm = build_meeting_minutes_response_dict(rr)
+                if mm:
+                    return mm
             if rr.get("intent") == "product_query":
                 pq = build_product_query_response_dict(rr)
                 if pq:

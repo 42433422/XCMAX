@@ -16,6 +16,8 @@ import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
 import com.xiuci.xcagi.mobile.core.model.AiCirclePost
 import com.xiuci.xcagi.mobile.core.model.ApprovalDetail
 import com.xiuci.xcagi.mobile.core.model.ListItem
+import com.xiuci.xcagi.mobile.core.model.MeetingLevelDef
+import com.xiuci.xcagi.mobile.core.model.MeetingMinuteData
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.ModMenuItem
 import com.xiuci.xcagi.mobile.core.network.PairingQrCodec
@@ -206,6 +208,68 @@ constructor(
 
     private val _chatMessages = MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val chatMessages: StateFlow<List<Pair<String, String>>> = _chatMessages.asStateFlow()
+
+    // ── 会议纪要 SSOT（三级派生） ──────────────────────────────────────────
+    private val _meetingLevels = MutableStateFlow<List<MeetingLevelDef>>(
+        listOf(
+            MeetingLevelDef("level1_script", "剧本式实录", "剧本", "raw"),
+            MeetingLevelDef("level2_architecture", "架构图式总结", "架构图", "level1_script", "mermaid"),
+            MeetingLevelDef("level3_plain", "说人话", "说人话", "level2_architecture"),
+        ),
+    )
+    val meetingLevels: StateFlow<List<MeetingLevelDef>> = _meetingLevels.asStateFlow()
+
+    private val _meetingResult = MutableStateFlow<MeetingMinuteData?>(null)
+    val meetingResult: StateFlow<MeetingMinuteData?> = _meetingResult.asStateFlow()
+
+    private val _meetingGenerating = MutableStateFlow(false)
+    val meetingGenerating: StateFlow<Boolean> = _meetingGenerating.asStateFlow()
+
+    private val _meetingTranscribing = MutableStateFlow(false)
+    val meetingTranscribing: StateFlow<Boolean> = _meetingTranscribing.asStateFlow()
+
+    private val _meetingError = MutableStateFlow("")
+    val meetingError: StateFlow<String> = _meetingError.asStateFlow()
+
+    fun loadMeetingLevels() {
+        viewModelScope.launch {
+            repo.meetingLevels().onSuccess { cfg ->
+                if (cfg.levels.isNotEmpty()) _meetingLevels.value = cfg.levels
+            }
+        }
+    }
+
+    /** 录音字节转写 → 返回文本（screen 负责把文本追加到原文）。 */
+    fun transcribeMeeting(audio: ByteArray, mime: String, onText: (String) -> Unit) {
+        _meetingError.value = ""
+        _meetingTranscribing.value = true
+        viewModelScope.launch {
+            repo.transcribeMeetingAudio(audio, mime)
+                .onSuccess { onText(it) }
+                .onFailure { _meetingError.value = it.message?.take(60) ?: "转写失败" }
+            _meetingTranscribing.value = false
+        }
+    }
+
+    /** 一次性生成三级会议纪要。 */
+    fun generateMeetingMinutes(transcript: String) {
+        val text = transcript.trim()
+        if (text.isEmpty() || _meetingGenerating.value) return
+        _meetingError.value = ""
+        _meetingGenerating.value = true
+        viewModelScope.launch {
+            repo.generateMeetingMinutes(text)
+                .onSuccess { _meetingResult.value = it }
+                .onFailure {
+                    _meetingError.value = it.message?.take(80) ?: "生成失败"
+                    _meetingResult.value = MeetingMinuteData(
+                        status = "failed",
+                        error_message = it.message,
+                    )
+                }
+            _meetingGenerating.value = false
+        }
+    }
 
     private val _items = MutableStateFlow<List<ListItem>>(emptyList())
     val items: StateFlow<List<ListItem>> = _items.asStateFlow()

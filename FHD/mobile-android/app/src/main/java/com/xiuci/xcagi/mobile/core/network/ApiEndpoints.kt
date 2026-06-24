@@ -102,4 +102,13 @@ object ApiEndpoints {
 
     // 钱包 / 余额
     const val WALLET_BALANCE = "$BASE/wallet/balance"
+
+    // 会议纪要 SSOT（三级派生）
+    const val MEETING_LEVELS = "$BASE/meetings/levels"
+    const val MEETING_GENERATE = "$BASE/meetings/generate-all"
+    const val MEETING_LIST = "$BASE/meetings"
+    const val MEETING_DETAIL = "$BASE/meetings/{id}"
+
+    // 录音转写（与桌面/Web 共用同一 ASR 端点，非 mobile/v1 命名空间）
+    const val VOICE_TRANSCRIBE = "api/voice/transcribe"
 }

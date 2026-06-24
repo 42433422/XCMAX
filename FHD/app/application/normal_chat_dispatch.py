@@ -30,6 +30,20 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
     text = (message or "").strip()
     lower = text.lower()
 
+    # 会议纪要：锚定整词（避免"记录/纪要"单字误命中），置于最前优先于通用查询分支
+    meeting_keywords = (
+        "会议纪要",
+        "会议记录",
+        "会议总结",
+        "整理会议",
+        "整理纪要",
+        "会议要点",
+        "把会议",
+        "开会记录",
+    )
+    if any(k in text for k in meeting_keywords):
+        return {"intent": "meeting_minutes", "slots": {"title": ""}}
+
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
     number_style_order = bool(
         re.search(
@@ -435,3 +449,28 @@ def build_label_print_response_dict(route_result: dict[str, Any]) -> dict[str, A
             "data": {},
             "normal_slot_dispatch": True,
         }
+
+
+def build_meeting_minutes_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+    """会议纪要槽位响应：下发 autoAction 让前端打开会议纪要面板（同 show_products_float 模式）。"""
+    if route_result.get("intent") != "meeting_minutes":
+        return None
+    slots = route_result.get("slots") or {}
+    return {
+        "success": True,
+        "message": "已打开会议纪要面板",
+        "response": (
+            "已帮你打开会议纪要面板。点开始录音或粘贴会议转写，"
+            "我会一次性整理出三层纪要：剧本式实录 → 架构图式总结 → 说人话。"
+        ),
+        "autoAction": {
+            "type": "show_meeting_minutes_float",
+            "feature": "meeting_minutes",
+        },
+        "data": {
+            "routing": "normal_slot_dispatch",
+            "intent": "meeting_minutes",
+            "slots": slots,
+        },
+        "normal_slot_dispatch": True,
+    }

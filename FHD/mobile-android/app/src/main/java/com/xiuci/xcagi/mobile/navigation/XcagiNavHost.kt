@@ -338,6 +338,10 @@ fun XcagiNavHost(
                     com.xiuci.xcagi.mobile.feature.scan.ScanQrScreen(vm) { nav.popBackStack() }
                 }
                 composable(Routes.SETTINGS) { SettingsScreen(vm) { nav.popBackStack() } }
+                composable(Routes.MEETING_MINUTES) {
+                    androidx.compose.runtime.LaunchedEffect(Unit) { vm.loadMeetingLevels() }
+                    MeetingMinutesScreen(vm) { nav.popBackStack() }
+                }
                 composable(Routes.AUTH) {
                     AuthScreen(
                             vm,
@@ -483,6 +487,7 @@ fun XcagiNavHost(
                                 )
                             },
                             onOpenOcr = { nav.navigate(Routes.OCR) },
+                            onOpenMeetingMinutes = { nav.navigate(Routes.MEETING_MINUTES) },
                     )
                 }
                 // 普通会话对话 — 复用 ChatScreen（带 conversationId）
@@ -515,6 +520,7 @@ fun XcagiNavHost(
                                 )
                             },
                             onOpenOcr = { nav.navigate(Routes.OCR) },
+                            onOpenMeetingMinutes = { nav.navigate(Routes.MEETING_MINUTES) },
                             onOpenEmployeeProfile = { modId, employeeId ->
                                 nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
                             },
