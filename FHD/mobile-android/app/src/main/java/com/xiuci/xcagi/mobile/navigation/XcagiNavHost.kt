@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.LocalPrintshop
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -96,6 +97,7 @@ import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
 import com.xiuci.xcagi.mobile.feature.web.DesktopToolWebView
 import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.UpdateDownload
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackData
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackType
@@ -165,22 +167,82 @@ fun XcagiNavHost(
     }
 
     updatePrompt?.let { prompt ->
+        val download by vm.updateDownload.collectAsState()
+        // 下载中=「取消」；失败=回退「浏览器下载」；非强更=「稍后」；强更默认无次按钮
+        val dismissAction: (@Composable () -> Unit)? =
+                when {
+                    download is UpdateDownload.Downloading -> {
+                        { TextButton({ vm.cancelUpdateDownload() }) { Text("取消") } }
+                    }
+                    download is UpdateDownload.Failed -> {
+                        {
+                            TextButton({
+                                ctx.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(prompt.downloadUrl))
+                                )
+                            }) { Text("浏览器下载") }
+                        }
+                    }
+                    !prompt.force -> {
+                        { TextButton({ vm.dismissUpdatePrompt() }) { Text("稍后") } }
+                    }
+                    else -> null
+                }
         AlertDialog(
-                onDismissRequest = { if (!prompt.force) vm.dismissUpdatePrompt() },
-                title = { Text(if (prompt.force) "需要更新" else "发现新版本") },
-                text = { Text("最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。") },
-                confirmButton = {
-                    TextButton({
-                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(prompt.downloadUrl)))
-                        if (!prompt.force) vm.dismissUpdatePrompt()
-                    }) { Text("去更新") }
+                onDismissRequest = {
+                    if (!prompt.force && download !is UpdateDownload.Downloading) {
+                        vm.dismissUpdatePrompt()
+                    }
                 },
-                dismissButton =
-                        if (!prompt.force) {
-                            { TextButton({ vm.dismissUpdatePrompt() }) { Text("稍后") } }
-                        } else {
-                            null
-                        },
+                title = { Text(if (prompt.force) "需要更新" else "发现新版本") },
+                text = {
+                    Column {
+                        Text("最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。")
+                        when (val d = download) {
+                            is UpdateDownload.Downloading -> {
+                                Spacer(Modifier.height(12.dp))
+                                LinearProgressIndicator(
+                                        progress = { d.percent / 100f },
+                                        modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                        "正在下载更新包… ${d.percent}%",
+                                        style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            is UpdateDownload.Ready -> {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                        "下载完成，点击「立即安装」继续。",
+                                        style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            is UpdateDownload.Failed -> {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                        "下载失败：${d.reason}",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            else -> {}
+                        }
+                    }
+                },
+                confirmButton = {
+                    when (download) {
+                        is UpdateDownload.Downloading ->
+                                TextButton(onClick = {}, enabled = false) { Text("下载中…") }
+                        is UpdateDownload.Ready ->
+                                TextButton({ vm.installDownloadedUpdate() }) { Text("立即安装") }
+                        is UpdateDownload.Failed ->
+                                TextButton({ vm.startInAppUpdate(prompt.downloadUrl) }) { Text("重试") }
+                        else ->
+                                TextButton({ vm.startInAppUpdate(prompt.downloadUrl) }) { Text("立即更新") }
+                    }
+                },
+                dismissButton = dismissAction,
         )
     }
 
