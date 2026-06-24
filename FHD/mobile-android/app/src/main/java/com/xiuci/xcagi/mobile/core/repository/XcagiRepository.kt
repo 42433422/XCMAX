@@ -1123,21 +1123,9 @@ class XcagiRepository @Inject constructor(
 
         val useCloud = !isPcReachable()
         if (useCloud) {
-            val relayId = sessionStore.relayDesktopId()
-            if (relayId.isNotBlank()) {
-                streamRelayCodexTask(
-                    relayId = relayId,
-                    message = message,
-                    conversationId = conversationId ?: "",
-                    onToken = { t ->
-                        acc.append(t)
-                        onToken(t)
-                    },
-                    onDone = onDone,
-                    onError = onError,
-                )
-                return
-            }
+            // 员工隔离：CLI 中继（streamRelayCodexTask）仅限超级员工会话（见上方 CODEX/CURSOR/CLAUDE 分支已各自处理 relay）。
+            // 小C / 普通对话 / 客服 / 平台员工绝不串入 relay——否则一旦绑定桌面，小C 会被桌面 codex CLI 接管，
+            // 连带「会议纪要」等小C意图（normal_chat_dispatch）也因消息被劫持而无法触发。普通会话始终走云端正常对话后端。
             preferCloudIfLanUnreachable()
         }
         // 构造上下文：取最近6条对话（与桌面端 useChatRequest.ts slice(-6) 一致）
