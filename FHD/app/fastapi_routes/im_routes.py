@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.application.execution_scope import factory_context
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.application.workspaces import get_workspace_registry
@@ -430,6 +431,57 @@ def claude_super_employee_invoke(
         db.close()
 
 
+@router.get("/api/admin/cursor-super-employee/messages")
+def cursor_super_employee_messages(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+    limit: int = Query(default=80, ge=1, le=200),
+):
+    """管理端 Cursor 超级员工软件内对话记录。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return {"success": True, "messages": messages}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("cursor_super_employee_messages")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.post("/api/admin/cursor-super-employee/messages")
+def cursor_super_employee_invoke(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端 Cursor 超级员工软件内调用入口。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        text = str(body.get("message") or body.get("body") or "").strip()
+        context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        # 管理端=平台操作者：铸造工厂授权（受 XCMAX_FACTORY_CAPABILITY_TOKEN 门控，未配则降产品域）。
+        workspace_id = str(body.get("workspace_id") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=workspace_id, base=context)
+        result = CursorSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
+        return {"success": True, **result}
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("cursor_super_employee_invoke")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
 # ── 顶层管理端「项目工厂」控制台（闭环：选项目 → 选工厂员工 → 派工）──
 
 
@@ -480,6 +532,7 @@ def admin_factory_employees(
         tool_endpoint = {
             "Claude": "/api/admin/claude-super-employee/messages",
             "Codex": "/api/admin/codex-super-employee/messages",
+            "Cursor": "/api/admin/cursor-super-employee/messages",
         }
         items = [
             {

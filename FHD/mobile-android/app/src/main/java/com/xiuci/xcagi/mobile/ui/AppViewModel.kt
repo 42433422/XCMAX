@@ -306,6 +306,7 @@ constructor(
                 val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
                 val fixedItems = fixedConversationItems(
                         showCodex = isEnterprise || adminMode,
+                        showCursor = isEnterprise || adminMode,
                         showClaude = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                         timestamps = timestamps,
@@ -1002,6 +1003,7 @@ constructor(
 
     private fun fixedConversationItems(
             showCodex: Boolean,
+            showCursor: Boolean,
             showClaude: Boolean,
             showCustomerService: Boolean,
             timestamps: Map<String, Long>,
@@ -1031,6 +1033,21 @@ constructor(
                             subtitle = cachedConversationPreview(PinnedIds.CODEX, previews)
                                 .ifBlank { "全设备协同" },
                             timestamp = cachedConversationTimestamp(PinnedIds.CODEX, timestamps),
+                            isOnline = true,
+                            isPinned = true,
+                    )
+                )
+        }
+
+        if (showCursor) {
+                items.add(
+                    ConversationItem(
+                            id = PinnedIds.CURSOR,
+                            type = ConversationType.PINNED_CURSOR,
+                            title = "超级员工-Cursor",
+                            subtitle = cachedConversationPreview(PinnedIds.CURSOR, previews)
+                                .ifBlank { "全设备协同 · Agent" },
+                            timestamp = cachedConversationTimestamp(PinnedIds.CURSOR, timestamps),
                             isOnline = true,
                             isPinned = true,
                     )
@@ -1433,7 +1450,7 @@ constructor(
                 // 切换会话：取消上一个会话仍在进行的流式任务并清空，避免消息串台到当前会话。
                 chatJob?.cancel()
                 _chatMessages.value = emptyList()
-                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE) {
+                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CURSOR || conversationId == PinnedIds.CLAUDE) {
                     // relay/直答的回复存在本地缓存，云端历史接口里没有(且登录过期会 401)，
                     // 故 super-employee 会话以本地缓存为准；本地为空才取云端历史兜底。
                     val local = repo.loadCachedChat(conversationId)
@@ -1441,9 +1458,11 @@ constructor(
                         _chatMessages.value = local
                     } else {
                         val remote =
-                                if (conversationId == PinnedIds.CLAUDE)
-                                        repo.loadClaudeSuperEmployeeMessages()
-                                else repo.loadCodexSuperEmployeeMessages()
+                                when (conversationId) {
+                                    PinnedIds.CLAUDE -> repo.loadClaudeSuperEmployeeMessages()
+                                    PinnedIds.CURSOR -> repo.loadCursorSuperEmployeeMessages()
+                                    else -> repo.loadCodexSuperEmployeeMessages()
+                                }
                         remote.onSuccess { _chatMessages.value = it }
                                 .onFailure { _chatMessages.value = emptyList() }
                     }
