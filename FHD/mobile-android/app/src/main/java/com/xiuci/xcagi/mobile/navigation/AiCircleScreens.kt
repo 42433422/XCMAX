@@ -346,7 +346,7 @@ private fun AiMomentCard(
                         }
                         Icon(
                             Icons.Default.MoreHoriz,
-                            contentDescription = null,
+                            contentDescription = "更多选项",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
                             modifier = Modifier.size(22.dp),
                         )

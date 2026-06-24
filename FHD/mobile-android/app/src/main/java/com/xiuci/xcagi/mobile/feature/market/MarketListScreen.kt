@@ -108,7 +108,7 @@ private fun MarketModCard(item: ListItem, onUse: () -> Unit) {
         ) {
             Icon(
                     Icons.Default.Extension,
-                    contentDescription = null,
+                    contentDescription = "能力包图标",
                     tint = MaterialTheme.colorScheme.secondary
             )
         }
