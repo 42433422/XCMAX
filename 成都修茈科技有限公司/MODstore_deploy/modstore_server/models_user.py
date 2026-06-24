@@ -137,4 +137,6 @@ class EmployeeExecutionMetric(Base):
     duration_ms = Column(Float, default=0.0)
     llm_tokens = Column(Integer, default=0)
     error = Column(Text, default="")
+    # 与 db/employee_ops.py 同表，保持 schema 一致（失败分类，见 llm_failure_classifier）。
+    failure_kind = Column(String(32), default="", index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
