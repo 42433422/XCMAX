@@ -555,6 +555,9 @@ async function submitLogin() {
 
         <div v-else class="login-qr-panel">
           <p class="login-subheading">{{ $t('login.qrHint') }}</p>
+          <div v-if="!qrDataUrl && !errorMessage" class="login-qr-loading" role="status" aria-live="polite">
+            <span class="login-qr-spinner" aria-hidden="true"></span>
+          </div>
           <img v-if="qrDataUrl" :src="qrDataUrl" :alt="$t('login.qrAlt')" class="login-qr-image" width="220" height="220" />
           <p v-if="qrExpiresAt" class="login-hint">{{ $t('login.qrCountdown', { seconds: qrCountdown }) }}</p>
           <button type="button" class="login-sso" :disabled="loading" @click="startQrLogin">{{ $t('login.refreshQr') }}</button>
@@ -674,6 +677,24 @@ async function submitLogin() {
   border-radius: 8px;
   border: 1px solid var(--xc-color-border, #e5e7eb);
   background: #fff;
+}
+.login-qr-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 220px;
+  height: 220px;
+  border-radius: 8px;
+  border: 1px solid var(--xc-color-border, #e5e7eb);
+  background: #fff;
+}
+.login-qr-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--xc-color-border, #e5e7eb);
+  border-top-color: var(--xc-color-primary, #1565c0);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
 }
 
 /* ─── 布局 ─────────────────────────────────────────────── */

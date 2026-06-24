@@ -22,7 +22,11 @@
             </div>
           </div>
         </button>
-        <div v-if="!groups.length" class="aigc-empty">加载中…</div>
+        <div v-if="groupsLoading && !groups.length" class="aigc-empty">加载中…</div>
+        <div v-else-if="groupsError && !groups.length" class="aigc-empty">
+          加载失败
+          <button class="aigc-text-btn aigc-retry" @click="loadGroups">重试</button>
+        </div>
       </div>
     </aside>
 
@@ -58,7 +62,9 @@
           :disabled="sending"
           @keyup.enter="send"
         />
-        <button class="aigc-send" :disabled="!input.trim() || sending" @click="send">发送</button>
+        <button class="aigc-send" :disabled="!input.trim() || sending" @click="send">
+          {{ sending ? '发送中…' : '发送' }}
+        </button>
       </footer>
     </section>
     <section class="aigc-chat aigc-chat--empty" v-else>
@@ -96,10 +102,13 @@ import {
   type AiGroupMessage,
 } from '@/api/aiGroups';
 import { apiFetch } from '@/utils/apiBase';
+import { showAppToast } from '@/composables/useAppToast';
 
 type PickEmployee = { employee_id: string; mod_id: string; name: string; avatar: string; summary: string };
 
 const groups = ref<AiGroup[]>([]);
+const groupsLoading = ref(true);
+const groupsError = ref<Error | null>(null);
 const activeGroup = ref<AiGroup | null>(null);
 const messages = ref<AiGroupMessage[]>([]);
 const employees = ref<PickEmployee[]>([]);
@@ -114,11 +123,15 @@ const addableEmployees = computed(() => {
 });
 
 async function loadGroups(): Promise<void> {
+  groupsLoading.value = true;
+  groupsError.value = null;
   try {
     groups.value = await fetchAiGroups('admin');
     if (!activeGroup.value && groups.value.length) await selectGroup(groups.value[0]);
-  } catch {
-    /* 静默：保留旧值 */
+  } catch (error) {
+    groupsError.value = error instanceof Error ? error : new Error('加载失败');
+  } finally {
+    groupsLoading.value = false;
   }
 }
 
@@ -151,8 +164,8 @@ async function send(): Promise<void> {
       activeGroup.value = res.group;
       groups.value = groups.value.map((x) => (x.id === res.group!.id ? res.group! : x));
     }
-  } catch {
-    /* ignore */
+  } catch (error) {
+    showAppToast(error instanceof Error ? error.message : '发送失败，请重试', 'error');
   } finally {
     sending.value = false;
     await scrollToBottom();
@@ -179,22 +192,23 @@ async function addMember(e: PickEmployee): Promise<void> {
       activeGroup.value = updated;
       groups.value = groups.value.map((x) => (x.id === updated.id ? updated : x));
     }
-  } catch {
-    /* ignore */
+  } catch (error) {
+    showAppToast(error instanceof Error ? error.message : '添加成员失败，请重试', 'error');
   }
 }
 
 async function removeMember(employeeId: string): Promise<void> {
   const g = activeGroup.value;
   if (!g) return;
+  if (!window.confirm('确定要将此成员移出群吗？')) return;
   try {
     const updated = await removeAiGroupMember(g.id, employeeId, 'admin');
     if (updated) {
       activeGroup.value = updated;
       groups.value = groups.value.map((x) => (x.id === updated.id ? updated : x));
     }
-  } catch {
-    /* ignore */
+  } catch (error) {
+    showAppToast(error instanceof Error ? error.message : '移出成员失败，请重试', 'error');
   }
 }
 
@@ -270,4 +284,5 @@ onMounted(() => {
 .aigc-text-btn--danger { color: #e34d59; border-color: #f0c2c5; }
 .aigc-empty { color: var(--color-text-2, #999); font-size: 13px; padding: 20px; text-align: center; }
 .aigc-empty--sm { padding: 8px; text-align: left; }
+.aigc-retry { margin-left: 8px; }
 </style>

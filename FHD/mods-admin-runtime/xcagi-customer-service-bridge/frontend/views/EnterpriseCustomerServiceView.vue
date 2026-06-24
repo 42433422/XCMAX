@@ -98,6 +98,10 @@
               </button>
             </div>
           </form>
+          <p v-if="changePortal.loadError" class="form-error">
+            {{ changePortal.loadError }}
+            <button class="btn btn-sm btn-secondary" type="button" @click="loadChangeRequests">重试</button>
+          </p>
           <ul v-if="changePortal.requests.length" class="item-list change-list">
             <li v-for="cr in changePortal.requests" :key="cr.id" class="item-row">
               <div class="req-main">
@@ -247,6 +251,7 @@ const changePortal = reactive({
   pipelineStage: '',
   requests: [] as ChangeRequestRow[],
   loading: false,
+  loadError: '',
   submitting: false,
   form: {
     change_type: 'product_change',
@@ -273,6 +278,7 @@ async function loadChangeRequests() {
   const uid = readMarketUserId()
   if (!uid) return
   changePortal.loading = true
+  changePortal.loadError = ''
   try {
     const res = await get<{ success?: boolean; data?: { requests?: ChangeRequestRow[]; pipeline_stage?: string } }>(
       `${CS_BRIDGE}/user-cs/change-requests`,
@@ -283,7 +289,7 @@ async function loadChangeRequests() {
       changePortal.pipelineStage = String(res.data.pipeline_stage || '')
     }
   } catch {
-    /* ignore */
+    changePortal.loadError = '加载失败'
   } finally {
     changePortal.loading = false
   }
@@ -328,16 +334,22 @@ async function refresh() {
 async function submitNewRequest() {
   if (!compose.title.trim()) return
   persistInstanceSnapshot()
-  await createEnterpriseContact({
-    source_instance_id: instanceId.value,
-    source_instance_name: instanceName.value,
-    request_type: compose.request_type,
-    title: compose.title.trim(),
-    description: compose.description.trim() || undefined,
-    priority: compose.priority,
-  })
+  try {
+    await createEnterpriseContact({
+      source_instance_id: instanceId.value,
+      source_instance_name: instanceName.value,
+      request_type: compose.request_type,
+      title: compose.title.trim(),
+      description: compose.description.trim() || undefined,
+      priority: compose.priority,
+    })
+  } catch (e) {
+    await appAlert(e instanceof Error ? e.message : '请求发送失败，请重试')
+    return
+  }
   compose.title = ''
   compose.description = ''
+  await appAlert('您的联络请求已发送')
   await refresh()
 }
 
@@ -397,6 +409,7 @@ onMounted(refresh)
 .st-closed { background: #f5f5f5; color: #757575; }
 .loading-hint, .empty-hint { color: #999; font-size: 13px; padding: 8px 0; }
 .hint-pending { color: #e65100; }
+.form-error { display: flex; align-items: center; gap: 8px; color: #c62828; font-size: 13px; padding: 8px 0; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal-content { background: #fff; border-radius: 12px; width: 480px; max-width: 90vw; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eee; }

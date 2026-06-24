@@ -14,15 +14,18 @@
           <button
             v-if="showCancel"
             class="btn btn-secondary"
+            :disabled="loading"
             @click="handleCancel"
           >
             {{ cancelText }}
           </button>
           <button
             :class="['btn', confirmClass]"
+            :disabled="loading"
             @click="handleConfirm"
           >
-            {{ confirmText }}
+            <i v-if="loading" class="fas fa-spinner fa-spin"></i>
+            {{ loading ? loadingText : confirmText }}
           </button>
         </div>
       </div>
@@ -65,6 +68,20 @@ const props = defineProps({
   maxWidth: {
     type: String,
     default: '400px'
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  },
+  loadingText: {
+    type: String,
+    default: '处理中...'
+  },
+  // When true, confirm does not auto-close the dialog; the parent keeps it
+  // open while its async handler runs and closes it after toggling loading off.
+  keepOpenOnConfirm: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -75,11 +92,15 @@ const emit = defineEmits([
 ])
 
 const handleConfirm = () => {
+  if (props.loading) return
   emit('confirm')
-  emit('update:modelValue', false)
+  if (!props.keepOpenOnConfirm) {
+    emit('update:modelValue', false)
+  }
 }
 
 const handleCancel = () => {
+  if (props.loading) return
   emit('cancel')
   emit('update:modelValue', false)
 }
@@ -144,6 +165,15 @@ const handleCancel = () => {
   font-size: 14px;
   cursor: pointer;
   transition: background-color 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn .fa-spinner {
+  margin-right: 6px;
 }
 
 .btn-primary {
