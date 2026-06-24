@@ -37,8 +37,8 @@ class TestModsScanFingerprintOSError:
             patch("os.listdir", side_effect=OSError("denied")),
         ):
             fp = mm._mods_scan_fingerprint()
-        # Should still produce a fingerprint with the root path
-        assert str(tmp_path) in fp
+        # listdir failed -> the root contributes only its abspath, no per-entry parts.
+        assert fp == os.path.abspath(str(tmp_path))
 
     def test_getmtime_oserror_falls_back_to_entry(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -53,7 +53,30 @@ class TestModsScanFingerprintOSError:
             patch("os.path.getmtime", side_effect=OSError("stat failed")),
         ):
             fp = mm._mods_scan_fingerprint()
-        assert "demo_mod" in fp
+        # getmtime failed -> entry recorded by bare name (no ":<mtime>" suffix).
+        assert fp == f"{os.path.abspath(str(tmp_path))}|demo_mod"
+
+    def test_underscore_entries_excluded_and_mtime_included(self, tmp_path):
+        from app.infrastructure.mods.mod_manager import ModManager
+
+        mod_dir = tmp_path / "demo_mod"
+        mod_dir.mkdir()
+        manifest = mod_dir / "manifest.json"
+        manifest.write_text('{"id": "demo_mod"}')
+        # _employees and other underscore-prefixed dirs must be ignored by the fingerprint.
+        hidden = tmp_path / "_employees"
+        hidden.mkdir()
+        (hidden / "manifest.json").write_text("{}")
+
+        mm = ModManager(mods_root=str(tmp_path))
+        with patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]):
+            fp = mm._mods_scan_fingerprint()
+        parts = fp.split("|")
+        assert parts[0] == os.path.abspath(str(tmp_path))
+        # Exactly one entry part, for the real mod, carrying its manifest mtime.
+        assert len(parts) == 2
+        assert parts[1].startswith("demo_mod:")
+        assert "_employees" not in fp
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +136,15 @@ class TestScanModsFromBuildIndex:
             )
         )
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]):
+        with (
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch("app.infrastructure.mods.mod_manager.parse_manifest") as mock_parse,
+        ):
             result = mm._scan_mods_from_build_index("fp1")
+        # Rows with a blank/absent mod_path are skipped before any manifest parse,
+        # and an index that yields zero mods returns None (caller falls back to full scan).
         assert result is None
+        mock_parse.assert_not_called()
 
     def test_index_returns_mods_when_valid(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -163,24 +192,39 @@ class TestInvokeModInitHook:
     def test_app_param_passed_as_none(self):
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
 
-        received = {}
+        calls = []
 
         def init_fn(app=None):
-            received["app"] = app
+            calls.append({"app": app})
 
         _invoke_mod_init_hook(init_fn, mod_id="m1")
-        assert received["app"] is None
+        # Legacy signature with only ``app`` -> called exactly once with app injected as None,
+        # and mod_id is NOT smuggled in (it is not a declared parameter).
+        assert calls == [{"app": None}]
 
     def test_mod_id_param_passed(self):
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
 
-        received = {}
+        calls = []
 
         def init_fn(mod_id=None):
-            received["mod_id"] = mod_id
+            calls.append({"mod_id": mod_id})
 
         _invoke_mod_init_hook(init_fn, mod_id="m1")
-        assert received["mod_id"] == "m1"
+        # Only ``mod_id`` declared -> bound to the supplied value, called once.
+        assert calls == [{"mod_id": "m1"}]
+
+    def test_both_app_and_mod_id_injected(self):
+        from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
+
+        calls = []
+
+        def init_fn(app, mod_id):
+            calls.append((app, mod_id))
+
+        _invoke_mod_init_hook(init_fn, mod_id="m99")
+        # Both known params get injected positionally-by-name: app=None, mod_id="m99".
+        assert calls == [(None, "m99")]
 
     def test_required_unknown_param_skips_call(self):
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
@@ -190,22 +234,23 @@ class TestInvokeModInitHook:
         def init_fn(unknown_required):
             called.append("called")
 
-        # Should skip calling because required param cannot be satisfied
-        _invoke_mod_init_hook(init_fn, mod_id="m1")
+        # A required param that the invoker cannot satisfy -> the hook is NOT called at all.
+        result = _invoke_mod_init_hook(init_fn, mod_id="m1")
+        assert result is None
         assert called == []
 
     def test_signature_bind_fails_falls_back_to_no_kwargs(self):
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
 
-        called = []
+        calls = []
 
         def init_fn(**kwargs):
-            # sig.bind(**kwargs) will succeed for **kwargs, but we force a fallback
-            called.append(kwargs)
+            calls.append(kwargs)
 
         _invoke_mod_init_hook(init_fn, mod_id="m1")
-        # Should call with mod_id kwarg
-        assert len(called) == 1
+        # **kwargs-only signature: no positional params to satisfy, so it is called once
+        # with an empty kwargs mapping (neither app nor mod_id is force-injected).
+        assert calls == [{}]
 
     def test_signature_inspect_failure_calls_directly(self):
         from app.infrastructure.mods.mod_manager import _invoke_mod_init_hook
@@ -237,14 +282,41 @@ class TestInvokeModInitHook:
 
 
 class TestRegisterModHooks:
+    def test_valid_hook_subscribes_resolved_callable(self, tmp_path):
+        """Happy path: the resolved handler is the real on-disk callable, and it is
+        subscribed under the exact event name with the ``backend.`` prefix stripped."""
+        from app.infrastructure.mods.mod_manager import _register_mod_hooks
+
+        backend_dir = tmp_path / "backend"
+        backend_dir.mkdir()
+        (backend_dir / "mymod.py").write_text(
+            "def handler(payload=None):\n    return ('handled', payload)\n"
+        )
+
+        metadata = MagicMock()
+        metadata.hooks = {"order.created": "backend.mymod.handler"}
+        metadata.mod_path = str(tmp_path)
+
+        with patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe:
+            _register_mod_hooks("m1", metadata)
+
+        mock_subscribe.assert_called_once()
+        (event, handler), _ = mock_subscribe.call_args
+        assert event == "order.created"
+        # The subscribed object is the *real* function loaded from disk, not a sentinel.
+        assert callable(handler)
+        assert handler.__name__ == "handler"
+        assert handler("p1") == ("handled", "p1")
+
     def test_no_hooks_returns_early(self):
         from app.infrastructure.mods.mod_manager import _register_mod_hooks
 
         metadata = MagicMock()
         metadata.hooks = {}
         with patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe:
-            _register_mod_hooks("m1", metadata)
-        # No hooks declared -> nothing subscribed.
+            result = _register_mod_hooks("m1", metadata)
+        # No hooks declared -> early return None, nothing subscribed.
+        assert result is None
         mock_subscribe.assert_not_called()
 
     def test_no_mod_path_logs_error(self):
@@ -253,28 +325,33 @@ class TestRegisterModHooks:
         metadata = MagicMock()
         metadata.hooks = {"event1": "backend.handler"}
         metadata.mod_path = ""
-        with patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe:
+        with (
+            patch("app.infrastructure.mods.mod_manager.import_mod_backend_py") as mock_import,
+            patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe,
+        ):
             _register_mod_hooks("m1", metadata)
-        # Missing mod_path -> cannot resolve handlers, nothing subscribed.
+        # Missing mod_path -> bails before attempting to import or subscribe anything.
+        mock_import.assert_not_called()
         mock_subscribe.assert_not_called()
 
     def test_invalid_spec_no_module_skipped(self):
         from app.infrastructure.mods.mod_manager import _register_mod_hooks
 
         metadata = MagicMock()
+        # "no_module_attr".rpartition(".") -> ("", "", "no_module_attr"): no module part.
         metadata.hooks = {"event1": "no_module_attr"}
         metadata.mod_path = "/tmp"
-        # spec.rpartition(".") returns ("", "", "no_module_attr") - no module
-        with patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe:
+        with (
+            patch("app.infrastructure.mods.mod_manager.import_mod_backend_py") as mock_import,
+            patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe,
+        ):
             _register_mod_hooks("m1", metadata)
+        # Unparseable spec -> never even attempts the import.
+        mock_import.assert_not_called()
         mock_subscribe.assert_not_called()
 
     def test_handler_not_callable_skipped(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _register_mod_hooks
-
-        backend_dir = tmp_path / "backend"
-        backend_dir.mkdir()
-        (backend_dir / "mymod.py").write_text("handler = 'not_callable'\n")
 
         metadata = MagicMock()
         metadata.hooks = {"event1": "mymod.handler"}
@@ -285,10 +362,11 @@ class TestRegisterModHooks:
             patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe,
         ):
             mock_module = MagicMock()
-            mock_module.handler = "not_callable"
+            mock_module.handler = "not_callable"  # str, not a function
             mock_import.return_value = mock_module
             _register_mod_hooks("m1", metadata)
-        # Resolved attribute is not callable -> handler is skipped, not subscribed.
+        # Import succeeded (attr looked up) but resolved value is not callable -> skip subscribe.
+        mock_import.assert_called_once_with(str(tmp_path), "m1", "mymod")
         mock_subscribe.assert_not_called()
 
     def test_import_error_logged(self, tmp_path):
@@ -302,11 +380,13 @@ class TestRegisterModHooks:
             patch(
                 "app.infrastructure.mods.mod_manager.import_mod_backend_py",
                 side_effect=ImportError("no module"),
-            ),
+            ) as mock_import,
             patch("app.infrastructure.mods.hooks.subscribe") as mock_subscribe,
         ):
-            # Import failure is a recoverable error -> swallowed, nothing subscribed.
-            _register_mod_hooks("m1", metadata)
+            # Import failure is a recoverable error -> swallowed (no propagation).
+            result = _register_mod_hooks("m1", metadata)
+        assert result is None
+        mock_import.assert_called_once()
         mock_subscribe.assert_not_called()
 
 
@@ -337,7 +417,12 @@ class TestUnloadModCleanupError:
 
             result = mm.unload_mod("m1")
 
+        # unload_mod must be fault-tolerant: cleanup() and comms unregister both raise,
+        # yet the mod is still fully torn down and the call reports success.
         assert result is True
+        instance.cleanup.assert_called_once()
+        registry.unregister_mod.assert_called_once_with("m1")
+        mock_comms_inst.unregister_all.assert_called_once_with("m1")
         assert "m1" not in mm._loaded_mods
 
 
@@ -665,10 +750,13 @@ class TestRegisterSingleModHttpRoutes:
         assert result is False
 
     def test_no_mod_path_records_failure(self):
-        from app.infrastructure.mods.mod_manager import _register_single_mod_http_routes
+        from app.infrastructure.mods.mod_manager import (
+            ModManager,
+            _register_single_mod_http_routes,
+        )
 
-        mm = MagicMock()
-        mm._http_routes_registered = set()
+        # Real ModManager so we can assert the exact failure message that was recorded.
+        mm = ModManager(mods_root="/tmp")
         meta = MagicMock()
         meta.backend_entry = "entry"
         meta.mod_path = ""
@@ -678,14 +766,19 @@ class TestRegisterSingleModHttpRoutes:
             mock_reg.return_value = registry
             result = _register_single_mod_http_routes(MagicMock(), mm, "m1")
         assert result is False
-        mm.record_blueprint_failure.assert_called_once()
+        failures = mm.get_blueprint_failures()
+        assert len(failures) == 1
+        assert failures[0]["mod_id"] == "m1"
+        assert failures[0]["message"] == "manifest 缺少 mod_path，无法注册路由"
+        assert "m1" not in mm._http_routes_registered
 
     def test_websocket_register_returns_false(self, tmp_path):
-        from app.infrastructure.mods.mod_manager import _register_single_mod_http_routes
+        from app.infrastructure.mods.mod_manager import (
+            ModManager,
+            _register_single_mod_http_routes,
+        )
 
-        mm = MagicMock()
-        mm._http_routes_registered = set()
-        mm._backend_entry_modules = {}
+        mm = ModManager(mods_root=str(tmp_path))
         meta = MagicMock()
         meta.backend_entry = "entry"
         meta.mod_path = str(tmp_path)
@@ -694,6 +787,7 @@ class TestRegisterSingleModHttpRoutes:
         mock_module.register_fastapi_routes = MagicMock()
         mock_module.register_websocket_routes = MagicMock(return_value=False)
 
+        app = MagicMock()
         with (
             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg,
             patch(
@@ -704,16 +798,25 @@ class TestRegisterSingleModHttpRoutes:
             registry = MagicMock()
             registry.get_mod_metadata.return_value = meta
             mock_reg.return_value = registry
-            result = _register_single_mod_http_routes(MagicMock(), mm, "m1")
-        assert result is True  # HTTP routes registered successfully
+            result = _register_single_mod_http_routes(app, mm, "m1")
+        # WS registrar returning False is non-fatal: HTTP routes still count as registered.
+        assert result is True
         assert "m1" in mm._http_routes_registered
+        # HTTP registrar gets (app, mod_id); WS registrar gets only (app,).
+        mock_module.register_fastapi_routes.assert_called_once_with(app, "m1")
+        mock_module.register_websocket_routes.assert_called_once_with(app)
+        # The imported backend module is cached so subsequent loads reuse it.
+        assert mm._backend_entry_modules["m1"] is mock_module
+        # A successful registration records no blueprint failure.
+        assert mm.get_blueprint_failures() == []
 
     def test_recoverable_error_returns_false(self, tmp_path):
-        from app.infrastructure.mods.mod_manager import _register_single_mod_http_routes
+        from app.infrastructure.mods.mod_manager import (
+            ModManager,
+            _register_single_mod_http_routes,
+        )
 
-        mm = MagicMock()
-        mm._http_routes_registered = set()
-        mm._backend_entry_modules = {}
+        mm = ModManager(mods_root=str(tmp_path))
         meta = MagicMock()
         meta.backend_entry = "entry"
         meta.mod_path = str(tmp_path)
@@ -730,7 +833,12 @@ class TestRegisterSingleModHttpRoutes:
             mock_reg.return_value = registry
             result = _register_single_mod_http_routes(MagicMock(), mm, "m1")
         assert result is False
-        mm.record_blueprint_failure.assert_called_once()
+        # The raised message is captured verbatim (via _short_exc_message) for diagnostics.
+        failures = mm.get_blueprint_failures()
+        assert len(failures) == 1
+        assert failures[0]["mod_id"] == "m1"
+        assert failures[0]["message"] == "import fail"
+        assert "m1" not in mm._http_routes_registered
 
 
 # ---------------------------------------------------------------------------
@@ -747,9 +855,11 @@ class TestRestoreEntitlementsFromSessionId:
         with patch(
             "app.enterprise.mod_entitlements.restore_entitlements_from_session_row"
         ) as mock_restore:
-            _restore_entitlements_from_session_id("")
-            _restore_entitlements_from_session_id(None)
-        # Empty/None session id -> early return, no entitlement restore attempted.
+            # Empty, None, and whitespace-only all strip to "" and short-circuit.
+            assert _restore_entitlements_from_session_id("") is None
+            assert _restore_entitlements_from_session_id(None) is None
+            assert _restore_entitlements_from_session_id("   ") is None
+        # No entitlement restore attempted for any blank session id.
         mock_restore.assert_not_called()
 
     def test_recoverable_error_swallowed(self):
@@ -757,14 +867,20 @@ class TestRestoreEntitlementsFromSessionId:
             _restore_entitlements_from_session_id,
         )
 
-        with patch(
-            "app.enterprise.mod_entitlements.restore_entitlements_from_session_row",
-            side_effect=RuntimeError("db error"),
-        ) as mock_restore:
-            # Recoverable error must be swallowed (no propagation) ...
-            _restore_entitlements_from_session_id("sid123")
-        # ... but the restore was actually attempted before failing.
-        mock_restore.assert_called_once()
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.restore_entitlements_from_session_row",
+                side_effect=RuntimeError("db error"),
+            ) as mock_restore,
+            patch("app.enterprise.mod_entitlements.set_session_entitlements") as mock_set,
+        ):
+            # Recoverable error must be swallowed (returns None, no propagation) ...
+            result = _restore_entitlements_from_session_id("sid123")
+        assert result is None
+        # ... the restore was attempted before failing ...
+        mock_restore.assert_called_once_with("sid123")
+        # ... and the downstream set never runs because the pipeline aborted early.
+        mock_set.assert_not_called()
 
     def test_successful_restore_with_cached(self):
         from app.infrastructure.mods.mod_manager import (
@@ -1028,51 +1144,30 @@ class TestEnsureModApiReady:
 
 
 class TestMountOnDiskPrimaryClientMods:
-    def test_mods_disabled_returns_empty(self):
-        from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
+    """Post-security-reversal contract: client mods must NOT be auto-mounted just because
+    their directory exists on disk; entitlement gates them via ensure_mod_api_ready instead.
+    The function is now a no-op stub kept only for legacy call sites."""
 
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True):
-            result = mount_on_disk_primary_client_mods()
-        assert result == []
-
-    def test_no_mod_path_returns_empty(self):
+    def test_never_loads_even_when_mod_present_on_disk(self):
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
 
         mm = MagicMock()
-        mm.resolve_mod_directory.return_value = None
-        with (
-            patch("app.enterprise.account_mod_binding.SUNBIRD_CLIENT_MOD_ID", "sunbird"),
-            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
-        ):
-            result = mount_on_disk_primary_client_mods(mm)
-        assert result == []
-
-    def test_already_loaded_returns_list(self):
-        from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
-
-        mm = MagicMock()
-        mm.resolve_mod_directory.return_value = "/tmp/sunbird"
-        mm._loaded_mods = ["sunbird"]
-        with (
-            patch("app.enterprise.account_mod_binding.SUNBIRD_CLIENT_MOD_ID", "sunbird"),
-            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
-        ):
-            result = mount_on_disk_primary_client_mods(mm)
-        assert result == []
-
-    def test_load_mod_success(self):
-        from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
-
-        mm = MagicMock()
+        # Even with a resolvable, not-yet-loaded mod that would "successfully" load,
+        # the stub refuses to touch it: no resolve, no load_mod, empty result.
         mm.resolve_mod_directory.return_value = "/tmp/sunbird"
         mm._loaded_mods = []
         mm.load_mod.return_value = True
-        with (
-            patch("app.enterprise.account_mod_binding.SUNBIRD_CLIENT_MOD_ID", "sunbird"),
-            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
-        ):
-            result = mount_on_disk_primary_client_mods(mm)
+        result = mount_on_disk_primary_client_mods(mm)
         assert result == []
+        mm.load_mod.assert_not_called()
+        mm.resolve_mod_directory.assert_not_called()
+
+    def test_returns_empty_without_a_manager(self):
+        from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
+
+        # Tolerates being called with no manager (legacy load_mod_routes call site).
+        assert mount_on_disk_primary_client_mods() == []
+        assert mount_on_disk_primary_client_mods(None) == []
 
 
 # ---------------------------------------------------------------------------
@@ -1143,6 +1238,45 @@ class TestRegisterEmployeePackRoutes:
         result = register_employee_pack_routes(MagicMock(), mm, "p1")
         assert result is False
 
+    def test_valid_pack_invokes_registrar_with_resolved_id(self, tmp_path):
+        from app.infrastructure.mods.mod_manager import (
+            _employee_pack_routes_registered,
+            register_employee_pack_routes,
+        )
+
+        emp_dir = tmp_path / "_employees" / "p1"
+        backend_dir = emp_dir / "backend"
+        backend_dir.mkdir(parents=True)
+        # manifest id ("packX") differs from the directory name ("p1") on purpose.
+        (emp_dir / "manifest.json").write_text(
+            json.dumps({"id": "packX", "artifact": "employee_pack", "backend": {"entry": "ep"}})
+        )
+        (backend_dir / "ep.py").write_text(
+            "def register_fastapi_routes(app, mod_id):\n"
+            "    app.registered_with = mod_id\n"
+            "    return True\n"
+        )
+
+        mm = MagicMock()
+        mm.mods_root = str(tmp_path)
+
+        class FakeApp:
+            registered_with = None
+
+        app = FakeApp()
+        _employee_pack_routes_registered.discard("packX")
+        try:
+            result = register_employee_pack_routes(app, mm, "p1")
+            assert result is True
+            # The real registrar ran and received the manifest-resolved id, not the dir name.
+            assert app.registered_with == "packX"
+            # Idempotency bookkeeping uses the resolved id too.
+            assert "packX" in _employee_pack_routes_registered
+            # No blueprint failure recorded on the happy path.
+            mm.record_blueprint_failure.assert_not_called()
+        finally:
+            _employee_pack_routes_registered.discard("packX")
+
 
 # ---------------------------------------------------------------------------
 # load_employee_pack_routes
@@ -1197,6 +1331,32 @@ class TestLoadEmployeePackRoutes:
             load_employee_pack_routes(MagicMock(), mm)
         mock_register.assert_not_called()
 
+    def test_dispatches_employee_pack_with_manifest_id(self, tmp_path):
+        from app.infrastructure.mods.mod_manager import load_employee_pack_routes
+
+        emp_dir = tmp_path / "_employees" / "p1"
+        emp_dir.mkdir(parents=True)
+        # Two packs: only the employee_pack should be dispatched, by its manifest id.
+        (emp_dir / "manifest.json").write_text(
+            json.dumps({"id": "packX", "artifact": "employee_pack", "backend": {"entry": "ep"}})
+        )
+        other = tmp_path / "_employees" / "p2"
+        other.mkdir(parents=True)
+        (other / "manifest.json").write_text(json.dumps({"id": "p2", "artifact": "mod"}))
+
+        mm = MagicMock()
+        mm.mods_root = str(tmp_path)
+        app = MagicMock()
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager.register_employee_pack_routes"
+            ) as mock_register,
+        ):
+            load_employee_pack_routes(app, mm)
+        # Exactly one dispatch, for the employee_pack, keyed by its manifest id ("packX").
+        mock_register.assert_called_once_with(app, mm, "packX")
+
 
 # ---------------------------------------------------------------------------
 # load_mod_blueprints (no-op)
@@ -1234,8 +1394,8 @@ class TestLoadModRoutes:
                 "app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"
             ) as mock_mount,
             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg,
-            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
-            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
+            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes") as mock_emp,
+            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last") as mock_spa,
         ):
             registry = MagicMock()
             registry.list_mods.return_value = []
@@ -1245,8 +1405,53 @@ class TestLoadModRoutes:
         mock_mount.assert_called_once_with(mm)
         # ... blueprint failures are reset ...
         assert mm._blueprint_failures == []
+        # ... employee-pack routes and the SPA fallback are always wired up ...
+        mock_emp.assert_called_once_with(app, mm)
+        mock_spa.assert_called_once_with(app)
         # ... and with an empty registry no per-mod HTTP routers are mounted.
         app.include_router.assert_not_called()
+
+    def test_routable_mod_is_registered_and_ordered(self):
+        from app.infrastructure.mods.mod_manager import ModManager, load_mod_routes
+
+        mm = ModManager(mods_root="/tmp")
+        mm._loaded_mods = ["m1"]
+        app = MagicMock()
+
+        meta = MagicMock()
+        meta.id = "m1"
+        meta.backend_entry = "entry"
+        meta.mod_path = "/tmp/m1"
+
+        # A mod with a registrar but no backend_entry must be filtered out of routing.
+        meta_skip = MagicMock()
+        meta_skip.id = "no_entry"
+        meta_skip.backend_entry = ""
+
+        mod_module = MagicMock()
+        mod_module.register_fastapi_routes = MagicMock()
+        del mod_module.register_websocket_routes
+
+        with (
+            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg,
+            patch(
+                "app.infrastructure.mods.mod_manager.import_mod_backend_py",
+                return_value=mod_module,
+            ),
+            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
+            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
+        ):
+            registry = MagicMock()
+            registry.list_mods.return_value = [meta, meta_skip]
+            registry.get_mod_metadata.return_value = meta
+            mock_reg.return_value = registry
+            load_mod_routes(app, mm)
+
+        # Only the mod with a backend_entry got its FastAPI routes mounted, keyed by id.
+        mod_module.register_fastapi_routes.assert_called_once_with(app, "m1")
+        assert "m1" in mm._http_routes_registered
+        assert "no_entry" not in mm._http_routes_registered
 
 
 # ---------------------------------------------------------------------------
@@ -1295,11 +1500,17 @@ class TestBackendPathForMod:
 
 
 class TestRepoLayoutModsCandidates:
-    def test_returns_list(self):
+    def test_only_existing_absolute_dirs_no_dupes(self):
         from app.infrastructure.mods.mod_manager import _repo_layout_mods_candidates
 
         result = _repo_layout_mods_candidates()
-        assert isinstance(result, list)
+        # Every candidate is an absolute path that actually exists as a directory ...
+        assert all(os.path.isabs(p) for p in result)
+        assert all(os.path.isdir(p) for p in result)
+        # ... and the function de-dups so each root appears at most once.
+        assert len(result) == len(set(result))
+        # Each candidate is named "mods" (possibly under XCAGI/ or mods-admin-runtime).
+        assert all(os.path.basename(p) in {"mods", "mods-admin-runtime"} for p in result)
 
 
 # ---------------------------------------------------------------------------
@@ -1311,12 +1522,35 @@ class TestAllModsRoots:
     def test_primary_not_dir_excluded(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _all_mods_roots
 
-        with patch.dict("os.environ", {"XCAGI_MODS_ROOT": ""}, clear=False):
-            result = _all_mods_roots(str(tmp_path / "nonexistent"))
-        # primary is not a dir, but repo candidates may be added
-        assert isinstance(result, list)
+        missing = str(tmp_path / "nonexistent")
+        with (
+            patch.dict("os.environ", {"XCAGI_MODS_ROOT": ""}, clear=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=["/repo/mods"],
+            ),
+        ):
+            result = _all_mods_roots(missing)
+        # A non-existent primary is dropped entirely; only the repo candidate survives.
+        assert missing not in result
+        assert result == ["/repo/mods"]
 
-    def test_env_path_added(self, tmp_path):
+    def test_primary_dir_listed_first(self, tmp_path):
+        from app.infrastructure.mods.mod_manager import _all_mods_roots
+
+        with (
+            patch.dict("os.environ", {"XCAGI_MODS_ROOT": ""}, clear=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=["/repo/mods"],
+            ),
+        ):
+            result = _all_mods_roots(str(tmp_path))
+        # Existing primary is honoured and takes precedence over repo candidates.
+        assert result[0] == os.path.abspath(str(tmp_path))
+        assert "/repo/mods" in result
+
+    def test_env_path_added_after_primary_no_dupes(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _all_mods_roots
 
         env_dir = tmp_path / "env_mods"
@@ -1329,7 +1563,22 @@ class TestAllModsRoots:
             ),
         ):
             result = _all_mods_roots(str(tmp_path))
-        assert str(env_dir) in result
+        # Primary first, then the distinct env-provided root; both present, no repeats.
+        assert result == [os.path.abspath(str(tmp_path)), str(env_dir)]
+
+    def test_env_equal_to_primary_not_duplicated(self, tmp_path):
+        from app.infrastructure.mods.mod_manager import _all_mods_roots
+
+        with (
+            patch.dict("os.environ", {"XCAGI_MODS_ROOT": str(tmp_path)}, clear=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+                return_value=[],
+            ),
+        ):
+            result = _all_mods_roots(str(tmp_path))
+        # Env duplicates the primary -> de-duplicated to a single entry.
+        assert result == [os.path.abspath(str(tmp_path))]
 
 
 # ---------------------------------------------------------------------------
@@ -1344,12 +1593,17 @@ class TestLoadModBackendNoDir:
         mm = ModManager(mods_root=str(tmp_path))
         mod_path = str(tmp_path / "m1")
         os.makedirs(mod_path)  # no backend/ subdir
+        backend_path = os.path.join(mod_path, "backend")
         meta = MagicMock()
         meta.backend_entry = ""
+        meta.hooks = {}
+        sys_path_before = list(sys.path)
         result = mm._load_mod_backend("m1", mod_path, meta)
-        # No backend directory -> early return, nothing registered.
+        # No backend directory -> early return before touching sys.path or the module cache.
         assert result is None
         assert "m1" not in mm._backend_entry_modules
+        assert backend_path not in sys.path
+        assert sys.path == sys_path_before
 
 
 # ---------------------------------------------------------------------------
@@ -1536,6 +1790,26 @@ class TestRefreshModsRootEnvNotDir:
 
 
 class TestEnsureModsLoadedBranches:
+    def test_happy_path_loads_and_mounts_routes(self):
+        from app.infrastructure.mods.mod_manager import ModManager
+
+        mm = ModManager(mods_root="/tmp")
+        app = MagicMock()
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as mock_load,
+            patch("app.infrastructure.mods.mod_manager.load_mod_routes") as mock_routes,
+        ):
+            mm.ensure_mods_loaded(app)
+        # Empty registry + manifests on disk -> load_all_mods then route mount, attempt counted.
+        mock_load.assert_called_once_with()
+        mock_routes.assert_called_once_with(app, mm)
+        assert mm._ensure_attempts == 1
+        assert mm._last_ensure_at > 0
+
     def test_mods_disabled_returns(self):
         from app.infrastructure.mods.mod_manager import ModManager
 
@@ -1545,8 +1819,9 @@ class TestEnsureModsLoadedBranches:
             patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
-        # Disabled -> no loading work performed.
+        # Disabled -> no loading work and the retry counter stays untouched.
         mock_load.assert_not_called()
+        assert mm._ensure_attempts == 0
 
     def test_already_loaded_returns(self):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -1556,11 +1831,14 @@ class TestEnsureModsLoadedBranches:
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
             patch.object(mm, "_refresh_mods_root_if_needed"),
             patch.object(mm, "list_loaded_mods", return_value=[MagicMock()]),
+            patch.object(mm, "scan_mods") as mock_scan,
             patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
-        # Registry already populated -> no reload.
+        # Registry already populated -> short-circuit before even scanning the disk.
+        mock_scan.assert_not_called()
         mock_load.assert_not_called()
+        assert mm._ensure_attempts == 0
 
     def test_no_discovered_returns(self):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -1574,8 +1852,9 @@ class TestEnsureModsLoadedBranches:
             patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
-        # No manifests on disk -> nothing to load.
+        # No manifests on disk -> nothing to load and no attempt consumed.
         mock_load.assert_not_called()
+        assert mm._ensure_attempts == 0
 
     def test_throttled_returns(self):
         import time
@@ -1583,7 +1862,8 @@ class TestEnsureModsLoadedBranches:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mm = ModManager(mods_root="/tmp")
-        mm._last_ensure_at = time.monotonic()
+        sentinel = time.monotonic()
+        mm._last_ensure_at = sentinel
         with (
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
             patch.object(mm, "_refresh_mods_root_if_needed"),
@@ -1592,8 +1872,10 @@ class TestEnsureModsLoadedBranches:
             patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
-        # Within the 1.5s throttle window -> load is skipped.
+        # Within the 1.5s throttle window -> load skipped, no new attempt, timestamp unchanged.
         mock_load.assert_not_called()
+        assert mm._ensure_attempts == 0
+        assert mm._last_ensure_at == sentinel
 
     def test_max_attempts_reached(self):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -1608,8 +1890,9 @@ class TestEnsureModsLoadedBranches:
             patch.object(mm, "load_all_mods") as mock_load,
         ):
             mm.ensure_mods_loaded(MagicMock())
-        # Attempt budget exhausted -> load is skipped.
+        # Attempt budget exhausted -> load skipped and counter not pushed past the cap.
         mock_load.assert_not_called()
+        assert mm._ensure_attempts == 20
 
     def test_recoverable_error_swallowed(self):
         from app.infrastructure.mods.mod_manager import ModManager
@@ -1622,8 +1905,9 @@ class TestEnsureModsLoadedBranches:
             ),
             patch.object(mm, "load_all_mods") as mock_load,
         ):
-            # Recoverable error is swallowed (does not propagate) and no load runs.
-            mm.ensure_mods_loaded(MagicMock())
+            # Recoverable error is swallowed (returns None, does not propagate) and no load runs.
+            result = mm.ensure_mods_loaded(MagicMock())
+        assert result is None
         mock_load.assert_not_called()
 
 
@@ -1659,30 +1943,95 @@ class TestBlueprintFailures:
 
 
 class TestMetadataToApiDict:
+    def _meta(self, **overrides):
+        m = MagicMock()
+        defaults = {
+            "id": "m1",
+            "name": "Mod",
+            "version": "1.0",
+            "author": "alice",
+            "description": "desc",
+            "primary": True,
+            "industry": {"k": "v"},
+            "ui_labels": {"a": "b"},
+            "ui_starter_pack": ["s1"],
+            "frontend_menu": ["menu1"],
+            "frontend_menu_overrides": ["ov"],
+            "workflow_employees": ["e1"],
+            "comms_exports": ["c1"],
+            "frontend_pro_entry_path": "/pro",
+        }
+        defaults.update(overrides)
+        for key, value in defaults.items():
+            setattr(m, key, value)
+        return m
+
     def test_bundle_artifact_adds_type(self):
         from app.infrastructure.mods.artifact_constants import ARTIFACT_BUNDLE
         from app.infrastructure.mods.mod_manager import ModManager
 
-        m = MagicMock()
-        m.id = "m1"
-        m.name = "Mod"
-        m.version = "1.0"
-        m.author = ""
-        m.description = ""
-        m.primary = False
-        m.artifact = ARTIFACT_BUNDLE
-        m.industry = {}
-        m.ui_labels = {}
-        m.ui_starter_pack = []
-        m.frontend_menu = []
-        m.frontend_menu_overrides = []
-        m.workflow_employees = []
-        m.comms_exports = []
-        m.frontend_pro_entry_path = ""
-
-        with patch(
-            "app.infrastructure.mods.mod_manager.normalize_artifact",
-            return_value=ARTIFACT_BUNDLE,
-        ):
-            result = ModManager._metadata_to_api_dict(m)
+        m = self._meta(artifact=ARTIFACT_BUNDLE)
+        result = ModManager._metadata_to_api_dict(m)
+        # Bundles carry the extra "type" discriminator the frontend keys on.
         assert result["type"] == "bundle"
+        assert result["artifact"] == "bundle"
+
+    def test_full_field_mapping_for_plain_mod(self):
+        from app.infrastructure.mods.artifact_constants import ARTIFACT_MOD
+        from app.infrastructure.mods.mod_manager import ModManager
+
+        m = self._meta(artifact=ARTIFACT_MOD)
+        result = ModManager._metadata_to_api_dict(m)
+        # Every scalar/collection field is projected through verbatim ...
+        assert result == {
+            "id": "m1",
+            "name": "Mod",
+            "version": "1.0",
+            "author": "alice",
+            "description": "desc",
+            "primary": True,
+            "artifact": "mod",
+            "industry": {"k": "v"},
+            "ui_labels": {"a": "b"},
+            "ui_starter_pack": ["s1"],
+            "menu": ["menu1"],
+            "frontend": {"pro_entry_path": "/pro"},
+            "menu_overrides": ["ov"],
+            "workflow_employees": ["e1"],
+            "comms_exports": ["c1"],
+        }
+        # ... and a non-bundle artifact must NOT add the "type" discriminator.
+        assert "type" not in result
+
+    def test_malformed_collections_coerced_to_empty(self):
+        from app.infrastructure.mods.artifact_constants import ARTIFACT_MOD
+        from app.infrastructure.mods.mod_manager import ModManager
+
+        # industry/ui_labels not dicts, ui_starter_pack not a list, falsy menus.
+        m = self._meta(
+            artifact=ARTIFACT_MOD,
+            author=None,
+            description=None,
+            primary=0,
+            industry="not-a-dict",
+            ui_labels=None,
+            ui_starter_pack="nope",
+            frontend_menu=[],
+            frontend_menu_overrides=None,
+            workflow_employees=None,
+            comms_exports=None,
+            frontend_pro_entry_path="  /trim  ",
+        )
+        result = ModManager._metadata_to_api_dict(m)
+        assert result["author"] == ""
+        assert result["description"] == ""
+        assert result["primary"] is False
+        assert result["industry"] == {}
+        assert result["ui_labels"] == {}
+        assert result["ui_starter_pack"] == []
+        assert result["menu"] == []
+        assert result["menu_overrides"] == []
+        assert result["workflow_employees"] == []
+        assert result["comms_exports"] == []
+        # pro_entry_path is stripped of surrounding whitespace.
+        assert result["frontend"]["pro_entry_path"] == "/trim"

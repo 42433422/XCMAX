@@ -136,13 +136,27 @@ class TestPostCsMessage:
 
     @pytest.mark.asyncio
     async def test_authorized_body_with_extra_fields(self, ext_mod):
+        """Extra body fields are ignored; only 'body' text drives the message."""
         mock_request = MagicMock()
         result = await ext_mod.post_cs_message(
             request=mock_request,
             body={"body": "msg", "extra": "ignored", "type": "text"},
             user=_mock_user(),
         )
-        assert hasattr(result, "body") or isinstance(result, dict)
+        # Success path returns a plain dict (not JSONResponse) → 200 envelope
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["code"] == 200
+        data = result["data"]
+        # message_id is derived from msg text path → cs_ + 12 hex
+        assert data["message_id"].startswith("cs_")
+        assert len(data["message_id"]) == 15
+        # backend echoes the dedicated CS employee mod id, not the extra fields
+        from app.services.user_cs_employee_runner import EMPLOYEE_MOD_ID
+
+        assert data["backend"] == EMPLOYEE_MOD_ID
+        assert "extra" not in data
+        assert "type" not in data
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +212,14 @@ class TestGetCsMessages:
 
     @pytest.mark.asyncio
     async def test_authorized_with_none_since(self, ext_mod):
+        """since=None must not filter; empty DB → empty messages list."""
         mock_request = MagicMock()
         result = await ext_mod.get_cs_messages(request=mock_request, since=None, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["data"]["messages"] == []
+        # no exception path → persist_error empty
+        assert result["data"]["persist_error"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +316,14 @@ class TestMobileShipmentsAdditional:
 
         with patch("app.db.session.get_db", return_value=mock_db):
             result = await ext_mod.mobile_shipments(page=1, per_page=20, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        data = result["data"]
+        assert data["items"] == [{"id": 1, "order_number": "SHP-001", "status": "in_transit"}]
+        assert data["pagination"]["total"] == 1
+        assert data["pagination"]["page"] == 1
+        assert data["pagination"]["per_page"] == 20
+        assert data["pagination"]["has_next"] is False
 
     @pytest.mark.asyncio
     async def test_empty_shipments(self, ext_mod):
@@ -311,7 +337,15 @@ class TestMobileShipmentsAdditional:
 
         with patch("app.db.session.get_db", return_value=mock_db):
             result = await ext_mod.mobile_shipments(page=2, per_page=10, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        data = result["data"]
+        assert data["items"] == []
+        assert data["pagination"]["total"] == 0
+        assert data["pagination"]["page"] == 2
+        assert data["pagination"]["total_pages"] == 0
+        assert data["pagination"]["has_prev"] is True
+        # offset = (page-1)*per_page = 10
+        mock_q.order_by.return_value.offset.assert_called_once_with(10)
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +402,7 @@ class TestApprovalItemsAdditional:
 class TestMobileDeviceRegisterAdditional:
     @pytest.mark.asyncio
     async def test_empty_push_provider_defaults_to_fcm(self, ext_mod):
-        """When push_provider is empty, provider defaults to 'fcm'."""
+        """When push_provider is empty, provider defaults to 'fcm' on the inserted row."""
         body = ext_mod.DeviceRegisterBody(
             fcm_token="a" * 10, push_token="push_tok", push_provider=""
         )
@@ -384,11 +418,17 @@ class TestMobileDeviceRegisterAdditional:
             patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["data"] == {"registered": True}
+        # New row inserted with provider defaulted to 'fcm'
+        mock_db.add.assert_called_once()
+        added = mock_db.add.call_args[0][0]
+        assert added.push_provider == "fcm"
+        assert added.push_token == "push_tok"
 
     @pytest.mark.asyncio
     async def test_empty_product_sku_defaults_to_personal(self, ext_mod):
-        """When product_sku is empty, defaults to 'personal'."""
+        """When product_sku is empty, defaults to 'personal' on the inserted row."""
         body = ext_mod.DeviceRegisterBody(fcm_token="a" * 10, push_token="push_tok", product_sku="")
         mock_db = MagicMock()
         mock_q = MagicMock()
@@ -402,11 +442,14 @@ class TestMobileDeviceRegisterAdditional:
             patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["data"]["registered"] is True
+        added = mock_db.add.call_args[0][0]
+        assert added.product_sku == "personal"
 
     @pytest.mark.asyncio
     async def test_push_provider_uppercase_lowered(self, ext_mod):
-        """push_provider is lowercased."""
+        """push_provider 'FCM' is lowercased to 'fcm' on the inserted row."""
         body = ext_mod.DeviceRegisterBody(
             fcm_token="a" * 10, push_token="push_tok", push_provider="FCM"
         )
@@ -422,11 +465,13 @@ class TestMobileDeviceRegisterAdditional:
             patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        added = mock_db.add.call_args[0][0]
+        assert added.push_provider == "fcm"
 
     @pytest.mark.asyncio
     async def test_push_token_from_fcm_when_push_empty(self, ext_mod):
-        """When push_token is empty, token comes from fcm_token."""
+        """When push_token is empty, token falls back to fcm_token on the inserted row."""
         body = ext_mod.DeviceRegisterBody(fcm_token="a" * 10, push_token="")
         mock_db = MagicMock()
         mock_q = MagicMock()
@@ -440,11 +485,15 @@ class TestMobileDeviceRegisterAdditional:
             patch("app.db.session.get_db", return_value=mock_db),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        added = mock_db.add.call_args[0][0]
+        # token := (push_token or fcm_token).strip() → fcm_token value
+        assert added.push_token == "a" * 10
+        assert added.fcm_token == "a" * 10
 
     @pytest.mark.asyncio
     async def test_update_existing_row_with_empty_product_sku(self, ext_mod):
-        """Update existing row with empty product_sku defaults to 'personal'."""
+        """Update existing row: empty product_sku defaults to 'personal' and no insert happens."""
         body = ext_mod.DeviceRegisterBody(fcm_token="a" * 10, push_token="push_tok", product_sku="")
         mock_db = MagicMock()
         mock_row = MagicMock()
@@ -460,7 +509,13 @@ class TestMobileDeviceRegisterAdditional:
             patch("app.utils.time.utc_now_naive", return_value="2026-06-17"),
         ):
             result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["data"]["registered"] is True
+        # Existing row branch → fields mutated in place, no db.add
+        mock_db.add.assert_not_called()
+        assert mock_row.product_sku == "personal"
+        assert mock_row.push_provider == "fcm"
+        assert mock_row.push_token == "push_tok"
 
 
 # ---------------------------------------------------------------------------
@@ -530,23 +585,35 @@ class TestMobilePairingLookupAdditional:
 class TestMobilePairingIssueAdditional:
     @pytest.mark.asyncio
     async def test_issue_with_default_host(self, ext_mod):
-        """Test pairing issue with default host (127.0.0.1) — should call _guess_lan_ipv4."""
+        """Default host (empty) → loopback → _guess_lan_ipv4 LAN IP used in payload."""
         body = ext_mod.PairingIssueBody()
         with (
-            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"),
+            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5") as mock_guess,
+            patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value=None),
             patch(
                 "app.security.mobile_pairing.issue_pairing_nonce",
                 return_value={"nonce": "n", "host": "10.0.0.5", "port": 5112},
             ),
         ):
             result = await ext_mod.mobile_pairing_issue(body, _mock_pairing_request())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        # loopback default forces LAN guess
+        mock_guess.assert_called_once()
+        assert isinstance(result, dict)
+        data = result["data"]
+        assert data["host"] == "10.0.0.5"
+        assert data["api_base_url"] == "http://10.0.0.5:5112/"
+        assert data["qr_json"]["kind"] == "xcagi_pairing"
+        assert data["deep_link"].startswith("xcagi://pairing?")
+        # no relay registered → relay keys absent
+        assert "relay" not in data
 
     @pytest.mark.asyncio
     async def test_issue_with_localhost_host(self, ext_mod):
+        """host='localhost' is loopback → replaced by LAN guess in payload."""
         body = ext_mod.PairingIssueBody(host="localhost", port=8080)
         with (
-            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"),
+            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5") as mock_guess,
+            patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value=None),
             patch(
                 "app.security.mobile_pairing.issue_pairing_nonce",
                 return_value={"nonce": "n", "host": "10.0.0.5", "port": 8080},
@@ -556,20 +623,35 @@ class TestMobilePairingIssueAdditional:
                 body,
                 _mock_pairing_request("localhost:8080", "localhost"),
             )
-        assert hasattr(result, "body") or isinstance(result, dict)
+        mock_guess.assert_called_once()
+        assert isinstance(result, dict)
+        data = result["data"]
+        assert data["host"] == "10.0.0.5"
+        assert data["api_base_url"] == "http://10.0.0.5:8080/"
 
     @pytest.mark.asyncio
     async def test_issue_with_custom_host(self, ext_mod):
+        """Public host is NOT rewritten and skips LAN guess + relay registration."""
         body = ext_mod.PairingIssueBody(host="example.com", port=443)
-        with patch(
-            "app.security.mobile_pairing.issue_pairing_nonce",
-            return_value={"nonce": "n", "host": "example.com", "port": 443},
+        with (
+            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5") as mock_guess,
+            patch(
+                "app.security.mobile_pairing.issue_pairing_nonce",
+                return_value={"nonce": "n", "host": "example.com", "port": 443},
+            ),
         ):
             result = await ext_mod.mobile_pairing_issue(
                 body,
                 _mock_pairing_request("example.com:443", "example.com"),
             )
-        assert hasattr(result, "body") or isinstance(result, dict)
+        # public host → LAN guess never consulted
+        mock_guess.assert_not_called()
+        assert isinstance(result, dict)
+        data = result["data"]
+        assert data["host"] == "example.com"
+        assert data["api_base_url"] == "http://example.com:443/"
+        # example.com is not private/loopback → no relay payload
+        assert "relay" not in data
 
 
 # ---------------------------------------------------------------------------
@@ -634,8 +716,13 @@ class TestMobileSyncPushAdditional:
             ) as mock_apply,
         ):
             result = await ext_mod.mobile_sync_push(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        # empty items → nothing written → apply limit = written(0) + 50
+        assert result["data"]["written"] == 0
+        assert result["data"]["apply"] == {"applied": 0}
         mock_apply.assert_called_once_with(limit=50)
+        mock_sync_db.append_change.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -686,7 +773,10 @@ class TestMobileAuthQrConfirmAdditional2:
             result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
         # bearer lookup should NOT be called since username is provided
         mock_bearer.assert_not_called()
-        assert hasattr(result, "body") or isinstance(result, dict)
+        # successful confirm returns a plain dict envelope, not a 4xx JSONResponse
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["data"] == {"confirmed": True, "qr_id": "a" * 8}
 
     @pytest.mark.asyncio
     async def test_bearer_no_password(self, ext_mod):
@@ -882,7 +972,15 @@ class TestMobileAuthOidcExchangeAdditional2:
             mock_get.return_value = mock_service
             body = ext_mod.OidcExchangeBody(code="abc123", state="s" * 8)
             result = await ext_mod.mobile_auth_oidc_exchange(body=body)
-        assert hasattr(result, "body") or isinstance(result, dict)
+        # success path → plain dict envelope carrying the issued tokens
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        data = result["data"]
+        assert data["session_id"] is None
+        assert data["account_kind"] == "personal"
+        assert data["user"] == {"id": 1, "username": "alice"}
+        assert data["access_token"] == "tok"
+        assert data["refresh_token"] == "rtok"
 
     @pytest.mark.asyncio
     async def test_enterprise_sku(self, ext_mod):
@@ -927,7 +1025,14 @@ class TestMobileAuthOidcExchangeAdditional2:
             mock_get.return_value = mock_service
             body = ext_mod.OidcExchangeBody(code="abc123", state="s" * 8)
             result = await ext_mod.mobile_auth_oidc_exchange(body=body)
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        data = result["data"]
+        # enterprise SKU → finalize payload account_kind flows through
+        assert data["account_kind"] == "enterprise"
+        assert data["session_id"] == "sid123"
+        assert data["user"] == {"id": 1, "username": "alice"}
+        assert data["access_token"] == "tok"
 
     @pytest.mark.asyncio
     async def test_authenticate_returns_success_false_with_empty_user(self, ext_mod):
@@ -1087,13 +1192,24 @@ class TestGuessLanIpv4Additional2:
             ip = ext_mod._guess_lan_ipv4()
         assert ip == "127.0.0.1"
 
-    def test_socket_close_called(self, ext_mod):
-        """Test that socket.close() is called on success."""
+    def test_valid_ip_returned_and_socket_closed(self, ext_mod):
+        """A non-loopback IP from getsockname is returned and the probe socket closed."""
         mock_socket = MagicMock()
         mock_socket.getsockname.return_value = ("192.168.1.100", 80)
         with patch("socket.socket", return_value=mock_socket):
-            ext_mod._guess_lan_ipv4()
+            ip = ext_mod._guess_lan_ipv4()
+        assert ip == "192.168.1.100"
+        # probe connects out to a public address to discover the egress interface
+        mock_socket.connect.assert_called_once_with(("8.8.8.8", 80))
         mock_socket.close.assert_called_once()
+
+    def test_loopback_ip_falls_back_to_loopback(self, ext_mod):
+        """When getsockname yields a 127.* address it is rejected for loopback default."""
+        mock_socket = MagicMock()
+        mock_socket.getsockname.return_value = ("127.0.0.53", 80)
+        with patch("socket.socket", return_value=mock_socket):
+            ip = ext_mod._guess_lan_ipv4()
+        assert ip == "127.0.0.1"
 
     def test_socket_close_called_on_error(self, ext_mod):
         """Test that socket.close() is NOT called when connect raises OSError."""
@@ -1132,8 +1248,8 @@ class TestPairingIssueHostAdditional:
 
 
 class TestEnsureMobileDeviceTableAdditional:
-    def test_import_error_logged(self, ext_mod):
-        """Test that import errors are caught and logged."""
+    def test_import_error_swallowed_and_logged(self, ext_mod):
+        """A recoverable error from get_db is swallowed and surfaced via logger.warning."""
         with (
             patch(
                 "app.db.session.get_db",
@@ -1143,12 +1259,16 @@ class TestEnsureMobileDeviceTableAdditional:
                 "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
                 (RuntimeError, ImportError),
             ),
+            patch.object(ext_mod.logger, "warning") as mock_warn,
         ):
             # Should not raise
-            ext_mod._ensure_mobile_device_table()
+            assert ext_mod._ensure_mobile_device_table() is None
+        mock_warn.assert_called_once()
+        # the offending exception is passed through to the log record
+        assert isinstance(mock_warn.call_args[0][-1], ImportError)
 
-    def test_value_error_logged(self, ext_mod):
-        """Test that ValueError is caught."""
+    def test_value_error_swallowed_and_logged(self, ext_mod):
+        """A ValueError (in RECOVERABLE_ERRORS) is caught rather than propagated."""
         with (
             patch(
                 "app.db.session.get_db",
@@ -1158,6 +1278,25 @@ class TestEnsureMobileDeviceTableAdditional:
                 "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
                 (RuntimeError, ValueError),
             ),
+            patch.object(ext_mod.logger, "warning") as mock_warn,
+        ):
+            assert ext_mod._ensure_mobile_device_table() is None
+        mock_warn.assert_called_once()
+        assert isinstance(mock_warn.call_args[0][-1], ValueError)
+
+    def test_unrecoverable_error_propagates(self, ext_mod):
+        """An error NOT in OPERATIONAL_ERRORS must propagate (not be silently swallowed)."""
+        # TypeError is not part of the recoverable set → must bubble up
+        with (
+            patch(
+                "app.db.session.get_db",
+                side_effect=TypeError("boom"),
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions.OPERATIONAL_ERRORS",
+                (RuntimeError, ValueError),
+            ),
+            pytest.raises(TypeError),
         ):
             ext_mod._ensure_mobile_device_table()
 
@@ -1184,7 +1323,33 @@ class TestEnsureMobileDeviceTableAdditional:
             ),
         ):
             ext_mod._ensure_mobile_device_table()
+        mock_insp.has_table.assert_called_once_with("mobile_device_tokens")
         mock_table.__table__.create.assert_called_once_with(mock_bind, checkfirst=True)
+
+    def test_table_creation_skipped_when_present(self, ext_mod):
+        """When the table already exists, create() is NOT invoked (else branch)."""
+        mock_db = MagicMock()
+        mock_db.get_bind.return_value = MagicMock()
+        mock_table = MagicMock()
+        mock_table.__table__ = MagicMock()
+        mock_table.__tablename__ = "mobile_device_tokens"
+        mock_insp = MagicMock()
+        mock_insp.has_table.return_value = True
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("sqlalchemy.inspect", return_value=mock_insp),
+            patch(
+                "app.db.models.mobile_device.MobileDeviceToken",
+                mock_table,
+                create=True,
+            ),
+        ):
+            ext_mod._ensure_mobile_device_table()
+        mock_insp.has_table.assert_called_once_with("mobile_device_tokens")
+        mock_table.__table__.create.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1225,6 +1390,7 @@ class TestMobileSyncStatusAdditional:
 
     @pytest.mark.asyncio
     async def test_status_with_zero_inbox_pending(self, ext_mod):
+        """get_status fields are preserved and inbox_pending=0 is injected."""
         mock_sync_db = MagicMock()
         mock_sync_db.get_status.return_value = {"healthy": True}
         mock_conn = MagicMock()
@@ -1239,7 +1405,10 @@ class TestMobileSyncStatusAdditional:
             patch("app.db.xcmax_sync._get_conn", return_value=mock_ctx),
         ):
             result = await ext_mod.mobile_sync_status(user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        data = result["data"]
+        assert data["healthy"] is True
+        assert data["inbox_pending"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1305,8 +1474,12 @@ class TestMobileSyncPullAdditional:
         ):
             body = ext_mod.SyncPullBody(since_cursor=0)
             result = await ext_mod.mobile_sync_pull(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
-        # cursor is 0 (falsy) → update_remote_cursor NOT called
+        assert isinstance(result, dict)
+        data = result["data"]
+        # cursor resolves to 0 (falsy) → no remote-cursor update, cursor echoed as 0
+        assert data["cursor"] == 0
+        assert data["changes"] == []
+        assert data["im_change_count"] == 0
         mock_sync_db.update_remote_cursor.assert_not_called()
 
     @pytest.mark.asyncio
@@ -1374,27 +1547,21 @@ class TestMobileSyncConflictsAdditional:
 
     @pytest.mark.asyncio
     async def test_conflicts_with_multiple_rows(self, ext_mod):
-        """Test sync conflicts with multiple conflict rows."""
+        """Conflict rows are coerced to dicts and returned verbatim under data.items."""
         mock_conn = MagicMock()
         rows = []
         for i in range(3):
+            payload = {
+                "id": i,
+                "entity_type": "customer",
+                "entity_id": f"c-{i}",
+                "conflict_note": "note",
+                "received_at": "2026-01-01",
+            }
+            # bind payload per-iteration so dict(row) yields distinct rows
             row = MagicMock()
-            row.keys.return_value = [
-                "id",
-                "entity_type",
-                "entity_id",
-                "conflict_note",
-                "received_at",
-            ]
-            row.__getitem__ = MagicMock(
-                side_effect=lambda k: {
-                    "id": i,
-                    "entity_type": "customer",
-                    "entity_id": f"c-{i}",
-                    "conflict_note": "note",
-                    "received_at": "2026-01-01",
-                }[k]
-            )
+            row.keys.return_value = list(payload.keys())
+            row.__getitem__ = MagicMock(side_effect=lambda k, p=payload: p[k])
             rows.append(row)
         mock_conn.execute.return_value.fetchall.return_value = rows
         mock_ctx = MagicMock()
@@ -1406,7 +1573,13 @@ class TestMobileSyncConflictsAdditional:
             patch("app.db.xcmax_sync._get_conn", return_value=mock_ctx),
         ):
             result = await ext_mod.mobile_sync_conflicts(user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        items = result["data"]["items"]
+        assert len(items) == 3
+        assert [it["entity_id"] for it in items] == ["c-0", "c-1", "c-2"]
+        assert items[0]["entity_type"] == "customer"
+        assert items[0]["conflict_note"] == "note"
+        assert "error" not in result["data"]
 
 
 # ---------------------------------------------------------------------------
@@ -1438,7 +1611,9 @@ class TestMobileSyncAckAdditional:
         with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db):
             body = ext_mod.SyncAckBody(cursor=999999)
             result = await ext_mod.mobile_sync_ack(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["data"]["acked"] == 999999
         mock_sync_db.update_remote_cursor.assert_called_once_with(999999)
 
 
@@ -1463,7 +1638,14 @@ class TestMobileApprovalListAdditional:
             result = await ext_mod.mobile_approval_list(
                 request=MagicMock(), status=None, page=2, page_size=50, user=_mock_user()
             )
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        data = result["data"]
+        assert data["items"] == []
+        assert data["pagination"]["total"] == 100
+        assert data["pagination"]["page"] == 2
+        assert data["pagination"]["total_pages"] == 2
+        assert data["pagination"]["has_next"] is False
+        assert data["pagination"]["has_prev"] is True
         # Verify offset is (2-1)*50 = 50
         mock_q.order_by.return_value.offset.assert_called_once_with(50)
 
@@ -1491,7 +1673,20 @@ class TestMobileApprovalListAdditional:
             result = await ext_mod.mobile_approval_list(
                 request=MagicMock(), status="approved", page=1, page_size=50, user=_mock_user()
             )
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        # status filter applied → query.filter invoked
+        mock_q.filter.assert_called_once()
+        data = result["data"]
+        assert data["items"] == [
+            {
+                "id": 1,
+                "title": "Test",
+                "status": "approved",
+                "request_no": "REQ-001",
+                "applicant_id": 100,
+            }
+        ]
+        assert data["pagination"]["total"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1513,7 +1708,11 @@ class TestMobileCustomersAdditional:
 
         with patch("app.db.session.get_db", return_value=mock_db):
             result = await ext_mod.mobile_customers(page=1, per_page=20, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        data = result["data"]
+        assert data["items"] == []
+        assert data["pagination"]["total"] == 0
+        assert data["pagination"]["has_prev"] is False
 
     @pytest.mark.asyncio
     async def test_customers_with_pagination(self, ext_mod):
@@ -1532,7 +1731,14 @@ class TestMobileCustomersAdditional:
 
         with patch("app.db.session.get_db", return_value=mock_db):
             result = await ext_mod.mobile_customers(page=3, per_page=10, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        data = result["data"]
+        # row mapped to {id, name, phone}
+        assert data["items"] == [{"id": 21, "name": "Bob", "phone": "13900000000"}]
+        assert data["pagination"]["total"] == 50
+        assert data["pagination"]["page"] == 3
+        assert data["pagination"]["total_pages"] == 5
+        assert data["pagination"]["has_next"] is True
         # Verify offset is (3-1)*10 = 20
         mock_q.offset.assert_called_once_with(20)
 
@@ -1739,11 +1945,17 @@ class TestMobileHomeAdditional:
             patch(
                 "app.mod_sdk.platform_shell.build_platform_shell_payload",
                 return_value={"shell": "data"},
-            ),
+            ) as mock_build,
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
         ):
             result = await ext_mod.mobile_home(user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        data = result["data"]
+        assert data["mods"] == mods
+        assert data["sync"] == {"healthy": True, "local_cursor": 5}
+        assert data["platform_shell"] == {"shell": "data"}
+        # platform shell built from the mod ids
+        mock_build.assert_called_once_with(["mod-0", "mod-1", "mod-2", "mod-3", "mod-4"])
 
 
 # ---------------------------------------------------------------------------
@@ -1763,7 +1975,9 @@ class TestMobilePlatformShellAdditional:
             ) as mock_build,
         ):
             result = await ext_mod.mobile_platform_shell(user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["data"] == {"shell": "empty"}
         mock_build.assert_called_once_with([])
 
     @pytest.mark.asyncio
@@ -1778,7 +1992,9 @@ class TestMobilePlatformShellAdditional:
             ) as mock_build,
         ):
             result = await ext_mod.mobile_platform_shell(user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["data"] == {"shell": "data"}
+        # only the mod ids are forwarded to the shell builder
         mock_build.assert_called_once_with(["mod-1", "mod-2"])
 
 
@@ -1808,4 +2024,11 @@ class TestMobileModsSummaryAdditional:
         items = [{"id": f"mod-{i}", "name": f"Mod {i}"} for i in range(10)]
         with patch.object(ext_mod, "_mobile_mod_items", return_value=items):
             result = await ext_mod.mobile_mods_summary(user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        data = result["data"]
+        assert data["items"] == items
+        assert len(data["items"]) == 10
+        # market_connected/market_profile_count keys are always present
+        assert "market_connected" in data
+        assert "market_profile_count" in data
