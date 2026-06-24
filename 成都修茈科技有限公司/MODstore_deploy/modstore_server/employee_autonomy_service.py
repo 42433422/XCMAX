@@ -22,6 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from sqlalchemy import func, or_
 
 from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA
+from modstore_server.platform_llm_scope import platform_llm_scoped
 from modstore_server.models import (
     EmployeeChangeRequest,
     EmployeeCollabMessage,
@@ -450,6 +451,7 @@ def _build_subtask_text(summary: str, detail: str, payload: Dict[str, Any]) -> s
     return "\n".join(x for x in lines if x).strip()[:4000]
 
 
+@platform_llm_scoped
 def dispatch_suggestion(
     suggestion_id: int,
     *,
@@ -547,6 +549,7 @@ def dispatch_suggestion(
     return {"ok": True, "suggestion_id": sid, "dispatch_result": result}
 
 
+@platform_llm_scoped
 def dispatch_pending_suggestions(limit: int = 20) -> Dict[str, Any]:
     lim = max(1, min(int(limit or 20), 100))
     sf = get_session_factory()
@@ -696,6 +699,7 @@ def list_pending_brief_tasks(limit: int = 100, *, status: str = "") -> List[Dict
         ]
 
 
+@platform_llm_scoped
 def dispatch_pending_brief_tasks(limit: int = 20) -> Dict[str, Any]:
     lim = max(1, min(int(limit or 20), 100))
     sf = get_session_factory()
@@ -875,6 +879,7 @@ def _alert_evolution_quota_circuit_break(quota_failures: int, lookback_hours: in
     )
 
 
+@platform_llm_scoped
 def run_employee_evolution_scan(
     *,
     lookback_hours: int = 24,
