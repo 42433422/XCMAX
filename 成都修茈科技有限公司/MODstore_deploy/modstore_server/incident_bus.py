@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from modstore_server.employee_executor import execute_employee_task
+from modstore_server.platform_llm_scope import platform_llm_scoped
 from modstore_server.integrations.ops_action_handlers import EVENT_TYPES
 from modstore_server.models import (
     CatalogItem,
@@ -239,6 +240,7 @@ def _incident_employee_input(
     return inp
 
 
+@platform_llm_scoped
 def _dispatch_incident(event_id: int) -> None:
     try:
         from modstore_server.node_coordinator import claim_incident_for_node
