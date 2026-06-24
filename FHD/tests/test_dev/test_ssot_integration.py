@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def test_ssot_list_shows_enabled_domains(capsys):
-    """list 输出全部 enabled 域。"""
+    """list 输出全部 enabled 域（含 service-topology 第 11 域）。"""
     from scripts.dev.ssot_cli import main
     from scripts.dev.ssot_plugins.base import load_registry
 
