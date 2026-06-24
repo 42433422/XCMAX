@@ -19,7 +19,7 @@ try:
 except ImportError:
     from datetime import datetime, timezone
 
-    UTC = timezone.utc
+    UTC = timezone.utc  # noqa: UP017
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

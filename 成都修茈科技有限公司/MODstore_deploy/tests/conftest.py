@@ -94,8 +94,12 @@ def auth_headers(client, monkeypatch):
     """注册临时用户（固定邮箱验证码）并返回 Bearer，供需登录的 /api/mods 等接口使用。"""
     import uuid
 
-    monkeypatch.setattr("modstore_server.market_auth_api.assert_email_outbound_configured", lambda: None)
-    monkeypatch.setattr("modstore_server.market_auth_api.generate_verification_code", lambda: "999999")
+    monkeypatch.setattr(
+        "modstore_server.market_auth_api.assert_email_outbound_configured", lambda: None
+    )
+    monkeypatch.setattr(
+        "modstore_server.market_auth_api.generate_verification_code", lambda: "999999"
+    )
     monkeypatch.setattr(
         "modstore_server.market_auth_api.send_verification_email",
         lambda *args, **kwargs: None,
