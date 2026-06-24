@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import HTTPException
 
@@ -55,14 +56,14 @@ def _money(value: Decimal | float | int | str) -> Decimal:
 
 
 def require_llm_credit(session, user_id: int, amount: int = 1) -> str:
-    """Allow LLM work with either monthly call quota or wallet balance."""
-    row = get_quota(session, user_id, "llm_calls")
-    if row:
-        if row.total >= 0 and row.used + amount > row.total:
-            raise HTTPException(403, "配额不足: llm_calls")
-        return "quota"
-    min_charge = _money(__import__("os").environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
-    if (__import__("os").environ.get("PAYMENT_BACKEND") or "").strip().lower() == "java":
+    """LLM 准入：钱包余额足够即可。
+
+    计次配额 ``llm_calls`` 已退役——LLM 一律按 token 计费、从钱包 ¥ 余额扣（会员购买随单
+    充值钱包，见 ``payment_fulfilment`` plan_membership_tokens）。``PAYMENT_BACKEND=java``
+    时由 Java 钱包(HTTP 用户请求带登录态)结算，这里放行。
+    """
+    min_charge = _money(os.environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
+    if (os.environ.get("PAYMENT_BACKEND") or "").strip().lower() == "java":
         return "java_wallet"
     wallet = session.query(Wallet).filter(Wallet.user_id == user_id).first()
     if wallet and _money(wallet.balance) >= min_charge:
@@ -72,30 +73,39 @@ def require_llm_credit(session, user_id: int, amount: int = 1) -> str:
     )
 
 
-def consume_llm_credit(session, user_id: int, amount: int = 1) -> str:
-    """Consume LLM quota when present; otherwise charge the wallet minimum."""
-    row = get_quota(session, user_id, "llm_calls")
-    if row:
-        consume_quota(session, user_id, "llm_calls", amount)
-        return "quota"
-    min_charge = _money(__import__("os").environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
-    if (__import__("os").environ.get("PAYMENT_BACKEND") or "").strip().lower() == "java":
+def consume_llm_credit(
+    session,
+    user_id: int,
+    amount: int = 1,
+    *,
+    charge: Union[Decimal, float, int, str, None] = None,
+) -> str:
+    """按 token 计算的 ¥ 金额从钱包扣费（计次配额已退役，统一钱包计费）。
+
+    ``charge`` 为按 token 算出的 ¥ 金额（``llm_billing.calculate_charge``）；缺省或低于
+    ``COSER_DEFAULT_MIN_CHARGE`` 时按最低收。``PAYMENT_BACKEND=java`` 时交由 Java 钱包结算。
+    """
+    min_charge = _money(os.environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
+    amount_yuan = _money(charge) if charge is not None else min_charge
+    if amount_yuan < min_charge:
+        amount_yuan = min_charge
+    if (os.environ.get("PAYMENT_BACKEND") or "").strip().lower() == "java":
         return "java_wallet"
     wallet = session.query(Wallet).filter(Wallet.user_id == user_id).with_for_update().first()
-    if not wallet or _money(wallet.balance) < min_charge:
+    if not wallet or _money(wallet.balance) < amount_yuan:
         raise HTTPException(
-            402, f"余额不足，需要 ¥{min_charge}，当前 ¥{wallet.balance if wallet else 0}"
+            402, f"余额不足，需要 ¥{amount_yuan}，当前 ¥{wallet.balance if wallet else 0}"
         )
-    wallet.balance = float(_money(wallet.balance) - min_charge)
+    wallet.balance = float(_money(wallet.balance) - amount_yuan)
     wallet.updated_at = datetime.now(timezone.utc)
     session.add(wallet)
     session.add(
         Transaction(
             user_id=user_id,
-            amount=-float(min_charge),
+            amount=-float(amount_yuan),
             txn_type="llm_wallet_charge",
             status="completed",
-            description=f"AI 调用钱包扣费 ({amount} 次)",
+            description=f"AI 调用钱包扣费 (¥{amount_yuan})",
         )
     )
     session.commit()
