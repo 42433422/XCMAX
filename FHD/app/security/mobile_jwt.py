@@ -35,6 +35,23 @@ _warned_missing_secret = False
 # 已消费的 refresh token jti（一次性使用）；进程内内存 + 可选 Redis 跨副本共享。
 _used_refresh_jti: set[str] = set()
 _used_refresh_lock = threading.Lock()
+_warned_inmemory_replay = False
+
+
+def _warn_inmemory_replay_if_risky() -> None:
+    """重启语义见 docs §十：SECRET_KEY 已配置时 token 跨重启存活，但进程内黑名单
+    会在重启时清空，重开 refresh 重放窗口（单副本 + 无 Redis 才命中）。一次性
+    WARNING，使该降级可观测，而非静默。SECRET_KEY 未配置时重启即全 token 失效
+    （fail-closed），无需告警。
+    """
+    global _warned_inmemory_replay
+    if _warned_inmemory_replay or not os.environ.get("SECRET_KEY", "").strip():
+        return
+    logger.warning(
+        "refresh 重放保护仅在进程内存（无 Redis）：SECRET_KEY 已配置使 token 跨重启存活，"
+        "但重启会清空已消费 jti、重开重放窗口。多副本 / 生产请配置 Redis 持久化。"
+    )
+    _warned_inmemory_replay = True
 
 
 def _secret_key() -> str:
@@ -78,6 +95,8 @@ def _mark_refresh_jti_used(jti: str, ttl_seconds: int) -> None:
             redis.set(f"mobile_refresh_used:{jti}", "1", ttl=ttl_seconds)
         except RECOVERABLE_ERRORS:
             pass
+    else:
+        _warn_inmemory_replay_if_risky()
     with _used_refresh_lock:
         _used_refresh_jti.add(jti)
 

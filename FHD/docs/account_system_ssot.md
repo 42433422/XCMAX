@@ -190,3 +190,21 @@ warehouses / storage_locations / inventory_ledger / inventory_transactions。
 > **已收口**（原空密码占位债）：`admin_set_user_profile`（`xcmax_admin.py`）预置占位用户改用**不可用哨兵哈希** `generate_password_hash(uuid.uuid4().hex)`，本地无可登录密码（登录走云端）；并在 `check_password_hash`（[app/utils/password_hash.py](../app/utils/password_hash.py)）增加「空/空白哈希一律拒绝」的防御纵深。守卫白名单已移除该点——任何位置再写空密码 `User(...)` 即 DRIFT。
 
 守卫：[scripts/dev/ssot_plugins/account_identity.py](../scripts/dev/ssot_plugins/account_identity.py) 用 AST 扫描 `app/` 内的身份伪造模式（JWT→`SimpleNamespace` 用户、空密码 `User(...)`），白名单外新增即 DRIFT；已在 [config/ssot.yaml](../config/ssot.yaml) 注册为 `account-identity` 域（mode=lint，advisory）。新增受控点须先登记本节再加白名单。
+
+## 十、重启 / 更新的状态语义（哪些会丢、哪些不丢）
+
+> 把「重启 / 更新后什么变了」写明，杜绝**静默**的真相漂移。原则：要么持久（落盘 / DB / 云端），要么**显式声明易失且 fail-closed**。
+
+| 状态 | 存储 | 重启 / 更新后 | 性质 |
+|------|------|--------------|------|
+| 设备身份 `device_id` | `{app_data_dir}/device_id`（落盘 UUID） | **不变**（换端口 / 改主机名 / 更新均不变） | 持久；旧 `hostname:port` 已废，仅留作 label。实现 [app/utils/device_identity.py](../app/utils/device_identity.py) |
+| 桌面中继绑定 | 云端 `mobile_relay_desktops` 表 + `{app_data_dir}/mobile_relay_desktop.json`（缓存） | **不变**（云端权威；本地 json 可重建） | 持久 |
+| LAN 配对 nonce / 6 位码 | 进程内存（5 分钟一次性） | **失效**（重新出码即可） | **易失（按设计，fail-closed）**——丢了只是「码过期」，无安全风险 |
+| refresh 防重放（已消费 jti） | 进程内存 + 可选 Redis | `SECRET_KEY` 未配→**全 token 失效**(fail-closed)；已配 + 无 Redis→**重放窗口重开**（待收口） | 半持久 |
+| 移动 / 桌面 token | 客户端本地（DataStore / localStorage / 内存）+ 服务端 Session | 见 §零：本地皆缓存，丢了重新登录 / 配对从云端拉回 | 缓存 |
+
+### refresh 防重放的持久化缺口（已知，非静默）
+- `SECRET_KEY` 未配置（典型桌面）：进程级随机密钥，重启后**所有** token 失效 → 不存在重放（fail-closed）。
+- `SECRET_KEY` 已配置 + **无 Redis** + 重启：已消费 jti 黑名单清空，未过期的 refresh token 可被重放一次。**单副本生产**才会命中。
+- 收口：多副本 / 生产配置 Redis（已支持 `_redis_blacklist`）即持久；命中风险组合时 `mobile_jwt` 打**一次性 WARNING**（可观测）。DB 持久化为后续可选项。
+- 实现：[app/security/mobile_jwt.py](../app/security/mobile_jwt.py)。
