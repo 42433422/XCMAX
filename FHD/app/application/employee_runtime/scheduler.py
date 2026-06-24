@@ -448,13 +448,18 @@ def _due_job_ids() -> list[str]:
 
 def _scheduler_loop() -> None:
     logger.info("employee scheduler loop started")
-    while not _stop_event.wait(_seconds_until_next_due()):
-        for job_id in _due_job_ids():
-            try:
-                run_employee_cron_job(job_id, source="cron")
-            except RECOVERABLE_ERRORS as exc:
-                logger.warning("employee cron job failed job_id=%s: %s", job_id, exc)
-    logger.info("employee scheduler loop stopped")
+    try:
+        while not _stop_event.wait(_seconds_until_next_due()):
+            for job_id in _due_job_ids():
+                try:
+                    run_employee_cron_job(job_id, source="cron")
+                except RECOVERABLE_ERRORS as exc:
+                    logger.warning("employee cron job failed job_id=%s: %s", job_id, exc)
+    except Exception as exc:
+        logger.exception("employee scheduler loop crashed unexpectedly: %s", exc)
+        raise
+    finally:
+        logger.info("employee scheduler loop stopped")
 
 
 def start_employee_scheduler() -> dict[str, Any]:
@@ -564,9 +569,13 @@ def _apply_job_outcome(
     error: str,
     duration_ms: float,
     finished: datetime,
-) -> None:
-    """根据执行结果更新 job 状态（含重试调度与告警）。必须在 _lock 内调用。"""
+) -> bool:
+    """根据执行结果更新 job 状态（含重试调度）。必须在 _lock 内调用。
+
+    返回是否应触发失败告警（由调用方在释放 _lock 后调用告警钩子，避免持锁阻塞）。
+    """
     global _last_error
+    should_alert = False
     job.running = False
     job.runs_total += 1
     job.last_run_at = finished
@@ -600,8 +609,9 @@ def _apply_job_outcome(
             job.last_status = "failed"
             job.retry_count = 0
             job.next_retry_at = None
-            # 只在最终失败时告警（重试中不告警，避免噪音）
-            _invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
+            # 只在最终失败时告警（重试中不告警，避免噪音）；
+            # 告警钩子由调用方在释放 _lock 后触发，避免持锁阻塞调度器。
+            should_alert = True
     # 无论成功失败，都计算下一个每日运行时间（重试期间 next_run_at 仍推进）
     if job.enabled:
         try:
@@ -609,6 +619,7 @@ def _apply_job_outcome(
         except ZoneInfoNotFoundError:
             tz = ZoneInfo("UTC")
         job.next_run_at = _next_daily_run(datetime.now(tz), job.hour, job.minute)
+    return should_alert
 
 
 def run_employee_cron_job(
@@ -647,28 +658,43 @@ def run_employee_cron_job(
             job.next_retry_at = None
 
     started = datetime.now(UTC)
-    ok, result, error = _execute_job_task(
-        job,
-        task=task,
-        input_data=input_data,
-        user_id=user_id,
-        workspace_root=workspace_root,
-        session_id=session_id,
-        source=source,
-    )
-    finished = datetime.now(UTC)
-    duration_ms = round((finished - started).total_seconds() * 1000, 1)
-
-    with _lock:
-        job = _jobs[jid]
-        _apply_job_outcome(
+    result: dict[str, Any] = {"success": False}
+    try:
+        ok, result, error = _execute_job_task(
             job,
-            ok=ok,
-            error=error,
-            duration_ms=duration_ms,
-            finished=finished,
+            task=task,
+            input_data=input_data,
+            user_id=user_id,
+            workspace_root=workspace_root,
+            session_id=session_id,
+            source=source,
         )
-        job_dict = job.to_dict()
+        finished = datetime.now(UTC)
+        duration_ms = round((finished - started).total_seconds() * 1000, 1)
+    except Exception as exc:
+        # 捕获任何异常（包括不在 RECOVERABLE_ERRORS 中的类型），确保清理 running 标志
+        finished = datetime.now(UTC)
+        duration_ms = round((finished - started).total_seconds() * 1000, 1)
+        ok = False
+        result = {"success": False}
+        error = str(exc)[:800]
+        logger.exception("employee cron job execution failed job_id=%s", jid)
+    finally:
+        with _lock:
+            job = _jobs[jid]
+            should_alert = _apply_job_outcome(
+                job,
+                ok=ok,
+                error=error,
+                duration_ms=duration_ms,
+                finished=finished,
+            )
+            job_dict = job.to_dict()
+            alert_error = job.last_error
+
+    # 在释放 _lock 后触发告警钩子，避免用户自定义钩子的阻塞操作持有全局锁
+    if should_alert:
+        _invoke_alert_hook(jid, alert_error, job_dict)
 
     return {"success": ok, "job": job_dict, "result": result}
 

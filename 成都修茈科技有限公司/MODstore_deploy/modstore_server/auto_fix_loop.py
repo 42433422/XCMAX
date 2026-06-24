@@ -207,6 +207,8 @@ def _patch_requirement(rel_path: str, package: str, fix_version: str) -> Optiona
 
     root = str(repo_root())
     full_path = os.path.join(root, rel_path)
+    if os.path.islink(full_path):
+        return None
     if not os.path.isfile(full_path):
         return None
 
@@ -233,6 +235,8 @@ def _patch_pyproject_dependency(rel_path: str, package: str, fix_version: str) -
 
     root = str(repo_root())
     full_path = os.path.join(root, rel_path)
+    if os.path.islink(full_path):
+        return None
     if not os.path.isfile(full_path):
         return None
 
