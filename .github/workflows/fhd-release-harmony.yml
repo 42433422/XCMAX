@@ -61,6 +61,18 @@ jobs:
           fi
           echo "version=${raw}" >> "${GITHUB_OUTPUT}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+      - name: Configure HarmonyOS production signing
+        # 用华为签名 secret 配置 build-profile.json5 → 后续构建产出已签名 HAP。
+        # secret 缺失时 no-op(对标 iOS/Android 的 secret 注入签名)。详见 FHD/mobile-harmony/docs/BUILD_HARMONY.md。
+        env:
+          HARMONY_SIGN_STORE_P12_BASE64: ${{ secrets.HARMONY_SIGN_STORE_P12_BASE64 }}
+          HARMONY_SIGN_CERT_BASE64: ${{ secrets.HARMONY_SIGN_CERT_BASE64 }}
+          HARMONY_SIGN_PROFILE_BASE64: ${{ secrets.HARMONY_SIGN_PROFILE_BASE64 }}
+          HARMONY_SIGN_STORE_PASSWORD: ${{ secrets.HARMONY_SIGN_STORE_PASSWORD }}
+          HARMONY_SIGN_KEY_PASSWORD: ${{ secrets.HARMONY_SIGN_KEY_PASSWORD }}
+          HARMONY_SIGN_KEY_ALIAS: ${{ secrets.HARMONY_SIGN_KEY_ALIAS }}
+          HARMONY_SIGN_ALG: ${{ secrets.HARMONY_SIGN_ALG }}
+        run: bash FHD/mobile-harmony/scripts/configure-harmony-signing.sh
       - name: Publish HarmonyOS release assets
         env:
           GH_TOKEN: ${{ github.token }}
