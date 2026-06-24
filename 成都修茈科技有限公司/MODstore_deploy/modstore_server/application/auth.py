@@ -65,8 +65,8 @@ class AuthApplicationService:
         if not user:
             raise AuthenticationError("用户不存在")
         return {
-            "access_token": create_access_token(user.id, user.username, is_admin=user.is_admin),
-            "refresh_token": create_refresh_token(user.id, user.username),
+            "access_token": create_access_token(int(user.id), str(user.username), is_admin=bool(user.is_admin)),
+            "refresh_token": create_refresh_token(int(user.id), str(user.username)),
         }
 
     def issue_pat(
