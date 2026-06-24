@@ -9,6 +9,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 if TYPE_CHECKING:
     from app.db.models.user import User
@@ -52,7 +53,7 @@ class AITool(Base):
     )
 
 
-class AIConversation(Base):
+class AIConversation(TenantScopedMixin, Base):
     __tablename__ = "ai_conversations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -73,7 +74,7 @@ class AIConversation(Base):
     )
 
 
-class AIConversationSession(Base):
+class AIConversationSession(TenantScopedMixin, Base):
     __tablename__ = "ai_conversation_sessions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -93,7 +94,7 @@ class AIConversationSession(Base):
     )
 
 
-class UserPreference(Base):
+class UserPreference(TenantScopedMixin, Base):
     __tablename__ = "user_preferences"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -104,7 +105,7 @@ class UserPreference(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
 
-class UserMemory(Base):
+class UserMemory(TenantScopedMixin, Base):
     __tablename__ = "user_memories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

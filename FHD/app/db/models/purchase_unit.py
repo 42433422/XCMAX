@@ -6,10 +6,10 @@ from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.db.mixins import IntegerPrimaryKeyMixin, TimestampMixin
+from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 
-class PurchaseUnit(IntegerPrimaryKeyMixin, TimestampMixin, Base):
+class PurchaseUnit(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "purchase_units"
     unit_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     contact_person: Mapped[Optional[str]] = mapped_column(String(100))

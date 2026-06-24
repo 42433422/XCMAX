@@ -29,6 +29,9 @@ from app.infrastructure.persistence.compat_db.queries import (
 )
 from app.shell.mod_row_scope import (
     append_mod_scope_where,
+    append_tenant_insert_col,
+    append_tenant_insert_ident,
+    append_tenant_scope_where,
     products_update_or_delete_mod_and,
     scoped_mod_id,
 )
@@ -50,6 +53,7 @@ def _products_delete_by_unit_pg(eng, unit_name: str) -> int:
     where_parts = [f"{col} = {prm}"]
     params: dict[str, object] = {"u": un}
     append_mod_scope_where(where_parts, params, pcols)
+    append_tenant_scope_where(where_parts, params, pcols)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
@@ -74,6 +78,7 @@ def _purchase_units_delete_by_norm_unit_pg(eng, unit_name: str) -> int:
     where_parts = [f"{col} = {prm}"]
     params: dict[str, object] = {"u": un}
     append_mod_scope_where(where_parts, params, cols)
+    append_tenant_scope_where(where_parts, params, cols)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
@@ -99,6 +104,7 @@ def _customers_delete_by_norm_name_pg(eng, insp, customer_name: str) -> int:
     where_parts = [f"{col} = {prm}"]
     params: dict[str, object] = {"u": cn}
     append_mod_scope_where(where_parts, params, cols_names)
+    append_tenant_scope_where(where_parts, params, cols_names)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
@@ -118,6 +124,7 @@ def _purchase_units_delete_by_id_pg(eng, customer_id: int) -> int:
     where_parts = ["id = :id"]
     params: dict[str, object] = {"id": int(customer_id)}
     append_mod_scope_where(where_parts, params, cols)
+    append_tenant_scope_where(where_parts, params, cols)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
@@ -137,6 +144,7 @@ def _customers_delete_by_id_pg(eng, insp, customer_id: int) -> int:
     where_parts = [f"{_sql_ident(id_col)} = :id"]
     params: dict[str, object] = {"id": int(customer_id)}
     append_mod_scope_where(where_parts, params, cols)
+    append_tenant_scope_where(where_parts, params, cols)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
@@ -160,6 +168,7 @@ def _products_unit_replace_pg(eng, old_name: str, new_name: str) -> None:
     where_parts = [f"{col} = {prm}"]
     params: dict[str, object] = {"nn": n, "oo": o}
     append_mod_scope_where(where_parts, params, pcols)
+    append_tenant_scope_where(where_parts, params, pcols)
     where_sql = " AND ".join(where_parts)
     with eng.connect() as conn:
         conn.execute(
@@ -199,6 +208,7 @@ def _customer_pg_fetch_by_id(eng, insp, customer_id: int) -> dict:
     where_parts = ["id = :id"]
     params: dict[str, object] = {"id": int(customer_id)}
     append_mod_scope_where(where_parts, params, pu_cols)
+    append_tenant_scope_where(where_parts, params, pu_cols)
     where_sql = " AND ".join(where_parts)
     with eng.connect() as conn:
         r = (
@@ -226,6 +236,7 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
         dup_parts = ["unit_name = :n", _pg_purchase_unit_active_sql()]
         dup_bind: dict[str, object] = {"n": name}
         append_mod_scope_where(dup_parts, dup_bind, pu_cols)
+        append_tenant_scope_where(dup_parts, dup_bind, pu_cols)
         dup_sql = " AND ".join(dup_parts)
         dup = conn.execute(
             text(_sql_select_from_where("id", "purchase_units", dup_sql)),
@@ -244,6 +255,7 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
         if "xcagi_mod_id" in pu_cols and mid:
             col_pairs.append(("xcagi_mod_id", "xmid"))
             bind["xmid"] = mid
+        append_tenant_insert_col(col_pairs, bind, pu_cols)
         if "is_active" in pu_cols:
             col_pairs.append(("is_active", "ia"))
             t = str(pu_cols["is_active"].get("type") or "").lower()
@@ -272,6 +284,7 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
         prev_parts = ["id = :id", _pg_purchase_unit_active_sql()]
         prev_bind: dict[str, object] = {"id": int(customer_id)}
         append_mod_scope_where(prev_parts, prev_bind, pu_cols)
+        append_tenant_scope_where(prev_parts, prev_bind, pu_cols)
         prev = (
             conn.execute(
                 text(
@@ -296,6 +309,7 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
         ]
         clash_bind: dict[str, object] = {"n": name, "id": int(customer_id)}
         append_mod_scope_where(clash_parts, clash_bind, pu_cols)
+        append_tenant_scope_where(clash_parts, clash_bind, pu_cols)
         clash = conn.execute(
             text(_sql_select_from_where("id", "purchase_units", " AND ".join(clash_parts))),
             clash_bind,
@@ -349,6 +363,7 @@ def _customer_pg_select_customers_name_by_id(eng, insp, customer_id: int) -> tup
     where_parts = [f"{_sql_ident(id_col)} = :id"]
     cbind: dict[str, object] = {"id": int(customer_id)}
     append_mod_scope_where(where_parts, cbind, cols)
+    append_tenant_scope_where(where_parts, cbind, cols)
     where_clause = " AND ".join(where_parts)
     select_sql = (
         "SELECT "
@@ -383,6 +398,7 @@ def _customer_pg_delete_anywhere(customer_id: int) -> None:
         where_parts = ["id = :id"]
         pbind: dict[str, object] = {"id": cid}
         append_mod_scope_where(where_parts, pbind, pu_cols)
+        append_tenant_scope_where(where_parts, pbind, pu_cols)
         with eng.connect() as conn:
             r = conn.execute(
                 text(
@@ -561,6 +577,7 @@ def products_pg_insert_row(
     if "xcagi_mod_id" in col_names and mid:
         icols.append("xcagi_mod_id")
         params["xcagi_mod_id"] = mid
+    append_tenant_insert_ident(icols, params, col_names)
     quoted = ", ".join(_sql_ident(c) for c in icols)
     ph = ", ".join(":" + c for c in icols)
     sql = _sql_insert_returning("products", quoted, ph)

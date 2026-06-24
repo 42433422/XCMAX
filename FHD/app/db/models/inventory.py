@@ -4,17 +4,19 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class Warehouse(Base):
+class Warehouse(TenantScopedMixin, Base):
     __tablename__ = "warehouses"
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_warehouses_tenant_code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[Optional[str]] = mapped_column(String(20))
     address: Mapped[Optional[str]] = mapped_column(Text)
@@ -31,7 +33,7 @@ class Warehouse(Base):
     )
 
 
-class StorageLocation(Base):
+class StorageLocation(TenantScopedMixin, Base):
     __tablename__ = "storage_locations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -49,7 +51,7 @@ class StorageLocation(Base):
     )
 
 
-class InventoryLedger(Base):
+class InventoryLedger(TenantScopedMixin, Base):
     __tablename__ = "inventory_ledger"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -78,7 +80,7 @@ class InventoryLedger(Base):
     )
 
 
-class InventoryTransaction(Base):
+class InventoryTransaction(TenantScopedMixin, Base):
     __tablename__ = "inventory_transactions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

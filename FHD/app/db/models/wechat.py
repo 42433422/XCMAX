@@ -8,9 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class WechatTask(Base):
+class WechatTask(TenantScopedMixin, Base):
     __tablename__ = "wechat_tasks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -37,7 +38,7 @@ class WechatTask(Base):
     contact: Mapped[Optional[WechatContact]] = relationship("WechatContact", back_populates="tasks")
 
 
-class WechatContact(Base):
+class WechatContact(TenantScopedMixin, Base):
     __tablename__ = "wechat_contacts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -62,7 +63,7 @@ class WechatContact(Base):
     )
 
 
-class WechatContactContext(Base):
+class WechatContactContext(TenantScopedMixin, Base):
     __tablename__ = "wechat_contact_context"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

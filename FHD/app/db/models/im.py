@@ -9,9 +9,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class ImConversation(Base):
+class ImConversation(TenantScopedMixin, Base):
     __tablename__ = "im_conversations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -31,7 +32,7 @@ class ImConversation(Base):
     )
 
 
-class ImConversationMember(Base):
+class ImConversationMember(TenantScopedMixin, Base):
     __tablename__ = "im_conversation_members"
     __table_args__ = (UniqueConstraint("conversation_id", "user_id", name="uq_im_conv_member"),)
 
@@ -46,7 +47,7 @@ class ImConversationMember(Base):
     conversation: Mapped[ImConversation] = relationship("ImConversation", back_populates="members")
 
 
-class ImMessage(Base):
+class ImMessage(TenantScopedMixin, Base):
     __tablename__ = "im_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -1369,6 +1369,103 @@ def ensure_users_tenant_id_column(
         logger.warning("users.tenant_id 兼容补列失败: %s", exc)
 
 
+# 需要租户隔离的业务表（须与继承 TenantScopedMixin 的模型保持一致）。
+# 全局租户过滤（app/db/tenant_filter.py）会引用这些表的 tenant_id 列，
+# 旧库升级时表已存在但缺列，此处幂等补齐 + 建索引。
+_TENANT_SCOPED_TABLES: tuple[str, ...] = (
+    # 核心 ERP
+    "products",
+    "customers",
+    "materials",
+    "suppliers",
+    "purchase_orders",
+    "purchase_order_items",
+    "purchase_inbounds",
+    "purchase_inbound_items",
+    "purchase_units",
+    "warehouses",
+    "storage_locations",
+    "inventory_ledger",
+    "inventory_transactions",
+    "financial_transactions",
+    "shipment_records",
+    "shipment_audit_events",
+    "contract_expiry_notifications",
+    # 审批 / 协作 / 集成
+    "approval_flows",
+    "approval_flow_nodes",
+    "approval_requests",
+    "approval_records",
+    "approval_delegations",
+    "im_conversations",
+    "im_conversation_members",
+    "im_messages",
+    "service_requests",
+    "service_bridge_config",
+    "wechat_tasks",
+    "wechat_contacts",
+    "wechat_contact_context",
+    # AI 会话 / 用户数据
+    "ai_conversations",
+    "ai_conversation_sessions",
+    "user_preferences",
+    "user_memories",
+)
+
+
+def ensure_business_tenant_id_columns(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """为继承 ``TenantScopedMixin`` 的业务表补齐 ``tenant_id`` 列与索引（幂等）。"""
+    from sqlalchemy import inspect, text
+
+    real_engine: Engine | None = None
+    url = (database_url or "").strip()
+    if url:
+        try:
+            from app.db import _create_engine_for_url
+
+            real_engine = _create_engine_for_url(url)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("无法创建引擎以补齐业务表 tenant_id: %s", exc)
+    if real_engine is None and engine is not None:
+        real_engine = engine
+    if real_engine is None:
+        try:
+            from app.db import _get_engine as _get_real_engine
+
+            real_engine = _get_real_engine()
+        except RECOVERABLE_ERRORS:
+            return
+
+    try:
+        insp = inspect(real_engine)
+        existing = set(insp.get_table_names() or [])
+        is_pg = real_engine.dialect.name == "postgresql"
+        for table in _TENANT_SCOPED_TABLES:
+            if table not in existing:
+                continue
+            cols = {c["name"] for c in insp.get_columns(table)}
+            if "tenant_id" in cols:
+                continue
+            logger.info("%s 缺少 tenant_id 列，正在补齐 …", table)
+            with real_engine.begin() as conn:
+                if is_pg:
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS tenant_id INTEGER")
+                    )
+                else:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN tenant_id INTEGER"))
+                conn.execute(
+                    text(f"CREATE INDEX IF NOT EXISTS ix_{table}_tenant_id ON {table} (tenant_id)")
+                )
+            logger.info("%s.tenant_id 已补齐", table)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("业务表 tenant_id 兼容补列失败: %s", exc)
+
+
 def init_im_tables(engine: Engine | None = None, *, database_url: str | None = None) -> None:
     """在主库上创建企业内部 IM V0 表（im_conversations / members / messages）。"""
     if engine is None:

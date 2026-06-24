@@ -2,17 +2,19 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, Integer, Numeric, String
+from sqlalchemy import DateTime, Float, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class Material(Base):
+class Material(TenantScopedMixin, Base):
     __tablename__ = "materials"
+    __table_args__ = (UniqueConstraint("tenant_id", "material_code", name="uq_materials_tenant_material_code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    material_code: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    material_code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     category: Mapped[Optional[str]] = mapped_column(String)
     specification: Mapped[Optional[str]] = mapped_column(String)

@@ -8,9 +8,10 @@ from sqlalchemy import DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class ShipmentAuditEvent(Base):
+class ShipmentAuditEvent(TenantScopedMixin, Base):
     __tablename__ = "shipment_audit_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -22,7 +23,7 @@ class ShipmentAuditEvent(Base):
     source: Mapped[str] = mapped_column(String(32), default="shipment")
 
 
-class ContractExpiryNotification(Base):
+class ContractExpiryNotification(TenantScopedMixin, Base):
     __tablename__ = "contract_expiry_notifications"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -5,10 +5,10 @@ from sqlalchemy import Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.db.mixins import IntegerPrimaryKeyMixin, TimestampMixin
+from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 
-class Product(IntegerPrimaryKeyMixin, TimestampMixin, Base):
+class Product(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "products"
     __table_args__ = (
         Index("ix_products_unit", "unit"),

@@ -354,14 +354,19 @@ def execute_employee_task_local(
     感知 → 记忆召回 → 认知 → 行动（多轮）→ 记忆回写。保留原返回结构与所有调用方兼容。
     """
     from app.application.employee_runtime.agent import EmployeeAgent
+    from app.db.tenant_runtime import tenant_scope_for_user_id
 
-    return EmployeeAgent(employee_id).run(
-        task,
-        input_data,
-        user_id=user_id,
-        workspace_root=workspace_root,
-        session_id=session_id,
-    )
+    # 员工在后台无 HTTP 中间件环境运行，默认不带租户上下文 → 会绕过全局租户过滤。
+    # 若 user_id 可解析出租户，则在该租户作用域内执行，确保员工读写业务数据被正确隔离；
+    # 平台级任务（user_id=0）保持无上下文。
+    with tenant_scope_for_user_id(user_id):
+        return EmployeeAgent(employee_id).run(
+            task,
+            input_data,
+            user_id=user_id,
+            workspace_root=workspace_root,
+            session_id=session_id,
+        )
 
 
 __all__ = ["execute_employee_task_local"]
