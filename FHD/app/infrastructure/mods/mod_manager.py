@@ -1274,6 +1274,11 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         return False
 
     mm = get_mod_manager()
+    # employee_pack 的 HTTP 路由在启动时已按 pack 注册（register_employee_pack_routes），
+    # 它没有独立 mod 目录——对其调用 load_mod 必因「Mod path: None」失败，并在每次访问
+    # /api/mod/<pack>/... 时刷 WARNING。已注册的 employee_pack 视为就绪，直接返回。
+    if mid in _employee_pack_routes_registered:
+        return True
     if mid not in mm._loaded_mods:
         if not mm.load_mod(mid):
             logger.warning("[ModManager] ensure_mod_api_ready: load_mod(%s) failed", mid)
