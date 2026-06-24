@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """finance_schema / rbac_schema Pydantic 模型单元测试（必填/可选/默认/校验失败）。"""
 
 from __future__ import annotations

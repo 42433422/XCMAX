@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 意图识别测试脚本（遗留 standalone，非 pytest 套件）
 

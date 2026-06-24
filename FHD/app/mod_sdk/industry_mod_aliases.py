@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """行业 Mod 中性 id ↔ 客户 legacy mod id 解析。"""
 
 from __future__ import annotations

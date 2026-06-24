@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_runtime.workspace_guard 工作空间 gate 单元测试。
 
 覆盖 glob→regex 转换、basename/路径匹配、forbidden/scope/read_only 决策与各分支。

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_runtime.metrics 进程内计数器单元测试（happy/边界/聚合/重置）。"""
 
 from __future__ import annotations

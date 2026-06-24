@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工写操作审批门（接 ApprovalGatedEngine 语义，轻量 tool_call 级 gate）。"""
 
 from __future__ import annotations

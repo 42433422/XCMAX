@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工 & 部门系统单一真相源（SSOT）+ 自动派生。
 
 唯一数据源：``config/duty_roster.json``（由 :mod:`app.mod_sdk.duty_roster` 加载）。

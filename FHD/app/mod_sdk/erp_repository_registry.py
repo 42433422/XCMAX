@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 L：ERP 领域 Repository 经 ``xcagi-erp-domain-bridge`` 提供方装配（可插拔边界）。"""
 
 from __future__ import annotations

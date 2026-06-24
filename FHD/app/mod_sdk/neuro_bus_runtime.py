@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 S：NeuroBus 生命周期与发布经 Mod 运行时 bundle 解析。"""
 
 from __future__ import annotations

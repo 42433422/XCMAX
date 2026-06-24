@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """进程启动分段计时（桌面交付与性能优化基线）。"""
 
 from __future__ import annotations

@@ -117,12 +117,25 @@ def _codex_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) 
 
 def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
     # Cursor Agent CLI headless（cursor agent --print）。stream-json 作心跳；
-    # --force 允许在 cwd 内改/建文件（print 模式默认只读）。
+    # --trust 跳过无 TTY 时的 workspace 信任提示；--force 允许在 cwd 内改/建文件。
+    trust_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_TRUST")
+            or os.environ.get("XCMAX_CURSOR_AGENT_TRUST")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
     force_raw = (
-        os.environ.get("DEVFLEET_CURSOR_FORCE")
-        or os.environ.get("XCMAX_CURSOR_AGENT_FORCE")
-        or "1"
-    ).strip().lower()
+        (
+            os.environ.get("DEVFLEET_CURSOR_FORCE")
+            or os.environ.get("XCMAX_CURSOR_AGENT_FORCE")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
     cmd = [
         cli_path,
         "agent",
@@ -130,6 +143,8 @@ def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str)
         "--output-format",
         "stream-json",
     ]
+    if trust_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--trust")
     if force_raw not in {"0", "false", "off", "disabled"}:
         cmd.append("--force")
     cmd.append(prompt)
