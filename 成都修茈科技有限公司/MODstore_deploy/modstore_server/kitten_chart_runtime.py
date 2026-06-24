@@ -154,7 +154,7 @@ def _aggregate_rows(
         else:
             bucket.setdefault(label, []).append(1.0)
     labels = list(bucket.keys())[:24]
-    values = [sum(bucket[l]) / len(bucket[l]) if bucket[l] else 0 for l in labels]
+    values = [sum(bucket[lbl]) / len(bucket[lbl]) if bucket[lbl] else 0 for lbl in labels]
     return labels, values
 
 
@@ -181,7 +181,7 @@ def build_chart_spec(
                 {
                     "type": "pie",
                     "radius": ["36%", "68%"],
-                    "data": [{"name": l, "value": v} for l, v in zip(labels, values)],
+                    "data": [{"name": lbl, "value": v} for lbl, v in zip(labels, values)],
                 }
             ],
         }

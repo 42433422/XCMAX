@@ -11,12 +11,12 @@ from modstore_server.self_maintenance_loop_runner import (
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _qa_task_text,
-    _review_task_text,
     _resume_review_qa_candidate,
+    _review_task_text,
     _structured_report_gate,
     _update_loop_memory,
-    close_loop_memory_items,
     clean_baseline_path,
+    close_loop_memory_items,
     ensure_clean_baseline,
     loop_memory_path,
 )
@@ -50,9 +50,7 @@ def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypa
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
-    files = [
-        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
-    ]
+    files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
     memory = {
         "open_items": [
             {
@@ -267,9 +265,7 @@ def test_employee_result_rejects_e2e_codex_timeout():
             "ok": True,
             "status": "completed",
             "outputs": [
-                {
-                    "message": "[e2e-agent] Codex CLI 失败: Codex CLI timeout after 600000ms"
-                }
+                {"message": "[e2e-agent] Codex CLI 失败: Codex CLI timeout after 600000ms"}
             ],
         }
     }

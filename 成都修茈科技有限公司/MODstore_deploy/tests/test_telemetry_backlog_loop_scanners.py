@@ -11,6 +11,7 @@
 - 其余 3 个函数：monkeypatch 模块 __file__ 属性，使其指向临时目录结构，
   从而让 Path(__file__).resolve().parents[3] 指向临时 XCMAX 根目录。
 """
+
 from __future__ import annotations
 
 import json
@@ -18,8 +19,9 @@ import os
 import time
 from pathlib import Path
 
-import modstore_server.telemetry_backlog_loop as tbl
 import pytest
+
+import modstore_server.telemetry_backlog_loop as tbl
 
 # ---------------------------------------------------------------------------
 # 辅助：创建临时 XCMAX 根目录结构，使 parents[3] 指向 tmp_root
@@ -175,11 +177,7 @@ class TestScanSecurityScanMetrics:
         """gitleaks 发现泄漏时触发 security_scan_alert 信号。"""
         metrics_dir = redirected_module / "FHD" / "metrics"
         metrics_dir.mkdir(parents=True)
-        sarif = {
-            "runs": [
-                {"results": [{"ruleId": "aws-access-token"}, {"ruleId": "private-key"}]}
-            ]
-        }
+        sarif = {"runs": [{"results": [{"ruleId": "aws-access-token"}, {"ruleId": "private-key"}]}]}
         (metrics_dir / "gitleaks-2026-06-20.json").write_text(json.dumps(sarif))
         signals = tbl._scan_security_scan_metrics()
         assert len(signals) == 1
@@ -442,7 +440,10 @@ class TestScanWorkflowDrift:
         old_time = time.time() - 120
         new_time = time.time()
 
-        for src_name, gen_name in [("ci-cd.yml", "fhd-ci-cd.yml"), ("deploy.yml", "fhd-deploy.yml")]:
+        for src_name, gen_name in [
+            ("ci-cd.yml", "fhd-ci-cd.yml"),
+            ("deploy.yml", "fhd-deploy.yml"),
+        ]:
             gen_file = root_wf / gen_name
             src_file = fhd_wf / src_name
             gen_file.write_text(

@@ -81,7 +81,11 @@ def _try_start_emulator() -> bool:
         return False
     fhd = _fhd_root()
     script_raw = (os.environ.get("MODSTORE_ANDROID_EMULATOR_START_SCRIPT") or "").strip()
-    script = Path(script_raw).expanduser().resolve() if script_raw else (fhd / "scripts" / "dev" / "start_android_emulator.sh")
+    script = (
+        Path(script_raw).expanduser().resolve()
+        if script_raw
+        else (fhd / "scripts" / "dev" / "start_android_emulator.sh")
+    )
     if not script.is_file():
         return False
     try:

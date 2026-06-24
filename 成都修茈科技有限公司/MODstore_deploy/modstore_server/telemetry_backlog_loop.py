@@ -470,8 +470,10 @@ def _scan_auto_merge_metrics() -> List[Dict[str, Any]]:
 
         # 自动合并成功：action 含 auto_merged 且 status 含 completed/merged
         auto_merge_runs = [
-            r for r in sample
-            if isinstance(r, dict) and (
+            r
+            for r in sample
+            if isinstance(r, dict)
+            and (
                 "auto_merge" in str(r.get("action") or "")
                 or "low_risk" in str(r.get("action") or "")
             )
@@ -481,15 +483,18 @@ def _scan_auto_merge_metrics() -> List[Dict[str, Any]]:
             return signals
 
         auto_merge_success = sum(
-            1 for r in auto_merge_runs
+            1
+            for r in auto_merge_runs
             if isinstance(r, dict) and "completed" in str(r.get("status") or "").lower()
         )
         success_rate = auto_merge_success / auto_merge_total
 
         # 回滚率
         rollback_runs = sum(
-            1 for r in sample
-            if isinstance(r, dict) and any(
+            1
+            for r in sample
+            if isinstance(r, dict)
+            and any(
                 term in str(r.get("status") or r.get("action") or "").lower()
                 for term in ("rollback", "revert", "regression", "回滚", "退回")
             )
@@ -498,37 +503,41 @@ def _scan_auto_merge_metrics() -> List[Dict[str, Any]]:
 
         # 成功率 < 80% 触发信号
         if success_rate < 0.8:
-            signals.append({
-                "type": "auto_merge_degradation",
-                "source": "auto_merge_metrics",
-                "payload": {
-                    "success_rate": round(success_rate * 100, 1),
-                    "auto_merge_total": auto_merge_total,
-                    "auto_merge_success": auto_merge_success,
-                    "rollback_rate": round(rollback_rate * 100, 1),
-                    "description": (
-                        f"自动合并成功率 {success_rate * 100:.1f}%"
-                        f"（{auto_merge_success}/{auto_merge_total}），低于 80% 阈值"
-                    ),
-                },
-            })
+            signals.append(
+                {
+                    "type": "auto_merge_degradation",
+                    "source": "auto_merge_metrics",
+                    "payload": {
+                        "success_rate": round(success_rate * 100, 1),
+                        "auto_merge_total": auto_merge_total,
+                        "auto_merge_success": auto_merge_success,
+                        "rollback_rate": round(rollback_rate * 100, 1),
+                        "description": (
+                            f"自动合并成功率 {success_rate * 100:.1f}%"
+                            f"（{auto_merge_success}/{auto_merge_total}），低于 80% 阈值"
+                        ),
+                    },
+                }
+            )
 
         # 回滚率 > 20% 触发信号
         if rollback_rate > 0.2:
-            signals.append({
-                "type": "auto_merge_degradation",
-                "source": "auto_merge_metrics",
-                "payload": {
-                    "success_rate": round(success_rate * 100, 1),
-                    "rollback_rate": round(rollback_rate * 100, 1),
-                    "rollback_count": rollback_runs,
-                    "total_runs": total,
-                    "description": (
-                        f"回滚率 {rollback_rate * 100:.1f}%"
-                        f"（{rollback_runs}/{total}），高于 20% 阈值"
-                    ),
-                },
-            })
+            signals.append(
+                {
+                    "type": "auto_merge_degradation",
+                    "source": "auto_merge_metrics",
+                    "payload": {
+                        "success_rate": round(success_rate * 100, 1),
+                        "rollback_rate": round(rollback_rate * 100, 1),
+                        "rollback_count": rollback_runs,
+                        "total_runs": total,
+                        "description": (
+                            f"回滚率 {rollback_rate * 100:.1f}%"
+                            f"（{rollback_runs}/{total}），高于 20% 阈值"
+                        ),
+                    },
+                }
+            )
     except Exception:
         logger.debug("auto merge metrics scan skipped")
 
@@ -579,15 +588,17 @@ def _scan_security_scan_metrics() -> List[Dict[str, Any]]:
                         total_findings = 0
 
                     if total_findings > 0:
-                        signals.append({
-                            "type": "security_scan_alert",
-                            "source": "gitleaks_scan",
-                            "payload": {
-                                "findings": total_findings,
-                                "file": latest.name,
-                                "description": f"gitleaks 发现 {total_findings} 处密钥泄漏",
-                            },
-                        })
+                        signals.append(
+                            {
+                                "type": "security_scan_alert",
+                                "source": "gitleaks_scan",
+                                "payload": {
+                                    "findings": total_findings,
+                                    "file": latest.name,
+                                    "description": f"gitleaks 发现 {total_findings} 处密钥泄漏",
+                                },
+                            }
+                        )
                 except (json.JSONDecodeError, OSError):
                     pass
 
@@ -614,16 +625,18 @@ def _scan_security_scan_metrics() -> List[Dict[str, Any]]:
                                 high_count += 1
 
                     if high_count > 0:
-                        signals.append({
-                            "type": "security_scan_alert",
-                            "source": "codeql_scan",
-                            "payload": {
-                                "high_alerts": high_count,
-                                "total_alerts": total_alerts,
-                                "file": latest.name,
-                                "description": f"CodeQL 发现 {high_count} 个高危告警（共 {total_alerts} 个）",
-                            },
-                        })
+                        signals.append(
+                            {
+                                "type": "security_scan_alert",
+                                "source": "codeql_scan",
+                                "payload": {
+                                    "high_alerts": high_count,
+                                    "total_alerts": total_alerts,
+                                    "file": latest.name,
+                                    "description": f"CodeQL 发现 {high_count} 个高危告警（共 {total_alerts} 个）",
+                                },
+                            }
+                        )
                 except (json.JSONDecodeError, OSError):
                     pass
 
@@ -647,15 +660,17 @@ def _scan_security_scan_metrics() -> List[Dict[str, Any]]:
                                 critical_high += 1
 
                     if critical_high > 0:
-                        signals.append({
-                            "type": "security_scan_alert",
-                            "source": "trivy_scan",
-                            "payload": {
-                                "critical_high_vulns": critical_high,
-                                "file": latest.name,
-                                "description": f"Trivy 发现 {critical_high} 个 CRITICAL/HIGH 漏洞",
-                            },
-                        })
+                        signals.append(
+                            {
+                                "type": "security_scan_alert",
+                                "source": "trivy_scan",
+                                "payload": {
+                                    "critical_high_vulns": critical_high,
+                                    "file": latest.name,
+                                    "description": f"Trivy 发现 {critical_high} 个 CRITICAL/HIGH 漏洞",
+                                },
+                            }
+                        )
                 except (json.JSONDecodeError, OSError):
                     pass
     except Exception:
@@ -721,22 +736,24 @@ def _scan_coverage_ratchet_gap() -> List[Dict[str, Any]]:
         if isinstance(latest_be, (int, float)) and isinstance(prev_be, (int, float)):
             delta = latest_be - prev_be
             if delta < -1.0:  # 回退超过 1%
-                signals.append({
-                    "type": "coverage_ratchet_gap",
-                    "source": "coverage_history_backend",
-                    "payload": {
-                        "latest": latest_be,
-                        "previous": prev_be,
-                        "delta": round(delta, 2),
-                        "dimension": "backend_lines",
-                        "latest_commit": latest.get("commit", "unknown"),
-                        "previous_commit": prev.get("commit", "unknown"),
-                        "description": (
-                            f"后端行覆盖率回退 {abs(delta):.2f}%"
-                            f"（{prev_be:.2f}% → {latest_be:.2f}%）"
-                        ),
-                    },
-                })
+                signals.append(
+                    {
+                        "type": "coverage_ratchet_gap",
+                        "source": "coverage_history_backend",
+                        "payload": {
+                            "latest": latest_be,
+                            "previous": prev_be,
+                            "delta": round(delta, 2),
+                            "dimension": "backend_lines",
+                            "latest_commit": latest.get("commit", "unknown"),
+                            "previous_commit": prev.get("commit", "unknown"),
+                            "description": (
+                                f"后端行覆盖率回退 {abs(delta):.2f}%"
+                                f"（{prev_be:.2f}% → {latest_be:.2f}%）"
+                            ),
+                        },
+                    }
+                )
 
         # 前端覆盖率回退检测
         latest_fe = latest.get("frontend_lines")
@@ -744,22 +761,24 @@ def _scan_coverage_ratchet_gap() -> List[Dict[str, Any]]:
         if isinstance(latest_fe, (int, float)) and isinstance(prev_fe, (int, float)):
             delta = latest_fe - prev_fe
             if delta < -1.0:
-                signals.append({
-                    "type": "coverage_ratchet_gap",
-                    "source": "coverage_history_frontend",
-                    "payload": {
-                        "latest": latest_fe,
-                        "previous": prev_fe,
-                        "delta": round(delta, 2),
-                        "dimension": "frontend_lines",
-                        "latest_commit": latest.get("commit", "unknown"),
-                        "previous_commit": prev.get("commit", "unknown"),
-                        "description": (
-                            f"前端行覆盖率回退 {abs(delta):.2f}%"
-                            f"（{prev_fe:.2f}% → {latest_fe:.2f}%）"
-                        ),
-                    },
-                })
+                signals.append(
+                    {
+                        "type": "coverage_ratchet_gap",
+                        "source": "coverage_history_frontend",
+                        "payload": {
+                            "latest": latest_fe,
+                            "previous": prev_fe,
+                            "delta": round(delta, 2),
+                            "dimension": "frontend_lines",
+                            "latest_commit": latest.get("commit", "unknown"),
+                            "previous_commit": prev.get("commit", "unknown"),
+                            "description": (
+                                f"前端行覆盖率回退 {abs(delta):.2f}%"
+                                f"（{prev_fe:.2f}% → {latest_fe:.2f}%）"
+                            ),
+                        },
+                    }
+                )
     except Exception:
         logger.debug("coverage ratchet gap scan skipped")
 
@@ -797,7 +816,7 @@ def _scan_workflow_drift() -> List[Dict[str, Any]]:
                     marker = "FHD/.github/workflows/"
                     idx = line.find(marker)
                     if idx >= 0:
-                        rest = line[idx + len(marker):]
+                        rest = line[idx + len(marker) :]
                         # 取到 .yml 结束
                         end = rest.find(".yml")
                         if end >= 0:
@@ -812,27 +831,31 @@ def _scan_workflow_drift() -> List[Dict[str, Any]]:
             src_mtime = src_file.stat().st_mtime
             # 源文件比生成文件新超过 60 秒（容忍文件系统精度）
             if src_mtime - gen_mtime > 60:
-                drifted.append({
-                    "generated": gen_file.name,
-                    "source": src_name,
-                    "source_mtime": src_mtime,
-                    "generated_mtime": gen_mtime,
-                })
+                drifted.append(
+                    {
+                        "generated": gen_file.name,
+                        "source": src_name,
+                        "source_mtime": src_mtime,
+                        "generated_mtime": gen_mtime,
+                    }
+                )
 
         if drifted:
             drift_list = ", ".join(d["source"] for d in drifted[:5])
-            signals.append({
-                "type": "workflow_drift",
-                "source": "workflow_sync_check",
-                "payload": {
-                    "drifted_count": len(drifted),
-                    "drifted_files": drift_list,
-                    "description": (
-                        f"检测到 {len(drifted)} 个 workflow 漂移"
-                        f"（源文件更新但未同步到根仓）：{drift_list}"
-                    ),
-                },
-            })
+            signals.append(
+                {
+                    "type": "workflow_drift",
+                    "source": "workflow_sync_check",
+                    "payload": {
+                        "drifted_count": len(drifted),
+                        "drifted_files": drift_list,
+                        "description": (
+                            f"检测到 {len(drifted)} 个 workflow 漂移"
+                            f"（源文件更新但未同步到根仓）：{drift_list}"
+                        ),
+                    },
+                }
+            )
     except Exception:
         logger.debug("workflow drift scan skipped")
 

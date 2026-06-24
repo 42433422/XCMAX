@@ -6,8 +6,9 @@ import os
 import types
 from unittest.mock import patch
 
-import modstore_server.employee_api as employee_api
 import pytest
+
+import modstore_server.employee_api as employee_api
 
 
 def test_router_prefix_and_tags() -> None:

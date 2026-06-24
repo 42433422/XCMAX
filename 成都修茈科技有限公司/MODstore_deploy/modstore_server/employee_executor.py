@@ -1910,11 +1910,9 @@ def execute_employee_task(
                 )
                 session.commit()
                 if not handler_ok:
-                    suppress_lifecycle_events = (
-                        isinstance(payload, dict)
-                        and str(payload.get("suppress_lifecycle_events") or "").strip().lower()
-                        in {"1", "true", "yes", "on"}
-                    )
+                    suppress_lifecycle_events = isinstance(payload, dict) and str(
+                        payload.get("suppress_lifecycle_events") or ""
+                    ).strip().lower() in {"1", "true", "yes", "on"}
                     if not suppress_lifecycle_events:
                         try:
                             from modstore_server.notification_service import (
@@ -1995,11 +1993,9 @@ def execute_employee_task(
                     )
                 except Exception:
                     pass
-                suppress_lifecycle_events = (
-                    isinstance(payload, dict)
-                    and str(payload.get("suppress_lifecycle_events") or "").strip().lower()
-                    in {"1", "true", "yes", "on"}
-                )
+                suppress_lifecycle_events = isinstance(payload, dict) and str(
+                    payload.get("suppress_lifecycle_events") or ""
+                ).strip().lower() in {"1", "true", "yes", "on"}
                 if not suppress_lifecycle_events:
                     try:
                         from modstore_server.services.change_signal import (
@@ -2112,11 +2108,9 @@ def execute_employee_task(
                     )
                 except Exception:
                     pass
-                suppress_lifecycle_events = (
-                    isinstance(payload, dict)
-                    and str(payload.get("suppress_lifecycle_events") or "").strip().lower()
-                    in {"1", "true", "yes", "on"}
-                )
+                suppress_lifecycle_events = isinstance(payload, dict) and str(
+                    payload.get("suppress_lifecycle_events") or ""
+                ).strip().lower() in {"1", "true", "yes", "on"}
                 if not suppress_lifecycle_events:
                     try:
                         from modstore_server.services.change_signal import emit_task_lifecycle_event
