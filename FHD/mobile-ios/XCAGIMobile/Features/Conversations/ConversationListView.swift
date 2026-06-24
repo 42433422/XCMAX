@@ -23,6 +23,7 @@ final class ConversationListViewModel: ObservableObject {
 struct ConversationListView: View {
     @EnvironmentObject private var session: SessionManager
     @StateObject private var vm = ConversationListViewModel()
+    @State private var profileContact: FixedContactDto?
 
     var body: some View {
         NavigationStack {
@@ -48,6 +49,9 @@ struct ConversationListView: View {
             }
             .navigationDestination(for: FixedContactDto.self) { contact in
                 destination(for: contact)
+            }
+            .sheet(item: $profileContact) { c in
+                NavigationStack { FixedPartnerProfileView(contact: c) }
             }
         }
         .task {
@@ -84,6 +88,10 @@ struct ConversationListView: View {
                 }
             }
             .padding(.vertical, 2)
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button { profileContact = c } label: { Label("名片", systemImage: "person.crop.circle") }
+                .tint(.blue)
         }
     }
 

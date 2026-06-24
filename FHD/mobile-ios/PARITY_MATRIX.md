@@ -50,6 +50,10 @@
 - ✅ **推送能力工程预置**:entitlements + 后台模式 + project.yml 接线已就位(差 Apple 侧密钥)。
 - ✅ **注册页**(对标 Android `RegisterScreen`):`RegisterView`(用户名/密码/邮箱 → FHD `api/auth/register`),登录页可进入。
 - ✅ **服务桥工单回复**(对标 Android `BridgeScreen`):服务桥列表项可回复 —— `service-bridge/requests/{id}/respond`(PUT,状态 resolved/processing/closed)。
+- ✅ **固定伙伴名片**(对标 Android `FixedPartnerProfileScreen`):`FixedPartnerProfileView`(头像/简介/能力标签/交流圈标签 + 发消息/查看交流圈),小C/客服/Codex/Claude 四类规格;消息列表行**左滑「名片」**进入(保留点按即对话)。
+- ℹ️ **Branded(`BrandedScreens`)非独立屏**:即安卓的登录/连接/鉴权 UI + 条款隐私链接,已由 `LoginView` + `LegalConsentView` + 设置法务链接覆盖,非缺失。
+
+至此安卓 20 个实质 mobile 屏 + 名片页全部对齐;无"故意省略"项。
 
 ## 与安卓的架构对应
 
