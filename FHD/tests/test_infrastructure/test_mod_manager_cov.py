@@ -618,3 +618,55 @@ class TestDefaultModsRoot:
         ):
             result = _default_mods_root()
         assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# ensure_mod_api_ready: 已注册 employee_pack 走快速返回，不重试 load_mod
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureModApiReadyEmployeePack:
+    """回归：employee_pack（如 artifact-generator）无独立 mod 目录，
+
+    对其反复 load_mod 必因「Mod path: None」失败，并在每次访问
+    /api/mod/<pack>/... 时刷 WARNING。已注册的 employee_pack 应直接判就绪。
+    """
+
+    def test_registered_employee_pack_short_circuits_without_load_mod(self):
+        import app.infrastructure.mods.mod_manager as mm_mod
+
+        fake_mm = MagicMock()
+        fake_mm._loaded_mods = []  # 不在 _loaded_mods，旧逻辑会走 load_mod 分支
+        fake_mm.load_mod = MagicMock(return_value=False)
+
+        with (
+            patch.object(mm_mod, "is_mods_disabled", return_value=False),
+            patch.object(mm_mod, "_restore_entitlements_from_session_id"),
+            patch.object(mm_mod, "_mod_allowed_for_api_load", return_value=True),
+            patch.object(mm_mod, "get_mod_manager", return_value=fake_mm),
+            patch.object(mm_mod, "_employee_pack_routes_registered", {"artifact-generator"}),
+        ):
+            ok = mm_mod.ensure_mod_api_ready("artifact-generator")
+
+        assert ok is True
+        fake_mm.load_mod.assert_not_called()  # 关键：不再尝试 load_mod → 无 WARNING
+
+    def test_unregistered_mod_still_attempts_load_mod(self):
+        """非 employee_pack 的未加载 Mod 仍走原 load_mod 路径（行为不变）。"""
+        import app.infrastructure.mods.mod_manager as mm_mod
+
+        fake_mm = MagicMock()
+        fake_mm._loaded_mods = []
+        fake_mm.load_mod = MagicMock(return_value=False)
+
+        with (
+            patch.object(mm_mod, "is_mods_disabled", return_value=False),
+            patch.object(mm_mod, "_restore_entitlements_from_session_id"),
+            patch.object(mm_mod, "_mod_allowed_for_api_load", return_value=True),
+            patch.object(mm_mod, "get_mod_manager", return_value=fake_mm),
+            patch.object(mm_mod, "_employee_pack_routes_registered", set()),
+        ):
+            ok = mm_mod.ensure_mod_api_ready("some-standalone-mod")
+
+        assert ok is False
+        fake_mm.load_mod.assert_called_once_with("some-standalone-mod")
