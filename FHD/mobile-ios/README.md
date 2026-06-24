@@ -26,8 +26,14 @@ brew install xcodegen          # 一次性
 cd FHD/mobile-ios
 xcodegen generate              # 生成 XCAGIMobile.xcodeproj
 open XCAGIMobile.xcodeproj
-# 选 XCAGIMobile scheme → Cmd+R 跑模拟器;真机需在 project.yml 填 DEVELOPMENT_TEAM
+# 两个 scheme(对标 Android flavor):
+#   XCAGIMobile         → 企业版(com.xiuci.xcagi.mobile.enterprise)
+#   XCAGIMobilePersonal → 个人版(com.xiuci.xcagi.mobile.personal,PERSONAL 编译条件 → MODstore 基址)
+# 选 scheme → Cmd+R 跑模拟器;真机需在 project.yml 填 DEVELOPMENT_TEAM
 ```
+
+**推送**:工程已预置 Push 能力(`Resources/XCAGIMobile.entitlements` 的 `aps-environment` + Info.plist `remote-notification` 后台模式)。
+端到端取 token 仍需在 Apple Developer 配置 APNs 密钥并用真实 Team 签名;只跑模拟器或暂不接推送时,可移除 `project.yml` 的 `CODE_SIGN_ENTITLEMENTS` 行以免签名要求。
 
 命令行构建(可选):
 

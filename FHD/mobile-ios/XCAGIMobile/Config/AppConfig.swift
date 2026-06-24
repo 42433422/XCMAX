@@ -11,8 +11,12 @@ enum AppConfig {
         case enterprise
     }
 
-    /// 当前构建的 SKU。iOS 单 target;如需个人版另起 scheme/配置即可。
+    /// 当前构建的 SKU(对标 Android flavor)。personal target 定义 `PERSONAL` 编译条件。
+    #if PERSONAL
+    static let sku: Sku = .personal
+    #else
     static let sku: Sku = .enterprise
+    #endif
 
     static let companyName = "成都修茈科技有限公司"
 
