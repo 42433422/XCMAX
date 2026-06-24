@@ -12,6 +12,7 @@ export struct DiscoverPage {
   @Consume dutyRoster: DutyRosterData;
 
   onOpenDutyRoster: () => void = () => {};
+  onOpenOverlay: (name: string) => void = () => {};
 
   build() {
     this.DiscoverArea();
@@ -27,12 +28,13 @@ export struct DiscoverPage {
             .fontWeight(FontWeight.Bold)
             .fontColor('#111827')
             .layoutWeight(1);
-          Text(`${this.employees.length} 位员工`)
+          Text('查看动态 >')
             .fontSize(13)
-            .fontColor('#4B5563');
+            .fontColor('#1D4ED8');
         }
         .width('100%')
-        .padding({ left: 18, right: 18, top: 18 });
+        .padding({ left: 18, right: 18, top: 18 })
+        .onClick(() => this.onOpenOverlay('aicircle'));
 
         this.DutyRosterEntry();
 
