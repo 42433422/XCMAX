@@ -255,6 +255,7 @@ fun ConversationListScreen(
                                             PinnedIds.ASSISTANT -> onOpenAssistant()
                                             PinnedIds.CS -> onOpenCustomerService()
                                             PinnedIds.CODEX -> onOpenConversation(PinnedIds.CODEX)
+                                            PinnedIds.CURSOR -> onOpenConversation(PinnedIds.CURSOR)
                                             PinnedIds.CLAUDE -> onOpenConversation(PinnedIds.CLAUDE)
                                             else -> onOpenConversation(item.id)
                                         }
@@ -860,6 +861,7 @@ private fun ConversationCell(
                     ConversationType.PINNED_ASSISTANT,
                     ConversationType.PINNED_CS,
                     ConversationType.PINNED_CODEX,
+                    ConversationType.PINNED_CURSOR,
                     ConversationType.PINNED_CLAUDE -> PinnedAvatar(type = item.type)
                     else -> AppAvatar(
                         imageSource = item.avatarUrl,
@@ -992,6 +994,7 @@ private fun PinnedAvatar(type: ConversationType) {
         ConversationType.PINNED_ASSISTANT -> AssistantAvatar()
         ConversationType.PINNED_CS -> CsAvatar()
         ConversationType.PINNED_CODEX -> CodexAvatar()
+        ConversationType.PINNED_CURSOR -> CursorAvatar()
         ConversationType.PINNED_CLAUDE -> ClaudeAvatar()
         else -> AssistantAvatar()
     }
@@ -1027,6 +1030,17 @@ private fun CodexAvatar() {
         size = 52.dp,
         shape = MaterialTheme.shapes.small,
         contentDescription = "超级员工-Codex",
+    )
+}
+
+/** 超级员工-Cursor 头像 */
+@Composable
+private fun CursorAvatar() {
+    AppAvatar(
+        fallback = AppAvatarFallback.CURSOR,
+        size = 52.dp,
+        shape = MaterialTheme.shapes.small,
+        contentDescription = "超级员工-Cursor",
     )
 }
 

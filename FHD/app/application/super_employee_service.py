@@ -115,6 +115,27 @@ def _codex_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) 
     ]
 
 
+def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    # Cursor Agent CLI headless（cursor agent --print）。stream-json 作心跳；
+    # --force 允许在 cwd 内改/建文件（print 模式默认只读）。
+    force_raw = (
+        os.environ.get("DEVFLEET_CURSOR_FORCE")
+        or os.environ.get("XCMAX_CURSOR_AGENT_FORCE")
+        or "1"
+    ).strip().lower()
+    cmd = [
+        cli_path,
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+    ]
+    if force_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--force")
+    cmd.append(prompt)
+    return cmd
+
+
 def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
     # Claude Code 无头模式（print）。stream-json：工作时持续吐事件(工具调用/文本)，
     # 作为"还在干活"的心跳，配合 idle-timeout 实现"只要在工作就不超时"。
@@ -193,6 +214,29 @@ CLAUDE_PROFILE = SuperEmployeeToolProfile(
     cli_reads_output_file=False,
     cli_stream_json=True,
     cli_command_builder=_claude_cli_command,
+)
+
+CURSOR_PROFILE = SuperEmployeeToolProfile(
+    employee_id="cursor-super-employee",
+    employee_name="超级员工-Cursor",
+    display_tool="Cursor",
+    tool_name="cursor_agent",
+    capability_key="cursor_cli",
+    storage_subdir="cursor_super_employee",
+    result_kind="cursor_result",
+    direct_kind="cursor_direct",
+    env_super_prefix="XCMAX_CURSOR_SUPER_EMPLOYEE",
+    env_tool_prefix="XCMAX_CURSOR",
+    cli_binary="cursor",
+    cli_extra_candidates=(
+        "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+        os.path.expanduser("~/.local/bin/cursor"),
+        "/opt/homebrew/bin/cursor",
+        "/usr/local/bin/cursor",
+    ),
+    cli_reads_output_file=False,
+    cli_stream_json=True,
+    cli_command_builder=_cursor_cli_command,
 )
 
 
@@ -1909,6 +1953,7 @@ __all__ = [
     "DISPATCHER_MESSAGE_KIND",
     "CODEX_PROFILE",
     "CLAUDE_PROFILE",
+    "CURSOR_PROFILE",
     "SuperEmployeeService",
     "SuperEmployeeToolProfile",
 ]
