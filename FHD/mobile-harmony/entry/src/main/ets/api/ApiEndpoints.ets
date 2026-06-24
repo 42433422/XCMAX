@@ -75,4 +75,5 @@ export class ApiEndpoints {
 
   // 管理员
   static readonly ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES: string = `${ApiEndpoints.BASE}/admin/codex-super-employee/messages`;
+  static readonly ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES: string = `${ApiEndpoints.BASE}/admin/claude-super-employee/messages`;
 }

@@ -87,6 +87,75 @@ def test_execute_task_waits_for_real_codex_result(monkeypatch):
     assert result["codex"]["assistant_message"]["body"] == "真实 Codex 已完成"
 
 
+def _capture_context_service():
+    """工厂：返回一个记录 invoke(context=...) 的假超级员工服务类 + 捕获列表。"""
+    captured: list[dict] = []
+
+    class FakeCodexService:
+        def invoke(self, **kwargs):
+            captured.append(dict(kwargs.get("context") or {}))
+            return {"dispatch": {"request_id": "r", "status": "completed", "accepted": True}}
+
+        def list_messages(self, **kwargs):
+            return []
+
+    return FakeCodexService, captured
+
+
+def test_explicit_multi_device_mode_survives_relay(monkeypatch):
+    """三态控件「多设备」：显式 mode=code + mode_explicit=True 必须原样透传，不被清掉。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    service_cls, captured = _capture_context_service()
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", service_cls)
+    relay._execute_task(
+        {
+            "task_id": "relay-explicit",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {
+                "message": "你好",
+                "context": {"mode": "code", "mode_explicit": True},
+            },
+        }
+    )
+    assert captured and captured[0].get("mode") == "code"
+
+
+def test_legacy_forced_code_mode_still_stripped(monkeypatch):
+    """旧客户端固定 mode=code（无 mode_explicit）仍被清掉 → 交回关键词分类器。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    service_cls, captured = _capture_context_service()
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", service_cls)
+    relay._execute_task(
+        {
+            "task_id": "relay-legacy",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {"message": "你好", "context": {"mode": "code"}},
+        }
+    )
+    assert captured and "mode" not in captured[0]
+
+
+def test_direct_chat_mode_passes_through_relay(monkeypatch):
+    """三态控件「直答」：mode=chat 不在强制集合、原样透传 → CLI 直答。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    service_cls, captured = _capture_context_service()
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", service_cls)
+    relay._execute_task(
+        {
+            "task_id": "relay-chat",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {"message": "帮我改一下", "context": {"mode": "chat"}},
+        }
+    )
+    assert captured and captured[0].get("mode") == "chat"
+
+
 def test_execute_task_marks_dispatch_unavailable_as_blocked(monkeypatch):
     from app.services import mobile_relay_desktop_client as relay
 

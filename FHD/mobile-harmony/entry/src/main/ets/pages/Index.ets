@@ -1,5 +1,5 @@
 import { MobileApiClient } from '../api/MobileApiClient';
-import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, DutyRosterData, FixedContactDto, ModInfo, UserDto } from '../models/MobileModels';
+import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, DutyRosterData, FixedContactDto, ModInfo, RelayDesktop, RelayTask, RelayTaskResult, SuperEmployeeDispatch, SuperEmployeeInvokeData, SuperEmployeeMessageRow, UserDto } from '../models/MobileModels';
 import { buildConversations, buildDutyRoster, buildEmployees, composeConversations, fallbackFixedTop, findEmployee } from '../state/AppDataBuilder';
 import { NotificationManager } from '../state/NotificationManager';
 import { AboutPage } from './AboutPage';
@@ -54,6 +54,10 @@ struct Index {
   @Provide activeConversationTitle: string = '小C助理';
   @Provide activeEmployeeKey: string = '';
   @Provide chatInput: string = '';
+  // 超级员工派工模式三态控件（自动/直答/多设备），仅 super:* 会话生效。
+  @Provide superDispatchMode: string = 'auto';
+  // 已绑定的桌面执行端 relay_id（非空 → 超级员工走 relay 离线中继；空 → 走 direct）。
+  @Provide relayDesktopId: string = '';
   @Provide messages: ChatMessage[] = [{ role: 'assistant', text: '已准备连接企业端。登录后，我会按企业端已安装员工和两个固定入口展示会话。' }];
   @Provide mods: ModInfo[] = [];
   @Provide employees: AiEmployeeProfile[] = [];
@@ -88,7 +92,8 @@ struct Index {
               onSetBiometric: (enabled: boolean) => this.setBiometricEnabled(enabled),
               onSetThemeMode: (mode: string) => this.setThemeMode(mode),
               onSubmitFeedback: (message: string, onDone: () => void) => this.submitFeedback(message, onDone),
-              onCheckForUpdate: () => this.checkForUpdate()
+              onCheckForUpdate: () => this.checkForUpdate(),
+              onBindRelayDesktop: (code: string, onDone: (ok: boolean, msg: string) => void) => this.bindRelayDesktop(code, onDone)
             });
           }
           if (this.showDutyRoster) {
@@ -140,6 +145,8 @@ struct Index {
       }
       this.statusText = '正在同步企业数据...';
       await this.loadHome();
+      // 恢复 relay 绑定（已绑定桌面 → 超级员工走离线中继；未绑定不影响其它功能）。
+      await this.refreshRelayBinding();
       this.statusText = `已同步 ${this.mods.length} 个模块、${this.employees.length} 位员工`;
     } catch (err) {
       this.statusText = `登录失败：${this.errorMessage(err)}`;
@@ -238,9 +245,14 @@ struct Index {
     this.messages = this.messages.concat([{ role: 'user', text: text }]);
     this.loading = true;
     try {
-      const payload = this.messageForActiveEmployee(text);
-      const response = await this.api.chat(payload, this.sessionId);
-      this.messages = this.messages.concat([{ role: 'assistant', text: this.extractReply(response) }]);
+      const superTool = this.superToolForConversation(this.activeConversationId);
+      if (superTool.length > 0) {
+        await this.sendSuperEmployeeMessage(superTool, text);
+      } else {
+        const payload = this.messageForActiveEmployee(text);
+        const response = await this.api.chat(payload, this.sessionId);
+        this.messages = this.messages.concat([{ role: 'assistant', text: this.extractReply(response) }]);
+      }
     } catch (err) {
       this.messages = this.messages.concat([{ role: 'assistant', text: `请求失败：${this.errorMessage(err)}` }]);
     } finally {
@@ -252,6 +264,186 @@ struct Index {
     const employee = findEmployee(this.employees, this.activeEmployeeKey);
     if (!employee) return text;
     return `请以企业端员工「${employee.name}」身份处理：${text}\n来源模块：${employee.modName}\n员工标识：${employee.employeeId}\n接口路径：${employee.apiBasePath}`;
+  }
+
+  // ── 超级员工派工（对标安卓 streamCodexSuperEmployeeChat 的 direct 分支）──
+  // convId 'super:codex'/'super:claude' → 工具名；其它 → 空（走通用聊天）。
+  private superToolForConversation(convId: string): string {
+    if (convId === 'super:claude') return 'claude';
+    if (convId === 'super:codex') return 'codex';
+    return '';
+  }
+
+  private async sendSuperEmployeeMessage(tool: string, text: string): Promise<void> {
+    // 已绑定桌面执行端 → 走 relay 离线中继（手机不在电脑旁也能派工）；否则 direct。
+    if (this.relayDesktopId.length > 0) {
+      await this.sendSuperEmployeeViaRelay(tool, text);
+      return;
+    }
+    const data = await this.api.superEmployeeInvoke(tool, text, this.superDispatchMode);
+    const immediate = this.superImmediateReply(data);
+    if (immediate.length > 0) {
+      // CLI 直答（直答档/自动档闲聊）：立即拿到答案。
+      this.messages = this.messages.concat([{ role: 'assistant', text: immediate }]);
+      return;
+    }
+    // 多设备派工：先占位，再轮询回写结果，替换占位。
+    this.messages = this.messages.concat([{ role: 'assistant', text: '已派发到多设备，执行中…' }]);
+    const requestId = this.superRequestId(data);
+    const reply = await this.pollSuperEmployeeReply(tool, requestId);
+    const finalText = reply.length > 0 ? reply : '任务已提交，稍后回到此会话可查看执行结果。';
+    this.messages = this.messages.slice(0, this.messages.length - 1).concat([{ role: 'assistant', text: finalText }]);
+  }
+
+  private superImmediateReply(data: SuperEmployeeInvokeData): string {
+    const am: SuperEmployeeMessageRow | undefined = data.assistant_message;
+    if (!am) return '';
+    const role = (am.role || '').trim().toLowerCase();
+    const kind = (am.kind || '').trim().toLowerCase();
+    const body = (am.body || '').trim();
+    if (body.length === 0) return '';
+    // 派工占位（"思考中…"/调度器）走 system/dispatcher，不算直答，交给轮询。
+    if (role === 'system' || kind === 'dispatcher') return '';
+    return body;
+  }
+
+  private superRequestId(data: SuperEmployeeInvokeData): string {
+    const d: SuperEmployeeDispatch | undefined = data.dispatch;
+    if (d && (d.request_id || '').trim().length > 0) return (d.request_id || '').trim();
+    const am: SuperEmployeeMessageRow | undefined = data.assistant_message;
+    if (am && (am.dispatch_request_id || '').trim().length > 0) return (am.dispatch_request_id || '').trim();
+    return '';
+  }
+
+  private async pollSuperEmployeeReply(tool: string, requestId: string): Promise<string> {
+    for (let i = 0; i < 60; i++) {
+      await this.sleep(2000);
+      let rows: SuperEmployeeMessageRow[] = [];
+      try {
+        rows = await this.api.superEmployeeMessages(tool);
+      } catch (err) {
+        // 轮询期间瞬时错误忽略，继续等待回写。
+        continue;
+      }
+      const hit = this.matchSuperResult(rows, requestId);
+      if (hit.length > 0) return hit;
+    }
+    return '';
+  }
+
+  // 倒序找到与本次请求匹配的助手结果消息（跳过 system/dispatcher 派工占位）。
+  private matchSuperResult(rows: SuperEmployeeMessageRow[], requestId: string): string {
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const row: SuperEmployeeMessageRow = rows[i];
+      const role = (row.role || '').trim().toLowerCase();
+      const kind = (row.kind || '').trim().toLowerCase();
+      const body = (row.body || '').trim();
+      const rid = (row.dispatch_request_id || '').trim();
+      if (role !== 'assistant') continue;
+      if (kind === 'dispatcher') continue;
+      if (requestId.length > 0 && rid !== requestId) continue;
+      if (body.length === 0) continue;
+      return body;
+    }
+    return '';
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve: () => void) => {
+      setTimeout(() => { resolve(); }, ms);
+    });
+  }
+
+  // ── 超级员工 relay 离线通路（对标安卓 streamRelayCodexTask）──
+  private async sendSuperEmployeeViaRelay(tool: string, text: string): Promise<void> {
+    const kind = tool === 'claude' ? 'claude.invoke' : 'codex.invoke';
+    const task = await this.api.relayCreateTask(this.relayDesktopId, kind, text, this.superDispatchMode);
+    const taskId = (task.task_id || '').trim();
+    if (taskId.length === 0) {
+      this.messages = this.messages.concat([{ role: 'assistant', text: '中继任务创建失败：未找到已绑定的电脑执行端。' }]);
+      return;
+    }
+    this.messages = this.messages.concat([{ role: 'assistant', text: '已经云中继派发到电脑执行端，执行中…' }]);
+    const reply = await this.pollRelayTask(taskId);
+    const finalText = reply.length > 0 ? reply : '电脑执行端暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。';
+    this.messages = this.messages.slice(0, this.messages.length - 1).concat([{ role: 'assistant', text: finalText }]);
+  }
+
+  // 轮询中继任务直到终态。done/completed → 取结果；failed/blocked/cancelled → 错误文案。
+  private async pollRelayTask(taskId: string): Promise<string> {
+    for (let i = 0; i < 90; i++) {
+      await this.sleep(2000);
+      let task: RelayTask = {};
+      try {
+        task = await this.api.relayTaskStatus(taskId);
+      } catch (err) {
+        continue;
+      }
+      const status = (task.status || '').trim().toLowerCase();
+      if (status === 'done' || status === 'completed') {
+        return this.relayTaskResultText(task);
+      }
+      if (status === 'failed' || status === 'blocked' || status === 'cancelled') {
+        const detail = this.relayTaskResultText(task);
+        return detail.length > 0 ? detail : '电脑执行端执行失败。';
+      }
+    }
+    return '';
+  }
+
+  // 结果取值：error → codex.assistant_message.body → reply（与安卓 relayTaskResultText 同构）。
+  private relayTaskResultText(task: RelayTask): string {
+    const result: RelayTaskResult | undefined = task.result;
+    if (!result) return '';
+    const err = (result.error || '').trim();
+    if (err.length > 0) return err;
+    const codex: SuperEmployeeInvokeData | undefined = result.codex;
+    if (codex) {
+      const am: SuperEmployeeMessageRow | undefined = codex.assistant_message;
+      const body = ((am ? am.body : '') || '').trim();
+      if (body.length > 0) return body;
+    }
+    const reply = (result.reply || '').trim();
+    if (reply.length > 0) return reply;
+    return '';
+  }
+
+  // 设置页"绑定电脑执行端"：6 位设备码 → relay_id，绑定后超级员工自动走 relay。
+  private async bindRelayDesktop(code: string, onDone: (ok: boolean, msg: string) => void): Promise<void> {
+    const clean = code.trim();
+    if (clean.length !== 6) {
+      onDone(false, '请输入 6 位设备码');
+      return;
+    }
+    try {
+      const data = await this.api.relayConfirmCode(clean);
+      const relayId = (data.relay_id || (data.desktop ? data.desktop.relay_id : '') || '').trim();
+      if (relayId.length === 0) {
+        onDone(false, '绑定响应缺少 relay_id');
+        return;
+      }
+      this.relayDesktopId = relayId;
+      onDone(true, '已绑定电脑执行端，超级员工任务将派到该电脑。');
+    } catch (err) {
+      onDone(false, `绑定失败：${this.errorMessage(err)}`);
+    }
+  }
+
+  // 登录后自动恢复 relay 绑定：账号下已绑定唯一桌面 → 直接采用，免去再次输码。
+  private async refreshRelayBinding(): Promise<void> {
+    try {
+      const desktops: RelayDesktop[] = await this.api.relayDesktops();
+      for (let i = 0; i < desktops.length; i++) {
+        const rid = (desktops[i].relay_id || '').trim();
+        if (rid.length > 0) {
+          this.relayDesktopId = rid;
+          return;
+        }
+      }
+    } catch (err) {
+      // 没有绑定或接口不可用时静默：超级员工回退 direct 通路。
+      console.info('refreshRelayBinding skipped: ' + this.errorMessage(err));
+    }
   }
   private extractReply(response: ChatResponseData): string {
     const direct = cleanText(response.reply);
