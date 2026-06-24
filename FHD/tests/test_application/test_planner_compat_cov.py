@@ -147,8 +147,19 @@ for _k in _installed_stubs:
         sys.modules[_k] = stub
 
 # Restore the real module so patches in other test files target the right __globals__.
+# If the real module was already imported before this file loaded, put it back verbatim.
+# Otherwise (it had not been imported yet — e.g. these files are passed to pytest in an
+# order where this file collects first) we must NOT leave our stub-loaded importlib copy
+# (_pcs) installed under the canonical name: any later genuine
+# `import app.application.planner_compat_service` would resolve to this cached copy whose
+# helper globals (_xcagi_compat_reply_payload, …) are MagicMocks, silently corrupting other
+# test files. Drop the copy so the next genuine import rebuilds the module against the
+# now-restored real dependencies. _pcs stays referenced directly by this file's tests, which
+# use patch.object(_pcs, …) and never depend on sys.modules pointing at it.
 if _real_pcs_module is not None:
     sys.modules["app.application.planner_compat_service"] = _real_pcs_module
+else:
+    sys.modules.pop("app.application.planner_compat_service", None)
 
 # Convenience aliases
 _derive_industry_from_session = _pcs._derive_industry_from_session
