@@ -979,6 +979,111 @@ class TestProcessChatExtended:
                 result = service.process_chat("u1", "查询", source="pro", context={})
         assert result["success"] is True
 
+    def test_nl_main_chain_opens_real_upfront_run(self):
+        """自然语言主链路应在执行前开真实 AgentRun（live run），而非事后 post_execution trace。"""
+
+        async def mock_chat(*a, **kw):
+            return {"success": True, "text": "你好呀", "action": "ai_response", "data": {}}
+
+        repo = InMemoryAgentRunRepository()
+        mock_ai = Mock()
+        mock_ai.chat = mock_chat
+        with patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ):
+            service = _make_service()
+            service.ai_service = mock_ai
+            with (
+                patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
+                patch(
+                    "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                    return_value=repo,
+                ),
+            ):
+                result = service.process_chat("u1", "你好", source=None, context={})
+
+        # 主链路结果带 run_id，且与一个真实落库的 run 对应
+        assert result["success"] is True
+        run_id = result.get("run_id")
+        assert run_id, "NL 主链路应返回 run_id"
+        run = repo.get(run_id)
+        assert run is not None
+        # 是「前置真实 run」而非事后重建：trace_mode 为 live 的 legacy_planner_run，状态已完成
+        assert run.metadata.get("trace_mode") == "legacy_planner_run"
+        assert run.status == "completed"
+        assert run.intent == "legacy_chat_adapter"
+        # 生命周期事件齐全且顺序正确：created → planner.started → planner.completed
+        event_types = [event.event_type for event in run.events]
+        assert "run.created" in event_types
+        assert "planner.started" in event_types
+        assert "planner.completed" in event_types
+        assert event_types.index("planner.started") < event_types.index("planner.completed")
+
+    def test_multimodal_chat_routes_to_orchestrator_not_legacy(self):
+        """聊天携带真实多模态 artifact 时应走 orchestrator 多模态计划，而非 legacy 引擎。"""
+
+        async def must_not_call(*a, **kw):
+            raise AssertionError("legacy ai_service.chat 不应被多模态轮次调用")
+
+        mock_ai = Mock()
+        mock_ai.chat = must_not_call
+        with patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ):
+            service = _make_service()
+            service.ai_service = mock_ai
+            with (
+                patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
+                patch.object(service, "_start_deterministic_import_agent_run") as mock_start,
+            ):
+                mock_start.return_value = {
+                    "success": True,
+                    "message": "处理完成",
+                    "run_id": "mm-run-1",
+                    "agent_run_id": "mm-run-1",
+                    "data": {
+                        "text": "ok",
+                        "action": "workflow_done",
+                        "run_id": "mm-run-1",
+                        "agent_run_id": "mm-run-1",
+                    },
+                }
+                result = service.process_chat(
+                    "u1",
+                    "看看这个发票",
+                    source=None,
+                    context={"attachments": [{"file_path": "/tmp/a.pdf", "text": "发票内容"}]},
+                )
+
+        # 分流到了 orchestrator：用真实多模态计划调用了 run 启动器，且 legacy 未被调用
+        assert mock_start.called
+        plan_arg = mock_start.call_args.kwargs["plan"]
+        assert plan_arg.intent == "multimodal_artifact_rag"
+        assert result["run_id"] == "mm-run-1"
+
+    def test_plain_chat_does_not_divert_to_multimodal(self):
+        """无 artifact 的纯文本聊天不得被误分流到多模态（护栏：最热路径零影响）。"""
+
+        async def mock_chat(*a, **kw):
+            return {"success": True, "text": "你好呀", "action": "ai_response", "data": {}}
+
+        mock_ai = Mock()
+        mock_ai.chat = mock_chat
+        with patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ):
+            service = _make_service()
+            service.ai_service = mock_ai
+            with (
+                patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
+                patch.object(service, "_start_deterministic_import_agent_run") as mock_start,
+            ):
+                result = service.process_chat("u1", "你好", source=None, context={})
+
+        # 未走多模态分流，legacy 引擎正常应答
+        assert mock_start.called is False
+        assert result["success"] is True
+
 
 # ========================= _resolve_unit_price_column - extended ==========
 

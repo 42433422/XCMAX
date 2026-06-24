@@ -8,6 +8,7 @@ export struct MessagesPage {
 
   onOpenConversation: (item: ConversationSummary) => void = () => {};
   onSendChatMessage: () => void = () => {};
+  onOpenOverlay: (name: string) => void = () => {};
 
   build() {
     this.MessageArea();
@@ -33,6 +34,8 @@ export struct MessagesPage {
           .width('100%')
           .padding({ left: 18, right: 18, top: 18 });
 
+          this.GroupChatEntry();
+
           ForEach(this.conversations, (item: ConversationSummary) => {
             this.ConversationRow(item);
           }, (item: ConversationSummary) => item.id);
@@ -43,6 +46,45 @@ export struct MessagesPage {
       .width('100%')
       .layoutWeight(1);
     }
+  }
+
+  @Builder
+  GroupChatEntry() {
+    Row({ space: 12 }) {
+      Text('群')
+        .width(48)
+        .height(48)
+        .borderRadius(14)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#FFFFFF')
+        .textAlign(TextAlign.Center)
+        .backgroundColor('#7C3AED');
+      Column({ space: 4 }) {
+        Text('AI 群聊')
+          .fontSize(17)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#111827')
+          .maxLines(1);
+        Text('多位 AI 员工在群里协作,可 @ 点名')
+          .fontSize(13)
+          .fontColor('#4B5563')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis });
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1);
+      Text('>')
+        .fontSize(18)
+        .fontColor('#9CA3AF');
+    }
+    .width('100%')
+    .padding(14)
+    .margin({ left: 14, right: 14 })
+    .backgroundColor('#FFFFFF')
+    .borderRadius(14)
+    .border({ width: 1, color: '#E5E7EB' })
+    .onClick(() => this.onOpenOverlay('aigroups'));
   }
 
   @Builder

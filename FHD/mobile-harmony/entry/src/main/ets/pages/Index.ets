@@ -1,9 +1,16 @@
 import { MobileApiClient } from '../api/MobileApiClient';
+import { SseChatClient } from '../api/SseChatClient';
+import { BiometricGate } from '../state/BiometricGate';
+import { NetworkMonitor } from '../state/NetworkMonitor';
+import { PushService } from '../state/PushService';
 import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, DutyRosterData, FixedContactDto, ModInfo, RelayDesktop, RelayTask, RelayTaskResult, SuperEmployeeDispatch, SuperEmployeeInvokeData, SuperEmployeeMessageRow, UserDto } from '../models/MobileModels';
 import { buildConversations, buildDutyRoster, buildEmployees, composeConversations, fallbackFixedTop, findEmployee } from '../state/AppDataBuilder';
+import { LocalStore, PersistedSession } from '../state/LocalStore';
 import { NotificationManager } from '../state/NotificationManager';
 import { AboutPage } from './AboutPage';
 import { AiCirclePage } from './AiCirclePage';
+import { AiGroupChatPage } from './AiGroupChatPage';
+import { AiGroupListPage } from './AiGroupListPage';
 import { ApprovalPage } from './ApprovalPage';
 import { BridgePage } from './BridgePage';
 import { CsChatPage } from './CsChatPage';
@@ -20,6 +27,7 @@ import { MarketListPage } from './MarketListPage';
 import { ModWebViewPage } from './ModWebViewPage';
 import { NotificationListPage } from './NotificationListPage';
 import { OcrPage } from './OcrPage';
+import { RegisterPage } from './RegisterPage';
 import { ScanQrPage } from './ScanQrPage';
 import { SettingsPage } from './SettingsPage';
 
@@ -35,6 +43,7 @@ function emptyDutyRoster(): DutyRosterData {
 struct Index {
   private api: MobileApiClient = new MobileApiClient(DEFAULT_BASE_URL);
   private notifier: NotificationManager = NotificationManager.getInstance();
+  private store: LocalStore = LocalStore.getInstance();
 
   @Provide baseUrl: string = DEFAULT_BASE_URL;
   @Provide username: string = '';
@@ -72,10 +81,135 @@ struct Index {
   @Provide showSettings: boolean = false;
   @State showDutyRoster: boolean = false;
   @State activeOverlay: string = '';
+  @State activeGroupName: string = '';
+  @State showLegalGate: boolean = false;
+  @State showRegister: boolean = false;
+  @State unlocked: boolean = true;
+  @Provide online: boolean = true;
+  private netMonitor: NetworkMonitor = NetworkMonitor.getInstance();
+
+  aboutToAppear(): void {
+    this.store.init(getContext(this));
+    const saved: PersistedSession = this.store.load();
+    // 恢复本机偏好(主题/生物识别)
+    this.biometricEnabled = saved.biometricEnabled;
+    this.themeMode = saved.themeMode;
+    // 首启合规门:未同意过则先弹用户协议与隐私政策(对标 Android LegalConsentScreen)
+    this.showLegalGate = !saved.legalConsented;
+    // 网络状态监测:离线时主界面顶部显示横幅
+    this.netMonitor.start((online: boolean) => { this.online = online; });
+    if (saved.baseUrl.length > 0) {
+      this.baseUrl = saved.baseUrl;
+    }
+    if (saved.loginAccountKind.length > 0) {
+      this.loginAccountKind = saved.loginAccountKind;
+    }
+    // 有持久化令牌则尝试自动登录(对标 Android auth_auto_login)
+    if (saved.accessToken.length > 0) {
+      this.restoreSession(saved);
+    }
+  }
+
+  private async restoreSession(saved: PersistedSession): Promise<void> {
+    this.accessToken = saved.accessToken;
+    this.sessionId = saved.sessionId;
+    this.accountKind = saved.accountKind;
+    this.displayName = saved.displayName.length > 0 ? saved.displayName : this.displayName;
+    this.companyBrand = saved.companyBrand.length > 0 ? saved.companyBrand : this.companyBrand;
+    this.api.setBaseUrl(this.baseUrl);
+    this.api.setAccessToken(saved.accessToken);
+    this.loading = true;
+    this.statusText = '正在恢复会话...';
+    try {
+      const me = await this.api.me();
+      if (me.user) {
+        this.displayName = cleanText(me.user.display_name, this.displayName);
+        this.companyBrand = cleanText(me.company_brand, this.companyBrand);
+        this.accountKind = cleanText(me.account_kind, this.accountKind);
+      }
+      await this.loadHome();
+      this.loggedIn = true;
+      this.statusText = `已恢复登录，同步 ${this.mods.length} 个模块、${this.employees.length} 位员工`;
+      // 开启生物识别时,恢复登录态需先解锁(对标 Android BiometricGate)
+      if (this.biometricEnabled) {
+        this.unlocked = false;
+        this.promptUnlock();
+      }
+    } catch (err) {
+      // 令牌过期/失效:清掉令牌回登录页
+      this.accessToken = '';
+      this.api.setAccessToken('');
+      this.store.clearSession();
+      this.statusText = '登录已过期，请重新登录';
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private promptUnlock(): void {
+    BiometricGate.authenticate('解锁 XCAGI 企业版')
+      .then((ok: boolean) => {
+        if (ok) {
+          this.unlocked = true;
+        } else {
+          this.statusText = '解锁失败，请重试';
+        }
+      })
+      .catch(() => {
+        // 验证流程异常:放行,避免锁死
+        this.unlocked = true;
+      });
+  }
+
+  @Builder
+  LockScreen() {
+    Column({ space: 18 }) {
+      Text('🔒')
+        .fontSize(48);
+      Text('已锁定')
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#111827');
+      Text('请通过生物识别解锁以继续')
+        .fontSize(14)
+        .fontColor('#6B7280');
+      Button('解锁')
+        .width(160)
+        .height(46)
+        .onClick(() => this.promptUnlock());
+      Text('退出登录')
+        .fontSize(14)
+        .fontColor('#1D4ED8')
+        .onClick(() => { this.unlocked = true; this.logout(); });
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor('#F4F6F8');
+  }
+
+  private persistSession(): void {
+    const snapshot: PersistedSession = {
+      accessToken: this.accessToken,
+      sessionId: this.sessionId,
+      baseUrl: this.baseUrl,
+      accountKind: this.accountKind,
+      loginAccountKind: this.loginAccountKind,
+      displayName: this.displayName,
+      companyBrand: this.companyBrand,
+      biometricEnabled: this.biometricEnabled,
+      themeMode: this.themeMode,
+      legalConsented: true
+    };
+    this.store.saveSession(snapshot);
+  }
 
   build() {
     Column() {
-      if (this.loggedIn) {
+      if (this.loggedIn && this.biometricEnabled && !this.unlocked) {
+        this.LockScreen();
+      } else if (this.loggedIn) {
         Stack() {
           MainShell({
             onOpenConversation: (item: ConversationSummary) => this.openConversation(item),
@@ -109,8 +243,25 @@ struct Index {
         }
         .width('100%')
         .height('100%');
+      } else if (this.showLegalGate) {
+        LegalConsentPage({
+          onBack: () => { this.showLegalGate = false; },
+          onAgree: () => { this.store.saveLegalConsent(true); this.showLegalGate = false; }
+        });
+      } else if (this.showRegister) {
+        RegisterPage({
+          onBack: () => { this.showRegister = false; },
+          onSuccess: () => {
+            this.showRegister = false;
+            this.statusText = '注册信息已提交，请使用企业账号登录或桌面端绑定码接入';
+          }
+        });
       } else {
-        LoginPage({ onLogin: () => this.login(), onExchangePairingCode: () => this.exchangePairingCode() });
+        LoginPage({
+          onLogin: () => this.login(),
+          onExchangePairingCode: () => this.exchangePairingCode(),
+          onOpenRegister: () => { this.showRegister = true; }
+        });
       }
     }
     .width('100%').height('100%').backgroundColor('#F4F6F8');
@@ -146,6 +297,9 @@ struct Index {
       }
       this.statusText = '正在同步企业数据...';
       await this.loadHome();
+      this.persistSession();
+      // 注册推送 token(best-effort;需 AGC 配置/真机才生效)
+      PushService.registerToken(this.api);
       // 恢复 relay 绑定（已绑定桌面 → 超级员工走离线中继；未绑定不影响其它功能）。
       await this.refreshRelayBinding();
       this.statusText = `已同步 ${this.mods.length} 个模块、${this.employees.length} 位员工`;
@@ -244,21 +398,62 @@ struct Index {
     if (text.length === 0) return;
     this.chatInput = '';
     this.messages = this.messages.concat([{ role: 'user', text: text }]);
+    // 占位的助手气泡，SSE token 逐字写入
+    this.messages = this.messages.concat([{ role: 'assistant', text: '' }]);
+    const assistantIndex = this.messages.length - 1;
     this.loading = true;
+    const payload = this.messageForActiveEmployee(text);
+    let acc = '';
+    let gotToken = false;
+    const sse = new SseChatClient(this.baseUrl, this.accessToken);
     try {
       const superTool = this.superToolForConversation(this.activeConversationId);
       if (superTool.length > 0) {
+        // 超级员工会话：走派工/中继通路（不走 SSE 流式）。
         await this.sendSuperEmployeeMessage(superTool, text);
       } else {
-        const payload = this.messageForActiveEmployee(text);
-        const response = await this.api.chat(payload, this.sessionId);
-        this.messages = this.messages.concat([{ role: 'assistant', text: this.extractReply(response) }]);
+        // 普通会话：SSE 流式逐字写入，失败回退一次性 HTTP（见 catch）。
+        await sse.stream(payload, {
+          onToken: (chunk: string) => {
+            gotToken = true;
+            acc += chunk;
+            this.updateAssistantAt(assistantIndex, acc);
+          },
+          onDone: (reply: string) => {
+            if (reply.length > 0) {
+              this.updateAssistantAt(assistantIndex, reply);
+            } else if (!gotToken) {
+              this.updateAssistantAt(assistantIndex, '服务端已返回，但没有可展示内容');
+            }
+          },
+          onError: (message: string) => {
+            if (!gotToken) {
+              this.updateAssistantAt(assistantIndex, `请求失败：${message}`);
+            }
+          }
+        });
       }
     } catch (err) {
-      this.messages = this.messages.concat([{ role: 'assistant', text: `请求失败：${this.errorMessage(err)}` }]);
+      // 流式失败回退到一次性 HTTP(对标 Android 流式失败兜底)
+      try {
+        const response = await this.api.chat(payload, this.sessionId);
+        this.updateAssistantAt(assistantIndex, this.extractReply(response));
+      } catch (err2) {
+        this.updateAssistantAt(assistantIndex, `请求失败：${this.errorMessage(err2)}`);
+      }
     } finally {
       this.loading = false;
     }
+  }
+
+  private updateAssistantAt(index: number, text: string): void {
+    this.messages = this.messages.map((message: ChatMessage, i: number): ChatMessage => {
+      if (i === index) {
+        const updated: ChatMessage = { role: 'assistant', text: text };
+        return updated;
+      }
+      return message;
+    });
   }
   private messageForActiveEmployee(text: string): string {
     if (this.activeEmployeeKey.length === 0) return text;
@@ -462,6 +657,7 @@ struct Index {
     this.conversations = buildConversations([]); this.dutyRoster = emptyDutyRoster();
     this.statusText = '已退出企业账号';
     this.showSettings = false; this.showDutyRoster = false; this.notifier.unregister();
+    this.store.clearSession();
   }
   private errorMessage(err: object): string { return cleanText((err as Error).message, '未知错误'); }
 
@@ -515,10 +711,25 @@ struct Index {
         moduleId: this.activeOverlay.substring('enterprise_module:'.length),
         moduleTitle: '企业模块',
         onBack: () => { this.activeOverlay = 'enterprise'; },
-        onOpenFeature: (featureId: string) => {}
+        onOpenFeature: (featureId: string) => {},
+        onOpenApproval: () => { this.activeOverlay = 'approval'; }
       });
     } else if (this.activeOverlay === 'aicircle') {
       AiCirclePage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'aigroups') {
+      AiGroupListPage({
+        onBack: () => this.closeOverlay(),
+        onOpenGroup: (groupId: string, groupName: string) => {
+          this.activeGroupName = groupName;
+          this.activeOverlay = 'aigroup:' + groupId;
+        }
+      });
+    } else if (this.activeOverlay.startsWith('aigroup:')) {
+      AiGroupChatPage({
+        groupId: this.activeOverlay.substring('aigroup:'.length),
+        groupName: this.activeGroupName,
+        onBack: () => { this.activeOverlay = 'aigroups'; }
+      });
     } else if (this.activeOverlay === 'scan') {
       ScanQrPage({ onBack: () => this.closeOverlay(), onScanResult: (result: string) => this.closeOverlay() });
     } else if (this.activeOverlay === 'ocr') {
@@ -545,11 +756,13 @@ struct Index {
   }
   private setBiometricEnabled(enabled: boolean): void {
     this.biometricEnabled = enabled;
+    this.store.savePreferences(this.biometricEnabled, this.themeMode);
     this.statusText = enabled ? '已开启生物识别解锁' : '已关闭生物识别解锁';
   }
   private setThemeMode(mode: string): void {
     const normalized = mode === 'dark' || mode === 'light' ? mode : 'system';
     this.themeMode = normalized;
+    this.store.savePreferences(this.biometricEnabled, this.themeMode);
     this.statusText = `主题模式：${normalized === 'dark' ? '深色' : normalized === 'light' ? '浅色' : '跟随系统'}`;
   }
   private submitFeedback(message: string, onDone: () => void): void {

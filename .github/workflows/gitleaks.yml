@@ -1,0 +1,36 @@
+name: gitleaks
+
+# 补齐分支保护 required 检查 gitleaks 在 PR 上的生产者。
+# 既有 fhd-security-metrics-collect.yml 只在 daily cron + 手动触发，无 pull_request，
+# 导致 required 上下文 "gitleaks" 在每个 PR 上永远缺席=结构性死锁。
+# 本 workflow 只扫 PR 提交范围（base..head）的新增密钥，不扫历史，
+# 以正确的 PR 门禁语义工作（拦新增、不被既有历史误伤）。job id = gitleaks → check 名 "gitleaks"。
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan PR commit range for new secrets
+        run: |
+          set -euo pipefail
+          VERSION=8.18.4
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          chmod +x /tmp/gitleaks
+          BASE='${{ github.event.pull_request.base.sha }}'
+          HEAD='${{ github.event.pull_request.head.sha }}'
+          echo "Scanning commit range ${BASE}..${HEAD}"
+          /tmp/gitleaks detect --source . --log-opts "${BASE}..${HEAD}" --redact --no-banner --exit-code 1

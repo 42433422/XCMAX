@@ -100,6 +100,9 @@ def get_effective_system_prompt(employee_id: str, manifest_prompt: str) -> str:
 def _fetch_failed_tasks(employee_id: str, *, lookback_hours: int, limit: int = 3) -> List[str]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
     try:
+        from sqlalchemy import or_
+
+        from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA
         from modstore_server.models import EmployeeExecutionMetric, get_session_factory
 
         sf = get_session_factory()
@@ -110,6 +113,12 @@ def _fetch_failed_tasks(employee_id: str, *, lookback_hours: int, limit: int = 3
                     EmployeeExecutionMetric.employee_id == employee_id,
                     EmployeeExecutionMetric.created_at >= cutoff,
                     EmployeeExecutionMetric.status != "success",
+                    # 排除配额/计费失败：拿额度耗尽的任务回放评审 prompt 既是无谓 LLM 调用，
+                    # 又会让 A/B 误判而还原本来更好的新 prompt。
+                    or_(
+                        EmployeeExecutionMetric.failure_kind.is_(None),
+                        EmployeeExecutionMetric.failure_kind != FAILURE_KIND_QUOTA,
+                    ),
                 )
                 .order_by(EmployeeExecutionMetric.id.desc())
                 .limit(limit)

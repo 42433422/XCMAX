@@ -81,4 +81,23 @@ export class ApiEndpoints {
   static readonly MEETING_LEVELS: string = `${ApiEndpoints.BASE}/meetings/levels`;
   static readonly MEETING_GENERATE: string = `${ApiEndpoints.BASE}/meetings/generate-all`;
   static readonly MEETING_DETAIL: string = `${ApiEndpoints.BASE}/meetings/{id}`;
+
+  // AI 圈子(朋友圈)
+  static readonly CIRCLE_POSTS: string = `${ApiEndpoints.BASE}/circle/posts`;
+  static readonly CIRCLE_POST_LIKE: string = `${ApiEndpoints.BASE}/circle/posts/{id}/like`;
+  static readonly CIRCLE_POST_COMMENTS: string = `${ApiEndpoints.BASE}/circle/posts/{id}/comments`;
+
+  // AI 群聊(对标 Android AiGroupScreens.kt)
+  static readonly AI_GROUPS: string = `${ApiEndpoints.BASE}/ai-groups`;
+  static readonly AI_GROUP_MESSAGES: string = `${ApiEndpoints.BASE}/ai-groups/{id}/messages`;
+  static readonly AI_GROUP_MEMBERS: string = `${ApiEndpoints.BASE}/ai-groups/{id}/members`;
+  static readonly AI_GROUP_MARK_READ: string = `${ApiEndpoints.BASE}/ai-groups/{id}/mark-read`;
+  static readonly AI_GROUP_MARK_UNREAD: string = `${ApiEndpoints.BASE}/ai-groups/{id}/mark-unread`;
+
+  // 钱包(我的页面余额/会员)
+  static readonly WALLET_BALANCE: string = `${ApiEndpoints.BASE}/wallet/balance`;
+  static readonly WALLET_OVERVIEW: string = `${ApiEndpoints.BASE}/wallet/overview`;
+
+  // SSE 流式对话(对标 Android SseChatClient,/api/ai/chat/stream)
+  static readonly AI_CHAT_STREAM: string = `api/ai/chat/stream`;
 }

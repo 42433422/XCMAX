@@ -1266,7 +1266,8 @@ class TestBuildDispatchRequest:
         )
         assert req["target_devices"] == ["all"]
 
-    def test_workspace_root_from_env(self, tmp_path, monkeypatch):
+    def test_workspace_root_product_scope_hides_server_path(self, tmp_path, monkeypatch):
+        # 信任墙：产品域（默认）绝不把服务端 repo 路径回显给派工，防客户驱动的越权。
         monkeypatch.setenv("MODSTORE_REPO_ROOT", "/my/repo")
         svc = _make_svc(tmp_path)
         req = svc._build_dispatch_request(
@@ -1276,7 +1277,23 @@ class TestBuildDispatchRequest:
             message="fix",
             context={},
         )
-        assert req["workspace_root"] == "/my/repo"
+        assert req["workspace_root"] == ""
+        assert req["scope"] == "product"
+
+    def test_workspace_root_factory_scope_resolves(self, tmp_path):
+        from app.application.execution_scope import CapabilityGrant, ExecutionScope
+
+        svc = _make_svc(tmp_path)
+        svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "xcmax")
+        req = svc._build_dispatch_request(
+            request_id="r",
+            created_at="t",
+            user_id=1,
+            message="fix",
+            context={},
+        )
+        assert req["scope"] == "factory"
+        assert req["workspace_root"]  # 工厂域解析出真实 workspace 根
 
 
 # ─────────────── _cli_workspace / _cli_timeout ──────────────────
@@ -1284,9 +1301,11 @@ class TestBuildDispatchRequest:
 
 class TestCliWorkspaceAndTimeout:
     def test_valid_workspace_in_context(self, tmp_path):
+        # 信任墙：产品域（默认）忽略客户提供的 workspace_root，一律用隔离临时区（防 path-injection）。
         svc = _make_svc(tmp_path)
         result = svc._cli_workspace({"workspace_root": str(tmp_path)})
-        assert result == str(tmp_path)
+        assert result != str(tmp_path)
+        assert result == svc._product_ephemeral_workspace()
 
     def test_invalid_workspace_falls_back(self, tmp_path):
         svc = _make_svc(tmp_path)
