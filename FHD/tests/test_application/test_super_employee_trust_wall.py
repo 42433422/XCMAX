@@ -36,11 +36,12 @@ def _svc() -> ClaudeSuperEmployeeService:
 def test_product_cwd_never_inside_repo_even_if_client_points_there(repo_root):
     svc = _svc()
     svc._grant = CapabilityGrant.product()
-    # 客户试图把 workspace_root 指向服务端 repo —— 必须被忽略。
+    # 客户试图把 workspace_root 指向服务端 repo（或任意宿主路径）—— 产品域一律忽略，用隔离临时区。
     cwd = Path(svc._cli_workspace({"workspace_root": str(repo_root)}))
-    assert not svc._is_server_repo_path(cwd)
-    assert repo_root.resolve() not in cwd.resolve().parents
     assert cwd.resolve() != repo_root.resolve()
+    assert repo_root.resolve() not in cwd.resolve().parents
+    # 产品域 cwd 恒为隔离临时区，与客户传入路径无关（防 path-injection）。
+    assert str(cwd) == svc._product_ephemeral_workspace()
 
 
 def test_factory_cwd_resolves_to_workspace_root(repo_root):
