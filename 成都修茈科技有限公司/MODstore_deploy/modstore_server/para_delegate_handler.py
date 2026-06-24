@@ -23,7 +23,6 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-
 _PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}
 
 
@@ -114,12 +113,15 @@ def _build_request(
     workspace_root = _project_root(input_data)
     mode = _mode_for_employee(employee_id, input_data)
     report_only = _coerce_bool(input_data.get("report_only"), mode in {"review", "verify"})
-    branch = str(
-        input_data.get("branch")
-        or input_data.get("base_branch")
-        or os.environ.get("MODSTORE_PARA_BRANCH")
+    branch = (
+        str(
+            input_data.get("branch")
+            or input_data.get("base_branch")
+            or os.environ.get("MODSTORE_PARA_BRANCH")
+            or "main"
+        ).strip()
         or "main"
-    ).strip() or "main"
+    )
     return {
         "request_id": uuid.uuid4().hex,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -131,10 +133,16 @@ def _build_request(
         "task": task,
         "prompt": str(input_data.get("prompt") or task or ""),
         "workspace_root": workspace_root,
-        "repo_url": str(input_data.get("repo_url") or os.environ.get("MODSTORE_PARA_REPO_URL") or ""),
+        "repo_url": str(
+            input_data.get("repo_url") or os.environ.get("MODSTORE_PARA_REPO_URL") or ""
+        ),
         "branch": branch,
-        "device_id": str(input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""),
-        "depends_on": input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else [],
+        "device_id": str(
+            input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
+        ),
+        "depends_on": (
+            input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else []
+        ),
         "para_task_id": str(input_data.get("para_task_id") or input_data.get("task_id") or ""),
         "dispatch_line": str(input_data.get("dispatch_line") or ""),
         "priority": str(input_data.get("priority") or ""),
@@ -142,7 +150,9 @@ def _build_request(
         "record_id": input_data.get("record_id"),
         "wait_for_para": input_data.get("wait_for_para"),
         "wait_timeout_sec": input_data.get("wait_timeout_sec"),
-        "evidence": input_data.get("evidence") if isinstance(input_data.get("evidence"), dict) else {},
+        "evidence": (
+            input_data.get("evidence") if isinstance(input_data.get("evidence"), dict) else {}
+        ),
         "raw_input": input_data,
     }
 
@@ -165,12 +175,17 @@ def _public_request(req: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _write_outbox(req: Dict[str, Any]) -> Path:
-    out = _outbox_dir() / f"{req.get('created_at','').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
+    out = (
+        _outbox_dir()
+        / f"{req.get('created_at','').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
+    )
     out.write_text(json.dumps(req, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return out
 
 
-def _outbox_response(req: Dict[str, Any], *, status: str, error: str, queued: bool = True) -> Dict[str, Any]:
+def _outbox_response(
+    req: Dict[str, Any], *, status: str, error: str, queued: bool = True
+) -> Dict[str, Any]:
     outbox = _write_outbox(req)
     return {
         "handler": "para_delegate",
@@ -219,9 +234,7 @@ def _build_para_prompt(req: Dict[str, Any]) -> str:
 
 def _get_para_token(client: httpx.Client, base: str) -> Dict[str, str]:
     token = (
-        os.environ.get("MODSTORE_PARA_AUTH_TOKEN")
-        or os.environ.get("DEVFLEET_AUTH_TOKEN")
-        or ""
+        os.environ.get("MODSTORE_PARA_AUTH_TOKEN") or os.environ.get("DEVFLEET_AUTH_TOKEN") or ""
     ).strip()
     if token:
         return {"token": token, "source": "env"}
@@ -375,7 +388,11 @@ def _wait_for_para_task(
                 ),
                 "snapshot": _task_result_snapshot(body),
             }
-        task = body.get("task") if isinstance(body, dict) and isinstance(body.get("task"), dict) else {}
+        task = (
+            body.get("task")
+            if isinstance(body, dict) and isinstance(body.get("task"), dict)
+            else {}
+        )
         status = str(task.get("status") or "").strip()
         if status in terminal:
             snapshot = _task_result_snapshot(body)
@@ -448,7 +465,9 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
         "title": str(req.get("title") or "MODstore loop task").strip(),
         "prompt": _build_para_prompt(req),
         "branch": str(req.get("branch") or "main").strip() or "main",
-        "subtask_title": f"{req.get('mode') or 'code'}: {req.get('title') or 'MODstore loop task'}"[:240],
+        "subtask_title": f"{req.get('mode') or 'code'}: {req.get('title') or 'MODstore loop task'}"[
+            :240
+        ],
         "report_only": bool(req.get("report_only")),
     }
     if repo_url:
@@ -472,9 +491,19 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                 body = resp.json() if resp.content else {}
             except Exception:
                 body = {"raw": resp.text[:4000]}
-            ok = resp.status_code < 400 and isinstance(body, dict) and bool(body.get("task") or body.get("subtask"))
+            ok = (
+                resp.status_code < 400
+                and isinstance(body, dict)
+                and bool(body.get("task") or body.get("subtask"))
+            )
             if not ok:
-                outbox = _write_outbox({**req, "para_payload": payload, "para_response": _summarize_para_response(body)})
+                outbox = _write_outbox(
+                    {
+                        **req,
+                        "para_payload": payload,
+                        "para_response": _summarize_para_response(body),
+                    }
+                )
                 return {
                     "handler": "para_delegate",
                     "ok": False,
@@ -503,11 +532,11 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                         "accepted": True,
                         "status": "para_api_missing_task_id",
                         "source": "para_api",
-                    "request": _public_request(req),
-                    "response": accepted,
-                    "auto_retry": auto_retry,
-                    "error": "Para API accepted but response missing task.id",
-                }
+                        "request": _public_request(req),
+                        "response": accepted,
+                        "auto_retry": auto_retry,
+                        "error": "Para API accepted but response missing task.id",
+                    }
                 final = _wait_for_para_task(client, base, token_info["token"], task_id, req)
                 return {
                     "handler": "para_delegate",
@@ -522,7 +551,9 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                     "response": accepted,
                     "auto_retry": auto_retry,
                     "para_result": final.get("snapshot"),
-                    "error": "" if final.get("ok") else str(final.get("error") or "Para task failed"),
+                    "error": (
+                        "" if final.get("ok") else str(final.get("error") or "Para task failed")
+                    ),
                 }
             return {
                 "handler": "para_delegate",

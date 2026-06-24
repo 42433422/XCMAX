@@ -87,7 +87,9 @@ def _run_command(command: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def maybe_execute_recovery(*, event_id: int, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def maybe_execute_recovery(
+    *, event_id: int, event_type: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     plan = build_recovery_plan(event_type=event_type, payload=payload)
     if plan["action"] == "observe":
         return {"executed": False, "ok": True, "plan": plan, "reason": "not_release_related"}
@@ -109,7 +111,10 @@ def maybe_execute_recovery(*, event_id: int, event_type: str, payload: Dict[str,
     path = _runtime_dir() / "release_recovery_audit.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({**out, "event_id": int(event_id), "ts": time.time()}, ensure_ascii=False) + "\n")
+        fh.write(
+            json.dumps({**out, "event_id": int(event_id), "ts": time.time()}, ensure_ascii=False)
+            + "\n"
+        )
     return out
 
 

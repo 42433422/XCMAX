@@ -17,7 +17,6 @@ from modstore_server.employee_config_v2_adapter import (
 )
 from modstore_server.models import CatalogItem
 
-
 EXECUTOR_ACTION_HANDLERS = frozenset(
     {
         "echo",
@@ -46,7 +45,11 @@ EXECUTOR_ACTION_HANDLERS = frozenset(
 def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
     """Validate that a catalog pack has a runnable implementation for its handlers."""
     manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-    v2 = manifest.get("employee_config_v2") if isinstance(manifest.get("employee_config_v2"), dict) else {}
+    v2 = (
+        manifest.get("employee_config_v2")
+        if isinstance(manifest.get("employee_config_v2"), dict)
+        else {}
+    )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
     handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
     clean_handlers = [str(h).strip() for h in handlers if str(h).strip()]

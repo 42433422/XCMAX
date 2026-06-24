@@ -55,9 +55,7 @@ def _repo_root() -> Path:
 def _fhd_root() -> Path:
     candidates: List[Path] = []
     explicit = (
-        os.environ.get("XCAGI_FHD_ROOT")
-        or os.environ.get("MODSTORE_DAILY_FHD_ROOT")
-        or ""
+        os.environ.get("XCAGI_FHD_ROOT") or os.environ.get("MODSTORE_DAILY_FHD_ROOT") or ""
     ).strip()
     if explicit:
         candidates.append(Path(explicit).expanduser().resolve())
@@ -547,7 +545,11 @@ def stop_surface_audit_ephemeral() -> Dict[str, Any]:
             stopped.append(pid_file.stem)
 
     emu_pid_raw = (os.environ.get("XCAGI_ANDROID_EMULATOR_PID_FILE") or "").strip()
-    emu_pid = Path(emu_pid_raw).expanduser().resolve() if emu_pid_raw else (_fhd_root() / "data" / "surface_audit" / ".android-emulator.pid")
+    emu_pid = (
+        Path(emu_pid_raw).expanduser().resolve()
+        if emu_pid_raw
+        else (_fhd_root() / "data" / "surface_audit" / ".android-emulator.pid")
+    )
     if emu_pid.is_file():
         _kill_pid_file("android-emulator", emu_pid)
         stopped.append("android-emulator")
