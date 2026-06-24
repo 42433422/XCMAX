@@ -54,6 +54,9 @@ htmlcov/
 *.cover
 coverage.xml
 coverage.json
+# Point-in-time coverage dumps at FHD root (slipped past bare coverage.json above)
+/coverage_*.json
+/coverage-*.json
 coverage/
 .tox/
 .vector_index/
