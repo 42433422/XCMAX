@@ -50,6 +50,7 @@ struct EnterpriseModuleView: View {
     let kind: Kind
     @EnvironmentObject private var session: SessionManager
     @StateObject private var vm = EnterpriseModuleViewModel()
+    @State private var respondTarget: EnterpriseRow?
 
     var body: some View {
         Group {
@@ -59,17 +60,12 @@ struct EnterpriseModuleView: View {
             case .empty: EmptyStateView(icon: kind.emptyIcon, title: "暂无数据")
             case .loaded:
                 List(vm.rows) { row in
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text(row.title).fontWeight(.medium)
-                            Spacer()
-                            if let s = row.status, !s.isEmpty { StatusBadge(status: s) }
-                        }
-                        if !row.subtitle.isEmpty {
-                            Text(row.subtitle).font(.footnote).foregroundColor(.secondary).lineLimit(2)
-                        }
+                    if kind == .serviceBridge {
+                        Button { respondTarget = row } label: { rowContent(row) }
+                            .buttonStyle(.plain)
+                    } else {
+                        rowContent(row)
                     }
-                    .padding(.vertical, 2)
                 }
                 .listStyle(.insetGrouped)
                 .refreshable { await vm.load(session.api, kind: kind) }
@@ -77,6 +73,83 @@ struct EnterpriseModuleView: View {
         }
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $respondTarget) { row in
+            BridgeRespondSheet(row: row) {
+                await vm.load(session.api, kind: kind)
+            }
+        }
         .task { if vm.phase == .idle { await vm.load(session.api, kind: kind) } }
+    }
+
+    private func rowContent(_ row: EnterpriseRow) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(row.title).fontWeight(.medium)
+                Spacer()
+                if let s = row.status, !s.isEmpty { StatusBadge(status: s) }
+                if kind == .serviceBridge { Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary) }
+            }
+            if !row.subtitle.isEmpty {
+                Text(row.subtitle).font(.footnote).foregroundColor(.secondary).lineLimit(2)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// 服务桥工单回复表单(对标 Android `BridgeScreen`)。
+private struct BridgeRespondSheet: View {
+    let row: EnterpriseRow
+    var onDone: () async -> Void
+
+    @EnvironmentObject private var session: SessionManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var status = "resolved"
+    @State private var submitting = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(row.title) {
+                    if !row.subtitle.isEmpty { Text(row.subtitle).font(.footnote).foregroundColor(.secondary) }
+                }
+                Section("处理结果") {
+                    Picker("状态", selection: $status) {
+                        Text("已处理").tag("resolved")
+                        Text("处理中").tag("processing")
+                        Text("已关闭").tag("closed")
+                    }
+                    TextField("输入处理意见或补充说明", text: $text, axis: .vertical).lineLimit(2...5)
+                }
+                if let e = error { Section { Text(e).font(.footnote).foregroundColor(.red) } }
+            }
+            .navigationTitle("回复工单")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("提交") { submit() }
+                        .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || submitting)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func submit() {
+        submitting = true
+        error = nil
+        Task {
+            do {
+                try await session.api.serviceBridgeRespond(id: row.id, response: text, status: status)
+                await onDone()
+                dismiss()
+            } catch {
+                self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            submitting = false
+        }
     }
 }

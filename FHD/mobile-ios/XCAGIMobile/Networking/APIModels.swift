@@ -333,6 +333,9 @@ struct WalletBalanceData: Decodable {
     var marketBaseUrl: String?
 }
 
+/// 简单 {success, message} 返回(注册等非信封接口)。
+struct SimpleResult: Decodable { var success: Bool?; var message: String? }
+
 // MARK: - IM 即时通讯(对标 Android `ImMessengerScreen` / 后端 app/fastapi_routes/im_routes.py)
 // 注意:IM 端点不在 api/mobile/v1 下,返回体也不是 MobileEnvelope —— 顶层即 {success, ...}。
 
