@@ -11,7 +11,10 @@ import time
 import traceback
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+import datetime as _dt_mod
+from datetime import datetime
+
+UTC = getattr(_dt_mod, "UTC", _dt_mod.timezone.utc)
 from functools import wraps
 from typing import Any
 

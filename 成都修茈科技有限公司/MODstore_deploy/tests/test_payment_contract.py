@@ -132,7 +132,7 @@ def test_canonical_sign_data_string_normalisation_matches_java():
     ],
 )
 def test_amount_sign_str_matches_contract(amount, expected):
-    from modstore_server.payment_api import _amount_sign_str
+    from modstore_server.payment_common import _amount_sign_str
 
     assert _amount_sign_str(amount) == expected
 
