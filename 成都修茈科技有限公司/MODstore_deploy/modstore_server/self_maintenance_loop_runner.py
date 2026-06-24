@@ -30,6 +30,7 @@ from apscheduler.triggers.cron import CronTrigger
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
 from .duty_employee_registry import duty_employee_records
 from .employee_executor import execute_employee_task
+from .platform_llm_scope import platform_llm_scoped
 from .models import EmployeeExecutionMetric, IncidentEvent, User, get_session_factory
 from .self_evolution_knowledge import (
     build_self_evolution_context,
@@ -3133,6 +3134,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     _write_loop_memory(memory)
 
 
+@platform_llm_scoped
 def run_self_maintenance_loop(
     *, triggered_by: str = "manual", force: bool = False, reason: Optional[str] = None
 ) -> Dict[str, Any]:
