@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import threading
 from typing import Any, Dict, TypeVar
 
@@ -35,7 +36,10 @@ def run_coro_sync(coro: Any) -> Any:
         except Exception as e:  # noqa: PERF203
             error["err"] = e
 
-    t = threading.Thread(target=_runner, daemon=True)
+    # 用 copy_context() 让守护线程继承当前上下文（含平台模型作用域），
+    # 否则新线程的 contextvar 为默认值，作用域会丢失。
+    ctx = contextvars.copy_context()
+    t = threading.Thread(target=ctx.run, args=(_runner,), daemon=True)
     t.start()
     t.join()
     if "err" in error:
