@@ -5,22 +5,22 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from app.infrastructure.llm import model_registry
 from app.infrastructure.llm.providers.base import LLMProvider
 from app.infrastructure.llm.providers.deepseek_legacy import DeepSeekLegacyProvider
 from app.infrastructure.llm.providers.modstore_provider import ModstoreProvider
 from app.infrastructure.llm.providers.openai_compatible_provider import OpenAICompatibleProvider
 from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
 
-_DEFAULT_ORDER = ("modstore", "openai_compatible", "deepseek_legacy", "openai_sdk")
-_PROVIDER_ID_ALIASES = {
-    "xcauto": "openai_compatible",
-    "xcauto-account": "openai_compatible",
-    "xcauto-default": "openai_compatible",
-    "xiuci": "openai_compatible",
-    "xiuci-account": "openai_compatible",
-    "openai": "openai_compatible",
-    "deepseek": "openai_compatible",
-}
+# 路由顺序与 provider id 归一别名来自模型统一 SSOT（FHD/config/models.yaml#gateway）。
+# 派生件缺失时回落到内置兜底顺序，避免路由瘫痪。
+_DEFAULT_ORDER = model_registry.gateway_order() or (
+    "modstore",
+    "openai_compatible",
+    "deepseek_legacy",
+    "openai_sdk",
+)
+_PROVIDER_ID_ALIASES = model_registry.registry_aliases()
 
 
 def _normalize_provider_id(provider_id: str | None) -> str:

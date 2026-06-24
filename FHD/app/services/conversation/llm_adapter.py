@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, cast
 
 import httpx
 
+from app.infrastructure.llm import model_registry
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,79 +57,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     支持20+厂商的统一调用接口，自动处理API差异
     """
 
-    PROVIDER_DEFAULT_URLS: Dict[str, str] = {
-        "xcauto": "https://xiu-ci.com/v1",
-        "xiuci": "https://xiu-ci.com/v1",
-        "deepseek": "https://api.deepseek.com",
-        "xiaomi": "https://token-plan-cn.xiaomimimo.com",
-        "openai": "https://api.openai.com",
-        "siliconflow": "https://api.siliconflow.cn",
-        "groq": "https://api.groq.com/openai",
-        "together": "https://api.together.xyz",
-        "openrouter": "https://openrouter.ai/api",
-        "dashscope": "https://dashscope.aliyuncs.com/compatible-mode",
-        "moonshot": "https://api.moonshot.cn",
-        "minimax": "https://api.minimaxi.com",
-        "doubao": "https://ark.cn-beijing.volces.com/api/v3",
-        "wenxin": "https://qianfan.baidubce.com/v2",
-        "hunyuan": "https://api.hunyuan.cloud.tencent.com/v1",
-        "zhipu": "https://open.bigmodel.cn/api/paas/v4",
-        "xunfei": "https://spark-api-open.xf-yun.com/v1",
-        "yi": "https://api.lingyiwanwu.com/v1",
-        "stepfun": "https://api.stepfun.com/v1",
-        "baichuan": "https://api.baichuan-ai.com/v1",
-        "sensetime": "https://api.sensenova.cn/compatible-mode/v1",
-    }
-
-    DEFAULT_MODELS: Dict[str, str] = {
-        "xcauto": "xcauto-account",
-        "xiuci": "xcauto-account",
-        "xiaomi": "mimo-v2.5-pro",
-        "deepseek": "deepseek-chat",
-        "openai": "gpt-4o-mini",
-        "siliconflow": "Qwen/Qwen2.5-7B-Instruct",
-        "groq": "llama-3.3-70b-versatile",
-        "together": "meta-llama/Llama-3-70b-chat-hf",
-        "openrouter": "openai/gpt-3.5-turbo",
-        "dashscope": "qwen-plus",
-        "moonshot": "moonshot-v1-8k",
-        "minimax": "MiniMax-Text-01",
-        "doubao": "ep-20250515143000-l6zqx",  # 示例endpoint
-        "wenxin": "ernie-speed-128k",
-        "hunyuan": "hunyuan-lite",
-        "zhipu": "glm-4-flash",
-        "xunfei": "spark-lite",
-        "yi": "yi-lightning",
-        "stepfun": "step-1-8k",
-        "baichuan": "Baichuan2-Turbo",
-        "sensetime": "SenseChat-5",
-    }
-
-    ENV_KEY_MAPPING: Dict[str, List[str]] = {
-        "xcauto": ["XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "OPENAI_API_KEY"],
-        "xiuci": ["XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "OPENAI_API_KEY"],
-        "xiaomi": ["XIAOMI_API_KEY", "MIMO_API_KEY", "XIAOMI_MIMO_API_KEY"],
-        "deepseek": ["DEEPSEEK_API_KEY"],
-        "openai": ["OPENAI_API_KEY"],
-        "anthropic": ["ANTHROPIC_API_KEY"],
-        "google": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-        "siliconflow": ["SILICONFLOW_API_KEY"],
-        "groq": ["GROQ_API_KEY"],
-        "together": ["TOGETHER_API_KEY"],
-        "openrouter": ["OPENROUTER_API_KEY"],
-        "dashscope": ["DASHSCOPE_API_KEY"],
-        "moonshot": ["MOONSHOT_API_KEY"],
-        "minimax": ["MINIMAX_API_KEY"],
-        "doubao": ["DOUBAO_API_KEY", "ARK_API_KEY"],
-        "wenxin": ["WENXIN_API_KEY", "QIANFAN_API_KEY", "BAIDU_QIANFAN_API_KEY"],
-        "hunyuan": ["HUNYUAN_API_KEY", "TENCENT_HUNYUAN_API_KEY"],
-        "zhipu": ["ZHIPU_API_KEY", "BIGMODEL_API_KEY"],
-        "xunfei": ["XUNFEI_API_KEY", "SPARK_API_KEY"],
-        "yi": ["YI_API_KEY", "LINGYIWANWU_API_KEY"],
-        "stepfun": ["STEPFUN_API_KEY"],
-        "baichuan": ["BAICHUAN_API_KEY"],
-        "sensetime": ["SENSETIME_API_KEY", "SENSENOVA_API_KEY"],
-    }
+    # 厂商连接信息（base_url / 默认模型 / env key 映射）来自模型统一 SSOT，
+    # 唯一真相源为 FHD/config/models.yaml（经 model_registry 读派生 JSON），
+    # 不再在此硬编码副本。新增厂商改 models.yaml + `ssot sync models --apply`。
+    PROVIDER_DEFAULT_URLS: Dict[str, str] = model_registry.provider_default_urls()
+    DEFAULT_MODELS: Dict[str, str] = model_registry.default_models()
+    ENV_KEY_MAPPING: Dict[str, List[str]] = model_registry.env_key_mapping()
 
     def __init__(
         self, provider: str = "xiaomi", model: str = None, api_key: str = None, base_url: str = None

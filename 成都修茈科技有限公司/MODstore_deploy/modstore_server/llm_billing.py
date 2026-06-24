@@ -307,6 +307,68 @@ def estimate_preauthorization(
     return money(max(calculate_charge(session, provider, model, estimated), DEFAULT_PREAUTH_CHARGE))
 
 
+# --- 多模态按单位计费（图像/视频/OCR/TTS 等；token 模态仍走上面的 calculate_charge）---------
+def resolve_unit_pricing(
+    session: Session, provider: str, model: str, modality: str
+) -> tuple[Decimal, str, Decimal]:
+    """非 token 模态的单价解析：返回 (price_per_unit, unit_name, min_charge)。
+
+    优先 DB ``AiModelPrice``（pricing_mode != 'token' 且 price_per_unit 有值）；
+    否则回退「模型统一 SSOT」按模态默认价
+    （FHD/config/models.yaml#pricing.defaults_by_modality → model_registry）。
+    """
+    row = (
+        session.query(AiModelPrice)
+        .filter(
+            AiModelPrice.provider == provider,
+            AiModelPrice.model == model,
+            AiModelPrice.enabled == True,
+        )
+        .first()
+    )
+    if (
+        row
+        and str(getattr(row, "pricing_mode", "") or "token") != "token"
+        and getattr(row, "price_per_unit", None) is not None
+    ):
+        _, _, d_min = default_model_prices(session)
+        return (
+            Decimal(str(row.price_per_unit or 0)),
+            str(getattr(row, "unit_name", "") or ""),
+            Decimal(str(row.min_charge or d_min)),
+        )
+    from modstore_server import model_registry
+
+    d = model_registry.pricing_defaults_by_modality(modality)
+    return (
+        Decimal(str(d.get("per_unit") or "0")),
+        str(d.get("unit") or modality),
+        Decimal(str(d.get("min_charge") or "0")),
+    )
+
+
+def calculate_unit_charge(
+    session: Session, provider: str, model: str, modality: str, units: int
+) -> Decimal:
+    """按单位计费：price_per_unit × 单位数 × 服务费倍率，保底 min_charge。"""
+    per_unit, _unit_name, min_charge = resolve_unit_pricing(session, provider, model, modality)
+    qty = Decimal(max(1, int(units)))
+    amount = per_unit * qty * service_fee_multiplier(session)
+    return money(max(amount, min_charge))
+
+
+def estimate_unit_preauthorization(
+    session: Session, provider: str, model: str, modality: str, units: int
+) -> Decimal:
+    """非 token 模态预授权额（保底 DEFAULT_PREAUTH_CHARGE）。"""
+    return money(
+        max(
+            calculate_unit_charge(session, provider, model, modality, units),
+            DEFAULT_PREAUTH_CHARGE,
+        )
+    )
+
+
 def _client_ip(request: Request | None) -> str:
     if not request:
         return ""
