@@ -19,8 +19,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
+from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA
 from modstore_server.models import (
     EmployeeChangeRequest,
     EmployeeCollabMessage,
@@ -859,6 +860,21 @@ class _PlatformBenchLlmClient:
         return str(out.get("content") or "")
 
 
+def _alert_evolution_quota_circuit_break(quota_failures: int, lookback_hours: int) -> None:
+    """配额耗尽触发自进化熔断：高优先级告警日志（供 ops 监控/告警管道捕获）。
+
+    改 prompt 无法修复额度耗尽，继续重写只会再发 LLM 调用、放大 403 死亡螺旋；
+    因此本轮直接暂停，并把根因(配额/计费)显式告警，而非淹没在通用 failed 噪声里。
+    """
+    logger.warning(
+        "employee_evolution_circuit_break reason=quota_exhausted quota_failures=%s "
+        "lookback_hours=%s —— 失败由配额/计费(403)主导，已暂停本轮 prompt 自进化以止血 LLM 调用；"
+        "请补充平台/用户 LLM 额度后自动恢复",
+        quota_failures,
+        lookback_hours,
+    )
+
+
 def run_employee_evolution_scan(
     *,
     lookback_hours: int = 24,
@@ -875,7 +891,12 @@ def run_employee_evolution_scan(
 
     sf = get_session_factory()
     with sf() as session:
-        # 仅关心最近窗口中失败较多的员工
+        # 仅关心最近窗口中失败较多的员工 —— 但必须排除「配额/计费/403」类失败：
+        # 改 prompt 无法修复额度耗尽，继续重写只会再发一次 LLM 调用、放大 403 死亡螺旋。
+        not_quota = or_(
+            EmployeeExecutionMetric.failure_kind.is_(None),
+            EmployeeExecutionMetric.failure_kind != FAILURE_KIND_QUOTA,
+        )
         rows = (
             session.query(
                 EmployeeExecutionMetric.employee_id,
@@ -884,19 +905,50 @@ def run_employee_evolution_scan(
             .filter(
                 EmployeeExecutionMetric.created_at >= cutoff,
                 EmployeeExecutionMetric.status != "success",
+                not_quota,
             )
             .group_by(EmployeeExecutionMetric.employee_id)
             .order_by(func.count(EmployeeExecutionMetric.id).desc())
             .limit(lim)
             .all()
         )
+        # 单独统计配额/计费失败数：用于熔断与告警（这类失败绝不进入 prompt 重写候选）。
+        quota_fail_total = int(
+            session.query(func.count(EmployeeExecutionMetric.id))
+            .filter(
+                EmployeeExecutionMetric.created_at >= cutoff,
+                EmployeeExecutionMetric.status != "success",
+                EmployeeExecutionMetric.failure_kind == FAILURE_KIND_QUOTA,
+            )
+            .scalar()
+            or 0
+        )
         candidates = [
             (str(r[0] or "").strip(), int(r[1] or 0))
             for r in rows
             if str(r[0] or "").strip() and int(r[1] or 0) >= min_failures
         ]
+    # 熔断：窗口内没有任何「可由 prompt 改进」的候选，却存在配额/计费失败 —— 说明失败由
+    # 额度耗尽主导。暂停本轮自进化并告警，避免继续烧 LLM 调用。下一轮额度恢复后自动续跑。
+    if not candidates and quota_fail_total > 0:
+        _alert_evolution_quota_circuit_break(quota_fail_total, lookback_hours)
+        return {
+            "ok": True,
+            "enabled": True,
+            "processed": 0,
+            "created": 0,
+            "circuit_broken": True,
+            "skipped_reason": "quota_exhausted",
+            "quota_failures": quota_fail_total,
+        }
     if not candidates:
-        return {"ok": True, "enabled": True, "processed": 0, "created": 0}
+        return {
+            "ok": True,
+            "enabled": True,
+            "processed": 0,
+            "created": 0,
+            "quota_failures": quota_fail_total,
+        }
 
     from modstore_server.employee_ai_pipeline import refine_system_prompt
     from modstore_server.employee_runtime import load_employee_pack, parse_employee_config_v2
@@ -1062,6 +1114,7 @@ def run_employee_evolution_scan(
         "created": created,
         "lookback_hours": lookback_hours,
         "min_failures": min_failures,
+        "quota_failures": quota_fail_total,
     }
 
 

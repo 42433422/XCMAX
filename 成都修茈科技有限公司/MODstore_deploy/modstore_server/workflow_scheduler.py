@@ -673,10 +673,13 @@ def start_scheduler() -> None:
                 triggered_by="scheduler",
             )
             logger.info(
-                "employee evolution scan: processed=%s created=%s enabled=%s",
+                "employee evolution scan: processed=%s created=%s enabled=%s "
+                "quota_failures=%s circuit_broken=%s",
                 out.get("processed"),
                 out.get("created"),
                 out.get("enabled"),
+                out.get("quota_failures"),
+                out.get("circuit_broken"),
             )
         except Exception:
             logger.exception("employee evolution scan loop failed")
