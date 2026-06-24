@@ -110,6 +110,12 @@ final class SessionManager: ObservableObject {
         store.saveLegalConsent(true)
     }
 
+    /// 已登录且拿到 APNs token 时,上报设备(对标 Android PushRegistrar)。
+    func registerPushIfPossible() async {
+        guard session.isLoggedIn, let token = PushManager.shared.deviceToken else { return }
+        try? await api.registerDevice(pushToken: token)
+    }
+
     // MARK: - 派生客户端
 
     func makeSSEClient() -> SSEChatClient {

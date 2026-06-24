@@ -90,6 +90,13 @@ enum APIEndpoints {
     static let csChat = "api/cs/chat"
     static let aiChatStream = "api/ai/chat/stream"
 
+    // IM 即时通讯(非 v1,顶层非信封;app/fastapi_routes/im_routes.py)
+    static let imConversations = "api/im/conversations"
+    static let imContacts = "api/im/contacts"
+    static let imDirect = "api/im/conversations/direct"
+    static let imMessages = "api/im/conversations/{id}/messages"
+    static let imRead = "api/im/conversations/{id}/read"
+
     /// 把 `{id}` / `{taskId}` 占位替换为实际值。
     static func path(_ template: String, id: String) -> String {
         template

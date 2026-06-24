@@ -3,8 +3,9 @@
 原生 **SwiftUI + MVVM** 客户端,对标 `mobile-android`(Kotlin/Compose)与 `mobile-harmony`(ArkTS)。
 共享同一套移动 API 契约 `api/mobile/v1/*`(见 `app/fastapi_routes/mobile_api_extensions.py`)。
 
-> 本轮交付范围:**扎实地基 + 核心流程**(登录/配对、SSE 流式对话、会话、通讯录、审批、客服、AI 交流圈、AI 群聊、企业模块、设置)。
-> 设备相关能力(扫码/OCR/推送/IM 实时 UI/MOD WebView)以**诚实占位**呈现,见 `PARITY_MATRIX.md`。
+> 范围:**全量对标安卓**。核心流程(登录/配对、SSE 流式对话、会话、通讯录、审批、客服、AI 交流圈、AI 群聊、企业模块、设置)
+> + 设备相关能力(二维码扫描、OCR、APNs 推送、IM 实时收发、MOD WebView)均已用真实原生框架实现,逐项状态见 `PARITY_MATRIX.md`。
+> 仍需在 Xcode/真机做交互验证(摄像头/识别/推送/WebSocket 实时);推送端到端需开启 Push Notifications capability + APNs 配置。
 
 ## 技术栈
 

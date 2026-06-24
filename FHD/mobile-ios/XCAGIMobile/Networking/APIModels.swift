@@ -333,6 +333,42 @@ struct WalletBalanceData: Decodable {
     var marketBaseUrl: String?
 }
 
+// MARK: - IM 即时通讯(对标 Android `ImMessengerScreen` / 后端 app/fastapi_routes/im_routes.py)
+// 注意:IM 端点不在 api/mobile/v1 下,返回体也不是 MobileEnvelope —— 顶层即 {success, ...}。
+
+struct ImConversation: Decodable, Hashable, Identifiable {
+    var id: Int?
+    var conversationId: Int?
+    var title: String?
+    var peerUserId: Int?
+    var peerName: String?
+    var unreadCount: Int?
+    var lastMessagePreview: String?
+    var idValue: Int { id ?? conversationId ?? 0 }
+}
+
+struct ImMessageDto: Decodable, Hashable, Identifiable {
+    var id: Int?
+    var conversationId: Int?
+    var senderId: Int?
+    var body: String?
+    var content: String?
+    var createdAt: String?
+    var createdAtMs: Double?
+
+    var idValue: String { id.map { String($0) } ?? UUID().uuidString }
+    var textValue: String {
+        if let b = body, !b.isEmpty { return b }
+        if let c = content, !c.isEmpty { return c }
+        return ""
+    }
+}
+
+struct ImConversationsResponse: Decodable { var success: Bool?; var conversations: [ImConversation]? }
+struct ImMessagesResponse: Decodable { var success: Bool?; var messages: [ImMessageDto]? }
+struct ImDirectResponse: Decodable { var success: Bool?; var conversation: ImConversation? }
+struct ImSendResponse: Decodable { var success: Bool?; var message: ImMessageDto? }
+
 // MARK: - 客户端内部聊天消息(非解码,UI 用)
 
 struct ChatMessage: Identifiable, Hashable {
