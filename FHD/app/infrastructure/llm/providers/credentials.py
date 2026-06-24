@@ -5,9 +5,19 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-XCAUTO_DEFAULT_BASE_URL = "https://xiu-ci.com/v1"
-XCAUTO_DEFAULT_MODEL = "xcauto-account"
-_XCAUTO_PROVIDER_ALIASES = {"xcauto", "xcauto-account", "xcauto-default", "xiuci", "xiuci-account"}
+from app.infrastructure.llm import model_registry
+
+# XCauto 自有网关连接信息来自模型统一 SSOT（FHD/config/models.yaml#providers[xcauto]）。
+_XCAUTO_SSOT = model_registry.get_provider("xcauto") or {}
+XCAUTO_DEFAULT_BASE_URL = _XCAUTO_SSOT.get("base_url") or "https://xiu-ci.com/v1"
+XCAUTO_DEFAULT_MODEL = _XCAUTO_SSOT.get("default_model") or "xcauto-account"
+_XCAUTO_PROVIDER_ALIASES = {_XCAUTO_SSOT.get("id", "xcauto"), *(_XCAUTO_SSOT.get("aliases") or [])} or {
+    "xcauto",
+    "xcauto-account",
+    "xcauto-default",
+    "xiuci",
+    "xiuci-account",
+}
 
 
 @dataclass(frozen=True)

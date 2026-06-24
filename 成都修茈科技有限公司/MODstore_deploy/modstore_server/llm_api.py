@@ -22,8 +22,10 @@ from modstore_server.llm_billing import (
     authorization_header,
     billing_settings_dict,
     calculate_charge,
+    calculate_unit_charge,
     enforce_risk_limits,
     estimate_preauthorization,
+    estimate_unit_preauthorization,
     get_or_create_billing_settings,
     merge_catalog_pricing,
     new_request_id,
@@ -1252,36 +1254,75 @@ async def llm_chat_stream(
 @router.post("/image")
 async def llm_image(
     body: LlmImageDTO,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
+    """文生图：经统一钱包预授权/结算（image 模态按张计费）。
+    与 run_billed_llm_chat 同构：BYOK 跳过计费；上游失败释放冻结。"""
     if body.provider not in KNOWN_PROVIDERS:
         raise HTTPException(400, "unknown provider")
     api_key, key_source = resolve_api_key(db, user.id, body.provider)
     if not api_key:
         raise HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
+    is_byok = key_source == "user_override"
     base = (
         resolve_base_url(db, user.id, body.provider)
         if body.provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
         else None
     )
-    result = await image_dispatch(
-        body.provider,
-        api_key=api_key,
-        base_url=base,
-        model=body.model.strip() or "gpt-image-1",
-        prompt=body.prompt.strip(),
-        size=body.size.strip() or "1024x1024",
-        n=body.n,
+    model = body.model.strip() or "gpt-image-1"
+    units = max(1, int(body.n or 1))
+    request_id = new_request_id()
+    enforce_risk_limits(
+        db, user.id, body.provider, model, [{"role": "user", "content": body.prompt}], request
     )
-    if not result.get("ok"):
-        raise HTTPException(502, result.get("error") or "image upstream error")
+    wallet = JavaWalletClient()
+    if is_byok:
+        hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
+    else:
+        preauth_amount = estimate_unit_preauthorization(db, body.provider, model, "image", units)
+        hold = await wallet.preauthorize(
+            authorization_header(request), preauth_amount, body.provider, model, request_id
+        )
+    charge = Decimal("0")
+    try:
+        result = await image_dispatch(
+            body.provider,
+            api_key=api_key,
+            base_url=base,
+            model=model,
+            prompt=body.prompt.strip(),
+            size=body.size.strip() or "1024x1024",
+            n=units,
+        )
+        if not result.get("ok"):
+            raise HTTPException(502, result.get("error") or "image upstream error")
+        if not is_byok:
+            charge = calculate_unit_charge(db, body.provider, model, "image", units)
+            await wallet.settle(authorization_header(request), hold, charge, request_id)
+    except HTTPException as exc:
+        try:
+            await wallet.release(authorization_header(request), hold, str(exc.detail), request_id)
+        except Exception:
+            logger.exception("failed to release image wallet hold")
+        raise
+    except Exception as exc:
+        try:
+            await wallet.release(authorization_header(request), hold, str(exc), request_id)
+        except Exception:
+            logger.exception("failed to release image wallet hold after unexpected error")
+        raise
     return {
         "ok": True,
         "images": result.get("images") or [],
         "provider": body.provider,
-        "model": body.model,
+        "model": model,
         "key_source": key_source,
+        "billed": not is_byok,
+        "charge_amount": float(charge),
+        "hold_no": hold.hold_no,
+        "request_id": request_id,
     }
 
 

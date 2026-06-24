@@ -158,6 +158,10 @@ def _ensure_columns(engine: Engine) -> None:
         ("ai_model_prices", "official_min_charge", "FLOAT"),
         ("ai_model_prices", "official_source", "VARCHAR(512) DEFAULT ''"),
         ("ai_model_prices", "official_synced_at", "DATETIME"),
+        # 多模态计费（图像/视频/OCR/TTS 等按单位计费）
+        ("ai_model_prices", "pricing_mode", "VARCHAR(32) DEFAULT 'token'"),
+        ("ai_model_prices", "price_per_unit", "FLOAT"),
+        ("ai_model_prices", "unit_name", "VARCHAR(32) DEFAULT ''"),
     ]
     for table, column, ddl in patches:
         _add_column_if_missing(engine, table, column, ddl)
