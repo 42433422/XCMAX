@@ -95,6 +95,7 @@ from app.fastapi_routes.mobile_extensions.relay_helpers import (
     _relay_admin_fallback_user,
     _relay_mobile_auth_payload,
 )
+from app.mod_sdk.assistant_ssot import dedicated_cs_label
 from app.security.mobile_pairing import (
     consume_by_shortcode,
     consume_pairing_nonce,
@@ -549,7 +550,7 @@ def _persist_mobile_cs_request(
                 source_instance_id=_mobile_cs_source_id(user),
                 source_instance_name=_mobile_cs_source_name(user),
                 request_type="mobile_ai_customer_service",
-                title=msg_body[:80] or "小C助理咨询",
+                title=msg_body[:80] or f"{dedicated_cs_label()}咨询",
                 description=msg_body,
                 priority="normal",
                 status="pending",
@@ -2487,6 +2488,25 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
     return format_mobile_response(data=data)
 
 
+# ── 联系人固定区组成（surface SSOT 派生） ──
+
+
+@extension_router.get("/contacts/fixed")
+async def get_mobile_fixed_contacts(request: Request, user=Depends(get_mobile_user)):
+    """返回手机端联系人固定区(按端 SSOT 派生)。
+
+    top/bottom 以平台员工为界:渲染顺序 = top + 平台员工(动态) + bottom。
+    管理端不含专属客服(由 surface SSOT 自动 gating);两端均含小C与超级员工。
+    """
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.application.surface_contacts import mobile_fixed_contacts
+
+    return format_mobile_response(data=mobile_fixed_contacts(_mobile_group_mode(request)))
+
+
 # ── 专属客服接口（企业版手机端） ──
 
 
@@ -2502,7 +2522,7 @@ async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
     return format_mobile_response(
         data={
             "cs_available": True,
-            "cs_name": "小C助理",
+            "cs_name": dedicated_cs_label(),
             "cs_avatar": None,
             "cs_online": True,
             "backend": EMPLOYEE_MOD_ID,
@@ -2542,7 +2562,7 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
             "form_url": "https://xiu-ci.com/market/about",
             "message": msg_body,
             "brief": (
-                "手机端用户正在和小C助理对话。请以 XCAGI 企业智能客服身份直接回复："
+                f"手机端用户正在和{dedicated_cs_label()}对话。请以 XCAGI 企业智能客服身份直接回复："
                 "先回答用户当前问题；如果需要进一步采集需求，再给出2-3个追问和需求提交链接。"
                 f"\n\n用户消息：{msg_body}"
             ),

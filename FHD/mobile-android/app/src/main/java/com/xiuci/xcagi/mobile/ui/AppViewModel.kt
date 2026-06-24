@@ -207,6 +207,17 @@ constructor(
     private val _chatMessages = MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val chatMessages: StateFlow<List<Pair<String, String>>> = _chatMessages.asStateFlow()
 
+    // 超级员工派工模式三态控件：auto=按内容自动判断 / chat=单设备直答 / code=多设备派工。
+    // 仅对超级员工会话（Codex/Claude）生效，替代后端 _TASK_MARKERS 关键词自动判断。
+    private val _superMode = MutableStateFlow("auto")
+    val superMode: StateFlow<String> = _superMode.asStateFlow()
+    fun setSuperMode(mode: String) {
+        _superMode.value = when (mode.trim().lowercase()) {
+            "chat", "code" -> mode.trim().lowercase()
+            else -> "auto"
+        }
+    }
+
     private val _items = MutableStateFlow<List<ListItem>>(emptyList())
     val items: StateFlow<List<ListItem>> = _items.asStateFlow()
 
@@ -1561,6 +1572,11 @@ constructor(
         _streaming.value = true
         var acc = ""
         val sessionId = conversationId ?: "default"
+        // 派工模式仅对超级员工会话生效；其他会话恒为 auto，避免把控件状态泄漏到普通对话。
+        val effectiveMode =
+                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE)
+                        _superMode.value
+                else "auto"
         chatJob =
                 viewModelScope.launch {
                     if (repo.hasNativeFhdAuth()) {
@@ -1569,6 +1585,7 @@ constructor(
                                 text,
                                 conversationId,
                                 sessionId,
+                                superMode = effectiveMode,
                                 onToken = { t ->
                                     acc += t
                                     _chatMessages.value =
@@ -1604,6 +1621,7 @@ constructor(
                                 text,
                                 conversationId,
                                 sessionId,
+                                superMode = effectiveMode,
                                 onToken = { t ->
                                     acc += t
                                     _chatMessages.value =

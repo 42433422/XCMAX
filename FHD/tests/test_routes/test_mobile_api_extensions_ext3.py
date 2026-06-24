@@ -88,9 +88,9 @@ class TestGetCsInfo:
             data = json.loads(result.body)
         else:
             data = result
-        # Phase 1 demo data
+        # /cs 是专属客服(cs-officer)通道,非小C;cs_name 取 SSOT 专属客服标签
         assert data.get("data", {}).get("cs_available") is True
-        assert data.get("data", {}).get("cs_name") == "小C助理"
+        assert data.get("data", {}).get("cs_name") == "专属客服"
         assert data.get("data", {}).get("cs_online") is True
         assert data.get("data", {}).get("cs_avatar") is None
 

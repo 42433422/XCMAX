@@ -311,11 +311,22 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         "client_surface": "mobile",
         "target_devices": ["all"],
     }
-    # 移动端聊天面固定下发 mode="code"，会把每条闲聊都强制派到 Para 多设备
-    # （"你好"/"在干嘛" 这类问候也被当成开发任务派工，回不到结果）。
-    # 这里清掉强制派工的 mode，交回内容分类器 _should_reply_with_cli：
-    # 闲聊 → 本地 CLI 直答；含"修复/测试/部署"等开发关键词 → Para 派工。
-    if str(context.get("mode") or "").strip().lower() in {
+    # 派工模式 = 三态控件（自动 / 直答 / 多设备）。
+    # 新客户端在用户「显式」选「多设备」时带 mode_explicit=True，此处保留其 mode →
+    # 直接走 Para 多设备派工，不再被关键词分类器二次判断。
+    # 旧客户端的聊天面固定下发 mode="code"（无 mode_explicit），会把每条闲聊都强制
+    # 派到 Para（"你好"/"在干嘛" 也被当开发任务，回不到结果），故仍清掉这种「非显式」
+    # 的强制派工 mode，交回内容分类器 _should_reply_with_cli：闲聊 → 本地 CLI 直答；
+    # 含"修复/测试/部署"等开发关键词 → Para 派工。
+    # 「直答」走 mode="chat"，不在下列强制集合内、原样透传 → CLI 直答。
+    mode_explicit_raw = context.get("mode_explicit")
+    mode_explicit = mode_explicit_raw is True or str(mode_explicit_raw or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not mode_explicit and str(context.get("mode") or "").strip().lower() in {
         "code",
         "task",
         "dispatch",

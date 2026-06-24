@@ -70,6 +70,10 @@ export class ApiEndpoints {
   static readonly CS_INFO: string = `${ApiEndpoints.BASE}/cs/info`;
   static readonly CS_MESSAGES: string = `${ApiEndpoints.BASE}/cs/messages`;
 
+  // 联系人固定区(按端 SSOT 派生)
+  static readonly CONTACTS_FIXED: string = `${ApiEndpoints.BASE}/contacts/fixed`;
+
   // 管理员
   static readonly ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES: string = `${ApiEndpoints.BASE}/admin/codex-super-employee/messages`;
+  static readonly ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES: string = `${ApiEndpoints.BASE}/admin/claude-super-employee/messages`;
 }
