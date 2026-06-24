@@ -1,15 +1,23 @@
 /**
- * 文字识别（OCR）页面。
+ * 文字识别(OCR)页面。
  *
- * 对标 Android OcrScreen.kt：上传图片 + 识别结果 + 复制文本。
- * 简化版用按钮模拟上传识别，本地 mock 识别结果。
+ * 对标 Android OcrScreen.kt:选图 + 识别 + 复制。
+ * 用华为 CoreVisionKit textRecognition 做真实 OCR:相册选图 → PixelMap → 识别文本。
+ * 复制走系统剪贴板。(真机行为需在 HarmonyOS 设备上验证。)
  */
+
+import { textRecognition } from '@kit.CoreVisionKit';
+import image from '@ohos.multimedia.image';
+import picker from '@ohos.file.picker';
+import fileIo from '@ohos.file.fs';
+import pasteboard from '@ohos.pasteboard';
 
 @Component
 export struct OcrPage {
   @State ocrText: string = '';
   @State recognizing: boolean = false;
   @State copied: boolean = false;
+  @State errorMsg: string = '';
 
   onBack: () => void = () => {};
 
@@ -74,11 +82,11 @@ export struct OcrPage {
           .textAlign(TextAlign.Center)
           .backgroundColor('#1D4ED8');
         Column({ space: 2 }) {
-          Text('上传图片识别')
+          Text('选图识别')
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor('#111827');
-          Text('调用企业端 OCR 引擎处理图片文字')
+          Text('从相册选择图片,本地 OCR 引擎提取文字')
             .fontSize(13)
             .fontColor('#4B5563');
         }
@@ -87,7 +95,7 @@ export struct OcrPage {
       }
       .width('100%');
 
-      Button(this.recognizing ? '识别中...' : '模拟上传图片并识别')
+      Button(this.recognizing ? '识别中...' : '选择图片并识别')
         .height(44)
         .fontSize(14)
         .fontColor('#FFFFFF')
@@ -95,13 +103,13 @@ export struct OcrPage {
         .borderRadius(10)
         .width('100%')
         .enabled(!this.recognizing)
-        .onClick(() => {
-          this.simulateRecognize();
-        });
+        .onClick(() => this.pickAndRecognize());
 
-      Text('移动端拍照上传正在接入，复杂批量识别请使用电脑端 OCR')
-        .fontSize(12)
-        .fontColor('#6B7280');
+      if (this.errorMsg.length > 0) {
+        Text(this.errorMsg)
+          .fontSize(12)
+          .fontColor('#B91C1C');
+      }
     }
     .width('100%')
     .padding(16)
@@ -132,7 +140,7 @@ export struct OcrPage {
       .width('100%');
 
       if (this.ocrText.length === 0) {
-        Text('尚未识别到文本，请先上传图片进行识别。')
+        Text('尚未识别到文本,请先选择图片进行识别。')
           .width('100%')
           .fontSize(14)
           .fontColor('#9CA3AF')
@@ -161,9 +169,7 @@ export struct OcrPage {
           .backgroundColor('#E8F0FF')
           .borderRadius(10)
           .width('100%')
-          .onClick(() => {
-            this.copyText();
-          });
+          .onClick(() => this.copyText());
       }
     }
     .width('100%')
@@ -174,21 +180,58 @@ export struct OcrPage {
     .border({ width: 1, color: '#E5E7EB' });
   }
 
-  private simulateRecognize(): void {
+  private async pickAndRecognize(): Promise<void> {
+    if (this.recognizing) {
+      return;
+    }
     this.recognizing = true;
     this.copied = false;
+    this.errorMsg = '';
     try {
-      this.ocrText = 'XCMAX 企业端 OCR 识别结果\n\n发票号码：20260620-00482\n开票日期：2026-06-20\n金额（含税）：￥12,800.00\n购买方：成都修茈科技有限公司\n销售方：XCAGI 智能科技\n\n备注：本识别结果由企业端 OCR 引擎生成，移动端仅做展示与复制。';
-    } catch (_err) {
-      this.ocrText = '';
+      const photoPicker = new picker.PhotoViewPicker();
+      const selectOptions = new picker.PhotoSelectOptions();
+      selectOptions.MIMEType = picker.PhotoViewMIMETypes.IMAGE_TYPE;
+      selectOptions.maxSelectNumber = 1;
+      const selectResult = await photoPicker.select(selectOptions);
+      const uris: string[] = selectResult.photoUris;
+      if (uris.length === 0) {
+        this.recognizing = false;
+        return;
+      }
+      await this.recognizeUri(uris[0]);
+    } catch (err) {
+      this.errorMsg = `识别失败：${(err as Error).message}`;
     } finally {
       this.recognizing = false;
     }
   }
 
+  private async recognizeUri(uri: string): Promise<void> {
+    const file = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+    const imageSource: image.ImageSource = image.createImageSource(file.fd);
+    let pixelMap: image.PixelMap | null = null;
+    try {
+      pixelMap = await imageSource.createPixelMap();
+      const visionInfo: textRecognition.VisionInfo = { pixelMap: pixelMap };
+      const result: textRecognition.TextRecognitionResult = await textRecognition.recognizeText(visionInfo);
+      this.ocrText = result.value.length > 0 ? result.value : '未识别到文字';
+    } finally {
+      if (pixelMap !== null) {
+        pixelMap.release();
+      }
+      imageSource.release();
+      fileIo.closeSync(file);
+    }
+  }
+
   private copyText(): void {
     try {
-      this.copied = true;
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.ocrText);
+      pasteboard.getSystemPasteboard().setData(data).then(() => {
+        this.copied = true;
+      }).catch(() => {
+        this.copied = false;
+      });
     } catch (_err) {
       this.copied = false;
     }

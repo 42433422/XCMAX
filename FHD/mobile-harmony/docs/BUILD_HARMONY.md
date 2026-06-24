@@ -9,6 +9,21 @@
 - 后端来源：企业版 Web 部署应继续把 API 基址注入为 `/fhd-api`，与桌面企业版登录后端保持同源。
 - 权限：当前只声明 `ohos.permission.INTERNET`。
 
+## 离线编译验证(无需联网、无需 DevEco IDE)
+
+本机已带命令行工具链(`~/XCMAX-runtime/harmony/`：hvigor + SDK + ohos 插件)。
+改动 ArkTS 后用下面命令做**真实编译验证**(约 4 秒，`CompileArkTS` 全量类型检查 + 打包 HAP)：
+
+```bash
+export PATH="$HOME/XCMAX-runtime/harmony/bin:$PATH"
+cd FHD/mobile-harmony
+hvigor --no-daemon assembleHap -p product=default -p buildMode=debug
+```
+
+期望末尾 `BUILD SUCCESSFUL`，无 `ArkTS:ERROR`(warning 可接受)。
+注意：**不要**跑 `ohpm install`(华为仓在隔离网络下 404)；全局 hvigor 会从 command-line-tools 离线解析 ohos 插件。
+真机行为(推送/摄像头扫码/OCR/生物识别/WebSocket 实时)需在 HarmonyOS 设备上验证，见 `PARITY_MATRIX.md`。
+
 ## 本地构建
 
 需要先安装 DevEco Studio / HarmonyOS SDK，并确保以下命令在 `PATH` 内：

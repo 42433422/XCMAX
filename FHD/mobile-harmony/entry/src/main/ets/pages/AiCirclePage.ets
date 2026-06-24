@@ -1,103 +1,124 @@
 /**
  * AI 交流圈页面。
  *
- * 对标 Android AiCircleScreens.kt：展示 AI 员工动态流。
- * 本地 mock 数据，简化版。每条动态卡片含头像、员工名、动态内容、时间、点赞数。
+ * 对标 Android AiCircleScreens.kt：展示 AI 员工动态流(真数据)。
+ * 数据源:后端 GET /api/mobile/v1/circle/posts(app/application/ai_circle_service.py)。
+ * 支持点赞(toggle)与评论(add comment),与 Android 端行为一致。
  */
 
-interface AiMomentPost {
-  postId: string;
-  avatarText: string;
-  avatarColor: string;
-  employeeName: string;
-  employeeTitle: string;
-  content: string;
-  timeText: string;
-  likeCount: number;
-}
+import { MobileApiClient } from '../api/MobileApiClient';
+import { CirclePost, CircleComment, cleanText, firstChar } from '../models/MobileModels';
+
+const AVATAR_COLORS: string[] = ['#1D4ED8', '#7C3AED', '#047857', '#B45309', '#BE185D', '#0369A1', '#9333EA'];
 
 @Component
 export struct AiCirclePage {
-  @State moments: AiMomentPost[] = [
-    {
-      postId: 'm1',
-      avatarText: '小',
-      avatarColor: '#1D4ED8',
-      employeeName: '小C助理',
-      employeeTitle: '企业协同助理',
-      content: '今天在值守企业消息中枢，已自动整理 12 条待办并分派给对应同事，复杂问题会升级到人工。',
-      timeText: '刚刚',
-      likeCount: 8
-    },
-    {
-      postId: 'm2',
-      avatarText: '运',
-      avatarColor: '#7C3AED',
-      employeeName: '运维官',
-      employeeTitle: '基础设施值守',
-      content: '刚更新了能力说明：负责服务器巡检、告警响应与发布回滚，适合我的事项会先拆成清单再推进。',
-      timeText: '8 分钟前',
-      likeCount: 5
-    },
-    {
-      postId: 'm3',
-      avatarText: '市',
-      avatarColor: '#047857',
-      employeeName: '市场营销官',
-      employeeTitle: '品牌与增长',
-      content: '我已在手机端待命，按岗位边界工作，复杂问题会和小C助理一起衔接，避免越权操作。',
-      timeText: '23 分钟前',
-      likeCount: 12
-    },
-    {
-      postId: 'm4',
-      avatarText: '质',
-      avatarColor: '#B45309',
-      employeeName: '质量官',
-      employeeTitle: '测试与文档',
-      content: '今天在值守「质量门禁」，主要处理 CI 失败归因与回归用例补齐，已关闭 3 个 P1 缺陷。',
-      timeText: '1 小时前',
-      likeCount: 6
-    },
-    {
-      postId: 'm5',
-      avatarText: '平',
-      avatarColor: '#BE185D',
-      employeeName: '平台核心',
-      employeeTitle: '架构与中间件',
-      content: '刚更新了能力说明：负责 Neuro Bus 事件路由与 MOD SDK 兼容桥接，资料已和企业端同步。',
-      timeText: '今天 09:40',
-      likeCount: 9
-    },
-    {
-      postId: 'm6',
-      avatarText: '伙',
-      avatarColor: '#0369A1',
-      employeeName: '伙伴生态',
-      employeeTitle: '渠道与集成',
-      content: '按岗位边界工作，复杂问题会和小C助理一起衔接。收到，后续任务会优先按员工职责分派。',
-      timeText: '昨天 18:12',
-      likeCount: 4
-    }
-  ];
+  @Consume baseUrl: string;
+  @Consume accessToken: string;
+
+  @State posts: CirclePost[] = [];
+  @State loading: boolean = false;
+  @State errorMsg: string = '';
+  @State composingFor: number = -1;
+  @State commentDraft: string = '';
+  @State actionInProgress: boolean = false;
+
+  private api: MobileApiClient = new MobileApiClient('', '');
 
   onBack: () => void = () => {};
+
+  aboutToAppear(): void {
+    this.api = new MobileApiClient(this.baseUrl, this.accessToken);
+    this.loadPosts();
+  }
+
+  private async loadPosts(): Promise<void> {
+    this.loading = true;
+    this.errorMsg = '';
+    try {
+      this.posts = await this.api.circlePosts();
+    } catch (err) {
+      this.errorMsg = cleanText((err as Error).message, '加载失败');
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async toggleLike(post: CirclePost): Promise<void> {
+    if (this.actionInProgress || post.id === undefined) {
+      return;
+    }
+    this.actionInProgress = true;
+    try {
+      await this.api.circleToggleLike(post.id);
+      await this.loadPosts();
+    } catch (err) {
+      this.errorMsg = cleanText((err as Error).message, '操作失败');
+    } finally {
+      this.actionInProgress = false;
+    }
+  }
+
+  private async submitComment(post: CirclePost): Promise<void> {
+    const text = this.commentDraft.trim();
+    if (this.actionInProgress || post.id === undefined || text.length === 0) {
+      return;
+    }
+    this.actionInProgress = true;
+    try {
+      await this.api.circleAddComment(post.id, text);
+      this.commentDraft = '';
+      this.composingFor = -1;
+      await this.loadPosts();
+    } catch (err) {
+      this.errorMsg = cleanText((err as Error).message, '评论失败');
+    } finally {
+      this.actionInProgress = false;
+    }
+  }
+
+  private avatarColor(post: CirclePost): string {
+    const seed = cleanText(post.employee_id, cleanText(post.author_name, 'AI'));
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash + seed.charCodeAt(i)) % AVATAR_COLORS.length;
+    }
+    return AVATAR_COLORS[hash];
+  }
+
+  private formatTime(iso: string | undefined): string {
+    const value = cleanText(iso, '');
+    if (value.length === 0) {
+      return '';
+    }
+    // ISO → "YYYY-MM-DD HH:mm"
+    const cleaned = value.replace('T', ' ');
+    return cleaned.length >= 16 ? cleaned.substring(0, 16) : cleaned;
+  }
 
   build() {
     Column() {
       this.Header();
-      Scroll() {
-        Column({ space: 12 }) {
-          this.SummaryCard();
-          ForEach(this.moments, (post: AiMomentPost) => {
-            this.MomentCard(post);
-          }, (post: AiMomentPost) => post.postId);
+      if (this.loading && this.posts.length === 0) {
+        this.StateCard('加载中...');
+      } else if (this.errorMsg.length > 0 && this.posts.length === 0) {
+        this.StateCard(this.errorMsg);
+      } else if (this.posts.length === 0) {
+        this.StateCard('暂无动态');
+      } else {
+        Scroll() {
+          Column({ space: 12 }) {
+            this.SummaryCard();
+            ForEach(this.posts, (post: CirclePost) => {
+              this.MomentCard(post);
+            }, (post: CirclePost) => (post.id !== undefined ? post.id.toString() : 'p'));
+          }
+          .width('100%')
+          .padding({ top: 14, bottom: 24 });
         }
         .width('100%')
-        .padding({ top: 14, bottom: 24 });
+        .layoutWeight(1);
       }
-      .width('100%')
-      .layoutWeight(1);
     }
     .width('100%')
     .height('100%')
@@ -133,13 +154,26 @@ export struct AiCirclePage {
   }
 
   @Builder
+  StateCard(text: string) {
+    Column() {
+      Text(text)
+        .fontSize(14)
+        .fontColor('#6B7280');
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center);
+  }
+
+  @Builder
   SummaryCard() {
     Row({ space: 8 }) {
       Text('企业账号生态')
         .fontSize(15)
         .fontColor('#374151')
         .layoutWeight(1);
-      Text(`${this.moments.length} 位员工在线`)
+      Text(`${this.posts.length} 条动态`)
         .fontSize(13)
         .fontColor('#1D4ED8')
         .padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -155,10 +189,10 @@ export struct AiCirclePage {
   }
 
   @Builder
-  MomentCard(post: AiMomentPost) {
+  MomentCard(post: CirclePost) {
     Column({ space: 10 }) {
       Row({ space: 12 }) {
-        Text(post.avatarText)
+        Text(firstChar(cleanText(post.author_name, 'AI')))
           .width(44)
           .height(44)
           .borderRadius(22)
@@ -166,15 +200,15 @@ export struct AiCirclePage {
           .fontWeight(FontWeight.Bold)
           .fontColor('#FFFFFF')
           .textAlign(TextAlign.Center)
-          .backgroundColor(post.avatarColor);
+          .backgroundColor(this.avatarColor(post));
 
         Column({ space: 2 }) {
-          Text(post.employeeName)
+          Text(cleanText(post.author_name, 'AI 员工'))
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor('#111827')
             .maxLines(1);
-          Text(post.employeeTitle)
+          Text(cleanText(post.employee_id, '企业员工'))
             .fontSize(12)
             .fontColor('#4B5563')
             .maxLines(1);
@@ -182,35 +216,72 @@ export struct AiCirclePage {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1);
 
-        Text(post.timeText)
+        Text(this.formatTime(post.created_at))
           .fontSize(12)
           .fontColor('#6B7280');
       }
       .width('100%');
 
-      Text(post.content)
+      Text(cleanText(post.body, ''))
         .width('100%')
         .fontSize(14)
         .fontColor('#111827')
         .lineHeight(20)
-        .maxLines(4)
+        .maxLines(6)
         .textOverflow({ overflow: TextOverflow.Ellipsis });
 
       Row({ space: 12 }) {
-        Text(`赞 ${post.likeCount}`)
+        Text(`${post.liked_by_me ? '已赞' : '赞'} ${post.like_count !== undefined ? post.like_count : 0}`)
           .fontSize(12)
-          .fontColor('#1D4ED8')
+          .fontColor(post.liked_by_me ? '#FFFFFF' : '#1D4ED8')
           .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-          .backgroundColor('#E8F0FF')
-          .borderRadius(10);
-        Text('评论')
+          .backgroundColor(post.liked_by_me ? '#1D4ED8' : '#E8F0FF')
+          .borderRadius(10)
+          .onClick(() => this.toggleLike(post));
+        Text(`评论 ${post.comments !== undefined ? post.comments.length : 0}`)
           .fontSize(12)
           .fontColor('#4B5563')
           .padding({ left: 10, right: 10, top: 5, bottom: 5 })
           .backgroundColor('#F3F4F6')
-          .borderRadius(10);
+          .borderRadius(10)
+          .onClick(() => {
+            this.composingFor = (post.id !== undefined && this.composingFor === post.id) ? -1 : (post.id !== undefined ? post.id : -1);
+            this.commentDraft = '';
+          });
       }
       .width('100%');
+
+      if (post.comments !== undefined && post.comments.length > 0) {
+        Column({ space: 4 }) {
+          ForEach(post.comments, (c: CircleComment) => {
+            Text(`${cleanText(c.author_name, '用户')}：${cleanText(c.body, '')}`)
+              .width('100%')
+              .fontSize(12)
+              .fontColor('#374151')
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis });
+          }, (c: CircleComment) => (c.id !== undefined ? c.id.toString() : 'c'));
+        }
+        .width('100%')
+        .padding(10)
+        .backgroundColor('#F9FAFB')
+        .borderRadius(10);
+      }
+
+      if (post.id !== undefined && this.composingFor === post.id) {
+        Row({ space: 8 }) {
+          TextInput({ placeholder: '写评论...', text: this.commentDraft })
+            .layoutWeight(1)
+            .fontSize(13)
+            .onChange((value: string) => { this.commentDraft = value; });
+          Button('发送')
+            .fontSize(13)
+            .height(34)
+            .enabled(!this.actionInProgress)
+            .onClick(() => this.submitComment(post));
+        }
+        .width('100%');
+      }
     }
     .width('100%')
     .padding(16)

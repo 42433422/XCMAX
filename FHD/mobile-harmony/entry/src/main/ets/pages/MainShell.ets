@@ -16,6 +16,7 @@ export struct MainShell {
   @Consume displayName: string;
   @Consume accountKind: string;
   @Consume activeConversationId: string;
+  @Consume online: boolean;
 
   onOpenConversation: (item: ConversationSummary) => void = () => {};
   onSendChatMessage: () => void = () => {};
@@ -33,12 +34,22 @@ export struct MainShell {
   @Builder
   MainShell() {
     Column() {
+      if (!this.online) {
+        Text('网络连接已断开，请检查网络')
+          .width('100%')
+          .fontSize(12)
+          .fontColor('#FFFFFF')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 6, bottom: 6 })
+          .backgroundColor('#DC2626');
+      }
       this.TopBar();
 
       if (this.selectedTab === TAB_MESSAGES) {
         MessagesPage({
           onOpenConversation: (item: ConversationSummary) => this.onOpenConversation(item),
-          onSendChatMessage: () => this.onSendChatMessage()
+          onSendChatMessage: () => this.onSendChatMessage(),
+          onOpenOverlay: (name: string) => this.onOpenOverlay(name)
         });
       } else if (this.selectedTab === TAB_CONTACTS) {
         ContactsPage({
@@ -46,7 +57,8 @@ export struct MainShell {
         });
       } else if (this.selectedTab === TAB_DISCOVER) {
         DiscoverPage({
-          onOpenDutyRoster: () => this.onOpenDutyRoster()
+          onOpenDutyRoster: () => this.onOpenDutyRoster(),
+          onOpenOverlay: (name: string) => this.onOpenOverlay(name)
         });
       } else {
         ProfilePage({

@@ -1,22 +1,46 @@
 import { ImMessage } from '../models/MobileModels';
+import { ImWebSocketClient, ImInbound, ImConnStatus } from '../api/ImWebSocketClient';
 
 /**
- * IM 即时通讯页面（简化版）。
+ * IM 即时通讯页面。
  *
- * 安卓版用 WebSocket + Room DB，鸿蒙版简化为 HTTP 模式：
- * 输入对方用户 ID 打开会话（占位 conversationId=1），消息本地追加展示。
+ * 对标 Android core/im/ImWebSocketClient.kt:用真实 WebSocket(/ws/im?session_id=)
+ * 接收实时消息,含重连退避与心跳;发送为 V0 本地回显(完整发送走 IM 会话 HTTP 流程)。
  */
 @Component
 export struct ImMessengerPage {
   @Consume baseUrl: string;
+  @Consume sessionId: string;
 
   @State peerIdText: string = '';
   @State conversationId: number = -1;
   @State draft: string = '';
   @State messages: ImMessage[] = [];
   @State error: string = '';
+  @State connStatus: ImConnStatus = 'idle';
+
+  private wsClient: ImWebSocketClient | null = null;
 
   onBack: () => void = () => {};
+
+  aboutToDisappear(): void {
+    this.teardownWs();
+  }
+
+  private teardownWs(): void {
+    if (this.wsClient !== null) {
+      this.wsClient.disconnect();
+      this.wsClient = null;
+    }
+  }
+
+  private connStatusLabel(): string {
+    if (this.connStatus === 'open') return '实时已连接';
+    if (this.connStatus === 'connecting') return '连接中...';
+    if (this.connStatus === 'reconnecting') return '重连中...';
+    if (this.connStatus === 'closed') return '已断开';
+    return '未连接';
+  }
 
   private openConversation(): void {
     const peer: string = this.peerIdText.trim();
@@ -24,10 +48,38 @@ export struct ImMessengerPage {
       this.error = '请输入对方用户 ID';
       return;
     }
-    // 简化：不真正调 API，直接占位会话 ID = 1
-    this.conversationId = 1;
+    this.conversationId = Number(peer);
     this.messages = [];
     this.error = '';
+    // 建立真实 WebSocket 连接,接收实时消息
+    this.teardownWs();
+    const client = new ImWebSocketClient(this.baseUrl, this.sessionId);
+    this.wsClient = client;
+    client.connect(
+      (inbound: ImInbound) => { this.onInbound(inbound); },
+      (status: ImConnStatus) => { this.connStatus = status; }
+    );
+  }
+
+  private onInbound(inbound: ImInbound): void {
+    const m = inbound.message;
+    if (!m) {
+      return;
+    }
+    const content: string = (m.content !== undefined && m.content.length > 0)
+      ? m.content : (m.body !== undefined ? m.body : '');
+    if (content.length === 0) {
+      return;
+    }
+    const msg: ImMessage = {
+      id: m.id !== undefined ? `${m.id}` : `${Date.now()}`,
+      conversationId: m.conversation_id !== undefined ? m.conversation_id : this.conversationId,
+      senderId: m.sender_id !== undefined ? m.sender_id : 0,
+      content: content,
+      timestamp: Date.now(),
+      mine: false
+    };
+    this.messages = this.messages.concat([msg]);
   }
 
   private sendMessage(): void {
@@ -48,6 +100,8 @@ export struct ImMessengerPage {
   }
 
   private closeConversation(): void {
+    this.teardownWs();
+    this.connStatus = 'idle';
     this.conversationId = -1;
     this.messages = [];
     this.draft = '';
@@ -90,9 +144,9 @@ export struct ImMessengerPage {
           .fontWeight(FontWeight.Medium)
           .fontColor('#111827')
           .maxLines(1);
-        Text(this.conversationId < 0 ? '发起即时直聊' : `会话 #${this.conversationId}`)
+        Text(this.conversationId < 0 ? '发起即时直聊' : `会话 #${this.conversationId} · ${this.connStatusLabel()}`)
           .fontSize(12)
-          .fontColor('#4B5563')
+          .fontColor(this.connStatus === 'open' ? '#166534' : '#4B5563')
           .maxLines(1);
       }
       .alignItems(HorizontalAlign.Start)

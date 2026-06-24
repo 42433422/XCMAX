@@ -10,6 +10,7 @@ export struct LoginPage {
 
   onLogin: () => void = () => {};
   onExchangePairingCode: () => void = () => {};
+  onOpenRegister: () => void = () => {};
 
   build() {
     this.LoginScreen();
@@ -180,6 +181,19 @@ export struct LoginPage {
             .onClick(() => {
               this.onLogin();
             });
+
+          Row({ space: 4 }) {
+            Text('还没有账号？')
+              .fontSize(13)
+              .fontColor('#64748B');
+            Text('注册新账号')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#1D4ED8')
+              .onClick(() => this.onOpenRegister());
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Center);
 
           Row({ space: 8 }) {
             Text(this.statusText.indexOf('失败') >= 0 ? '!' : 'i')
