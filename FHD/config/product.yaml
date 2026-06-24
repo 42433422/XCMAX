@@ -1,0 +1,68 @@
+# XCMAX 产品 SSOT — 三端 × 渠道 × 发行版 的唯一真相源
+#
+# 这是「产品形态」的机器可校验真相源：哪几端、各端跑哪些渠道、只产哪些发行版。
+# 散文版策略口径见 specs/product-lines-3-plus-2.md（指向本文件为机器真相源）。
+#
+# 校验： python scripts/dev/ssot_plugins/product.py check
+# 登记： FHD/config/ssot.yaml (domain: product) + FHD/docs/SSOT_INDEX.md
+# 守卫： FHD/tests/test_product_ssot.py（随后端测试套阻断式跑）
+version: 1
+
+# 产品大版本锚点（与 FHD/VERSION.md「XCAGI 总版本」恒为 10.0.0）
+product_version: "10.0.0"
+
+# ── 发行版（edition / SKU）全局状态 ────────────────────────────────
+# 只有 status: active 的发行版可被任意一端列入 editions。
+editions:
+  enterprise:
+    status: active
+    aliases: ["企业版", "full"]
+    note: 唯一在研在产发行版。
+  personal:
+    status: discontinued        # 个人版已停产 / 停止开发
+    aliases: ["个人版", "minimal"]
+    frozen_since: "2026-06-17"
+    note: >-
+      不进入版本目标、销售口径、路线图承诺与验收清单；仅保留兼容、归档与未来恢复入口。
+      代码侧保留但不产制品：桌面 build-all-skus 默认只产 enterprise（-IncludePersonal 显式恢复）；
+      安卓 personal flavor 由 -PincludeDiscontinuedSku=true 网关，默认不生成；安卓 CI 不再构建 personal。
+      恢复个人版前须先重新评审 specs/product-lines-3-plus-2.md。
+
+# ── 三端 ──────────────────────────────────────────────────────────
+ends:
+  # 1) 服务器官网端 —— 无个人/企业强区分
+  server:
+    display: 服务器官网端
+    repo: 成都修茈科技有限公司/
+    edition_split: false        # 官网端不区分个人/企业发行版
+    note: AI 员工商店 / Mod 分发、企业授权、订阅、支付、更新源；不按发行版分叉。
+
+  # 2) 电脑端 —— 仅企业版
+  desktop:
+    display: 电脑端
+    repo: FHD/
+    platforms: [windows, macos]
+    editions: [enterprise]      # personal 已停产
+    note: 企业桌面 ERP + AI 主交付；Windows 与 macOS 双平台对标同步。
+
+  # 3) 手机端 —— 仅企业版；三渠道进度/版本须同步
+  mobile:
+    display: 手机端
+    editions: [enterprise]      # personal 已停产
+    sync_required: true         # 安卓 / 苹果 / 鸿蒙 三渠道功能与版本须同步推进
+    channels:
+      android:
+        display: 安卓
+        status: active
+        repo: FHD/mobile-android/
+        version_anchor: FHD/mobile-android/app/build.gradle.kts#versionName
+      harmony:
+        display: 鸿蒙
+        status: active
+        repo: FHD/mobile-harmony/
+        version_anchor: FHD/mobile-harmony/AppScope/app.json5#versionName
+      ios:
+        display: 苹果
+        status: in_development   # 原生 SwiftUI 已对标安卓，工程在分支待并入主干
+        repo: FHD/mobile-ios/
+        version_anchor: pending  # 并入主干后补锚点并加入版本校验
