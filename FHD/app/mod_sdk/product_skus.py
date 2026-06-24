@@ -22,6 +22,26 @@ logger = logging.getLogger(__name__)
 
 ProductSku = Literal["personal", "enterprise"]
 
+# 发行版状态 SSOT 的代码侧镜像 —— 真相源 config/product.yaml editions.*。
+# personal 已停产：保留 SKU 行为（兼容已安装/归档/未来恢复），但不再作为在产发行版生产制品。
+# scripts/dev/ssot_plugins/product.py 守卫此处与 product.yaml 对齐，防止个人版被悄悄复活。
+SKU_STATUS: dict[ProductSku, str] = {
+    "enterprise": "active",
+    "personal": "discontinued",
+}
+ACTIVE_SKUS: frozenset[ProductSku] = frozenset(
+    sku for sku, status in SKU_STATUS.items() if status == "active"
+)
+DISCONTINUED_SKUS: frozenset[ProductSku] = frozenset(
+    sku for sku, status in SKU_STATUS.items() if status == "discontinued"
+)
+
+
+def is_sku_active(sku: ProductSku | None) -> bool:
+    """该 SKU 是否仍为在产/在研发行版（personal 已停产 → False）。"""
+    return sku in ACTIVE_SKUS
+
+
 SKU_AUX_MOD_IDS: tuple[str, ...] = (
     "xcagi-planner-excel-tools",
     "wechat-contacts-ai-employee",
@@ -118,9 +138,15 @@ def _read_product_sku_file() -> ProductSku | None:
 def resolve_product_sku() -> ProductSku | None:
     """进程 SKU：环境变量优先，其次安装资源 product-sku.json。"""
     sku = normalize_product_sku(os.environ.get("XCAGI_PRODUCT_SKU"))
-    if sku:
-        return sku
-    return _read_product_sku_file()
+    if not sku:
+        sku = _read_product_sku_file()
+    if sku and not is_sku_active(sku):
+        logger.warning(
+            "解析到已停产发行版 SKU=%s（仅兼容运行，不再产出制品）；见 config/product.yaml editions.%s",
+            sku,
+            sku,
+        )
+    return sku
 
 
 def bundled_mod_ids_for_sku(sku: ProductSku | None = None) -> tuple[str, ...]:
@@ -197,6 +223,10 @@ def configure_sku_edition_env(sku: ProductSku | None = None) -> ProductSku | Non
 
 __all__ = [
     "ProductSku",
+    "SKU_STATUS",
+    "ACTIVE_SKUS",
+    "DISCONTINUED_SKUS",
+    "is_sku_active",
     "SKU_AUX_MOD_IDS",
     "ENTERPRISE_HOST_MOD_IDS",
     "PERSONAL_HOST_MOD_IDS",

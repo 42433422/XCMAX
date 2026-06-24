@@ -18,6 +18,8 @@ ANCHORS: list[tuple[str, str]] = [
     ("app/fastapi_app/factory.py", r'version="([\d.]+)"'),
     ("app/infrastructure/mods/manifest.py", r'current_version\s*=\s*"([\d.]+)"'),
     ("mobile-android/app/build.gradle.kts", r'versionName\s*=\s*"([\d.]+)"'),
+    ("mobile-harmony/AppScope/app.json5", r'"versionName"\s*:\s*"([\d.]+)"'),
+    # iOS：原生工程并入主干后追加锚点（config/product.yaml ends.mobile.channels.ios）
 ]
 
 
