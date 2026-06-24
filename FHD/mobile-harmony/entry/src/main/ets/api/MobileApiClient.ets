@@ -6,6 +6,9 @@ import {
   ChatMessage,
   ChatResponseData,
   CsInfo,
+  MeetingGenerateBody,
+  MeetingLevelsData,
+  MeetingMinuteData,
   MobileEnvelope,
   MobileFixedContactsData,
   MobileHomeData,
@@ -157,6 +160,20 @@ export class MobileApiClient {
     const body: ChatRequestBody = { message: message, session_id: 'cs' };
     const response = await this.rawRequest<ChatResponseData>('api/cs/chat', http.RequestMethod.POST, body);
     return response;
+  }
+
+  // ── 会议纪要 SSOT（三级派生） ──
+  async meetingLevels(): Promise<MeetingLevelsData> {
+    const envelope = await this.request<MeetingLevelsData>(
+      ApiEndpoints.MEETING_LEVELS, http.RequestMethod.GET);
+    return envelope.data || ({ version: 1, levels: [] } as MeetingLevelsData);
+  }
+
+  async generateMeetingMinutes(transcript: string, title?: string): Promise<MeetingMinuteData> {
+    const body: MeetingGenerateBody = { raw_transcript: transcript, title: title };
+    const envelope = await this.request<MeetingMinuteData>(
+      ApiEndpoints.MEETING_GENERATE, http.RequestMethod.POST, body);
+    return envelope.data || ({ status: 'failed' } as MeetingMinuteData);
   }
 
   private async request<T>(path: string, method: http.RequestMethod, body?: object): Promise<MobileEnvelope<T>> {

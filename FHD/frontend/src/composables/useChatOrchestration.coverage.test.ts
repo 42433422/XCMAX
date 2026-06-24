@@ -1190,6 +1190,16 @@ describe('useChatOrchestration coverage – handleAutoAction 各分支', () => {
     window.removeEventListener('xcagi:switch-view', handler)
   })
 
+  it('show_meeting_minutes_float 派发 open-meeting-minutes 并打开会议纪要面板', () => {
+    const api = createApi()
+    const handler = vi.fn()
+    window.addEventListener('xcagi:open-meeting-minutes', handler)
+    api.handleAutoAction({ type: 'show_meeting_minutes_float' })
+    expect(handler).toHaveBeenCalled()
+    expect(handler.mock.calls[0][0].detail.forceOpen).toBe(true)
+    window.removeEventListener('xcagi:open-meeting-minutes', handler)
+  })
+
   it('show_print 派发 switch-view 到 print', () => {
     const api = createApi()
     const handler = vi.fn()

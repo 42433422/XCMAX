@@ -978,6 +978,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       applyProRuntimeMode(type, true)
     }
 
+    // 会议纪要面板：小C 识别"整理会议纪要"等意图后下发，打开三级纪要面板
+    if (type === 'show_meeting_minutes_float' || type === 'show_meeting_minutes') {
+      window.dispatchEvent(new CustomEvent('xcagi:open-meeting-minutes', { detail: { forceOpen: true } }))
+      return
+    }
+
     // 与普通模式一致：无论是否专业 UI，产品副窗都应打开（工作流也会下发 show_products_float）
     if (type === 'show_products' || type === 'show_products_float') {
       emitAssistantPush({

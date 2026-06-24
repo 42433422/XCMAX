@@ -20,6 +20,36 @@ export interface MobileEnvelope<T> {
   data?: T;
 }
 
+// ── 会议纪要 SSOT 三级派生 ──
+export interface MeetingGenerateBody {
+  raw_transcript: string;
+  title?: string;
+}
+
+export interface MeetingMinuteData {
+  id?: number;
+  title?: string;
+  status?: string;
+  source_hash?: string;
+  level1_script?: string;
+  level2_architecture?: string;
+  level3_plain?: string;
+  error_message?: string;
+}
+
+export interface MeetingLevelDef {
+  id?: string;
+  label?: string;
+  short?: string;
+  derives_from?: string;
+  render?: string;
+}
+
+export interface MeetingLevelsData {
+  version?: number;
+  levels?: MeetingLevelDef[];
+}
+
 export interface MobileLoginData {
   user?: UserDto;
   session_id?: string;
