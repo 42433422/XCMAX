@@ -52,6 +52,8 @@ domains:
       - FHD/app/fastapi_app/factory.py#FastAPI(version=)
       - FHD/app/infrastructure/mods/manifest.py#current_version
       - FHD/mobile-android/app/build.gradle.kts#versionName
+      - FHD/mobile-harmony/AppScope/app.json5#versionName
+      # iOS：原生工程并入主干后补锚点（config/product.yaml ends.mobile.channels.ios=in_development）
     mode: sync+verify
     check: python scripts/dev/verify_version_anchors.py
     # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本
@@ -103,6 +105,16 @@ domains:
     derived: []
     mode: lint
     check: python scripts/dev/ssot_plugins/error_codes.py check
+    sync: null
+
+  - name: product
+    owner: product
+    enabled: true
+    ssot: FHD/config/product.yaml
+    derived: []
+    mode: lint
+    # 三端×渠道×发行版真相源；校验版本三渠道同步 + personal 停产防漂移（代码/CI/构建）
+    check: python scripts/dev/ssot_plugins/product.py check
     sync: null
 
   - name: k8s-manifests
