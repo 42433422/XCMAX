@@ -90,6 +90,7 @@ jobs:
           # 成都修茈科技有限公司/.github/workflows/modstore-ci-backend-python.yml 的
           # MODSTORE_PY_COVERAGE_FLOOR 保持一致(见 docs/coverage-gates.md)。
           MODSTORE_PY_COVERAGE_FLOOR: '40'
+          MODSTORE_EMAIL_DEBUG: '1'
         run: |
           python -m pytest tests/ -v --cov=modman --cov=modstore_server \
             --cov-report=term-missing --cov-report=xml \
