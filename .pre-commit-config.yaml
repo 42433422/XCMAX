@@ -62,6 +62,14 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+      - id: mods-ssot-parity
+        name: Mod SSOT parity (FHD/mods -> FHD/XCAGI/mods)
+        # 任一 SSOT 源或导出副本变动时，拦住未同步的漂移；修复跑 mods_ssot.py sync
+        files: '^FHD/mods/|^FHD/XCAGI/mods/|^FHD/scripts/dev/mods_ssot\.py$'
+        entry: python3 FHD/scripts/dev/mods_ssot.py check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
 
   # ----- FHD Python 格式化 / lint：Ruff 是唯一工具（import sort 由 Ruff I 规则处理） -----
   - repo: https://github.com/astral-sh/ruff-pre-commit
