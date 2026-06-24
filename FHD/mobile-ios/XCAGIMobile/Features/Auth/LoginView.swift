@@ -59,11 +59,17 @@ struct LoginView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!canSubmit)
 
-                    Button {
-                        showPairing = true
-                    } label: {
-                        Label("用桌面端绑定码连接", systemImage: "desktopcomputer")
-                            .font(.footnote)
+                    HStack(spacing: Theme.Space.xl) {
+                        Button {
+                            showPairing = true
+                        } label: {
+                            Label("桌面绑定码", systemImage: "desktopcomputer").font(.footnote)
+                        }
+                        NavigationLink {
+                            RegisterView()
+                        } label: {
+                            Label("注册账号", systemImage: "person.badge.plus").font(.footnote)
+                        }
                     }
                     .padding(.top, Theme.Space.sm)
 

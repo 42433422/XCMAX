@@ -51,6 +51,19 @@ final class APIClient: @unchecked Sendable {
         try await envelope(APIEndpoints.me, of: MobileMeData.self) ?? MobileMeData()
     }
 
+    /// 企业账号自助注册(对标 Android `RegisterScreen` → FHD `api/auth/register`)。
+    @discardableResult
+    func register(username: String, password: String, email: String) async throws -> Bool {
+        let body: [String: Any] = [
+            "username": username.trimmingCharacters(in: .whitespaces),
+            "password": password,
+            "email": email.trimmingCharacters(in: .whitespaces),
+        ]
+        let resp = try await raw(APIEndpoints.authRegister, method: .post, body: body, of: SimpleResult.self)
+        if resp.success == false { throw APIError.business(resp.message ?? "注册失败") }
+        return true
+    }
+
     func home() async throws -> MobileHomeData {
         try await envelope(APIEndpoints.home, of: MobileHomeData.self) ?? MobileHomeData()
     }
@@ -170,6 +183,13 @@ final class APIClient: @unchecked Sendable {
 
     func serviceBridgeRequests() async throws -> ServiceBridgeData {
         try await envelope("\(APIEndpoints.serviceBridgeRequests)?page=1&per_page=20", of: ServiceBridgeData.self) ?? ServiceBridgeData()
+    }
+
+    /// 回复服务桥工单(对标 Android `BridgeScreen`)。PUT,status ∈ pending/processing/resolved/closed。
+    func serviceBridgeRespond(id: Int, response: String, status: String = "resolved") async throws {
+        let body: [String: Any] = ["response": response, "responded_by": "ios", "status": status]
+        _ = try await envelope(APIEndpoints.path(APIEndpoints.serviceBridgeRespond, id: String(id)),
+                               method: .put, body: body, of: EmptyData.self)
     }
 
     func walletBalance() async throws -> WalletBalanceData {

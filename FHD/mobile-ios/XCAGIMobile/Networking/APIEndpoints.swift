@@ -11,6 +11,7 @@ enum APIEndpoints {
 
     // 认证
     static let authLogin = "\(base)/auth/login"
+    static let authRegister = "api/auth/register"   // 非 v1:企业账号自助注册(FHD)
     static let authLoginWithPhoneCode = "\(base)/auth/login-with-phone-code"
     static let authQrConfirm = "\(base)/auth/qr/confirm"
     static let authOidcExchange = "\(base)/auth/oidc/exchange"
