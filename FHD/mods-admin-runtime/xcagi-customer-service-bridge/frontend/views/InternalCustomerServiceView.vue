@@ -30,6 +30,10 @@
         </button>
         <div v-show="funnelExpanded" class="cs-funnel-body">
           <p v-if="funnelLoading" class="muted">加载漏斗…</p>
+          <p v-else-if="funnelError" class="form-error cs-funnel-error">
+            {{ funnelError }}
+            <button type="button" class="btn btn-xs btn-ghost" @click="loadPipelineFunnel">重试</button>
+          </p>
           <div v-else class="cs-funnel-stages">
             <button
               v-for="st in funnelStages"
@@ -147,7 +151,7 @@
             </section>
 
             <!-- 商机进度：只读展示 + 阶段说明（不切换下方功能区） -->
-            <section class="cs-progress-panel">
+            <section class="cs-progress-panel" :class="{ 'has-unsaved-changes': stageDraftDirty }">
               <div class="cs-progress-bar">
                 <div class="cs-progress-track">
                   <div class="cs-progress-fill" :style="{ width: progressPercent(u.id) + '%' }" />
@@ -1022,7 +1026,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { get, post, put } from '@/api'
 import { getUnifiedLedger, type UnifiedLedgerEntry } from '@/api/financeLedger'
 import { wechatApi } from '@/api/wechat'
@@ -1031,7 +1035,7 @@ import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { useWechatGroupBridge } from '@/composables/useWechatGroupBridge'
 import { useWechatEnterpriseBinding } from '@/composables/useWechatEnterpriseBinding'
 import { useServiceBridge } from '@/composables/useServiceBridge'
-import { appAlert } from '@/utils/appDialog'
+import { appAlert, appConfirm } from '@/utils/appDialog'
 import ContractEsignPanel from '@/components/contract/ContractEsignPanel.vue'
 
 const router = useRouter()
@@ -1259,6 +1263,7 @@ const changeRequestNotifyingId = ref('')
 const changeRequestOpsDispatchingId = ref('')
 const funnelExpanded = ref(true)
 const funnelLoading = ref(false)
+const funnelError = ref('')
 const funnelStages = ref<Array<{ id: string; label: string; count: number }>>([])
 const funnelTotalClients = ref(0)
 const funnelStageFilter = ref('')
@@ -2652,15 +2657,17 @@ async function finalizeIntakeFromPipeline(opts: { silent?: boolean } = {}) {
 
 async function loadPipelineFunnel() {
   funnelLoading.value = true
+  funnelError.value = ''
   try {
     const res = await get(`${CS_BRIDGE}/user-cs/pipeline/funnel`, { max_clients_per_stage: 8 })
     const data = (res as { data?: { stages?: Array<{ id: string; label: string; count: number }>; total_clients?: number } })
       ?.data
     funnelStages.value = data?.stages || []
     funnelTotalClients.value = Number(data?.total_clients || 0)
-  } catch {
+  } catch (e) {
     funnelStages.value = DEFAULT_PIPELINE_STAGES.map((s) => ({ ...s, count: 0 }))
     funnelTotalClients.value = 0
+    funnelError.value = `漏斗加载失败：${e instanceof Error ? e.message : String(e)}`
   } finally {
     funnelLoading.value = false
   }
@@ -3744,7 +3751,12 @@ async function handleSaveBindings(options: { syncAfter?: boolean } = {}) {
     if ((selectedEnterpriseUser.value?.bindingCount || 0) > 0) {
       passiveLoopSummary.value = ''
     }
-    if (options.syncAfter) await handleSyncWechat(true)
+    if (options.syncAfter) {
+      await handleSyncWechat(true)
+      await appAlert('群聊绑定已保存并同步')
+    } else {
+      await appAlert('群聊绑定已保存')
+    }
     return true
   } catch (e) {
     await appAlert(`保存失败：${e instanceof Error ? e.message : String(e)}`)
@@ -4022,6 +4034,14 @@ onMounted(async () => {
   if (fromRoute != null) await toggleClient(fromRoute)
 })
 
+onBeforeRouteLeave(async () => {
+  if (stageDraftDirty.value) {
+    const ok = await appConfirm('您有未保存的阶段变更，确定要离开吗？')
+    if (!ok) return false
+  }
+  return true
+})
+
 onUnmounted(() => {
   stopPassiveLoopTimer()
 })
@@ -4084,6 +4104,11 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.cs-progress-panel.has-unsaved-changes {
+  border-color: #f59e0b;
+  background: linear-gradient(180deg, #fffaf0 0%, #fff 100%);
+  box-shadow: 0 0 0 1px #f59e0b inset;
 }
 
 .cs-progress-bar { margin-bottom: 2px; }

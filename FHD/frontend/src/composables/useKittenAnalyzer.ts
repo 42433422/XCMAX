@@ -341,6 +341,8 @@ export function useKittenAnalyzer() {
   const isKittenStreaming = ref(false)
   const isDatasetParsing = ref(false)
   const kittenPhase = ref<KittenPhase>(KITTEN_PHASE.idle)
+  /** 解析/请求失败时的用户可见错误文案，供视图渲染错误横幅（kittenPhase=error 时） */
+  const parseErrorMessage = ref('')
   const currentResult = ref<KittenAnalysisResult | null>(null)
   const fileInput = ref<HTMLInputElement | null>(null)
   const chatMessagesRef = ref<HTMLElement | null>(null)
@@ -499,6 +501,7 @@ export function useKittenAnalyzer() {
     isChatLoading.value = false
     isDatasetParsing.value = false
     kittenPhase.value = KITTEN_PHASE.idle
+    parseErrorMessage.value = ''
     currentResult.value = null
     datasetSummary.value = null
     datasetRows.value = []
@@ -579,6 +582,7 @@ export function useKittenAnalyzer() {
     if (!file) return
 
     addMessage('user', `上传文件：${file.name}`)
+    parseErrorMessage.value = ''
     isDatasetParsing.value = true
     kittenPhase.value = KITTEN_PHASE.ingesting
 
@@ -617,6 +621,7 @@ export function useKittenAnalyzer() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addMessage('ai', `文件解析失败：${msg}`)
+      parseErrorMessage.value = `文件解析失败：${msg}`
       kittenPhase.value = KITTEN_PHASE.error
     } finally {
       isDatasetParsing.value = false
@@ -834,6 +839,7 @@ export function useKittenAnalyzer() {
     inputText.value = ''
     isChatLoading.value = true
     isKittenStreaming.value = false
+    parseErrorMessage.value = ''
     kittenPhase.value = KITTEN_PHASE.analyzing
 
     if (!kittenSessionUserId.value) {
@@ -857,6 +863,7 @@ export function useKittenAnalyzer() {
         type: failed ? 'error' : 'analysis',
         kind: failed ? 'chatError' : 'analysis'
       }
+      parseErrorMessage.value = failed ? plain.slice(0, 220) : ''
       kittenPhase.value = failed ? KITTEN_PHASE.error : KITTEN_PHASE.delivered
     }
 
@@ -977,6 +984,7 @@ export function useKittenAnalyzer() {
         type: 'error',
         kind: 'networkError'
       }
+      parseErrorMessage.value = `网络异常：${msg}`
       kittenPhase.value = KITTEN_PHASE.error
     } finally {
       isChatLoading.value = false
@@ -1024,8 +1032,17 @@ export function useKittenAnalyzer() {
     }
   }
 
+  /** 关闭错误横幅：清空错误文案并退出 error 阶段（有数据集则回到结构就绪，否则回到初始） */
+  const clearError = () => {
+    parseErrorMessage.value = ''
+    if (kittenPhase.value === KITTEN_PHASE.error) {
+      kittenPhase.value = hasDataset.value ? KITTEN_PHASE.schemaReady : KITTEN_PHASE.idle
+    }
+  }
+
   const clearResult = () => {
     currentResult.value = null
+    parseErrorMessage.value = ''
     kittenPhase.value = hasDataset.value ? KITTEN_PHASE.schemaReady : KITTEN_PHASE.idle
   }
 
@@ -1047,6 +1064,7 @@ export function useKittenAnalyzer() {
     isKittenStreaming,
     isDatasetParsing,
     kittenPhase,
+    parseErrorMessage,
     currentResult,
     fileInput,
     chatMessagesRef,
@@ -1076,6 +1094,7 @@ export function useKittenAnalyzer() {
     isDocGenLoading,
     generateAiOfficeDocument,
     runFinancialBrief,
+    clearError,
     clearResult,
     handleInputKeydown
   }
