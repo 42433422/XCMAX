@@ -35,6 +35,7 @@ enum class ConversationType {
     PINNED_CS,            // 固定：专属客服（仅 enterprise）
     PINNED_ASSISTANT,     // 固定：小C助理
     PINNED_CODEX,         // 固定：超级员工-Codex
+    PINNED_CURSOR,        // 固定：超级员工-Cursor
     PINNED_CLAUDE,        // 固定：超级员工-Claude
     AI_TASK,              // AI 任务会话
     SYSTEM_NOTIFICATION,  // 系统通知
@@ -45,5 +46,6 @@ object PinnedIds {
     const val CS = "pinned:cs"
     const val ASSISTANT = "pinned:assistant"
     const val CODEX = "pinned:codex"
+    const val CURSOR = "pinned:cursor"
     const val CLAUDE = "pinned:claude"
 }

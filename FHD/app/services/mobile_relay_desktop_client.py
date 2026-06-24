@@ -20,6 +20,7 @@ import httpx
 
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
 from app.utils.path_utils import get_app_data_dir
 
@@ -124,6 +125,8 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
             "codex_cli": True,
             "claude": True,
             "claude_cli": True,
+            "cursor": True,
+            "cursor_cli": True,
             "desktop": True,
             "host": host,
             "port": int(port),
@@ -287,10 +290,13 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     ).strip()
     if not message:
         return {"error": "任务缺少 message"}
-    # 中继泛化：按 kind 前缀选择超级员工(codex.* / claude.*)，本地执行后回写。
+    # 中继泛化：按 kind 前缀选择超级员工(codex.* / claude.* / cursor.*)，本地执行后回写。
     if kind.startswith("claude"):
         service: Any = ClaudeSuperEmployeeService()
         tool_label = "Claude"
+    elif kind.startswith("cursor"):
+        service = CursorSuperEmployeeService()
+        tool_label = "Cursor"
     elif kind.startswith("codex"):
         service = CodexSuperEmployeeService()
         tool_label = "Codex"

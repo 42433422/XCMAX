@@ -153,6 +153,9 @@ private fun parseEmployeeConversationRef(conversationId: String?): EmployeeConve
 internal fun isCodexConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CODEX
 
+internal fun isCursorConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.CURSOR
+
 internal fun isClaudeConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CLAUDE
 
@@ -162,6 +165,7 @@ internal fun chatAvatarFallback(
 ): AppAvatarFallback =
     when {
         isCodexConversation(conversationId) -> AppAvatarFallback.CODEX
+        isCursorConversation(conversationId) -> AppAvatarFallback.CURSOR
         isClaudeConversation(conversationId) -> AppAvatarFallback.CLAUDE
         hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
         else -> AppAvatarFallback.ASSISTANT
@@ -248,6 +252,7 @@ fun ChatScreen(
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
     val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
     val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
+    val cursorConversation = remember(conversationId) { isCursorConversation(conversationId) }
     val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
     val employeeProfile =
         remember(employeeRef, employees) {
@@ -257,6 +262,7 @@ fun ChatScreen(
         when {
             employeeProfile != null -> employeeProfile.name
             codexConversation -> "超级员工-Codex"
+            cursorConversation -> "超级员工-Cursor"
             claudeConversation -> "超级员工-Claude"
             else -> conversationTitle
         }
@@ -378,7 +384,7 @@ fun ChatScreen(
                 onVoice = { startVoiceInput() },
                 onMore = { showMoreSheet = true },
                 gitBranch = gitBranch,
-                showDevTools = claudeConversation || codexConversation,
+                showDevTools = claudeConversation || codexConversation || cursorConversation,
                 onGitMerge = { gitBranch?.let { vm.gitMerge(it, conversationId) } },
                 onGitDiff = { gitBranch?.let { vm.gitDiff(it, conversationId) } },
                 onGitDiscard = { gitBranch?.let { vm.gitDiscard(it, conversationId) } },
