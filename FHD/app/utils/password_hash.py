@@ -128,6 +128,9 @@ def check_password_hash(pwhash: str, password: str) -> bool:
     """
     if not isinstance(pwhash, str) or not isinstance(password, str):
         return False
+    # 空/空白哈希绝不匹配任何密码（防御纵深：占位用户、迁移残留等不可被登录）。
+    if not pwhash.strip():
+        return False
     if "$" not in pwhash:
         return False
 
