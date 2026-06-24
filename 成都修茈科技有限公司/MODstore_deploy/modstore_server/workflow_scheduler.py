@@ -421,6 +421,43 @@ def start_scheduler() -> None:
     except Exception:
         logger.exception("register daily release_train orchestrator cron failed")
 
+    def _mobile_release_loop_job() -> None:
+        try:
+            from modstore_server.mobile_release_loop import run as run_mobile_release_loop_entry
+
+            r = run_mobile_release_loop_entry()
+            logger.info(
+                "mobile release loop: mode=%s status=%s consensus=%s target=%s",
+                r.get("mode"),
+                r.get("status"),
+                r.get("consensus"),
+                r.get("target_version"),
+            )
+        except Exception:
+            logger.exception("mobile release loop job failed")
+
+    try:
+        from modstore_server.mobile_release_loop import cron_trigger_for_mobile_release_loop
+
+        # 默认关：闭环虽 shadow 安全，注册仍需显式开启，避免在未接真管线时静默上线。
+        if _env_bool("MODSTORE_MOBILE_RELEASE_LOOP_CRON_ENABLED", False):
+            _scheduler.add_job(
+                _mobile_release_loop_job,
+                cron_trigger_for_mobile_release_loop(),
+                id="mobile_release_loop_job",
+                replace_existing=True,
+                misfire_grace_time=_business_misfire_grace_time(),
+                coalesce=True,
+                max_instances=1,
+            )
+        else:
+            logger.info(
+                "mobile release loop cron disabled (default); "
+                "set MODSTORE_MOBILE_RELEASE_LOOP_CRON_ENABLED=1 to register (runs shadow unless MODE=primary)"
+            )
+    except Exception:
+        logger.exception("register mobile release loop cron failed")
+
     def _daily_backup_job() -> None:
         try:
             from modstore_server.daily_backup_job import run_daily_backup_job
