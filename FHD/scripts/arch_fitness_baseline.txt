@@ -273,12 +273,16 @@
 [routes->services] app/fastapi_routes/xcmax_admin.py:672
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:101
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:102
+[routes->services] app/fastapi_routes/mobile_api_extensions.py:103
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:228
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:229
+[routes->services] app/fastapi_routes/mobile_api_extensions.py:230
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:2088
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:2114
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:2430
+[routes->services] app/fastapi_routes/mobile_api_extensions.py:2450
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:2456
+[routes->services] app/fastapi_routes/mobile_api_extensions.py:2476
 [routes->services] app/fastapi_routes/xcmax_admin.py:725
 [routes->services] app/fastapi_routes/xcmax_admin.py:739
 [routes->services] app/fastapi_routes/xcmax_admin.py:756
