@@ -12,12 +12,13 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import HTTPException
 
+from app.infrastructure.topology import LLM_V1_BASE_URL, MARKET_CATALOG_URL
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CATALOG_BASE_URL = "https://xiu-ci.com/v1"
-DEFAULT_MARKET_CATALOG_URL = "https://xiu-ci.com/api/market/catalog"
+DEFAULT_CATALOG_BASE_URL = LLM_V1_BASE_URL
+DEFAULT_MARKET_CATALOG_URL = MARKET_CATALOG_URL
 
 
 def catalog_base_url() -> str:
