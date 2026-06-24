@@ -150,12 +150,27 @@ class ItemFulfilStrategy(FulfilStrategy):
             q = (
                 session.query(Quota)
                 .filter(Quota.user_id == ctx.user_id, Quota.quota_type == "employee_count")
+                .with_for_update()
                 .first()
             )
             if not q:
                 q = Quota(user_id=ctx.user_id, quota_type="employee_count", total=1, used=0)
             else:
-                q.total = int(q.total or 0) + 1
+                # 幂等保护：仅当本订单是首次为该用户加 employee 配额时才 +1。
+                # 此处 Entitlement(employee) 已在上方 session.add，autoflush 会把它计入；
+                # 正常首次履约 count==1，并发重试漏过 is_already_fulfilled 时会看到
+                # 已提交的旧 Entitlement（count>=2）→ 跳过，避免重复加额度。
+                existing_ents = (
+                    session.query(Entitlement)
+                    .filter(
+                        Entitlement.source_order_id == ctx.out_trade_no,
+                        Entitlement.entitlement_type == "employee",
+                        Entitlement.user_id == ctx.user_id,
+                    )
+                    .all()
+                )
+                if len(existing_ents) == 1:
+                    q.total = int(q.total or 0) + 1
             session.add(q)
 
         # 写入作者分润记录（仅当商品有关联作者且价格 > 0 时）

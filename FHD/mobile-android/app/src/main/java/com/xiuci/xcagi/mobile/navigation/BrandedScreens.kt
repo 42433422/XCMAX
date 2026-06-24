@@ -821,7 +821,7 @@ private fun LoginScanButton(
         ) {
                 Icon(
                         Icons.Default.QrCodeScanner,
-                        contentDescription = null,
+                        contentDescription = "扫码绑定或登录",
                         modifier = Modifier.size(18.dp),
                         tint = XcagiTheme.extra.brandBlue,
                 )

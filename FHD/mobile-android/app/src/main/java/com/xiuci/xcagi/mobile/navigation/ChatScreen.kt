@@ -809,7 +809,7 @@ private fun GitActionBar(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Default.CallMerge,
-                contentDescription = null,
+                contentDescription = "待处理分支",
                 tint = imTextSecondary(),
                 modifier = Modifier.size(13.dp),
             )

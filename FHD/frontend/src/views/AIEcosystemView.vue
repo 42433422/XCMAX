@@ -56,8 +56,29 @@ import ModStoreLauncherIcon from '@/components/modStore/ModStoreLauncherIcon.vue
 
 const router = useRouter()
 
-const KittenAnalyzerView = defineAsyncComponent(() => import('@/components/kitten/KittenAnalyzerView.vue'))
-const AIOpenPanel = defineAsyncComponent(() => import('@/components/aiopen/AIOpenPanel.vue'))
+const asyncLoadingComponent = {
+  template: '<div class="ecosystem-async-state ecosystem-async-state--loading">加载中…</div>',
+}
+
+const asyncErrorComponent = {
+  template:
+    '<div class="ecosystem-async-state ecosystem-async-state--error" role="alert">应用加载失败，请返回重试</div>',
+}
+
+const KittenAnalyzerView = defineAsyncComponent({
+  loader: () => import('@/components/kitten/KittenAnalyzerView.vue'),
+  loadingComponent: asyncLoadingComponent,
+  errorComponent: asyncErrorComponent,
+  delay: 200,
+  timeout: 15000,
+})
+const AIOpenPanel = defineAsyncComponent({
+  loader: () => import('@/components/aiopen/AIOpenPanel.vue'),
+  loadingComponent: asyncLoadingComponent,
+  errorComponent: asyncErrorComponent,
+  delay: 200,
+  timeout: 15000,
+})
 
 const inAnalyzer = ref(false)
 const activeApp = ref('kitten')
@@ -182,5 +203,20 @@ const exitAnalyzer = () => {
 .app-launcher-desc {
   font-size: 13px;
   color: #64748b;
+}
+.ecosystem-async-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  padding: 24px;
+  text-align: center;
+}
+.ecosystem-async-state--loading {
+  color: #64748b;
+}
+.ecosystem-async-state--error {
+  color: #b91c1c;
 }
 </style>
