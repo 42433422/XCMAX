@@ -1,6 +1,5 @@
 import { api } from './core';
 import type { ApiResponse } from '@/types/api';
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 export interface SalesContractProduct {
   model_number: string;
