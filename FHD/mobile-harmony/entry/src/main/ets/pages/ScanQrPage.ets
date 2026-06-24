@@ -1,14 +1,19 @@
 /**
  * 扫码页面。
  *
- * 对标 Android ScanQrScreen.kt：扫码取景框 + 相册选择 + 手电筒。
- * 简化版不调真实相机，点击取景框模拟扫码结果。
+ * 对标 Android ScanQrScreen.kt:用华为统一扫码服务(ScanKit)拉起系统扫码界面,
+ * 真实扫描配对二维码/设备码,结果回填后由上层做配对或路由。
+ * (ScanKit 真机行为需在 HarmonyOS 设备上验证。)
  */
+
+import { scanBarcode, scanCore } from '@kit.ScanKit';
+import common from '@ohos.app.ability.common';
 
 @Component
 export struct ScanQrPage {
   @State scanResult: string = '';
-  @State flashOn: boolean = false;
+  @State scanning: boolean = false;
+  @State errorMsg: string = '';
 
   onBack: () => void = () => {};
   onScanResult: (result: string) => void = () => {};
@@ -57,31 +62,26 @@ export struct ScanQrPage {
   ScanArea() {
     Column() {
       Column() {
-        // 取景框：方形 Border 描述
         Column()
           .width(220)
           .height(220)
-          .border({
-            width: 2,
-            color: '#3370FF',
-            radius: 12
-          })
+          .border({ width: 2, color: '#3370FF', radius: 12 })
           .backgroundColor('#00000000')
-          .onClick(() => {
-            this.simulateScan();
-          });
+          .onClick(() => this.startScan());
 
-        Text('将电脑端显示的配对二维码放入框内')
+        Text('点击取景框拉起扫码,将二维码放入框内')
           .fontSize(13)
           .fontColor('#9CA3AF')
           .margin({ top: 20 })
           .textAlign(TextAlign.Center);
 
-        Text('点击取景框可模拟扫码')
-          .fontSize(12)
-          .fontColor('#6B7280')
-          .margin({ top: 6 })
-          .textAlign(TextAlign.Center);
+        if (this.errorMsg.length > 0) {
+          Text(this.errorMsg)
+            .fontSize(12)
+            .fontColor('#F87171')
+            .margin({ top: 6 })
+            .textAlign(TextAlign.Center);
+        }
       }
       .width('100%')
       .height('100%')
@@ -126,52 +126,43 @@ export struct ScanQrPage {
 
   @Builder
   BottomActions() {
-    Row({ space: 16 }) {
-      Column({ space: 4 }) {
-        Text(this.flashOn ? '手电筒开' : '手电筒')
-          .fontSize(13)
-          .fontColor(this.flashOn ? '#FFD700' : '#FFFFFF');
-        Text(this.flashOn ? '已开启' : '点击开启')
-          .fontSize(11)
-          .fontColor('#6B7280');
-      }
-      .alignItems(HorizontalAlign.Center)
-      .width(90)
-      .padding({ top: 10, bottom: 10 })
-      .backgroundColor('#1A1A1A')
+    Button(this.scanning ? '扫码中...' : '开始扫描')
+      .height(48)
+      .width('100%')
+      .fontSize(15)
+      .fontColor('#FFFFFF')
+      .backgroundColor('#3370FF')
       .borderRadius(12)
-      .border({ width: 1, color: '#2A2A2A' })
-      .onClick(() => {
-        this.flashOn = !this.flashOn;
-      });
-
-      Column({ space: 4 }) {
-        Text('从相册选择')
-          .fontSize(13)
-          .fontColor('#FFFFFF');
-        Text('识别图片二维码')
-          .fontSize(11)
-          .fontColor('#6B7280');
-      }
-      .alignItems(HorizontalAlign.Center)
-      .layoutWeight(1)
-      .padding({ top: 10, bottom: 10 })
-      .backgroundColor('#1A1A1A')
-      .borderRadius(12)
-      .border({ width: 1, color: '#2A2A2A' })
-      .onClick(() => {
-        this.simulateScan();
-      });
-    }
-    .width('100%')
-    .padding({ left: 18, right: 18, top: 10, bottom: 20 });
+      .enabled(!this.scanning)
+      .margin({ left: 18, right: 18, top: 10, bottom: 20 })
+      .onClick(() => this.startScan());
   }
 
-  private simulateScan(): void {
+  private startScan(): void {
+    if (this.scanning) {
+      return;
+    }
+    this.scanning = true;
+    this.errorMsg = '';
+    const options: scanBarcode.ScanOptions = {
+      scanTypes: [scanCore.ScanType.ALL],
+      enableMultiMode: true,
+      enableAlbum: true
+    };
     try {
-      this.scanResult = 'xcagi://pair?nonce=482913&server=119.27.178.147:5100';
-    } catch (_err) {
-      this.scanResult = '';
+      const context = getContext(this) as common.Context;
+      scanBarcode.startScanForResult(context, options)
+        .then((result: scanBarcode.ScanResult) => {
+          this.scanning = false;
+          this.scanResult = result.originalValue;
+        })
+        .catch((err: Object) => {
+          this.scanning = false;
+          this.errorMsg = `扫码失败：${(err as Error).message}`;
+        });
+    } catch (err) {
+      this.scanning = false;
+      this.errorMsg = `无法拉起扫码：${(err as Error).message}`;
     }
   }
 }

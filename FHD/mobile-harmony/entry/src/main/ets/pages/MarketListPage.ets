@@ -1,97 +1,80 @@
 /**
  * 应用市场页面。
  *
- * 对标 Android MarketListScreen.kt：MOD 列表展示与安装。
- * 本地 mock 6 个 MOD，每个卡片含图标、名称、描述、安装按钮。
+ * 对标 Android MarketListScreen.kt：展示企业端已安装的 MOD 能力包(真数据)。
+ * 数据源:GET /api/mobile/v1/mods(MobileApiClient.mods())。
+ * 点击「打开」触发 onOpenMod(modId) → ModWebViewPage。
  */
 
-interface MarketMod {
-  modId: string;
-  iconText: string;
-  iconColor: string;
-  name: string;
-  description: string;
-  version: string;
-  installed: boolean;
-}
+import { MobileApiClient } from '../api/MobileApiClient';
+import { ModInfo, cleanText, firstChar } from '../models/MobileModels';
+
+const ICON_COLORS: string[] = ['#1D4ED8', '#BE185D', '#7C3AED', '#047857', '#B45309', '#0369A1'];
 
 @Component
 export struct MarketListPage {
-  @State mods: MarketMod[] = [
-    {
-      modId: 'mod-invoice-ocr',
-      iconText: '票',
-      iconColor: '#1D4ED8',
-      name: '票据 OCR 识别',
-      description: '识别发票、收据、表格截图，自动提取关键字段并归档。',
-      version: 'v2.4.1',
-      installed: true
-    },
-    {
-      modId: 'mod-duty-roster',
-      iconText: '岗',
-      iconColor: '#BE185D',
-      name: '值班编制管理',
-      description: '按区域展示在岗员工，支持入岗状态与组织架构同步。',
-      version: 'v1.8.0',
-      installed: true
-    },
-    {
-      modId: 'mod-approval-flow',
-      iconText: '审',
-      iconColor: '#7C3AED',
-      name: '审批流程引擎',
-      description: '多级审批流配置，支持通过、驳回、加签与委托。',
-      version: 'v3.1.2',
-      installed: false
-    },
-    {
-      modId: 'mod-bridge-service',
-      iconText: '桥',
-      iconColor: '#047857',
-      name: '服务桥接工单',
-      description: '跨部门服务请求流转，支持工单分派、回复与状态追踪。',
-      version: 'v1.5.3',
-      installed: false
-    },
-    {
-      modId: 'mod-neuro-bus',
-      iconText: '神',
-      iconColor: '#B45309',
-      name: 'Neuro Bus 事件中枢',
-      description: '事件发布订阅、去重、熔断、死信队列与 SLA 分层调度。',
-      version: 'v4.0.0',
-      installed: true
-    },
-    {
-      modId: 'mod-market-sync',
-      iconText: '市',
-      iconColor: '#0369A1',
-      name: '市场同步通道',
-      description: '从 MODstore 拉取行业能力包，自动同步到企业端生态。',
-      version: 'v2.0.6',
-      installed: false
-    }
-  ];
+  @Consume baseUrl: string;
+  @Consume accessToken: string;
+
+  @State mods: ModInfo[] = [];
+  @State loading: boolean = false;
+  @State errorMsg: string = '';
+
+  private api: MobileApiClient = new MobileApiClient('', '');
 
   onBack: () => void = () => {};
   onOpenMod: (modId: string) => void = () => {};
 
+  aboutToAppear(): void {
+    this.api = new MobileApiClient(this.baseUrl, this.accessToken);
+    this.loadMods();
+  }
+
+  private async loadMods(): Promise<void> {
+    this.loading = true;
+    this.errorMsg = '';
+    try {
+      const data = await this.api.mods();
+      this.mods = data.items || [];
+    } catch (err) {
+      this.errorMsg = cleanText((err as Error).message, '加载失败');
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private iconColor(mod: ModInfo): string {
+    const seed = cleanText(mod.id, cleanText(mod.name, 'M'));
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash + seed.charCodeAt(i)) % ICON_COLORS.length;
+    }
+    return ICON_COLORS[hash];
+  }
+
   build() {
     Column() {
       this.Header();
-      Scroll() {
-        Column({ space: 12 }) {
-          this.SummaryCard();
-          ForEach(this.mods, (mod: MarketMod) => {
-            this.ModCard(mod);
-          }, (mod: MarketMod) => mod.modId);
+      if (this.loading && this.mods.length === 0) {
+        this.StateCard('加载中...');
+      } else if (this.errorMsg.length > 0 && this.mods.length === 0) {
+        this.StateCard(this.errorMsg);
+      } else if (this.mods.length === 0) {
+        this.StateCard('企业端尚未启用任何 MOD');
+      } else {
+        Scroll() {
+          Column({ space: 12 }) {
+            this.SummaryCard();
+            ForEach(this.mods, (mod: ModInfo) => {
+              this.ModCard(mod);
+            }, (mod: ModInfo) => cleanText(mod.id, cleanText(mod.name, 'mod')));
+          }
+          .width('100%')
+          .padding({ top: 14, bottom: 24 });
         }
         .width('100%')
-        .padding({ top: 14, bottom: 24 });
+        .layoutWeight(1);
       }
-      .width('100%')
-      .layoutWeight(1);
     }
     .width('100%')
     .height('100%')
@@ -127,9 +110,22 @@ export struct MarketListPage {
   }
 
   @Builder
+  StateCard(text: string) {
+    Column() {
+      Text(text)
+        .fontSize(14)
+        .fontColor('#6B7280');
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center);
+  }
+
+  @Builder
   SummaryCard() {
     Row({ space: 8 }) {
-      Text('可用能力')
+      Text('已启用能力')
         .fontSize(15)
         .fontColor('#374151')
         .layoutWeight(1);
@@ -149,9 +145,9 @@ export struct MarketListPage {
   }
 
   @Builder
-  ModCard(mod: MarketMod) {
+  ModCard(mod: ModInfo) {
     Row({ space: 12 }) {
-      Text(mod.iconText)
+      Text(firstChar(cleanText(mod.name, 'M')))
         .width(44)
         .height(44)
         .borderRadius(10)
@@ -159,24 +155,24 @@ export struct MarketListPage {
         .fontWeight(FontWeight.Bold)
         .fontColor('#FFFFFF')
         .textAlign(TextAlign.Center)
-        .backgroundColor(mod.iconColor);
+        .backgroundColor(this.iconColor(mod));
 
       Column({ space: 3 }) {
         Row({ space: 8 }) {
-          Text(mod.name)
+          Text(cleanText(mod.name, '未命名 MOD'))
             .fontSize(15)
             .fontWeight(FontWeight.Medium)
             .fontColor('#111827')
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1);
-          Text(mod.version)
+          Text(cleanText(mod.version, ''))
             .fontSize(11)
             .fontColor('#6B7280');
         }
         .width('100%');
 
-        Text(mod.description)
+        Text(cleanText(mod.description, '企业能力包'))
           .fontSize(13)
           .fontColor('#4B5563')
           .maxLines(2)
@@ -186,19 +182,13 @@ export struct MarketListPage {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1);
 
-      Button(mod.installed ? '打开' : '安装')
+      Button('打开')
         .height(34)
         .fontSize(13)
-        .fontColor(mod.installed ? '#1D4ED8' : '#FFFFFF')
-        .backgroundColor(mod.installed ? '#E8F0FF' : '#18A85F')
+        .fontColor('#1D4ED8')
+        .backgroundColor('#E8F0FF')
         .borderRadius(8)
-        .onClick(() => {
-          if (mod.installed) {
-            this.onOpenMod(mod.modId);
-          } else {
-            this.installMod(mod.modId);
-          }
-        });
+        .onClick(() => this.onOpenMod(cleanText(mod.id, '')));
     }
     .width('100%')
     .padding(16)
@@ -206,21 +196,5 @@ export struct MarketListPage {
     .backgroundColor('#FFFFFF')
     .borderRadius(14)
     .border({ width: 1, color: '#E5E7EB' });
-  }
-
-  private installMod(modId: string): void {
-    const next: MarketMod[] = this.mods.map((mod: MarketMod) => {
-      const updated: MarketMod = {
-        modId: mod.modId,
-        iconText: mod.iconText,
-        iconColor: mod.iconColor,
-        name: mod.name,
-        description: mod.description,
-        version: mod.version,
-        installed: mod.modId === modId ? true : mod.installed
-      };
-      return updated;
-    });
-    this.mods = next;
   }
 }
