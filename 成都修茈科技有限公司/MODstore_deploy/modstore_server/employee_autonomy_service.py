@@ -21,7 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import func, or_
 
-from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA
+from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
 from modstore_server.models import (
     EmployeeChangeRequest,
     EmployeeCollabMessage,
@@ -865,11 +865,12 @@ def _evolution_failure_candidates(
 ) -> List[Tuple[str, int]]:
     """近窗口内 prompt-可修失败 ≥ ``min_failures`` 的员工 ``(employee_id, fail_count)``。
 
-    排除 ``failure_kind == FAILURE_KIND_QUOTA`` 的基建/配额类失败——这些不是 prompt 问题。
+    排除配额/计费（QUOTA）和限流/超时（TRANSIENT）类基建失败——改 prompt 无法修复。
     """
-    not_quota = or_(
+    _infra_kinds = [FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT]
+    not_infra = or_(
         EmployeeExecutionMetric.failure_kind.is_(None),
-        EmployeeExecutionMetric.failure_kind != FAILURE_KIND_QUOTA,
+        ~EmployeeExecutionMetric.failure_kind.in_(_infra_kinds),
     )
     rows = (
         session.query(
@@ -879,7 +880,7 @@ def _evolution_failure_candidates(
         .filter(
             EmployeeExecutionMetric.created_at >= cutoff,
             EmployeeExecutionMetric.status != "success",
-            not_quota,
+            not_infra,
         )
         .group_by(EmployeeExecutionMetric.employee_id)
         .order_by(func.count(EmployeeExecutionMetric.id).desc())
@@ -924,11 +925,12 @@ def run_employee_evolution_scan(
 
     sf = get_session_factory()
     with sf() as session:
-        # 仅关心最近窗口中失败较多的员工 —— 但必须排除「配额/计费/403」类失败：
-        # 改 prompt 无法修复额度耗尽，继续重写只会再发一次 LLM 调用、放大 403 死亡螺旋。
-        not_quota = or_(
+        # 仅关心最近窗口中失败较多的员工 —— 但必须排除「配额/计费」和「限流/超时」类基建失败：
+        # 改 prompt 无法修复额度耗尽或网关抖动，继续重写只会再发 LLM 调用、放大死亡螺旋。
+        _infra = [FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT]
+        not_infra_inline = or_(
             EmployeeExecutionMetric.failure_kind.is_(None),
-            EmployeeExecutionMetric.failure_kind != FAILURE_KIND_QUOTA,
+            ~EmployeeExecutionMetric.failure_kind.in_(_infra),
         )
         rows = (
             session.query(
@@ -938,7 +940,7 @@ def run_employee_evolution_scan(
             .filter(
                 EmployeeExecutionMetric.created_at >= cutoff,
                 EmployeeExecutionMetric.status != "success",
-                not_quota,
+                not_infra_inline,
             )
             .group_by(EmployeeExecutionMetric.employee_id)
             .order_by(func.count(EmployeeExecutionMetric.id).desc())
