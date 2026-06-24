@@ -1323,8 +1323,8 @@ class SuperEmployeeService:
         """解析本地 CLI 的工作目录，按执行域分流（信任墙第 3 层：工作区层）。
 
         - 工厂域：经 Workspace 注册表解析（含 P2 的 worktree 隔离）。
-        - 产品域：**绝不**落到服务端工程树；优先客户显式提供的本机路径（且不得指向服务端
-          repo），否则退到本档隔离的临时区。这堵死了"把 workspace_root 指向你服务器"的注入。
+        - 产品域：**绝不采信客户提供的宿主路径**（防 path-injection / 越权读盘），一律用本档
+          隔离的临时区。客户请求体里的 ``workspace_root`` 对产品域完全无效。
         """
         if self._grant.is_factory:
             try:
@@ -1333,13 +1333,6 @@ class SuperEmployeeService:
                 return str(reg.checkout(ws, task_id=str(context.get("request_id") or "task")))
             except WorkspaceError:
                 return str(get_workspace_registry().get(None).root)
-        candidate = str((context or {}).get("workspace_root") or "").strip()
-        if (
-            candidate
-            and Path(candidate).exists()
-            and not self._is_server_repo_path(Path(candidate))
-        ):
-            return candidate
         return self._product_ephemeral_workspace()
 
     def _factory_workspace_root(self) -> str:
@@ -1348,15 +1341,6 @@ class SuperEmployeeService:
             return str(get_workspace_registry().get(self._grant.workspace_id).root)
         except WorkspaceError:
             return ""
-
-    def _is_server_repo_path(self, path: Path) -> bool:
-        """该路径是否落在 XCMAX 服务端工程树内（=工厂领地，产品域禁入）。"""
-        try:
-            root = get_workspace_registry().get(None).root.resolve()
-            resolved = path.resolve()
-            return resolved == root or root in resolved.parents
-        except (OSError, WorkspaceError):
-            return False
 
     def _product_ephemeral_workspace(self) -> str:
         """产品域 CLI 的隔离临时工作目录。
