@@ -31,12 +31,17 @@ jobs:
         run: mkdir -p metrics
 
       # gitleaks: 密钥泄漏扫描（SARIF v2.1.0）
+      # continue-on-error=true：本 job 是指标采集，发现泄漏不应中止后续 Trivy/commit；
+      # 门禁语义由 gitleaks.yml（PR-only）负责。
+      # GITLEAKS_CONFIG 指向项目自定义 allowlist（默认只查 .gitleaks.toml 根目录）。
       - name: Run gitleaks scan
         uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_CONFIG: .github/gitleaks-config.toml
 
       - name: Export gitleaks SARIF to metrics
         run: |
