@@ -77,6 +77,26 @@ _FALLBACK_DOC: dict[str, Any] = {
             "avatar_letter": "超",
         },
     },
+    "factory_employees": {
+        "claude-factory-employee": {
+            "id": "claude-factory-employee",
+            "tier": "super",
+            "scope": "factory",
+            "visibility": "internal",
+            "display_name": "工厂员工-Claude",
+            "display_tool": "Claude",
+            "avatar_letter": "厂",
+        },
+        "codex-factory-employee": {
+            "id": "codex-factory-employee",
+            "tier": "super",
+            "scope": "factory",
+            "visibility": "internal",
+            "display_name": "工厂员工-Codex",
+            "display_tool": "Codex",
+            "avatar_letter": "厂",
+        },
+    },
     "contact_kinds": {
         "assistant": {"label": "小C助理", "is_employee_tier": True, "tier": "assistant"},
         "super": {"label": "超级员工", "is_employee_tier": True, "tier": "super"},
@@ -194,6 +214,35 @@ def super_employee_ids() -> frozenset[str]:
     return frozenset(super_employees().keys())
 
 
+def factory_employees() -> dict[str, dict[str, Any]]:
+    """工厂版超级员工注册表（scope=factory · visibility=internal）。
+
+    与 :func:`super_employees` **完全分离**：这些角色绝不进任何客户/管理选人器(surfaces)，
+    仅出现在顶层管理端「项目工厂」控制台，运行需 FACTORY 授权。
+    """
+    raw = load_ai_workforce_document().get("factory_employees")
+    if not isinstance(raw, dict):
+        raw = _FALLBACK_DOC.get("factory_employees", {})
+    return {k: v for k, v in raw.items() if not str(k).startswith("_") and isinstance(v, dict)}
+
+
+def factory_employee_ids() -> frozenset[str]:
+    return frozenset(factory_employees().keys())
+
+
+def is_factory_employee(emp_id: str) -> bool:
+    """该 id 是否为内部工厂角色（=客户/管理面绝不可见）。"""
+    eid = str(emp_id or "").strip()
+    if eid in factory_employees():
+        return True
+    # 纵深防御：即便误进了 super_employees，也按 visibility/scope 判定为内部。
+    meta = super_employees().get(eid) or {}
+    return (
+        str(meta.get("visibility") or "").strip().lower() == "internal"
+        or str(meta.get("scope") or "").strip().lower() == "factory"
+    )
+
+
 def xiaoc_display_name() -> str:
     """小C助理对外展示名（统一文案源，替代各端硬编码 "小C助理"）。"""
     return str(xiaoc().get("display_name") or "小C助理")
@@ -309,6 +358,9 @@ __all__ = [
     "xiaoc",
     "super_employees",
     "super_employee_ids",
+    "factory_employees",
+    "factory_employee_ids",
+    "is_factory_employee",
     "xiaoc_display_name",
     "xiaoc_consult_title",
     "xiaoc_conversation_surfaces",

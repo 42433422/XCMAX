@@ -21,6 +21,7 @@ import httpx
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+from app.infrastructure.topology import FHD_API_BASE_URL
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
 from app.utils.path_utils import get_app_data_dir
 
@@ -48,7 +49,7 @@ def _relay_base_url() -> str:
     value = (
         os.environ.get("XCAGI_RELAY_BASE_URL")
         or os.environ.get("XCAGI_PUBLIC_FHD_BASE_URL")
-        or "https://xiu-ci.com/fhd-api"
+        or FHD_API_BASE_URL
     ).strip()
     if not value.startswith(("http://", "https://")):
         value = f"https://{value}"

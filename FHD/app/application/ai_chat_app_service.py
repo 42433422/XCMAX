@@ -186,7 +186,29 @@ class AIChatApplicationService:
         # Excel 向量：须在 _try_handle_dynamic_workflow 之前注入，否则「规则导入捷径」提前 return 时永远不会检索索引。
         ctx = self._inject_excel_vector_context(message=message, context=dict(ctx))
 
+        # 收口：自然语言主链路在执行前开一个真实的 AgentRun（前置 run，而非事后 trace）。
+        # chat_run / chat_run_context 由下方主链路赋值；workflow 捷径路径保持 None（已自带 run）。
+        chat_run = None
+        chat_run_context: dict[str, Any] = {}
+
         def _finalize(resp: dict[str, Any]) -> dict[str, Any]:
+            if chat_run is not None:
+                try:
+                    from app.application.agent_orchestrator.chat_trace import (
+                        finalize_legacy_chat_run,
+                    )
+
+                    resp = finalize_legacy_chat_run(
+                        chat_run.run_id,
+                        resp,
+                        message=message,
+                        runtime_context=chat_run_context,
+                        user_id=user_id,
+                        source=source,
+                        channel="ai_chat_main_chain",
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("legacy chat AgentRun finalize skipped", exc_info=True)
             try:
                 from app.neuro_bus.application_neuro_bridge import neuro_notify_chat_completed
 
@@ -210,6 +232,37 @@ class AIChatApplicationService:
         )
         if workflow_result is not None:
             return _finalize(workflow_result)
+
+        # 多模态主链路收口：聊天携带真实多模态 artifact 时，走 orchestrator 多模态自治 run
+        # （而非 legacy 兜底）。护栏内置于 _try_handle_multimodal_chat：无 artifact 不分流。
+        multimodal_result = self._try_handle_multimodal_chat(
+            user_id=user_id,
+            message=message,
+            source=source,
+            context=ctx,
+        )
+        if multimodal_result is not None:
+            return _finalize(multimodal_result)
+
+        # 自然语言主链路：在调用 legacy 引擎前开真实 run，使 created→running→completed
+        # 的生命周期反映真实执行（替代路由层的事后 post_execution trace）。legacy 引擎本身不变。
+        chat_run_context = {
+            **(ctx if isinstance(ctx, dict) else {}),
+            "route": "ai_chat_main_chain",
+            "source": str(source or "").strip(),
+        }
+        try:
+            from app.application.agent_orchestrator.chat_trace import start_legacy_chat_run
+
+            chat_run = start_legacy_chat_run(
+                message=message,
+                runtime_context=chat_run_context,
+                user_id=user_id,
+                source=source,
+                channel="ai_chat_main_chain",
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("legacy chat AgentRun pre-create skipped", exc_info=True)
 
         enriched_context = dict(ctx)
         if isinstance(file_context, dict):
@@ -1654,6 +1707,67 @@ class AIChatApplicationService:
                 },
             },
         }
+
+    def _try_handle_multimodal_chat(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        source: str | None,
+        context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """多模态主链路收口：聊天上下文携带真实多模态 artifact 且多模态自治规划器能产出
+        计划时，走真正的 orchestrator run（Dataset/RAG 入库+检索/确认写库），替代 legacy 兜底。
+
+        护栏：无 artifact 信号键、或规划器返回 None 时不分流，保持 legacy 主链路不变；
+        实测纯文本 / excel_vector / 纯 excel_analysis 上下文均不会分流（最热路径零影响）。
+        """
+        ctx = context if isinstance(context, dict) else {}
+        signal_keys = (
+            "multimodal_attachments",
+            "attachments",
+            "files",
+            "artifacts",
+            "ocr",
+            "ocr_result",
+            "file_analysis",
+            "generated_document",
+            "excel_analysis",
+        )
+        if not any(ctx.get(key) for key in signal_keys):
+            return None
+        try:
+            from app.application.agent_orchestrator.multimodal_planner import (
+                build_multimodal_autonomous_plan,
+            )
+        except RECOVERABLE_ERRORS:
+            return None
+        runtime_ctx = dict(ctx)
+        runtime_ctx.setdefault("message", message)
+        try:
+            plan = build_multimodal_autonomous_plan(
+                user_id=user_id,
+                message=message,
+                runtime_context=runtime_ctx,
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("multimodal autonomous plan probe skipped", exc_info=True)
+            return None
+        if plan is None:
+            return None
+        try:
+            return self._start_deterministic_import_agent_run(
+                user_id=user_id,
+                message=message,
+                source=source,
+                context=ctx,
+                file_context={},
+                plan=plan,
+                thinking_steps="检测到多模态附件，已转入多模态自治工作流",
+            )
+        except RECOVERABLE_ERRORS:
+            logger.exception("multimodal autonomous run failed; falling back to legacy chat")
+            return None
 
     def _try_handle_dynamic_workflow(
         self,

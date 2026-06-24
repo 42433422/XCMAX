@@ -1,0 +1,64 @@
+# XcodeGen 工程定义 —— 修茈 iOS App(对标 mobile-android / mobile-harmony)。
+#
+# 本机无 Xcode 时无法生成 .xcodeproj;在装有 Xcode 的 Mac 上执行:
+#   brew install xcodegen      # 一次性
+#   cd FHD/mobile-ios && xcodegen generate
+#   open XCAGIMobile.xcodeproj
+# 两个 scheme(对标 Android personal/enterprise flavor):
+#   XCAGIMobile          → 企业版(com.xiuci.xcagi.mobile.enterprise)
+#   XCAGIMobilePersonal  → 个人版(com.xiuci.xcagi.mobile.personal,定义 PERSONAL 编译条件)
+#
+# 无第三方依赖;系统框架(SwiftUI/Foundation/Network/Security/LocalAuthentication/
+# AVFoundation/Vision/PhotosUI/WebKit/UserNotifications)由 import 自动链接。
+
+name: XCAGIMobile
+
+options:
+  bundleIdPrefix: com.xiuci.xcagi.mobile
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""           # 真机构建时填你的 Apple Team ID
+    SWIFT_STRICT_CONCURRENCY: minimal
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    TARGETED_DEVICE_FAMILY: "1"    # 1 = iPhone
+    SUPPORTS_MACCATALYST: NO
+    INFOPLIST_FILE: XCAGIMobile/Resources/Info.plist
+    CODE_SIGN_ENTITLEMENTS: XCAGIMobile/Resources/XCAGIMobile.entitlements
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  # ── 企业版(默认)──
+  XCAGIMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: XCAGIMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiuci.xcagi.mobile.enterprise
+        PRODUCT_NAME: XCAGIMobile
+        APP_DISPLAY_NAME: 修茈企业
+
+  # ── 个人版(MODstore 基址;定义 PERSONAL 编译条件切换 AppConfig.sku)──
+  XCAGIMobilePersonal:
+    type: application
+    platform: iOS
+    sources:
+      - path: XCAGIMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiuci.xcagi.mobile.personal
+        PRODUCT_NAME: XCAGIMobilePersonal
+        APP_DISPLAY_NAME: 修茈个人
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: PERSONAL

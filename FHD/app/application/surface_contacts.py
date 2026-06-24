@@ -56,6 +56,9 @@ def _super_entries() -> list[dict[str, Any]]:
         meta = registry.get(emp_id)
         if not isinstance(meta, dict):
             continue
+        # 纵深防御：内部工厂角色绝不进客户/管理选人器（与 factory_employees 分离的二道闸）。
+        if assistant_ssot.is_factory_employee(emp_id):
+            continue
         out.append(
             {
                 "id": emp_id,

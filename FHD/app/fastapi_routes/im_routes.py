@@ -11,7 +11,9 @@ from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+from app.application.execution_scope import factory_context
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
+from app.application.workspaces import get_workspace_registry
 from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
@@ -19,6 +21,7 @@ from app.infrastructure.auth.dependencies import (
     require_identified_user,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
+from app.mod_sdk import assistant_ssot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -355,6 +358,10 @@ def codex_super_employee_invoke(
             return denied
         text = str(body.get("message") or body.get("body") or "").strip()
         context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        # 管理端=平台操作者：铸造工厂授权（受 XCMAX_FACTORY_CAPABILITY_TOKEN 门控，未配则降产品域）。
+        # workspace_id 可来自顶层 body 或前端 context（项目选择器）；缺省=自举项目 xcmax。
+        workspace_id = str(body.get("workspace_id") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=workspace_id, base=context)
         result = CodexSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
         return {"success": True, **result}
     except ValueError as exc:
@@ -403,6 +410,10 @@ def claude_super_employee_invoke(
             return denied
         text = str(body.get("message") or body.get("body") or "").strip()
         context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        # 管理端=平台操作者：铸造工厂授权（受 XCMAX_FACTORY_CAPABILITY_TOKEN 门控，未配则降产品域）。
+        # workspace_id 可来自顶层 body 或前端 context（项目选择器）；缺省=自举项目 xcmax。
+        workspace_id = str(body.get("workspace_id") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=workspace_id, base=context)
         result = ClaudeSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
         return {"success": True, **result}
     except ValueError as exc:
@@ -458,6 +469,77 @@ def cursor_super_employee_invoke(
     except RECOVERABLE_ERRORS as exc:
         logger.exception("cursor_super_employee_invoke")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+# ── 顶层管理端「项目工厂」控制台（闭环：选项目 → 选工厂员工 → 派工）──
+
+
+@router.get("/api/admin/factory/workspaces")
+def admin_factory_workspaces(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """列出工厂可派工的项目 Workspace（仅平台管理端可见）。"""
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        items = [
+            {
+                "id": ws.id,
+                "label": ws.label,
+                "isolation": ws.isolation,
+                "default_branch": ws.default_branch,
+                "vcs_kind": ws.vcs_kind,
+            }
+            for ws in get_workspace_registry().list()
+        ]
+        return {"success": True, "workspaces": items}
+    except RECOVERABLE_ERRORS:
+        logger.exception("admin_factory_workspaces")
+        return JSONResponse({"success": False, "message": "加载项目列表失败"}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.get("/api/admin/factory/employees")
+def admin_factory_employees(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """列出工厂版超级员工身份（仅平台管理端可见；绝不进客户选人器）。
+
+    每个工厂员工映射到底层工具的现有超级员工对话端点——管理端发消息时带
+    ``context.workspace_id`` 选项目，路由侧自动铸造工厂授权并对该 Workspace 派工。
+    """
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        tool_endpoint = {
+            "Claude": "/api/admin/claude-super-employee/messages",
+            "Codex": "/api/admin/codex-super-employee/messages",
+        }
+        items = [
+            {
+                "id": meta.get("id"),
+                "display_name": meta.get("display_name"),
+                "display_tool": meta.get("display_tool"),
+                "avatar_letter": meta.get("avatar_letter"),
+                "summary": meta.get("summary"),
+                "scope": meta.get("scope"),
+                "endpoint": tool_endpoint.get(str(meta.get("display_tool") or "")),
+            }
+            for meta in assistant_ssot.factory_employees().values()
+        ]
+        return {"success": True, "employees": items}
+    except RECOVERABLE_ERRORS:
+        logger.exception("admin_factory_employees")
+        return JSONResponse({"success": False, "message": "加载工厂员工失败"}, status_code=500)
     finally:
         db.close()
 

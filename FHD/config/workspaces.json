@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "_doc": "工厂 Workspace 注册表（SSOT）：超级员工(工厂版)派工的目标 repo。P1 自举仅 xcmax(isolation=none, 等于今天对工程根直接派工)；P2 外扩在此新增外部 repo 条目并改 isolation=worktree。由 app/application/workspaces.py 加载；仅 FACTORY 执行域可解析，PRODUCT 域永不可达（见 app/application/execution_scope.py）。",
+  "workspaces": {
+    "xcmax": {
+      "id": "xcmax",
+      "label": "XCMAX 主项目",
+      "root": "${XCMAX_REPO_ROOT}",
+      "vcs": {"kind": "git", "default_branch": "main"},
+      "isolation": "none",
+      "scope": "factory",
+      "self": true
+    }
+  }
+}
