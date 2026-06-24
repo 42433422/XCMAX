@@ -22,7 +22,9 @@ from modstore_server.llm_billing import (
     authorization_header,
     billing_settings_dict,
     calculate_charge,
+    calculate_image_charge,
     enforce_risk_limits,
+    estimate_image_preauthorization,
     estimate_preauthorization,
     get_or_create_billing_settings,
     merge_catalog_pricing,
@@ -30,6 +32,7 @@ from modstore_server.llm_billing import (
     official_markup_multiplier,
     pricing_public_dict,
     save_failure_log,
+    save_image_call_log,
     save_success_log,
     usage_from_response,
 )
@@ -1251,37 +1254,114 @@ async def llm_chat_stream(
 
 @router.post("/image")
 async def llm_image(
+    request: Request,
     body: LlmImageDTO,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
     if body.provider not in KNOWN_PROVIDERS:
         raise HTTPException(400, "unknown provider")
-    api_key, key_source = resolve_api_key(db, user.id, body.provider)
+    provider = body.provider
+    api_key, key_source = resolve_api_key(db, user.id, provider)
     if not api_key:
-        raise HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
+        raise HTTPException(
+            400,
+            f"供应商「{provider}」未配置可用 API Key（平台环境变量或 BYOK）。"
+            f"请在「资金与记录 → 大模型 API」为该厂商保存生图密钥，或切换到已配置的生图厂商。",
+        )
+    is_byok = key_source == "user_override"
     base = (
-        resolve_base_url(db, user.id, body.provider)
-        if body.provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+        resolve_base_url(db, user.id, provider)
+        if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
         else None
     )
-    result = await image_dispatch(
-        body.provider,
-        api_key=api_key,
-        base_url=base,
-        model=body.model.strip() or "gpt-image-1",
-        prompt=body.prompt.strip(),
-        size=body.size.strip() or "1024x1024",
-        n=body.n,
-    )
-    if not result.get("ok"):
-        raise HTTPException(502, result.get("error") or "image upstream error")
+    model = body.model.strip() or "gpt-image-1"
+    prompt = body.prompt.strip()
+    size = body.size.strip() or "1024x1024"
+    n = body.n
+    request_id = new_request_id()
+    # 复用对话同款风控（频次/内容），用合成消息承载提示词。
+    enforce_risk_limits(db, user.id, provider, model, [{"role": "user", "content": prompt}], request)
+
+    wallet = JavaWalletClient()
+    if is_byok:
+        # BYOK：用户自有密钥，平台不代收费用，跳过钱包预授权/结算。
+        hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
+    else:
+        preauth_amount = estimate_image_preauthorization(db, provider, model, n)
+        hold = await wallet.preauthorize(
+            authorization_header(request), preauth_amount, provider, model, request_id
+        )
+
+    charge = Decimal("0")
+    try:
+        result = await image_dispatch(
+            provider,
+            api_key=api_key,
+            base_url=base,
+            model=model,
+            prompt=prompt,
+            size=size,
+            n=n,
+        )
+        if not result.get("ok"):
+            err = result.get("error") or "image upstream error"
+            save_failure_log(
+                db,
+                user_id=user.id,
+                provider=provider,
+                model=model,
+                error=str(err),
+                hold_no=hold.hold_no,
+            )
+            raise HTTPException(502, err)
+        images = result.get("images") or []
+        billed_count = len(images) or n  # 按实际产出张数结算，无产出时回退请求张数
+        if is_byok:
+            charge = Decimal("0")
+        else:
+            charge = calculate_image_charge(db, provider, model, billed_count)
+            await wallet.settle(authorization_header(request), hold, charge, request_id)
+        save_image_call_log(
+            db,
+            user_id=user.id,
+            provider=provider,
+            model=model,
+            count=billed_count,
+            charge=charge,
+            hold_no=hold.hold_no,
+        )
+    except HTTPException as exc:
+        try:
+            await wallet.release(authorization_header(request), hold, str(exc.detail), request_id)
+        except Exception:
+            logger.exception("failed to release image wallet hold")
+        raise
+    except Exception as exc:
+        try:
+            save_failure_log(
+                db,
+                user_id=user.id,
+                provider=provider,
+                model=model,
+                error=str(exc),
+                hold_no=hold.hold_no,
+            )
+            await wallet.release(authorization_header(request), hold, str(exc), request_id)
+        except Exception:
+            logger.exception("failed to release image wallet hold after unexpected error")
+        raise
+
     return {
         "ok": True,
-        "images": result.get("images") or [],
-        "provider": body.provider,
-        "model": body.model,
+        "images": images,
+        "provider": provider,
+        "model": model,
         "key_source": key_source,
+        "charge_amount": float(charge),
+        "billed": not is_byok,
+        "hold_no": hold.hold_no,
+        "request_id": request_id,
     }
 
 

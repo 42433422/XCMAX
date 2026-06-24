@@ -35,6 +35,8 @@ DEFAULT_OUTPUT_PRICE_PER_1K = Decimal(os.environ.get("COSER_DEFAULT_OUTPUT_PRICE
 DEFAULT_MIN_CHARGE = Decimal(os.environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
 DEFAULT_PREAUTH_CHARGE = Decimal(os.environ.get("COSER_DEFAULT_PREAUTH_CHARGE", "0.05"))
 DEFAULT_SERVICE_FEE_MULTIPLIER = Decimal(os.environ.get("COSER_SERVICE_FEE_MULTIPLIER", "1.5"))
+# 图片生成默认单价（元/张）。管理员可在 ai_model_prices.price_per_image 按模型覆盖。
+DEFAULT_IMAGE_PRICE_PER_UNIT = Decimal(os.environ.get("COSER_DEFAULT_IMAGE_PRICE_PER_UNIT", "0.45"))
 
 _WINDOWS: dict[str, list[float]] = {}
 
@@ -305,6 +307,71 @@ def estimate_preauthorization(
         prompt_tokens, completion_tokens, prompt_tokens + completion_tokens, estimated=True
     )
     return money(max(calculate_charge(session, provider, model, estimated), DEFAULT_PREAUTH_CHARGE))
+
+
+def image_unit_price(session: Session, provider: str, model: str) -> Decimal:
+    """单张生图价（元/张）：优先 ai_model_prices.price_per_image，回退环境默认价。
+
+    与 token 计费不同，生图单价即用户最终单张价（管理员直接设定面向用户的价格），
+    不再叠加 service_fee_multiplier，便于「0.45/张」这类直观定价。
+    """
+    row = (
+        session.query(AiModelPrice)
+        .filter(
+            AiModelPrice.provider == provider,
+            AiModelPrice.model == model,
+            AiModelPrice.enabled == True,  # noqa: E712
+        )
+        .first()
+    )
+    if row is not None and getattr(row, "price_per_image", None) is not None:
+        return Decimal(str(row.price_per_image))
+    return DEFAULT_IMAGE_PRICE_PER_UNIT
+
+
+def calculate_image_charge(session: Session, provider: str, model: str, count: int) -> Decimal:
+    """按张计费：单价 × 张数，并以模型 min_charge 兜底。"""
+    n = max(1, int(count or 1))
+    _in, _out, min_charge = model_price(session, provider, model)
+    amount = image_unit_price(session, provider, model) * Decimal(n)
+    return money(max(amount, min_charge))
+
+
+def estimate_image_preauthorization(
+    session: Session, provider: str, model: str, count: int
+) -> Decimal:
+    """生图预授权：张数已知，按上限预授（实际结算可下调）。"""
+    return money(
+        max(calculate_image_charge(session, provider, model, count), DEFAULT_PREAUTH_CHARGE)
+    )
+
+
+def save_image_call_log(
+    session: Session,
+    *,
+    user_id: int,
+    provider: str,
+    model: str,
+    count: int,
+    charge: Decimal,
+    hold_no: str = "",
+) -> None:
+    """生图成功的用量审计（复用 LlmCallLog，token 字段记 0）。"""
+    session.add(
+        LlmCallLog(
+            user_id=user_id,
+            provider=provider,
+            model=model,
+            status="success",
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            estimated=False,
+            charge_amount=float(charge),
+            hold_no=hold_no,
+        )
+    )
+    session.commit()
 
 
 def _client_ip(request: Request | None) -> str:
