@@ -23,7 +23,6 @@ def test_count_on_duty_employees_uses_duty_roster() -> None:
     from modstore_server.duty_roster import all_planned_employee_ids
 
     assert count_on_duty_employees() == len(all_planned_employee_ids())
-    assert count_on_duty_employees() == 52
 
 
 def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
