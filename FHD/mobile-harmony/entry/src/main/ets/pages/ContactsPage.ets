@@ -1,10 +1,12 @@
-import { AiEmployeeProfile } from '../models/MobileModels';
+import { AiEmployeeProfile, FixedContactDto } from '../models/MobileModels';
 import { findEmployee } from '../state/AppDataBuilder';
 
 @Component
 export struct ContactsPage {
   @Consume selectedEmployeeKey: string;
   @Consume employees: AiEmployeeProfile[];
+  @Consume fixedTop: FixedContactDto[];
+  @Consume fixedBottom: FixedContactDto[];
 
   onStartEmployeeChat: (employeeKey: string) => void = () => {};
 
@@ -35,8 +37,9 @@ export struct ContactsPage {
           .width('100%')
           .padding({ left: 18, right: 18, top: 18 });
 
-          this.FixedContact('小C助理', '企业 AI 助手，处理搜索、问答和跨工具操作', 'C');
-          this.FixedContact('专属客服', '企业账号专属服务入口', '客');
+          ForEach(this.fixedTop, (f: FixedContactDto) => {
+            this.FixedContact(f.name, f.summary, f.avatar);
+          }, (f: FixedContactDto) => f.id);
 
           Row() {
             Text('企业端已安装 AI 员工')
@@ -58,6 +61,10 @@ export struct ContactsPage {
               this.EmployeeRow(employee);
             }, (employee: AiEmployeeProfile) => employee.key);
           }
+
+          ForEach(this.fixedBottom, (f: FixedContactDto) => {
+            this.FixedContact(f.name, f.summary, f.avatar);
+          }, (f: FixedContactDto) => f.id);
         }
         .width('100%')
         .padding({ bottom: 18 });

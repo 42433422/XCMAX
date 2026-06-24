@@ -1024,6 +1024,7 @@ class XcagiRepository @Inject constructor(
         message: String,
         conversationId: String? = null,
         sessionId: String = "default",
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -1053,14 +1054,15 @@ class XcagiRepository @Inject constructor(
                     message = message,
                     kind = relayKind,
                     conversationId = conversationId ?: "",
+                    superMode = superMode,
                     onToken = tokenSink,
                     onDone = doneSink,
                     onError = onError,
                 )
             } else when {
-                isClaude -> streamClaudeSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
+                isClaude -> streamClaudeSuperEmployeeChat(message = message, superMode = superMode, onToken = tokenSink, onDone = doneSink, onError = onError)
                 isCursor -> streamCursorSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
-                else -> streamCodexSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
+                else -> streamCodexSuperEmployeeChat(message = message, superMode = superMode, onToken = tokenSink, onDone = doneSink, onError = onError)
             }
             val finalText = finalReply.ifBlank { acc.toString() }
             if (finalText.isNotBlank()) {
@@ -1121,8 +1123,20 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    // 派工模式三态控件（自动/直答/多设备）→ 后端 context.mode 片段。
+    //   auto → 空 map：交后端 _TASK_MARKERS 关键词分类器，保持原行为
+    //   chat → 单设备 CLI 直答（relay 不剥离 chat）
+    //   code → 强制 Para 多设备派工；mode_explicit 让 relay 不再剥离该 mode
+    private fun superEmployeeModeContext(superMode: String): Map<String, Any?> =
+        when (superMode.trim().lowercase()) {
+            "chat" -> mapOf("mode" to "chat")
+            "code" -> mapOf("mode" to "code", "mode_explicit" to true)
+            else -> emptyMap()
+        }
+
     private suspend fun streamCodexSuperEmployeeChat(
         message: String,
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -1139,8 +1153,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
-                    ),
+                    ) + superEmployeeModeContext(superMode),
                 ),
             )
             if (!response.success) {
@@ -1197,6 +1210,7 @@ class XcagiRepository @Inject constructor(
     // 超级员工-Claude：与 Codex 同构（排比 Para 多设备派工），仅工具/端点不同。
     private suspend fun streamClaudeSuperEmployeeChat(
         message: String,
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -1213,8 +1227,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
-                    ),
+                    ) + superEmployeeModeContext(superMode),
                 ),
             )
             if (!response.success) {
@@ -1780,6 +1793,7 @@ class XcagiRepository @Inject constructor(
         message: String,
         kind: String = "codex.invoke",
         conversationId: String = "",
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -1800,10 +1814,11 @@ class XcagiRepository @Inject constructor(
                     kind = kind,
                     payload = mapOf(
                         "message" to message,
-                        "context" to mapOf(
-                            "source" to "mobile_chat",
-                            "client_surface" to "mobile",
-                            "mode" to "code",
+                        "context" to (
+                            mapOf(
+                                "source" to "mobile_chat",
+                                "client_surface" to "mobile",
+                            ) + superEmployeeModeContext(superMode)
                         ),
                     ),
                 ),
@@ -1973,11 +1988,12 @@ class XcagiRepository @Inject constructor(
         message: String,
         conversationId: String? = null,
         sessionId: String = "default",
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
     ) {
-        streamChat(message, conversationId, sessionId, onToken, onDone, onError)
+        streamChat(message, conversationId, sessionId, superMode, onToken, onDone, onError)
     }
 
     suspend fun loadCachedChat(sessionId: String = "default"): List<Pair<String, String>> =

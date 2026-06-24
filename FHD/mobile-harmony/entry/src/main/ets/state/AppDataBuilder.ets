@@ -6,6 +6,7 @@ import {
   DutyAreaInfo,
   DutyEmployee,
   DutyRosterData,
+  FixedContactDto,
   firstChar,
   ModInfo,
   WorkflowEmployeeInfo,
@@ -47,29 +48,60 @@ export function buildEmployees(mods: ModInfo[]): AiEmployeeProfile[] {
   return out;
 }
 
+/**
+ * 登录前/重置态的占位会话(无端信息):小C + 企业端兜底固定条目 + 动态员工。
+ * 登录后由 Index 用 composeConversations(后端按端 SSOT) 覆盖。
+ */
 export function buildConversations(employees: AiEmployeeProfile[]): ConversationSummary[] {
-  const fixed: ConversationSummary[] = [
-    {
-      id: 'assistant',
-      title: '小C助理',
-      subtitle: '企业 AI 助手，处理搜索、问答和跨工具操作',
-      badge: 'AI在线',
-      avatar: 'C',
-      source: 'fixed',
-      employeeKey: ''
-    },
-    {
-      id: 'customer-service',
-      title: '专属客服',
-      subtitle: '企业账号专属服务入口',
-      badge: '在线',
-      avatar: '客',
-      source: 'fixed',
-      employeeKey: ''
-    }
-  ];
-  const dynamic = employees.map((employee: AiEmployeeProfile): ConversationSummary => {
-    return {
+  return composeConversations(fallbackFixedTop('enterprise'), employees, []);
+}
+
+export function findEmployee(employees: AiEmployeeProfile[], key: string): AiEmployeeProfile | undefined {
+  return employees.find((item: AiEmployeeProfile) => item.key === key);
+}
+
+/** 后端固定联系人 DTO → 会话条目。 */
+export function fixedToConversation(f: FixedContactDto): ConversationSummary {
+  let badge: string = '在线';
+  if (f.kind === 'assistant') {
+    badge = 'AI在线';
+  } else if (f.kind === 'super') {
+    badge = '多设备';
+  }
+  let convId: string = `fixed:${f.id}`;
+  if (f.kind === 'assistant') {
+    convId = 'assistant';
+  } else if (f.kind === 'dedicated_cs') {
+    convId = 'customer-service';
+  } else if (f.kind === 'super') {
+    // 稳定 convId 编码工具（id 形如 codex-super-employee / claude-super-employee），
+    // 供聊天页识别"这是超级员工会话、走哪个工具"。
+    convId = f.id.toLowerCase().indexOf('claude') >= 0 ? 'super:claude' : 'super:codex';
+  }
+  return {
+    id: convId,
+    title: f.name,
+    subtitle: f.summary,
+    badge: badge,
+    avatar: f.avatar,
+    source: 'fixed',
+    employeeKey: ''
+  };
+}
+
+/**
+ * 按 surface SSOT 顺序组装会话列表：固定区(top) + 平台员工(动态) + 固定区(bottom)。
+ * top/bottom 来自后端 /contacts/fixed（已按端 gating，含超级员工）。
+ */
+export function composeConversations(
+  top: FixedContactDto[],
+  employees: AiEmployeeProfile[],
+  bottom: FixedContactDto[]
+): ConversationSummary[] {
+  const out: ConversationSummary[] = [];
+  top.forEach((f: FixedContactDto) => out.push(fixedToConversation(f)));
+  employees.forEach((employee: AiEmployeeProfile) => {
+    out.push({
       id: `employee:${employee.key}`,
       title: employee.name,
       subtitle: employee.summary,
@@ -77,13 +109,32 @@ export function buildConversations(employees: AiEmployeeProfile[]): Conversation
       avatar: employee.avatarText,
       source: employee.modName,
       employeeKey: employee.key
-    };
+    });
   });
-  return fixed.concat(dynamic);
+  bottom.forEach((f: FixedContactDto) => out.push(fixedToConversation(f)));
+  return out;
 }
 
-export function findEmployee(employees: AiEmployeeProfile[], key: string): AiEmployeeProfile | undefined {
-  return employees.find((item: AiEmployeeProfile) => item.key === key);
+/**
+ * 旧后端/拉取失败时的固定区兜底：小C助理始终在；专属客服仅企业端
+ * （管理端不显，与 surface SSOT 一致）。超级员工需后端端点提供，兜底不含。
+ */
+export function fallbackFixedTop(accountKind: string): FixedContactDto[] {
+  const top: FixedContactDto[] = [
+    {
+      id: 'assistant', kind: 'assistant', name: '小C助理',
+      summary: '企业 AI 助手，处理搜索、问答和跨工具操作',
+      avatar: 'C', route: 'assistant_chat', backend: 'assistant'
+    }
+  ];
+  if (accountKind !== 'admin') {
+    top.push({
+      id: 'dedicated_cs', kind: 'dedicated_cs', name: '专属客服',
+      summary: '企业账号专属服务入口',
+      avatar: '客', route: 'cs', backend: 'enterprise-cs'
+    });
+  }
+  return top;
 }
 
 /**
