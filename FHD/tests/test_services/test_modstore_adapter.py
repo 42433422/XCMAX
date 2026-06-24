@@ -80,10 +80,19 @@ class TestToOpenaiObject:
 
     def test_empty_dict(self):
         obj = _to_openai_object({})
-        assert isinstance(obj, SimpleNamespace)
+        # An empty dict becomes a SimpleNamespace with no attributes,
+        # which round-trips back to an empty mapping.
+        assert vars(obj) == {}
+        assert obj == SimpleNamespace()
 
     def test_empty_list(self):
         assert _to_openai_object([]) == []
+
+    def test_dict_with_list_of_scalars_preserved(self):
+        # Lists of non-dict values stay as plain values, not namespaces.
+        obj = _to_openai_object({"nums": [1, 2, 3], "name": "z"})
+        assert obj.nums == [1, 2, 3]
+        assert obj.name == "z"
 
 
 # ---------------------------------------------------------------------------
@@ -144,8 +153,8 @@ class TestPlatformStreamPayload:
     def test_json_with_choices(self):
         payload = json.dumps({"choices": [{"message": {"content": "x"}, "finish_reason": None}]})
         out = _platform_stream_payload_to_openai_chunk(payload)
-        assert out is not None
-        assert out["choices"][0]["delta"]["content"] == "x"
+        assert out["choices"][0]["delta"] == {"content": "x"}
+        assert out["choices"][0]["finish_reason"] is None
 
     def test_error_type_raises(self):
         with pytest.raises(ValueError, match="boom"):
@@ -158,20 +167,28 @@ class TestPlatformStreamPayload:
     def test_dict_with_content(self):
         payload = json.dumps({"content": "some text"})
         out = _platform_stream_payload_to_openai_chunk(payload)
-        assert out is not None
-        assert out["choices"][0]["delta"]["content"] == "some text"
+        assert out["choices"][0]["delta"] == {"content": "some text"}
+        assert out["choices"][0]["finish_reason"] is None
 
     def test_dict_with_tool_calls(self):
         payload = json.dumps({"tool_calls": [{"id": "tc1"}], "finish_reason": "stop"})
         out = _platform_stream_payload_to_openai_chunk(payload)
-        assert out is not None
-        assert out["choices"][0]["delta"]["tool_calls"] == [{"id": "tc1"}]
+        # No content, but tool_calls + finish_reason are surfaced into the delta/frame.
+        assert out["choices"][0]["delta"] == {"tool_calls": [{"id": "tc1"}]}
+        assert out["choices"][0]["finish_reason"] == "stop"
 
-    def test_dict_with_delta_field(self):
+    def test_dict_with_delta_string_used_as_content(self):
         payload = json.dumps({"delta": "delta_text"})
         out = _platform_stream_payload_to_openai_chunk(payload)
-        assert out is not None
-        assert out["choices"][0]["delta"]["content"] == "delta_text"
+        assert out["choices"][0]["delta"] == {"content": "delta_text"}
+        assert out["choices"][0]["finish_reason"] is None
+
+    def test_dict_delta_dict_is_stringified_as_content(self):
+        # NOTE: the non-choices fallback path does str(content) on raw["delta"],
+        # so a *dict* delta is coerced to its repr rather than passed through.
+        payload = json.dumps({"delta": {"content": "hi"}})
+        out = _platform_stream_payload_to_openai_chunk(payload)
+        assert out["choices"][0]["delta"]["content"] == str({"content": "hi"})
 
     def test_invalid_json_treated_as_text(self):
         out = _platform_stream_payload_to_openai_chunk("{invalid json")
@@ -181,6 +198,31 @@ class TestPlatformStreamPayload:
         payload = json.dumps({"content": ""})
         out = _platform_stream_payload_to_openai_chunk(payload)
         assert out is None
+
+    def test_dict_with_only_finish_reason_emits_empty_delta(self):
+        # A terminal frame carrying only finish_reason must still be emitted
+        # (empty delta) so the consumer can observe the stop event.
+        payload = json.dumps({"finish_reason": "stop"})
+        out = _platform_stream_payload_to_openai_chunk(payload)
+        assert out == {"choices": [{"delta": {}, "finish_reason": "stop"}]}
+
+    def test_dict_text_field_used_as_content(self):
+        out = _platform_stream_payload_to_openai_chunk(json.dumps({"text": "from-text"}))
+        assert out["choices"][0]["delta"]["content"] == "from-text"
+        assert out["choices"][0]["finish_reason"] is None
+
+    def test_json_with_choices_preserves_extra_top_level_keys(self):
+        payload = json.dumps(
+            {
+                "id": "chatcmpl-1",
+                "choices": [{"message": {"content": "x"}, "finish_reason": "stop"}],
+            }
+        )
+        out = _platform_stream_payload_to_openai_chunk(payload)
+        # Top-level metadata is spread through unchanged.
+        assert out["id"] == "chatcmpl-1"
+        assert out["choices"][0]["delta"] == {"content": "x"}
+        assert out["choices"][0]["finish_reason"] == "stop"
 
 
 # ---------------------------------------------------------------------------
@@ -263,11 +305,26 @@ class TestModstorePlatformAdapterProperties:
         adapter.platform_url = ""
         assert adapter.is_configured is False
 
-    def test_repr(self):
+    def test_repr_configured_masks_token(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com", auth_token="mytoken")
         r = repr(adapter)
         assert "ModstorePlatformAdapter" in r
-        assert "example.com" in r
+        assert "url=http://example.com" in r
+        assert "default=xiaomi/mimo-v2.5-pro" in r
+        # configured marker present, no failure marker
+        assert "✅" in r and "❌" not in r
+        # token is masked to asterisks with its length, never the raw value
+        assert "mytoken" not in r
+        assert "token=******* (7 chars)" in r
+        assert "source=unknown" in r
+
+    def test_repr_unconfigured_shows_failure_marker(self, monkeypatch):
+        monkeypatch.delenv("MODSTORE_PLATFORM_URL", raising=False)
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com")
+        adapter.platform_url = ""
+        r = repr(adapter)
+        assert "❌" in r and "✅" not in r
+        assert "token= (0 chars)" in r
 
 
 # ---------------------------------------------------------------------------
@@ -339,9 +396,13 @@ class TestNormalizeResponse:
             "model": "gpt-4",
         }
         result = adapter._normalize_response(raw, "openai", "gpt-4")
-        assert result["choices"][0]["message"]["content"] == "hi"
+        assert result["choices"][0]["message"] == {"role": "assistant", "content": "hi"}
+        assert result["choices"][0]["finish_reason"] == "stop"
+        assert result["choices"][0]["index"] == 0
+        # raw "model" wins over the provider/model fallback
         assert result["model"] == "gpt-4"
-        assert "_modstore_meta" in result
+        assert result["usage"] == {"prompt_tokens": 5, "completion_tokens": 2}
+        assert result["_modstore_meta"]["key_source"] is None
 
     def test_with_choices_and_tool_calls(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
@@ -370,8 +431,16 @@ class TestNormalizeResponse:
             "key_source": "platform",
         }
         result = adapter._normalize_response(raw, "xiaomi", "mimo")
-        assert result["choices"][0]["message"]["content"] == "hello world"
+        assert result["choices"][0]["message"] == {
+            "role": "assistant",
+            "content": "hello world",
+        }
+        assert result["choices"][0]["finish_reason"] == "stop"
+        # No raw "model" → falls back to "<provider>/<model>"
         assert result["model"] == "xiaomi/mimo"
+        # Platform metadata is surfaced into _modstore_meta.
+        assert result["_modstore_meta"]["success"] is True
+        assert result["_modstore_meta"]["key_source"] == "platform"
 
     def test_with_usage_dataclass(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
@@ -385,7 +454,10 @@ class TestNormalizeResponse:
         usage_obj = Usage()
         raw = {"content": "hi", "usage": usage_obj}
         result = adapter._normalize_response(raw, "p", "m")
-        assert "prompt_tokens" in result["usage"]
+        # The object's __dict__ is unwrapped into the usage mapping with real values.
+        assert result["usage"] == {"prompt_tokens": 5, "completion_tokens": 2}
+        assert result["choices"][0]["message"]["content"] == "hi"
+        assert result["model"] == "p/m"
 
     def test_empty_choices_list(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
@@ -437,8 +509,12 @@ class TestFromSession:
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://example.com")
         request = MagicMock()
         request.headers.get.side_effect = RuntimeError("no headers")
+        # A header-read failure must be swallowed (not propagated) and yield
+        # an unauthenticated adapter rather than crashing the request.
         adapter = ModstorePlatformAdapter.from_session(request=request)
         assert adapter.auth_token == ""
+        assert adapter._source == "env"
+        assert adapter.platform_url == "http://example.com"
 
     def test_from_session_import_error(self, monkeypatch):
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
@@ -446,19 +522,29 @@ class TestFromSession:
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://example.com")
         request = MagicMock()
         request.headers.get.return_value = ""
+        # Force the market_account import inside the session-token branch to fail.
         with patch.dict("sys.modules", {"app.fastapi_routes.market_account": None}):
             adapter = ModstorePlatformAdapter.from_session(
                 session_id="test_session", request=request
             )
-            # Should not raise, just log error
-            assert adapter is not None
+        # ImportError is swallowed: no token recovered, source stays "env",
+        # and a usable (but unauthenticated) adapter is returned.
+        assert isinstance(adapter, ModstorePlatformAdapter)
+        assert adapter.auth_token == ""
+        assert adapter._source == "env"
 
     def test_from_request_delegates_to_from_session(self, monkeypatch):
+        monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
+        monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://example.com")
         request = MagicMock()
         request.headers.get.return_value = "Bearer tok"
         adapter = ModstorePlatformAdapter.from_request(request=request)
+        # from_request must forward the request so the header token is extracted,
+        # with Bearer stripped and source marked as request-derived.
         assert isinstance(adapter, ModstorePlatformAdapter)
+        assert adapter.auth_token == "tok"
+        assert adapter._source == "request"
 
 
 # ---------------------------------------------------------------------------
@@ -472,10 +558,34 @@ class TestRefreshTokenFromSession:
         assert adapter.refresh_token_from_session() is False
 
     def test_import_error_returns_false(self, monkeypatch):
-        adapter = ModstorePlatformAdapter(platform_url="http://example.com")
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com", auth_token="old")
         with patch.dict("sys.modules", {"app.fastapi_routes.market_account": None}):
             result = adapter.refresh_token_from_session(session_id="abc")
-            assert result is False
+        assert result is False
+        # On failure the existing token must be left untouched.
+        assert adapter.auth_token == "old"
+
+    def test_refresh_success_replaces_token(self):
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com", auth_token="old")
+        fake_module = SimpleNamespace(
+            session_id_from_request=lambda request: "",
+            session_market_token=lambda sid: "fresh_token" if sid == "sess-1" else "",
+        )
+        with patch.dict("sys.modules", {"app.fastapi_routes.market_account": fake_module}):
+            result = adapter.refresh_token_from_session(session_id="sess-1")
+        assert result is True
+        assert adapter.auth_token == "fresh_token"
+
+    def test_refresh_no_token_in_session_returns_false(self):
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com", auth_token="old")
+        fake_module = SimpleNamespace(
+            session_id_from_request=lambda request: "",
+            session_market_token=lambda sid: "",  # session bound but no token
+        )
+        with patch.dict("sys.modules", {"app.fastapi_routes.market_account": fake_module}):
+            result = adapter.refresh_token_from_session(session_id="sess-1")
+        assert result is False
+        assert adapter.auth_token == "old"
 
 
 # ---------------------------------------------------------------------------
@@ -508,20 +618,40 @@ class TestChatCompletion:
 
     @pytest.mark.asyncio
     async def test_success_response(self, monkeypatch):
-        adapter = ModstorePlatformAdapter(platform_url="http://example.com")
+        adapter = ModstorePlatformAdapter(
+            platform_url="http://example.com",
+            default_provider="xiaomi",
+            default_model="mimo",
+            user_id=99,
+        )
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "content": "hello",
-            "usage": {},
+            "usage": {"total_tokens": 7},
             "success": True,
         }
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client.is_closed = False
         adapter._client = mock_client
-        result = await adapter.chat_completion([{"role": "user", "content": "hi"}])
+        result = await adapter.chat_completion(
+            [{"role": "user", "content": "hi"}], temperature=0.3, max_tokens=128
+        )
+        # Normalized OpenAI-shaped response.
         assert result["choices"][0]["message"]["content"] == "hello"
+        assert result["model"] == "xiaomi/mimo"
+        assert result["_modstore_meta"]["success"] is True
+        # The adapter POSTs to the platform chat endpoint with a fully-built payload.
+        call = mock_client.post.await_args
+        assert call.args[0] == "http://example.com/api/llm/chat"
+        sent = call.kwargs["json"]
+        assert sent["provider"] == "xiaomi"
+        assert sent["model"] == "mimo"
+        assert sent["temperature"] == 0.3
+        assert sent["max_tokens"] == 128
+        assert sent["user_id"] == 99
+        assert sent["messages"] == [{"role": "user", "content": "hi"}]
 
     @pytest.mark.asyncio
     async def test_error_status_raises(self, monkeypatch):
@@ -617,6 +747,8 @@ class TestProviderMethods:
         adapter._client = mock_client
         result = await adapter.get_available_providers()
         assert result == [{"name": "openai"}]
+        # Reads from the providers endpoint.
+        assert mock_client.get.await_args.args[0] == "http://example.com/api/llm/providers"
 
     @pytest.mark.asyncio
     async def test_get_available_providers_failure(self):
@@ -652,6 +784,30 @@ class TestProviderMethods:
         adapter._client = mock_client
         result = await adapter.get_credential_status("openai")
         assert result == {"has_key": True}
+        # The provider name is embedded in the credential-status URL.
+        assert (
+            mock_client.get.await_args.args[0]
+            == "http://example.com/api/llm/credential-status/openai"
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_credential_status_defaults_to_adapter_provider(self):
+        adapter = ModstorePlatformAdapter(
+            platform_url="http://example.com", default_provider="xiaomi"
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"has_key": False}
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.is_closed = False
+        adapter._client = mock_client
+        result = await adapter.get_credential_status()  # no provider arg
+        assert result == {"has_key": False}
+        assert (
+            mock_client.get.await_args.args[0]
+            == "http://example.com/api/llm/credential-status/xiaomi"
+        )
 
     @pytest.mark.asyncio
     async def test_get_credential_status_failure(self):
@@ -663,7 +819,8 @@ class TestProviderMethods:
         mock_client.is_closed = False
         adapter._client = mock_client
         result = await adapter.get_credential_status("unknown")
-        assert "error" in result
+        # Non-200 surfaces the HTTP status in the error payload.
+        assert result == {"error": "HTTP 404"}
 
     @pytest.mark.asyncio
     async def test_get_credential_status_exception(self):
@@ -673,7 +830,8 @@ class TestProviderMethods:
         mock_client.is_closed = False
         adapter._client = mock_client
         result = await adapter.get_credential_status("openai")
-        assert "error" in result
+        # A transport exception is captured as the error string, not re-raised.
+        assert result == {"error": "boom"}
 
 
 # ---------------------------------------------------------------------------
@@ -695,7 +853,9 @@ class TestClose:
     async def test_close_no_client(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
         adapter._client = None
-        await adapter.close()  # Should not raise
+        # Closing with no client is a no-op that leaves the slot untouched.
+        await adapter.close()
+        assert adapter._client is None
 
     @pytest.mark.asyncio
     async def test_close_already_closed(self):
@@ -719,8 +879,18 @@ class TestCreateFromEnv:
 
     def test_with_env_returns_adapter(self, monkeypatch):
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://example.com")
+        monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "envtok")
         adapter = create_modstore_adapter_from_env()
         assert isinstance(adapter, ModstorePlatformAdapter)
+        # The factory reads configuration straight from the environment.
+        assert adapter.platform_url == "http://example.com"
+        assert adapter.auth_token == "envtok"
+        assert adapter.is_configured is True
+
+    def test_blank_env_returns_none(self, monkeypatch):
+        # Whitespace-only URL is treated as unconfigured.
+        monkeypatch.setenv("MODSTORE_PLATFORM_URL", "   ")
+        assert create_modstore_adapter_from_env() is None
 
 
 # ---------------------------------------------------------------------------
@@ -730,13 +900,22 @@ class TestCreateFromEnv:
 
 class TestModstoreOpenAICompatibleClient:
     def test_init(self):
-        adapter = ModstorePlatformAdapter(platform_url="http://example.com")
+        adapter = ModstorePlatformAdapter(
+            platform_url="http://example.com",
+            default_model="gpt-4",
+            default_provider="openai",
+        )
         client = ModstoreOpenAICompatibleClient(adapter)
         assert client.adapter is adapter
-        assert hasattr(client, "chat")
-        assert hasattr(client.chat, "completions")
-        assert client.default_model == adapter.default_model
-        assert client.default_provider == adapter.default_provider
+        # The chat.completions facade is wired to the *same* adapter instance.
+        assert isinstance(client.chat, _ModstoreOpenAIChat)
+        assert isinstance(client.chat.completions, _ModstoreOpenAICompletions)
+        assert client.chat.completions._adapter is adapter
+        # default_model/provider are live properties proxied from the adapter.
+        assert client.default_model == "gpt-4"
+        assert client.default_provider == "openai"
+        adapter.default_model = "gpt-4o"
+        assert client.default_model == "gpt-4o"
 
     def test_is_modstore_openai_compatible_flag(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
@@ -759,10 +938,21 @@ class TestModstoreOpenAICompletions:
             "usage": {},
             "model": "test",
         }
-        with patch.object(adapter, "chat_completion_sync", return_value=mock_response):
+        with patch.object(adapter, "chat_completion_sync", return_value=mock_response) as mock_sync:
             completions = _ModstoreOpenAICompletions(adapter)
-            result = completions.create(messages=[{"role": "user", "content": "hi"}], stream=False)
-            assert result.choices[0].message.content == "hi"
+            result = completions.create(
+                messages=[{"role": "user", "content": "hi"}],
+                stream=False,
+                model="openai/gpt-4",
+            )
+        # The dict response is wrapped into attribute-access objects (OpenAI SDK shape).
+        assert isinstance(result, SimpleNamespace)
+        assert result.choices[0].message.content == "hi"
+        assert result.choices[0].message.role == "assistant"
+        assert result.choices[0].finish_reason == "stop"
+        assert result.model == "test"
+        # The chosen model is forwarded to the sync call.
+        assert mock_sync.call_args.kwargs["model"] == "openai/gpt-4"
 
     def test_create_stream_non_native(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MODSTORE_USE_NATIVE_STREAM", "0")
@@ -782,8 +972,48 @@ class TestModstoreOpenAICompletions:
             chunks = list(
                 completions.create(messages=[{"role": "user", "content": "hi"}], stream=True)
             )
-            assert len(chunks) == 1
-            assert chunks[0].choices[0].delta.content == "streamed"
+        # Non-native mode synthesizes exactly one stream chunk from the full response.
+        assert len(chunks) == 1
+        assert chunks[0].choices[0].delta.content == "streamed"
+        assert chunks[0].choices[0].finish_reason == "stop"
+        assert chunks[0].choices[0].index == 0
+        assert chunks[0].model == "test"
+
+    def test_create_stream_native_yields_per_payload_chunks(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_MODSTORE_USE_NATIVE_STREAM", "1")
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com")
+
+        def fake_stream(**kwargs):
+            yield "hello"
+            yield json.dumps({"content": " world", "finish_reason": "stop"})
+            yield "[DONE]"  # terminal marker → produces no chunk
+
+        with patch.object(adapter, "stream_chat_completion_sync", side_effect=fake_stream):
+            completions = _ModstoreOpenAICompletions(adapter)
+            chunks = list(
+                completions.create(messages=[{"role": "user", "content": "hi"}], stream=True)
+            )
+        # [DONE] is dropped; two content payloads become two chunks.
+        assert [c.choices[0].delta.content for c in chunks] == ["hello", " world"]
+        assert chunks[1].choices[0].finish_reason == "stop"
+
+    def test_create_stream_native_default_when_env_unset(self, monkeypatch):
+        # Default (env unset) is native streaming, so stream_chat_completion_sync is used.
+        monkeypatch.delenv("XCAGI_MODSTORE_USE_NATIVE_STREAM", raising=False)
+        adapter = ModstorePlatformAdapter(platform_url="http://example.com")
+        with (
+            patch.object(
+                adapter, "stream_chat_completion_sync", return_value=iter(["hi there"])
+            ) as native,
+            patch.object(adapter, "chat_completion_sync") as sync,
+        ):
+            completions = _ModstoreOpenAICompletions(adapter)
+            chunks = list(
+                completions.create(messages=[{"role": "user", "content": "x"}], stream=True)
+            )
+        assert native.called
+        assert sync.called is False
+        assert chunks[0].choices[0].delta.content == "hi there"
 
 
 # ---------------------------------------------------------------------------
@@ -796,8 +1026,14 @@ class TestBackwardCompat:
         assert ModstoreProxyAdapter is ModstorePlatformAdapter
 
     def test_create_modstore_openai_client_from_request(self, monkeypatch):
+        monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
+        monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://example.com")
         request = MagicMock()
         request.headers.get.return_value = "Bearer tok"
         client = create_modstore_openai_client_from_request(request)
         assert isinstance(client, ModstoreOpenAICompatibleClient)
+        # The request's Authorization header is threaded all the way into the
+        # underlying adapter (Bearer prefix stripped).
+        assert client.adapter.auth_token == "tok"
+        assert client.adapter.platform_url == "http://example.com"

@@ -77,9 +77,12 @@ class TestResolveBackend:
 # get (lines 114-125)
 # ---------------------------------------------------------------------------
 class TestGet:
-    def test_disabled_returns_none(self) -> None:
-        cache = IntentCache(backend=MagicMock(), enabled=False)
+    def test_disabled_short_circuits_before_touching_backend(self) -> None:
+        backend = MagicMock()
+        cache = IntentCache(backend=backend, enabled=False)
+        # disabled cache must return None *and* never read from the backend.
         assert cache.get("hello", "m1") is None
+        backend.get.assert_not_called()
 
     def test_empty_text_returns_none(self) -> None:
         backend = MagicMock()
@@ -89,15 +92,22 @@ class TestGet:
 
     def test_backend_none_returns_none(self) -> None:
         cache = IntentCache(backend=None, enabled=True)
-        with patch.object(cache, "_resolve_backend", return_value=None):
+        with patch.object(cache, "_resolve_backend", return_value=None) as resolve:
             assert cache.get("hello", "m1") is None
+            resolve.assert_called_once()
 
-    def test_success_returns_backend_value(self) -> None:
+    def test_success_returns_value_and_queries_normalized_tenant_key(self) -> None:
         backend = MagicMock()
         backend.get.return_value = {"intent": "x"}
-        cache = IntentCache(backend=backend, enabled=True)
-        assert cache.get("hello", "m1") == {"intent": "x"}
-        backend.get.assert_called_once()
+        cache = IntentCache(backend=backend, enabled=True, scope="intent", version="1")
+        # The exact value from the backend must pass through unchanged...
+        assert cache.get("Hello  World", "m1") == {"intent": "x"}
+        # ...and the lookup must use the normalized, version+tenant-scoped key,
+        # matching make_key so a later set()/invalidate() targets the same slot.
+        expected_key = cache.make_key("Hello  World", "m1")
+        assert expected_key == cache.make_key("hello world", "m1")  # normalization
+        backend.get.assert_called_once_with(expected_key)
+        assert expected_key.startswith("intent:v1:m1:")
 
     def test_recoverable_error_returns_none_and_observes(self) -> None:
         backend = MagicMock()
@@ -112,9 +122,11 @@ class TestGet:
 # set (lines 134-146)
 # ---------------------------------------------------------------------------
 class TestSet:
-    def test_disabled_returns_false(self) -> None:
-        cache = IntentCache(backend=MagicMock(), enabled=False)
+    def test_disabled_short_circuits_before_touching_backend(self) -> None:
+        backend = MagicMock()
+        cache = IntentCache(backend=backend, enabled=False)
         assert cache.set("hi", {"intent": "a"}) is False
+        backend.set.assert_not_called()
 
     def test_empty_text_returns_false(self) -> None:
         backend = MagicMock()
@@ -125,22 +137,37 @@ class TestSet:
     def test_none_value_returns_false(self) -> None:
         backend = MagicMock()
         cache = IntentCache(backend=backend, enabled=True)
+        # never cache an absent result, even with valid text.
         assert cache.set("hi", None) is False
         backend.set.assert_not_called()
 
     def test_backend_none_returns_false(self) -> None:
         cache = IntentCache(backend=None, enabled=True)
-        with patch.object(cache, "_resolve_backend", return_value=None):
+        with patch.object(cache, "_resolve_backend", return_value=None) as resolve:
             assert cache.set("hi", {"intent": "a"}) is False
+            resolve.assert_called_once()
 
-    def test_success_uses_default_ttl_and_returns_bool(self) -> None:
+    def test_success_writes_normalized_key_value_and_default_ttl(self) -> None:
         backend = MagicMock()
         backend.set.return_value = 1  # truthy non-bool -> coerced to True
-        cache = IntentCache(backend=backend, enabled=True, default_ttl=42)
-        result = cache.set("hi", {"intent": "a"}, mod_id="m1")
+        cache = IntentCache(backend=backend, enabled=True, default_ttl=42, scope="intent")
+        value = {"intent": "a"}
+        result = cache.set("Hi  There", value, mod_id="m1")
+        # backend.set's truthy 1 must be coerced to a real bool True.
         assert result is True
-        _, kwargs = backend.set.call_args
-        assert kwargs["ttl"] == 42
+        args, kwargs = backend.set.call_args
+        # positional: (key, value); the key is the normalized make_key.
+        assert args[0] == cache.make_key("Hi  There", "m1")
+        assert args[0].startswith("intent:v1:m1:")
+        assert args[1] == value  # value stored verbatim
+        assert kwargs["ttl"] == 42  # falls back to constructor default
+
+    def test_falsy_backend_result_coerced_to_false(self) -> None:
+        # backend.set returning 0 (e.g. nothing written) must surface as False.
+        backend = MagicMock()
+        backend.set.return_value = 0
+        cache = IntentCache(backend=backend, enabled=True)
+        assert cache.set("hi", {"intent": "a"}) is False
 
     def test_explicit_ttl_overrides_default(self) -> None:
         backend = MagicMock()
@@ -163,6 +190,63 @@ class TestSet:
 # get_or_compute — set backfill failure (lines 196-198)
 # ---------------------------------------------------------------------------
 class TestGetOrComputeBackfillError:
+    def test_disabled_bypasses_cache_and_calls_compute(self) -> None:
+        backend = MagicMock()
+        cache = IntentCache(backend=backend, enabled=False)
+        compute = MagicMock(return_value={"intent": "create", "confidence": 0.9})
+        out = cache.get_or_compute(text="hi", compute_fn=compute)
+        assert out == {"intent": "create", "confidence": 0.9}
+        compute.assert_called_once()
+        # disabled: neither read nor write the backend.
+        backend.get.assert_not_called()
+        backend.set.assert_not_called()
+
+    def test_cache_hit_returns_cached_without_computing(self) -> None:
+        backend = MagicMock()
+        cached_value = {"intent": "create", "confidence": 0.99}
+        backend.get.return_value = cached_value
+        cache = IntentCache(backend=backend, enabled=True, scope="intent")
+        compute = MagicMock()
+        with patch(f"{MODPATH}._observe_hit") as hit:
+            out = cache.get_or_compute(text="hi", mod_id="m1", compute_fn=compute)
+        assert out is cached_value
+        compute.assert_not_called()  # hit means compute_fn is skipped entirely
+        backend.set.assert_not_called()  # no backfill on a hit
+        hit.assert_called_once_with("intent", "m1")
+
+    def test_miss_computes_observes_and_backfills_good_result(self) -> None:
+        backend = MagicMock()
+        backend.get.return_value = None  # miss
+        cache = IntentCache(backend=backend, enabled=True, scope="intent", default_ttl=300)
+        result = {"intent": "create", "confidence": 0.8}
+        compute = MagicMock(return_value=result)
+        with patch(f"{MODPATH}._observe_miss") as miss:
+            out = cache.get_or_compute(text="hi", mod_id="m1", compute_fn=compute)
+        assert out == result
+        compute.assert_called_once()
+        # a good result is backfilled at the right key with the default ttl.
+        args, kwargs = backend.set.call_args
+        assert args[0] == cache.make_key("hi", "m1")
+        assert args[1] == result
+        assert kwargs["ttl"] == 300
+        # miss is observed with (scope, mod_id, elapsed_seconds>=0).
+        (m_scope, m_mod, m_elapsed), _ = miss.call_args
+        assert (m_scope, m_mod) == ("intent", "m1")
+        assert m_elapsed >= 0
+
+    def test_custom_should_cache_predicate_blocks_backfill(self) -> None:
+        backend = MagicMock()
+        backend.get.return_value = None
+        cache = IntentCache(backend=backend, enabled=True)
+        result = {"intent": "create", "confidence": 0.9}
+        out = cache.get_or_compute(
+            text="hi",
+            compute_fn=lambda: result,
+            should_cache=lambda _r: False,  # caller vetoes caching
+        )
+        assert out == result
+        backend.set.assert_not_called()
+
     def test_backfill_set_error_is_swallowed_and_result_returned(self) -> None:
         backend = MagicMock()
         backend.get.return_value = None  # miss
@@ -206,8 +290,9 @@ class TestGetOrComputeBackfillError:
 class TestInvalidate:
     def test_backend_none_no_op(self) -> None:
         cache = IntentCache(backend=None, enabled=True)
-        with patch.object(cache, "_resolve_backend", return_value=None):
+        with patch.object(cache, "_resolve_backend", return_value=None) as resolve:
             assert cache.invalidate("hi", "m1") is None
+            resolve.assert_called_once()
 
     def test_empty_text_no_op(self) -> None:
         backend = MagicMock()
@@ -215,19 +300,22 @@ class TestInvalidate:
         assert cache.invalidate("", "m1") is None
         backend.delete.assert_not_called()
 
-    def test_success_deletes_key(self) -> None:
+    def test_success_deletes_same_key_set_would_write(self) -> None:
         backend = MagicMock()
-        cache = IntentCache(backend=backend, enabled=True)
+        cache = IntentCache(backend=backend, enabled=True, scope="intent")
+        # invalidate must target the identical key make_key/set produce, so a
+        # later read genuinely misses; normalization is applied here too.
         expected_key = cache.make_key("hi", "m1")
-        cache.invalidate("hi", "m1")
+        cache.invalidate("Hi", "m1")  # different casing -> same normalized key
         backend.delete.assert_called_once_with(expected_key)
 
-    def test_recoverable_error_swallowed(self) -> None:
+    def test_recoverable_error_attempts_delete_then_swallows(self) -> None:
         backend = MagicMock()
         backend.delete.side_effect = TimeoutError("redis timeout")
         cache = IntentCache(backend=backend, enabled=True)
-        # must not raise
+        # the delete is attempted (not skipped) but the error never propagates.
         assert cache.invalidate("hi", "m1") is None
+        backend.delete.assert_called_once_with(cache.make_key("hi", "m1"))
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +336,16 @@ class TestDefaultShouldCacheIntent:
 
     def test_negative_confidence_not_cached(self) -> None:
         assert _default_should_cache_intent({"intent": "go", "confidence": -1}) is False
+
+    def test_missing_confidence_key_treated_as_zero_not_cached(self) -> None:
+        # ``result.get("confidence") or 0`` -> 0 -> float(0) <= 0 -> not cached,
+        # even though the intent itself is valid.
+        assert _default_should_cache_intent({"intent": "go"}) is False
+
+    def test_string_confidence_is_coerced_via_float(self) -> None:
+        # confidence may arrive as a numeric string; float() coercion gates it.
+        assert _default_should_cache_intent({"intent": "go", "confidence": "0.7"}) is True
+        assert _default_should_cache_intent({"intent": "go", "confidence": "0"}) is False
 
     def test_good_dict_cached(self) -> None:
         assert _default_should_cache_intent({"intent": "go", "confidence": 0.9}) is True
@@ -332,10 +430,12 @@ class TestObserveHelpers:
         labeled.inc.assert_called_once()
 
     def test_observe_hit_default_mod_id_global(self) -> None:
-        counter = MagicMock(labels=MagicMock(return_value=MagicMock()))
+        labeled = MagicMock()
+        counter = MagicMock(labels=MagicMock(return_value=labeled))
         with patch(f"{self.METRICS}.intent_cache_hits_total", counter):
-            _observe_hit("intent", None)
+            _observe_hit("intent", None)  # mod_id None -> "_global"
         counter.labels.assert_called_once_with(scope="intent", mod_id="_global")
+        labeled.inc.assert_called_once()
 
     def test_observe_hit_swallows_error(self) -> None:
         # a recoverable error raised while emitting must not propagate.
