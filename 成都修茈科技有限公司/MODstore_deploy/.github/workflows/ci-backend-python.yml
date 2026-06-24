@@ -71,7 +71,7 @@ jobs:
 
       - name: Run mypy type checking
         run: |
-          pip install mypy types-redis types-requests types-pyyaml types-paramiko types-python-dotenv types-passlib types-psutil types-pytz
+          pip install mypy types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
           pip install -e ../../../packages/xcagi_common
           mypy --no-error-summary
 
