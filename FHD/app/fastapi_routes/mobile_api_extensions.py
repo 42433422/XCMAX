@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.execution_scope import factory_context
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _admin_employee_match_keys,
@@ -1241,6 +1242,13 @@ async def mobile_admin_codex_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
+    # 仅平台管理账号铸造工厂授权；企业(客户)账号一律产品域（此路由 admin/enterprise 共用）。
+    if (
+        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        == "admin"
+    ):
+        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=_wsid, base=context)
     try:
         result = CodexSuperEmployeeService().invoke(
             user_id=uid,
@@ -1309,6 +1317,13 @@ async def mobile_admin_claude_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
+    # 仅平台管理账号铸造工厂授权；企业(客户)账号一律产品域（此路由 admin/enterprise 共用）。
+    if (
+        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        == "admin"
+    ):
+        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=_wsid, base=context)
     try:
         result = ClaudeSuperEmployeeService().invoke(
             user_id=uid,

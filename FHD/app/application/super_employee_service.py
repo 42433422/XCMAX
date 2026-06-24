@@ -29,6 +29,12 @@ from typing import Any
 
 import httpx
 
+from app.application.execution_scope import (
+    CONTEXT_TOKEN_KEY,
+    FACTORY_TOKEN_ENV,
+    CapabilityGrant,
+)
+from app.application.workspaces import WorkspaceError, get_workspace_registry
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
@@ -215,6 +221,9 @@ class SuperEmployeeService:
         self._outbox_dir.mkdir(parents=True, exist_ok=True)
         self._http_client_factory = http_client_factory or self._default_http_client
         self._cli_runner = cli_runner or subprocess.run
+        # 执行授权（deny-by-default）。每个 Service 实例按请求新建（见路由），无跨请求竞态；
+        # 默认产品域，invoke() 里据 context 重解析。任何绕过 invoke 的路径也仍是安全档。
+        self._grant = CapabilityGrant.product()
 
     # ── 公开 API ──
 
@@ -243,6 +252,25 @@ class SuperEmployeeService:
         if not text:
             raise ValueError("message 不能为空")
         ctx = context if isinstance(context, dict) else {}
+        # 解析执行授权（deny-by-default：缺/错平台令牌即产品域），随后立即把令牌抹出 context，
+        # 确保它绝不流入 dispatch 请求 / messages.jsonl / Para 载荷 / 日志。
+        self._grant = CapabilityGrant.resolve(ctx)
+        token_attempt = bool(str(ctx.get(CONTEXT_TOKEN_KEY) or "").strip())
+        ctx.pop(CONTEXT_TOKEN_KEY, None)
+        # 审计留痕（信任决策咽喉点）：工厂派工记 who/which-workspace；带令牌却被降级=可疑越权。
+        if self._grant.is_factory:
+            logger.info(
+                "super_employee factory dispatch user=%s workspace=%s tool=%s",
+                user_id,
+                self._grant.workspace_id,
+                self._p.tool_name,
+            )
+        elif token_attempt:
+            logger.warning(
+                "super_employee factory token rejected, downgraded to product user=%s tool=%s",
+                user_id,
+                self._p.tool_name,
+            )
         request_id = uuid.uuid4().hex
         created_at = _utc_now()
         user_msg = self._message_row(
@@ -341,6 +369,8 @@ class SuperEmployeeService:
                 "task_id": str(dispatch.get("task_id") or ""),
                 "task_status": str(dispatch.get("task_status") or ""),
                 "dispatcher": str(dispatch.get("dispatcher") or ""),
+                "scope": self._grant.scope.value,
+                "workspace_id": self._grant.workspace_id or "",
                 "devices": dispatch.get("devices")
                 if isinstance(dispatch.get("devices"), list)
                 else [],
@@ -370,13 +400,11 @@ class SuperEmployeeService:
         message: str,
         context: dict[str, Any],
     ) -> dict[str, Any]:
-        workspace_root = str(
-            context.get("workspace_root")
-            or os.environ.get(f"{self._p.env_tool_prefix}_WORKSPACE_ROOT")
-            or os.environ.get("MODSTORE_PARA_WORKSPACE_ROOT")
-            or os.environ.get("MODSTORE_REPO_ROOT")
-            or ""
-        ).strip()
+        # 工作区只在工厂域解析为真实工程路径；产品域绝不向派工/远端设备暴露服务端 repo 路径。
+        if self._grant.is_factory:
+            workspace_root = self._factory_workspace_root()
+        else:
+            workspace_root = ""
         raw_source = str(context.get("source") or "admin_im").strip().lower()
         source = "xcagi_mobile_im" if raw_source.startswith("mobile") else "xcagi_admin_im"
         return {
@@ -395,7 +423,10 @@ class SuperEmployeeService:
             "task": message,
             "prompt": message,
             "workspace_root": workspace_root,
-            "raw_context": context,
+            "scope": self._grant.scope.value,
+            "workspace_id": self._grant.workspace_id or "",
+            # 纵深防御：无论调用方是否经 invoke 抹除，平台令牌都不得进派工/持久化载荷。
+            "raw_context": {k: v for k, v in context.items() if k != CONTEXT_TOKEN_KEY},
         }
 
     def _dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -1121,6 +1152,29 @@ class SuperEmployeeService:
             os.environ.get("DEVFLEET_CLAUDE_PERMISSION_MODE") or "acceptEdits"
         ).strip() or "acceptEdits"
 
+    def _apply_scope_to_cmd(self, cmd: list[str]) -> list[str]:
+        """信任墙第 4 层（纵深防御）：产品域收紧 claude 的工具面。
+
+        把 ``--permission-mode`` 降到 ``default`` 并显式禁用写/执行类工具，使被注入的产品域
+        会话即便被诱导喊 git/shell，那些工具也压根没注册 → 硬失败而非软拒绝。工厂域不动；
+        codex 命令构造默认已是 ``--sandbox read-only``，此处不改。
+        """
+        if self._grant.is_factory or self._p.cli_binary != "claude" or not cmd:
+            return cmd
+        out: list[str] = []
+        i = 0
+        while i < len(cmd):
+            if cmd[i] == "--permission-mode" and i + 1 < len(cmd):
+                out += ["--permission-mode", "default"]
+                i += 2
+                continue
+            out.append(cmd[i])
+            i += 1
+        if "--disallowedTools" not in out:
+            prompt = out.pop()  # prompt 恒为末位参数
+            out += ["--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit", prompt]
+        return out
+
     def _conversation_cmd(
         self, cli_path: str, prompt: str, resume_session_id: str | None
     ) -> list[str]:
@@ -1136,7 +1190,7 @@ class SuperEmployeeService:
         if resume_session_id:
             cmd += ["--resume", resume_session_id]
         cmd.append(prompt)
-        return cmd
+        return self._apply_scope_to_cmd(cmd)
 
     def _run_conversation_turn(self, cli_path: str, text: str, context: dict[str, Any]) -> str:
         key = self._session_key(context)
@@ -1195,7 +1249,9 @@ class SuperEmployeeService:
         hard_cap = self._cli_hard_cap_seconds()
         with tempfile.TemporaryDirectory(prefix=f"xcagi-{self._p.tool_name}-cli-") as tmp:
             output_path = Path(tmp) / "last_message.txt"
-            cmd = self._p.cli_command_builder(cli_path, prompt, output_path, cwd)
+            cmd = self._apply_scope_to_cmd(
+                self._p.cli_command_builder(cli_path, prompt, output_path, cwd)
+            )
             # 注入式 runner(测试)走简单路径；生产用 idle-timeout：只要还在产出就不杀，
             # 仅"持续静默"(卡死/挂起)或超绝对上限才结束。
             if self._cli_runner is not subprocess.run:
@@ -1264,20 +1320,53 @@ class SuperEmployeeService:
         return ""
 
     def _cli_workspace(self, context: dict[str, Any]) -> str:
-        candidate = str(
-            context.get("workspace_root")
-            or os.environ.get(f"{self._p.env_tool_prefix}_WORKSPACE_ROOT")
-            or os.environ.get("MODSTORE_REPO_ROOT")
-            or ""
-        ).strip()
-        if candidate and Path(candidate).exists():
+        """解析本地 CLI 的工作目录，按执行域分流（信任墙第 3 层：工作区层）。
+
+        - 工厂域：经 Workspace 注册表解析（含 P2 的 worktree 隔离）。
+        - 产品域：**绝不**落到服务端工程树；优先客户显式提供的本机路径（且不得指向服务端
+          repo），否则退到本档隔离的临时区。这堵死了"把 workspace_root 指向你服务器"的注入。
+        """
+        if self._grant.is_factory:
+            try:
+                reg = get_workspace_registry()
+                ws = reg.get(self._grant.workspace_id)
+                return str(reg.checkout(ws, task_id=str(context.get("request_id") or "task")))
+            except WorkspaceError:
+                return str(get_workspace_registry().get(None).root)
+        candidate = str((context or {}).get("workspace_root") or "").strip()
+        if (
+            candidate
+            and Path(candidate).exists()
+            and not self._is_server_repo_path(Path(candidate))
+        ):
             return candidate
-        # 默认根=包含 FHD 的工程根（如 ~/Desktop/XCMAX），让超级员工覆盖整个工程而非仅 FHD 子目录。
-        here = Path(__file__).resolve()
-        for parent in here.parents:
-            if parent.name == "FHD":
-                return str(parent.parent)
-        return str(here.parents[3])
+        return self._product_ephemeral_workspace()
+
+    def _factory_workspace_root(self) -> str:
+        """工厂派工请求里写给远端设备的工作区根路径（不含 worktree 隔离，远端自理）。"""
+        try:
+            return str(get_workspace_registry().get(self._grant.workspace_id).root)
+        except WorkspaceError:
+            return ""
+
+    def _is_server_repo_path(self, path: Path) -> bool:
+        """该路径是否落在 XCMAX 服务端工程树内（=工厂领地，产品域禁入）。"""
+        try:
+            root = get_workspace_registry().get(None).root.resolve()
+            resolved = path.resolve()
+            return resolved == root or root in resolved.parents
+        except (OSError, WorkspaceError):
+            return False
+
+    def _product_ephemeral_workspace(self) -> str:
+        """产品域 CLI 的隔离临时工作目录。
+
+        放在系统临时区（而非 app data / 存储根），保证开发态与生产态都**在任何工程树之外**
+        —— 规避 ``get_app_data_dir()`` 在源码运行时回落到 FHD 仓库根的已知陷阱。
+        """
+        base = Path(tempfile.gettempdir()) / "xcmax_product_scratch" / self._p.storage_subdir
+        base.mkdir(parents=True, exist_ok=True)
+        return str(base)
 
     def _cli_timeout_seconds(self) -> float:
         """Backward-compat alias for _cli_idle_timeout_seconds (used by tests)."""
@@ -1305,22 +1394,38 @@ class SuperEmployeeService:
             return 3600.0
 
     def _cli_subprocess_env(self) -> dict[str, str] | None:
-        """给 CLI 子进程注入代理。差异化代理：FHD 本身直连自有云端 xiu-ci.com（代理会断 SSL），
-        但 claude/codex 调 api.anthropic.com 等需走代理（直连被 403 拦）。
-        仅当 XCMAX_CLI_PROXY 设了才注入；否则返回 None（继承当前环境，行为不变）。"""
+        """构造 CLI 子进程环境。两件事：
+
+        1. 差异化代理：FHD 直连自有云端 xiu-ci.com（代理会断 SSL），但 claude/codex 调
+           api.anthropic.com 等需走代理（直连被 403）。仅当 XCMAX_CLI_PROXY 设了才注入。
+        2. 信任墙第 2 层：**产品域**剥掉平台工厂令牌与 git 凭证，客户驱动的子进程永远拿不到
+           平台机密（防被注入后偷令牌/推代码）。
+
+        工厂域且无代理：返回 None（继承当前环境，与历史行为一致，零回归）。
+        """
         proxy = str(os.environ.get("XCMAX_CLI_PROXY") or "").strip()
-        if not proxy:
+        product = not self._grant.is_factory
+        if not proxy and not product:
             return None
         env = os.environ.copy()
-        for k in (
-            "HTTP_PROXY",
-            "HTTPS_PROXY",
-            "ALL_PROXY",
-            "http_proxy",
-            "https_proxy",
-            "all_proxy",
-        ):
-            env[k] = proxy
+        if proxy:
+            for k in (
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+            ):
+                env[k] = proxy
+        if product:
+            for k in list(env.keys()):
+                if (
+                    k == FACTORY_TOKEN_ENV
+                    or k.startswith("XCMAX_FACTORY")
+                    or k in ("GITHUB_TOKEN", "GH_TOKEN", "GIT_ASKPASS", "GIT_TOKEN")
+                ):
+                    env.pop(k, None)
         return env
 
     def _run_cli_idle(

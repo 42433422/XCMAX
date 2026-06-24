@@ -84,6 +84,29 @@
       "summary": "Codex 超级员工 · 多设备派工"
     }
   },
+  "factory_employees": {
+    "_doc": "工厂版超级员工(2级·scope=factory·visibility=internal)身份真相源。与客户面 super_employees 完全分离：只对项目 Workspace 派工、平台计费、仅出现在顶层管理端「项目工厂」控制台，绝不进任何客户/管理选人器(surfaces)。运行经 super_employee_service + execution_scope 的 FACTORY 授权(需 XCMAX_FACTORY_CAPABILITY_TOKEN)。",
+    "claude-factory-employee": {
+      "id": "claude-factory-employee",
+      "tier": "super",
+      "scope": "factory",
+      "visibility": "internal",
+      "display_name": "工厂员工-Claude",
+      "display_tool": "Claude",
+      "avatar_letter": "厂",
+      "summary": "Claude 工厂版 · 对 Workspace 派工 · 平台计费"
+    },
+    "codex-factory-employee": {
+      "id": "codex-factory-employee",
+      "tier": "super",
+      "scope": "factory",
+      "visibility": "internal",
+      "display_name": "工厂员工-Codex",
+      "display_tool": "Codex",
+      "avatar_letter": "厂",
+      "summary": "Codex 工厂版 · 对 Workspace 派工 · 平台计费"
+    }
+  },
   "contact_kinds": {
     "_doc": "桌面端/手机端联系人页里可出现的条目种类。surfaces 块按(端×设备)引用这些 id。",
     "assistant": {

@@ -127,6 +127,12 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       meta: { title: '智脑集成' },
     },
     {
+      path: '/project-factory',
+      name: 'project-factory',
+      component: () => import('../views/ProjectFactoryView.vue'),
+      meta: { title: '项目工厂' },
+    },
+    {
       path: '/model-payment',
       name: 'model-payment',
       redirect: { name: 'settings', query: { section: 'model-payment' } },
