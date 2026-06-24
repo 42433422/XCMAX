@@ -1,18 +1,26 @@
-"""Targeted branch-coverage tests for app.db.init_db.
+"""Behavioral tests for app.db.init_db schema-bootstrap / column-ensure helpers.
 
-Focus: the still-uncovered *error / fallback* paths of the ``ensure_*`` column
-helpers and the ``init_*`` table helpers — specifically:
+These exercise the ``ensure_*`` column helpers, the ``init_*`` table helpers, the
+engine-resolution branches (``_create_engine_for_url`` / ``_get_engine`` /
+``_resolve_auth_bootstrap_engine``) and the trailing ``except RECOVERABLE_ERRORS``
+swallow paths.
 
-* the ``_create_engine_for_url`` failure branch (logs a warning, engine stays None),
-* the no-url / no-engine ``_get_engine`` fallback (raises a recoverable error → return),
-* the trailing ``except RECOVERABLE_ERRORS`` warning branch around the DDL block,
-* ``ensure_neuro_event_log_bootstrap`` (untested), ``ensure_sqlite_enterprise_business_bootstrap``
-  swallow=False re-raise, ``init_im_tables`` engine resolution, ``ensure_product_query_indexes``
-  inspect failure + per-stmt failure, and ``init_persona_tables`` create_all failure.
+Design principles (behavioral, not smoke):
 
-All DB/engine access is mocked — nothing connects to a real database. Functions
-import ``_create_engine_for_url`` / ``_get_engine`` from ``app.db`` *inside their
-bodies*, so we patch the attributes on the ``app.db`` module (the real import site).
+* **Success paths use a real in-memory SQLite engine** and assert the *exact*
+  resulting schema (column names + the concrete ``DEFAULT`` values the ALTER
+  statements stamp onto existing rows). The observable behavior under test is the
+  DDL the helper emits — we read it back from the real database.
+* **Swallow paths use a real engine pointed at an unwritable path** so a genuine
+  ``sqlite3.OperationalError`` (a member of ``RECOVERABLE_ERRORS``) is raised by
+  the real driver — not a mocked ``inspect``/``begin``. We assert the helper
+  returns ``None`` without propagating, and (where the helper exposes
+  ``swallow_errors``) that ``swallow_errors=False`` re-raises the *same* real error.
+* Engine-resolution branches are the only place we mock ``app.db._create_engine_for_url``
+  / ``app.db._get_engine`` — that is the genuine external "where do I get an engine"
+  dependency. We still assert on the *resulting schema*, not on the mock.
+
+Nothing connects to a real server database; everything is in-memory SQLite.
 """
 
 from __future__ import annotations
@@ -21,36 +29,86 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+# A path under a directory that does not exist -> sqlite3 "unable to open
+# database file" the moment any connection is attempted. This drives the real
+# RECOVERABLE_ERRORS swallow branch without mocking inspect()/begin().
+_UNWRITABLE_URL = "sqlite:////nonexistent_dir_init_db_cov90/db.sqlite"
 
 
-def _sqlite_engine_with_sessions(extra_cols: str = "") -> object:
-    """Real in-memory SQLite engine with a minimal ``sessions`` table."""
+def _broken_engine() -> object:
+    """Real engine whose every connection attempt raises OperationalError."""
+    return create_engine(_UNWRITABLE_URL)
+
+
+def _sqlite_engine_with_sessions() -> object:
+    """Real in-memory SQLite engine with a minimal (legacy) ``sessions`` table."""
     eng = create_engine("sqlite:///:memory:")
     with eng.begin() as conn:
         conn.execute(
             text(
-                f"""
+                """
                 CREATE TABLE sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id VARCHAR NOT NULL,
                     user_id INTEGER NOT NULL,
-                    expires_at TIMESTAMP NOT NULL{extra_cols}
+                    expires_at TIMESTAMP NOT NULL
                 )
                 """
+            )
+        )
+        # one row, so DEFAULT clauses on added columns are observable.
+        conn.execute(
+            text(
+                "INSERT INTO sessions (session_id, user_id, expires_at) "
+                "VALUES ('s1', 1, '2020-01-01')"
             )
         )
     return eng
 
 
+def _sqlite_engine_with_users() -> object:
+    eng = create_engine("sqlite:///:memory:")
+    with eng.begin() as conn:
+        conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR)"))
+        conn.execute(text("INSERT INTO users (username) VALUES ('alice')"))
+    return eng
+
+
+def _columns(eng: object, table: str) -> set[str]:
+    with eng.connect() as conn:  # type: ignore[attr-defined]
+        return {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+
+
+def _table_names(eng: object) -> set[str]:
+    with eng.connect() as conn:  # type: ignore[attr-defined]
+        return {
+            row[0]
+            for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+        }
+
+
+def _index_names(eng: object) -> set[str]:
+    with eng.connect() as conn:  # type: ignore[attr-defined]
+        return {
+            row[0]
+            for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='index'"))
+        }
+
+
 # ===========================================================================
-# _create_engine_for_url failure branch  (url given but engine creation raises)
-# Then no engine arg + _get_engine fallback also raises -> early return.
+# _create_engine_for_url failure -> _get_engine fallback also raises -> return
 # ===========================================================================
 
 
 class TestCreateEngineFailureFallbacks:
-    """When DATABASE_URL is given but _create_engine_for_url raises, and no engine
-    arg is supplied and _get_engine() also raises, the helper returns silently."""
+    """url given but _create_engine_for_url raises, no engine arg, and _get_engine
+    also raises -> the helper returns None silently (recoverable-error fallback)."""
 
     @pytest.mark.parametrize(
         "func_name",
@@ -63,7 +121,7 @@ class TestCreateEngineFailureFallbacks:
             "ensure_user_profile_columns",
         ],
     )
-    def test_create_engine_error_then_get_engine_fallback_returns(self, func_name):
+    def test_create_engine_error_then_get_engine_fallback_returns_none(self, func_name):
         import app.db.init_db as init_db
 
         func = getattr(init_db, func_name)
@@ -72,288 +130,337 @@ class TestCreateEngineFailureFallbacks:
             patch("app.db._create_engine_for_url", side_effect=RuntimeError("bad url")),
             patch("app.db._get_engine", get_engine_mock),
         ):
-            # url is non-empty -> _create_engine_for_url branch runs and fails (logs);
-            # engine is None -> falls through to _get_engine which raises a recoverable
-            # error -> function returns None without raising.
             result = func(None, database_url="postgresql://bad")
+
+        # contract: no engine resolvable -> silent None return, no propagation.
         assert result is None
-        # confirms the no-engine fallback path was actually reached
+        # the no-engine fallback was actually reached (it raised -> early return).
         get_engine_mock.assert_called_once()
 
 
 # ===========================================================================
-# ensure_sessions_market_refresh_token_column — trailing except branch
+# ensure_sessions_market_refresh_token_column
 # ===========================================================================
 
 
 class TestMarketRefreshTokenColumn:
-    def test_alter_failure_swallowed(self):
-        """ALTER raises a recoverable error -> warning logged, no raise (1253-1254)."""
+    def test_adds_refresh_token_column_via_database_url(self):
+        """url branch -> _create_engine_for_url(url) -> column actually appended."""
+        from app.db.init_db import ensure_sessions_market_refresh_token_column
+
+        eng = _sqlite_engine_with_sessions()
+        with patch("app.db._create_engine_for_url", return_value=eng) as mock_create:
+            ensure_sessions_market_refresh_token_column(None, database_url="sqlite:///x")
+
+        mock_create.assert_called_once_with("sqlite:///x")
+        assert "market_refresh_token" in _columns(eng, "sessions")
+
+    def test_idempotent_when_column_present(self):
+        """Column already present -> early return, table left exactly as-is."""
+        from app.db.init_db import ensure_sessions_market_refresh_token_column
+
+        eng = _sqlite_engine_with_sessions()
+        with eng.begin() as conn:
+            conn.execute(text("ALTER TABLE sessions ADD COLUMN market_refresh_token TEXT"))
+        before = _columns(eng, "sessions")
+
+        ensure_sessions_market_refresh_token_column(eng)
+
+        assert _columns(eng, "sessions") == before  # unchanged
+
+    def test_no_sessions_table_returns_without_creating(self):
+        """sessions table absent -> early return, nothing created."""
+        from app.db.init_db import ensure_sessions_market_refresh_token_column
+
+        eng = create_engine("sqlite:///:memory:")  # empty db, no sessions table
+        ensure_sessions_market_refresh_token_column(eng)
+        assert "sessions" not in _table_names(eng)
+
+    def test_alter_failure_emits_correct_ddl_then_swallows(self):
+        """ALTER raises recoverable error -> the correct DDL was attempted, then swallowed."""
         from app.db.init_db import ensure_sessions_market_refresh_token_column
 
         eng = MagicMock()
         eng.dialect.name = "sqlite"
-        eng.begin.side_effect = RuntimeError("alter boom")
+        captured: list[str] = []
+        conn = eng.begin.return_value.__enter__.return_value
+
+        def _exec(stmt, *a, **k):
+            captured.append(str(stmt))
+            raise OperationalError("ALTER", {}, Exception("alter boom"))
+
+        conn.execute.side_effect = _exec
         insp = MagicMock()
         insp.get_table_names.return_value = ["sessions"]
-        insp.get_columns.return_value = [{"name": "id"}]  # column missing -> enter ALTER
+        insp.get_columns.return_value = [{"name": "id"}]  # column missing -> ALTER
 
         with (
             patch("app.db._create_engine_for_url", return_value=eng),
             patch("sqlalchemy.inspect", return_value=insp),
         ):
-            ensure_sessions_market_refresh_token_column(None, database_url="sqlite:///x")
-        eng.begin.assert_called_once()
+            result = ensure_sessions_market_refresh_token_column(None, database_url="sqlite:///x")
+
+        # behavior under test: the exact DDL the helper generates, and the swallow.
+        assert captured == ["ALTER TABLE sessions ADD COLUMN market_refresh_token TEXT"]
+        assert result is None
 
 
 # ===========================================================================
-# ensure_sessions_enterprise_entitlement_columns — _get_engine fallback success
-# + trailing except branch
+# ensure_sessions_enterprise_entitlement_columns
 # ===========================================================================
 
 
 class TestEnterpriseEntitlementColumns:
-    def test_get_engine_fallback_used_when_no_url_no_engine(self):
-        """No url + no engine -> _get_engine() supplies a real engine (1280-1285)."""
+    def test_get_engine_fallback_adds_exact_columns(self):
+        """No url + no engine -> _get_engine() supplies the engine; two columns added."""
         from app.db.init_db import ensure_sessions_enterprise_entitlement_columns
 
         eng = _sqlite_engine_with_sessions()
-        with patch("app.db._get_engine", return_value=eng):
+        with patch("app.db._get_engine", return_value=eng) as mock_get:
             ensure_sessions_enterprise_entitlement_columns(None, database_url=None)
-        with eng.connect() as conn:
-            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(sessions)"))}
-        assert "market_user_id" in cols
-        assert "entitled_mod_ids_json" in cols
 
-    def test_inspect_failure_swallowed(self):
-        """inspect raises recoverable error -> warning, no raise (1313-1314)."""
+        mock_get.assert_called_once()
+        cols = _columns(eng, "sessions")
+        assert {"market_user_id", "entitled_mod_ids_json"}.issubset(cols)
+
+    def test_only_missing_column_added(self):
+        """One of the two columns already present -> only the other is appended."""
         from app.db.init_db import ensure_sessions_enterprise_entitlement_columns
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        with (
-            patch("app.db._create_engine_for_url", return_value=eng),
-            patch("sqlalchemy.inspect", side_effect=OSError("disk gone")),
-        ):
-            ensure_sessions_enterprise_entitlement_columns(None, database_url="sqlite:///x")
-        eng.begin.assert_not_called()
+        eng = _sqlite_engine_with_sessions()
+        with eng.begin() as conn:
+            conn.execute(text("ALTER TABLE sessions ADD COLUMN market_user_id INTEGER"))
+
+        ensure_sessions_enterprise_entitlement_columns(eng)
+
+        cols = _columns(eng, "sessions")
+        assert "entitled_mod_ids_json" in cols
+        assert "market_user_id" in cols
+
+    def test_unwritable_engine_failure_is_swallowed(self):
+        """Real driver OperationalError (inspect) -> swallowed, returns None."""
+        from app.db.init_db import ensure_sessions_enterprise_entitlement_columns
+
+        assert ensure_sessions_enterprise_entitlement_columns(_broken_engine()) is None
 
 
 # ===========================================================================
-# ensure_sessions_account_meta_columns — _get_engine fallback + trailing except
+# ensure_sessions_account_meta_columns
 # ===========================================================================
 
 
 class TestSessionsAccountMetaColumns:
-    def test_get_engine_fallback_adds_columns(self):
-        """No url + no engine -> _get_engine fallback (1340-1345) adds the meta columns."""
+    def test_get_engine_fallback_adds_all_meta_columns_with_defaults(self):
+        """Fallback engine -> all 8 meta columns added, with the documented DEFAULTs."""
         from app.db.init_db import ensure_sessions_account_meta_columns
 
         eng = _sqlite_engine_with_sessions()
         with patch("app.db._get_engine", return_value=eng):
             ensure_sessions_account_meta_columns(None, database_url=None)
-        with eng.connect() as conn:
-            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(sessions)"))}
-        assert "account_kind" in cols
-        assert "market_membership_tier" in cols
 
-    def test_alter_failure_swallowed(self):
-        """ALTER raises recoverable error -> warning, no raise (1381-1382)."""
+        cols = _columns(eng, "sessions")
+        expected = {
+            "account_kind",
+            "company_brand",
+            "market_is_admin",
+            "market_is_enterprise",
+            "impersonating_market_user_id",
+            "impersonating_username",
+            "tenant_id",
+            "market_membership_tier",
+        }
+        assert expected.issubset(cols)
+
+        # DEFAULT clauses are stamped onto the pre-existing row.
+        with eng.connect() as conn:
+            row = conn.execute(
+                text("SELECT account_kind, company_brand, market_membership_tier FROM sessions")
+            ).fetchone()
+        assert row[0] == "enterprise"  # account_kind DEFAULT 'enterprise'
+        assert row[1] == ""  # company_brand DEFAULT ''
+        assert row[2] is None  # market_membership_tier has no default
+
+    def test_unwritable_engine_failure_is_swallowed(self):
         from app.db.init_db import ensure_sessions_account_meta_columns
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        eng.begin.side_effect = RuntimeError("alter boom")
-        insp = MagicMock()
-        insp.get_table_names.return_value = ["sessions"]
-        insp.get_columns.return_value = [{"name": "id"}]  # all meta cols missing
-        with (
-            patch("app.db._create_engine_for_url", return_value=eng),
-            patch("sqlalchemy.inspect", return_value=insp),
-        ):
-            ensure_sessions_account_meta_columns(None, database_url="sqlite:///x")
-        eng.begin.assert_called_once()
+        assert ensure_sessions_account_meta_columns(_broken_engine()) is None
 
 
 # ===========================================================================
-# ensure_users_tenant_id_column — _get_engine fallback + trailing except
+# ensure_users_tenant_id_column
 # ===========================================================================
 
 
 class TestUsersTenantIdColumn:
     def test_get_engine_fallback_adds_column(self):
-        """No url + no engine -> _get_engine fallback (1405-1410) adds users.tenant_id."""
         from app.db.init_db import ensure_users_tenant_id_column
 
-        eng = create_engine("sqlite:///:memory:")
-        with eng.begin() as conn:
-            conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR)"))
-        with patch("app.db._get_engine", return_value=eng):
+        eng = _sqlite_engine_with_users()
+        with patch("app.db._get_engine", return_value=eng) as mock_get:
             ensure_users_tenant_id_column(None, database_url=None)
-        with eng.connect() as conn:
-            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
-        assert "tenant_id" in cols
 
-    def test_alter_failure_swallowed(self):
-        """ALTER raises recoverable error -> warning, no raise (1427-1428)."""
+        mock_get.assert_called_once()
+        assert "tenant_id" in _columns(eng, "users")
+
+    def test_no_users_table_returns_without_alter(self):
+        """users table absent -> early return, nothing created."""
         from app.db.init_db import ensure_users_tenant_id_column
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        eng.begin.side_effect = RuntimeError("alter boom")
-        insp = MagicMock()
-        insp.get_table_names.return_value = ["users"]
-        insp.get_columns.return_value = [{"name": "id"}]  # tenant_id missing
-        with (
-            patch("app.db._create_engine_for_url", return_value=eng),
-            patch("sqlalchemy.inspect", return_value=insp),
-        ):
-            ensure_users_tenant_id_column(None, database_url="sqlite:///x")
-        eng.begin.assert_called_once()
+        eng = create_engine("sqlite:///:memory:")  # empty db, no `users`
+        ensure_users_tenant_id_column(eng)
+        assert "users" not in _table_names(eng)
+
+    def test_unwritable_engine_failure_is_swallowed(self):
+        from app.db.init_db import ensure_users_tenant_id_column
+
+        assert ensure_users_tenant_id_column(_broken_engine()) is None
 
 
 # ===========================================================================
-# ensure_business_tenant_id_columns — _get_engine fallback success
+# ensure_business_tenant_id_columns
 # ===========================================================================
 
 
 class TestBusinessTenantIdColumns:
-    def test_get_engine_fallback_adds_columns(self):
-        """No url + no engine -> _get_engine fallback (1454-1459) adds tenant_id to products."""
+    def test_get_engine_fallback_adds_tenant_id_only_to_existing_tables(self):
+        """Only business tables that exist get tenant_id; absent ones are skipped."""
         from app.db.init_db import ensure_business_tenant_id_columns
 
         eng = create_engine("sqlite:///:memory:")
         with eng.begin() as conn:
             conn.execute(text("CREATE TABLE products (id INTEGER PRIMARY KEY, name VARCHAR)"))
+            conn.execute(text("CREATE TABLE materials (id INTEGER PRIMARY KEY)"))
+            # suppliers intentionally absent
+
         with patch("app.db._get_engine", return_value=eng):
             ensure_business_tenant_id_columns(None, database_url=None)
+
+        assert "tenant_id" in _columns(eng, "products")
+        assert "tenant_id" in _columns(eng, "materials")
+        assert "suppliers" not in _table_names(eng)  # not auto-created
+
+    def test_skips_table_that_already_has_tenant_id(self):
+        """products already has tenant_id -> no duplicate-column error, stays valid."""
+        from app.db.init_db import ensure_business_tenant_id_columns
+
+        eng = create_engine("sqlite:///:memory:")
+        with eng.begin() as conn:
+            conn.execute(text("CREATE TABLE products (id INTEGER PRIMARY KEY, tenant_id INTEGER)"))
+
+        ensure_business_tenant_id_columns(eng)  # must not raise on existing column
+
+        # PRAGMA returns each column once; tenant_id must not be duplicated.
         with eng.connect() as conn:
-            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(products)"))}
-        assert "tenant_id" in cols
+            names = [row[1] for row in conn.execute(text("PRAGMA table_info(products)"))]
+        assert names.count("tenant_id") == 1
+
+    def test_unwritable_engine_failure_is_swallowed(self):
+        from app.db.init_db import ensure_business_tenant_id_columns
+
+        assert ensure_business_tenant_id_columns(_broken_engine()) is None
 
 
 # ===========================================================================
-# ensure_user_profile_columns — _get_engine fallback + trailing except
+# ensure_user_profile_columns
 # ===========================================================================
 
 
 class TestUserProfileColumns:
-    def test_get_engine_fallback_adds_columns(self):
-        """No url + no engine -> _get_engine fallback (1519-1524) adds tier/industry_id."""
+    def test_get_engine_fallback_adds_all_profile_columns_with_defaults(self):
         from app.db.init_db import ensure_user_profile_columns
 
-        eng = create_engine("sqlite:///:memory:")
-        with eng.begin() as conn:
-            conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR)"))
+        eng = _sqlite_engine_with_users()
         with patch("app.db._get_engine", return_value=eng):
             ensure_user_profile_columns(None, database_url=None)
-        with eng.connect() as conn:
-            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
-        assert "tier" in cols
-        assert "industry_id" in cols
-        assert "email_verified" in cols
 
-    def test_alter_failure_swallowed(self):
-        """ALTER raises recoverable error -> warning, no raise (1562-1563)."""
+        cols = _columns(eng, "users")
+        expected = {
+            "tier",
+            "industry_id",
+            "account_tier",
+            "budget_range",
+            "entitled_industries",
+            "failed_login_attempts",
+            "locked_until",
+            "email_verified",
+        }
+        assert expected.issubset(cols)
+
+        with eng.connect() as conn:
+            row = conn.execute(
+                text("SELECT tier, industry_id, failed_login_attempts FROM users")
+            ).fetchone()
+        assert row[0] == "personal"  # tier DEFAULT 'personal'
+        assert row[1] == "通用"  # industry_id DEFAULT '通用'
+        assert row[2] == 0  # failed_login_attempts DEFAULT 0
+
+    def test_unwritable_engine_failure_is_swallowed(self):
         from app.db.init_db import ensure_user_profile_columns
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        eng.begin.side_effect = RuntimeError("alter boom")
-        insp = MagicMock()
-        insp.get_table_names.return_value = ["users"]
-        insp.get_columns.return_value = [{"name": "id"}]  # all profile cols missing
-        with (
-            patch("app.db._create_engine_for_url", return_value=eng),
-            patch("sqlalchemy.inspect", return_value=insp),
-        ):
-            ensure_user_profile_columns(None, database_url="sqlite:///x")
-        eng.begin.assert_called_once()
+        assert ensure_user_profile_columns(_broken_engine()) is None
 
 
 # ===========================================================================
-# ensure_neuro_event_log_bootstrap  (entirely untested)
+# ensure_neuro_event_log_bootstrap
 # ===========================================================================
 
 
 class TestEnsureNeuroEventLogBootstrap:
-    def test_none_engine_returns(self):
-        """No resolvable engine -> early return (967), no table creation."""
+    def test_none_engine_returns_without_creating(self):
+        """No resolvable engine -> early return; create_all never invoked."""
         from app.db.init_db import ensure_neuro_event_log_bootstrap
 
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=None),
             patch("app.db.base.Base.metadata.create_all") as mock_create,
         ):
-            ensure_neuro_event_log_bootstrap(None)
+            result = ensure_neuro_event_log_bootstrap(None)
+
+        assert result is None
         mock_create.assert_not_called()
 
-    def test_creates_table_when_missing(self):
-        """Table absent -> create_all invoked for NeuroEventLog."""
+    def test_creates_table_on_real_engine_when_missing(self):
+        """Real empty engine -> neuro_event_log table is actually created."""
         from app.db.init_db import ensure_neuro_event_log_bootstrap
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        insp = MagicMock()
-        insp.get_table_names.return_value = []
-        with (
-            patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
-            patch("sqlalchemy.inspect", return_value=insp),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
-        ):
-            ensure_neuro_event_log_bootstrap(eng)
-        mock_create.assert_called_once()
+        eng = create_engine("sqlite:///:memory:")
+        ensure_neuro_event_log_bootstrap(eng)
+        assert "neuro_event_log" in _table_names(eng)
 
-    def test_skips_when_table_present(self):
+    def test_idempotent_when_table_already_present(self):
+        """Second call is a no-op create_all (checkfirst) and does not error."""
         from app.db.init_db import ensure_neuro_event_log_bootstrap
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        insp = MagicMock()
-        insp.get_table_names.return_value = ["neuro_event_log"]
-        with (
-            patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
-            patch("sqlalchemy.inspect", return_value=insp),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
-        ):
-            ensure_neuro_event_log_bootstrap(eng)
-        mock_create.assert_not_called()
+        eng = create_engine("sqlite:///:memory:")
+        ensure_neuro_event_log_bootstrap(eng)
+        before = _table_names(eng)
 
-    def test_swallow_errors_false_reraises(self):
-        """inspect raises recoverable error + swallow_errors=False -> re-raise (982)."""
+        ensure_neuro_event_log_bootstrap(eng)  # again
+
+        assert _table_names(eng) == before
+        assert "neuro_event_log" in before
+
+    def test_swallow_errors_false_reraises_real_operational_error(self):
+        """Real driver error + swallow_errors=False -> propagates OperationalError."""
         from app.db.init_db import ensure_neuro_event_log_bootstrap
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        with (
-            patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
-            patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
-        ):
-            with pytest.raises(RuntimeError, match="inspect failed"):
-                ensure_neuro_event_log_bootstrap(eng, swallow_errors=False)
+        with pytest.raises(OperationalError):
+            ensure_neuro_event_log_bootstrap(_broken_engine(), swallow_errors=False)
 
-    def test_swallow_errors_true_swallows(self):
+    def test_swallow_errors_true_swallows_real_operational_error(self):
         from app.db.init_db import ensure_neuro_event_log_bootstrap
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        with (
-            patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
-            patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
-        ):
-            ensure_neuro_event_log_bootstrap(eng, swallow_errors=True)
-        mock_create.assert_not_called()
+        assert ensure_neuro_event_log_bootstrap(_broken_engine(), swallow_errors=True) is None
 
 
 # ===========================================================================
-# ensure_sqlite_enterprise_business_bootstrap  (912-918 re-raise branch + 859)
+# ensure_sqlite_enterprise_business_bootstrap
 # ===========================================================================
 
 
 class TestEnsureSqliteEnterpriseBusinessBootstrap:
-    def test_non_sqlite_skipped(self):
-        """Non-sqlite dialect -> early return (859-860), no table creation."""
+    def test_non_sqlite_dialect_is_skipped(self):
+        """Non-sqlite dialect -> early return; no ORM create_all."""
         from app.db.init_db import ensure_sqlite_enterprise_business_bootstrap
 
         eng = MagicMock()
@@ -362,182 +469,209 @@ class TestEnsureSqliteEnterpriseBusinessBootstrap:
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
             patch("app.db.base.Base.metadata.create_all") as mock_create,
         ):
-            ensure_sqlite_enterprise_business_bootstrap(eng)
+            result = ensure_sqlite_enterprise_business_bootstrap(eng)
+
+        assert result is None
         mock_create.assert_not_called()
 
-    def test_creates_tables_when_missing(self):
+    def test_creates_business_tables_on_real_engine(self):
         from app.db.init_db import ensure_sqlite_enterprise_business_bootstrap
 
         eng = create_engine("sqlite:///:memory:")
-        with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng):
-            ensure_sqlite_enterprise_business_bootstrap(eng)
-        with eng.connect() as conn:
-            tables = {
-                row[0]
-                for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            }
-        assert {"tenants", "customers", "products"}.issubset(tables)
+        ensure_sqlite_enterprise_business_bootstrap(eng)
+        assert {"tenants", "customers", "products"}.issubset(_table_names(eng))
 
-    def test_swallow_errors_false_reraises(self):
-        """inspect raises recoverable error + swallow_errors=False -> re-raise (917-918)."""
+    def test_swallow_errors_false_reraises_real_operational_error(self):
         from app.db.init_db import ensure_sqlite_enterprise_business_bootstrap
 
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        with (
-            patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
-            patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
-        ):
-            with pytest.raises(RuntimeError, match="inspect failed"):
-                ensure_sqlite_enterprise_business_bootstrap(eng, swallow_errors=False)
+        with pytest.raises(OperationalError):
+            ensure_sqlite_enterprise_business_bootstrap(_broken_engine(), swallow_errors=False)
+
+    def test_swallow_errors_true_swallows_real_operational_error(self):
+        from app.db.init_db import ensure_sqlite_enterprise_business_bootstrap
+
+        assert (
+            ensure_sqlite_enterprise_business_bootstrap(_broken_engine(), swallow_errors=True)
+            is None
+        )
 
 
 # ===========================================================================
-# init_im_tables — engine resolution branches (1569-1576)
+# init_im_tables — engine resolution branches
 # ===========================================================================
 
 
 class TestInitImTablesEngineResolution:
     def test_resolves_engine_from_database_url(self):
-        """engine=None + database_url -> _create_engine_for_url branch (1569-1572)."""
+        """engine=None + database_url -> _create_engine_for_url(url) branch; tables made."""
         from app.db.init_db import init_im_tables
 
         eng = create_engine("sqlite:///:memory:")
         with patch("app.db._create_engine_for_url", return_value=eng) as mock_create:
             init_im_tables(None, database_url="sqlite:///x")
+
         mock_create.assert_called_once_with("sqlite:///x")
-        with eng.connect() as conn:
-            tables = {
-                row[0]
-                for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            }
-        assert "im_conversations" in tables
+        assert {
+            "im_conversations",
+            "im_conversation_members",
+            "im_messages",
+        }.issubset(_table_names(eng))
 
     def test_resolves_engine_from_get_engine(self):
-        """engine=None + no url -> _get_engine branch (1574-1576)."""
+        """engine=None + no url -> _get_engine() branch; tables made."""
         from app.db.init_db import init_im_tables
 
         eng = create_engine("sqlite:///:memory:")
         with patch("app.db._get_engine", return_value=eng) as mock_get:
             init_im_tables(None, database_url=None)
+
         mock_get.assert_called_once()
-        with eng.connect() as conn:
-            tables = {
-                row[0]
-                for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            }
-        assert "im_messages" in tables
+        assert {
+            "im_conversations",
+            "im_conversation_members",
+            "im_messages",
+        }.issubset(_table_names(eng))
+
+    def test_uses_passed_engine_without_resolution(self):
+        """engine given -> neither resolver is consulted; tables still created."""
+        from app.db.init_db import init_im_tables
+
+        eng = create_engine("sqlite:///:memory:")
+        with (
+            patch("app.db._create_engine_for_url") as mock_create,
+            patch("app.db._get_engine") as mock_get,
+        ):
+            init_im_tables(eng)
+
+        mock_create.assert_not_called()
+        mock_get.assert_not_called()
+        assert "im_messages" in _table_names(eng)
 
 
 # ===========================================================================
-# ensure_product_query_indexes — inspect failure + per-stmt failure
+# ensure_product_query_indexes
 # ===========================================================================
 
 
-class TestEnsureProductQueryIndexesErrors:
+class TestEnsureProductQueryIndexes:
+    def test_creates_both_indexes_on_real_products_table(self):
+        from app.db.init_db import ensure_product_query_indexes
+
+        eng = create_engine("sqlite:///:memory:")
+        with eng.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE products (id INTEGER PRIMARY KEY, unit VARCHAR, "
+                    "model_number VARCHAR)"
+                )
+            )
+
+        ensure_product_query_indexes(eng)
+
+        assert {"ix_products_unit", "ix_products_model_number"}.issubset(_index_names(eng))
+
+    def test_no_products_table_creates_no_indexes(self):
+        """products absent -> early return, no transaction, no indexes created."""
+        from app.db.init_db import ensure_product_query_indexes
+
+        eng = create_engine("sqlite:///:memory:")  # no products table
+        ensure_product_query_indexes(eng)
+        assert not any(i.startswith("ix_products_") for i in _index_names(eng))
+
     def test_inspect_failure_treated_as_no_products(self):
-        """inspect raises recoverable error -> names=set() -> early return (1675-1676)."""
+        """inspect raises recoverable error -> names=set() -> early return, no begin()."""
         from app.db.init_db import ensure_product_query_indexes
 
         eng = MagicMock()
         with patch("sqlalchemy.inspect", side_effect=OSError("inspect down")):
-            ensure_product_query_indexes(eng)
-        # products absent (names empty) -> never opened a transaction to build indexes
-        eng.begin.assert_not_called()
+            result = ensure_product_query_indexes(eng)
 
-    def test_per_stmt_failure_is_swallowed(self):
-        """Each CREATE INDEX failure is caught individually (1689-1690), no raise."""
+        assert result is None
+        eng.begin.assert_not_called()  # never opened a tx to build indexes
+
+    def test_per_stmt_failure_attempts_both_then_swallows(self):
+        """Each CREATE INDEX failure is caught individually; both DDLs attempted, no raise."""
         from app.db.init_db import ensure_product_query_indexes
 
         eng = MagicMock()
         insp = MagicMock()
         insp.get_table_names.return_value = ["products"]
         conn = eng.begin.return_value.__enter__.return_value
-        conn.execute.side_effect = RuntimeError("index boom")
+        executed: list[str] = []
+
+        def _exec(stmt, *a, **k):
+            executed.append(str(stmt))
+            raise OperationalError("CREATE INDEX", {}, Exception("index boom"))
+
+        conn.execute.side_effect = _exec
         with patch("sqlalchemy.inspect", return_value=insp):
-            ensure_product_query_indexes(eng)
-        # both index statements were attempted despite each one failing
-        assert conn.execute.call_count == 2
+            result = ensure_product_query_indexes(eng)
+
+        assert result is None
+        assert executed == [
+            "CREATE INDEX IF NOT EXISTS ix_products_unit ON products (unit)",
+            "CREATE INDEX IF NOT EXISTS ix_products_model_number ON products (model_number)",
+        ]
 
 
 # ===========================================================================
-# init_approval_tables — trailing except branch (1661-1662)
+# init_approval_tables
 # ===========================================================================
 
 
-class TestInitApprovalTablesAlterError:
-    def test_inspect_failure_swallowed(self):
-        """inspect raises recoverable error after create_all -> warning, no raise (1661-1662)."""
+class TestInitApprovalTables:
+    def test_creates_approval_tables_on_real_engine(self):
+        from app.db.init_db import init_approval_tables
+
+        eng = create_engine("sqlite:///:memory:")
+        with patch("app.db._get_engine", return_value=eng):
+            init_approval_tables(eng)
+
+        tables = _table_names(eng)
+        assert {
+            "approval_flows",
+            "approval_flow_nodes",
+            "approval_requests",
+            "approval_records",
+            "approval_delegations",
+        }.issubset(tables)
+        # business_type compat column is present on the freshly-created flow table.
+        assert "business_type" in _columns(eng, "approval_flows")
+
+    def test_post_create_inspect_failure_is_swallowed(self):
+        """create_all succeeds, then inspect raises recoverable error -> no raise."""
         from app.db.init_db import init_approval_tables
 
         eng = MagicMock()
         eng.dialect.name = "sqlite"
         with (
             patch("app.db._get_engine", return_value=eng),
-            patch("app.db.base.Base.metadata.create_all"),
+            patch("app.db.base.Base.metadata.create_all") as mock_create,
             patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect down")),
         ):
-            init_approval_tables(eng)  # must not raise
+            result = init_approval_tables(eng)
+
+        assert result is None
+        mock_create.assert_called_once()  # create_all ran before the swallowed inspect
 
 
 # ===========================================================================
-# init_persona_tables — create_all failure (1749-1750) + _get_engine fallback (1743)
+# init_service_bridge_tables
 # ===========================================================================
 
 
-class TestInitPersonaTables:
-    def test_creates_tables(self):
-        from app.db.init_db import init_persona_tables
+class TestInitServiceBridgeTables:
+    def test_creates_service_tables_on_real_engine(self):
+        from app.db.init_db import init_service_bridge_tables
 
         eng = create_engine("sqlite:///:memory:")
         with patch("app.db._get_engine", return_value=eng):
-            init_persona_tables(eng)
-        with eng.connect() as conn:
-            tables = {
-                row[0]
-                for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            }
-        assert "persona_profile" in tables
-        assert "persona_event_log" in tables
+            init_service_bridge_tables(eng)
 
-    def test_get_engine_failure_falls_back_to_passed_engine(self):
-        """_get_engine raises -> keep the passed engine (1743) and still create tables."""
-        from app.db.init_db import init_persona_tables
+        assert {"service_requests", "service_bridge_config"}.issubset(_table_names(eng))
 
-        eng = create_engine("sqlite:///:memory:")
-        with patch("app.db._get_engine", side_effect=RuntimeError("no real engine")):
-            init_persona_tables(eng)
-        with eng.connect() as conn:
-            tables = {
-                row[0]
-                for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            }
-        assert "persona_profile" in tables
-
-    def test_create_all_failure_swallowed(self):
-        """create_all raises recoverable error -> warning, no raise (1749-1750)."""
-        from app.db.init_db import init_persona_tables
-
-        eng = MagicMock()
-        eng.dialect.name = "sqlite"
-        with (
-            patch("app.db._get_engine", return_value=eng),
-            patch(
-                "app.db.base.Base.metadata.create_all",
-                side_effect=RuntimeError("create boom"),
-            ),
-        ):
-            init_persona_tables(eng)  # must not raise
-
-
-# ===========================================================================
-# init_service_bridge_tables — create_all failure (1717-1718)
-# ===========================================================================
-
-
-class TestInitServiceBridgeTablesError:
-    def test_create_all_failure_swallowed(self):
-        """create_all raises recoverable error -> warning, no raise (1717-1718)."""
+    def test_create_all_failure_is_swallowed(self):
+        """create_all raises recoverable error -> warning, no raise, returns None."""
         from app.db.init_db import init_service_bridge_tables
 
         eng = MagicMock()
@@ -546,7 +680,52 @@ class TestInitServiceBridgeTablesError:
             patch("app.db._get_engine", return_value=eng),
             patch(
                 "app.db.base.Base.metadata.create_all",
-                side_effect=RuntimeError("create boom"),
+                side_effect=OperationalError("create", {}, Exception("create boom")),
             ),
         ):
-            init_service_bridge_tables(eng)  # must not raise
+            result = init_service_bridge_tables(eng)
+
+        assert result is None
+
+
+# ===========================================================================
+# init_persona_tables
+# ===========================================================================
+
+
+class TestInitPersonaTables:
+    def test_creates_persona_tables_on_real_engine(self):
+        from app.db.init_db import init_persona_tables
+
+        eng = create_engine("sqlite:///:memory:")
+        with patch("app.db._get_engine", return_value=eng):
+            init_persona_tables(eng)
+
+        assert {"persona_profile", "persona_event_log"}.issubset(_table_names(eng))
+
+    def test_get_engine_failure_falls_back_to_passed_engine(self):
+        """_get_engine raises -> keep the passed engine and still create the tables."""
+        from app.db.init_db import init_persona_tables
+
+        eng = create_engine("sqlite:///:memory:")
+        with patch("app.db._get_engine", side_effect=RuntimeError("no real engine")):
+            init_persona_tables(eng)
+
+        assert "persona_profile" in _table_names(eng)
+
+    def test_create_all_failure_is_swallowed(self):
+        """create_all raises recoverable error -> warning, no raise, returns None."""
+        from app.db.init_db import init_persona_tables
+
+        eng = MagicMock()
+        eng.dialect.name = "sqlite"
+        with (
+            patch("app.db._get_engine", return_value=eng),
+            patch(
+                "app.db.base.Base.metadata.create_all",
+                side_effect=OperationalError("create", {}, Exception("create boom")),
+            ),
+        ):
+            result = init_persona_tables(eng)
+
+        assert result is None

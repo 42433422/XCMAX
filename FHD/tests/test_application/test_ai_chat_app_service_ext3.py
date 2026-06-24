@@ -813,7 +813,14 @@ class TestInferExcelColumnRolesExtended:
             {"产品名称": "产品C", "单价": "300.0", "型号": "5005C", "客户": "公司X"},
         ]
         result, conf = service._infer_excel_column_roles(records)
-        assert result.get("unit_price") == "单价"
+        # Purely numeric column -> unit_price; alpha-numeric -> model; repeated value -> unit_name.
+        assert result["unit_price"] == "单价"
+        assert result["model_number"] == "型号"
+        assert result["unit_name"] == "客户"
+        # A column can only take one role; "客户" already claimed unit_name so product is unclaimed.
+        assert result["product_name"] == ""
+        # Confidence is a real probability in (0, 1], not the trivial 0.0 floor.
+        assert 0.0 < conf <= 1.0
 
     def test_model_like_column_identified(self):
         service = _make_service()
@@ -823,7 +830,13 @@ class TestInferExcelColumnRolesExtended:
             {"名称": "产品C", "型号": "5005C", "价格": "300"},
         ]
         result, conf = service._infer_excel_column_roles(records)
-        assert result.get("model_number") == "型号"
+        assert result["model_number"] == "型号"
+        assert result["unit_price"] == "价格"
+        assert result["unit_name"] == "名称"
+        assert 0.0 < conf <= 1.0
+        # No key was assigned to two roles.
+        assigned = [v for v in result.values() if v]
+        assert len(assigned) == len(set(assigned))
 
 
 # ========================= _fallback_excel_product_name_column - extended ==
@@ -896,15 +909,36 @@ class TestFallbackExcelModelNumberColumnExtended:
 
 
 class TestHeaderHintColumnRolesExtended:
-    def test_returns_dict(self):
+    def test_maps_header_labels_to_roles(self):
         result = AIChatApplicationService._header_hint_column_roles(["产品名称", "单价"])
-        assert isinstance(result, dict)
-        assert "unit_name" in result
-        assert "product_name" in result
+        # Each recognized header label is bound to its role; absent roles are empty strings.
+        assert result == {
+            "unit_name": "",
+            "product_name": "产品名称",
+            "model_number": "",
+            "unit_price": "单价",
+        }
+
+    def test_maps_all_four_roles(self):
+        result = AIChatApplicationService._header_hint_column_roles(
+            ["客户", "产品名称", "型号", "单价"]
+        )
+        assert result == {
+            "unit_name": "客户",
+            "product_name": "产品名称",
+            "model_number": "型号",
+            "unit_price": "单价",
+        }
 
     def test_empty_keys(self):
         result = AIChatApplicationService._header_hint_column_roles([])
-        assert isinstance(result, dict)
+        # No keys -> every role is the empty default.
+        assert result == {
+            "unit_name": "",
+            "product_name": "",
+            "model_number": "",
+            "unit_price": "",
+        }
 
 
 # ========================= _extract_excel_import_records - deep ============
@@ -912,6 +946,7 @@ class TestHeaderHintColumnRolesExtended:
 
 class TestExtractExcelImportRecordsDeep:
     def test_grid_preview_rows_with_header(self):
+        """grid_preview.rows[0] is the header; remaining rows become normalized records."""
         service = _make_service()
         excel_analysis = {
             "preview_data": {
@@ -944,10 +979,24 @@ class TestExtractExcelImportRecordsDeep:
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
-        assert len(records) >= 1
+        # Two data rows -> two records with prices parsed to float and unit/product mapped.
+        assert records == [
+            {
+                "unit_name": "公司A",
+                "product_name": "产品X",
+                "model_number": "",
+                "unit_price": 100.0,
+            },
+            {
+                "unit_name": "公司A",
+                "product_name": "产品Y",
+                "model_number": "",
+                "unit_price": 200.0,
+            },
+        ]
 
     def test_unnamed_columns_promoted(self):
-        """First row looks like headers but keys are Unnamed:0 etc."""
+        """First row (Unnamed:* keys) is real header and gets promoted; data rebuilt under it."""
         service = _make_service()
         excel_analysis = {
             "preview_data": {
@@ -978,6 +1027,23 @@ class TestExtractExcelImportRecordsDeep:
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
+        # Header row was consumed (not emitted as data); only the two genuine data rows survive.
+        assert records == [
+            {
+                "unit_name": "公司A",
+                "product_name": "产品X",
+                "model_number": "",
+                "unit_price": 100.0,
+            },
+            {
+                "unit_name": "公司A",
+                "product_name": "产品Y",
+                "model_number": "",
+                "unit_price": 200.0,
+            },
+        ]
+        # The literal header labels must NOT appear as a product record.
+        assert all(r["product_name"] != "产品名称" for r in records)
 
     def test_unit_key_packaging_ratio_high_skipped(self):
         """When unit_key column values are mostly packaging units, it should be cleared."""
@@ -1010,10 +1076,18 @@ class TestExtractExcelImportRecordsDeep:
             patch.object(service, "_default_purchase_unit_for_import", return_value="默认公司"),
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
-        # unit_key should be cleared because packaging ratio >= 0.45
         assert err is None
+        # The "单位" column is mostly packaging units (件/箱/桶) -> ratio >= 0.45 -> unit_key
+        # cleared. Every row falls back to default_unit instead of a measure word.
+        assert len(records) == 3
+        assert {r["unit_name"] for r in records} == {"默认公司"}
+        assert [r["product_name"] for r in records] == ["产品X", "产品Y", "产品Z"]
+        assert [r["unit_price"] for r in records] == [100.0, 200.0, 300.0]
+        # None of the packaging units leaked into unit_name.
+        assert "件" not in {r["unit_name"] for r in records}
 
     def test_unit_key_same_as_product_key_cleared(self):
+        """unit_key == product_key collapses unit_key; with no default_unit every row drops."""
         service = _make_service()
         excel_analysis = {
             "preview_data": {
@@ -1043,6 +1117,8 @@ class TestExtractExcelImportRecordsDeep:
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
+        # unit_key collapsed to "" and no default_unit -> unit_name empty -> rows skipped.
+        assert records == []
 
     def test_price_parse_failure_defaults_zero(self):
         service = _make_service()
@@ -1073,8 +1149,15 @@ class TestExtractExcelImportRecordsDeep:
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
-        if records:
-            assert records[0]["unit_price"] == 0.0
+        # Non-numeric price text falls back to 0.0 rather than raising or dropping the row.
+        assert records == [
+            {
+                "unit_name": "公司A",
+                "product_name": "产品X",
+                "model_number": "",
+                "unit_price": 0.0,
+            }
+        ]
 
     def test_dedup_same_unit_product_model(self):
         service = _make_service()
@@ -1106,7 +1189,15 @@ class TestExtractExcelImportRecordsDeep:
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
-        assert len(records) == 1
+        # Two identical (unit, product, model) rows collapse to a single deduped record.
+        assert records == [
+            {
+                "unit_name": "公司A",
+                "product_name": "产品X",
+                "model_number": "5003A",
+                "unit_price": 100.0,
+            }
+        ]
 
     def test_skip_row_without_unit_or_product(self):
         service = _make_service()
@@ -1137,10 +1228,11 @@ class TestExtractExcelImportRecordsDeep:
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
-        assert len(records) == 0
+        # Row has neither unit nor product nor model -> nothing emitted.
+        assert records == []
 
     def test_measure_unit_replaced_with_default(self):
-        """When unit_name looks like a measure unit, it should be replaced with default."""
+        """unit_name cell that is a bare measure word ('件') is swapped for default_unit."""
         service = _make_service()
         excel_analysis = {
             "preview_data": {
@@ -1169,8 +1261,16 @@ class TestExtractExcelImportRecordsDeep:
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
-        if records:
-            assert records[0]["unit_name"] == "默认公司"
+        assert records == [
+            {
+                "unit_name": "默认公司",
+                "product_name": "产品X",
+                "model_number": "",
+                "unit_price": 100.0,
+            }
+        ]
+        # The literal measure word "件" must not survive as the customer/unit name.
+        assert records[0]["unit_name"] != "件"
 
 
 # ========================= process_chat - deep error branches =============
@@ -1281,7 +1381,12 @@ class TestProcessChatDeepErrors:
         assert "不能为空" in result["message"]
 
     def test_file_context_injects_excel_analysis(self):
-        async def mock_chat(*a, **kw):
+        """file_context.file_path + sheet_name must be folded into the context passed to chat()."""
+        captured: dict[str, object] = {}
+
+        async def mock_chat(user_id, message, prepared_context, source=None):
+            captured["context"] = prepared_context
+            captured["source"] = source
             return {"success": True, "text": "结果", "action": "followup", "data": {}}
 
         service = self._make_service_with_mock()
@@ -1296,10 +1401,43 @@ class TestProcessChatDeepErrors:
             result = service.process_chat(
                 "u1",
                 "查询",
-                source=None,
+                source="pro",
                 file_context={"file_path": "/test.xlsx", "sheet_name": "Sheet1"},
             )
+        # The successful chat result is surfaced with text echoed into response.
         assert result["success"] is True
+        assert result["response"] == "结果"
+        assert result["data"]["action"] == "followup"
+        # The file_context produced an excel_analysis entry handed down to ai_service.chat.
+        assert captured["context"]["excel_analysis"] == {
+            "file_path": "/test.xlsx",
+            "sheet_name": "Sheet1",
+        }
+        # source is threaded through unchanged.
+        assert captured["source"] == "pro"
+
+    def test_file_context_without_path_injects_no_excel_analysis(self):
+        """A file_context lacking a usable path must not synthesize an excel_analysis key."""
+        captured: dict[str, object] = {}
+
+        async def mock_chat(user_id, message, prepared_context, source=None):
+            captured["context"] = prepared_context
+            return {"success": True, "text": "ok", "action": "reply", "data": {}}
+
+        service = self._make_service_with_mock()
+        mock_ai = Mock()
+        mock_ai.chat = mock_chat
+        service.ai_service = mock_ai
+        with (
+            patch.object(service, "_inject_excel_vector_context", return_value={}),
+            patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
+            patch("app.services.get_conversation_service"),
+        ):
+            result = service.process_chat(
+                "u1", "查询", source=None, file_context={"sheet_name": "Sheet1"}
+            )
+        assert result["success"] is True
+        assert "excel_analysis" not in captured["context"]
 
 
 # ========================= _persist_chat_turn - deep ======================
@@ -1307,11 +1445,15 @@ class TestProcessChatDeepErrors:
 
 class TestPersistChatTurnDeep:
     def test_no_session_id_skips(self):
+        """No session_id/conversation_id -> early return, conversation service never touched."""
         service = _make_service()
-        # Should not raise
-        service._persist_chat_turn("u1", "hello", {}, {"success": True})
+        with patch("app.services.get_conversation_service") as get_conv:
+            service._persist_chat_turn("u1", "hello", {}, {"success": True})
+        # The function must short-circuit before resolving the conversation service.
+        get_conv.assert_not_called()
 
     def test_with_session_id_persists(self):
+        """A user turn and an assistant turn are both saved under the same session."""
         service = _make_service()
         mock_conv = Mock()
         with patch("app.services.get_conversation_service", return_value=mock_conv):
@@ -1326,8 +1468,19 @@ class TestPersistChatTurnDeep:
                 },
             )
         assert mock_conv.save_message.call_count == 2
+        first, second = mock_conv.save_message.call_args_list
+        # First save is the user message; second is the assistant reply, both keyed by session.
+        assert first.kwargs["role"] == "user"
+        assert first.kwargs["session_id"] == "sess1"
+        assert first.kwargs["content"] == "hello"
+        assert first.kwargs["intent"] == "reply"
+        assert second.kwargs["role"] == "assistant"
+        assert second.kwargs["session_id"] == "sess1"
+        assert second.kwargs["content"] == "world"
+        assert second.kwargs["intent"] == "reply"
 
     def test_with_conversation_id_persists(self):
+        """conversation_id is accepted as the session key; no intent -> chat/assistant_reply."""
         service = _make_service()
         mock_conv = Mock()
         with patch("app.services.get_conversation_service", return_value=mock_conv):
@@ -1338,8 +1491,15 @@ class TestPersistChatTurnDeep:
                 {"success": True, "response": "world", "data": {}},
             )
         assert mock_conv.save_message.call_count == 2
+        first, second = mock_conv.save_message.call_args_list
+        assert first.kwargs["session_id"] == "conv1"
+        assert second.kwargs["session_id"] == "conv1"
+        # With no resolvable intent the user/assistant default intents are used.
+        assert first.kwargs["intent"] == "chat"
+        assert second.kwargs["intent"] == "assistant_reply"
 
     def test_with_tool_call_data(self):
+        """toolCall.tool_id resolves the intent recorded on both saved messages."""
         service = _make_service()
         mock_conv = Mock()
         with patch("app.services.get_conversation_service", return_value=mock_conv):
@@ -1359,6 +1519,12 @@ class TestPersistChatTurnDeep:
                 },
             )
         assert mock_conv.save_message.call_count == 2
+        first, second = mock_conv.save_message.call_args_list
+        # tool_key/tool_id surface as the intent on both rows.
+        assert first.kwargs["intent"] == "products"
+        assert second.kwargs["intent"] == "products"
+        assert first.kwargs["content"] == "hello"
+        assert second.kwargs["content"] == "done"
 
 
 # ========================= _inject_excel_vector_context - deep ============
@@ -1371,16 +1537,26 @@ class TestInjectExcelVectorContextDeep:
         mock_svc.query.return_value = {"success": True, "hits": [{"score": 0.9}]}
         with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
             result = service._inject_excel_vector_context("hello", {"excel_index_id": "idx1"})
-        assert "excel_vector_context" in result
-        assert result["excel_vector_context"]["hits"] == [{"score": 0.9}]
+        # The injected block carries the resolved index id, the original query, and the hits.
+        assert result["excel_vector_context"] == {
+            "index_id": "idx1",
+            "query": "hello",
+            "hits": [{"score": 0.9}],
+        }
+        # The original context key is preserved alongside the injection.
+        assert result["excel_index_id"] == "idx1"
 
     def test_unsuccessful_query(self):
+        """A failed search leaves the context untouched (no excel_vector_context added)."""
         service = _make_service()
         mock_svc = Mock()
         mock_svc.query.return_value = {"success": False}
         with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
             result = service._inject_excel_vector_context("hello", {"excel_index_id": "idx1"})
+        # Query was attempted but its failure means no enrichment; original context survives.
+        mock_svc.query.assert_called_once()
         assert "excel_vector_context" not in result
+        assert result == {"excel_index_id": "idx1"}
 
     def test_custom_top_k(self):
         service = _make_service()
@@ -1403,11 +1579,25 @@ class TestInjectExcelVectorContextDeep:
         mock_svc.query.assert_called_once_with(index_id="idx1", query_text="hello", top_k=5)
 
     def test_vector_index_id_alias(self):
+        """excel_vector_index_id is an accepted alias for excel_index_id."""
         service = _make_service()
         mock_svc = Mock()
-        mock_svc.query.return_value = {"success": True, "hits": []}
+        mock_svc.query.return_value = {"success": True, "hits": [{"id": "h1"}]}
         with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
             result = service._inject_excel_vector_context(
                 "hello", {"excel_vector_index_id": "vidx1"}
             )
-        mock_svc.query.assert_called_once()
+        # The alias resolves to the same index id used for the query and the injected block.
+        mock_svc.query.assert_called_once_with(index_id="vidx1", query_text="hello", top_k=5)
+        assert result["excel_vector_context"]["index_id"] == "vidx1"
+        assert result["excel_vector_context"]["hits"] == [{"id": "h1"}]
+
+    def test_no_index_id_returns_context_unchanged(self):
+        """Without an index id the search service is never invoked and context is returned as-is."""
+        service = _make_service()
+        with patch("app.application.get_excel_vector_search_app_service") as get_svc:
+            ctx = {"foo": "bar"}
+            result = service._inject_excel_vector_context("hello", ctx)
+        get_svc.assert_not_called()
+        assert result == {"foo": "bar"}
+        assert "excel_vector_context" not in result

@@ -37,6 +37,16 @@ def _make_cache(cached=None):
     return cache
 
 
+def _assert_no_fast_path(result):
+    """Assert quick_recognize fell through to the default no-match fast-path result."""
+    assert result["fast_path"] is True
+    assert result["source"] == "quick_recognize"
+    assert result["primary_intent"] is None
+    assert result["tool_key"] is None
+    assert result["context_inherited"] is False
+    assert result["slots"] == {}
+
+
 # ---------------------------------------------------------------------------
 # Tests for _load_intent_runtime_rules branches (lines 62-84)
 # ---------------------------------------------------------------------------
@@ -119,16 +129,21 @@ class TestLoadIntentRuntimeRules:
         """Unsupported items in intent_patterns are skipped (continue branch)."""
         config = {
             "quick_rules": {
-                "intent_patterns": ["not_a_dict_or_tuple"],
+                # one valid tuple + one invalid string item; only the valid one survives
+                "intent_patterns": ["not_a_dict_or_tuple", (r"valid", "products")],
                 "context_inherit_patterns": [],
                 "command_map": {},
                 "append_keywords": [],
             }
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
+            import app.services.intent_service as _mod
             from app.services.intent_service import _load_intent_runtime_rules
 
-            _load_intent_runtime_rules()  # should not raise
+            _load_intent_runtime_rules()
+            # the unsupported string item is dropped; the valid tuple is kept
+            assert _mod._quick_intent_patterns == [(r"valid", "products")]
+            assert "not_a_dict_or_tuple" not in [p for p, _ in _mod._quick_intent_patterns]
 
     def test_dict_context_inherit_patterns(self):
         """context_inherit_patterns as list of dicts."""
@@ -149,19 +164,22 @@ class TestLoadIntentRuntimeRules:
             assert any(p == r"^再一份$" for p, _ in _mod._context_inherit_patterns)
 
     def test_invalid_context_inherit_item_skipped(self):
-        """Unsupported context_inherit_patterns items are skipped."""
+        """Unsupported context_inherit_patterns items are skipped (continue branch)."""
         config = {
             "quick_rules": {
                 "intent_patterns": [],
-                "context_inherit_patterns": [42],
+                # invalid int item + one valid dict; only the valid one is kept
+                "context_inherit_patterns": [42, {"pattern": r"^好的$", "action": "repeat_last"}],
                 "command_map": {},
                 "append_keywords": [],
             }
         }
         with patch("app.services.intent_service.get_intent_config", return_value=config):
+            import app.services.intent_service as _mod
             from app.services.intent_service import _load_intent_runtime_rules
 
-            _load_intent_runtime_rules()  # should not raise
+            _load_intent_runtime_rules()
+            assert _mod._context_inherit_patterns == [(r"^好的$", "repeat_last")]
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +376,8 @@ class TestRecognizeIntentsImpl:
         matches = [
             {"id": "products", "tool_key": "products", "block_if_negated": False, "keywords": []}
         ]
-        engine = _make_engine(matches, ["products"])
+        # engine reports the same hint twice -> must be collapsed to a single entry
+        engine = _make_engine(matches, ["products", "products"])
         cache = _make_cache(None)
         from app.domain.neuro.reflex_arc import ReflexType
 
@@ -372,7 +391,9 @@ class TestRecognizeIntentsImpl:
             from app.services.intent_service import recognize_intents
 
             result = recognize_intents("查产品")
-        assert result["intent_hints"].count("products") <= 1
+        assert result["intent_hints"] == ["products"]
+        assert result["primary_intent"] == "products"
+        assert result["tool_key"] == "products"
 
     def test_template_keyword_in_msg_adds_hint(self):
         result = self._run("查询模板", matches=[], hints=[])
@@ -391,8 +412,11 @@ class TestRecognizeIntentsImpl:
         assert result["tool_key"] == "shipment_generate"
 
     def test_starts_with_shipment_without_order_info_no_match(self):
+        # "发货单" alone (len <= 5, no 桶/规格/etc.) -> the starts-with block does NOT fire
         result = self._run("发货单", matches=[], hints=[])
-        assert result.get("tool_key") != "shipment_generate"
+        assert result["tool_key"] is None
+        assert result["primary_intent"] is None
+        assert result["is_likely_unclear"] is True
 
     def test_container_and_spec_pattern_sets_shipment(self):
         result = self._run("3桶规格25", matches=[], hints=[])
@@ -431,7 +455,8 @@ class TestRecognizeIntentsImpl:
             from app.services.intent_service import recognize_intents
 
             result = recognize_intents("七彩乐园的9803")
-        assert result["slots"].get("unit_name") == "七彩乐园"
+        # resolver returned a unit -> its canonical unit_name is used, plus the model number
+        assert result["slots"] == {"unit_name": "七彩乐园", "model_number": "9803"}
 
     def test_slot_unit_model_unresolved(self):
         from app.domain.neuro.reflex_arc import ReflexType
@@ -452,7 +477,10 @@ class TestRecognizeIntentsImpl:
             from app.services.intent_service import recognize_intents
 
             result = recognize_intents("七彩乐园的9803")
-        assert result["slots"].get("unit_name") == "七彩乐园"
+        # resolver returned None -> falls back to the raw matched name, model still captured
+        assert result["slots"] == {"unit_name": "七彩乐园", "model_number": "9803"}
+        # with no prior tool, the unit+model match also routes to products
+        assert result["tool_key"] == "products"
 
     def test_slot_fallback_to_products_keyword_when_tool_is_products(self):
         matches = [
@@ -472,7 +500,9 @@ class TestRecognizeIntentsImpl:
             from app.services.intent_service import recognize_intents
 
             result = recognize_intents("查产品9803")
-        assert result["slots"].get("keyword") is not None
+        # tool_key=products and no unit-of-the-model pattern -> keyword is the whole message
+        assert result["slots"] == {"keyword": "查产品9803"}
+        assert result["tool_key"] == "products"
 
     def test_recoverable_error_in_recognize_intents_returns_safe_default(self):
         from app.services.intent_service import recognize_intents
@@ -500,7 +530,17 @@ class TestRecognizeIntentsImpl:
         ):
             arc.process.side_effect = exc_cls("reflex_fail")
             result = recognize_intents("你好")
-        assert isinstance(result, dict)
+        # reflex blew up -> all basic-intent flags fall back to False (not raised, not stale-True)
+        assert result["is_greeting"] is False
+        assert result["is_goodbye"] is False
+        assert result["is_help"] is False
+        assert result["is_confirmation"] is False
+        assert result["is_negation_intent"] is False
+        assert result["is_negated"] is False
+        # engine still ran and found nothing -> no tool / no hints
+        assert result["primary_intent"] is None
+        assert result["tool_key"] is None
+        assert result["intent_hints"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -645,25 +685,32 @@ class TestQuickSlotExtraction:
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("发货单七彩乐园3桶", "shipment_generate")
-        assert slots.get("unit_name") is not None or "quantity" in slots or "spec" in slots
+        # 发货单 prefix stripped, name extracted before quantity, quantity captured
+        assert slots["unit_name"] == "七彩乐园"
+        assert slots["quantity"] == "3桶"
+        assert "spec" not in slots
+        assert "model_number" not in slots
 
     def test_shipment_generate_multi_unit(self):
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("发货单七彩乐园和太阳鸟各5桶", "shipment_generate")
-        assert isinstance(slots, dict)
+        # two names separated by 和 -> unit_name becomes a list; quantity still captured
+        assert slots["unit_name"] == ["七彩乐园", "太阳鸟各"]
+        assert slots["quantity"] == "5桶"
 
     def test_products_keyword(self):
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("查9803产品", "products")
-        assert slots.get("keyword") == "查9803产品"
+        # products intent stores the whole normalized message as the search keyword
+        assert slots == {"keyword": "查9803产品"}
 
     def test_customers_keyword(self):
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("查七彩乐园客户", "customers")
-        assert slots.get("keyword") is not None
+        assert slots == {"keyword": "查七彩乐园客户"}
 
     def test_unknown_intent_empty_slots(self):
         from app.services.intent_service import quick_slot_extraction
@@ -678,20 +725,32 @@ class TestQuickSlotExtraction:
 
 
 class TestReloadIntentService:
-    def test_reload_clears_cache_and_reloads_all(self):
+    def test_reload_clears_cache_and_swaps_reflex_arc(self):
+        import app.services.intent_service as _mod
+
         cache_mock = MagicMock()
         new_arc = MagicMock()
+        saved_arc = _mod._reflex_arc
         with (
             patch("app.services.intent_service._intent_cache", cache_mock),
-            patch("app.services.intent_service.reload_intent_config"),
+            patch("app.services.intent_service.reload_intent_config") as reload_cfg,
             patch("app.services.intent_service.get_reflex_arc", return_value=new_arc),
-            patch("app.services.intent_service.reload_rule_engine"),
-            patch("app.services.intent_service._load_intent_runtime_rules"),
+            patch("app.services.intent_service.reload_rule_engine") as reload_engine,
+            patch("app.services.intent_service._load_intent_runtime_rules") as reload_rules,
         ):
             from app.services.intent_service import reload_intent_service
 
-            reload_intent_service()
+            try:
+                reload_intent_service()
+                # observable state change: the module-level reflex arc is replaced
+                assert _mod._reflex_arc is new_arc
+            finally:
+                _mod._reflex_arc = saved_arc
+        # the full reload pipeline ran exactly once
         cache_mock.clear.assert_called_once()
+        reload_cfg.assert_called_once()
+        reload_engine.assert_called_once()
+        reload_rules.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -704,13 +763,15 @@ class TestExtractMultiUnitNames:
         from app.services.intent_service import _extract_multi_unit_names
 
         result = _extract_multi_unit_names("发货单七彩乐园3桶")
-        assert isinstance(result, list)
+        # prefix stripped, single name extracted before the quantity
+        assert result == ["七彩乐园"]
 
     def test_with_separator(self):
         from app.services.intent_service import _extract_multi_unit_names
 
         result = _extract_multi_unit_names("发货单七彩乐园和太阳鸟")
-        assert isinstance(result, list)
+        # split on 和 -> two distinct names
+        assert result == ["七彩乐园", "太阳鸟"]
 
     def test_empty_msg(self):
         from app.services.intent_service import _extract_multi_unit_names
@@ -733,26 +794,26 @@ class TestExtractMultiUnitNames:
     def test_extract_name_before_quantity_long_text_no_match(self):
         from app.services.intent_service import _extract_name_before_quantity
 
-        # text > 10 chars with no quantity match -> regex can still extract up-to-10 chars
-        # just verify return value is str or None (no exception)
+        # 20 chars, no quantity match -> the ^([^\s\d]{2,10}) regex caps the name at 10 chars
         result = _extract_name_before_quantity("x" * 20, r"\d+[桶箱件个]")
-        assert result is None or isinstance(result, str)
+        assert result == "x" * 10
 
     def test_extract_name_before_quantity_empty_part_skipped(self):
-        """Part is empty after strip -> continue branch in _extract_multi_unit_names."""
+        """Leading separator yields an empty first part that is skipped (continue branch)."""
         from app.services.intent_service import _extract_multi_unit_names
 
-        # separator at start produces an empty first part
+        # "和七彩乐园3桶": split on 和 -> ["", "七彩乐园3桶"]; the empty part is skipped
         result = _extract_multi_unit_names("和七彩乐园3桶")
-        assert isinstance(result, list)
+        assert result == ["七彩乐园"]
 
     def test_extract_multi_unit_names_no_name_found_with_sep(self):
-        """has_any_sep=True but no valid names extracted -> falls through to single-name path."""
+        """has_any_sep=True but per-part names too short -> falls through to single-name path."""
         from app.services.intent_service import _extract_multi_unit_names
 
-        # single-char parts won't pass the 2-char minimum
+        # "甲" and "乙" are 1-char each so the split path yields no names; the whole cleaned
+        # string "甲和乙" (3 chars) then matches the single-name path.
         result = _extract_multi_unit_names("发货单甲和乙")
-        assert isinstance(result, list)
+        assert result == ["甲和乙"]
 
     def test_extract_multi_unit_names_no_name_from_single_path(self):
         """Single-name path returns empty when name extraction fails."""
@@ -1097,13 +1158,15 @@ class TestRecognizeIntentsImplExtra:
         result = self._base_run("打印3规格25")
         assert result["tool_key"] == "shipment_generate"
 
-    def test_print_model_spec_with_container_qty_no_trigger(self):
-        """has_container_qty=True blocks the print+spec path."""
+    def test_print_model_spec_with_container_qty_routes_via_container_spec(self):
+        """has_container_qty=True blocks the print+spec path, but 桶+规格+digit fires the
+        container-and-spec block instead -> still shipment_generate."""
         result = self._base_run("打印3规格25桶")
-        # tool_key might be set by another path; just assert it didn't come from this block
-        # with container qty present the print-model-spec block is skipped
-        # the container-and-spec block (line 395-407) might fire instead
-        assert isinstance(result, dict)
+        # the print-model-spec block is skipped (container qty present); the container-and-spec
+        # block (桶 + 规格 + number) takes over and routes to shipment_generate
+        assert result["tool_key"] == "shipment_generate"
+        assert result["primary_intent"] == "shipment_generate"
+        assert "shipment_generate" in result["intent_hints"]
 
     def test_order_action_with_signals_triggers_shipment(self):
         """Lines 433-450: 发货单 + 型号123 + 规格5 -> signals>=2 -> shipment_generate."""
@@ -1111,11 +1174,13 @@ class TestRecognizeIntentsImplExtra:
         assert result["tool_key"] == "shipment_generate"
 
     def test_order_action_with_only_one_signal_no_trigger(self):
-        """signals < 2 -> shipment NOT set from the multi-signal block."""
-        # only 规格 signal, no 编号/桶
-        result = self._base_run("发货单规格5")
-        # tool_key may or may not be set by other paths, but multi-signal block didn't fire
-        assert isinstance(result, dict)
+        """has_order_action but signals < 2 -> multi-signal block does NOT set shipment."""
+        # 打单 (order action) + only 规格 signal; no 编号/型号, no 桶, and the
+        # starts-with-发货单 block can't apply since it doesn't start with 发货单/送货单/出货单.
+        result = self._base_run("打单规格5")
+        assert result["tool_key"] is None
+        assert result["primary_intent"] is None
+        assert result["intent_hints"] == []
 
     def test_resolve_purchase_unit_exception_uses_raw_name(self):
         """Lines 473-475: resolve_purchase_unit raises RECOVERABLE_ERRORS -> resolved=None."""
@@ -1310,7 +1375,7 @@ class TestQuickRecognizeExtra:
         _mod._quick_intent_patterns = []
         try:
             result = quick_recognize("查产品")  # not in command_map
-            assert result["primary_intent"] is None
+            _assert_no_fast_path(result)
         finally:
             _mod._quick_command_map = old_cmd
             _mod._quick_intent_patterns = old_pat
@@ -1326,7 +1391,7 @@ class TestQuickRecognizeExtra:
         _mod._quick_intent_patterns = [(r"^\d+$", "products")]
         try:
             result = quick_recognize("非数字消息")
-            assert result["primary_intent"] is None
+            _assert_no_fast_path(result)
         finally:
             _mod._quick_command_map = old_cmd
             _mod._quick_intent_patterns = old_pat
@@ -1346,8 +1411,8 @@ class TestQuickRecognizeExtra:
         }
         try:
             result = quick_recognize("查一查", context=ctx)
-            # msg doesn't start with 再加 -> append block not entered
-            assert result["source"] != "append_inherit"
+            # msg doesn't start with 再加 -> append block not entered, no inheritance
+            _assert_no_fast_path(result)
         finally:
             _mod._append_keywords = old_kw
             _mod._context_inherit_patterns = old_ci
@@ -1364,8 +1429,8 @@ class TestQuickRecognizeExtra:
         ctx = {"current_intent": "products", "current_tool_key": "products"}
         try:
             result = quick_recognize("继续", context=ctx)
-            # action != repeat_last -> not inherited via context_inherit
-            assert result["source"] != "context_inherit"
+            # pattern matched but action != repeat_last -> no inheritance, falls through
+            _assert_no_fast_path(result)
         finally:
             _mod._append_keywords = old_kw
             _mod._context_inherit_patterns = old_ci
@@ -1382,8 +1447,8 @@ class TestQuickRecognizeExtra:
         ctx = {}  # empty context, no last_intent
         try:
             result = quick_recognize("再一份", context=ctx)
-            # no last_intent -> context_inherit block not triggered
-            assert result["source"] != "context_inherit"
+            # repeat_last matched but no last_intent/tool to inherit -> falls through
+            _assert_no_fast_path(result)
         finally:
             _mod._append_keywords = old_kw
             _mod._context_inherit_patterns = old_ci
@@ -1406,8 +1471,8 @@ class TestQuickRecognizeExtra:
         }
         try:
             result = quick_recognize("好的", context=ctx)
-            # pending_intent is falsy -> block skipped, falls to end
-            assert result["source"] != "context_pending"
+            # pending_intent is falsy -> block skipped, falls through to default
+            _assert_no_fast_path(result)
         finally:
             _mod._append_keywords = old_kw
             _mod._context_inherit_patterns = old_ci
@@ -1424,7 +1489,8 @@ class TestQuickRecognizeExtra:
         ctx = {}  # no pending, no last_intent
         try:
             result = quick_recognize("再加一桶", context=ctx)
-            assert result["source"] != "append_inherit"
+            # append kw matched but nothing to inherit (no pending, no last) -> falls through
+            _assert_no_fast_path(result)
         finally:
             _mod._append_keywords = old_kw
             _mod._context_inherit_patterns = old_ci
@@ -1437,55 +1503,55 @@ class TestQuickRecognizeExtra:
 
 class TestQuickSlotExtractionExtra:
     def test_shipment_no_unit_names_extracted(self):
-        """unit_names empty -> unit_name not set in slots."""
+        """ "生成" (a name prefix) strips to empty -> no unit_name, no other slots either."""
         from app.services.intent_service import quick_slot_extraction
 
-        # A message that won't produce extractable unit names
         slots = quick_slot_extraction("生成", "shipment_generate")
-        assert "unit_name" not in slots
+        assert slots == {}
 
     def test_shipment_multi_unit(self):
-        """len(unit_names) > 1 -> slots['unit_name'] is a list."""
+        """Two 和-separated names -> slots['unit_name'] is a list, quantity also captured."""
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("发货单七彩乐园和太阳鸟各5桶", "shipment_generate")
-        if "unit_name" in slots:
-            assert isinstance(slots["unit_name"], list)
+        assert slots["unit_name"] == ["七彩乐园", "太阳鸟各"]
+        assert slots["quantity"] == "5桶"
 
     def test_shipment_with_quantity_no_spec_no_model(self):
-        """quantity matched, no spec, no model -> only quantity in slots."""
+        """Bare quantity with no extractable name/spec/model -> only quantity set."""
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("3桶", "shipment_generate")
-        if "quantity" in slots:
-            assert "3桶" in slots["quantity"]
+        assert slots == {"quantity": "3桶"}
 
     def test_shipment_with_spec_no_quantity(self):
-        """spec matched -> spec set in slots."""
+        """规格 captured into spec; the leading text before 规格 also becomes unit_name."""
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("七彩规格25", "shipment_generate")
-        if "spec" in slots:
-            assert slots["spec"] == "25"
+        assert slots["spec"] == "25"
+        assert slots["unit_name"] == "七彩规格"
+        assert "quantity" not in slots
 
     def test_shipment_with_model(self):
-        """型号 matched -> model_number set."""
+        """型号 captured into model_number; '型号' also matches the name-before-quantity rule."""
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("型号9803", "shipment_generate")
-        if "model_number" in slots:
-            assert slots["model_number"] == "9803"
+        assert slots["model_number"] == "9803"
+        assert slots["unit_name"] == "型号"
+        assert "spec" not in slots
 
     def test_products_with_empty_msg(self):
-        """products intent but empty msg -> keyword NOT set (line 662 branch)."""
+        """products intent but empty msg -> keyword NOT set (truthiness guard)."""
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("", "products")
-        assert "keyword" not in slots
+        assert slots == {}
 
     def test_customers_with_empty_msg(self):
         """customers intent but empty msg -> keyword NOT set."""
         from app.services.intent_service import quick_slot_extraction
 
         slots = quick_slot_extraction("", "customers")
-        assert "keyword" not in slots
+        assert slots == {}
