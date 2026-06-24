@@ -114,3 +114,17 @@ domains:
     mode: verify
     check: python scripts/dev/ssot_plugins/k8s.py check
     sync: null
+
+  - name: service-topology
+    owner: devops
+    enabled: true
+    ssot: FHD/config/service_topology.yaml
+    derived:
+      - FHD/app/infrastructure/topology.py
+      - FHD/frontend/src/constants/topology.ts
+      - FHD/mobile-harmony/entry/src/main/ets/models/ServiceTopology.ets
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt
+      - FHD/config/topology.generated.json
+    mode: sync+verify
+    check: python scripts/dev/service_topology_ssot.py check
+    sync: python scripts/dev/service_topology_ssot.py generate --apply
