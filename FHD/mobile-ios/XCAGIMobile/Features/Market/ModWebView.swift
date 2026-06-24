@@ -11,16 +11,12 @@ struct ModWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         let token = bearer.trimmingCharacters(in: .whitespaces)
+        let isMarket = ModWebView.isMarketURL(url)
+        let isFhdLan = ModWebView.isFhdLanURL(url)
+
         if !token.isEmpty {
-            // 注入常见登录态键(具体键名可按 Web 端 token 存储约定再校准)。
-            let js = """
-            try {
-              localStorage.setItem('access_token', '\(token)');
-              localStorage.setItem('fhd_access_token', '\(token)');
-              localStorage.setItem('token', '\(token)');
-            } catch (e) {}
-            """
-            let script = WKUserScript(source: js, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            let script = WKUserScript(source: ModWebView.injectScript(token: token, isMarket: isMarket, isFhdLan: isFhdLan),
+                                      injectionTime: .atDocumentStart, forMainFrameOnly: true)
             config.userContentController.addUserScript(script)
         }
         let web = WKWebView(frame: .zero, configuration: config)
@@ -28,12 +24,47 @@ struct ModWebView: UIViewRepresentable {
 
         var req = URLRequest(url: url)
         req.setValue("ios", forHTTPHeaderField: "X-XCAGI-Client")
-        if !token.isEmpty { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        // 与 Android 一致:市场页靠 localStorage(modstore_token),不加 Authorization;其余加 Bearer。
+        if !token.isEmpty && !isMarket {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         web.load(req)
         return web
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    // 对标 Android feature/web/WebViewTokenScript.kt:精确镜像注入键名与判定。
+    static func isMarketURL(_ url: URL) -> Bool {
+        url.absoluteString.lowercased().contains("xiu-ci.com")
+    }
+
+    static func isFhdLanURL(_ url: URL) -> Bool {
+        let s = url.absoluteString.lowercased()
+        guard !isMarketURL(url), s.hasPrefix("http://") else { return false }
+        return s.contains("127.0.0.1") || s.contains("192.168.") || s.contains("10.") || s.contains("localhost")
+    }
+
+    static func injectScript(token: String, isMarket: Bool, isFhdLan: Bool) -> String {
+        let esc = token.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
+        var lines = ""
+        if isMarket {
+            lines += "localStorage.setItem('modstore_token','\(esc)');"
+        }
+        if isFhdLan {
+            lines += "document.cookie = 'session_id=\(esc); path=/; SameSite=Lax';"
+        }
+        return """
+        (function() {
+          try {
+            \(lines)
+            window.__XCAGI_CLIENT__ = 'ios';
+            document.documentElement.classList.add('xcagi-client-ios');
+            window.dispatchEvent(new Event('xcagi-client-ready'));
+          } catch (e) {}
+        })();
+        """
+    }
 }
 
 /// MOD 页面承载(全屏 WebView)。

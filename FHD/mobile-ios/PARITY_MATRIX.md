@@ -41,10 +41,13 @@
 ## 仍待办(诚实声明)
 
 1. **真机验证(📱)**:所有设备相关能力已写完并通过类型/语法检查,但交互需在 iOS 真机/模拟器验证:SSE 逐字、群聊/IM 收发、扫码取景、OCR 识别、生物识别、WebView 登录态注入。
-2. **推送端到端(⚙️)**:`registerForRemoteNotifications` 取 token 需在 Xcode 为 target 开启 **Push Notifications capability**(生成 `aps-environment` 权限)并配置 APNs 密钥;未配置时 `didFailToRegister` 静默忽略、不阻断 App。
-3. **WebView 登录态键名**:`ModWebView` 注入了 `access_token`/`fhd_access_token`/`token` 到 localStorage 并带 `Authorization` 头;具体键名以 Web 端约定为准,可能需按 MOD 页面再校准。
-4. **签名 / 上架**:`project.yml` 的 `DEVELOPMENT_TEAM` 需真机/分发时填写;App 图标当前为占位(`AppIcon` 无图)。
-5. **个人版 SKU**:当前单 target = 企业版;个人版(MODstore 基址 + 手机验证码注册)作为后续 scheme/配置。
+2. **推送 APNs 密钥(⚙️)**:`aps-environment` 权限 + `remote-notification` 后台模式 + Push capability 已在工程内预置(`XCAGIMobile.entitlements`);**端到端仍需在 Apple Developer 配置 APNs 密钥/证书**并用真实 Team 签名。未配置时 `didFailToRegister` 静默忽略、不阻断 App。
+3. **签名 / 上架**:`project.yml` 的 `DEVELOPMENT_TEAM` 需真机/分发时填写;App 图标当前为占位(`AppIcon` 无图)。
+
+### 本轮已闭合
+- ✅ **WebView 登录态注入对齐 Android**:`ModWebView` 精确镜像 `WebViewTokenScript.kt` —— 市场页(`xiu-ci.com`)注入 `localStorage.modstore_token` 不加 Authorization;局域网 FHD(http+内网)注入 `session_id` cookie + Bearer 头;并发 `window.__XCAGI_CLIENT__='ios'` / `xcagi-client-ready` 事件。
+- ✅ **个人版 SKU**:`project.yml` 新增 `XCAGIMobilePersonal` target/scheme(`com.xiuci.xcagi.mobile.personal`,定义 `PERSONAL` 编译条件 → `AppConfig.sku=.personal` → MODstore 基址);对标 Android personal/enterprise flavor。自助手机验证码注册(modstore 个人流)仍列后续。
+- ✅ **推送能力工程预置**:entitlements + 后台模式 + project.yml 接线已就位(差 Apple 侧密钥)。
 
 ## 与安卓的架构对应
 

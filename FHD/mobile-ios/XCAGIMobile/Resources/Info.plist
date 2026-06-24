@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>修茈企业</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleName</key>
 	<string>XCAGIMobile</string>
 	<key>CFBundleIdentifier</key>
@@ -21,6 +21,11 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<!-- 推送(远程通知后台模式) -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
 	</array>
 	<!-- 隐私用途说明(扫码/OCR/生物识别核心流程的真机权限) -->
 	<key>NSCameraUsageDescription</key>
