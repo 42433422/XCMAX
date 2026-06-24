@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { api } from '../api'
+import { api, setAuthTokens } from '../api'
 
 const router = useRouter()
 const route = useRoute()
@@ -41,7 +41,7 @@ async function doLogin() {
   err.value = ''
   try {
     const res = await api.login(username.value, password.value)
-    localStorage.setItem('modstore_token', res.token)
+    setAuthTokens(res)
     const rawRedirect = route.query.redirect
     const redirect = Array.isArray(rawRedirect) ? rawRedirect[0] || '/' : rawRedirect || '/'
     window.location.href = String(redirect)

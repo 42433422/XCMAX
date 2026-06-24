@@ -55,6 +55,8 @@ htmlcov/
 coverage.xml
 coverage.json
 coverage/
+# 仓库根的 coverage.py 转储（瞬时产物，曾被误提交 ~38MB）；真正的棘轮基线在 FHD/metrics/ 下，不受此影响。
+/coverage*.json
 .tox/
 .vector_index/
 

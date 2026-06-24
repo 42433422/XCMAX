@@ -14,6 +14,18 @@ from fastapi import HTTPException, Request
 
 P1_BLOCKED_TOOL_NAMES: frozenset[str] = frozenset({"products_bulk_import"})
 
+# 启动时读取一次提权令牌，避免每个 p2 请求都访问 ``os.environ``。
+_ELEVATED_TOKEN: str = (os.environ.get("FHD_AI_ELEVATED_TOKEN") or "").strip()
+
+
+def _elevated_token() -> str:
+    """返回提权令牌（启动时缓存）。
+
+    若启动时未配置（缓存为空），回退到实时读取，以兼容运行时通过 monkeypatch /
+    动态注入设置该变量的测试与场景；生产环境在启动时配置后即走缓存、不再读 env。
+    """
+    return _ELEVATED_TOKEN or (os.environ.get("FHD_AI_ELEVATED_TOKEN") or "").strip()
+
 
 def _header(request: Request | None, name: str) -> str:
     if request is None:
@@ -25,7 +37,7 @@ def resolve_ai_tier(request: Request | None) -> str:
     claimed = _header(request, "X-XCAGI-AI-Tier").lower()
     if claimed != "p2":
         return "p1"
-    secret = (os.environ.get("FHD_AI_ELEVATED_TOKEN") or "").strip()
+    secret = _elevated_token()
     token = _header(request, "X-XCAGI-Elevated-Token")
     # 恒定时间比较，避免按字符短路导致的时序侧信道（与 mobile_jwt 校验一致）。
     if secret and token and hmac.compare_digest(token.encode("utf-8"), secret.encode("utf-8")):
