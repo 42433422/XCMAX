@@ -147,6 +147,7 @@ def dispatch_subtasks(
     created_by_user_id: int = 0,
     max_concurrency: int = 2,
     allow_high_risk_real_run: bool = False,
+    bench_llm_override: Optional[Tuple[str, str]] = None,
 ) -> Dict[str, Any]:
     """按 SubTask 列表的拓扑顺序执行（depends_on 决定顺序，同层并行）。
 
@@ -176,6 +177,7 @@ def dispatch_subtasks(
             completed=completed,
             max_concurrency=max_concurrency,
             allow_high_risk_real_run=allow_high_risk_real_run,
+            bench_llm_override=bench_llm_override,
         )
         for r in layer_results:
             completed[r["employee_id"]] = r
@@ -207,6 +209,7 @@ def dispatch_subtasks(
             completed=completed,
             max_concurrency=max_concurrency,
             allow_high_risk_real_run=allow_high_risk_real_run,
+            bench_llm_override=bench_llm_override,
         )
         for r in followup_results:
             completed[r["employee_id"]] = r
@@ -251,6 +254,7 @@ def _run_layer(
     completed: Dict[str, Any],
     max_concurrency: int,
     allow_high_risk_real_run: bool,
+    bench_llm_override: Optional[Tuple[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     from modstore_server.employee_executor import execute_employee_task
 
@@ -269,6 +273,7 @@ def _run_layer(
                 st.task_brief,
                 input_data,
                 user_id=uid,
+                bench_llm_override=bench_llm_override,
             )
             ok, reason = _evaluate_execution_success(result if isinstance(result, dict) else {})
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)

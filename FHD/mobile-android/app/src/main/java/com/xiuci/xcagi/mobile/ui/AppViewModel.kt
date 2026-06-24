@@ -1811,9 +1811,25 @@ constructor(
 
     fun toggleAiCircleLike(postId: Int) =
             viewModelScope.launch {
+                // 乐观更新：先本地翻转点赞态与计数，失败再回滚，保证按一下即时反馈
+                val before = _aiCirclePosts.value
+                _aiCirclePosts.value = before.map { p ->
+                    if (p.id == postId) {
+                        val liked = !p.liked_by_me
+                        p.copy(
+                            liked_by_me = liked,
+                            like_count = (p.like_count + if (liked) 1 else -1).coerceAtLeast(0),
+                        )
+                    } else {
+                        p
+                    }
+                }
                 repo.toggleAiCircleLike(postId)
                         .onSuccess { loadAiCirclePosts() }
-                        .onFailure { snack(productErrorMessage(it.message, "点赞失败"), true) }
+                        .onFailure {
+                            _aiCirclePosts.value = before // 回滚
+                            snack(productErrorMessage(it.message, "点赞失败"), true)
+                        }
             }
 
     fun addAiCircleComment(postId: Int, body: String, onSuccess: () -> Unit = {}) =

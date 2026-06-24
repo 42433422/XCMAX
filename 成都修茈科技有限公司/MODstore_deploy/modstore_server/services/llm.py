@@ -124,7 +124,7 @@ async def chat_dispatch_via_session(
 
     uid = int(user_id or 0)
     if uid > 0:
-        from modstore_server.quota_middleware import consume_llm_credit, require_llm_credit
+        from modstore_server.quota_middleware import require_llm_credit
 
         require_llm_credit(session, uid, 1)
 
@@ -138,8 +138,16 @@ async def chat_dispatch_via_session(
         forbid_reasoning_fallback=forbid_reasoning_fallback,
     )
     if uid > 0 and result.get("ok"):
+        # 统一计费：按 token 算出 ¥ 金额从钱包扣（计次配额已退役）。
         try:
-            consume_llm_credit(session, uid, 1)
+            from modstore_server.llm_billing import calculate_charge, usage_from_response
+            from modstore_server.quota_middleware import consume_llm_credit
+
+            usage = usage_from_response(
+                result.get("usage") or {}, messages, str(result.get("content") or "")
+            )
+            charge = calculate_charge(session, provider, model, usage)
+            consume_llm_credit(session, uid, 1, charge=charge)
         except Exception:
             pass
     return result
