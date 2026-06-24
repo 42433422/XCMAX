@@ -166,3 +166,68 @@ class TestAnchorsConsistency:
     def test_version_sync_imports_same_anchors(self):
         """version_sync 复用的 ANCHORS 与 verify_version_anchors 是同一对象。"""
         assert version_sync.ANCHORS is ANCHORS
+
+    def test_anchors_cover_mobile_and_download(self):
+        """扩展后的锚点覆盖鸿蒙 3 文件 + 官网下载 3 字段（防发布漂移）。"""
+        paths = [p for p, _ in ANCHORS]
+        assert "mobile-harmony/oh-package.json5" in paths
+        assert "mobile-harmony/entry/oh-package.json5" in paths
+        assert "mobile-harmony/AppScope/app.json5" in paths
+        assert paths.count("config/download_release.json") == 3
+
+
+class TestHarmonyVersionCode:
+    """harmony_version_code 公式：major*10000 + minor*100 + patch。"""
+
+    def test_baseline(self):
+        assert version_sync.harmony_version_code("10.0.0") == 100000
+
+    def test_minor_bump(self):
+        assert version_sync.harmony_version_code("10.1.0") == 100100
+
+    def test_patch_and_mixed(self):
+        assert version_sync.harmony_version_code("10.0.3") == 100003
+        assert version_sync.harmony_version_code("11.2.3") == 110203
+
+
+class TestSetVersion:
+    """set_version（软件自定版本）：写 VERSION.md 真相源后传播。"""
+
+    def _fake_repo(self, tmp_path, monkeypatch, *, current="10.0.0"):
+        (tmp_path / "VERSION.md").write_text(
+            f"| **XCAGI 总版本** | `{current}` | x |\n\n*最后更新：2026-01-01*\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "pyproject.toml").write_text(f'version = "{current}"\n', encoding="utf-8")
+        monkeypatch.setattr(version_sync, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(
+            version_sync, "ANCHORS", [("pyproject.toml", r'version\s*=\s*"([\d.]+)"')]
+        )
+        monkeypatch.setattr(version_sync, "_canonical_version", lambda: current)
+
+    def test_invalid_semver_returns_2(self, tmp_path, monkeypatch):
+        self._fake_repo(tmp_path, monkeypatch)
+        assert version_sync.set_version("10.1", None, apply=True) == 2
+
+    def test_same_version_noop_returns_0(self, tmp_path, monkeypatch):
+        self._fake_repo(tmp_path, monkeypatch)
+        assert version_sync.set_version("10.0.0", None, apply=True) == 0
+        # 未变更
+        assert "`10.0.0`" in (tmp_path / "VERSION.md").read_text(encoding="utf-8")
+
+    def test_dry_run_does_not_write(self, tmp_path, monkeypatch):
+        self._fake_repo(tmp_path, monkeypatch)
+        rc = version_sync.set_version("10.1.0", None, apply=False)
+        assert rc == 0
+        # VERSION.md 与锚点都未落盘
+        assert "`10.0.0`" in (tmp_path / "VERSION.md").read_text(encoding="utf-8")
+        assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == 'version = "10.0.0"\n'
+
+    def test_apply_writes_truth_source_and_anchor(self, tmp_path, monkeypatch):
+        self._fake_repo(tmp_path, monkeypatch)
+        rc = version_sync.set_version("10.1.0", None, apply=True)
+        assert rc == 0
+        vm = (tmp_path / "VERSION.md").read_text(encoding="utf-8")
+        assert "`10.1.0`" in vm  # 真相源已改
+        assert "version_sync.py --set 同步至 10.1.0" in vm  # 页脚溯源
+        assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == 'version = "10.1.0"\n'
