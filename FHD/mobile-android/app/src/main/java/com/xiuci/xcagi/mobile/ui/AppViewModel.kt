@@ -28,6 +28,7 @@ import com.xiuci.xcagi.mobile.core.push.PushRegistrar
 import com.xiuci.xcagi.mobile.core.im.ImRepository
 import com.xiuci.xcagi.mobile.core.repository.XcagiRepository
 import com.xiuci.xcagi.mobile.core.sync.MobileSyncRepository
+import com.xiuci.xcagi.mobile.core.update.ApkUpdater
 import com.xiuci.xcagi.mobile.core.work.MobileSyncWorker
 import com.xiuci.xcagi.mobile.model.ConversationItem
 import com.xiuci.xcagi.mobile.model.ConversationType
@@ -36,6 +37,7 @@ import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -61,6 +63,18 @@ data class UpdatePrompt(
         val versionName: String,
         val downloadUrl: String,
 )
+
+/** 应用内自更新下载状态，驱动更新弹窗 UI。 */
+sealed interface UpdateDownload {
+    /** 未开始 / 已重置。 */
+    data object Idle : UpdateDownload
+    /** 下载中，[percent] 为 0..100。 */
+    data class Downloading(val percent: Int) : UpdateDownload
+    /** 下载完成，APK 落盘在 [apkPath]，等待安装。 */
+    data class Ready(val apkPath: String) : UpdateDownload
+    /** 下载失败，[reason] 为简短原因。 */
+    data class Failed(val reason: String) : UpdateDownload
+}
 
 internal fun cachedConversationTimestamp(
         conversationId: String,
@@ -351,6 +365,10 @@ constructor(
     val autoLoggingIn: StateFlow<Boolean> = _autoLoggingIn.asStateFlow()
     val updatePrompt: StateFlow<UpdatePrompt?> = _updatePrompt.asStateFlow()
 
+    private val _updateDownload = MutableStateFlow<UpdateDownload>(UpdateDownload.Idle)
+    val updateDownload: StateFlow<UpdateDownload> = _updateDownload.asStateFlow()
+    private var updateDownloadJob: Job? = null
+
     // 微信风格：modInfos 也从 DB Flow 派生，与 conversations 共享同一数据源，彻底消除头像不一致
     val modInfos: StateFlow<List<ModInfo>> =
             repo.observeCachedModInfos()
@@ -523,6 +541,57 @@ constructor(
 
     fun dismissUpdatePrompt() {
         _updatePrompt.value = null
+        // 重置终态下载状态，避免下次打开弹窗显示陈旧的「已完成 / 失败」；下载中不动。
+        if (_updateDownload.value !is UpdateDownload.Downloading) {
+            _updateDownload.value = UpdateDownload.Idle
+        }
+    }
+
+    /** 应用内自更新：流式下载整包 APK，完成后自动尝试拉起系统安装器。 */
+    fun startInAppUpdate(url: String) {
+        if (updateDownloadJob?.isActive == true) return
+        if (url.isBlank()) {
+            snack("暂无应用内下载地址，请前往官网更新", isError = true)
+            return
+        }
+        updateDownloadJob =
+                viewModelScope.launch {
+                    _updateDownload.value = UpdateDownload.Downloading(0)
+                    ApkUpdater.download(appContext, url) { pct ->
+                                _updateDownload.value = UpdateDownload.Downloading(pct)
+                            }
+                            .onSuccess { file ->
+                                _updateDownload.value = UpdateDownload.Ready(file.absolutePath)
+                                launchInstall(file)
+                            }
+                            .onFailure { e ->
+                                _updateDownload.value =
+                                        UpdateDownload.Failed(e.message?.take(120) ?: "下载失败")
+                            }
+                }
+    }
+
+    /** 安装已下载完成的更新包（用户在弹窗点「立即安装」时调用）。 */
+    fun installDownloadedUpdate() {
+        val state = _updateDownload.value
+        if (state is UpdateDownload.Ready) launchInstall(File(state.apkPath))
+    }
+
+    /** 取消进行中的下载并复位状态。 */
+    fun cancelUpdateDownload() {
+        updateDownloadJob?.cancel()
+        updateDownloadJob = null
+        _updateDownload.value = UpdateDownload.Idle
+    }
+
+    private fun launchInstall(file: File) {
+        if (!ApkUpdater.canInstall(appContext)) {
+            snack("请在系统设置中允许「安装未知应用」后重试", isError = true)
+            ApkUpdater.requestInstallPermission(appContext)
+            return
+        }
+        runCatching { ApkUpdater.install(appContext, file) }
+                .onFailure { snack("启动安装失败：${it.message}", isError = true) }
     }
 
     fun setBiometricEnabled(enabled: Boolean) =
