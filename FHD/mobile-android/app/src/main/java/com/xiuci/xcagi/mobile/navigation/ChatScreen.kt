@@ -182,6 +182,7 @@ fun ChatScreen(
     onBack: (() -> Unit)? = null,
     onOpenMod: (String) -> Unit = {},
     onOpenOcr: () -> Unit = {},
+    onOpenMeetingMinutes: () -> Unit = {},
     onOpenProfile: (() -> Unit)? = null,
     onOpenEmployeeProfile: (String, String) -> Unit = { _, _ -> },
 ) {
@@ -351,8 +352,17 @@ fun ChatScreen(
                         iconTint = MaterialTheme.colorScheme.secondary,
                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
                         showArrow = true,
-                        showDivider = false,
+                        showDivider = true,
                         onClick = { showMoreSheet = false; onOpenOcr() },
+                    )
+                    WeCell(
+                        title = "会议纪要",
+                        subtitle = "录音转写，一键生成三级纪要（剧本→架构图→说人话）",
+                        iconTint = MaterialTheme.colorScheme.secondary,
+                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
+                        showArrow = true,
+                        showDivider = false,
+                        onClick = { showMoreSheet = false; onOpenMeetingMinutes() },
                     )
                 }
             }

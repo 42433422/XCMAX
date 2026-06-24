@@ -12,6 +12,7 @@ import { EnterprisePage } from './EnterprisePage';
 import { EnterpriseModulePage } from './EnterpriseModulePage';
 import { ImMessengerPage } from './ImMessengerPage';
 import { LegalConsentPage } from './LegalConsentPage';
+import { MeetingMinutesPage } from './MeetingMinutesPage';
 import { LoginPage } from './LoginPage';
 import { LongTailPage } from './LongTailPage';
 import { MainShell } from './MainShell';
@@ -522,6 +523,8 @@ struct Index {
       ScanQrPage({ onBack: () => this.closeOverlay(), onScanResult: (result: string) => this.closeOverlay() });
     } else if (this.activeOverlay === 'ocr') {
       OcrPage({ onBack: () => this.closeOverlay() });
+    } else if (this.activeOverlay === 'meeting') {
+      MeetingMinutesPage({ onBack: () => this.closeOverlay() });
     } else if (this.activeOverlay === 'market') {
       MarketListPage({ onBack: () => this.closeOverlay(), onOpenMod: (modId: string) => {
         this.activeOverlay = 'modweb:' + modId;
