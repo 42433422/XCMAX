@@ -31,24 +31,20 @@
 | 设置(主题/生物识别持久化) | ✅ | ✅ | ✅ | `SessionStore.savePreferences` | ✅ |
 | **生物识别解锁** | ✅ | ✅ | ✅ | `BiometricGate`(LocalAuthentication) | 📱 |
 | **网络监测 + 离线横幅** | ✅ | ✅ | ✅ | `NetworkMonitor`(NWPathMonitor) | ✅ |
-| **IM 实时(WebSocket)客户端** | ✅ | ✅ | ✅(基础设施) | `IMWebSocketClient`(退避重连+心跳);会话 UI 占位 | 📱🧱 |
-| **真二维码扫描** | ✅ | ✅ | 🧱 占位 | 待接 `AVCaptureMetadataOutput` | 🧱 |
-| **真 OCR 文字识别** | ✅ | ✅ | 🧱 占位 | 待接 Vision `VNRecognizeTextRequest` + PhotosUI | 🧱 |
-| **推送 token 注册** | ✅ | ✅ | 🧱 占位 | `APIClient.registerDevice` 已就绪;待接 APNs 取 token | 🧱 |
-| 通知中心 | ✅ | ✅ | 🧱 占位 | 待接 UNUserNotificationCenter | 🧱 |
-| MOD 市场承载页(WebView) | ✅ | ⚠️ 占位 | 🧱 占位 | 列表用 `mods`;详情待接 WKWebView | 🧱 |
+| **IM 实时(WebSocket)** | ✅ | ✅ | ✅ | `ImMessengerView`:REST 历史/发送(`/api/im/...`)+ `IMWebSocketClient` 实时接收 | 📱 |
+| **真二维码扫描** | ✅ | ✅ | ✅ | `QRScannerView`(AVFoundation `AVCaptureMetadataOutput`),结果可作绑定码 | 📱 |
+| **真 OCR 文字识别** | ✅ | ✅ | ✅ | `OcrView`:PhotosUI 选图 + Vision `VNRecognizeTextRequest` + 复制 | 📱 |
+| **推送 token 注册** | ✅ | ✅ | ✅ | `AppDelegate`/`PushManager` 取 APNs token → `/devices/register` | ⚙️📱 需推送证书 |
+| 通知中心 | ✅ | ✅ | ✅ | `NotificationListView`(UNUserNotificationCenter,前台/点击入库) | 📱 |
+| MOD 市场承载页(WebView) | ✅ | ⚠️ 占位 | ✅ | `MarketListView`(`/mods`)→ `ModWebView`(WKWebView 注入登录态) | 📱 |
 
 ## 仍待办(诚实声明)
 
-1. **真机验证(📱)**:SSE 逐字、群聊收发、生物识别解锁需在 iOS 设备/模拟器验证交互。
-2. **设备能力(🧱)**——按优先级分阶段补齐:
-   - 扫码:`AVFoundation` `AVCaptureMetadataOutput`
-   - OCR:`Vision` + `PhotosUI`(选图识别)
-   - 推送:APNs(`UNUserNotificationCenter` 取 device token → 已有 `/devices/register`)
-   - IM 会话 UI:`IMWebSocketClient` 客户端已就绪,缺会话页与历史拉取的接线
-   - MOD 详情:`WKWebView` 注入登录态
-3. **签名 / 上架**:`project.yml` 的 `DEVELOPMENT_TEAM` 需真机/分发时填写;App 图标当前为占位(`AppIcon` 无图)。
-4. **个人版 SKU**:当前单 target = 企业版;个人版(MODstore 基址 + 手机验证码注册)作为后续 scheme/配置。
+1. **真机验证(📱)**:所有设备相关能力已写完并通过类型/语法检查,但交互需在 iOS 真机/模拟器验证:SSE 逐字、群聊/IM 收发、扫码取景、OCR 识别、生物识别、WebView 登录态注入。
+2. **推送端到端(⚙️)**:`registerForRemoteNotifications` 取 token 需在 Xcode 为 target 开启 **Push Notifications capability**(生成 `aps-environment` 权限)并配置 APNs 密钥;未配置时 `didFailToRegister` 静默忽略、不阻断 App。
+3. **WebView 登录态键名**:`ModWebView` 注入了 `access_token`/`fhd_access_token`/`token` 到 localStorage 并带 `Authorization` 头;具体键名以 Web 端约定为准,可能需按 MOD 页面再校准。
+4. **签名 / 上架**:`project.yml` 的 `DEVELOPMENT_TEAM` 需真机/分发时填写;App 图标当前为占位(`AppIcon` 无图)。
+5. **个人版 SKU**:当前单 target = 企业版;个人版(MODstore 基址 + 手机验证码注册)作为后续 scheme/配置。
 
 ## 与安卓的架构对应
 

@@ -176,6 +176,32 @@ final class APIClient: @unchecked Sendable {
         try await envelope(APIEndpoints.walletBalance, of: WalletBalanceData.self) ?? WalletBalanceData()
     }
 
+    // MARK: - IM 即时通讯(顶层非信封,用 raw 解码)
+
+    func imConversations() async throws -> [ImConversation] {
+        try await raw(APIEndpoints.imConversations, of: ImConversationsResponse.self).conversations ?? []
+    }
+
+    func imCreateDirect(peerUserId: Int) async throws -> ImConversation? {
+        try await raw(APIEndpoints.imDirect, method: .post, body: ["peer_user_id": peerUserId], of: ImDirectResponse.self).conversation
+    }
+
+    func imMessages(conversationId: Int, limit: Int = 50) async throws -> [ImMessageDto] {
+        try await raw("\(APIEndpoints.path(APIEndpoints.imMessages, id: String(conversationId)))?limit=\(limit)",
+                      of: ImMessagesResponse.self).messages ?? []
+    }
+
+    @discardableResult
+    func imSend(conversationId: Int, body: String) async throws -> ImMessageDto? {
+        try await raw(APIEndpoints.path(APIEndpoints.imMessages, id: String(conversationId)),
+                      method: .post, body: ["body": body], of: ImSendResponse.self).message
+    }
+
+    func imMarkRead(conversationId: Int, lastMessageId: Int) async throws {
+        _ = try await raw(APIEndpoints.path(APIEndpoints.imRead, id: String(conversationId)),
+                          method: .post, body: ["last_message_id": lastMessageId], of: EmptyData.self)
+    }
+
     // MARK: - 设备 / 推送注册
 
     func registerDevice(pushToken: String, platform: String = AppConfig.platform) async throws {

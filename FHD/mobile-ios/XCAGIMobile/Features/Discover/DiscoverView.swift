@@ -16,11 +16,11 @@ struct DiscoverView: View {
                     NavigationRow(icon: "arrow.left.arrow.right.circle.fill", tint: .teal, title: "服务桥工单") { EnterpriseModuleView(kind: .serviceBridge) }
                 }
                 Section("工具") {
-                    NavigationRow(icon: "qrcode.viewfinder", tint: .purple, title: "扫一扫") { ScanQrPlaceholderView() }
-                    NavigationRow(icon: "doc.text.viewfinder", tint: .brown, title: "OCR 文字识别") { OcrPlaceholderView() }
-                    NavigationRow(icon: "bell.badge.fill", tint: .red, title: "通知中心") { NotificationPlaceholderView() }
-                    NavigationRow(icon: "bag.fill", tint: .cyan, title: "应用市场") { MarketPlaceholderView() }
-                    NavigationRow(icon: "bubble.left.and.text.bubble.right.fill", tint: .mint, title: "即时通讯 IM") { ImMessengerPlaceholderView() }
+                    NavigationRow(icon: "qrcode.viewfinder", tint: .purple, title: "扫一扫") { ScanQrView() }
+                    NavigationRow(icon: "doc.text.viewfinder", tint: .brown, title: "OCR 文字识别") { OcrView() }
+                    NavigationRow(icon: "bell.badge.fill", tint: .red, title: "通知中心") { NotificationListView() }
+                    NavigationRow(icon: "bag.fill", tint: .cyan, title: "应用市场") { MarketListView() }
+                    NavigationRow(icon: "bubble.left.and.text.bubble.right.fill", tint: .mint, title: "即时通讯 IM") { ImMessengerView() }
                 }
             }
             .navigationTitle("发现")
