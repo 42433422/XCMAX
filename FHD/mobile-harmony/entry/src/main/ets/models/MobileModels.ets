@@ -123,6 +123,25 @@ export interface ChatResponseData {
   data?: ChatPayload;
 }
 
+// 增量同步（/sync/pull）返回投影，对齐 Android MobileSyncRepository。
+export interface SyncAiChange {
+  session_id: string;
+  role: string;
+  content: string;
+}
+
+export interface SyncApprovalRow {
+  id: number;
+  title: string;
+  status: string;
+}
+
+export interface SyncPullData {
+  cursor?: number;
+  ai_changes?: SyncAiChange[];
+  approvals?: SyncApprovalRow[];
+}
+
 export interface ConversationSummary {
   id: string;
   title: string;
