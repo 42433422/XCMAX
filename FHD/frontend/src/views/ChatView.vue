@@ -125,8 +125,13 @@
           <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
           <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
         </button>
-        <button class="btn btn-primary send-message-btn" id="sendMessageBtn" @click="sendMessage">
-          发送
+        <button
+          class="btn btn-primary send-message-btn"
+          id="sendMessageBtn"
+          :disabled="isLoading"
+          @click="sendMessage"
+        >
+          {{ isLoading ? '发送中...' : '发送' }}
         </button>
       </div>
     </div>

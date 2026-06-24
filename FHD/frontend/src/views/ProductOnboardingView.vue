@@ -79,7 +79,10 @@
               <span class="industry-chip-scenario">{{ chipScenarioText(preset.scenario) }}</span>
             </button>
           </div>
-          <p v-if="!openIndustryOptions.length" class="industry-loading-hint">
+          <div v-if="!onboardingCatalogLoaded" class="status-card">
+            <i class="fa fa-spinner fa-spin"></i> 正在加载行业权限…
+          </div>
+          <p v-else-if="!openIndustryOptions.length" class="industry-loading-hint">
             正在加载行业权限…
           </p>
           <p v-if="previewIndustryOptions.length" class="industry-preview-hint">更多行业（即将开放，暂不可选）</p>

@@ -535,7 +535,7 @@ internal fun SearchBarField(
         ) {
             Icon(
                     Icons.Default.Search,
-                    contentDescription = null,
+                    contentDescription = "搜索会话",
                     tint = XcagiTheme.extra.n400,
                     modifier = Modifier.size(20.dp),
             )

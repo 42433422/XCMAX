@@ -132,7 +132,7 @@ fun ImMessengerScreen(
                     Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Default.ChatBubbleOutline, contentDescription = null, tint = XcagiTheme.extra.brandBlue)
+                    Icon(Icons.Default.ChatBubbleOutline, contentDescription = "会话", tint = XcagiTheme.extra.brandBlue)
                 }
                 Spacer(Modifier.width(Spacing.sm))
                 Column(Modifier.weight(1f)) {

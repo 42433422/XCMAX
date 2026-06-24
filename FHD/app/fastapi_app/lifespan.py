@@ -107,6 +107,10 @@ async def lifespan(app: FastAPI):
             task = getattr(app.state, "neuro_health_monitor_task", None)
             if task and not task.done():
                 task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
             logger.info("✅ HealthMonitor 监控循环已停止")
         except RECOVERABLE_ERRORS as hm_err:
             logger.warning("⚠️ HealthMonitor 关闭失败: %s", hm_err)

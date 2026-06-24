@@ -82,8 +82,15 @@ def install_tenant_filter() -> None:
         if tid is None:
             return
         for obj in session.new:
-            if isinstance(obj, TenantScopedMixin) and getattr(obj, "tenant_id", None) is None:
-                obj.tenant_id = tid
+            if isinstance(obj, TenantScopedMixin):
+                obj_tid = getattr(obj, "tenant_id", None)
+                if obj_tid is None:
+                    obj.tenant_id = tid
+                elif obj_tid != tid:
+                    raise ValueError(
+                        f"Cannot assign tenant_id={obj_tid} to {type(obj).__name__} "
+                        f"while in tenant scope {tid}. Tenant assignment mismatch detected."
+                    )
 
 
 # 模块导入即安装（models/__init__ 在所有模型映射后导入本模块）。

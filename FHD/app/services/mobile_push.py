@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -101,7 +102,7 @@ def send_fcm(
         )
         creds.refresh(Request())
         access_token = creds.token
-        project_id = json.load(open(cred_path, encoding="utf-8")).get("project_id")
+        project_id = json.loads(Path(cred_path).read_text(encoding="utf-8")).get("project_id")
         if not project_id:
             return False
         url = f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"

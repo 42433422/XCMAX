@@ -75,6 +75,10 @@ async function submitLookup() {
 
         <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
         <p v-if="successMessage" class="login-success" role="status">{{ successMessage }}</p>
+        <p v-if="successMessage && !usernames.length" class="help-text">
+          换个邮箱再试，或
+          <router-link :to="{ name: 'login-forgot-password', query: route.query }">重置密码</router-link>
+        </p>
         <ul v-if="usernames.length" class="username-list">
           <li v-for="name in usernames" :key="name">{{ name }}</li>
         </ul>
@@ -173,6 +177,18 @@ async function submitLookup() {
   color: #067945;
   background: #f0fff4;
   border: 1px solid #b7ebc6;
+}
+
+.help-text {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #888;
+}
+
+.help-text a {
+  color: #0052d9;
+  text-decoration: none;
 }
 
 .username-list {

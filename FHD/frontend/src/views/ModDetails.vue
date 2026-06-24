@@ -36,7 +36,18 @@
         </div>
       </div>
 
-      <div class="mod-section" v-if="statistics">
+      <div class="mod-section details-state" v-if="detailsLoading">
+        <i class="fa fa-spinner fa-spin"></i> 加载中…
+      </div>
+
+      <div class="mod-section details-state details-error" v-else-if="detailsError">
+        <i class="fa fa-exclamation-triangle"></i> {{ detailsError }}
+        <button type="button" class="btn btn-primary btn-retry" @click="loadDetails">
+          <i class="fa fa-refresh"></i> 重试
+        </button>
+      </div>
+
+      <div class="mod-section" v-if="!detailsLoading && !detailsError && statistics">
         <h3><i class="fa fa-bar-chart"></i> 统计信息</h3>
         <div class="stats-grid">
           <div class="stat-item">
@@ -62,7 +73,7 @@
         </div>
       </div>
 
-      <div class="mod-section" v-if="ratings && ratings.length > 0">
+      <div class="mod-section" v-if="!detailsLoading && !detailsError && ratings && ratings.length > 0">
         <h3><i class="fa fa-comments"></i> 用户评价 ({{ ratings.length }})</h3>
         <div class="ratings-list">
           <div v-for="rating in ratings" :key="rating.id" class="rating-item">
@@ -85,7 +96,7 @@
         </div>
       </div>
 
-      <div class="mod-section" v-if="!ratings || ratings.length === 0">
+      <div class="mod-section" v-if="!detailsLoading && !detailsError && (!ratings || ratings.length === 0)">
         <h3><i class="fa fa-comments"></i> 用户评价</h3>
         <p class="no-ratings">暂无评价，快来抢沙发吧！</p>
       </div>
@@ -167,6 +178,8 @@ export default {
     const userComment = ref('');
     const statistics = ref(null);
     const ratings = ref([]);
+    const detailsLoading = ref(false);
+    const detailsError = ref('');
 
     const isDependencySatisfied = (depId) => {
       if (depId === 'xcagi') return true;
@@ -219,6 +232,8 @@ export default {
     };
 
     const loadDetails = async () => {
+      detailsLoading.value = true;
+      detailsError.value = '';
       try {
         const response = await apiFetch(`/api/mod-store/mod/${props.mod.id}/details`);
         const data = await response.json();
@@ -226,9 +241,14 @@ export default {
         if (data.success) {
           statistics.value = data.data.statistics;
           ratings.value = data.data.ratings || [];
+        } else {
+          detailsError.value = `加载详情失败：${data.error || data.detail || '请重试'}`;
         }
       } catch (error) {
         console.error('Failed to load mod details:', error);
+        detailsError.value = `加载详情失败：${error?.message || '请重试'}`;
+      } finally {
+        detailsLoading.value = false;
       }
     };
 
@@ -239,6 +259,9 @@ export default {
       userComment,
       statistics,
       ratings,
+      detailsLoading,
+      detailsError,
+      loadDetails,
       isDependencySatisfied,
       hasUpdate,
       formatDate,
@@ -459,6 +482,21 @@ export default {
   text-align: center;
   color: #95a5a6;
   padding: 30px;
+}
+
+.details-state {
+  text-align: center;
+  color: #7f8c8d;
+  padding: 30px;
+}
+
+.details-state.details-error {
+  color: #e74c3c;
+}
+
+.btn-retry {
+  display: inline-flex;
+  margin-top: 12px;
 }
 
 .mod-footer {

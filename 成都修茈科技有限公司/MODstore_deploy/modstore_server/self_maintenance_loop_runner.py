@@ -710,7 +710,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             if (
                 isinstance(item, dict)
                 and item.get("kind") == "failed_steps"
-                and int(item.get("retry_count") or 1) >= max_retries
+                and int(item.get("retry_count") or 0) > max_retries
             ):
                 item["escalated"] = True
                 logger.warning(
@@ -718,15 +718,31 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     item.get("run_id"),
                     max_retries,
                 )
-        memory["open_items"] = [
-            item
-            for item in open_items_raw
-            if not (
+        escalated_items = []
+        kept_items = []
+        for item in open_items_raw:
+            if (
                 isinstance(item, dict)
                 and item.get("kind") == "failed_steps"
-                and int(item.get("retry_count") or 1) >= max_retries
-            )
-        ]
+                and int(item.get("retry_count") or 0) > max_retries
+            ):
+                escalated_items.append(item)
+            else:
+                kept_items.append(item)
+
+        memory["open_items"] = kept_items
+        closed_items = memory.get("closed_items")
+        if not isinstance(closed_items, list):
+            closed_items = []
+        closed_at = _iso(_utc_now())
+        for item in escalated_items:
+            closed_items.append({
+                "actor": "self_maintenance",
+                "closed_at": closed_at,
+                "original_item": item,
+                "resolution_reason": "max_retries_exceeded",
+            })
+        memory["closed_items"] = closed_items[-200:]
     last_decision = memory.get("last_policy_decision")
     if isinstance(last_decision, dict) and str(last_decision.get("reason") or "") in {
         "review_or_qa_reported_risk",

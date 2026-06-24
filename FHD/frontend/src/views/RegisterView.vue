@@ -61,6 +61,10 @@ const redirectPath = computed(() => {
   return v;
 });
 
+const passwordMismatch = computed(
+  () => !!password.value && !!confirmPassword.value && password.value !== confirmPassword.value,
+);
+
 const canSubmit = computed(() => {
   if (loading.value) return false;
   if (!username.value.trim() || password.value.length < 6) return false;
@@ -232,8 +236,10 @@ async function submitRegister() {
             autocomplete="new-password"
             placeholder="确认密码"
             :disabled="loading"
+            :aria-invalid="passwordMismatch"
           />
         </div>
+        <p v-if="passwordMismatch" class="login-field-error" role="alert">两次输入的密码不一致</p>
 
         <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
 
@@ -386,6 +392,12 @@ async function submitRegister() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.login-field-error {
+  margin: 4px 0 0;
+  color: #e34d59;
+  font-size: 12px;
 }
 
 .login-error {
