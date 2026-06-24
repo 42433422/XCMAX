@@ -43,6 +43,29 @@ xcodebuild -project XCAGIMobile.xcodeproj -scheme XCAGIMobile \
   -destination 'platform=iOS Simulator,name=iPhone 15' build
 ```
 
+## 发版与签名(CI)
+
+两条流水线(源在 `FHD/.github/workflows/`,根 `.github/workflows/` 为镜像):
+
+| workflow | 触发 | 作用 | 需要 secret |
+|---|---|---|---|
+| `ci-mobile-ios` | push/PR 命中 `mobile-ios/**` | `xcodegen` + `xcodebuild` **免签编译验证**(模拟器目标) | 无 |
+| `release-ios`(Release iOS Enterprise) | 手动 `workflow_dispatch` | 签名 `archive` → 导出 `.ipa`(可选 TestFlight 上传);**未配 secret 时降级为未签名归档** | 见下 |
+
+发版所需 GitHub secrets(仓库 Settings → Secrets and variables → Actions):
+
+| secret | 来源 | 必填 |
+|---|---|---|
+| `IOS_DIST_CERT_P12_BASE64` | 分发证书 `.p12` → `base64 -i dist.p12 \| pbcopy` | 是 |
+| `IOS_DIST_CERT_PASSWORD` | 导出 `.p12` 时设的密码 | 是 |
+| `IOS_PROVISION_PROFILE_BASE64` | 描述文件 `.mobileprovision` → `base64 -i app.mobileprovision \| pbcopy` | 是 |
+| `IOS_TEAM_ID` | Apple Developer → Membership 的 10 位 Team ID | 是 |
+| `IOS_KEYCHAIN_PASSWORD` | 任意临时口令(留空则随机) | 否 |
+| `APP_STORE_CONNECT_API_KEY_ID` / `_ISSUER_ID` / `_KEY_BASE64` | App Store Connect API Key(`.p8` base64),仅 `upload_testflight=true` 用 | 否 |
+
+> 配齐前 4 个 secret 后,Actions 里手动跑 **Release iOS Enterprise** 即产出 `.ipa` 工件;勾 `upload_testflight` 且配好 API Key 则直推 TestFlight。本地手动导出见 `ExportOptions.example.plist`。
+> ⚠️ 当前 `Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` 是**占位图标**,上架前用正式品牌图标替换(脚本:`scripts/gen_placeholder_appicon.py`)。
+
 ## 后端基址
 
 - 企业版默认 `https://xiu-ci.com/fhd-api`(`Config/AppConfig.swift`)
