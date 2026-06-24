@@ -150,10 +150,14 @@ def test_sync_push_pull(tmp_path, monkeypatch):
     monkeypatch.setattr("modstore_server.app.save_config", lambda c: None)
     monkeypatch.setattr("modstore_server.app.project_root", lambda: tmp_path / "ph")
 
-    monkeypatch.setattr("modstore_server.market_api.assert_email_outbound_configured", lambda: None)
-    monkeypatch.setattr("modstore_server.market_api.generate_verification_code", lambda: "999999")
     monkeypatch.setattr(
-        "modstore_server.market_api.send_verification_email",
+        "modstore_server.api.market_routes.assert_email_outbound_configured", lambda: None
+    )
+    monkeypatch.setattr(
+        "modstore_server.api.market_routes.generate_verification_code", lambda: "999999"
+    )
+    monkeypatch.setattr(
+        "modstore_server.api.market_routes.send_verification_email",
         lambda *args, **kwargs: None,
     )
 
@@ -240,10 +244,14 @@ def test_admin_reset_user_password_wrong_token(client, monkeypatch):
 def test_admin_reset_user_password_then_login(client, monkeypatch):
     import uuid
 
-    monkeypatch.setattr("modstore_server.market_api.assert_email_outbound_configured", lambda: None)
-    monkeypatch.setattr("modstore_server.market_api.generate_verification_code", lambda: "999999")
     monkeypatch.setattr(
-        "modstore_server.market_api.send_verification_email",
+        "modstore_server.api.market_routes.assert_email_outbound_configured", lambda: None
+    )
+    monkeypatch.setattr(
+        "modstore_server.api.market_routes.generate_verification_code", lambda: "999999"
+    )
+    monkeypatch.setattr(
+        "modstore_server.api.market_routes.send_verification_email",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setenv("MODSTORE_ADMIN_RECHARGE_TOKEN", "secret-admin")

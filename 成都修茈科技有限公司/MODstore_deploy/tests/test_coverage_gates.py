@@ -160,9 +160,12 @@ def test_pom_declares_jacoco_check_rule():
 
 
 def test_vite_config_enforces_payment_api_at_80():
-    text = _read(REPO_ROOT / "market" / "vite.config.ts")
-    assert "thresholds" in text
+    # Coverage thresholds live in vitest.config.ts (separate from vite build config)
+    text = _read(REPO_ROOT / "market" / "vitest.config.ts")
+    assert "thresholds" in text, (
+        "market/vitest.config.ts must define coverage thresholds"
+    )
     assert (
         "src/application/paymentApi.ts" in text
-    ), "vite.config.ts must keep a per-file 80% gate on the payment API client"
-    assert "lines: 80" in text, "vite.config.ts must enforce 80% lines on the payment API client"
+    ), "vitest.config.ts must keep a per-file 80% gate on the payment API client"
+    assert "lines: 80" in text, "vitest.config.ts must enforce 80% lines on the payment API client"
