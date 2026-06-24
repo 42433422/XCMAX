@@ -1137,9 +1137,11 @@ class TestBuildDispatchRequest:
 
 class TestCliWorkspaceAndTimeout:
     def test_valid_workspace_in_context(self, tmp_path):
+        # 信任墙：产品域（默认）忽略客户提供的 workspace_root，一律用隔离临时区（防 path-injection）。
         svc = _make_svc(tmp_path)
         result = svc._cli_workspace({"workspace_root": str(tmp_path)})
-        assert result == str(tmp_path)
+        assert result != str(tmp_path)
+        assert result == svc._product_ephemeral_workspace()
 
     def test_invalid_workspace_falls_back(self, tmp_path):
         svc = _make_svc(tmp_path)

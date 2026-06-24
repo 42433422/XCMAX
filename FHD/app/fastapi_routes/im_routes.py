@@ -455,9 +455,9 @@ def admin_factory_workspaces(
             for ws in get_workspace_registry().list()
         ]
         return {"success": True, "workspaces": items}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("admin_factory_workspaces")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": "加载项目列表失败"}, status_code=500)
     finally:
         db.close()
 
@@ -494,9 +494,9 @@ def admin_factory_employees(
             for meta in assistant_ssot.factory_employees().values()
         ]
         return {"success": True, "employees": items}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("admin_factory_employees")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": "加载工厂员工失败"}, status_code=500)
     finally:
         db.close()
 
