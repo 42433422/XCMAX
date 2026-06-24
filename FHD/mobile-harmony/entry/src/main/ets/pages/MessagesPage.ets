@@ -5,6 +5,7 @@ import { ChatPage } from './ChatPage';
 export struct MessagesPage {
   @Consume activeConversationId: string;
   @Consume conversations: ConversationSummary[];
+  @State searchQuery: string = '';
 
   onOpenConversation: (item: ConversationSummary) => void = () => {};
   onSendChatMessage: () => void = () => {};
@@ -33,9 +34,30 @@ export struct MessagesPage {
           .width('100%')
           .padding({ left: 18, right: 18, top: 18 });
 
-          ForEach(this.conversations, (item: ConversationSummary) => {
+          TextInput({ placeholder: '搜索会话', text: this.searchQuery })
+            .height(40)
+            .fontSize(15)
+            .fontColor('#111827')
+            .placeholderColor('#6B7280')
+            .backgroundColor('#FFFFFF')
+            .borderRadius(12)
+            .border({ width: 1, color: '#E5E7EB' })
+            .padding({ left: 14, right: 14 })
+            .margin({ left: 14, right: 14 })
+            .onChange((value: string) => {
+              this.searchQuery = value;
+            });
+
+          ForEach(this.filtered(), (item: ConversationSummary) => {
             this.ConversationRow(item);
           }, (item: ConversationSummary) => item.id);
+
+          if (this.filtered().length === 0) {
+            Text(this.searchQuery.trim().length > 0 ? '没有匹配的会话' : '暂无会话')
+              .fontSize(14)
+              .fontColor('#9CA3AF')
+              .margin({ top: 28 });
+          }
         }
         .width('100%')
         .padding({ bottom: 18 });
@@ -91,6 +113,21 @@ export struct MessagesPage {
     .onClick(() => {
       this.onOpenConversation(item);
     });
+  }
+
+  // 按标题/副标题大小写不敏感过滤会话（对齐 Android ConversationListScreen 搜索）。
+  private filtered(): ConversationSummary[] {
+    const q = this.searchQuery.trim().toLowerCase();
+    if (q.length === 0) {
+      return this.conversations;
+    }
+    const out: ConversationSummary[] = [];
+    for (const item of this.conversations) {
+      if (item.title.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q)) {
+        out.push(item);
+      }
+    }
+    return out;
   }
 
   @Builder

@@ -1,4 +1,12 @@
 import { MobileApiClient } from '../api/MobileApiClient';
+import { SseChatClient, SseRecentMessage } from '../api/SseChatClient';
+import { SessionStore, SessionSnapshot } from '../state/SessionStore';
+import { ConnectivityMonitor } from '../state/ConnectivityMonitor';
+import { BiometricGate } from '../state/BiometricGate';
+import { OfflineDb } from '../state/OfflineDb';
+import { MobileSyncRepository, SyncSummary } from '../state/MobileSyncRepository';
+import { Analytics } from '../state/Analytics';
+import common from '@ohos.app.ability.common';
 import { AiEmployeeProfile, ChatMessage, ChatResponseData, cleanText, ConversationSummary, DutyRosterData, FixedContactDto, ModInfo, UserDto } from '../models/MobileModels';
 import { buildConversations, buildDutyRoster, buildEmployees, composeConversations, fallbackFixedTop, findEmployee } from '../state/AppDataBuilder';
 import { NotificationManager } from '../state/NotificationManager';
@@ -33,6 +41,11 @@ function emptyDutyRoster(): DutyRosterData {
 @Component
 struct Index {
   private api: MobileApiClient = new MobileApiClient(DEFAULT_BASE_URL);
+  private sse: SseChatClient = new SseChatClient();
+  private session: SessionStore = new SessionStore();
+  private connectivity: ConnectivityMonitor = new ConnectivityMonitor();
+  private db: OfflineDb = new OfflineDb();
+  private sync: MobileSyncRepository | null = null;
   private notifier: NotificationManager = NotificationManager.getInstance();
 
   @Provide baseUrl: string = DEFAULT_BASE_URL;
@@ -47,6 +60,7 @@ struct Index {
   @Provide loginAccountKind: string = 'admin';
   @Provide statusText: string = '连接企业端移动服务';
   @Provide loading: boolean = false;
+  @Provide isOnline: boolean = true;
   @State loggedIn: boolean = false;
   @Provide selectedTab: number = TAB_MESSAGES;
   @Provide selectedEmployeeKey: string = '';
@@ -67,6 +81,71 @@ struct Index {
   @Provide showSettings: boolean = false;
   @State showDutyRoster: boolean = false;
   @State activeOverlay: string = '';
+
+  aboutToAppear(): void {
+    this.db.init(getContext(this) as common.Context).then(() => {}, () => {});
+    this.restoreSession();
+    this.connectivity.start((online: boolean) => {
+      this.isOnline = online;
+      if (!online) {
+        this.statusText = '网络已断开，正在重连…';
+      }
+    });
+  }
+
+  aboutToDisappear(): void {
+    this.connectivity.stop();
+  }
+
+  // 冷启动恢复持久化的登录态（对齐 Android 自动恢复会话），失败则停留登录页。
+  private async restoreSession(): Promise<void> {
+    try {
+      await this.session.init(getContext(this) as common.Context);
+      const snap = await this.session.load();
+      if (snap.baseUrl.length > 0) {
+        this.baseUrl = snap.baseUrl;
+        this.api.setBaseUrl(snap.baseUrl);
+      }
+      if (snap.accessToken.length > 0) {
+        this.accessToken = snap.accessToken;
+        this.api.setAccessToken(snap.accessToken);
+        this.sessionId = snap.sessionId;
+        this.accountKind = cleanText(snap.accountKind, this.accountKind);
+        this.loginAccountKind = cleanText(snap.loginAccountKind, this.loginAccountKind);
+        this.displayName = cleanText(snap.displayName, this.displayName);
+        this.companyBrand = cleanText(snap.companyBrand, this.companyBrand);
+        this.loggedIn = true;
+        this.statusText = '已恢复登录，正在同步企业数据...';
+        await this.loadHome();
+        this.statusText = `已恢复登录 · ${this.mods.length} 个模块、${this.employees.length} 位员工`;
+        this.triggerSync();
+      }
+    } catch (err) {
+      // 恢复失败不致命：停留在登录页。
+    }
+  }
+
+  // 登录成功后持久化会话，供下次冷启动恢复。
+  private async persistSession(): Promise<void> {
+    const snap: SessionSnapshot = {
+      baseUrl: this.baseUrl,
+      accessToken: this.accessToken,
+      sessionId: this.sessionId,
+      accountKind: this.accountKind,
+      loginAccountKind: this.loginAccountKind,
+      displayName: this.displayName,
+      companyBrand: this.companyBrand
+    };
+    try {
+      await this.session.saveAuth(snap);
+    } catch (err) {
+    }
+  }
+
+  // 登出清除持久化会话（fire-and-forget）。
+  private clearSession(): void {
+    this.session.clear().then(() => {}, () => {});
+  }
 
   build() {
     Column() {
@@ -141,6 +220,9 @@ struct Index {
       this.statusText = '正在同步企业数据...';
       await this.loadHome();
       this.statusText = `已同步 ${this.mods.length} 个模块、${this.employees.length} 位员工`;
+      await this.persistSession();
+      this.triggerSync();
+      Analytics.logKv('login_success', 'kind', this.accountKind);
     } catch (err) {
       this.statusText = `登录失败：${this.errorMessage(err)}`;
     } finally {
@@ -169,6 +251,7 @@ struct Index {
         throw new Error('绑定返回地址无效');
       }
       this.api.setBaseUrl(this.baseUrl);
+      await this.session.saveBaseUrl(this.baseUrl);
       this.statusText = `已切换到 ${this.baseUrl}`;
     } catch (err) {
       this.statusText = `绑定失败：${this.errorMessage(err)}`;
@@ -235,17 +318,82 @@ struct Index {
     const text = this.chatInput.trim();
     if (text.length === 0) return;
     this.chatInput = '';
+    // 当前轮之前的历史作为 recent_messages 上下文（对齐 Android SseChatClient）。
+    const recent = this.recentMessagesContext();
     this.messages = this.messages.concat([{ role: 'user', text: text }]);
     this.loading = true;
+    const payload = this.messageForActiveEmployee(text);
+    // 占位 assistant 气泡，token 到达即流式追加。
+    this.messages = this.messages.concat([{ role: 'assistant', text: '' }]);
+    const assistantIndex = this.messages.length - 1;
+    let acc = '';
     try {
-      const payload = this.messageForActiveEmployee(text);
-      const response = await this.api.chat(payload, this.sessionId);
-      this.messages = this.messages.concat([{ role: 'assistant', text: this.extractReply(response) }]);
+      await this.sse.streamChat(
+        this.api.getBaseUrl(), payload, this.accessToken, 0, recent, '',
+        {
+          onToken: (t: string) => {
+            acc += t;
+            this.updateAssistantAt(assistantIndex, acc);
+          },
+          onDone: (full: string) => {
+            const finalText = cleanText(full, acc.length > 0 ? acc : '（无回复）');
+            this.updateAssistantAt(assistantIndex, finalText);
+            this.cacheTurn(text, finalText);
+            Analytics.log('chat_done');
+          },
+          onError: (msg: string) => {
+            this.updateAssistantAt(assistantIndex, acc.length > 0 ? acc : `请求失败：${msg}`);
+          }
+        }
+      );
     } catch (err) {
-      this.messages = this.messages.concat([{ role: 'assistant', text: `请求失败：${this.errorMessage(err)}` }]);
+      this.updateAssistantAt(assistantIndex, `请求失败：${this.errorMessage(err)}`);
     } finally {
       this.loading = false;
     }
+  }
+
+  // 取最近 6 条非空消息作为 recent_messages 上下文（{role, content}）。
+  private recentMessagesContext(): SseRecentMessage[] {
+    const out: SseRecentMessage[] = [];
+    const history = this.messages;
+    const start = history.length > 6 ? history.length - 6 : 0;
+    for (let i = start; i < history.length; i++) {
+      const m = history[i];
+      if (m.text.trim().length > 0) {
+        out.push({ role: m.role, content: m.text });
+      }
+    }
+    return out;
+  }
+
+  // 流式更新指定下标的 assistant 气泡（复制数组触发 ArkUI 刷新）。
+  private updateAssistantAt(index: number, text: string): void {
+    if (index < 0 || index >= this.messages.length) return;
+    const copy = this.messages.slice();
+    copy[index] = { role: 'assistant', text: text };
+    this.messages = copy;
+  }
+
+  // 把一轮对话写入离线缓存（供冷启动秒出 / sync 增量同步复用）。
+  private cacheTurn(userText: string, assistantText: string): void {
+    const key = this.activeConversationId.length > 0 ? this.activeConversationId : 'default';
+    const now = new Date().getTime();
+    this.db.cacheChat(key, 'user', userText, now).then(() => {}, () => {});
+    this.db.cacheChat(key, 'assistant', assistantText, now + 1).then(() => {}, () => {});
+  }
+
+  // 触发增量同步（拉远端变更写离线缓存），登录/冷启动恢复后调用。
+  private triggerSync(): void {
+    if (this.sync === null) {
+      this.sync = new MobileSyncRepository(this.api, this.db, this.session);
+    }
+    this.sync.pullAndCache().then((r: SyncSummary) => {
+      Analytics.logKv('sync', 'ai', r.aiCount.toString());
+      if (r.ok && (r.aiCount > 0 || r.approvalCount > 0)) {
+        this.statusText = `已同步 ${r.aiCount} 条对话、${r.approvalCount} 条审批`;
+      }
+    }, () => {});
   }
   private messageForActiveEmployee(text: string): string {
     if (this.activeEmployeeKey.length === 0) return text;
@@ -269,6 +417,7 @@ struct Index {
     this.conversations = buildConversations([]); this.dutyRoster = emptyDutyRoster();
     this.statusText = '已退出企业账号';
     this.showSettings = false; this.showDutyRoster = false; this.notifier.unregister();
+    this.clearSession();
   }
   private errorMessage(err: object): string { return cleanText((err as Error).message, '未知错误'); }
 
@@ -349,8 +498,21 @@ struct Index {
     }
   }
   private setBiometricEnabled(enabled: boolean): void {
-    this.biometricEnabled = enabled;
-    this.statusText = enabled ? '已开启生物识别解锁' : '已关闭生物识别解锁';
+    if (!enabled) {
+      this.biometricEnabled = false;
+      this.statusText = '已关闭生物识别解锁';
+      return;
+    }
+    if (!BiometricGate.canAuthenticate()) {
+      this.biometricEnabled = false;
+      this.statusText = '本设备不支持生物识别/设备密码';
+      return;
+    }
+    this.statusText = '请完成生物识别校验以开启';
+    BiometricGate.prompt((success: boolean) => {
+      this.biometricEnabled = success;
+      this.statusText = success ? '已开启生物识别解锁' : '生物识别校验未通过，未开启';
+    });
   }
   private setThemeMode(mode: string): void {
     const normalized = mode === 'dark' || mode === 'light' ? mode : 'system';

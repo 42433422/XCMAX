@@ -12,7 +12,8 @@ import {
   MobileLoginData,
   MobileMeData,
   MobileModsData,
-  PairingExchangeData
+  PairingExchangeData,
+  SyncPullData
 } from '../models/MobileModels';
 
 type HeaderMap = Record<string, string>;
@@ -30,6 +31,10 @@ interface PairingRequestBody {
 interface ChatRequestBody {
   message: string;
   session_id: string;
+}
+
+interface SyncPullRequestBody {
+  since_cursor: number;
 }
 
 interface ApprovalActionBody {
@@ -109,6 +114,17 @@ export class MobileApiClient {
       body
     );
     return response;
+  }
+
+  // 增量同步：拉取 since_cursor 之后的变更（对话/审批），对齐 Android mobileSyncPull。
+  async syncPull(sinceCursor: number): Promise<SyncPullData> {
+    const body: SyncPullRequestBody = { since_cursor: sinceCursor };
+    const envelope = await this.request<SyncPullData>(
+      ApiEndpoints.SYNC_PULL,
+      http.RequestMethod.POST,
+      body
+    );
+    return envelope.data || {};
   }
 
   // ── 审批流 ──
