@@ -26,7 +26,7 @@ def test_load_registry_returns_domains():
     domains = load_registry(REGISTRY_PATH)
     assert len(domains) == len(_registry_domains())
     names = [d["name"] for d in domains]
-    assert {"mods", "version", "db-schema"}.issubset(names)
+    assert {"mods", "version", "db-schema", "service-topology"}.issubset(names)
 
 
 def test_load_registry_enabled_filter():
@@ -36,6 +36,8 @@ def test_load_registry_enabled_filter():
     domains = load_registry(REGISTRY_PATH, enabled_only=True)
     expected_enabled = [d for d in _registry_domains() if d.get("enabled", True)]
     assert len(domains) == len(expected_enabled)
+    # service-topology 域必须已登记且 enabled
+    assert "service-topology" in [d["name"] for d in domains]
     assert all(d.get("enabled", True) for d in domains)
 
 

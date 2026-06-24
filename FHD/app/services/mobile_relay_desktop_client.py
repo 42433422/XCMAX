@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 
+from app.infrastructure.topology import FHD_API_BASE_URL
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
 from app.utils.device_identity import get_stable_device_id
 from app.utils.path_utils import get_app_data_dir, get_desktop_state_dir
@@ -236,7 +237,7 @@ def _relay_base_url() -> str:
     value = (
         os.environ.get("XCAGI_RELAY_BASE_URL")
         or os.environ.get("XCAGI_PUBLIC_FHD_BASE_URL")
-        or "https://xiu-ci.com/fhd-api"
+        or FHD_API_BASE_URL
     ).strip()
     if not value.startswith(("http://", "https://")):
         value = f"https://{value}"

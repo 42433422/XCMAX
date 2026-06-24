@@ -162,3 +162,19 @@ domains:
     mode: verify
     check: python ../scripts/guard_alembic_single_head.py
     sync: null
+
+  - name: service-topology
+    owner: devops
+    enabled: true
+    # 服务拓扑 SSOT（第 11 域）：把散落的服务器事实（xiu-ci.com 硬编码 71 文件 / 端口散 100+ 文件）
+    # 收口成单一真相源 FHD/config/service_topology.yaml；派生四端常量 + 健康探针 JSON。
+    ssot: FHD/config/service_topology.yaml
+    derived:
+      - FHD/app/infrastructure/topology.py
+      - FHD/frontend/src/constants/topology.ts
+      - FHD/mobile-harmony/entry/src/main/ets/models/ServiceTopology.ets
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt
+      - FHD/config/topology.generated.json
+    mode: sync+verify
+    check: python scripts/dev/service_topology_ssot.py check
+    sync: python scripts/dev/service_topology_ssot.py generate --apply
