@@ -249,6 +249,7 @@ fun ChatScreen(
     val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
     val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
     val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
+    val superMode by vm.superMode.collectAsState()
     val employeeProfile =
         remember(employeeRef, employees) {
             employeeRef?.let { ref -> employees.findEmployee(ref.modId, ref.employeeId) }
@@ -379,6 +380,9 @@ fun ChatScreen(
                 onMore = { showMoreSheet = true },
                 gitBranch = gitBranch,
                 showDevTools = claudeConversation || codexConversation,
+                showModes = claudeConversation || codexConversation,
+                superMode = superMode,
+                onSuperModeChange = { vm.setSuperMode(it) },
                 onGitMerge = { gitBranch?.let { vm.gitMerge(it, conversationId) } },
                 onGitDiff = { gitBranch?.let { vm.gitDiff(it, conversationId) } },
                 onGitDiscard = { gitBranch?.let { vm.gitDiscard(it, conversationId) } },
@@ -645,6 +649,9 @@ private fun ImInputBar(
     onMore: (() -> Unit)? = null,
     gitBranch: String? = null,
     showDevTools: Boolean = false,
+    showModes: Boolean = false,
+    superMode: String = "auto",
+    onSuperModeChange: (String) -> Unit = {},
     onGitMerge: () -> Unit = {},
     onGitDiff: () -> Unit = {},
     onGitDiscard: () -> Unit = {},
@@ -658,6 +665,10 @@ private fun ImInputBar(
         Column {
             // 顶部分隔线
             HorizontalDivider(thickness = 0.5.dp, color = imDivider())
+            // 派工模式三态控件：自动/直答/多设备（替代后端关键词自动判断）。超级员工聊天里常驻。
+            if (showModes) {
+                SuperEmployeeModeBar(mode = superMode, onModeChange = onSuperModeChange)
+            }
             // 开发工具条：超级员工聊天里常驻（钉钉式输入框上方一排）。
             // 有分支时点亮可合并/查看/丢弃；无分支置灰，点了提示先发开发任务。
             if (showDevTools) {
@@ -764,6 +775,51 @@ private fun ImInputBar(
 //  情境功能键条（开发任务分支：合并/diff/丢弃）
 //  仿钉钉/微信：输入框上方一排快捷键，跟着场景出现、用完即走
 // ══════════════════════════════════════════
+// 派工模式三态控件（自动 / 直答 / 多设备）。替代后端 _TASK_MARKERS 关键词自动判断：
+// 自动=交后端按内容判断；直答=单设备 CLI 直答；多设备=强制 Para 多设备派工。
+@Composable
+private fun SuperEmployeeModeBar(
+    mode: String,
+    onModeChange: (String) -> Unit,
+) {
+    val haptics = rememberHaptics()
+    val options = listOf(
+        "auto" to "自动",
+        "chat" to "直答",
+        "code" to "多设备",
+    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEach { (value, label) ->
+            val selected = mode == value
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color =
+                    if (selected) XcagiTheme.extra.weChatOnline.copy(alpha = 0.14f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.clickable {
+                    if (!selected) {
+                        haptics.tap()
+                        onModeChange(value)
+                    }
+                },
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (selected) XcagiTheme.extra.weChatOnline else imTextSecondary(),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun GitActionBar(
     branch: String?,

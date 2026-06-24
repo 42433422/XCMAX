@@ -218,6 +218,20 @@
           class="im-compose im-compose--codex"
           @submit.prevent="onCodexSend"
         >
+          <div class="im-compose-modes" role="group" aria-label="派工模式">
+            <button
+              v-for="opt in CODEX_MODE_OPTIONS"
+              :key="opt.value"
+              type="button"
+              class="im-compose-mode"
+              :class="{ 'is-active': codexMode === opt.value }"
+              :title="opt.hint"
+              :aria-pressed="codexMode === opt.value"
+              @click="codexMode = opt.value"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
           <input
             ref="codexInputEl"
             v-model="codexDraft"
@@ -494,6 +508,22 @@ const activeSystemEntry = ref<SystemEmployeeEntry | null>(null);
 const codexMessages = ref<CodexSuperEmployeeMessage[]>([]);
 const codexDraft = ref('');
 const codexBusy = ref(false);
+// 派工模式三态控件（替代后端 _TASK_MARKERS 关键词自动判断）：
+//   auto → 不下发 mode，交后端关键词分类器（保持原行为）
+//   chat → mode=chat，单设备 CLI 直答
+//   code → mode=code + mode_explicit，强制 Para 多设备派工（relay 不再剥离）
+type CodexMode = 'auto' | 'chat' | 'code';
+const CODEX_MODE_OPTIONS: ReadonlyArray<{ value: CodexMode; label: string; hint: string }> = [
+  { value: 'auto', label: '自动', hint: '按内容自动判断：闲聊直答，开发任务派工' },
+  { value: 'chat', label: '直答', hint: '单设备 CLI 直接回答，不派工' },
+  { value: 'code', label: '多设备', hint: '强制派发到全部在线设备协同执行' },
+];
+const codexMode = ref<CodexMode>('auto');
+function codexModeContext(): Record<string, unknown> {
+  if (codexMode.value === 'chat') return { mode: 'chat' };
+  if (codexMode.value === 'code') return { mode: 'code', mode_explicit: true };
+  return {};
+}
 const codexDispatch = ref<CodexSuperEmployeeDispatch | null>(null);
 const codexStreamBody = ref('');
 const codexStreamMessageId = ref('');
@@ -1323,6 +1353,7 @@ async function onCodexSend(): Promise<void> {
       source: codexContextSource.value,
       client_surface: codexApiScope.value === 'mobile' ? 'mobile' : 'admin_console',
       target_devices: ['all'],
+      ...codexModeContext(),
     });
     codexDispatch.value = result.dispatch ?? null;
     codexMessages.value = result.messages;
@@ -2184,6 +2215,35 @@ onUnmounted(() => {
   position: relative;
   z-index: 30;
   background: #fff;
+  flex-wrap: wrap;
+}
+.im-compose-modes {
+  flex-basis: 100%;
+  display: flex;
+  gap: 6px;
+}
+.im-compose-mode {
+  padding: 4px 12px;
+  border: 1px solid var(--xc-color-border, #e6e9ef);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--xc-color-text-secondary, #5a6478);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background 150ms ease;
+}
+.im-compose-mode:hover {
+  border-color: var(--xc-color-primary, #0052d9);
+}
+.im-compose-mode.is-active {
+  background: var(--xc-color-primary, #0052d9);
+  border-color: var(--xc-color-primary, #0052d9);
+  color: #fff;
 }
 .im-compose-input {
   flex: 1;
