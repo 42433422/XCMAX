@@ -186,8 +186,15 @@ def test_in_process_notification_client_persists_via_application_service(monkeyp
 def test_standalone_notification_service_app_only_serves_notification_routes():
     from modstore_server.api.notification_service_app import app
 
-    paths = {route.path for route in app.routes}
-    assert "/healthz" in paths
+    # /healthz has include_in_schema=False — verify via HTTP
+    client = TestClient(app)
+    health = client.get("/healthz")
+    assert health.status_code == 200
+
+    # Use OpenAPI schema for route enumeration (compatible with Starlette 0.x and 1.x)
+    schema = app.openapi()
+    paths = set(schema.get("paths", {}).keys())
+
     assert "/api/notifications/" in paths
     assert "/api/notifications/{notification_id}/read" in paths
     assert "/api/notifications/read-all" in paths
@@ -204,10 +211,6 @@ def test_standalone_notification_service_app_only_serves_notification_routes():
             assert not path.startswith(
                 prefix
             ), f"standalone notification app must not expose {path}"
-
-    client = TestClient(app)
-    health = client.get("/healthz")
-    assert health.status_code == 200
     assert health.json() == {"status": "ok", "service": "notification"}
 
 
