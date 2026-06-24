@@ -258,6 +258,15 @@ fun ChatScreen(
     val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
     val cursorConversation = remember(conversationId) { isCursorConversation(conversationId) }
     val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
+    // 员工隔离：会议纪要等小C专属能力仅在小C(助手)会话出现。
+    // 平台员工(employeeRef)/超级员工(codex/cursor/claude)/客服(CS)会话一律不得使用。
+    val assistantConversation = remember(conversationId, employeeRef) {
+        employeeRef == null &&
+            !isCodexConversation(conversationId) &&
+            !isCursorConversation(conversationId) &&
+            !isClaudeConversation(conversationId) &&
+            conversationId?.trim() != PinnedIds.CS
+    }
     val superMode by vm.superMode.collectAsState()
     val employeeProfile =
         remember(employeeRef, employees) {
@@ -352,18 +361,21 @@ fun ChatScreen(
                         iconTint = MaterialTheme.colorScheme.secondary,
                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
                         showArrow = true,
-                        showDivider = true,
+                        showDivider = assistantConversation,
                         onClick = { showMoreSheet = false; onOpenOcr() },
                     )
-                    WeCell(
-                        title = "会议纪要",
-                        subtitle = "录音转写，一键生成三级纪要（剧本→架构图→说人话）",
-                        iconTint = MaterialTheme.colorScheme.secondary,
-                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                        showArrow = true,
-                        showDivider = false,
-                        onClick = { showMoreSheet = false; onOpenMeetingMinutes() },
-                    )
+                    // 会议纪要为小C专属：仅在小C(助手)会话展示，员工/超级员工/客服会话隐藏（员工隔离）。
+                    if (assistantConversation) {
+                        WeCell(
+                            title = "会议纪要",
+                            subtitle = "录音转写，一键生成三级纪要（剧本→架构图→说人话）",
+                            iconTint = MaterialTheme.colorScheme.secondary,
+                            iconBg = MaterialTheme.colorScheme.secondaryContainer,
+                            showArrow = true,
+                            showDivider = false,
+                            onClick = { showMoreSheet = false; onOpenMeetingMinutes() },
+                        )
+                    }
                 }
             }
         }
