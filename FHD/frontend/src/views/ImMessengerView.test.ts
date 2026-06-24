@@ -26,6 +26,9 @@ vi.mock('@/api/im', () => ({
   sendImMessage: vi.fn().mockResolvedValue({ success: true }),
   createDirectConversation: vi.fn().mockResolvedValue({ id: 1 }),
   fetchImContacts: vi.fn().mockResolvedValue([enterpriseCsContact]),
+  fetchDesktopFixedContacts: vi
+    .fn()
+    .mockResolvedValue({ device: 'desktop', side: '', top: [], bottom: [] }),
   imWebSocketUrl: vi.fn(() => 'ws://localhost/ws'),
   markImRead: vi.fn().mockResolvedValue({}),
 }))
@@ -165,7 +168,12 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
     expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
 
-    await wrapper.find('.im-conv-item--pinned').trigger('click')
+    // surface SSOT 重排后 super 顺序=Claude→Codex,Codex 不再是首个固定项:按文案精确点击。
+    const codexPinned = wrapper
+      .findAll('.im-conv-item--pinned')
+      .find((w) => w.text().includes('超级员工-Codex'))
+    expect(codexPinned).toBeTruthy()
+    await codexPinned!.trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('跨设备协作开发员工')

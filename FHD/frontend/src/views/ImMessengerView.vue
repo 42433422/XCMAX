@@ -349,6 +349,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import {
   createDirectConversation,
+  fetchDesktopFixedContacts,
   fetchImContacts,
   fetchImConversations,
   fetchImMessages,
@@ -357,6 +358,7 @@ import {
   sendImMessage,
   type ImContact,
   type ImConversationSummary,
+  type ImFixedEntry,
   type ImMessage,
 } from '@/api/im';
 import api from '@/api';
@@ -503,6 +505,8 @@ const codexStreamActive = ref(false);
 const messages = ref<ImMessage[]>([]);
 const draft = ref('');
 const dutyEmployees = ref<DutyEmployeeEntry[]>([]);
+// 桌面端固定区组成(surface SSOT: device=desktop × side),驱动 pinnedContacts 顺序。
+const desktopFixed = ref<{ top: ImFixedEntry[]; bottom: ImFixedEntry[] }>({ top: [], bottom: [] });
 const dutyEmployeeMessages = ref<Record<string, DutyEmployeeChatMessage[]>>({});
 const dutyEmployeeDraft = ref('');
 const dutyEmployeeBusy = ref(false);
@@ -641,9 +645,38 @@ const filteredContacts = computed(() => {
   );
 });
 
+// surface SSOT 的 super 条目 id → 本视图带行为(对话面板/轮询)的强类型超级员工条目。
+function mapFixedSuper(entry: ImFixedEntry): PinnedImEntry | null {
+  if (entry.id === 'claude-super-employee') return CLAUDE_SUPER_EMPLOYEE_ENTRY;
+  if (entry.id === 'codex-super-employee') return CODEX_SUPER_EMPLOYEE_ENTRY;
+  return null;
+}
+
+function mapFixedEntries(entries: ImFixedEntry[]): PinnedImEntry[] {
+  const out: PinnedImEntry[] = [];
+  for (const e of entries) {
+    if (e.kind === 'super') {
+      const mapped = mapFixedSuper(e);
+      if (mapped) out.push(mapped);
+    } else if (e.kind === 'dedicated_cs') {
+      out.push(...contacts.value.filter((c) => isEnterpriseDedicatedContact(c)));
+    }
+  }
+  return out;
+}
+
+// surface SSOT 未加载时的回退:super 内部 SSOT 声明序 = Claude → Codex。
+const SUPER_SSOT_ORDER: PinnedImEntry[] = [CLAUDE_SUPER_EMPLOYEE_ENTRY, CODEX_SUPER_EMPLOYEE_ENTRY];
+
 const pinnedContacts = computed<PinnedImEntry[]>(() => {
   if (isAdminCustomerServiceConsole.value) {
-    return [CODEX_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
+    // 顺序由 surface_composition('desktop','admin')=[platform, super] 驱动:
+    // top(platform 之前) + 平台员工(动态) + bottom(platform 之后,含超级员工)。
+    const top = mapFixedEntries(desktopFixed.value.top);
+    const bottom = desktopFixed.value.bottom.length
+      ? mapFixedEntries(desktopFixed.value.bottom)
+      : SUPER_SSOT_ORDER;
+    return [...top, ...dutyEmployees.value, ...bottom];
   }
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
 });
@@ -1418,6 +1451,9 @@ async function loadContacts(): Promise<void> {
   contactsLoading.value = true;
   try {
     contacts.value = await fetchImContacts();
+    // 桌面固定区组成由 surface SSOT 端点驱动(fail-safe:失败返回空段→回退 SSOT 声明序)。
+    const fixed = await fetchDesktopFixedContacts();
+    desktopFixed.value = { top: fixed.top, bottom: fixed.bottom };
     imApiReachable.value = true;
   } catch (error) {
     showAppToast(error instanceof Error ? error.message : '加载联系人失败', 'error');
