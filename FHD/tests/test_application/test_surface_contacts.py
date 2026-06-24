@@ -14,15 +14,15 @@ def test_mobile_enterprise_composition():
     assert r["side"] == "enterprise"
     # 平台员工之前: 小C助理 + 专属客服
     assert _kinds(r["top"]) == ["assistant", "dedicated_cs"]
-    # 平台员工之后: 两个超级员工
-    assert _kinds(r["bottom"]) == ["super", "super"]
+    # 平台员工之后: 全部超级员工(Claude/Codex/Cursor)
+    assert _kinds(r["bottom"]) == ["super", "super", "super"]
 
 
 def test_mobile_admin_has_no_dedicated_cs():
     r = surface_contacts.mobile_fixed_contacts("admin")
     assert r["side"] == "admin"
     assert _kinds(r["top"]) == ["assistant"]  # 管理端无专属客服
-    assert _kinds(r["bottom"]) == ["super", "super"]
+    assert _kinds(r["bottom"]) == ["super", "super", "super"]
     all_kinds = _kinds(r["top"]) + _kinds(r["bottom"])
     assert "dedicated_cs" not in all_kinds
 
@@ -42,7 +42,11 @@ def test_super_employees_present_both_sides():
     for side in ("enterprise", "admin"):
         r = surface_contacts.mobile_fixed_contacts(side)
         super_ids = {e["id"] for e in r["bottom"] if e["kind"] == "super"}
-        assert super_ids == {"claude-super-employee", "codex-super-employee"}
+        assert super_ids == {
+            "claude-super-employee",
+            "codex-super-employee",
+            "cursor-super-employee",
+        }
 
 
 def test_unknown_side_defaults_enterprise():
