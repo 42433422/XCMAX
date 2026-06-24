@@ -65,9 +65,7 @@ def _text_of(err: Any) -> str:
     if err is None:
         return ""
     if isinstance(err, dict):
-        return " ".join(
-            str(err.get(k) or "") for k in ("error", "message", "detail", "content")
-        )
+        return " ".join(str(err.get(k) or "") for k in ("error", "message", "detail", "content"))
     return str(err)
 
 
