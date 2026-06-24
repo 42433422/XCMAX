@@ -82,6 +82,14 @@
       "display_tool": "Codex",
       "avatar_letter": "超",
       "summary": "Codex 超级员工 · 多设备派工"
+    },
+    "cursor-super-employee": {
+      "id": "cursor-super-employee",
+      "tier": "super",
+      "display_name": "超级员工-Cursor",
+      "display_tool": "Cursor",
+      "avatar_letter": "超",
+      "summary": "Cursor 超级员工 · 多设备派工"
     }
   },
   "contact_kinds": {

@@ -197,11 +197,15 @@ def _append_super_employees(employees: list[dict[str, Any]]) -> None:
     仅出现在手机端选人列表中供用户手动拉入。
     """
     try:
-        from app.application.super_employee_service import CLAUDE_PROFILE, CODEX_PROFILE
+        from app.application.super_employee_service import (
+            CLAUDE_PROFILE,
+            CODEX_PROFILE,
+            CURSOR_PROFILE,
+        )
     except Exception:  # noqa: BLE001 - 超级员工模块不可用时静默跳过
         return
     existing = {str(e.get("employee_id") or "") for e in employees if isinstance(e, dict)}
-    for profile in (CODEX_PROFILE, CLAUDE_PROFILE):
+    for profile in (CODEX_PROFILE, CLAUDE_PROFILE, CURSOR_PROFILE):
         if profile.employee_id in existing:
             continue
         employees.append(

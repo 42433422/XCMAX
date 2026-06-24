@@ -89,6 +89,13 @@ async def lifespan(app: FastAPI):
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 员工本地调度器关闭失败: %s", e)
     try:
+        from app.application.task_dispatch import stop_work_order_worker
+
+        stop_work_order_worker()
+        logger.info("✅ 派工 worker 已关闭")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 派工 worker 关闭失败: %s", e)
+    try:
         from app.services.mobile_relay_desktop_client import stop_desktop_relay_poller
 
         stop_desktop_relay_poller()
@@ -303,6 +310,15 @@ async def _init_employee_runtime_async(app: FastAPI):
         )
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 员工运行时初始化失败: %s", e)
+
+    try:
+        from app.application.task_dispatch import start_work_order_worker
+
+        worker_status = await asyncio.to_thread(start_work_order_worker)
+        app.state.work_order_worker = worker_status
+        logger.info("✅ 派工 worker running=%s", worker_status.get("running"))
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 派工 worker 启动失败: %s", e)
 
 
 async def _init_mobile_relay_desktop_async(app: FastAPI):
