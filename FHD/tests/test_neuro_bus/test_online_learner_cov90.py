@@ -20,7 +20,16 @@ import app.neuro_bus.routing.online_learner as ol_mod
 from app.neuro_bus.routing.online_learner import OnlineLearner
 
 torch = pytest.importorskip("torch")
+import app.neuro_bus.routing.policy_nn as _policy_nn_mod  # noqa: E402
 from app.neuro_bus.routing.policy_nn import RoutingMLP  # noqa: E402
+
+# CI 无 ml extra 时 torch.nn 不可用：policy_nn.nn 为 None，RoutingMLP 无法实例化
+# （importorskip("torch") 不足以拦截——torch 本体/桩可导入但 torch.nn 缺失）。
+# 需要真实模型的用例按能力跳过，与源模块 update_policy 在 torch/nn 缺失时返回 None 的降级一致。
+requires_real_nn = pytest.mark.skipif(
+    getattr(_policy_nn_mod, "nn", None) is None,
+    reason="torch.nn 不可用（CI 无 ml extra）",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +111,7 @@ def test_update_policy_returns_none_when_no_active_policy(monkeypatch):
 # ---------------------------------------------------------------------------
 # update_policy 成功路径
 # ---------------------------------------------------------------------------
+@requires_real_nn
 def test_update_policy_success_returns_version_and_persists(monkeypatch, tmp_path):
     """完整成功路径：训练 → 保存权重 → 写 manifest → 返回新版本号。"""
     policies_dir = tmp_path / "routing_policies"
@@ -163,6 +173,7 @@ def test_update_policy_returns_none_on_recoverable_error(monkeypatch):
     assert learner.update_policy() is None
 
 
+@requires_real_nn
 def test_update_policy_increments_version_with_existing_manifest(monkeypatch, tmp_path):
     """已有 manifest 含版本 3,5 → 新版本应为 6。"""
     policies_dir = tmp_path / "routing_policies"
