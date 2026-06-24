@@ -137,8 +137,11 @@ def load_baseline() -> dict:
 def save_baseline(d: dict) -> None:
     BASELINE.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "_note": "覆盖率棘轮基线（只升不降）。行 floor 见 pyproject.toml fail_under；"
-        "此处存分支 floor 与前端各项 floor。由 coverage_ratchet.py --bump 维护。",
+        "_note": (
+            "覆盖率棘轮基线（只升不降）。后端行 floor SSOT = pyproject.toml fail_under；"
+            "backend_lines_floor 为镜像（只读参考）。分支 floor 与前端各项 floor 为本文件 SSOT。"
+            "由 coverage_ratchet.py --bump 维护；updated/last_measured 记录最近 bump 时的实测值。"
+        ),
         **{k: v for k, v in d.items() if not k.startswith("_")},
     }
     BASELINE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -355,6 +358,16 @@ def cmd_bump(args: argparse.Namespace) -> int:
                 print("[cov-ratchet] vitest.config.js thresholds 已同步")
 
     if changed:
+        # 补齐可复现性元数据：镜像行 floor、时间戳、最近实测值
+        base["updated"] = date.today().isoformat()
+        base["backend_lines_floor"] = int(read_fail_under(PYPROJECT))
+        measured = base.setdefault("last_measured", {})
+        if be:
+            measured["backend_lines"] = be["line_pct"]
+            measured["backend_branches"] = be["branch_pct"]
+        if fe:
+            for key in FE_KEYS:
+                measured[f"frontend_{key}"] = fe[key]
         save_baseline(base)
         append_history(be, fe, note="bump")
         print("[cov-ratchet] 基线已提升并记录历史。")
