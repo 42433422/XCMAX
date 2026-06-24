@@ -1,18 +1,30 @@
 import http from '@ohos.net.http';
 import { ApiEndpoints } from './ApiEndpoints';
 import {
+  AiGroup,
+  AiGroupCreateData,
+  AiGroupMessage,
+  AiGroupMessagesData,
+  AiGroupPostResult,
+  AiGroupsData,
   ApprovalDetail,
   ApprovalItem,
   ChatMessage,
   ChatResponseData,
+  CirclePost,
+  CirclePostsData,
   CsInfo,
+  CustomersData,
   MobileEnvelope,
   MobileFixedContactsData,
   MobileHomeData,
   MobileLoginData,
   MobileMeData,
   MobileModsData,
-  PairingExchangeData
+  PairingExchangeData,
+  ServiceBridgeData,
+  ShipmentsData,
+  WalletBalanceData
 } from '../models/MobileModels';
 
 type HeaderMap = Record<string, string>;
@@ -34,6 +46,37 @@ interface ChatRequestBody {
 
 interface ApprovalActionBody {
   opinion: string;
+}
+
+interface CircleCommentBody {
+  body: string;
+}
+
+interface AiGroupCreateBody {
+  name: string;
+}
+
+interface AiGroupMessageBody {
+  message: string;
+  sender_name: string;
+  mentions: string[];
+}
+
+interface AiGroupMemberBody {
+  employee_id: string;
+  mod_id: string;
+  name: string;
+  avatar: string;
+  summary: string;
+}
+
+interface DeviceRegisterBody {
+  fcm_token: string;
+  push_provider: string;
+  push_token: string;
+  product_sku: string;
+  device_label: string;
+  platform: string;
 }
 
 export class MobileApiClient {
@@ -157,6 +200,101 @@ export class MobileApiClient {
     const body: ChatRequestBody = { message: message, session_id: 'cs' };
     const response = await this.rawRequest<ChatResponseData>('api/cs/chat', http.RequestMethod.POST, body);
     return response;
+  }
+
+  // ── AI 圈子(朋友圈) ──
+  async circlePosts(): Promise<CirclePost[]> {
+    const envelope = await this.request<CirclePostsData>(ApiEndpoints.CIRCLE_POSTS, http.RequestMethod.GET);
+    return (envelope.data && envelope.data.items) ? envelope.data.items : [];
+  }
+
+  async circleToggleLike(postId: number): Promise<void> {
+    const path = ApiEndpoints.CIRCLE_POST_LIKE.replace('{id}', postId.toString());
+    await this.request<Object>(path, http.RequestMethod.POST);
+  }
+
+  async circleAddComment(postId: number, body: string): Promise<void> {
+    const path = ApiEndpoints.CIRCLE_POST_COMMENTS.replace('{id}', postId.toString());
+    const payload: CircleCommentBody = { body: body };
+    await this.request<Object>(path, http.RequestMethod.POST, payload);
+  }
+
+  // ── AI 群聊 ──
+  async aiGroups(): Promise<AiGroup[]> {
+    const envelope = await this.request<AiGroupsData>(ApiEndpoints.AI_GROUPS, http.RequestMethod.GET);
+    return (envelope.data && envelope.data.groups) ? envelope.data.groups : [];
+  }
+
+  async createAiGroup(name: string): Promise<AiGroup> {
+    const payload: AiGroupCreateBody = { name: name.trim() };
+    const envelope = await this.request<AiGroupCreateData>(
+      ApiEndpoints.AI_GROUPS, http.RequestMethod.POST, payload);
+    return (envelope.data && envelope.data.group) ? envelope.data.group : ({} as AiGroup);
+  }
+
+  async aiGroupMessages(groupId: string): Promise<AiGroupMessage[]> {
+    const path = ApiEndpoints.AI_GROUP_MESSAGES.replace('{id}', groupId);
+    const envelope = await this.request<AiGroupMessagesData>(path, http.RequestMethod.GET);
+    return (envelope.data && envelope.data.messages) ? envelope.data.messages : [];
+  }
+
+  async sendAiGroupMessage(
+    groupId: string, message: string, senderName: string, mentions: string[]): Promise<AiGroupPostResult> {
+    const path = ApiEndpoints.AI_GROUP_MESSAGES.replace('{id}', groupId);
+    const payload: AiGroupMessageBody = {
+      message: message, sender_name: senderName.length > 0 ? senderName : '我', mentions: mentions };
+    const envelope = await this.request<AiGroupPostResult>(path, http.RequestMethod.POST, payload);
+    return envelope.data || ({} as AiGroupPostResult);
+  }
+
+  async addAiGroupMember(
+    groupId: string, employeeId: string, modId: string, name: string, avatar: string, summary: string): Promise<void> {
+    const path = ApiEndpoints.AI_GROUP_MEMBERS.replace('{id}', groupId);
+    const payload: AiGroupMemberBody = {
+      employee_id: employeeId, mod_id: modId, name: name, avatar: avatar, summary: summary };
+    await this.request<Object>(path, http.RequestMethod.POST, payload);
+  }
+
+  async markAiGroupRead(groupId: string): Promise<void> {
+    const path = ApiEndpoints.AI_GROUP_MARK_READ.replace('{id}', groupId);
+    await this.request<Object>(path, http.RequestMethod.POST);
+  }
+
+  // ── 企业模块(客户/发货/服务桥/钱包) ──
+  async customers(page: number = 1): Promise<CustomersData> {
+    const envelope = await this.request<CustomersData>(
+      `${ApiEndpoints.CUSTOMERS}?page=${page}&per_page=20`, http.RequestMethod.GET);
+    return envelope.data || ({ items: [] } as CustomersData);
+  }
+
+  async shipments(page: number = 1): Promise<ShipmentsData> {
+    const envelope = await this.request<ShipmentsData>(
+      `${ApiEndpoints.SHIPMENTS}?page=${page}&per_page=20`, http.RequestMethod.GET);
+    return envelope.data || ({ items: [] } as ShipmentsData);
+  }
+
+  async serviceBridgeRequests(): Promise<ServiceBridgeData> {
+    const envelope = await this.request<ServiceBridgeData>(
+      `${ApiEndpoints.SERVICE_BRIDGE_REQUESTS}?page=1&per_page=20`, http.RequestMethod.GET);
+    return envelope.data || ({ items: [] } as ServiceBridgeData);
+  }
+
+  async walletBalance(): Promise<WalletBalanceData> {
+    const envelope = await this.request<WalletBalanceData>(ApiEndpoints.WALLET_BALANCE, http.RequestMethod.GET);
+    return envelope.data || ({} as WalletBalanceData);
+  }
+
+  // ── 设备/推送注册(对标 Android PushRegistrar) ──
+  async registerDevice(pushToken: string, platform: string): Promise<void> {
+    const body: DeviceRegisterBody = {
+      fcm_token: pushToken,
+      push_provider: 'hmspush',
+      push_token: pushToken,
+      product_sku: 'enterprise',
+      device_label: 'HarmonyOS',
+      platform: platform
+    };
+    await this.request<Object>(ApiEndpoints.DEVICES_REGISTER, http.RequestMethod.POST, body);
   }
 
   private async request<T>(path: string, method: http.RequestMethod, body?: object): Promise<MobileEnvelope<T>> {
