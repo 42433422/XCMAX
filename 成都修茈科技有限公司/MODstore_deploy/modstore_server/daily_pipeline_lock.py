@@ -51,7 +51,9 @@ def daily_pipeline_lock_enabled() -> bool:
 def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     tmp.replace(path)
 
 
@@ -87,6 +89,70 @@ def scheduler_heartbeat_status(*, max_age_seconds: int = 600) -> Dict[str, Any]:
         "ok": age_seconds <= max(1, int(max_age_seconds)),
         "path": str(path),
         "reason": "ok" if age_seconds <= max(1, int(max_age_seconds)) else "heartbeat_stale",
+    }
+
+
+# 日循环每 24h 跑一次,留一轮宽限(2 天)再判停摆,避免单次延迟误报。
+DEFAULT_LOOP_MAX_SILENCE_SECONDS = 172800
+
+
+def _loop_max_silence_seconds() -> int:
+    raw = os.environ.get("MODSTORE_SELF_MAINTENANCE_MAX_SILENCE_SEC")
+    try:
+        return max(1, int(raw)) if raw else DEFAULT_LOOP_MAX_SILENCE_SECONDS
+    except (TypeError, ValueError):
+        return DEFAULT_LOOP_MAX_SILENCE_SECONDS
+
+
+def _parse_iso_epoch(value: Optional[str]) -> Optional[float]:
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def self_maintenance_loop_liveness(
+    last_activity_iso: Optional[str],
+    *,
+    max_silence_seconds: Optional[int] = None,
+    now_epoch: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Pure staleness verdict for the self-maintenance loop.
+
+    ``last_activity_iso`` 应取 ledger 中最近一次 **complete 或 skip** 的时间戳——skip
+    也算"调度器有跳动"(进程活着、只是被门控跳过),只有 complete 与 skip 长期都没有
+    才说明调度器真的停摆(生产曾因此停摆 12 天无人知)。无任何活动记录按 stale 处理。
+
+    纯函数:不读时钟外部状态(``now_epoch`` 可注入),便于单测。供 ops 状态接口附加到
+    响应里,外部探针/日志告警据此发现"调度器不活了"。
+    """
+    threshold = (
+        max_silence_seconds if max_silence_seconds is not None else _loop_max_silence_seconds()
+    )
+    threshold = max(1, int(threshold))
+    now = time.time() if now_epoch is None else float(now_epoch)
+    last_epoch = _parse_iso_epoch(last_activity_iso)
+    if last_epoch is None:
+        return {
+            "is_stale": True,
+            "age_seconds": None,
+            "last_activity": None,
+            "threshold_seconds": threshold,
+            "reason": "no_activity_recorded",
+        }
+    age = max(0.0, now - last_epoch)
+    is_stale = age > threshold
+    return {
+        "is_stale": is_stale,
+        "age_seconds": age,
+        "last_activity": str(last_activity_iso),
+        "threshold_seconds": threshold,
+        "reason": "loop_stalled" if is_stale else "ok",
     }
 
 
@@ -158,5 +224,6 @@ __all__ = [
     "daily_pipeline_lock_path",
     "scheduler_heartbeat_path",
     "scheduler_heartbeat_status",
+    "self_maintenance_loop_liveness",
     "write_scheduler_heartbeat",
 ]
