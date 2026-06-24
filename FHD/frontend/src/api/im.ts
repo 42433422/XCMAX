@@ -45,6 +45,46 @@ export async function fetchImContacts(keyword?: string): Promise<ImContact[]> {
   return data.contacts ?? [];
 }
 
+/** 桌面端固定联系人条目(后端 surface SSOT 派生:assistant/super/dedicated_cs)。 */
+export type ImFixedEntry = {
+  id: string;
+  kind: string;
+  name: string;
+  summary: string;
+  avatar: string;
+  route: string;
+  backend: string;
+};
+
+export type ImFixedContacts = {
+  device: string;
+  side: string;
+  top: ImFixedEntry[];
+  bottom: ImFixedEntry[];
+};
+
+/**
+ * 桌面端消息页固定联系人组成(surface SSOT: device=desktop × side)。
+ * 以 platform 为界切 top/bottom,顺序即 SSOT 声明序。fail-safe:任何失败返回空段,
+ * 交由调用方回退,绝不抛断列表渲染。
+ */
+export async function fetchDesktopFixedContacts(): Promise<ImFixedContacts> {
+  const empty: ImFixedContacts = { device: 'desktop', side: '', top: [], bottom: [] };
+  try {
+    const res = await apiFetch('/api/im/fixed-contacts', { headers: jsonHeaders });
+    const data = await readJson<{ success?: boolean } & Partial<ImFixedContacts>>(res);
+    if (!data.success) return empty;
+    return {
+      device: data.device ?? 'desktop',
+      side: data.side ?? '',
+      top: data.top ?? [],
+      bottom: data.bottom ?? [],
+    };
+  } catch {
+    return empty;
+  }
+}
+
 export async function fetchImConversations(): Promise<ImConversationSummary[]> {
   const res = await apiFetch('/api/im/conversations', { headers: jsonHeaders });
   const data = await readJson<{ success?: boolean; conversations?: ImConversationSummary[] }>(res);
