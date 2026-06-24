@@ -135,20 +135,32 @@ _spec.loader.exec_module(_pcs)
 
 # Replace temporary stubs with real packages so other test files aren't broken.
 import importlib as _importlib
-import types as _types
 
 for _k in _installed_stubs:
     sys.modules.pop(_k, None)  # must remove stub first; import_module returns cached value
     try:
         sys.modules[_k] = _importlib.import_module(_k)
     except Exception:
-        stub = _types.ModuleType(_k)
-        stub.__path__ = []  # type: ignore[attr-defined]
-        sys.modules[_k] = stub
+        # Re-import failed (e.g. a transitive dep is still stubbed at this point).
+        # Leave the module ABSENT — every stub we installed was for a module that
+        # was absent beforehand, so removing it restores the pre-stub state and lets
+        # later code import the real module cleanly from disk. Do NOT fabricate a
+        # ModuleType stub here: a package stub with empty __path__ would silently
+        # break submodule imports for the rest of the session (e.g.
+        # `app.application.agent_orchestrator.run_repository`).
+        sys.modules.pop(_k, None)
 
 # Restore the real module so patches in other test files target the right __globals__.
+# This file's own tests use the `_pcs` alias + patch.object(_pcs, ...), so they never
+# depend on sys.modules["app.application.planner_compat_service"] pointing at our copy.
 if _real_pcs_module is not None:
     sys.modules["app.application.planner_compat_service"] = _real_pcs_module
+else:
+    # planner_compat_service was not imported before this file loaded — do NOT leave our
+    # stub-loaded copy (whose deps are MagicMocks) in sys.modules, or later test files
+    # (e.g. test_planner_compat_agent_trace.py) would import the stubbed version and see
+    # MagicMock run ids / finalize results. Removing it forces a clean real re-import.
+    sys.modules.pop("app.application.planner_compat_service", None)
 
 # Convenience aliases
 _derive_industry_from_session = _pcs._derive_industry_from_session
