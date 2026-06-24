@@ -30,6 +30,9 @@ class EmployeeExecutionMetric(Base):
     duration_ms = Column(Float, default=0.0)
     llm_tokens = Column(Integer, default=0)
     error = Column(Text, default="")
+    # 失败分类：quota（配额/计费/403，改 prompt 无效）/ transient / prompt / ""。
+    # 自进化引擎据此排除配额类失败，避免 403 死亡螺旋。见 llm_failure_classifier。
+    failure_kind = Column(String(32), default="", index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
