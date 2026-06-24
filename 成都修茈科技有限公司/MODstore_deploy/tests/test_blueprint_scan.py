@@ -10,14 +10,14 @@ _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def test_scan_example_mod_blueprints(tmp_path: Path) -> None:
-    # Use inline fixture so the test is self-contained (library/ is gitignored)
-    py = tmp_path / "blueprints.py"
+    # Use inline FastAPI-style fixture (scanner no longer parses Flask @bp.route)
+    py = tmp_path / "routes.py"
     py.write_text(
-        "from flask import Blueprint\n"
-        "bp = Blueprint('example', __name__)\n"
-        "@bp.route('/hello', methods=['GET'])\n"
+        "from fastapi import APIRouter\n"
+        "router = APIRouter()\n"
+        "@router.get('/hello')\n"
         "def hello(): pass\n"
-        "@bp.route('/status', methods=['GET'])\n"
+        "@router.get('/status')\n"
         "def status(): pass\n",
         encoding="utf-8",
     )
