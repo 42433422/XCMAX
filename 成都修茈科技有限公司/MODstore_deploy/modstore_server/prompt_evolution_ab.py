@@ -126,7 +126,12 @@ async def _judge_prompt_pair(
     prompt_before: str,
     prompt_after: str,
 ) -> str:
-    """LLM 判断哪条 prompt 更可能成功完成该失败任务。返回 before|after|tie。"""
+    """LLM 判断哪条 prompt 更可能成功完成该失败任务。返回 before|after|tie|error。
+
+    ``error`` 表示评审本身没跑成（如平台 LLM 配额耗尽 / 不可用），与真正的
+    ``tie`` 区分开——否则配额 403 会被静默记成"平局"，污染 A/B 结论。
+    """
+    from modstore_server.llm_quota import is_quota_exhausted
     from modstore_server.services.llm import (
         chat_dispatch_via_platform_only,
         resolve_platform_bench_llm,
@@ -134,7 +139,7 @@ async def _judge_prompt_pair(
 
     prov, mdl = resolve_platform_bench_llm()
     if not prov or not mdl:
-        return "tie"
+        return "error"
 
     messages = [
         {
@@ -156,14 +161,22 @@ async def _judge_prompt_pair(
     ]
     try:
         out = await chat_dispatch_via_platform_only(prov, mdl, messages, max_tokens=16)
+    except Exception as exc:  # noqa: BLE001 — 评审失败一律记 error，由上层决定是否下结论
+        if is_quota_exhausted(exc):
+            return "error"
+        return "error"
+    # dispatch 返回的是 dict（{"ok":.., "content":..}），不能直接 str() 当判词。
+    if isinstance(out, dict):
+        if not out.get("ok") or is_quota_exhausted(out):
+            return "error"
+        verdict = str(out.get("content") or "").strip().lower()
+    else:
         verdict = str(out or "").strip().lower()
-        if "after" in verdict:
-            return "after"
-        if "before" in verdict:
-            return "before"
-        return "tie"
-    except Exception:
-        return "tie"
+    if "after" in verdict:
+        return "after"
+    if "before" in verdict:
+        return "before"
+    return "tie"
 
 
 def run_prompt_shadow_ab(
@@ -191,6 +204,7 @@ def run_prompt_shadow_ab(
 
     wins_after = 0
     wins_before = 0
+    errors = 0
     details: List[Dict[str, str]] = []
     for task in tasks:
         verdict = run_coro_sync(
@@ -205,6 +219,24 @@ def run_prompt_shadow_ab(
             wins_after += 1
         elif verdict == "before":
             wins_before += 1
+        elif verdict == "error":
+            errors += 1
+
+    # 评审全部因 LLM 不可用（如平台配额耗尽）失败：没有任何真实对比信号，
+    # 不下结论、不自动应用 prompt。improved_wins=False 让上层保持 suggested 状态。
+    if errors and wins_after == 0 and wins_before == 0:
+        return {
+            "ok": False,
+            "skipped": True,
+            "reason": "llm_unavailable",
+            "verdict": "tie",
+            "wins_after": 0,
+            "wins_before": 0,
+            "errors": errors,
+            "replay_count": len(tasks),
+            "details": details,
+            "improved_wins": False,
+        }
 
     improved_wins = wins_after >= min_wins and wins_after > wins_before
     return {
@@ -212,6 +244,7 @@ def run_prompt_shadow_ab(
         "verdict": "after" if improved_wins else ("before" if wins_before > wins_after else "tie"),
         "wins_after": wins_after,
         "wins_before": wins_before,
+        "errors": errors,
         "replay_count": len(tasks),
         "details": details,
         "improved_wins": improved_wins,
