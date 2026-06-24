@@ -348,3 +348,168 @@ export interface ImMessage {
   timestamp: number;
   mine: boolean;
 }
+
+// ════════════════════════════════════════════════════════════════
+// AI 圈子(朋友圈)— 对标 Android AiCircleScreens.kt
+// 后端 /api/mobile/v1/circle/posts(app/application/ai_circle_service.py)
+// ════════════════════════════════════════════════════════════════
+
+/** 圈子评论。 */
+export interface CircleComment {
+  id?: number;
+  author_name?: string;
+  body?: string;
+  created_at?: string;
+}
+
+/** 圈子动态。 */
+export interface CirclePost {
+  id?: number;
+  author_kind?: string;
+  author_user_id?: number;
+  employee_id?: string;
+  author_name?: string;
+  author_avatar?: string;
+  body?: string;
+  created_at?: string;
+  like_count?: number;
+  liked_by_me?: boolean;
+  comments?: CircleComment[];
+}
+
+/** 圈子列表数据(data.items + count)。 */
+export interface CirclePostsData {
+  items?: CirclePost[];
+  count?: number;
+}
+
+// ════════════════════════════════════════════════════════════════
+// AI 群聊 — 对标 Android AiGroupScreens.kt
+// 后端 /api/mobile/v1/ai-groups(app/application/ai_group_chat_service.py)
+// ════════════════════════════════════════════════════════════════
+
+/** 群成员。 */
+export interface AiGroupMember {
+  employee_id?: string;
+  mod_id?: string;
+  name?: string;
+  avatar?: string;
+  summary?: string;
+}
+
+/** AI 群聊(_public_group)。 */
+export interface AiGroup {
+  id?: string;
+  name?: string;
+  department_key?: string;
+  member_count?: number;
+  members?: AiGroupMember[];
+  is_pinned?: boolean;
+  is_hidden?: boolean;
+  is_followed?: boolean;
+  unread_count?: number;
+  created_at?: string;
+  last_message_preview?: string;
+  last_message_at?: string;
+}
+
+/** 群消息(_public_message)。 */
+export interface AiGroupMessage {
+  id?: string;
+  group_id?: string;
+  role?: string;
+  sender_id?: string;
+  sender_name?: string;
+  sender_avatar?: string;
+  body?: string;
+  created_at?: string;
+}
+
+export interface AiGroupsData {
+  groups?: AiGroup[];
+}
+
+export interface AiGroupCreateData {
+  group?: AiGroup;
+}
+
+export interface AiGroupMessagesData {
+  messages?: AiGroupMessage[];
+}
+
+/** post_message 返回:{group_id, messages:[新增成员回复]}。 */
+export interface AiGroupPostResult {
+  group_id?: string;
+  messages?: AiGroupMessage[];
+}
+
+// ════════════════════════════════════════════════════════════════
+// 企业模块数据(客户/发货/服务桥/钱包)— 对标 Android EnterpriseScreens.kt
+// ════════════════════════════════════════════════════════════════
+
+/** 分页信息(paginate_list)。 */
+export interface PaginationInfo {
+  total?: number;
+  page?: number;
+  per_page?: number;
+  total_pages?: number;
+}
+
+/** 客户(/api/mobile/v1/customers)。 */
+export interface CustomerItem {
+  id?: number;
+  name?: string;
+  phone?: string;
+}
+
+export interface CustomersData {
+  items?: CustomerItem[];
+  pagination?: PaginationInfo;
+}
+
+/** 发货(/api/mobile/v1/shipments)。 */
+export interface ShipmentItem {
+  id?: number;
+  order_number?: string;
+  status?: string;
+}
+
+export interface ShipmentsData {
+  items?: ShipmentItem[];
+  pagination?: PaginationInfo;
+}
+
+/** 服务桥请求(ServiceRequest.to_dict)。 */
+export interface ServiceBridgeRequest {
+  id?: number;
+  source_instance_id?: string;
+  source_instance_name?: string;
+  request_type?: string;
+  title?: string;
+  description?: string;
+  priority?: string;
+  status?: string;
+  response?: string;
+  responded_by?: string;
+  responded_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ServiceBridgeData {
+  items?: ServiceBridgeRequest[];
+  pagination?: PaginationInfo;
+}
+
+/** 钱包余额(/api/mobile/v1/wallet/balance)。 */
+export interface WalletBalanceData {
+  balance?: number;
+  currency?: string;
+  membership_level?: string;
+  experience?: number;
+  byok_configured?: boolean;
+  byok_count?: number;
+  synced?: boolean;
+  message?: string;
+  market_base_url?: string;
+}

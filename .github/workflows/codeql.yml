@@ -1,0 +1,39 @@
+name: CodeQL
+
+# 补齐分支保护 required 检查 analyze (python) / analyze (javascript-typescript)。
+# 此前这两个必需上下文无生产者(default-setup=not-configured、仓库无 CodeQL workflow），
+# 在每个 PR 上永远"等待中"=结构性死锁，迫使所有合并走 admin 强推。
+# job id = analyze + matrix.language → check run 名恰为 "analyze (python)" / "analyze (javascript-typescript)"，
+# 精确匹配 branch protection 的 required contexts。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
