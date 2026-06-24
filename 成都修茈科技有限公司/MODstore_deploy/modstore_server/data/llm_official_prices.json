@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "usd_to_cny": 7.2,
+    "updated": "2026-06"
+  },
+  "providers": {
+    "deepseek": {
+      "currency": "CNY",
+      "source_url": "https://platform.deepseek.com/api-docs/pricing",
+      "models": {
+        "deepseek-chat": {
+          "input_per_1m": 1.0,
+          "output_per_1m": 2.0,
+          "min_charge": 0.001
+        },
+        "deepseek-reasoner": {
+          "input_per_1m": 4.0,
+          "output_per_1m": 16.0,
+          "min_charge": 0.001
+        }
+      }
+    },
+    "openai": {
+      "currency": "USD",
+      "source_url": "https://openai.com/api/pricing",
+      "models": {
+        "gpt-4o": {
+          "input_per_1m": 2.5,
+          "output_per_1m": 10.0,
+          "min_charge": 0.001
+        },
+        "gpt-4o-mini": {
+          "input_per_1m": 0.15,
+          "output_per_1m": 0.6,
+          "min_charge": 0.001
+        },
+        "gpt-4.1": {
+          "input_per_1m": 2.0,
+          "output_per_1m": 8.0,
+          "min_charge": 0.001
+        },
+        "gpt-4.1-mini": {
+          "input_per_1m": 0.4,
+          "output_per_1m": 1.6,
+          "min_charge": 0.001
+        },
+        "o3": {
+          "input_per_1m": 10.0,
+          "output_per_1m": 40.0,
+          "min_charge": 0.001
+        }
+      },
+      "patterns": [
+        {
+          "prefix": "gpt-4o-",
+          "input_per_1m": 2.5,
+          "output_per_1m": 10.0,
+          "min_charge": 0.001
+        },
+        {
+          "prefix": "gpt-4.1-",
+          "input_per_1m": 0.4,
+          "output_per_1m": 1.6,
+          "min_charge": 0.001
+        }
+      ]
+    },
+    "anthropic": {
+      "currency": "USD",
+      "source_url": "https://www.anthropic.com/pricing",
+      "models": {
+        "claude-opus-4-8": {
+          "input_per_1m": 15.0,
+          "output_per_1m": 75.0,
+          "min_charge": 0.001
+        },
+        "claude-sonnet-4-6": {
+          "input_per_1m": 3.0,
+          "output_per_1m": 15.0,
+          "min_charge": 0.001
+        },
+        "claude-haiku-4-5-20251001": {
+          "input_per_1m": 0.8,
+          "output_per_1m": 4.0,
+          "min_charge": 0.001
+        }
+      }
+    },
+    "qwen": {
+      "currency": "CNY",
+      "source_url": "https://help.aliyun.com/zh/model-studio/getting-started/models",
+      "models": {
+        "qwen-turbo": {
+          "input_per_1m": 0.3,
+          "output_per_1m": 0.6,
+          "min_charge": 0.001
+        },
+        "qwen-plus": {
+          "input_per_1m": 0.8,
+          "output_per_1m": 2.0,
+          "min_charge": 0.001
+        },
+        "qwen-max": {
+          "input_per_1m": 40.0,
+          "output_per_1m": 120.0,
+          "min_charge": 0.001
+        }
+      }
+    }
+  },
+  "openrouter_provider_map": {
+    "deepseek": "deepseek",
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "qwen": "qwen"
+  }
+}
