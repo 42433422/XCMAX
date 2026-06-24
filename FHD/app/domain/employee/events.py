@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """标准 AI 员工事件类型 + manifest.triggers 键映射。
 
 员工触发（``triggers.on_error`` 等）通过 NeuroBus 订阅这些事件类型实现。

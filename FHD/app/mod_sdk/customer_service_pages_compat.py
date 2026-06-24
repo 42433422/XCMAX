@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 K（客服）：外部/内部客服页经 ``xcagi-customer-service-bridge`` Mod 路由。"""
 
 from __future__ import annotations

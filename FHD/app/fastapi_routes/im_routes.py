@@ -84,10 +84,7 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     sid = ws.cookies.get(cookie_name) or ws.query_params.get("session_id")
     if not sid:
         return None
-    try:
-        from app.services import get_session_service
-    except ImportError:
-        from app.application.facades.session_facade import get_session_service
+    from app.application.facades.session_facade import get_session_service
 
     user = get_session_service().validate_session(str(sid).strip())
     if user is None:
@@ -110,10 +107,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
     if not offline:
         return
     try:
-        try:
-            from app.services.mobile_push import notify_user as notify_mobile_user
-        except ImportError:
-            from app.application.mobile_push_app_service import notify_mobile_user
+        from app.application.mobile_push_app_service import notify_mobile_user
 
         preview = (body or "").strip()[:120] or "新消息"
         for uid in offline:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工领域值对象：events / trigger_binding / memory_scope。"""
 
 from __future__ import annotations

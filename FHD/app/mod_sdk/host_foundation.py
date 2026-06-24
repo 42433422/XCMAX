@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """宿主基础能力：以 employee_pack（员工）交付，磁盘上仍为多个 bridge Mod 目录。"""
 
 from __future__ import annotations

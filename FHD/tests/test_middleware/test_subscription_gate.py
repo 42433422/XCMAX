@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """SubscriptionGateMiddleware 单元测试。"""
 
 from __future__ import annotations

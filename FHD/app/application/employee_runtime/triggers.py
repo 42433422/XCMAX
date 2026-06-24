@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工 NeuroBus 触发器：manifest.triggers → 动态 subscribe → EmployeeAgent.run。
 
 在 ``refresh_employee_pack_runtime`` / 启动预热时扫描已安装员工包，

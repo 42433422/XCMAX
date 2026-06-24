@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_pack → Planner 工具注册表。"""
 
 from __future__ import annotations

@@ -101,7 +101,7 @@ from app.security.mobile_pairing import (
     issue_pairing_nonce,
     lookup_by_shortcode,
 )
-from app.services.mobile_relay_service import MobileRelayService
+from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -228,7 +228,7 @@ def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] 
     if not _host_is_private_or_loopback(host):
         return None
     try:
-        from app.services.mobile_relay_desktop_client import register_desktop_relay
+        from app.application.facades.mobile_relay_facade import register_desktop_relay
 
         relay = register_desktop_relay(host=host, port=port)
     except RECOVERABLE_ERRORS as exc:
@@ -2497,7 +2497,7 @@ async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    from app.services.user_cs_employee_runner import EMPLOYEE_MOD_ID
+    from app.application.facades.user_cs_employee_facade import EMPLOYEE_MOD_ID
 
     return format_mobile_response(
         data={
@@ -2523,7 +2523,7 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
             format_mobile_response(None, "消息不能为空", success=False, code=400),
             status_code=400,
         )
-    from app.services.user_cs_employee_runner import EMPLOYEE_MOD_ID, run_user_cs_employee
+    from app.application.facades.user_cs_employee_facade import EMPLOYEE_MOD_ID, run_user_cs_employee
 
     message_id = f"cs_{uuid.uuid4().hex[:12]}"
     username = _safe_user_text(user, "username")

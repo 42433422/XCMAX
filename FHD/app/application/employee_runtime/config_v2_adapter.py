@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """将前端 employee_config_v2 富结构翻译为 employee_executor 可消费的配置。"""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """EmployeeMemoryManager / MemoryContext 单元测试（I/O mock）。"""
 
 from __future__ import annotations

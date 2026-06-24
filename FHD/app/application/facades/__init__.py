@@ -34,6 +34,10 @@ from app.application.facades.kitten_facade import (
     generate_office_file,
     pop_document_pickup,
 )
+from app.application.facades.mobile_relay_facade import (
+    MobileRelayService,
+    register_desktop_relay,
+)
 from app.application.facades.ocr_facade import get_ocr_service
 from app.application.facades.print_facade import printer_service
 from app.application.facades.query_facade import (
@@ -65,6 +69,10 @@ from app.application.facades.tools_facade import (
     set_tool_execute_headers,
 )
 from app.application.facades.tts_facade import synthesize_to_data_uri, trigger_common_tts_warmup
+from app.application.facades.user_cs_employee_facade import (
+    EMPLOYEE_MOD_ID,
+    run_user_cs_employee,
+)
 from app.application.facades.wechat_facade import (
     refresh_wechat_contacts_from_decrypt,
     wechat_message_source_size_payload,
@@ -74,7 +82,9 @@ __all__ = [
     "ShipmentApplicationServiceEventPrimary",
     "AIConversationService",
     "BertIntentClassifier",
+    "EMPLOYEE_MOD_ID",
     "InventoryService",
+    "MobileRelayService",
     "PurchaseService",
     "ReportService",
     "KittenReportExportService",
@@ -112,6 +122,8 @@ __all__ = [
     "refresh_wechat_contacts_from_decrypt",
     "wechat_message_source_size_payload",
     "printer_service",
+    "register_desktop_relay",
+    "run_user_cs_employee",
     "synthesize_to_data_uri",
     "trigger_common_tts_warmup",
 ]

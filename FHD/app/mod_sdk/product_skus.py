@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """桌面双 SKU 发行：personal / enterprise。"""
 
 from __future__ import annotations

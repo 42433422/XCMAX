@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """宿主配置 Profile：从 FHD/config 加载 SKU / bridge / 行业 / 工作流员工目录，替代散落硬编码。"""
 
 from __future__ import annotations

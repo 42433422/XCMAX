@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Branch-coverage tests for app.mod_sdk.customer_delivery_seed."""
 
 from __future__ import annotations
