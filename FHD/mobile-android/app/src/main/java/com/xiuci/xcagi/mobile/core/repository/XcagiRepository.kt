@@ -25,6 +25,9 @@ import com.xiuci.xcagi.mobile.core.model.MarketLoginBody
 import com.xiuci.xcagi.mobile.core.model.MarketPasswordLoginBody
 import com.xiuci.xcagi.mobile.core.model.MarketRegisterBody
 import com.xiuci.xcagi.mobile.core.model.MarketSendCodeBody
+import com.xiuci.xcagi.mobile.core.model.MeetingGenerateBody
+import com.xiuci.xcagi.mobile.core.model.MeetingLevelsData
+import com.xiuci.xcagi.mobile.core.model.MeetingMinuteData
 import com.xiuci.xcagi.mobile.core.model.ModIndustry
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.ModMenuItem
@@ -68,8 +71,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.map
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import retrofit2.HttpException
 import retrofit2.Retrofit
@@ -507,6 +513,50 @@ class XcagiRepository @Inject constructor(
     suspend fun fetchAppConfig(): Result<AppConfigResponse> = try {
         val cfg = modstore().appConfig(sku = BuildConfig.PRODUCT_SKU)
         Result.success(cfg)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    // ── 会议纪要 SSOT（三级派生） ──────────────────────────────────────────
+    suspend fun meetingLevels(): Result<MeetingLevelsData> = try {
+        val env = fhd().meetingLevels()
+        env.data?.let { Result.success(it) } ?: fail(env)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    /** 一次性生成三级会议纪要（剧本式 → 架构图式 → 说人话）。 */
+    suspend fun generateMeetingMinutes(
+        transcript: String,
+        title: String? = null,
+    ): Result<MeetingMinuteData> = try {
+        val env = fhd().generateMeetingMinutes(MeetingGenerateBody(transcript, title))
+        env.data?.let { Result.success(it) } ?: fail(env)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    /** 录音字节 → 文本（复用桌面/Web 同一 ASR 端点 /api/voice/transcribe）。 */
+    suspend fun transcribeMeetingAudio(
+        audio: ByteArray,
+        mime: String,
+    ): Result<String> = try {
+        val ext = when {
+            mime.contains("webm") -> "webm"
+            mime.contains("ogg") -> "ogg"
+            mime.contains("mp4") || mime.contains("m4a") -> "m4a"
+            mime.contains("wav") -> "wav"
+            else -> "m4a"
+        }
+        val body = audio.toRequestBody(mime.toMediaTypeOrNull())
+        val part = MultipartBody.Part.createFormData("file", "meeting.$ext", body)
+        val resp = fhd().transcribeAudio(part)
+        val text = resp.data?.text?.trim().orEmpty()
+        if (resp.success && text.isNotEmpty()) {
+            Result.success(text)
+        } else {
+            Result.failure(IllegalStateException(resp.detail ?: "未识别到内容"))
+        }
     } catch (e: Exception) {
         Result.failure(e)
     }

@@ -25,6 +25,8 @@ object Routes {
     const val CONVERSATION_CHAT = "conversation_chat"
     /** 专属客服对话 */
     const val CS_CHAT = "cs_chat"
+    /** 会议纪要（录音转写 → 三级派生 SSOT） */
+    const val MEETING_MINUTES = "meeting_minutes"
     const val FIXED_PARTNER_PROFILE = "fixed_partner/{partnerKind}"
 
     fun conversationChat(conversationId: String): String = "$CONVERSATION_CHAT/$conversationId"
