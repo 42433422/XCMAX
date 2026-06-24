@@ -14,12 +14,14 @@ tmp_path so the tests are deterministic, offline and fast.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
 
+from app.application.execution_scope import CapabilityGrant, ExecutionScope
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -485,18 +487,28 @@ class TestCliPath:
 
 
 class TestCliWorkspace:
-    def test_env_workspace_root_used(self, tmp_path, monkeypatch):
+    def test_product_domain_ignores_env_uses_ephemeral_scratch(self, tmp_path, monkeypatch):
+        # 信任墙第3层：产品域(默认)绝不读 *_WORKSPACE_ROOT 环境、绝不落到工程树，
+        # 只落系统临时区隔离 scratch（规避 get_app_data_dir 回落仓库根的陷阱）。
         monkeypatch.setenv("XCMAX_CLAUDE_WORKSPACE_ROOT", str(tmp_path))
-        svc = _make_svc(tmp_path)
-        assert svc._cli_workspace({}) == str(tmp_path)
+        svc = _make_svc(tmp_path)  # 默认 product 域
+        ws = svc._cli_workspace({})
+        assert ws != str(tmp_path)  # env 路径被无视
+        assert "xcmax_product_scratch" in ws
+        assert ws.endswith("claude_super_employee")  # = CLAUDE_PROFILE.storage_subdir
+        assert Path(ws).exists()
 
-    def test_fallback_resolves_to_project_root(self, tmp_path, monkeypatch):
+    def test_product_domain_honors_caller_path_when_not_server_repo(self, tmp_path):
+        # 客户显式提供的本机路径(存在且非服务端 repo)被采纳。
+        svc = _make_svc(tmp_path)
+        assert svc._cli_workspace({"workspace_root": str(tmp_path)}) == str(tmp_path)
+
+    def test_fallback_resolves_to_existing_dir(self, tmp_path, monkeypatch):
         monkeypatch.delenv("XCMAX_CLAUDE_WORKSPACE_ROOT", raising=False)
         monkeypatch.delenv("MODSTORE_REPO_ROOT", raising=False)
         svc = _make_svc(tmp_path)
         result = svc._cli_workspace({})
-        # The real module lives under .../FHD/app/application; fallback walks parents to
-        # the dir containing FHD and returns its parent, so the result is a real dir.
+        # 产品域 ephemeral scratch 一定是真实存在的目录
         assert Path(result).exists()
 
 
@@ -504,10 +516,25 @@ class TestCliWorkspace:
 
 
 class TestCliSubprocessEnv:
-    def test_no_proxy_returns_none(self, tmp_path, monkeypatch):
+    def test_factory_no_proxy_returns_none(self, tmp_path, monkeypatch):
+        # 工厂域 + 无代理：继承当前环境(返回 None)，与历史行为一致、零回归。
         monkeypatch.delenv("XCMAX_CLI_PROXY", raising=False)
         svc = _make_svc(tmp_path)
+        svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "default")
         assert svc._cli_subprocess_env() is None
+
+    def test_product_no_proxy_returns_scrubbed_env(self, tmp_path, monkeypatch):
+        # 信任墙第2层：产品域(默认)即便无代理也要构造环境，以剥掉平台工厂令牌/git 凭证。
+        monkeypatch.delenv("XCMAX_CLI_PROXY", raising=False)
+        monkeypatch.setenv("GITHUB_TOKEN", "platform-secret")
+        monkeypatch.setenv("XCMAX_FACTORY_CAPABILITY_TOKEN", "factory-secret")
+        svc = _make_svc(tmp_path)  # 默认 product 域
+        env = svc._cli_subprocess_env()
+        assert env is not None
+        assert "GITHUB_TOKEN" not in env  # 平台 git 凭证被剥离
+        assert "XCMAX_FACTORY_CAPABILITY_TOKEN" not in env  # 工厂令牌被剥离
+        # 非机密的普通变量保留(只剥令牌/凭证，不清空环境)
+        assert env.get("PATH") == os.environ.get("PATH")
 
     def test_proxy_injected_into_all_vars(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CLI_PROXY", "http://proxy:8080")
