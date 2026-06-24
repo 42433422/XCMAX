@@ -860,6 +860,39 @@ class _PlatformBenchLlmClient:
         return str(out.get("content") or "")
 
 
+def _evolution_failure_candidates(
+    session, *, cutoff, min_failures: int, limit: int
+) -> List[Tuple[str, int]]:
+    """近窗口内 prompt-可修失败 ≥ ``min_failures`` 的员工 ``(employee_id, fail_count)``。
+
+    排除 ``failure_kind == FAILURE_KIND_QUOTA`` 的基建/配额类失败——这些不是 prompt 问题。
+    """
+    not_quota = or_(
+        EmployeeExecutionMetric.failure_kind.is_(None),
+        EmployeeExecutionMetric.failure_kind != FAILURE_KIND_QUOTA,
+    )
+    rows = (
+        session.query(
+            EmployeeExecutionMetric.employee_id,
+            func.count(EmployeeExecutionMetric.id).label("fail_count"),
+        )
+        .filter(
+            EmployeeExecutionMetric.created_at >= cutoff,
+            EmployeeExecutionMetric.status != "success",
+            not_quota,
+        )
+        .group_by(EmployeeExecutionMetric.employee_id)
+        .order_by(func.count(EmployeeExecutionMetric.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        (str(r[0] or "").strip(), int(r[1] or 0))
+        for r in rows
+        if str(r[0] or "").strip() and int(r[1] or 0) >= min_failures
+    ]
+
+
 def _alert_evolution_quota_circuit_break(quota_failures: int, lookback_hours: int) -> None:
     """配额耗尽触发自进化熔断：高优先级告警日志（供 ops 监控/告警管道捕获）。
 
