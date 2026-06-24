@@ -656,9 +656,12 @@ def minimal_pdf_fixture_bytes() -> bytes:
         import fitz
 
         doc = fitz.open()
-        page = doc.new_page()
-        page.insert_text((72, 72), "PDF smoke test\nline two", fontsize=12)
-        return doc.tobytes()
+        try:
+            page = doc.new_page()
+            page.insert_text((72, 72), "PDF smoke test\nline two", fontsize=12)
+            return doc.tobytes()
+        finally:
+            doc.close()
     except Exception:
         return b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 

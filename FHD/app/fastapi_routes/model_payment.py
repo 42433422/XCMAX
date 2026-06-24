@@ -423,7 +423,7 @@ def query_trade(out_trade_no: str):
 
 
 @router.post("/refund")
-def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
+def refund_trade(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
     """alipay.trade.refund：发起退款。body: out_trade_no, refund_amount, out_request_no?, refund_reason?"""
     out_trade_no = str(body.get("out_trade_no") or "").strip()
     refund_amount = str(body.get("refund_amount") or "").strip()
@@ -435,6 +435,54 @@ def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
     if not refund_amount:
         return JSONResponse(
             {"success": False, "message": "refund_amount 必填（元）"}, status_code=400
+        )
+
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        current_user = resolve_session_user(request)
+        if current_user is None:
+            return JSONResponse(
+                {"success": False, "message": "未登录"},
+                status_code=401,
+            )
+        current_user_id = int(current_user.id)
+    except (TypeError, ValueError, AttributeError):
+        return JSONResponse(
+            {"success": False, "message": "用户信息无效"},
+            status_code=401,
+        )
+
+    order = mp_orders.get_order(out_trade_no)
+    if order is None:
+        return JSONResponse(
+            {"success": False, "message": "订单不存在"},
+            status_code=404,
+        )
+
+    order_user_id = order.get("local_user_id")
+    if order_user_id is None or int(order_user_id) != current_user_id:
+        return JSONResponse(
+            {"success": False, "message": "无权限退款此订单"},
+            status_code=403,
+        )
+
+    try:
+        refund_amount_float = float(refund_amount)
+        if refund_amount_float <= 0:
+            return JSONResponse(
+                {"success": False, "message": "refund_amount 必须大于 0"}, status_code=400
+            )
+    except ValueError:
+        return JSONResponse(
+            {"success": False, "message": "refund_amount 必须是有效的数字"}, status_code=400
+        )
+
+    original_amount = float(order.get("amount_yuan") or "0")
+    if refund_amount_float > original_amount:
+        return JSONResponse(
+            {"success": False, "message": f"退款金额不能超过原订单金额 {original_amount}"},
+            status_code=400,
         )
 
     res = mp_ali.refund_order(
