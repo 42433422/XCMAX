@@ -169,3 +169,14 @@ domains:
     mode: sync+verify
     check: python scripts/dev/service_topology_ssot.py check
     sync: python scripts/dev/service_topology_ssot.py generate --apply
+
+  - name: account-identity
+    owner: backend
+    enabled: true
+    # 真相源声明：云端（修茈市场）为身份权威，本地 users/sessions 为收敛缓存。
+    ssot: FHD/docs/account_system_ssot.md
+    derived: []
+    mode: lint
+    # 棘轮守卫：冻结已知造身份点，白名单外新增即 DRIFT（见 docs §9.3）。
+    check: python scripts/dev/ssot_plugins/account_identity.py check
+    sync: null
