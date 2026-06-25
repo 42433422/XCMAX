@@ -16,7 +16,6 @@ import pytest
 
 from app.infrastructure.llm import client as llm_client
 
-
 # ---------------------------------------------------------------------------
 # _env_mode / _initial_mode
 # ---------------------------------------------------------------------------
@@ -320,9 +319,7 @@ class TestGetOfflineStatus:
 
     def test_successful_probe_with_string_models(self):
         mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(
-            {"models": ["model-a", "model-b"]}
-        ).encode("utf-8")
+        mock_resp.read.return_value = json.dumps({"models": ["model-a", "model-b"]}).encode("utf-8")
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
         with patch("urllib.request.urlopen", return_value=mock_resp):

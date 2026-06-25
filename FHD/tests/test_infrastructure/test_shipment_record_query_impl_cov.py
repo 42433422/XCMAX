@@ -22,7 +22,6 @@ from app.infrastructure.persistence.shipment_record_query_impl import (
     _record_to_dict,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -125,6 +124,7 @@ class TestRecordToDict:
 
     def test_none_dict_falls_to_hardcoded_keys(self):
         """When __dict__ is empty/missing, falls to hardcoded key list."""
+
         # Use a simple object that has no __dict__ attributes
         class EmptyRecord:
             id = 99
@@ -273,9 +273,7 @@ class TestQueryShipmentsAdditional:
                 return_value=None,
             ),
         ):
-            result = query.query_shipments(
-                start_date="2026-01-01", end_date="2026-12-31"
-            )
+            result = query.query_shipments(start_date="2026-01-01", end_date="2026-12-31")
 
         assert result["success"] is True
 

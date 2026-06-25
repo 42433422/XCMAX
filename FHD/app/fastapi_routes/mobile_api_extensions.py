@@ -21,8 +21,9 @@ from fastapi.responses import JSONResponse
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
-from app.application.execution_scope import factory_context
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+from app.application.execution_scope import factory_context
+from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _admin_employee_match_keys,
@@ -103,7 +104,6 @@ from app.security.mobile_pairing import (
     issue_pairing_nonce,
     lookup_by_shortcode,
 )
-from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -2624,7 +2624,10 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
             format_mobile_response(None, "消息不能为空", success=False, code=400),
             status_code=400,
         )
-    from app.application.facades.user_cs_employee_facade import EMPLOYEE_MOD_ID, run_user_cs_employee
+    from app.application.facades.user_cs_employee_facade import (
+        EMPLOYEE_MOD_ID,
+        run_user_cs_employee,
+    )
 
     message_id = f"cs_{uuid.uuid4().hex[:12]}"
     username = _safe_user_text(user, "username")

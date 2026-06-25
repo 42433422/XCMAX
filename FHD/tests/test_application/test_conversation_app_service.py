@@ -60,7 +60,10 @@ class TestSaveMessage:
         mock_msg.id = 1
 
         with (
-            patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)),
+            patch(
+                "app.application.conversation_app_service.get_db",
+                return_value=_mock_db_ctx(mock_db),
+            ),
             patch("app.application.conversation_app_service.AIConversation", return_value=mock_msg),
             patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_conversation_message_saved",
@@ -77,7 +80,10 @@ class TestSaveMessage:
         mock_msg.id = 1
 
         with (
-            patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)),
+            patch(
+                "app.application.conversation_app_service.get_db",
+                return_value=_mock_db_ctx(mock_db),
+            ),
             patch("app.application.conversation_app_service.AIConversation", return_value=mock_msg),
             patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_conversation_message_saved",
@@ -109,7 +115,9 @@ class TestGetSessionMessages:
             _make_message(id=1, created_at=datetime(2026, 1, 1)),
         ]
         mock_q.all.return_value = msgs
-        with patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = self._svc().get_session_messages("sess")
         # Reversed → oldest first
         assert result[0][0] == 1
@@ -123,7 +131,9 @@ class TestGetSessionMessages:
         mock_q.order_by.return_value = mock_q
         mock_q.limit.return_value = mock_q
         mock_q.all.return_value = [_make_message(created_at=None)]
-        with patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = self._svc().get_session_messages("sess")
         assert result[0][5] is None  # created_at slot
 
@@ -135,7 +145,9 @@ class TestGetSessionMessages:
         mock_q.order_by.return_value = mock_q
         mock_q.limit.return_value = mock_q
         mock_q.all.return_value = []
-        with patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = self._svc().get_session_messages("sess")
         assert result == []
 
@@ -152,8 +164,14 @@ class TestCreateSession:
         mock_session.session_id = "new-sess"
 
         with (
-            patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)),
-            patch("app.application.conversation_app_service.AIConversationSession", return_value=mock_session),
+            patch(
+                "app.application.conversation_app_service.get_db",
+                return_value=_mock_db_ctx(mock_db),
+            ),
+            patch(
+                "app.application.conversation_app_service.AIConversationSession",
+                return_value=mock_session,
+            ),
         ):
             result = self._svc().create_session("u1")
         assert result == "new-sess"
@@ -172,7 +190,9 @@ class TestGetOrCreateSession:
         mock_q.filter.return_value = mock_q
         mock_q.order_by.return_value = mock_q
         mock_q.first.return_value = _make_session(session_id="existing")
-        with patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = self._svc().get_or_create_session("u1")
         assert result == "existing"
         mock_db.add.assert_not_called()
@@ -188,8 +208,14 @@ class TestGetOrCreateSession:
         mock_session.session_id = "fresh"
 
         with (
-            patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)),
-            patch("app.application.conversation_app_service.AIConversationSession", return_value=mock_session),
+            patch(
+                "app.application.conversation_app_service.get_db",
+                return_value=_mock_db_ctx(mock_db),
+            ),
+            patch(
+                "app.application.conversation_app_service.AIConversationSession",
+                return_value=mock_session,
+            ),
         ):
             result = self._svc().get_or_create_session("u1")
         assert result == "fresh"
@@ -210,7 +236,9 @@ class TestGetSessions:
         mock_q.order_by.return_value = mock_q
         mock_q.limit.return_value = mock_q
         mock_q.all.return_value = [_make_session()]
-        with patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = self._svc().get_sessions("u1")
         assert len(result) == 1
         assert result[0]["session_id"] == "sess-1"
@@ -223,7 +251,9 @@ class TestGetSessions:
         mock_q.order_by.return_value = mock_q
         mock_q.limit.return_value = mock_q
         mock_q.all.return_value = [_make_session(created_at=None, updated_at=None)]
-        with patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = self._svc().get_sessions("u1")
         assert result[0]["created_at"] is None
         assert result[0]["updated_at"] is None
@@ -246,7 +276,9 @@ class TestDeleteSession:
         msg_q = MagicMock()
         msg_q.filter.return_value = msg_q
         mock_db.query.side_effect = [session_q, msg_q]
-        with patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = self._svc().delete_session("sess-1")
         assert result is True
         msg_q.filter.return_value.delete.assert_called_once()
@@ -260,7 +292,9 @@ class TestDeleteSession:
         mock_q.filter.return_value = mock_q
         mock_q.order_by.return_value = mock_q
         mock_q.first.return_value = None
-        with patch("app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.application.conversation_app_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = self._svc().delete_session("ghost")
         assert result is False
 

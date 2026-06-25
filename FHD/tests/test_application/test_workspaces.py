@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """工厂 Workspace 注册表 :mod:`app.application.workspaces` 守卫。"""
 
 from __future__ import annotations

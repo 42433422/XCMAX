@@ -28,7 +28,6 @@ from app.application.tenant_workspace_prefs import (
     save_selected_industry,
 )
 
-
 # ---------------------------------------------------------------------------
 # Test fixture: in-memory preference service
 # ---------------------------------------------------------------------------
@@ -46,9 +45,7 @@ class _FakePrefService:
         self.get_call_count += 1
         return self.store.get(user_id, {}).get(preference_key)
 
-    def set_preference(
-        self, user_id: str, preference_key: str, preference_value: str
-    ) -> bool:
+    def set_preference(self, user_id: str, preference_key: str, preference_value: str) -> bool:
         self.set_call_count += 1
         self.store.setdefault(user_id, {})[preference_key] = preference_value
         return True
@@ -336,21 +333,15 @@ class TestGetWorkspacePrefs:
         assert result == {"selected_industry_id": "涂料"}
 
     def test_stored_non_dict_json_returns_empty(self, fake_pref_service):
-        fake_pref_service.store["tenant:1"] = {
-            "workspace_prefs": json.dumps([1, 2, 3])
-        }
+        fake_pref_service.store["tenant:1"] = {"workspace_prefs": json.dumps([1, 2, 3])}
         assert get_workspace_prefs("tenant:1") == {}
 
     def test_stored_string_json_returns_empty(self, fake_pref_service):
-        fake_pref_service.store["tenant:1"] = {
-            "workspace_prefs": json.dumps("just a string")
-        }
+        fake_pref_service.store["tenant:1"] = {"workspace_prefs": json.dumps("just a string")}
         assert get_workspace_prefs("tenant:1") == {}
 
     def test_stored_null_json_returns_empty(self, fake_pref_service):
-        fake_pref_service.store["tenant:1"] = {
-            "workspace_prefs": json.dumps(None)
-        }
+        fake_pref_service.store["tenant:1"] = {"workspace_prefs": json.dumps(None)}
         assert get_workspace_prefs("tenant:1") == {}
 
     def test_invalid_json_returns_empty(self, fake_pref_service):
@@ -438,32 +429,22 @@ class TestPatchWorkspacePrefs:
         assert result == {"selected_industry_id": "new"}
 
     def test_product_flow_completed_key(self, fake_pref_service):
-        result = patch_workspace_prefs(
-            "tenant:1", {"product_flow_completed": True}
-        )
+        result = patch_workspace_prefs("tenant:1", {"product_flow_completed": True})
         assert result == {"product_flow_completed": True}
 
     def test_host_pack_acknowledged_key(self, fake_pref_service):
-        result = patch_workspace_prefs(
-            "tenant:1", {"host_pack_acknowledged": True}
-        )
+        result = patch_workspace_prefs("tenant:1", {"host_pack_acknowledged": True})
         assert result == {"host_pack_acknowledged": True}
 
     def test_industry_mod_id_key(self, fake_pref_service):
-        result = patch_workspace_prefs(
-            "tenant:1", {"industry_mod_id": "coating-mod"}
-        )
+        result = patch_workspace_prefs("tenant:1", {"industry_mod_id": "coating-mod"})
         assert result == {"industry_mod_id": "coating-mod"}
 
     def test_workflow_ai_employees_merges_with_existing(self, fake_pref_service):
         fake_pref_service.store["tenant:1"] = {
-            "workspace_prefs": json.dumps(
-                {"workflow_ai_employees": {"emp-a": True}}
-            )
+            "workspace_prefs": json.dumps({"workflow_ai_employees": {"emp-a": True}})
         }
-        result = patch_workspace_prefs(
-            "tenant:1", {"workflow_ai_employees": {"emp-b": False}}
-        )
+        result = patch_workspace_prefs("tenant:1", {"workflow_ai_employees": {"emp-b": False}})
         assert result == {"workflow_ai_employees": {"emp-a": True, "emp-b": False}}
 
     def test_workflow_ai_employees_empty_emp_id_skipped(self, fake_pref_service):
@@ -488,16 +469,12 @@ class TestPatchWorkspacePrefs:
 
     def test_workflow_ai_employees_non_dict_value_ignored(self, fake_pref_service):
         # When value is not a dict, falls to else branch and stores as-is
-        result = patch_workspace_prefs(
-            "tenant:1", {"workflow_ai_employees": ["not", "a", "dict"]}
-        )
+        result = patch_workspace_prefs("tenant:1", {"workflow_ai_employees": ["not", "a", "dict"]})
         assert result == {"workflow_ai_employees": ["not", "a", "dict"]}
 
     def test_workflow_ai_employees_none_value_overwrites(self, fake_pref_service):
         # None is not a dict, so goes to else branch
-        result = patch_workspace_prefs(
-            "tenant:1", {"workflow_ai_employees": None}
-        )
+        result = patch_workspace_prefs("tenant:1", {"workflow_ai_employees": None})
         assert result == {"workflow_ai_employees": None}
 
     def test_mixed_keys_partial(self, fake_pref_service):
@@ -516,29 +493,21 @@ class TestPatchWorkspacePrefs:
             "industry_mod_id": "mod-1",
         }
 
-    def test_workflow_ai_employees_existing_none_treated_as_empty(
-        self, fake_pref_service
-    ):
+    def test_workflow_ai_employees_existing_none_treated_as_empty(self, fake_pref_service):
         fake_pref_service.store["tenant:1"] = {
             "workspace_prefs": json.dumps({"workflow_ai_employees": None})
         }
-        result = patch_workspace_prefs(
-            "tenant:1", {"workflow_ai_employees": {"emp-a": True}}
-        )
+        result = patch_workspace_prefs("tenant:1", {"workflow_ai_employees": {"emp-a": True}})
         assert result == {"workflow_ai_employees": {"emp-a": True}}
 
-    def test_workflow_ai_employees_existing_not_dict_treated_as_empty(
-        self, fake_pref_service
-    ):
+    def test_workflow_ai_employees_existing_not_dict_treated_as_empty(self, fake_pref_service):
         # When existing stored value is a non-dict truthy value (e.g. string),
         # dict(value) raises ValueError. This test documents that behavior.
         fake_pref_service.store["tenant:1"] = {
             "workspace_prefs": json.dumps({"workflow_ai_employees": "invalid"})
         }
         with pytest.raises(ValueError):
-            patch_workspace_prefs(
-                "tenant:1", {"workflow_ai_employees": {"emp-a": True}}
-            )
+            patch_workspace_prefs("tenant:1", {"workflow_ai_employees": {"emp-a": True}})
 
 
 # ---------------------------------------------------------------------------
@@ -617,9 +586,7 @@ class TestSaveSelectedIndustry:
     def test_with_industry_mod_id_still_noop(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            result = save_selected_industry(
-                "tenant:1", "涂料", industry_mod_id="mod-1"
-            )
+            result = save_selected_industry("tenant:1", "涂料", industry_mod_id="mod-1")
         assert result == {}
 
     def test_does_not_write_to_storage(self, fake_pref_service):

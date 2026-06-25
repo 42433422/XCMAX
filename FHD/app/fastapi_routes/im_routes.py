@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
-from app.application.execution_scope import factory_context
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+from app.application.execution_scope import factory_context
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.application.workspaces import get_workspace_registry
 from app.config import Config

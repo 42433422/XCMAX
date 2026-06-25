@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """超级员工执行信任域：把"产品身份"与"工厂身份"沿正交轴 ``ExecutionScope`` 分开。
 
 设计要点（见仓库根 ``ARCH-ENTERPRISE-MOD-EMPLOYEE.md`` 讨论）：
