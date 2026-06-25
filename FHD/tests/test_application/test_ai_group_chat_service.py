@@ -1004,6 +1004,84 @@ def test_append_relay_work_report_marks_acceptance_needs_review_on_blocked_body(
     assert "可以验收" not in acceptance["body"]
 
 
+def test_acceptance_rejects_read_only_patch_not_applied_report(tmp_path: Path):
+    svc = make_service(tmp_path)
+    group = svc.create_group(user_id=1, name="超级开发部")
+    svc.add_member(
+        user_id=1,
+        group_id=group["id"],
+        member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
+    )
+    work_order_id = "work-order-read-only"
+    svc._append_messages(  # noqa: SLF001 - 覆盖线上真实假阳性形态
+        [
+            svc._message_row(  # noqa: SLF001
+                user_id=1,
+                group_id=group["id"],
+                role="ai",
+                sender_id="ai-group-dispatcher",
+                sender_name="工作流调度",
+                sender_avatar="",
+                body=svc._format_work_order_message(  # noqa: SLF001
+                    "任务1：解决软件老是闪退的问题",
+                    ["超级员工-Codex"],
+                ),
+                kind="work_order",
+                status="assigned",
+                work_order_id=work_order_id,
+                payload={"task": "任务1：解决软件老是闪退的问题"},
+            ),
+            svc._message_row(  # noqa: SLF001
+                user_id=1,
+                group_id=group["id"],
+                role="ai",
+                sender_id="codex-super-employee",
+                sender_name="超级员工-Codex",
+                sender_avatar="",
+                body="Codex 已接单",
+                kind="work_report",
+                status="queued",
+                work_order_id=work_order_id,
+                payload={"raw": {"task_id": "relay-task-read-only"}},
+            ),
+        ]
+    )
+
+    svc.append_relay_work_report(
+        task={
+            "task_id": "relay-task-read-only",
+            "relay_id": "relay-1",
+            "kind": "codex.invoke",
+            "status": "completed",
+            "created_by_user_id": 1,
+            "payload": {
+                "message": "任务1：解决软件老是闪退的问题",
+                "context": {
+                    "source": "mobile_ai_group",
+                    "group_id": group["id"],
+                    "work_order_id": work_order_id,
+                    "employee_id": "codex-super-employee",
+                },
+            },
+            "result": {
+                "ok": True,
+                "summary": (
+                    "已按负责人定位完成，但代码写入被当前只读沙盒拦截，"
+                    "apply_patch 没能落盘；复现路径：FHD/desktop/main.ts:190。"
+                ),
+            },
+        }
+    )
+
+    messages = svc.get_messages(user_id=1, group_id=group["id"])
+    relay_report = next(m for m in messages if m.get("kind") == "relay_work_report")
+    acceptance = next(m for m in messages if m.get("kind") == "work_acceptance")
+    assert relay_report["status"] == "blocked"
+    assert acceptance["status"] == "needs_review"
+    assert "需要复核" in acceptance["body"]
+    assert "可以验收" not in acceptance["body"]
+
+
 def test_acceptance_rejects_cannot_execute_without_evidence(tmp_path: Path):
     svc = make_service(tmp_path)
     group = svc.create_group(user_id=1, name="超级开发部")
