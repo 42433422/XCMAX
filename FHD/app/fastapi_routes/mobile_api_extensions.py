@@ -1271,6 +1271,81 @@ async def mobile_admin_codex_super_employee_invoke(
         )
 
 
+@extension_router.get("/admin/cursor-super-employee/messages")
+async def mobile_admin_cursor_super_employee_messages(
+    request: Request,
+    limit: int = Query(default=80, ge=1, le=200),
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的 Cursor 超级员工对话记录。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS:
+        logger.exception("mobile_admin_cursor_super_employee_messages")
+        return JSONResponse(
+            format_mobile_response(None, "服务暂时不可用，请稍后重试", success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/admin/cursor-super-employee/messages")
+async def mobile_admin_cursor_super_employee_invoke(
+    request: Request,
+    body: CursorSuperEmployeeMobileMessageBody,
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的软件内 Cursor 调用入口。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    text = (body.message or body.body or "").strip()
+    context = dict(body.context or {})
+    context.setdefault("source", "mobile_im")
+    context.setdefault("client_surface", "mobile")
+    context.setdefault("target_devices", ["all"])
+    # 仅平台管理账号铸造工厂授权；企业(客户)账号一律产品域（此路由 admin/enterprise 共用）。
+    if (
+        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        == "admin"
+    ):
+        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=_wsid, base=context)
+    try:
+        result = CursorSuperEmployeeService().invoke(
+            user_id=uid,
+            message=text,
+            context=context,
+        )
+        return format_mobile_response(data=result)
+    except ValueError:
+        return JSONResponse(
+            format_mobile_response(None, "请求参数有误", success=False, code=400),
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("mobile_admin_cursor_super_employee_invoke")
+        return JSONResponse(
+            format_mobile_response(None, "服务暂时不可用，请稍后重试", success=False, code=500),
+            status_code=500,
+        )
+
+
 @extension_router.get("/admin/claude-super-employee/messages")
 async def mobile_admin_claude_super_employee_messages(
     request: Request,

@@ -586,6 +586,22 @@ async def _cognition_real(
 
     use_platform_dispatch = bool(bench_llm_override)
 
+    # 后台 loop 平台作用域：未显式指定 bench 时，优先用平台 bench 模型并走平台 only，
+    # 跳过用户模型解析（否则 admin 名下无模型/配额会先报错或触发 403）。
+    if not bench_llm_override:
+        try:
+            from modstore_server.platform_llm_scope import platform_llm_scope_active
+
+            if platform_llm_scope_active():
+                from modstore_server.services.llm import resolve_platform_bench_llm
+
+                _pp, _pm = resolve_platform_bench_llm()
+                if _pp and _pm:
+                    bench_llm_override = (_pp, _pm)
+                    use_platform_dispatch = True
+        except Exception:
+            pass
+
     if bench_llm_override:
         provider, model_name = bench_llm_override
     else:
