@@ -313,3 +313,5 @@
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:233
 [routes->services] app/fastapi_routes/im_routes.py:91
 [routes->services] app/fastapi_routes/im_routes.py:117
+[routes->services] app/fastapi_routes/mobile_api_extensions.py:2543
+[routes->services] app/fastapi_routes/mobile_api_extensions.py:2569
