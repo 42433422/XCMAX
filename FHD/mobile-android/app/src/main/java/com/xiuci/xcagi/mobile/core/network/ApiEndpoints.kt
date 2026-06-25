@@ -61,6 +61,9 @@ object ApiEndpoints {
     // 设备
     const val DEVICES_REGISTER = "$BASE/devices/register"
 
+    // 自建推送：离线通知轮询
+    const val NOTIFICATIONS_PENDING = "$BASE/notifications/pending"
+
     // 配对
     const val PAIRING_EXCHANGE = "$BASE/pairing/exchange"
     const val PAIRING_ISSUE = "$BASE/pairing/issue"

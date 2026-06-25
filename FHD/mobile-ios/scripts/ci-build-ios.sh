@@ -15,7 +15,9 @@ xcodegen generate
 marketing_version="${IOS_MARKETING_VERSION:-10.0.0}"
 build_number="${IOS_BUILD_NUMBER:-1}"
 destination="${IOS_SIMULATOR_DESTINATION:-generic/platform=iOS Simulator}"
-schemes="${IOS_SCHEMES:-XCAGIMobile XCAGIMobilePersonal}"
+# SSOT: current default verification should follow the XCAGI main App Store line.
+# Compatibility builds can opt in via IOS_SCHEMES="XCAGIMobile XCAGIMobilePersonal".
+schemes="${IOS_SCHEMES:-XCAGIMobile}"
 
 for scheme in ${schemes}; do
   xcodebuild \

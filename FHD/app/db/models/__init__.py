@@ -30,6 +30,7 @@ from app.db.models.inventory import (
 )
 from app.db.models.material import Material
 from app.db.models.mobile_device import MobileDeviceToken
+from app.db.models.mobile_notification import MobileNotificationOutbox
 from app.db.models.permission import Permission, Role, role_permissions
 from app.db.models.product import Product
 from app.db.models.purchase import (

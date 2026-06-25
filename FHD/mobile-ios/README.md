@@ -1,4 +1,4 @@
-# 修茈企业 iOS App(`mobile-ios`)
+# XCAGI iOS App(`mobile-ios`)
 
 原生 **SwiftUI + MVVM** 客户端,对标 `mobile-android`(Kotlin/Compose)与 `mobile-harmony`(ArkTS)。
 共享同一套移动 API 契约 `api/mobile/v1/*`(见 `app/fastapi_routes/mobile_api_extensions.py`)。
@@ -27,9 +27,9 @@ cd FHD/mobile-ios
 bash scripts/generate-app-icon.sh
 xcodegen generate              # 生成 XCAGIMobile.xcodeproj
 open XCAGIMobile.xcodeproj
-# 两个 scheme(对标 Android flavor):
-#   XCAGIMobile         → 企业版(com.xiuci.xcagi.mobile.enterprise)
-#   XCAGIMobilePersonal → 个人版(com.xiuci.xcagi.mobile.personal,PERSONAL 编译条件 → MODstore 基址)
+# 两个 scheme(当前口径: 主线 + 冻结兼容):
+#   XCAGIMobile         → 当前主发版 / App Store 线(com.xiuci.xcagi.mobile.enterprise)
+#   XCAGIMobilePersonal → 冻结兼容线(com.xiuci.xcagi.mobile.personal,PERSONAL 编译条件 → MODstore 基址)
 # 选 scheme → Cmd+R 跑模拟器;真机/归档需传入 Apple Team ID
 ```
 
@@ -83,10 +83,10 @@ GitHub Actions 入口: `FHD/.github/workflows/release-ios.yml`。默认只跑模
 - `APP_STORE_CONNECT_API_ISSUER_ID`
 - `APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64`
 
-`XCAGIMobile` 与 `XCAGIMobilePersonal` 是两个 Bundle ID。workflow 会按 scheme 自动选取 profile secret:
+`XCAGIMobile` 与 `XCAGIMobilePersonal` 仍保留两个 Bundle ID,但当前对外上架口径以 `XCAGIMobile` 为准。workflow 会按 scheme 自动选取 profile secret:
 
 - `XCAGIMobile` → `IOS_PROVISION_PROFILE_ENTERPRISE_BASE64`
-- `XCAGIMobilePersonal` → `IOS_PROVISION_PROFILE_PERSONAL_BASE64`
+- `XCAGIMobilePersonal` → `IOS_PROVISION_PROFILE_PERSONAL_BASE64`（冻结兼容）
 
 兼容旧分支时,可以额外保留 `IOS_PROVISION_PROFILE_BASE64` 指向企业版 profile,但当前分支已不再依赖该单 profile 配置。
 
@@ -103,11 +103,13 @@ bash scripts/sync-ios-signing-secrets.sh \
   --p12 /path/to/ios_distribution.p12 \
   --p12-password '***' \
   --profile-enterprise /path/to/enterprise.mobileprovision \
-  --profile-personal /path/to/personal.mobileprovision \
   --api-key-p8 /path/to/AuthKey_XXXXXX.p8 \
   --api-key-id XXXXXX \
   --api-issuer-id XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX \
   --keychain-password '***'
+
+# 如需继续维护冻结兼容线,再额外传:
+#   --profile-personal /path/to/personal.mobileprovision
 ```
 
 ## 后端基址
@@ -134,6 +136,6 @@ XCAGIMobile/
 
 ## 本地验证口径
 
-- `scripts/ci-build-ios.sh`:生成 AppIcon、生成 `.xcodeproj`,并对企业版/个人版两个 scheme 跑 iOS Simulator build。
+- `scripts/ci-build-ios.sh`:生成 AppIcon、生成 `.xcodeproj`,默认只跑当前主线 `XCAGIMobile` 的 iOS Simulator build;如需兼容线联调,显式传 `IOS_SCHEMES="XCAGIMobile XCAGIMobilePersonal"`。
 - `scripts/archive-ios.sh`:生成 AppIcon、生成 `.xcodeproj`,执行 device archive,可选导出 IPA 和上传 App Store Connect。
 - 真机交互仍需人工验证:扫码、OCR、APNs 推送、WebSocket/SSE、WebView 登录态。

@@ -5,6 +5,7 @@ import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AiCircleListData
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
+import com.xiuci.xcagi.mobile.core.model.PendingNotificationsData
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
 import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
@@ -274,6 +275,11 @@ interface FhdApi {
 
     @POST(ApiEndpoints.DEVICES_REGISTER)
     suspend fun registerDevice(@Body body: DeviceRegisterBody): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.NOTIFICATIONS_PENDING)
+    suspend fun pendingNotifications(
+        @Query("limit") limit: Int = 50,
+    ): MobileEnvelope<PendingNotificationsData>
 
     @POST(ApiEndpoints.PAIRING_EXCHANGE)
     suspend fun pairingExchange(@Body body: PairingExchangeBody): MobileEnvelope<Map<String, Any?>>
