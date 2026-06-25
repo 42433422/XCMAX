@@ -28,10 +28,10 @@ from app.application.super_employee_service import (
     CODEX_PROFILE,
     DISPATCHER_MESSAGE_KIND,
     SuperEmployeeService,
-    _coerce_list,
-    _codex_cli_command,
-    _cursor_cli_command,
     _claude_cli_command,
+    _codex_cli_command,
+    _coerce_list,
+    _cursor_cli_command,
     _safe_json_line,
     _utc_now,
 )
@@ -166,11 +166,19 @@ class TestModuleHelpers:
         assert line.endswith("\n")
         assert json.loads(line.strip()) == {"a": 1}
 
-    def test_codex_cli_command(self, tmp_path):
+    def test_codex_cli_command(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("XCMAX_CODEX_SANDBOX_MODE", raising=False)
+        monkeypatch.delenv("DEVFLEET_CODEX_SANDBOX_MODE", raising=False)
         cmd = _codex_cli_command("/path/codex", "prompt", tmp_path / "out.txt", "/cwd")
         assert cmd[0] == "/path/codex"
         assert "prompt" in cmd
         assert "/cwd" in cmd
+        assert cmd[cmd.index("--sandbox") + 1] == "workspace-write"
+
+    def test_codex_cli_command_allows_read_only_override(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XCMAX_CODEX_SANDBOX_MODE", "read-only")
+        cmd = _codex_cli_command("/path/codex", "prompt", tmp_path / "out.txt", "/cwd")
+        assert cmd[cmd.index("--sandbox") + 1] == "read-only"
 
     def test_cursor_cli_command(self, tmp_path, monkeypatch):
         monkeypatch.setenv("DEVFLEET_CURSOR_TRUST", "1")
