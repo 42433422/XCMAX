@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全量解耦：平台 Mod 清单与受保护客户 Mod 存在性。"""
 
 from __future__ import annotations

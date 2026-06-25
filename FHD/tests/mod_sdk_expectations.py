@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Mod / 发行版相关测试的宽松断言集合（实现演进时避免逐文件改 phase / execution_path）。"""
 
 from __future__ import annotations

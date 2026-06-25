@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_runtime.scheduler local daily job wiring."""
 
 from __future__ import annotations

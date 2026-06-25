@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """auth_schema / common_schema Pydantic 模型单元测试。"""
 
 from __future__ import annotations

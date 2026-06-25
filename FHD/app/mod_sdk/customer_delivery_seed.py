@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """客户交付种子包安装。"""
 
 from __future__ import annotations

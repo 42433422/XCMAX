@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """工作空间策略的运行时强制（WorkspaceGuard）。
 
 此前 ``scope_globs`` / ``forbidden_globs`` 只在 ``scripts/dev/verify_employee_contract.py``

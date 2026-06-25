@@ -28,7 +28,9 @@ MAX_RESPONDERS = 6
 # 喂给单个 AI 的群历史条数。
 CONTEXT_TURNS = 10
 # 超级员工 employee_id 集合：命中时走专用 invoke 通道而非 mod_employee_complete。
-_SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset({"codex-super-employee", "claude-super-employee"})
+_SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset(
+    {"codex-super-employee", "claude-super-employee", "cursor-super-employee"}
+)
 
 CompletionFn = Callable[[list[dict[str, str]]], Awaitable[dict[str, Any]]]
 
@@ -191,17 +193,21 @@ def _default_duty_employee_loader() -> list[dict[str, Any]]:
 
 
 def _append_super_employees(employees: list[dict[str, Any]]) -> None:
-    """追加超级员工（Codex / Claude）到员工列表，使其可被拉入群聊。
+    """追加超级员工（Codex / Cursor / Claude）到员工列表，使其可被拉入群聊。
 
     超级员工不属于任何部门（department_key 留空），不参与部门群自动补员，
     仅出现在手机端选人列表中供用户手动拉入。
     """
     try:
-        from app.application.super_employee_service import CLAUDE_PROFILE, CODEX_PROFILE
+        from app.application.super_employee_service import (
+            CLAUDE_PROFILE,
+            CODEX_PROFILE,
+            CURSOR_PROFILE,
+        )
     except Exception:  # noqa: BLE001 - 超级员工模块不可用时静默跳过
         return
     existing = {str(e.get("employee_id") or "") for e in employees if isinstance(e, dict)}
-    for profile in (CODEX_PROFILE, CLAUDE_PROFILE):
+    for profile in (CODEX_PROFILE, CURSOR_PROFILE, CLAUDE_PROFILE):
         if profile.employee_id in existing:
             continue
         employees.append(
@@ -680,6 +686,7 @@ class AiGroupChatService:
         """
         from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
         from app.application.codex_super_employee_service import CodexSuperEmployeeService
+        from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 
         employee_id = str(member.get("employee_id") or "")
         me = str(member.get("name") or employee_id)
@@ -699,6 +706,8 @@ class AiGroupChatService:
         try:
             if employee_id == "codex-super-employee":
                 service = CodexSuperEmployeeService()
+            elif employee_id == "cursor-super-employee":
+                service = CursorSuperEmployeeService()
             else:
                 service = ClaudeSuperEmployeeService()
             # 群聊场景强制走 CLI 直答（mode=chat），避免 transcript 里包含

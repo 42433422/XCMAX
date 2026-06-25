@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 E：审批 API 经 ``xcagi-approval-bridge`` 门面（handler 委托宿主 approval 路由）。"""
 
 from __future__ import annotations

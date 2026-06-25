@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """GET /api/platform-shell/capabilities — 通用化宿主能力清单（阶段 4）。"""
 
 from __future__ import annotations

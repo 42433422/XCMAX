@@ -34,6 +34,10 @@ export default defineConfig({
         find: '@mod-views/xcagi-planner-bridge/ChatView.vue',
         replacement: path.resolve(__dirname, './src/test-stubs/ModChatViewStub.vue'),
       },
+      {
+        find: '@admin-console-inject/views/DutyRosterGraphView.vue',
+        replacement: path.resolve(__dirname, './src/views/adminDutyRosterGraphView.stub.vue'),
+      },
       { find: '@', replacement: path.resolve(__dirname, './src') },
     ],
   },
@@ -77,11 +81,13 @@ export default defineConfig({
       // 2026-06-20：6 个组件 236 测试补齐，functions 78.5% > 76%，棘轮提升 functions 至 78。
       // 2026-06-21：删除 coverage.ramp.test.ts（2496 行盲调凑数）+ zeroCoverage.mount.test.ts（仅
       //   断言 exists），挤水分后真实基线为 79.67/78.89/76/79.67，棘轮重置至诚实值。
+      // 2026-06-24：全量补测（~1100+ 测试，60+ 文件）恢复真实覆盖至 89.64/79.75/77.9/89.64，
+      //   阈值恢复至 ratchet baseline floor（89/79/77/89），棘轮门禁通过。
       thresholds: {
-        lines: 79,
-        branches: 78,
-        functions: 76,
-        statements: 79,
+        lines: 89,
+        branches: 79,
+        functions: 77,
+        statements: 89,
       },
     },
   },

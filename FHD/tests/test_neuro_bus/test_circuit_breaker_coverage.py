@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """熔断器 (CircuitBreaker) 真实行为测试。
 
 覆盖状态机转换 CLOSED -> OPEN -> HALF_OPEN -> CLOSED/OPEN、

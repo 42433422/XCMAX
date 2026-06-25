@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """xcagi-core-workflow-employees：Mod（房子）+ 四名员工（家具）静态与路由冒烟。"""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """按行业聚合「要补哪些基础线」——供首启引导与扩展市场推荐。"""
 
 from __future__ import annotations

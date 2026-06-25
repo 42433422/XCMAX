@@ -1,0 +1,154 @@
+name: Release iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version
+        required: false
+        type: string
+        default: "10.0.0"
+      build_number:
+        description: iOS build number. Empty uses run number.
+        required: false
+        type: string
+      scheme:
+        description: Xcode scheme to archive
+        required: true
+        type: choice
+        default: XCAGIMobile
+        options:
+          - XCAGIMobile
+          - XCAGIMobilePersonal
+      export_ipa:
+        description: Archive and export an .ipa using signing secrets
+        required: true
+        type: boolean
+        default: false
+      upload_app_store_connect:
+        description: Upload exported .ipa to App Store Connect
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fhd-release-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile-ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+
+      - name: Resolve version inputs
+        id: version
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          if [[ -z "${raw}" || "${raw}" == "main" || "${raw}" == "master" ]]; then
+            raw="10.0.0"
+          fi
+          build="${{ github.event.inputs.build_number || '' }}"
+          if [[ -z "${build}" ]]; then
+            build="${{ github.run_number }}"
+          fi
+          echo "marketing_version=${raw}" >> "${GITHUB_OUTPUT}"
+          echo "build_number=${build}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build both iOS schemes for simulator
+        env:
+          IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: bash scripts/ci-build-ios.sh
+
+      - name: Configure App Store signing
+        if: ${{ github.event.inputs.export_ipa == 'true' }}
+        env:
+          IOS_SCHEME: ${{ github.event.inputs.scheme }}
+          IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISION_PROFILE_ENTERPRISE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_ENTERPRISE_BASE64 }}
+          IOS_PROVISION_PROFILE_PERSONAL_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_PERSONAL_BASE64 }}
+          IOS_PROVISION_PROFILE_BASE64_LEGACY: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          case "${IOS_SCHEME}" in
+            XCAGIMobile)
+              IOS_PROVISION_PROFILE_BASE64="${IOS_PROVISION_PROFILE_ENTERPRISE_BASE64:-${IOS_PROVISION_PROFILE_BASE64_LEGACY:-}}"
+              profile_secret_name="IOS_PROVISION_PROFILE_ENTERPRISE_BASE64"
+              ;;
+            XCAGIMobilePersonal)
+              IOS_PROVISION_PROFILE_BASE64="${IOS_PROVISION_PROFILE_PERSONAL_BASE64:-}"
+              profile_secret_name="IOS_PROVISION_PROFILE_PERSONAL_BASE64"
+              ;;
+            *)
+              echo "Unknown iOS scheme: ${IOS_SCHEME}" >&2
+              exit 2
+              ;;
+          esac
+
+          : "${IOS_CERTIFICATE_P12_BASE64:?IOS_CERTIFICATE_P12_BASE64 secret is required}"
+          : "${IOS_CERTIFICATE_PASSWORD:?IOS_CERTIFICATE_PASSWORD secret is required}"
+          : "${IOS_PROVISION_PROFILE_BASE64:?${profile_secret_name} secret is required for scheme ${IOS_SCHEME}}"
+          : "${IOS_KEYCHAIN_PASSWORD:?IOS_KEYCHAIN_PASSWORD secret is required}"
+
+          mkdir -p build/signing "${HOME}/Library/MobileDevice/Provisioning Profiles"
+          security create-keychain -p "${IOS_KEYCHAIN_PASSWORD}" build/signing/xcagi-ios.keychain-db
+          security default-keychain -s build/signing/xcagi-ios.keychain-db
+          security unlock-keychain -p "${IOS_KEYCHAIN_PASSWORD}" build/signing/xcagi-ios.keychain-db
+          security set-keychain-settings -lut 21600 build/signing/xcagi-ios.keychain-db
+
+          echo "${IOS_CERTIFICATE_P12_BASE64}" | base64 --decode > build/signing/certificate.p12
+          security import build/signing/certificate.p12 \
+            -k build/signing/xcagi-ios.keychain-db \
+            -P "${IOS_CERTIFICATE_PASSWORD}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "${IOS_KEYCHAIN_PASSWORD}" build/signing/xcagi-ios.keychain-db
+
+          echo "${IOS_PROVISION_PROFILE_BASE64}" | base64 --decode > build/signing/profile.mobileprovision
+          security cms -D -i build/signing/profile.mobileprovision > build/signing/profile.plist
+          uuid=$(/usr/libexec/PlistBuddy -c 'Print UUID' build/signing/profile.plist)
+          name=$(/usr/libexec/PlistBuddy -c 'Print Name' build/signing/profile.plist)
+          cp build/signing/profile.mobileprovision "${HOME}/Library/MobileDevice/Provisioning Profiles/${uuid}.mobileprovision"
+          echo "IOS_PROVISIONING_PROFILE_SPECIFIER=${name}" >> "${GITHUB_ENV}"
+
+      - name: Archive and export IPA
+        if: ${{ github.event.inputs.export_ipa == 'true' }}
+        env:
+          IOS_SCHEME: ${{ github.event.inputs.scheme }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+          IOS_EXPORT_METHOD: app-store-connect
+          IOS_UPLOAD_APP_STORE_CONNECT: ${{ github.event.inputs.upload_app_store_connect == 'true' && '1' || '0' }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+        run: bash scripts/archive-ios.sh --export
+
+      - name: Upload IPA artifact
+        if: ${{ github.event.inputs.export_ipa == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-ios-${{ github.event.inputs.scheme }}-${{ steps.version.outputs.marketing_version }}
+          path: mobile-ios/build/export/${{ github.event.inputs.scheme }}/*.ipa
+          if-no-files-found: error

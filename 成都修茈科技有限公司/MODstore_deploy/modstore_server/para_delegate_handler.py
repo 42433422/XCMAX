@@ -23,6 +23,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+
 _PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}
 
 
@@ -113,15 +114,12 @@ def _build_request(
     workspace_root = _project_root(input_data)
     mode = _mode_for_employee(employee_id, input_data)
     report_only = _coerce_bool(input_data.get("report_only"), mode in {"review", "verify"})
-    branch = (
-        str(
-            input_data.get("branch")
-            or input_data.get("base_branch")
-            or os.environ.get("MODSTORE_PARA_BRANCH")
-            or "main"
-        ).strip()
+    branch = str(
+        input_data.get("branch")
+        or input_data.get("base_branch")
+        or os.environ.get("MODSTORE_PARA_BRANCH")
         or "main"
-    )
+    ).strip() or "main"
     return {
         "request_id": uuid.uuid4().hex,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -133,16 +131,10 @@ def _build_request(
         "task": task,
         "prompt": str(input_data.get("prompt") or task or ""),
         "workspace_root": workspace_root,
-        "repo_url": str(
-            input_data.get("repo_url") or os.environ.get("MODSTORE_PARA_REPO_URL") or ""
-        ),
+        "repo_url": str(input_data.get("repo_url") or os.environ.get("MODSTORE_PARA_REPO_URL") or ""),
         "branch": branch,
-        "device_id": str(
-            input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
-        ),
-        "depends_on": (
-            input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else []
-        ),
+        "device_id": str(input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""),
+        "depends_on": input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else [],
         "para_task_id": str(input_data.get("para_task_id") or input_data.get("task_id") or ""),
         "dispatch_line": str(input_data.get("dispatch_line") or ""),
         "priority": str(input_data.get("priority") or ""),
@@ -150,9 +142,7 @@ def _build_request(
         "record_id": input_data.get("record_id"),
         "wait_for_para": input_data.get("wait_for_para"),
         "wait_timeout_sec": input_data.get("wait_timeout_sec"),
-        "evidence": (
-            input_data.get("evidence") if isinstance(input_data.get("evidence"), dict) else {}
-        ),
+        "evidence": input_data.get("evidence") if isinstance(input_data.get("evidence"), dict) else {},
         "raw_input": input_data,
     }
 
@@ -175,17 +165,12 @@ def _public_request(req: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _write_outbox(req: Dict[str, Any]) -> Path:
-    out = (
-        _outbox_dir()
-        / f"{req.get('created_at','').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
-    )
+    out = _outbox_dir() / f"{req.get('created_at','').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
     out.write_text(json.dumps(req, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return out
 
 
-def _outbox_response(
-    req: Dict[str, Any], *, status: str, error: str, queued: bool = True
-) -> Dict[str, Any]:
+def _outbox_response(req: Dict[str, Any], *, status: str, error: str, queued: bool = True) -> Dict[str, Any]:
     outbox = _write_outbox(req)
     return {
         "handler": "para_delegate",
@@ -234,7 +219,9 @@ def _build_para_prompt(req: Dict[str, Any]) -> str:
 
 def _get_para_token(client: httpx.Client, base: str) -> Dict[str, str]:
     token = (
-        os.environ.get("MODSTORE_PARA_AUTH_TOKEN") or os.environ.get("DEVFLEET_AUTH_TOKEN") or ""
+        os.environ.get("MODSTORE_PARA_AUTH_TOKEN")
+        or os.environ.get("DEVFLEET_AUTH_TOKEN")
+        or ""
     ).strip()
     if token:
         return {"token": token, "source": "env"}
@@ -388,11 +375,7 @@ def _wait_for_para_task(
                 ),
                 "snapshot": _task_result_snapshot(body),
             }
-        task = (
-            body.get("task")
-            if isinstance(body, dict) and isinstance(body.get("task"), dict)
-            else {}
-        )
+        task = body.get("task") if isinstance(body, dict) and isinstance(body.get("task"), dict) else {}
         status = str(task.get("status") or "").strip()
         if status in terminal:
             snapshot = _task_result_snapshot(body)
@@ -430,6 +413,208 @@ def _first_para_error(snapshot: Dict[str, Any]) -> str:
     return f"Para task status={status or 'unknown'}"
 
 
+# ── Para 分级派工：一级=本机单设备，二级=多设备协同（与 FHD super_employee_service 同构） ──
+#
+# loops 后半经此桥接 Para/DevFleet。原先只认单个写死的 MODSTORE_PARA_DEVICE_ID，没配
+# 就 outbox。现补齐与 FHD 一致的分级：默认一级优先——发现在线的本机/主设备派单设备；
+# 仅当任务显式要多设备并行/分工(max_devices>1 / target_devices 多个 / para_tier=2 /
+# escalate / 文本含"多设备"等)或本机不可用时升二级，扇出到多台 worker。显式给了
+# device_id 的部署保持原行为不变(零回归)。设备配对+agent 拉起仍属 DevFleet/运维侧。
+
+_SUBTASK_LABELS = ("需求定位与方案", "核心实现", "验证与收尾")
+
+
+def _dev_tool() -> str:
+    """loops 桥默认派给的设备工具(DevFleet devTool)，用于设备过滤。"""
+    return (os.environ.get("MODSTORE_PARA_DEV_TOOL") or "codex").strip() or "codex"
+
+
+def _device_discovery_enabled() -> bool:
+    return _env_bool("MODSTORE_PARA_DEVICE_DISCOVERY", "1")
+
+
+def _safe_json(resp: httpx.Response) -> Any:
+    try:
+        return resp.json() if resp.content else {}
+    except Exception:
+        return {"raw": resp.text[:4000]}
+
+
+def _device_tool_entry(item: Dict[str, Any], tool_name: str) -> Optional[Dict[str, Any]]:
+    tools = item.get("tools")
+    if isinstance(tools, list):
+        for tool in tools:
+            if isinstance(tool, dict) and tool.get("toolName") == tool_name:
+                return tool
+    return None
+
+
+def _device_eligible(item: Any, tool_name: str) -> bool:
+    """设备能否承接派工：在线 + 目标工具已装且非占用 + 具备能力。与 FHD 同构。"""
+    if not isinstance(item, dict):
+        return False
+    if str(item.get("status") or "") != "online":
+        return False
+    tool = _device_tool_entry(item, tool_name)
+    if tool and str(tool.get("status") or "") == "not_installed":
+        return False
+    if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
+        return False
+    if not tool:
+        caps = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
+        if caps.get(f"{tool_name}_cli") is True:
+            return True
+        return str(item.get("devTool") or "") == tool_name
+    return True
+
+
+def _resolve_tier(req: Dict[str, Any]) -> int:
+    """一级(1) / 二级(2)。默认一级，按需升二级。读 req.raw_input + 任务文本。"""
+    forced = (os.environ.get("MODSTORE_PARA_FORCE_TIER") or "").strip().lower()
+    if forced in {"1", "local", "single", "本机"}:
+        return 1
+    if forced in {"2", "fleet", "multi", "多设备"}:
+        return 2
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    hint = str(raw.get("para_tier") or raw.get("tier") or "").strip().lower()
+    if hint in {"2", "fleet", "multi", "multi_device", "多设备"}:
+        return 2
+    if hint in {"1", "local", "single", "本机"}:
+        return 1
+    if raw.get("escalate") in (True, 1, "1", "true", "yes", "on"):
+        return 2
+    try:
+        if int(raw.get("max_devices") or 0) > 1:
+            return 2
+    except (TypeError, ValueError):
+        pass
+    target = raw.get("target_devices")
+    if isinstance(target, list):
+        specific = [s for s in (str(x).strip() for x in target) if s and s != "all"]
+        if len(specific) > 1:
+            return 2
+    text = f"{req.get('task') or ''} {req.get('prompt') or ''}"
+    if any(m in text for m in ("多设备", "所有设备", "全部设备", "调用所有设备", "跨设备")):
+        return 2
+    return 1
+
+
+def _max_fleet_devices(req: Dict[str, Any]) -> int:
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    try:
+        return max(1, min(8, int(raw.get("max_devices") or 3)))
+    except (TypeError, ValueError):
+        return 3
+
+
+def _select_local_device(devices: list, tool_name: str) -> list:
+    """一级：只挑「本机」一台。配置 MODSTORE_PARA_DEVICE_ID → is_primary → 首台合格。
+    识别到的本机若不合格(离线/工具未装/占用)则返空，由上层升二级。"""
+    local_id = (
+        os.environ.get("MODSTORE_PARA_DEVICE_ID")
+        or os.environ.get("DEVFLEET_DEVICE_ID")
+        or ""
+    ).strip()
+    if local_id:
+        for item in devices:
+            if isinstance(item, dict) and str(item.get("id") or "") == local_id:
+                return [item] if _device_eligible(item, tool_name) else []
+        return []
+    for item in devices:
+        if isinstance(item, dict) and item.get("isPrimary"):
+            return [item] if _device_eligible(item, tool_name) else []
+    for item in devices:
+        if _device_eligible(item, tool_name):
+            return [item]
+    return []
+
+
+def _select_fleet_devices(devices: list, req: Dict[str, Any], tool_name: str) -> list:
+    """二级：选多台在线设备(偏好非主 worker)，受 target_devices / max_devices 约束。"""
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    target = raw.get("target_devices")
+    targets = (
+        {str(x).strip() for x in target if str(x).strip()}
+        if isinstance(target, list)
+        else {"all"}
+    )
+    candidates: list = []
+    for item in devices:
+        if not _device_eligible(item, tool_name):
+            continue
+        if (
+            "all" not in targets
+            and str(item.get("id") or "") not in targets
+            and str(item.get("name") or "") not in targets
+        ):
+            continue
+        candidates.append(item)
+    workers = [item for item in candidates if not item.get("isPrimary")]
+    selected = workers or candidates
+    return selected[: _max_fleet_devices(req)]
+
+
+def _fetch_devices(client: httpx.Client, base: str, token: str) -> list:
+    try:
+        resp = client.get(
+            f"{base}/api/devices",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    except Exception:
+        return []
+    if resp.status_code >= 400:
+        return []
+    body = _safe_json(resp)
+    devices = body.get("devices") if isinstance(body, dict) else []
+    return devices if isinstance(devices, list) else []
+
+
+def _resolve_dispatch_devices(
+    client: httpx.Client, base: str, token: str, req: Dict[str, Any]
+) -> tuple:
+    """返回 (tier, [device dicts], reason)。显式 device_id → 零回归走一级单设备。"""
+    explicit = str(req.get("device_id") or "").strip()
+    if explicit:
+        return 1, [{"id": explicit}], ""
+    if not _device_discovery_enabled():
+        return (
+            1,
+            [],
+            "未配置 MODSTORE_PARA_DEVICE_ID 且设备发现关闭(MODSTORE_PARA_DEVICE_DISCOVERY=0)",
+        )
+    tool = _dev_tool()
+    devices = _fetch_devices(client, base, token)
+    tier = _resolve_tier(req)
+    if tier == 1:
+        local = _select_local_device(devices, tool)
+        if local:
+            return 1, local, ""
+        tier = 2  # 本机不可用 → 升二级
+    selected = _select_fleet_devices(devices, req, tool)
+    if not selected:
+        return tier, [], f"未发现在线可用 {tool} 设备(共 {len(devices)} 台)"
+    return tier, selected, ""
+
+
+def _multi_device_prompt(base_prompt: str, device: Dict[str, Any], index: int, total: int) -> str:
+    if total <= 1:
+        return base_prompt
+    label = device.get("name") or device.get("id") or f"设备{index + 1}"
+    suffix = (
+        f"\n\n你是第 {index + 1}/{total} 台工作设备（{label}）。"
+        "请承担可独立完成的部分，避免与其它设备改同一批文件；提交到调度器分配的分支并回写日志。"
+    )
+    return base_prompt + suffix
+
+
+def _para_subtask_title(req: Dict[str, Any], index: int, total: int) -> str:
+    title = str(req.get("title") or "MODstore loop task")
+    if total <= 1:
+        return f"{req.get('mode') or 'code'}: {title}"[:240]
+    label = _SUBTASK_LABELS[index] if index < len(_SUBTASK_LABELS) else f"工作单元{index + 1}"
+    return f"{label}：{title[:60]}"
+
+
 def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
     base = _api_base()
     if not base:
@@ -437,14 +622,6 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
             req,
             status="awaiting_para_dispatcher",
             error="MODSTORE_PARA_API_BASE 未配置；已写入 outbox，但未真实派发到 Para",
-        )
-
-    if not str(req.get("device_id") or "").strip():
-        return _outbox_response(
-            req,
-            status="blocked_missing_para_device",
-            error="MODSTORE_PARA_DEVICE_ID/input device_id 未配置，无法选择 Para 工作设备",
-            queued=False,
         )
 
     repo_url = str(req.get("repo_url") or "").strip()
@@ -460,70 +637,107 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
             queued=False,
         )
 
-    payload: Dict[str, Any] = {
-        "device_id": str(req.get("device_id") or "").strip(),
-        "title": str(req.get("title") or "MODstore loop task").strip(),
-        "prompt": _build_para_prompt(req),
-        "branch": str(req.get("branch") or "main").strip() or "main",
-        "subtask_title": f"{req.get('mode') or 'code'}: {req.get('title') or 'MODstore loop task'}"[
-            :240
-        ],
-        "report_only": bool(req.get("report_only")),
-    }
-    if repo_url:
-        payload["repo_url"] = repo_url
-    if req.get("para_task_id"):
-        payload["task_id"] = str(req.get("para_task_id") or "").strip()
-    if isinstance(req.get("depends_on"), list) and req.get("depends_on"):
-        payload["depends_on"] = req.get("depends_on")
-    payload["max_attempts"] = 1
-
+    base_prompt = _build_para_prompt(req)
+    first_payload: Dict[str, Any] = {}
     try:
         with httpx.Client(timeout=_api_timeout(), trust_env=False) as client:
             token_info = _get_para_token(client, base)
-            resp = client.post(
-                f"{base}/api/tasks",
-                headers={"Authorization": f"Bearer {token_info['token']}"},
-                json=payload,
-            )
-            body: Any = {}
-            try:
-                body = resp.json() if resp.content else {}
-            except Exception:
-                body = {"raw": resp.text[:4000]}
-            ok = (
-                resp.status_code < 400
-                and isinstance(body, dict)
-                and bool(body.get("task") or body.get("subtask"))
-            )
-            if not ok:
-                outbox = _write_outbox(
+            token = token_info["token"]
+
+            tier, sel_devices, select_reason = _resolve_dispatch_devices(client, base, token, req)
+            if not sel_devices:
+                return _outbox_response(
+                    req,
+                    status="blocked_no_online_para_device",
+                    error=select_reason or "未发现在线可用 Para 工作设备",
+                    queued=False,
+                )
+
+            total = len(sel_devices)
+            task_id = str(req.get("para_task_id") or "").strip()
+            dispatched: list = []
+            for index, device in enumerate(sel_devices):
+                device_id = str(device.get("id") or "").strip()
+                if not device_id:
+                    continue
+                payload: Dict[str, Any] = {
+                    "device_id": device_id,
+                    "title": str(req.get("title") or "MODstore loop task").strip(),
+                    "prompt": _multi_device_prompt(base_prompt, device, index, total),
+                    "branch": str(req.get("branch") or "main").strip() or "main",
+                    "subtask_title": _para_subtask_title(req, index, total),
+                    "report_only": bool(req.get("report_only")),
+                    "max_attempts": 1,
+                }
+                if repo_url:
+                    payload["repo_url"] = repo_url
+                if isinstance(req.get("depends_on"), list) and req.get("depends_on"):
+                    payload["depends_on"] = req.get("depends_on")
+                if task_id:
+                    payload["task_id"] = task_id
+                if not first_payload:
+                    first_payload = payload
+
+                resp = client.post(
+                    f"{base}/api/tasks",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json=payload,
+                )
+                body = _safe_json(resp)
+                ok = (
+                    resp.status_code < 400
+                    and isinstance(body, dict)
+                    and bool(body.get("task") or body.get("subtask"))
+                )
+                if not ok:
+                    if not dispatched:
+                        # 首台即失败 → 整体 outbox，不谎报成功
+                        outbox = _write_outbox(
+                            {
+                                **req,
+                                "para_payload": payload,
+                                "para_response": _summarize_para_response(body),
+                            }
+                        )
+                        return {
+                            "handler": "para_delegate",
+                            "ok": False,
+                            "queued": True,
+                            "status": "para_api_rejected_outboxed",
+                            "status_code": resp.status_code,
+                            "source": "para_api",
+                            "para_tier": tier,
+                            "error": str(
+                                (body.get("error") or body.get("detail") or resp.text[:500])
+                                if isinstance(body, dict)
+                                else resp.text[:500]
+                            ),
+                            "outbox_path": str(outbox),
+                            "request": _public_request(req),
+                            "response": _summarize_para_response(body),
+                        }
+                    continue  # 多设备时后续设备失败：记录并继续，task 已建
+                accepted = _summarize_para_response(body)
+                if not task_id:
+                    task_id = str(accepted.get("task_id") or "").strip()
+                _force_single_device_attempt({**req, "device_id": device_id}, accepted)
+                dispatched.append(
                     {
-                        **req,
-                        "para_payload": payload,
-                        "para_response": _summarize_para_response(body),
+                        "device_id": device_id,
+                        "device_name": accepted.get("device_name") or device.get("name"),
+                        "subtask_id": accepted.get("subtask_id"),
                     }
                 )
-                return {
-                    "handler": "para_delegate",
-                    "ok": False,
-                    "queued": True,
-                    "status": "para_api_rejected_outboxed",
-                    "status_code": resp.status_code,
-                    "source": "para_api",
-                    "error": str(
-                        (body.get("error") or body.get("detail") or resp.text[:500])
-                        if isinstance(body, dict)
-                        else resp.text[:500]
-                    ),
-                    "outbox_path": str(outbox),
-                    "request": _public_request(req),
-                    "response": _summarize_para_response(body),
-                }
-            accepted = _summarize_para_response(body)
-            auto_retry = _force_single_device_attempt(req, accepted)
-            task_id = str(accepted.get("task_id") or "").strip()
+
+            if not dispatched:
+                return _outbox_response(
+                    {**req, "para_payload": first_payload},
+                    status="para_api_no_subtask_created",
+                    error="Para API 未创建任何 subtask",
+                )
+
             should_wait = _coerce_bool(req.get("wait_for_para"), _wait_for_completion_default())
+            device_scope = "local_device" if tier == 1 else "all_devices"
             if should_wait:
                 if not task_id:
                     return {
@@ -532,45 +746,44 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                         "accepted": True,
                         "status": "para_api_missing_task_id",
                         "source": "para_api",
+                        "para_tier": tier,
+                        "device_scope": device_scope,
                         "request": _public_request(req),
-                        "response": accepted,
-                        "auto_retry": auto_retry,
+                        "devices": dispatched,
                         "error": "Para API accepted but response missing task.id",
                     }
-                final = _wait_for_para_task(client, base, token_info["token"], task_id, req)
+                final = _wait_for_para_task(client, base, token, task_id, req)
                 return {
                     "handler": "para_delegate",
                     "ok": bool(final.get("ok")),
                     "accepted": True,
                     "completed": bool(final.get("ok")),
-                    "status_code": resp.status_code,
                     "status": final.get("status"),
                     "source": "para_api",
                     "auth": token_info["source"],
+                    "para_tier": tier,
+                    "device_scope": device_scope,
                     "request": _public_request(req),
-                    "response": accepted,
-                    "auto_retry": auto_retry,
+                    "devices": dispatched,
                     "para_result": final.get("snapshot"),
-                    "error": (
-                        "" if final.get("ok") else str(final.get("error") or "Para task failed")
-                    ),
+                    "error": "" if final.get("ok") else str(final.get("error") or "Para task failed"),
                 }
             return {
                 "handler": "para_delegate",
                 "ok": True,
                 "accepted": True,
                 "completed": False,
-                "status_code": resp.status_code,
                 "status": "para_task_accepted",
                 "source": "para_api",
                 "auth": token_info["source"],
+                "para_tier": tier,
+                "device_scope": device_scope,
                 "request": _public_request(req),
-                "response": accepted,
-                "auto_retry": auto_retry,
+                "devices": dispatched,
             }
     except Exception as exc:  # noqa: BLE001
         return _outbox_response(
-            {**req, "para_payload": payload},
+            {**req, "para_payload": first_payload},
             status="para_api_failed_outboxed",
             error=f"Para API 调用失败，已写入 outbox: {str(exc)[:500]}",
         )
