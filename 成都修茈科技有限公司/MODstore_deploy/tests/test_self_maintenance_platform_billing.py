@@ -11,6 +11,7 @@ import asyncio
 
 from fastapi import HTTPException
 
+import modstore_server.llm_billing as llm_billing
 import modstore_server.llm_chat_proxy as llm_chat_proxy
 import modstore_server.llm_key_resolver as llm_key_resolver
 import modstore_server.quota_middleware as quota_middleware
@@ -31,13 +32,19 @@ def _patch_llm(monkeypatch, *, require_raises=False):
 
     monkeypatch.setattr(llm_chat_proxy, "chat_dispatch", _fake_chat_dispatch)
 
+    # 新版按 token 计费：consume 走 calculate_charge/usage_from_response 旁路。
+    # 打桩这两者使 consume 路径可达且不依赖真实 DB/定价（否则被 services.llm
+    # 里的 try/except 吞掉，consume 永不触发）。
+    monkeypatch.setattr(llm_billing, "usage_from_response", lambda *a, **k: {})
+    monkeypatch.setattr(llm_billing, "calculate_charge", lambda *a, **k: 0)
+
     def _require(session, uid, amount=1):
         calls["require"].append((uid, amount))
         if require_raises:
             raise HTTPException(403, "配额不足: llm_calls")
         return "quota"
 
-    def _consume(session, uid, amount=1):
+    def _consume(session, uid, amount=1, *, charge=None):
         calls["consume"].append((uid, amount))
         return "quota"
 
