@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """工厂 Workspace 注册表：把超级员工(工厂版)派工的目标 repo 从裸 ``workspace_root``
 字符串升成受平台控制的注册表。承接"先自举再外扩"：
 

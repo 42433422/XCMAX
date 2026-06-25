@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """AI 员工三阶级 + 小C助理身份 单一真相源（SSOT）加载器。
 
 真相源：``config/ai_workforce.json``。本模块是「员工系统 ↔ 人格系统」联系的唯一程序入口：

@@ -1,4 +1,3 @@
-
 from app.mod_sdk.host_foundation import (
     HOST_FOUNDATION_EMPLOYEE_PACK_ID,
     catalog_store_collection,

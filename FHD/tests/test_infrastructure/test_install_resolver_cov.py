@@ -26,7 +26,6 @@ from app.infrastructure.mods.install_resolver import (
 )
 from app.infrastructure.mods.package import ModPackageError, ModSignatureError
 
-
 # ---------------------------------------------------------------------------
 # Helper fixtures
 # ---------------------------------------------------------------------------
@@ -41,9 +40,7 @@ def mock_mm():
 
 @pytest.fixture
 def resolver(mock_mm):
-    with patch(
-        "app.infrastructure.mods.install_resolver.get_mod_manager", return_value=mock_mm
-    ):
+    with patch("app.infrastructure.mods.install_resolver.get_mod_manager", return_value=mock_mm):
         return InstallResolver()
 
 
@@ -55,9 +52,7 @@ def resolver(mock_mm):
 class TestEmployeePackBranches:
     @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
     @patch("app.infrastructure.mods.install_resolver.peek_artifact")
-    def test_employee_pack_install_fails_triggers_rollback(
-        self, mock_peek, mock_get_mm, mock_mm
-    ):
+    def test_employee_pack_install_fails_triggers_rollback(self, mock_peek, mock_get_mm, mock_mm):
         mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
         mock_get_mm.return_value = mock_mm
 
@@ -76,9 +71,7 @@ class TestEmployeePackBranches:
         ):
             resolver = InstallResolver()
             with patch.object(resolver, "_rollback") as mock_rb:
-                ok, msg, data = resolver.install_package_dispatch(
-                    "/path/to/pack.xcemp", "/store"
-                )
+                ok, msg, data = resolver.install_package_dispatch("/path/to/pack.xcemp", "/store")
                 mock_rb.assert_called_once()
 
         assert ok is False
@@ -86,9 +79,7 @@ class TestEmployeePackBranches:
 
     @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
     @patch("app.infrastructure.mods.install_resolver.peek_artifact")
-    def test_employee_pack_peek_manifest_error_suppressed(
-        self, mock_peek, mock_get_mm, mock_mm
-    ):
+    def test_employee_pack_peek_manifest_error_suppressed(self, mock_peek, mock_get_mm, mock_mm):
         mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
         mock_get_mm.return_value = mock_mm
 
@@ -106,18 +97,14 @@ class TestEmployeePackBranches:
             ),
         ):
             resolver = InstallResolver()
-            ok, msg, data = resolver.install_package_dispatch(
-                "/path/to/pack.xcemp", "/store"
-            )
+            ok, msg, data = resolver.install_package_dispatch("/path/to/pack.xcemp", "/store")
 
         # Should still succeed; pack_id is empty so nothing added to rollback stack
         assert ok is True
 
     @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
     @patch("app.infrastructure.mods.install_resolver.peek_artifact")
-    def test_employee_pack_empty_id_not_added_to_rollback(
-        self, mock_peek, mock_get_mm, mock_mm
-    ):
+    def test_employee_pack_empty_id_not_added_to_rollback(self, mock_peek, mock_get_mm, mock_mm):
         mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
         mock_get_mm.return_value = mock_mm
 
@@ -147,9 +134,7 @@ class TestEmployeePackBranches:
 
     @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
     @patch("app.infrastructure.mods.install_resolver.peek_artifact")
-    def test_employee_pack_none_id_not_added_to_rollback(
-        self, mock_peek, mock_get_mm, mock_mm
-    ):
+    def test_employee_pack_none_id_not_added_to_rollback(self, mock_peek, mock_get_mm, mock_mm):
         mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
         mock_get_mm.return_value = mock_mm
 
@@ -178,9 +163,7 @@ class TestEmployeePackBranches:
 
     @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
     @patch("app.infrastructure.mods.install_resolver.peek_artifact")
-    def test_employee_pack_success_adds_to_rollback(
-        self, mock_peek, mock_get_mm, mock_mm
-    ):
+    def test_employee_pack_success_adds_to_rollback(self, mock_peek, mock_get_mm, mock_mm):
         mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
         mock_get_mm.return_value = mock_mm
 
@@ -218,9 +201,7 @@ class TestEmployeePackBranches:
 class TestRegularModBranches:
     @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
     @patch("app.infrastructure.mods.install_resolver.peek_artifact")
-    def test_mod_install_fails_triggers_rollback(
-        self, mock_peek, mock_get_mm, mock_mm
-    ):
+    def test_mod_install_fails_triggers_rollback(self, mock_peek, mock_get_mm, mock_mm):
         mock_peek.return_value = "xcmod"
         mock_get_mm.return_value = mock_mm
         mock_mm.install_mod_package.return_value = (False, "install error", None)
@@ -324,9 +305,7 @@ class TestRollback:
         mock_registry.get_mod_metadata.return_value = {"name": "mod-1"}
 
         resolver = InstallResolver()
-        with patch(
-            "app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry
-        ):
+        with patch("app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry):
             rb = [("mod_dir", mod_dir_path)]
             resolver._rollback(rb)
 
@@ -345,9 +324,7 @@ class TestRollback:
         mock_registry.get_mod_metadata.return_value = None  # no metadata
 
         resolver = InstallResolver()
-        with patch(
-            "app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry
-        ):
+        with patch("app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry):
             rb = [("mod_dir", mod_dir_path)]
             resolver._rollback(rb)
 
@@ -362,9 +339,7 @@ class TestRollback:
         mock_registry.get_mod_metadata.return_value = None
 
         resolver = InstallResolver()
-        with patch(
-            "app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry
-        ):
+        with patch("app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry):
             rb = [("mod_dir", "/nonexistent/path/mod-3")]
             resolver._rollback(rb)
 
@@ -426,9 +401,7 @@ class TestRollback:
         mock_registry.get_mod_metadata.side_effect = RuntimeError("registry error")
 
         resolver = InstallResolver()
-        with patch(
-            "app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry
-        ):
+        with patch("app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry):
             rb = [("mod_dir", str(mod_dir))]
             # Should not raise despite the error
             resolver._rollback(rb)

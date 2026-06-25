@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from app.mod_sdk.customer_delivery import delivery_for_industry_mod, list_customer_deliveries

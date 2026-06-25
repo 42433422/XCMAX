@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """平台员工执行路径的 Persona 风格注入。
 
 按 ai_workforce SSOT:小C助理 + 平台员工 共享 Persona 引擎;超级员工独立人格、不纳入。

@@ -19,7 +19,6 @@ from app.application.ops_closure_status import (
     build_ops_closure_status,
 )
 
-
 # ---------------------------------------------------------------------------
 # _installed_employee_pack_ids
 # ---------------------------------------------------------------------------
@@ -44,12 +43,8 @@ class TestInstalledEmployeePackIds:
         mock_pack_empty = {"id": ""}
 
         with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr
-            ),
-            patch(
-                "app.infrastructure.mods.employee_registry.EmployeeRegistry"
-            ) as mock_reg_cls,
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr),
+            patch("app.infrastructure.mods.employee_registry.EmployeeRegistry") as mock_reg_cls,
         ):
             mock_reg = MagicMock()
             mock_reg.list_packs.return_value = [mock_pack1, mock_pack2, mock_pack_empty]
@@ -64,12 +59,8 @@ class TestInstalledEmployeePackIds:
         mock_mgr.list_loaded_mods.return_value = []
 
         with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr
-            ),
-            patch(
-                "app.infrastructure.mods.employee_registry.EmployeeRegistry"
-            ) as mock_reg_cls,
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr),
+            patch("app.infrastructure.mods.employee_registry.EmployeeRegistry") as mock_reg_cls,
         ):
             mock_reg = MagicMock()
             mock_reg.list_packs.return_value = [{"id": "emp-x"}]
@@ -83,12 +74,8 @@ class TestInstalledEmployeePackIds:
         mock_mgr.list_loaded_mods.return_value = []
 
         with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr
-            ),
-            patch(
-                "app.infrastructure.mods.employee_registry.EmployeeRegistry"
-            ) as mock_reg_cls,
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr),
+            patch("app.infrastructure.mods.employee_registry.EmployeeRegistry") as mock_reg_cls,
         ):
             mock_reg = MagicMock()
             mock_reg.list_packs.return_value = [{"id": "emp-y"}]
@@ -103,12 +90,8 @@ class TestInstalledEmployeePackIds:
         mock_mgr.list_loaded_mods.return_value = []
 
         with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr
-            ),
-            patch(
-                "app.infrastructure.mods.employee_registry.EmployeeRegistry"
-            ) as mock_reg_cls,
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr),
+            patch("app.infrastructure.mods.employee_registry.EmployeeRegistry") as mock_reg_cls,
         ):
             mock_reg = MagicMock()
             mock_reg.list_packs.return_value = [{"id": "emp-z"}]
@@ -139,9 +122,7 @@ class TestInstalledEmployeePackIds:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 side_effect=[mock_mgr, mock_mgr_2],
             ),
-            patch(
-                "app.infrastructure.mods.employee_registry.EmployeeRegistry"
-            ) as mock_reg_cls,
+            patch("app.infrastructure.mods.employee_registry.EmployeeRegistry") as mock_reg_cls,
         ):
             mock_reg = MagicMock()
             mock_reg.list_packs.return_value = []
@@ -164,9 +145,7 @@ class TestInstalledEmployeePackIds:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 side_effect=[mock_mgr, mock_mgr_2],
             ),
-            patch(
-                "app.infrastructure.mods.employee_registry.EmployeeRegistry"
-            ) as mock_reg_cls,
+            patch("app.infrastructure.mods.employee_registry.EmployeeRegistry") as mock_reg_cls,
         ):
             mock_reg = MagicMock()
             mock_reg.list_packs.return_value = [{"id": "emp-from-reg"}]
@@ -200,7 +179,9 @@ class TestDutyEmployeeAreaMap:
     def test_block_not_dict_skipped(self):
         with patch(
             "app.application.ops_closure_status.load_duty_roster_document",
-            return_value={"areas": {"zone1": "not-a-dict", "zone2": {"label": "Z2", "ids": ["e1"]}}},
+            return_value={
+                "areas": {"zone1": "not-a-dict", "zone2": {"label": "Z2", "ids": ["e1"]}}
+            },
         ):
             result = _duty_employee_area_map()
         assert result == {"e1": {"area_key": "zone2", "area_label": "Z2"}}
@@ -245,9 +226,7 @@ class TestDutyEmployeeAreaMap:
 
 class TestBuildRosterRows:
     def test_empty_planned(self):
-        rows = _build_roster_rows(
-            [], missing_remote_set=set(), local_packs=set(), area_map={}
-        )
+        rows = _build_roster_rows([], missing_remote_set=set(), local_packs=set(), area_map={})
         assert rows == []
 
     def test_in_catalog_and_local_installed(self):
@@ -363,9 +342,7 @@ class TestBuildOpsClosureStatus:
                 return_value={},
             ),
         ):
-            result = build_ops_closure_status(
-                {"staffing": {"missing_employees": ["emp-a"]}}
-            )
+            result = build_ops_closure_status({"staffing": {"missing_employees": ["emp-a"]}})
         assert result["deliverable"] is False
         assert any(b["code"] == "REMOTE_STAFFING_GAP" for b in result["blockers"])
 
@@ -403,9 +380,7 @@ class TestBuildOpsClosureStatus:
                 return_value={},
             ),
         ):
-            result = build_ops_closure_status(
-                {"change_requests": {"pending": 5}}
-            )
+            result = build_ops_closure_status({"change_requests": {"pending": 5}})
         assert result["deliverable"] is False
         assert any(b["code"] == "PENDING_CHANGE_REQUESTS" for b in result["blockers"])
 
@@ -529,9 +504,7 @@ class TestBuildOpsClosureStatus:
                 return_value={},
             ),
         ):
-            result = build_ops_closure_status(
-                {"staffing": {"missing_employees": many_missing}}
-            )
+            result = build_ops_closure_status({"staffing": {"missing_employees": many_missing}})
         blocker = next(b for b in result["blockers"] if b["code"] == "REMOTE_STAFFING_GAP")
         assert len(blocker["employee_ids"]) == 50
         assert blocker["count"] == 60
