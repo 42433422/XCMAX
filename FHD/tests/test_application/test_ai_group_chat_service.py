@@ -1082,6 +1082,92 @@ def test_acceptance_rejects_read_only_patch_not_applied_report(tmp_path: Path):
     assert "可以验收" not in acceptance["body"]
 
 
+def test_acceptance_rejects_long_nested_read_only_report(tmp_path: Path):
+    svc = make_service(tmp_path)
+    group = svc.create_group(user_id=1, name="超级开发部")
+    svc.add_member(
+        user_id=1,
+        group_id=group["id"],
+        member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
+    )
+    work_order_id = "work-order-long-read-only"
+    task_id = "relay-task-long-read-only"
+    svc._append_messages(  # noqa: SLF001 - 覆盖线上长报告截断漏判
+        [
+            svc._message_row(  # noqa: SLF001
+                user_id=1,
+                group_id=group["id"],
+                role="ai",
+                sender_id="ai-group-dispatcher",
+                sender_name="工作流调度",
+                sender_avatar="",
+                body=svc._format_work_order_message(  # noqa: SLF001
+                    "任务2：解决自动分支没法选择分支的问题",
+                    ["超级员工-Codex"],
+                ),
+                kind="work_order",
+                status="assigned",
+                work_order_id=work_order_id,
+                payload={"task": "任务2：解决自动分支没法选择分支的问题"},
+            ),
+            svc._message_row(  # noqa: SLF001
+                user_id=1,
+                group_id=group["id"],
+                role="ai",
+                sender_id="codex-super-employee",
+                sender_name="超级员工-Codex",
+                sender_avatar="",
+                body="Codex 已接单",
+                kind="work_report",
+                status="queued",
+                work_order_id=work_order_id,
+                payload={"raw": {"task_id": task_id}},
+            ),
+        ]
+    )
+    long_prefix = "职责结论：" + ("服务端分支参数说明。" * 120)
+    nested_body = (
+        long_prefix
+        + "\n\n我尝试修改 super_employee_service.py、mobile_api_extensions.py 和对应测试，"
+        "但当前环境是只读沙盒，apply_patch 被拒绝；pytest 也因没有可写临时目录失败。"
+        "\n\n闭环结果：无文件改动，推送：无改动可提交。"
+    )
+
+    svc.append_relay_work_report(
+        task={
+            "task_id": task_id,
+            "relay_id": "relay-1",
+            "kind": "codex.invoke",
+            "status": "completed",
+            "created_by_user_id": 1,
+            "payload": {
+                "message": "任务2：解决自动分支没法选择分支的问题",
+                "context": {
+                    "source": "mobile_ai_group",
+                    "group_id": group["id"],
+                    "work_order_id": work_order_id,
+                    "employee_id": "codex-super-employee",
+                },
+            },
+            "result": {
+                "ok": True,
+                "codex": {
+                    "dispatch": {"dispatcher": "codex_cli", "status": "completed"},
+                    "assistant_message": {"body": nested_body},
+                },
+            },
+        }
+    )
+
+    messages = svc.get_messages(user_id=1, group_id=group["id"])
+    relay_report = next(m for m in messages if m.get("kind") == "relay_work_report")
+    acceptance = next(m for m in messages if m.get("kind") == "work_acceptance")
+    assert relay_report["status"] == "blocked"
+    assert acceptance["status"] == "needs_review"
+    assert "需要复核" in acceptance["body"]
+    assert "可以验收" not in acceptance["body"]
+
+
 def test_acceptance_rejects_cannot_execute_without_evidence(tmp_path: Path):
     svc = make_service(tmp_path)
     group = svc.create_group(user_id=1, name="超级开发部")
