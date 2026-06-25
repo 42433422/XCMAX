@@ -11,7 +11,6 @@ from modstore_server.employee_runtime import employee_pack_runtime_issues
 from modstore_server.integrations.doc_sync_handler import _match_glob
 from modstore_server.scripts.onboard_yuangon_employees import _manifest_from_employee_yaml
 
-
 COMPANY_ROOT = Path(__file__).resolve().parents[2]
 YUANGON_ROOT = COMPANY_ROOT / "yuangon"
 

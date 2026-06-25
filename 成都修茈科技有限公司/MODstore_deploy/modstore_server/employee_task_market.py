@@ -37,7 +37,9 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _admin_user_id(session) -> int:
-    row = session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()  # noqa: E712
+    row = (
+        session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
+    )  # noqa: E712
     if row:
         return int(row.id)
     row = session.query(User).order_by(User.id.asc()).first()
@@ -143,7 +145,9 @@ def _recent_stats(session, employee_id: str, *, hours: int = 24) -> Dict[str, An
             failure += int(count or 0)
     running = (
         session.query(PendingBriefTask)
-        .filter(PendingBriefTask.owner_employee_id == employee_id, PendingBriefTask.status == "running")
+        .filter(
+            PendingBriefTask.owner_employee_id == employee_id, PendingBriefTask.status == "running"
+        )
         .count()
     )
     total = success + failure
@@ -175,7 +179,9 @@ def _score_candidate(
     load_penalty = int(stats.get("running") or 0) * 8
     failure_penalty = min(20, int(stats.get("failure") or 0) * 3)
     priority_bonus = incident_priority / 10.0
-    score = round(max(0.0, capability + history + priority_bonus - load_penalty - failure_penalty), 3)
+    score = round(
+        max(0.0, capability + history + priority_bonus - load_penalty - failure_penalty), 3
+    )
     return {
         "capability": round(capability, 3),
         "employee_id": employee_id,
@@ -239,7 +245,9 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
         ev = session.get(IncidentEvent, int(event_id))
         if ev is None:
             return {"ok": False, "claimed": False, "reason": "incident_not_found"}
-        if int(ev.dispatched_count or 0) > 0 and not _env_bool("MODSTORE_EMPLOYEE_TASK_MARKET_REDISPATCH", False):
+        if int(ev.dispatched_count or 0) > 0 and not _env_bool(
+            "MODSTORE_EMPLOYEE_TASK_MARKET_REDISPATCH", False
+        ):
             return {"ok": True, "claimed": False, "reason": "incident_already_dispatched"}
         payload = _payload(ev)
         uid = _admin_user_id(session)

@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-
 PHASES = ("phase_a", "phase_b", "phase_c", "phase_d")
 DEFAULT_SAMPLE_SIZE = 100
 
@@ -70,7 +69,10 @@ def _read_jsonl(path: Path, *, max_rows: int = 20000) -> List[Dict[str, Any]]:
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    tmp.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
     tmp.replace(path)
 
 
@@ -124,15 +126,19 @@ def _phase_from_row(row: Dict[str, Any]) -> str:
     result = _merge_result(row)
     reason = str(result.get("reason") or _policy_decision(row).get("reason") or "").lower()
     files = "\n".join(_changed_files(row)).lower()
-    if result.get("safety_score_v3") or "v3" in reason or any(
-        token in files
-        for token in (
-            "adaptive_release_controller",
-            "autonomous_risk_gate",
-            "auto_merge_audit_sampler",
-            "human_uncertainty_queue",
-            "kb_self_maintenance",
-            "unified_autonomy_orchestrator",
+    if (
+        result.get("safety_score_v3")
+        or "v3" in reason
+        or any(
+            token in files
+            for token in (
+                "adaptive_release_controller",
+                "autonomous_risk_gate",
+                "auto_merge_audit_sampler",
+                "human_uncertainty_queue",
+                "kb_self_maintenance",
+                "unified_autonomy_orchestrator",
+            )
         )
     ):
         return "phase_d"
@@ -147,13 +153,17 @@ def _phase_from_row(row: Dict[str, Any]) -> str:
         )
     ):
         return "phase_c"
-    if result.get("safety_score_v2") or "v2" in reason or any(
-        token in files
-        for token in (
-            "employee_task_market",
-            "employee_runtime_policy",
-            "employee_health_scan",
-            "employee_autonomy_service",
+    if (
+        result.get("safety_score_v2")
+        or "v2" in reason
+        or any(
+            token in files
+            for token in (
+                "employee_task_market",
+                "employee_runtime_policy",
+                "employee_health_scan",
+                "employee_autonomy_service",
+            )
         )
     ):
         return "phase_b"
@@ -183,7 +193,9 @@ def _load_review_results() -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def _sample_rows(rows: Sequence[Dict[str, Any]], sample_size: int, seed: str) -> List[Dict[str, Any]]:
+def _sample_rows(
+    rows: Sequence[Dict[str, Any]], sample_size: int, seed: str
+) -> List[Dict[str, Any]]:
     if len(rows) <= sample_size:
         return list(rows)
     rng = random.Random(seed)
@@ -193,7 +205,13 @@ def _sample_rows(rows: Sequence[Dict[str, Any]], sample_size: int, seed: str) ->
 def _sample_item(row: Dict[str, Any], phase: str, run_id: str) -> Dict[str, Any]:
     result = _merge_result(row)
     decision = _policy_decision(row)
-    sample_id = _stable_id(phase, row.get("run_id"), row.get("branch"), result.get("merge_commit_sha"), result.get("changed_files"))
+    sample_id = _stable_id(
+        phase,
+        row.get("run_id"),
+        row.get("branch"),
+        result.get("merge_commit_sha"),
+        result.get("changed_files"),
+    )
     return {
         "audit_questions": [
             "Was the auto-merge decision correct?",
@@ -221,7 +239,9 @@ def _sample_item(row: Dict[str, Any], phase: str, run_id: str) -> Dict[str, Any]
     }
 
 
-def _metrics_for_phase(phase: str, items: Sequence[Dict[str, Any]], review_results: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def _metrics_for_phase(
+    phase: str, items: Sequence[Dict[str, Any]], review_results: Dict[str, Dict[str, Any]]
+) -> Dict[str, Any]:
     labeled = []
     false_positive = 0
     needs_policy_change = 0
@@ -261,11 +281,15 @@ def run_auto_merge_audit_sampling_once(
 ) -> Dict[str, Any]:
     """Create per-phase human audit samples and a management summary."""
 
-    requested_phases = [str(item).strip().lower() for item in (phases or PHASES) if str(item).strip()]
+    requested_phases = [
+        str(item).strip().lower() for item in (phases or PHASES) if str(item).strip()
+    ]
     requested_phases = [item for item in requested_phases if item in PHASES]
     if not requested_phases:
         requested_phases = list(PHASES)
-    size = max(1, sample_size or _env_int("MODSTORE_AUTO_MERGE_AUDIT_SAMPLE_SIZE", DEFAULT_SAMPLE_SIZE))
+    size = max(
+        1, sample_size or _env_int("MODSTORE_AUTO_MERGE_AUDIT_SAMPLE_SIZE", DEFAULT_SAMPLE_SIZE)
+    )
     size = min(size, 100)
     rows = [row for row in _read_jsonl(_ledger_path()) if _is_auto_merge(row)]
     by_phase: Dict[str, List[Dict[str, Any]]] = {phase: [] for phase in requested_phases}

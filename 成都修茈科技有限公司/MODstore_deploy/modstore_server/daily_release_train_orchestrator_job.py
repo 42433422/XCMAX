@@ -78,16 +78,32 @@ def _record_time_rail_runtime(result: Dict[str, Any]) -> None:
         ok = bool(result.get("ok"))
         record_node_run("ORCH", ok=ok, source="daily_release_train_orchestrator_job", meta=meta)
         record_node_run("KIND", ok=True, source="daily_release_train_orchestrator_job", meta=meta)
-        record_node_run("BR", ok=bool(result.get("digest_mode") in ("primary", "digest")), source="daily_release_train_orchestrator_job", meta=meta)
+        record_node_run(
+            "BR",
+            ok=bool(result.get("digest_mode") in ("primary", "digest")),
+            source="daily_release_train_orchestrator_job",
+            meta=meta,
+        )
 
         phase_b = result.get("phase_b") if isinstance(result.get("phase_b"), dict) else {}
-        line_results = phase_b.get("line_results") if isinstance(phase_b.get("line_results"), dict) else {}
+        line_results = (
+            phase_b.get("line_results") if isinstance(phase_b.get("line_results"), dict) else {}
+        )
         for line_key, node_id in (("P-W", "PW"), ("P-App", "APPB"), ("S-R", "SR")):
             row = line_results.get(line_key) if isinstance(line_results.get(line_key), dict) else {}
             if row:
-                record_node_run(node_id, ok=bool(row.get("ok")), source="daily_release_train_orchestrator_job.phase_b", meta={**meta, "line": line_key})
+                record_node_run(
+                    node_id,
+                    ok=bool(row.get("ok")),
+                    source="daily_release_train_orchestrator_job.phase_b",
+                    meta={**meta, "line": line_key},
+                )
 
-        pipeline = result.get("phase_c_pipeline") if isinstance(result.get("phase_c_pipeline"), dict) else {}
+        pipeline = (
+            result.get("phase_c_pipeline")
+            if isinstance(result.get("phase_c_pipeline"), dict)
+            else {}
+        )
         step_ids = list(
             pipeline.get("executed_steps")
             or pipeline.get("step_ids")
@@ -96,11 +112,26 @@ def _record_time_rail_runtime(result: Dict[str, Any]) -> None:
         )
         for step in ("P3", "P4", "P5", "P6", "P7", "P8", "P9"):
             if step in step_ids:
-                record_node_run(step, ok=bool(pipeline.get("ok")), source="daily_release_train_orchestrator_job.phase_c_pipeline", meta={**meta, "step_ids": step_ids})
+                record_node_run(
+                    step,
+                    ok=bool(pipeline.get("ok")),
+                    source="daily_release_train_orchestrator_job.phase_c_pipeline",
+                    meta={**meta, "step_ids": step_ids},
+                )
         if any(step in step_ids for step in ("P5", "P6")):
-            record_node_run("CANARY", ok=bool(pipeline.get("ok")), source="daily_release_train_orchestrator_job.phase_c_pipeline", meta={**meta, "step_ids": step_ids})
+            record_node_run(
+                "CANARY",
+                ok=bool(pipeline.get("ok")),
+                source="daily_release_train_orchestrator_job.phase_c_pipeline",
+                meta={**meta, "step_ids": step_ids},
+            )
         if pipeline.get("rollback"):
-            record_node_run("ROLLBACK", ok=False, source="daily_release_train_orchestrator_job.phase_c_pipeline", meta={**meta, "rollback": pipeline.get("rollback")})
+            record_node_run(
+                "ROLLBACK",
+                ok=False,
+                source="daily_release_train_orchestrator_job.phase_c_pipeline",
+                meta={**meta, "rollback": pipeline.get("rollback")},
+            )
 
         phase_c = result.get("phase_c") if isinstance(result.get("phase_c"), dict) else {}
         steps = phase_c.get("steps") if isinstance(phase_c.get("steps"), list) else []
@@ -109,13 +140,33 @@ def _record_time_rail_runtime(result: Dict[str, Any]) -> None:
                 continue
             node_id = {"P9": "P9I", "P5": "P5I", "P6": "P6I"}.get(str(step_row.get("step") or ""))
             if node_id:
-                record_node_run(node_id, ok=bool(step_row.get("ok")), source="daily_release_train_orchestrator_job.phase_c", meta={**meta, "step": step_row.get("step")})
+                record_node_run(
+                    node_id,
+                    ok=bool(step_row.get("ok")),
+                    source="daily_release_train_orchestrator_job.phase_c",
+                    meta={**meta, "step": step_row.get("step")},
+                )
         if isinstance(phase_c.get("fastgate"), dict):
-            record_node_run("FASTGATE", ok=bool(phase_c["fastgate"].get("ok")), source="daily_release_train_orchestrator_job.phase_c", meta={**meta, "fastgate": phase_c.get("fastgate")})
+            record_node_run(
+                "FASTGATE",
+                ok=bool(phase_c["fastgate"].get("ok")),
+                source="daily_release_train_orchestrator_job.phase_c",
+                meta={**meta, "fastgate": phase_c.get("fastgate")},
+            )
         if isinstance(phase_c.get("download_release"), dict):
-            record_node_run("DLSSOT", ok=bool(phase_c["download_release"].get("ok")), source="daily_release_train_orchestrator_job.phase_c", meta={**meta, "download_release": phase_c.get("download_release")})
+            record_node_run(
+                "DLSSOT",
+                ok=bool(phase_c["download_release"].get("ok")),
+                source="daily_release_train_orchestrator_job.phase_c",
+                meta={**meta, "download_release": phase_c.get("download_release")},
+            )
         if isinstance(phase_c.get("rollback"), dict):
-            record_node_run("ROLLBACK", ok=False, source="daily_release_train_orchestrator_job.phase_c", meta={**meta, "rollback": phase_c.get("rollback")})
+            record_node_run(
+                "ROLLBACK",
+                ok=False,
+                source="daily_release_train_orchestrator_job.phase_c",
+                meta={**meta, "rollback": phase_c.get("rollback")},
+            )
     except Exception:
         logger.exception("release_train orchestrator: time_rail runtime record failed")
 

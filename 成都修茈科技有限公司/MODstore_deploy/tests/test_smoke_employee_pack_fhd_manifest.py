@@ -50,10 +50,13 @@ def test_modstore_employee_manifest_passes_fhd_validator_when_fhd_present():
     assert err == ""
     assert manifest is not None
 
-    from app.infrastructure.mods.artifact_package import (  # type: ignore  # noqa: E402
-        validate_employee_pack_manifest,
-        validate_xcagi_host_profile_extensions,
-    )
+    try:
+        from app.infrastructure.mods.artifact_package import (  # type: ignore  # noqa: E402
+            validate_employee_pack_manifest,
+            validate_xcagi_host_profile_extensions,
+        )
+    except ImportError as exc:
+        pytest.skip(f"FHD 依赖未安装，跳过（{exc}）")
 
     ve = validate_employee_pack_manifest(manifest)
     assert ve == [], f"FHD validate_employee_pack_manifest: {ve}"
@@ -69,9 +72,12 @@ def test_builtin_track_id_invalid_rejected_by_fhd_when_fhd_present():
     if root not in sys.path:
         sys.path.insert(0, root)
 
-    from app.infrastructure.mods.artifact_package import (  # type: ignore  # noqa: E402
-        validate_xcagi_host_profile_extensions,
-    )
+    try:
+        from app.infrastructure.mods.artifact_package import (  # type: ignore  # noqa: E402
+            validate_xcagi_host_profile_extensions,
+        )
+    except ImportError as exc:
+        pytest.skip(f"FHD 依赖未安装，跳过（{exc}）")
 
     bad = {
         "id": "x",

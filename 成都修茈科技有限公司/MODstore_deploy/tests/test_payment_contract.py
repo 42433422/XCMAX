@@ -132,7 +132,7 @@ def test_canonical_sign_data_string_normalisation_matches_java():
     ],
 )
 def test_amount_sign_str_matches_contract(amount, expected):
-    from modstore_server.payment_api import _amount_sign_str
+    from modstore_server.payment_common import _amount_sign_str
 
     assert _amount_sign_str(amount) == expected
 
@@ -225,12 +225,28 @@ def test_refund_payload_contains_all_required_fields():
 
 def test_frontend_api_client_uses_contract_paths():
     """The market frontend MUST keep using the contract paths verbatim. If any
-    of them disappear from ``api.ts`` the FastAPI/Java backends and frontend
-    have drifted."""
+    of them disappear from the frontend API modules the FastAPI/Java backends
+    and frontend have drifted.
 
-    api_ts = (REPO_ROOT / "market" / "src" / "api.ts").read_text(encoding="utf-8")
+    Note: ``api.ts`` is now a re-export barrel; actual paths live in
+    ``api/wallet.ts``, ``api/legacyMonolith.ts``, and
+    ``application/paymentApi.ts``.  We search across all three.
+    """
+    api_dir = REPO_ROOT / "market" / "src" / "api"
+    app_dir = REPO_ROOT / "market" / "src" / "application"
+    combined = ""
+    for ts_file in [
+        api_dir / "wallet.ts",
+        api_dir / "legacyMonolith.ts",
+        app_dir / "paymentApi.ts",
+    ]:
+        if ts_file.is_file():
+            combined += ts_file.read_text(encoding="utf-8")
     for path in payment_contract.FRONTEND_PAYMENT_PATHS:
-        assert path in api_ts, f"market/src/api.ts no longer references {path!r}"
+        assert path in combined, (
+            f"None of market/src/api/wallet.ts, api/legacyMonolith.ts, "
+            f"or application/paymentApi.ts references {path!r}"
+        )
 
 
 def test_frontend_payment_api_module_uses_contract_paths():
@@ -309,14 +325,33 @@ def test_java_event_contracts_mirror_python():
 
 
 def _all_routes(app) -> set[tuple[str, str]]:
+    """Return (METHOD, /path) pairs from the live FastAPI app.
+
+    Uses app.openapi() which is version-independent (Starlette 0.x and 1.x).
+    Falls back to recursive route traversal for apps without an OpenAPI schema.
+    """
     routes: set[tuple[str, str]] = set()
-    for route in app.router.routes:
-        path = getattr(route, "path", None)
-        methods = getattr(route, "methods", None) or set()
-        if not path or not methods:
-            continue
-        for method in methods:
-            routes.add((method.upper(), path))
+    try:
+        schema = app.openapi()
+        for path, methods_dict in schema.get("paths", {}).items():
+            for method in methods_dict:
+                if method.upper() in {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}:
+                    routes.add((method.upper(), path))
+        return routes
+    except Exception:
+        pass
+    # Fallback: recursive traversal (handles _IncludedRouter in Starlette 1.x)
+    from fastapi.routing import APIRoute
+
+    def collect(obj: object) -> None:
+        for route in getattr(obj, "routes", []):
+            if isinstance(route, APIRoute):
+                for method in route.methods or []:
+                    routes.add((method.upper(), route.path))
+            elif hasattr(route, "routes"):
+                collect(route)
+
+    collect(app)
     return routes
 
 

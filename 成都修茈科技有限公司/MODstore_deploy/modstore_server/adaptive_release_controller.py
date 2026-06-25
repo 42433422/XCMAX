@@ -52,7 +52,20 @@ def _metric(metrics: Dict[str, Any], name: str, default: float) -> float:
 
 def _release_related(event_type: str, payload: Dict[str, Any]) -> bool:
     text = json.dumps({"event_type": event_type, "payload": payload}, ensure_ascii=False).lower()
-    return any(token in text for token in ("deploy", "release", "canary", "rollback", "slo", "smoke", "发布", "灰度", "回滚"))
+    return any(
+        token in text
+        for token in (
+            "deploy",
+            "release",
+            "canary",
+            "rollback",
+            "slo",
+            "smoke",
+            "发布",
+            "灰度",
+            "回滚",
+        )
+    )
 
 
 def build_adaptive_release_plan(*, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:

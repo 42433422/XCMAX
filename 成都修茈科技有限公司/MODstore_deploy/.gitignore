@@ -48,7 +48,8 @@ modstore_server/data/event_outbox.jsonl
 modstore_server/data/event_outbox_*.jsonl
 modstore_server/data/payment_orders/
 modstore_server/data/chroma/
-modstore_server/data/
+modstore_server/data/*.jsonl
+# 静态数据文件（如 llm_official_prices.json）是源码的一部分，应追踪入库
 
 # 运行时目录 —— 本地测试数据不得覆盖服务器生产数据
 var/runtime/

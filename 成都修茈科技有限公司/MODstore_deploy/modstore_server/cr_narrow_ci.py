@@ -93,7 +93,9 @@ def _copytree_filtered(src: Path, dst: Path) -> None:
     )
 
 
-def _prepare_overlay_root(root: Path, rel_path: str, content: str) -> tuple[tempfile.TemporaryDirectory[str], Path, str]:
+def _prepare_overlay_root(
+    root: Path, rel_path: str, content: str
+) -> tuple[tempfile.TemporaryDirectory[str], Path, str]:
     """Create a small overlay repo and write proposed CR content into it."""
 
     tmp = tempfile.TemporaryDirectory(prefix="modstore_narrow_ci_")
