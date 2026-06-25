@@ -300,3 +300,71 @@ def test_enterprise_groups_user_scoped(tmp_path: Path):
     svc.list_groups(user_id=2)
     assert len(svc.list_groups(user_id=1)) == 4
     assert len(svc.list_groups(user_id=2)) == 4
+
+
+@pytest.mark.asyncio
+async def test_discussion_prompt_is_collaborative(tmp_path: Path):
+    """群聊回复编排应是「多成员协作讨论」（参考同事发言、向可执行结论收敛），而非各说各的。"""
+    seen: list[dict] = []
+    svc = make_service(tmp_path, seen)
+    gid = svc.create_group(user_id=1, name="讨论组")["id"]
+    svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"})
+    svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e2", "name": "小服"})
+    await svc.post_message(user_id=1, group_id=gid, text="怎么提升复购？")
+    assert seen, "应至少有一次 AI 回复"
+    assert all("协作讨论" in s["system"] for s in seen)
+    assert any("收敛" in s["system"] for s in seen)
+
+
+@pytest.mark.asyncio
+async def test_execute_after_discussion_dispatches_super_employee(tmp_path: Path, monkeypatch):
+    """execute=True 时，讨论后把结论综合成任务，派群里的超级员工以「任务模式」执行，结果回群。"""
+    from app.application.ai_group_chat_service import AiGroupChatService
+
+    svc = make_service(tmp_path)
+    gid = svc.create_group(user_id=1, name="执行组")["id"]
+    svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"})
+    svc.add_member(
+        user_id=1,
+        group_id=gid,
+        member={"employee_id": "claude-super-employee", "name": "超级员工-Claude"},
+    )
+
+    # 讨论阶段：超员回复打桩，避免真跑 CLI。
+    async def fake_super_reply(self, group, member, history, *, user_id):
+        return "超级员工-Claude：建议先改复购页文案"
+
+    monkeypatch.setattr(AiGroupChatService, "_super_employee_reply", fake_super_reply)
+
+    # 执行阶段：打桩服务，捕获 invoke 入参。
+    captured: dict = {}
+
+    class FakeService:
+        def invoke(self, *, user_id, message, context):
+            captured["message"] = message
+            captured["context"] = context
+            return {"status": "completed", "assistant_message": {"body": "已完成：改了复购页文案"}}
+
+    monkeypatch.setattr(
+        AiGroupChatService, "_super_service", staticmethod(lambda eid: FakeService())
+    )
+
+    result = await svc.post_message(user_id=1, group_id=gid, text="实现复购优化", execute=True)
+    bodies = [m["body"] for m in result["messages"]]
+    # 末条=执行结果，来自超级员工。
+    assert any("已完成：改了复购页文案" in b for b in bodies)
+    # 用的是任务模式（不是 mode=chat），且 brief 带上了讨论要点。
+    assert captured["context"].get("mode") != "chat"
+    assert "讨论要点" in captured["message"]
+    assert "实现复购优化" in captured["message"]
+
+
+@pytest.mark.asyncio
+async def test_execute_noop_when_no_super_employee(tmp_path: Path):
+    """群里没有超级员工时，execute=True 不产生执行消息（只有讨论）。"""
+    svc = make_service(tmp_path)
+    gid = svc.create_group(user_id=1, name="无超员组")["id"]
+    svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"})
+    result = await svc.post_message(user_id=1, group_id=gid, text="做个表", execute=True)
+    # 仅 用户消息 + 1 条讨论回复，无执行结果。
+    assert len(result["messages"]) == 2
