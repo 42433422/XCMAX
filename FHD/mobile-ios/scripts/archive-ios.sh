@@ -143,8 +143,8 @@ if [[ "${upload}" == "1" ]]; then
     echo "iTMSTransporter upload failed; retrying with xcrun altool --upload-package." >&2
     xcrun altool \
       --upload-package "${ipa}" \
-      --api-key "${APP_STORE_CONNECT_API_KEY_ID}" \
-      --api-issuer "${APP_STORE_CONNECT_API_ISSUER_ID}" \
+      --apiKey "${APP_STORE_CONNECT_API_KEY_ID}" \
+      --apiIssuer "${APP_STORE_CONNECT_API_ISSUER_ID}" \
       --verbose
   fi
 fi
