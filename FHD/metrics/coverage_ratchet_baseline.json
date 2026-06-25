@@ -4,18 +4,18 @@
   "backend_lines_floor": 84,
   "backend_branch_floor": 73,
   "frontend_floors": {
-    "lines": 89,
-    "branches": 79,
-    "functions": 77,
-    "statements": 89
+    "lines": 91,
+    "branches": 80,
+    "functions": 82,
+    "statements": 91
   },
   "last_measured": {
     "backend_lines": 84.46,
     "backend_branches": 73.63,
-    "frontend_lines": 89.98,
-    "frontend_branches": 79.7,
-    "frontend_functions": 78.5,
-    "frontend_statements": 89.98
+    "frontend_lines": 92.36,
+    "frontend_branches": 81.74,
+    "frontend_functions": 83.59,
+    "frontend_statements": 92.36
   },
   "last_measured_commit": "3d9df84de",
   "last_measured_date": "2026-06-20"
