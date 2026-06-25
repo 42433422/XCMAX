@@ -9,6 +9,19 @@ data class MobileEnvelope<T>(
     val data: T? = null,
 )
 
+/** 自建推送离线通知（/api/notifications/pending 返回项）。 */
+data class PendingNotification(
+    val id: Long = 0,
+    val title: String = "",
+    val body: String = "",
+    val route: String = "",
+    val channel: String = "",
+)
+
+data class PendingNotificationsData(
+    val notifications: List<PendingNotification> = emptyList(),
+)
+
 data class AiCircleComment(
     val id: Int = 0,
     val author_name: String = "",

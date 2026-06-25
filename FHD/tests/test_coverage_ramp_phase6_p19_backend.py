@@ -1890,31 +1890,6 @@ class TestSavePolicyStateDict:
 # ===========================================================================
 
 
-class TestJpushEnabled:
-    """Cover ``_jpush_enabled``."""
-
-    def test_enabled(self, monkeypatch):
-        from app.services.mobile_push import _jpush_enabled
-
-        monkeypatch.setenv("JPUSH_APP_KEY", "key")
-        monkeypatch.setenv("JPUSH_MASTER_SECRET", "secret")
-        assert _jpush_enabled() is True
-
-    def test_disabled_missing_key(self, monkeypatch):
-        from app.services.mobile_push import _jpush_enabled
-
-        monkeypatch.delenv("JPUSH_APP_KEY", raising=False)
-        monkeypatch.delenv("JPUSH_MASTER_SECRET", raising=False)
-        assert _jpush_enabled() is False
-
-    def test_disabled_empty_key(self, monkeypatch):
-        from app.services.mobile_push import _jpush_enabled
-
-        monkeypatch.setenv("JPUSH_APP_KEY", "")
-        monkeypatch.setenv("JPUSH_MASTER_SECRET", "secret")
-        assert _jpush_enabled() is False
-
-
 class TestFcmEnabled:
     """Cover ``_fcm_enabled``."""
 
@@ -1930,66 +1905,6 @@ class TestFcmEnabled:
         monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT_JSON", raising=False)
         monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT", raising=False)
         assert _fcm_enabled() is False
-
-
-class TestSendJpush:
-    """Cover ``send_jpush``."""
-
-    def test_empty_ids_returns_false(self):
-        from app.services.mobile_push import send_jpush
-
-        assert send_jpush([], "title", "body") is False
-
-    def test_disabled_returns_false(self, monkeypatch):
-        from app.services.mobile_push import send_jpush
-
-        monkeypatch.delenv("JPUSH_APP_KEY", raising=False)
-        assert send_jpush(["id1"], "title", "body") is False
-
-    def test_api_success(self, monkeypatch):
-        from app.services.mobile_push import send_jpush
-
-        monkeypatch.setenv("JPUSH_APP_KEY", "key")
-        monkeypatch.setenv("JPUSH_MASTER_SECRET", "secret")
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        with patch("httpx.post", return_value=mock_resp):
-            result = send_jpush(["id1"], "title", "body")
-        assert result is True
-
-    def test_api_failure_status(self, monkeypatch):
-        from app.services.mobile_push import send_jpush
-
-        monkeypatch.setenv("JPUSH_APP_KEY", "key")
-        monkeypatch.setenv("JPUSH_MASTER_SECRET", "secret")
-        mock_resp = MagicMock()
-        mock_resp.status_code = 400
-        mock_resp.text = "bad request"
-        with patch("httpx.post", return_value=mock_resp):
-            result = send_jpush(["id1"], "title", "body")
-        assert result is False
-
-    def test_api_exception(self, monkeypatch):
-        from app.services.mobile_push import send_jpush
-
-        monkeypatch.setenv("JPUSH_APP_KEY", "key")
-        monkeypatch.setenv("JPUSH_MASTER_SECRET", "secret")
-        with patch("httpx.post", side_effect=ConnectionError("network")):
-            result = send_jpush(["id1"], "title", "body")
-        assert result is False
-
-    def test_sends_with_data(self, monkeypatch):
-        from app.services.mobile_push import send_jpush
-
-        monkeypatch.setenv("JPUSH_APP_KEY", "key")
-        monkeypatch.setenv("JPUSH_MASTER_SECRET", "secret")
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        with patch("httpx.post", return_value=mock_resp) as mock_post:
-            send_jpush(["id1"], "title", "body", data={"key": "val"})
-        call_kwargs = mock_post.call_args
-        payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
-        assert payload["message"]["extras"] == {"key": "val"}
 
 
 class TestSendFcm:
@@ -2039,21 +1954,18 @@ class TestSendFcm:
 class TestSendToUserDevices:
     """Cover ``send_to_user_devices``."""
 
-    def test_routes_fcm_and_jpush(self):
+    def test_routes_fcm_only_non_fcm_skipped(self):
+        # 极光移除后:fcm 设备走 FCM;其它 provider(走自建推送)在此处不发,被跳过。
         from app.services.mobile_push import send_to_user_devices
 
         devices = [
             {"push_provider": "fcm", "push_token": "fcm1"},
-            {"push_provider": "jpush", "push_token": "jp1"},
+            {"push_provider": "selfpush", "push_token": "sp1"},
         ]
-        with (
-            patch("app.services.mobile_push.send_fcm", return_value=True) as mock_fcm,
-            patch("app.services.mobile_push.send_jpush", return_value=True) as mock_jp,
-        ):
+        with patch("app.services.mobile_push.send_fcm", return_value=True) as mock_fcm:
             result = send_to_user_devices(devices, "title", "body")
         mock_fcm.assert_called_once_with(["fcm1"], "title", "body", None)
-        mock_jp.assert_called_once_with(["jp1"], "title", "body", None)
-        assert result == {"fcm": True, "jpush": True}
+        assert result == {"fcm": True}
 
     def test_empty_token_skipped(self):
         from app.services.mobile_push import send_to_user_devices
@@ -2088,10 +2000,14 @@ class TestNotifyUser:
         ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-            with patch(
-                "app.services.mobile_push.send_to_user_devices",
-                return_value={"fcm": True, "jpush": False},
+            with (
+                patch(
+                    "app.services.mobile_push.send_to_user_devices",
+                    return_value={"fcm": True},
+                ),
+                patch("app.services.mobile_push.enqueue_outbox", return_value=True),
             ):
                 result = notify_user(1, "title", "body")
 
         assert result["fcm"] is True
+        assert result["outbox"] is True

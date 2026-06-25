@@ -21,9 +21,6 @@ android {
         targetSdk = 35
         versionCode = 10
         versionName = "10.0.0"
-        manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
-        manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
-        manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
         buildConfigField("int", "FHD_DEFAULT_PORT", "17500")
         buildConfigField("String", "MODSTORE_BASE_URL", "\"https://xiu-ci.com\"")
         buildConfigField("String", "ENTERPRISE_FHD_BASE_URL", "\"https://xiu-ci.com/fhd-api\"")
@@ -37,14 +34,12 @@ android {
             applicationIdSuffix = ".personal"
             resValue("string", "app_name", "XCAGI 个人版")
             buildConfigField("String", "PRODUCT_SKU", "\"personal\"")
-            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.personal"
         }
         create("enterprise") {
             dimension = "sku"
             applicationIdSuffix = ".enterprise"
             resValue("string", "app_name", "XCAGI 企业版")
             buildConfigField("String", "PRODUCT_SKU", "\"enterprise\"")
-            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.enterprise"
         }
     }
 
@@ -220,7 +215,6 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-messaging")
 
-    implementation("cn.jiguang.sdk:jpush:5.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
@@ -233,13 +227,4 @@ dependencies {
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-}
-
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.isFile) f.inputStream().use { load(it) }
-}
-val jpushKey = localProps.getProperty("JPUSH_APPKEY")?.trim().orEmpty()
-if (jpushKey.isNotBlank()) {
-    android.defaultConfig.manifestPlaceholders["JPUSH_APPKEY"] = jpushKey
 }
