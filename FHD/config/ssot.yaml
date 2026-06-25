@@ -75,11 +75,16 @@ domains:
   - name: docs-ssot
     owner: docs
     enabled: true
-    ssot: FHD/docs/SSOT_INDEX.md
-    derived: []
-    mode: lint
+    # SSOT 源已上移到本文件的 doc_registry/retired 段；SSOT_INDEX.md 现为派生视图（请勿手改）。
+    ssot: FHD/config/ssot.yaml
+    derived:
+      - FHD/docs/SSOT_INDEX.md
+    mode: generate
+    # check = docs_ssot_lint.py：① 校验 SSOT_INDEX.md 与本文件 doc_registry 同步（硬失败）
+    #         ② 扫描其它 md 的未登记 SSOT 声明（软告警，--strict 时硬失败）
     check: python scripts/dev/docs_ssot_lint.py
-    sync: null
+    # sync = 从本文件 doc_registry/retired 重新生成 SSOT_INDEX.md
+    sync: python scripts/dev/gen_ssot_index.py
 
   # ===== 已启用域（lint/verify，advisory gate 不阻断）=====
   - name: test-files
@@ -194,3 +199,72 @@ domains:
     # 棘轮守卫：冻结已知造身份点，白名单外新增即 DRIFT（见 docs §9.3）。
     check: python scripts/dev/ssot_plugins/account_identity.py check
     sync: null
+# ===== 文档真相源登记（doc_registry）=====
+# 唯一登记表：「某概念的唯一真相源是哪份文档」。取代旧 SSOT_INDEX.md 的手维护表格。
+# FHD/docs/SSOT_INDEX.md 由 scripts/dev/gen_ssot_index.py 从本段自动生成（请勿手改 md）。
+# docs_ssot_lint.py 也直接读本段（不再解析 md），从此 ssot.yaml 为唯一源。
+# doc 路径均相对仓根（XCMAX/）。
+doc_registry:
+  - key: coverage
+    label: coverage（覆盖率）
+    doc: FHD/docs/reports/COVERAGE_RAMP.md
+    desc: 后端/前端覆盖率基线、目标、棘轮 floor
+  - key: ci
+    label: ci（CI/CD）
+    doc: docs/CI_SSOT.md
+    desc: 根仓 .github/workflows/ 唯一调度入口
+  - key: mod
+    label: mod（Mod 开发）
+    doc: FHD/docs/guides/MOD_AUTHORING_GUIDE.md
+    desc: Mod 开发规范、mods/ 为唯一编辑源
+  - key: version
+    label: version（产品版本）
+    doc: FHD/VERSION.md
+    desc: v10 锁定、版本锚点 10.0.0
+  - key: route
+    label: route（路由）
+    doc: FHD/docs/reports/WAVE2_ROUTE_SSOT.md
+    desc: RouteRegistry + mounts/* 路由 SSOT
+  - key: git
+    label: git（Git 仓库）
+    doc: FHD/docs/reports/GIT_WORKTREE_RECOVERY.md
+    desc: 根仓 XCMAX/ 为 Git SSOT
+  - key: mypy
+    label: mypy（类型检查）
+    doc: FHD/pyproject.toml
+    desc: '[tool.mypy] 配置'
+  - key: deps
+    label: deps（依赖锁定）
+    doc: FHD/docs/guides/DEPENDENCY_LOCKS.md
+    desc: Python/Node 依赖锁定策略
+  - key: auth
+    label: auth（授权市场）
+    doc: FHD/docs/guides/AUTH_MARKET_CONTRACT.md
+    desc: 授权与市场契约
+  - key: compliance
+    label: compliance（合规）
+    doc: FHD/docs/evidence/compliance-tier2/00-control-matrix.md
+    desc: Tier2 合规控制矩阵
+  - key: ssot-framework
+    label: ssot-framework（SSOT 框架）
+    doc: FHD/docs/SSOT_FRAMEWORK.md
+    desc: 统一注册表 ssot.yaml + ssot_cli 编排器
+  - key: claimed-vs-actual
+    label: claimed-vs-actual（对外声称 vs 实测）
+    doc: FHD/docs/CLAIMED_VS_ACTUAL.md
+    desc: 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成
+  - key: coverage-metrics
+    label: coverage-metrics（覆盖率唯一数字）
+    doc: FHD/metrics/coverage-dual-summary.json
+    desc: 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径）
+
+# ===== 已退役 SSOT（指针化）=====
+# 旧 SSOT 文档已收敛到新源，仅保留为重定向指针。
+retired:
+  - from: FHD/docs/reports/COVERAGE_GAP.md
+    to: FHD/docs/reports/COVERAGE_RAMP.md
+    reason: 覆盖率 SSOT 收敛
+  - from: FHD/docs/reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md
+    note: 覆盖率章节
+    to: FHD/docs/reports/COVERAGE_RAMP.md
+    reason: 覆盖率 SSOT 收敛
