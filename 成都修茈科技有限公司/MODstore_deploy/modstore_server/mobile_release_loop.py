@@ -251,7 +251,10 @@ def _default_smoke(platform: str, target: str) -> bool:
         if r.status_code >= 400:
             return False
         data = r.json()
-        return str(data.get("latest_android_version_name") or data.get("latest_version_name") or "") == target
+        return (
+            str(data.get("latest_android_version_name") or data.get("latest_version_name") or "")
+            == target
+        )
     except Exception:  # noqa: BLE001
         return False
 
@@ -286,7 +289,9 @@ def default_deps() -> LoopDeps:
 def run(*, mode: Optional[str] = None) -> Dict[str, Any]:
     """生产入口：用默认依赖跑闭环。默认 shadow，除非 MODSTORE_MOBILE_RELEASE_LOOP_MODE=primary。"""
     if mode is None:
-        mode = (os.environ.get("MODSTORE_MOBILE_RELEASE_LOOP_MODE", MODE_SHADOW) or MODE_SHADOW).strip()
+        mode = (
+            os.environ.get("MODSTORE_MOBILE_RELEASE_LOOP_MODE", MODE_SHADOW) or MODE_SHADOW
+        ).strip()
     return run_mobile_release_loop(default_deps(), mode=mode)
 
 

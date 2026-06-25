@@ -7,7 +7,6 @@ super_employee_service 的分级模型同构, 但在 MODstore_deploy 包内独�
 
 from modstore_server import para_delegate_handler as h
 
-
 # ─────────────── _resolve_tier ───────────────
 
 
@@ -71,7 +70,11 @@ def test_ineligible_offline():
 
 
 def test_ineligible_tool_not_installed():
-    item = {"id": "d1", "status": "online", "tools": [{"toolName": "codex", "status": "not_installed"}]}
+    item = {
+        "id": "d1",
+        "status": "online",
+        "tools": [{"toolName": "codex", "status": "not_installed"}],
+    }
     assert not h._device_eligible(item, "codex")
 
 
@@ -186,8 +189,12 @@ def test_discovery_escalates_when_primary_lacks_tool(monkeypatch):
     monkeypatch.delenv("MODSTORE_PARA_DEVICE_ID", raising=False)
     # 主设备装 codex 没装 claude; claude 任务一级选不到 → 升二级到 w1
     fleet = [
-        {"id": "p1", "status": "online", "isPrimary": True,
-         "tools": [{"toolName": "claude", "status": "not_installed"}]},
+        {
+            "id": "p1",
+            "status": "online",
+            "isPrimary": True,
+            "tools": [{"toolName": "claude", "status": "not_installed"}],
+        },
         {"id": "w1", "status": "online", "tools": [{"toolName": "claude", "status": "idle"}]},
     ]
     monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "claude")
@@ -209,7 +216,9 @@ def test_discovery_disabled_returns_empty(monkeypatch):
     monkeypatch.delenv("MODSTORE_PARA_DEVICE_ID", raising=False)
     monkeypatch.setenv("MODSTORE_PARA_DEVICE_DISCOVERY", "0")
     req = {"task": "修复", "raw_input": {}}
-    tier, devices, reason = h._resolve_dispatch_devices(_FakeClient([_online_codex("p1")]), "http://p", "tok", req)
+    tier, devices, reason = h._resolve_dispatch_devices(
+        _FakeClient([_online_codex("p1")]), "http://p", "tok", req
+    )
     assert devices == []
     assert "设备发现关闭" in reason
 
@@ -295,9 +304,7 @@ def test_post_para_api_tier_two_fans_out(monkeypatch):
     client = _IntegClient([_online_codex("w1"), _online_codex("w2"), _online_codex("w3")])
     monkeypatch.setattr(h.httpx, "Client", lambda *a, **k: client)
 
-    out = h.dispatch_para_delegate(
-        task="跑测试", input_data={"max_devices": 2}, employee_id="x"
-    )
+    out = h.dispatch_para_delegate(task="跑测试", input_data={"max_devices": 2}, employee_id="x")
 
     assert out["ok"] is True
     assert out["para_tier"] == 2

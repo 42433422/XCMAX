@@ -129,9 +129,7 @@ async def chat_dispatch_via_session(
                 ),
                 "status": "platform_llm_unconfigured",
             }
-        return await chat_dispatch_via_platform_only(
-            p_prov, p_mdl, messages, max_tokens=max_tokens
-        )
+        return await chat_dispatch_via_platform_only(p_prov, p_mdl, messages, max_tokens=max_tokens)
 
     from modstore_server.llm_chat_proxy import chat_dispatch
     from modstore_server.llm_key_resolver import (

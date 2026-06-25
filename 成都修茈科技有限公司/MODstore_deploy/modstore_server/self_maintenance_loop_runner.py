@@ -30,8 +30,8 @@ from apscheduler.triggers.cron import CronTrigger
 from .duty_employee_registry import duty_employee_records
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
 from .employee_executor import execute_employee_task
-from .platform_llm_scope import platform_llm_scoped
 from .models import EmployeeExecutionMetric, IncidentEvent, User, get_session_factory
+from .platform_llm_scope import platform_llm_scoped
 from .self_evolution_knowledge import (
     build_self_evolution_context,
     collect_proactive_signals,
@@ -740,12 +740,14 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             closed_items = []
         closed_at = _iso(_utc_now())
         for item in escalated_items:
-            closed_items.append({
-                "actor": "self_maintenance",
-                "closed_at": closed_at,
-                "original_item": item,
-                "resolution_reason": "max_retries_exceeded",
-            })
+            closed_items.append(
+                {
+                    "actor": "self_maintenance",
+                    "closed_at": closed_at,
+                    "original_item": item,
+                    "resolution_reason": "max_retries_exceeded",
+                }
+            )
         memory["closed_items"] = closed_items[-200:]
     last_decision = memory.get("last_policy_decision")
     if isinstance(last_decision, dict) and str(last_decision.get("reason") or "") in {

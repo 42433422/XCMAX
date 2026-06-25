@@ -115,9 +115,7 @@ def _job_summary(
 ) -> dict[str, Any]:
     runs_sorted = sorted(runs, key=lambda r: r.id)
     last = runs_sorted[-1]
-    last_success = next(
-        (r for r in reversed(runs_sorted) if r.status == "success"), None
-    )
+    last_success = next((r for r in reversed(runs_sorted) if r.status == "success"), None)
 
     consecutive_failures = 0
     for r in reversed(runs_sorted):
@@ -159,9 +157,7 @@ def get_runtime_status(
     ``consecutive_failures`` / ``state``（healthy | failing | stale）。
     """
     stale_after = int(
-        stale_after_seconds
-        if stale_after_seconds is not None
-        else DEFAULT_STALE_AFTER_SECONDS
+        stale_after_seconds if stale_after_seconds is not None else DEFAULT_STALE_AFTER_SECONDS
     )
     now = _utcnow()
 
@@ -171,12 +167,7 @@ def get_runtime_status(
 
         sf = get_session_factory()
         with sf() as session:
-            rows = (
-                session.query(JobRun)
-                .order_by(JobRun.id.desc())
-                .limit(max(1, scan_limit))
-                .all()
-            )
+            rows = session.query(JobRun).order_by(JobRun.id.desc()).limit(max(1, scan_limit)).all()
     except Exception:
         logger.exception("get_runtime_status 读取失败")
         return {

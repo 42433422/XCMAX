@@ -33,6 +33,7 @@ _APP_FILING_APPROVED = (
     "on",
 )
 
+
 @router.get("/app/config", summary="Android/HarmonyOS/iOS 客户端配置（合规、按平台版本）")
 def api_app_config(
     platform: str = Query("android", max_length=32),

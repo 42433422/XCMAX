@@ -47,9 +47,7 @@ def test_image_unit_price_defaults_when_no_row(mem_db):
 
 
 def test_image_unit_price_db_override(mem_db):
-    mem_db.add(
-        AiModelPrice(provider="openai", model="gpt-image-1", price_per_image=Decimal("0.8"))
-    )
+    mem_db.add(AiModelPrice(provider="openai", model="gpt-image-1", price_per_image=Decimal("0.8")))
     mem_db.commit()
     assert image_unit_price(mem_db, "openai", "gpt-image-1") == Decimal("0.8")
 
@@ -88,9 +86,7 @@ def test_estimate_image_preauthorization_not_below_floor(mem_db):
 def test_image_dispatch_anthropic_is_explicitly_rejected():
     from modstore_server.llm_chat_proxy import image_dispatch
 
-    r = asyncio.run(
-        image_dispatch("anthropic", api_key="k", base_url=None, model="x", prompt="p")
-    )
+    r = asyncio.run(image_dispatch("anthropic", api_key="k", base_url=None, model="x", prompt="p"))
     assert r["ok"] is False
     assert "不提供图像生成" in r["error"]
 
@@ -104,9 +100,7 @@ def test_image_dispatch_routes_openai_compatible():
         from modstore_server.llm_chat_proxy import image_dispatch
 
         r = asyncio.run(
-            image_dispatch(
-                "openai", api_key="k", base_url=None, model="gpt-image-1", prompt="p"
-            )
+            image_dispatch("openai", api_key="k", base_url=None, model="gpt-image-1", prompt="p")
         )
     assert r["ok"] is True
     m.assert_awaited_once()
@@ -121,9 +115,7 @@ def test_image_dispatch_routes_google_imagen():
         from modstore_server.llm_chat_proxy import image_dispatch
 
         r = asyncio.run(
-            image_dispatch(
-                "google", api_key="k", base_url=None, model="imagen-3.0", prompt="p"
-            )
+            image_dispatch("google", api_key="k", base_url=None, model="imagen-3.0", prompt="p")
         )
     assert r["ok"] is True
     m.assert_awaited_once()
@@ -252,7 +244,13 @@ def test_image_route_upstream_failure_returns_502(client):
     r = _post_image(
         client,
         user,
-        {"provider": "openai", "model": model, "prompt": "a cat", "n": 1, "_key_source": "platform"},
+        {
+            "provider": "openai",
+            "model": model,
+            "prompt": "a cat",
+            "n": 1,
+            "_key_source": "platform",
+        },
         fail,
     )
     assert r.status_code == 502, r.text

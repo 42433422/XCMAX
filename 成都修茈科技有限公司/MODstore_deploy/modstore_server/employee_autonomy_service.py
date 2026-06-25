@@ -22,7 +22,6 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from sqlalchemy import func, or_
 
 from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
-from modstore_server.platform_llm_scope import platform_llm_scoped
 from modstore_server.models import (
     EmployeeChangeRequest,
     EmployeeCollabMessage,
@@ -34,6 +33,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
 

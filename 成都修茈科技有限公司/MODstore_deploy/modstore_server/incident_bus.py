@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from modstore_server.employee_executor import execute_employee_task
-from modstore_server.platform_llm_scope import platform_llm_scoped
 from modstore_server.integrations.ops_action_handlers import EVENT_TYPES
 from modstore_server.models import (
     CatalogItem,
@@ -20,6 +19,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
 

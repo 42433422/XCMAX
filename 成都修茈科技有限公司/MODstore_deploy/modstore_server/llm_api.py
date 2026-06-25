@@ -1284,7 +1284,9 @@ async def llm_image(
     n = body.n
     request_id = new_request_id()
     # 复用对话同款风控（频次/内容），用合成消息承载提示词。
-    enforce_risk_limits(db, user.id, provider, model, [{"role": "user", "content": prompt}], request)
+    enforce_risk_limits(
+        db, user.id, provider, model, [{"role": "user", "content": prompt}], request
+    )
 
     wallet = JavaWalletClient()
     if is_byok:

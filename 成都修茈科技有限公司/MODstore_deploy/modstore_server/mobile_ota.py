@@ -20,7 +20,12 @@ PLATFORMS = ("android", "harmony", "ios")
 
 _DEFAULTS: Dict[str, Dict[str, Any]] = {
     "android": {"min_code": 10, "latest_code": 10, "latest_name": "10.0.0", "available": True},
-    "harmony": {"min_code": 100000, "latest_code": 100000, "latest_name": "10.0.0", "available": True},
+    "harmony": {
+        "min_code": 100000,
+        "latest_code": 100000,
+        "latest_name": "10.0.0",
+        "available": True,
+    },
     "ios": {"min_code": 0, "latest_code": 0, "latest_name": "", "available": False},
 }
 

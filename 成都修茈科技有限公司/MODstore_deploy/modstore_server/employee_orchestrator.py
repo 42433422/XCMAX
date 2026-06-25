@@ -314,9 +314,7 @@ def _run_layer(
     with ThreadPoolExecutor(max_workers=min(max_concurrency, len(layer))) as pool:
         # 用 copy_context() 把当前上下文（含平台模型作用域）带进池内线程，
         # 否则后台 loop 的平台作用域会在子线程丢失而静默回落到用户配额。
-        futures = {
-            pool.submit(contextvars.copy_context().run, _run_one, st): st for st in layer
-        }
+        futures = {pool.submit(contextvars.copy_context().run, _run_one, st): st for st in layer}
         for fut in as_completed(futures):
             results.append(fut.result())
     return results
