@@ -645,9 +645,7 @@ def execute_duty_graph_programmatic(
     sf = get_session_factory()
     with sf() as session:
         rows = list_employees_exec()
-        employee_index = {
-            norm_pkg_id(r.get("id")): r for r in rows if norm_pkg_id(r.get("id"))
-        }
+        employee_index = {norm_pkg_id(r.get("id")): r for r in rows if norm_pkg_id(r.get("id"))}
         if norm_pkg_id(target) not in employee_index:
             return {"ok": False, "error": "目标员工未部署（执行库未注册）"}
 

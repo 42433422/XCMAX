@@ -42,10 +42,13 @@ def test_resolve_prefers_runtime_snapshot_from_extra_roots(tmp_path: Path) -> No
     _make_repo(runtime_root)
     _make_repo(source_root / "成都修茈科技有限公司")
 
-    assert resolve_yuangon_repo_root(
-        source_root,
-        extra_roots=[runtime_root],
-    ) == runtime_root.resolve()
+    assert (
+        resolve_yuangon_repo_root(
+            source_root,
+            extra_roots=[runtime_root],
+        )
+        == runtime_root.resolve()
+    )
 
 
 def test_resolve_keeps_original_root_when_yuangon_is_missing(tmp_path: Path) -> None:

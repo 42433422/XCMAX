@@ -23,7 +23,6 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-
 _PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}
 
 
@@ -114,12 +113,15 @@ def _build_request(
     workspace_root = _project_root(input_data)
     mode = _mode_for_employee(employee_id, input_data)
     report_only = _coerce_bool(input_data.get("report_only"), mode in {"review", "verify"})
-    branch = str(
-        input_data.get("branch")
-        or input_data.get("base_branch")
-        or os.environ.get("MODSTORE_PARA_BRANCH")
+    branch = (
+        str(
+            input_data.get("branch")
+            or input_data.get("base_branch")
+            or os.environ.get("MODSTORE_PARA_BRANCH")
+            or "main"
+        ).strip()
         or "main"
-    ).strip() or "main"
+    )
     return {
         "request_id": uuid.uuid4().hex,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -131,10 +133,16 @@ def _build_request(
         "task": task,
         "prompt": str(input_data.get("prompt") or task or ""),
         "workspace_root": workspace_root,
-        "repo_url": str(input_data.get("repo_url") or os.environ.get("MODSTORE_PARA_REPO_URL") or ""),
+        "repo_url": str(
+            input_data.get("repo_url") or os.environ.get("MODSTORE_PARA_REPO_URL") or ""
+        ),
         "branch": branch,
-        "device_id": str(input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""),
-        "depends_on": input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else [],
+        "device_id": str(
+            input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
+        ),
+        "depends_on": (
+            input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else []
+        ),
         "para_task_id": str(input_data.get("para_task_id") or input_data.get("task_id") or ""),
         "dispatch_line": str(input_data.get("dispatch_line") or ""),
         "priority": str(input_data.get("priority") or ""),
@@ -142,7 +150,9 @@ def _build_request(
         "record_id": input_data.get("record_id"),
         "wait_for_para": input_data.get("wait_for_para"),
         "wait_timeout_sec": input_data.get("wait_timeout_sec"),
-        "evidence": input_data.get("evidence") if isinstance(input_data.get("evidence"), dict) else {},
+        "evidence": (
+            input_data.get("evidence") if isinstance(input_data.get("evidence"), dict) else {}
+        ),
         "raw_input": input_data,
     }
 
@@ -165,12 +175,17 @@ def _public_request(req: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _write_outbox(req: Dict[str, Any]) -> Path:
-    out = _outbox_dir() / f"{req.get('created_at','').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
+    out = (
+        _outbox_dir()
+        / f"{req.get('created_at','').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
+    )
     out.write_text(json.dumps(req, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return out
 
 
-def _outbox_response(req: Dict[str, Any], *, status: str, error: str, queued: bool = True) -> Dict[str, Any]:
+def _outbox_response(
+    req: Dict[str, Any], *, status: str, error: str, queued: bool = True
+) -> Dict[str, Any]:
     outbox = _write_outbox(req)
     return {
         "handler": "para_delegate",
@@ -219,9 +234,7 @@ def _build_para_prompt(req: Dict[str, Any]) -> str:
 
 def _get_para_token(client: httpx.Client, base: str) -> Dict[str, str]:
     token = (
-        os.environ.get("MODSTORE_PARA_AUTH_TOKEN")
-        or os.environ.get("DEVFLEET_AUTH_TOKEN")
-        or ""
+        os.environ.get("MODSTORE_PARA_AUTH_TOKEN") or os.environ.get("DEVFLEET_AUTH_TOKEN") or ""
     ).strip()
     if token:
         return {"token": token, "source": "env"}
@@ -375,7 +388,11 @@ def _wait_for_para_task(
                 ),
                 "snapshot": _task_result_snapshot(body),
             }
-        task = body.get("task") if isinstance(body, dict) and isinstance(body.get("task"), dict) else {}
+        task = (
+            body.get("task")
+            if isinstance(body, dict) and isinstance(body.get("task"), dict)
+            else {}
+        )
         status = str(task.get("status") or "").strip()
         if status in terminal:
             snapshot = _task_result_snapshot(body)
@@ -511,9 +528,7 @@ def _select_local_device(devices: list, tool_name: str) -> list:
     """一级：只挑「本机」一台。配置 MODSTORE_PARA_DEVICE_ID → is_primary → 首台合格。
     识别到的本机若不合格(离线/工具未装/占用)则返空，由上层升二级。"""
     local_id = (
-        os.environ.get("MODSTORE_PARA_DEVICE_ID")
-        or os.environ.get("DEVFLEET_DEVICE_ID")
-        or ""
+        os.environ.get("MODSTORE_PARA_DEVICE_ID") or os.environ.get("DEVFLEET_DEVICE_ID") or ""
     ).strip()
     if local_id:
         for item in devices:
@@ -534,9 +549,7 @@ def _select_fleet_devices(devices: list, req: Dict[str, Any], tool_name: str) ->
     raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
     target = raw.get("target_devices")
     targets = (
-        {str(x).strip() for x in target if str(x).strip()}
-        if isinstance(target, list)
-        else {"all"}
+        {str(x).strip() for x in target if str(x).strip()} if isinstance(target, list) else {"all"}
     )
     candidates: list = []
     for item in devices:
@@ -766,7 +779,9 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                     "request": _public_request(req),
                     "devices": dispatched,
                     "para_result": final.get("snapshot"),
-                    "error": "" if final.get("ok") else str(final.get("error") or "Para task failed"),
+                    "error": (
+                        "" if final.get("ok") else str(final.get("error") or "Para task failed")
+                    ),
                 }
             return {
                 "handler": "para_delegate",

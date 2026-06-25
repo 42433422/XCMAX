@@ -732,9 +732,7 @@ async def run_agent_loop_v2(
             if sys_msg:
                 msgs.append({"role": "system", "content": sys_msg})
             msgs.append({"role": "user", "content": user or ""})
-            result = await _maybe_await(
-                llm.chat(msgs, max_tokens=SCRIPT_AGENT_CODE_MAX_TOKENS)
-            )
+            result = await _maybe_await(llm.chat(msgs, max_tokens=SCRIPT_AGENT_CODE_MAX_TOKENS))
             return str(result or "")
 
     ctx = await collect_context(brief, user_id=user_id, upload_items=files)

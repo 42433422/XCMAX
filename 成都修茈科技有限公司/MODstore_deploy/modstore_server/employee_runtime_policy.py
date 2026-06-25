@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
-
 DEFAULT_POLICY_NAME = "employee_runtime_policy.json"
 
 
@@ -48,7 +47,9 @@ def save_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
     path = policy_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     tmp.replace(path)
     return {**payload, "path": str(path)}
 
@@ -100,7 +101,9 @@ def policy_for_employee(employee_id: str) -> Dict[str, Any]:
     return row if isinstance(row, dict) else {}
 
 
-def apply_policy_to_config(employee_id: str, config: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def apply_policy_to_config(
+    employee_id: str, config: Dict[str, Any]
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     policy = policy_for_employee(employee_id)
     if not policy or not isinstance(config, dict):
         return config, {}

@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 import modstore_server.services.llm as llm_mod
 from modstore_server import digest_line_executor as dle
 
-
 # ─────────────── digest 产线 _platform_bench_override ───────────────
 
 
@@ -135,7 +134,9 @@ def test_loop_cognition_runs_via_platform_dispatch(monkeypatch):
     import modstore_server.quota_middleware as qmw
 
     def _boom(*a, **k):
-        raise AssertionError("平台派发不应调用 require/consume_llm_credit（那是被烧穿的用户配额路径）")
+        raise AssertionError(
+            "平台派发不应调用 require/consume_llm_credit（那是被烧穿的用户配额路径）"
+        )
 
     monkeypatch.setattr(qmw, "require_llm_credit", _boom)
     monkeypatch.setattr(qmw, "consume_llm_credit", _boom)
