@@ -560,6 +560,21 @@ class TestDefaultDutyEmployeeLoader:
 class TestDefaultEnterpriseEmployeeLoader:
     """_default_enterprise_employee_loader 的分支覆盖。"""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_mod_manager(self, monkeypatch: pytest.MonkeyPatch):
+        """确保 get_mod_manager 和 _append_super_employees 在每个测试前处于干净状态。"""
+        mock_mm = MagicMock()
+        mock_mm.list_all_mods.return_value = []
+        monkeypatch.setattr(
+            "app.infrastructure.mods.mod_manager.get_mod_manager",
+            lambda: mock_mm,
+        )
+        monkeypatch.setattr(
+            "app.application.ai_group_chat_service._append_super_employees",
+            lambda x: None,
+        )
+        yield
+
     def test_default_enterprise_employee_loader_returns_empty_on_import_error(self, monkeypatch: pytest.MonkeyPatch):
         import builtins
 
