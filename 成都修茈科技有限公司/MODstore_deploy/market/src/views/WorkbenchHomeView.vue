@@ -5615,31 +5615,21 @@ const mediaGenRunner = {
   async generateImages(prompt: string, opts: { size: string; style: string; count: number }) {
     const safePrompt = prompt.slice(0, 240)
     const styled = opts.style && opts.style !== 'default' ? `${opts.style} 风格，` : ''
-    try {
-      if (!llmCatalog.value && localStorage.getItem('modstore_token')) {
-        await loadLlmCatalogForWorkbench()
-      }
-      const { resolveMediaProviderModel } = await import('../llmMedia')
-      const { provider, model } = resolveMediaProviderModel('image', llmCatalog.value)
-      if (!model) {
-        throw new Error('未找到可用的生图模型，请在「资金与记录 → 大模型 API」中选择含生图模型的厂商并刷新目录')
-      }
-      const res = await api.llmGenerateImage(provider, model, `${styled}${safePrompt}`, {
-        size: opts.size,
-        count: opts.count,
-      })
-      const urls = Array.isArray(res?.images) ? res.images.filter(Boolean) : []
-      if (urls.length) return urls
-    } catch {
-      // 未配置真实生图模型时保留占位图回退，避免打断创作流程。
+    // 不做占位图回退：未配模型或上游报错时如实抛出，由调用方展示错误，
+    // 绝不把 picsum 随机图当作「AI 生成」糊弄用户。
+    if (!llmCatalog.value && localStorage.getItem('modstore_token')) {
+      await loadLlmCatalogForWorkbench()
     }
-    const items: string[] = []
-    for (let i = 0; i < Math.max(1, Math.min(4, opts.count)); i += 1) {
-      const seed = `${safePrompt}-${opts.size}-${i}`
-      const url = `https://picsum.photos/seed/${encodeURIComponent(seed)}/${opts.size.replace('x', '/')}`
-      items.push(url)
+    const { resolveMediaProviderModel } = await import('../llmMedia')
+    const { provider, model } = resolveMediaProviderModel('image', llmCatalog.value)
+    if (!model) {
+      throw new Error('未找到可用的生图模型，请在「资金与记录 → 大模型 API」中选择含生图模型的厂商并刷新目录')
     }
-    return items
+    const res = await api.llmGenerateImage(provider, model, `${styled}${safePrompt}`, {
+      size: opts.size,
+      count: opts.count,
+    })
+    return Array.isArray(res?.images) ? res.images.filter(Boolean) : []
   },
   async generatePptOutline(topic: string, audience: string, pages: number) {
     const { provider, model } = await resolveChatProviderModel()
