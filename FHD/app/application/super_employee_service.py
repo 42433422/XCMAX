@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -38,6 +39,22 @@ from app.application.workspaces import WorkspaceError, get_workspace_registry
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
+
+# 按消息文件路径共享的写锁：串行化 append / 全量重写，防并发写截断/丢行
+# （多个 service 实例可能指向同一文件，故按路径键而非按实例）。
+_MESSAGE_FILE_LOCKS: dict[str, threading.RLock] = {}
+_MESSAGE_LOCKS_GUARD = threading.Lock()
+
+
+def _message_file_lock(path: Path) -> threading.RLock:
+    key = str(path)
+    with _MESSAGE_LOCKS_GUARD:
+        lock = _MESSAGE_FILE_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _MESSAGE_FILE_LOCKS[key] = lock
+        return lock
+
 
 DEFAULT_PARA_API_URL = "http://127.0.0.1:3001"
 DISPATCHER_MESSAGE_KIND = "dispatcher"
@@ -176,6 +193,36 @@ def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str)
     ]
 
 
+def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    # Cursor Agent CLI headless（cursor agent --print）。stream-json 作心跳；
+    # --trust 跳过无 TTY 时的 workspace 信任提示；--force 允许在 cwd 内改/建文件。
+    trust_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_TRUST")
+            or os.environ.get("XCMAX_CURSOR_AGENT_TRUST")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
+    force_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_FORCE")
+            or os.environ.get("XCMAX_CURSOR_AGENT_FORCE")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
+    cmd = [cli_path, "agent", "--print", "--output-format", "stream-json"]
+    if trust_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--trust")
+    if force_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--force")
+    cmd.append(prompt)
+    return cmd
+
+
 @dataclass(frozen=True)
 class SuperEmployeeToolProfile:
     """A concrete super-employee tool's identity + dispatch configuration."""
@@ -310,7 +357,10 @@ class SuperEmployeeService:
         text = (message or "").strip()
         if not text:
             raise ValueError("message 不能为空")
-        ctx = context if isinstance(context, dict) else {}
+        ctx = dict(context) if isinstance(context, dict) else {}
+        # 隔离作用域：把发起用户写进 ctx，向下传到会话键/工作区键，实现按用户隔离
+        # （避免多用户共享同一条 CLI 续接会话 / 同一 worktree）。
+        ctx.setdefault("_scope_user_id", str(int(user_id)))
         # 解析执行授权（deny-by-default：缺/错平台令牌即产品域），随后立即把令牌抹出 context，
         # 确保它绝不流入 dispatch 请求 / messages.jsonl / Para 载荷 / 日志。
         self._grant = CapabilityGrant.resolve(ctx)
@@ -1061,9 +1111,10 @@ class SuperEmployeeService:
         return row
 
     def _append_messages(self, messages: list[dict[str, Any]]) -> None:
-        with self._messages_path.open("a", encoding="utf-8") as fh:
-            for msg in messages:
-                fh.write(_safe_json_line(msg))
+        with _message_file_lock(self._messages_path):
+            with self._messages_path.open("a", encoding="utf-8") as fh:
+                for msg in messages:
+                    fh.write(_safe_json_line(msg))
 
     def _read_all_message_rows(self) -> list[dict[str, Any]]:
         if not self._messages_path.exists():
@@ -1081,9 +1132,10 @@ class SuperEmployeeService:
         return rows
 
     def _write_all_message_rows(self, rows: list[dict[str, Any]]) -> None:
-        with self._messages_path.open("w", encoding="utf-8") as fh:
-            for row in rows:
-                fh.write(_safe_json_line(row))
+        with _message_file_lock(self._messages_path):
+            with self._messages_path.open("w", encoding="utf-8") as fh:
+                for row in rows:
+                    fh.write(_safe_json_line(row))
 
     def _sync_para_task_updates(self, *, user_id: int, rows: list[dict[str, Any]]) -> None:
         changed = False
@@ -1268,9 +1320,17 @@ class SuperEmployeeService:
             logger.warning("写 session store 失败", exc_info=True)
 
     def _session_key(self, context: dict[str, Any]) -> str:
-        """会话键：手机端是单一 pinned 会话，按工具名即可隔离 claude/codex 各自一条续接会话。"""
-        conv = str((context or {}).get("conversation_id") or "").strip()
-        return f"{self._p.tool_name}:{conv}" if conv else self._p.tool_name
+        """会话键 = 工具 × 用户 × 会话。
+
+        含 ``_scope_user_id``（由 :meth:`invoke` 注入）→ 多用户对同一超级员工各自一条
+        独立 CLI 续接会话 + 独立 worktree，杜绝跨用户上下文/工作区串台；派工场景再带
+        ``conversation_id``（= work_order_id）做到每工单一独立会话。
+        """
+        ctx = context or {}
+        conv = str(ctx.get("conversation_id") or "").strip()
+        uid = str(ctx.get("_scope_user_id") or "").strip()
+        base = f"{self._p.tool_name}:u{uid}" if uid else self._p.tool_name
+        return f"{base}:{conv}" if conv else base
 
     def _ensure_session_workspace(self, key: str) -> tuple[str | None, str | None]:
         """持久隔离工作区：同一会话复用一个 git worktree（不碰 live checkout、不破坏运行中的 FHD）。"""

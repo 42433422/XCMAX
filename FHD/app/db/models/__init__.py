@@ -1,4 +1,5 @@
 from app.db.models.agent import AgentRunRecord
+from app.db.models.work_order import WorkOrder
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.neuro_event_log import NeuroEventLog
 from app.db.models.butler_profile import ButlerUserProfile
@@ -54,6 +55,7 @@ from app.db import tenant_filter as _tenant_filter  # noqa: E402,F401
 __all__ = [
     "PurchaseUnit",
     "AgentRunRecord",
+    "WorkOrder",
     "AiCirclePost",
     "AiCircleReaction",
     "AiCircleComment",
