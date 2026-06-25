@@ -135,9 +135,16 @@ if [[ "${upload}" == "1" ]]; then
     chmod 600 "${HOME}/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
   fi
 
-  xcrun iTMSTransporter \
+  if ! xcrun iTMSTransporter \
     -m upload \
     -assetFile "${ipa}" \
     -apiKey "${APP_STORE_CONNECT_API_KEY_ID}" \
-    -apiIssuer "${APP_STORE_CONNECT_API_ISSUER_ID}"
+    -apiIssuer "${APP_STORE_CONNECT_API_ISSUER_ID}"; then
+    echo "iTMSTransporter upload failed; retrying with xcrun altool --upload-package." >&2
+    xcrun altool \
+      --upload-package "${ipa}" \
+      --api-key "${APP_STORE_CONNECT_API_KEY_ID}" \
+      --api-issuer "${APP_STORE_CONNECT_API_ISSUER_ID}" \
+      --verbose
+  fi
 fi
