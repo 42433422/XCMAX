@@ -1602,6 +1602,7 @@ async def mobile_ai_group_post(
             text=body.message,
             sender_name=body.sender_name or "我",
             mentions=body.mentions,
+            execute=bool(body.execute),
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
