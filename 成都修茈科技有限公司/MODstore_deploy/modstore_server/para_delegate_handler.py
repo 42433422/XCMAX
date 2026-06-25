@@ -177,7 +177,7 @@ def _public_request(req: Dict[str, Any]) -> Dict[str, Any]:
 def _write_outbox(req: Dict[str, Any]) -> Path:
     out = (
         _outbox_dir()
-        / f"{req.get('created_at','').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
+        / f"{req.get('created_at', '').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
     )
     out.write_text(json.dumps(req, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return out
