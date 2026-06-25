@@ -6,13 +6,17 @@ Moved here on 2026-06-21 (P0 cleanup of `scripts/dev/`). These were one-off, mac
 throwaway scripts (many hardcode Windows paths such as `E:\FHD\XCAGI\...` and target an old
 WeChat-DB analysis workflow), kept only for reference.
 
+2026-06-25 second pass: archived 32 more orphan one-shots that had slipped into `scripts/` root
+(the CI `guard_temp_scripts.py` only blocks repo-root + `scripts/*.py` one level, so these under
+`FHD/scripts/` were never caught). All had zero references in workflows/imports/Makefiles/docs.
+
 | dir | files | what it was |
 |-----|------:|-------------|
 | `analyze/`      | 32 | ad-hoc data/template/wechat-db analysis probes |
-| `checks/`       | 30 | one-off "check_*" inspection scripts |
+| `checks/`       | 48 | one-off "check_*" inspection scripts (DB/customer/units/templates probes) |
 | `debug/`        |  4 | throwaway debug drivers |
-| `fixes/`        |  5 | one-shot data-fix / force-sync scripts |
-| `tests_adhoc/`  | 53 | manual `test_*` drivers — NOT collected by pytest (`testpaths = ["tests"]`) |
+| `fixes/`        | 13 | one-shot data-fix / force-sync / lane / manifest / surface-audit fixers |
+| `tests_adhoc/`  | 59 | manual `test_*` / `final_*` drivers — NOT collected by pytest (`testpaths = ["tests"]`) |
 | `tmp/`          |  3 | scratch text dumps |
 
 Verified before archiving: no references from `.github/` workflows, `pyproject.toml`,

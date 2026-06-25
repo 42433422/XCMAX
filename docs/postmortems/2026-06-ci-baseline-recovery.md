@@ -5,7 +5,7 @@
 | 字段 | 内容 |
 |------|------|
 | 严重级别 | SEV-2（主分支 CI 长期黄） |
-| 基线 | [`pytest-v10-baseline.txt`](../../FHD/test_reports/pytest-v10-baseline.txt) |
+| 基线 | [`pytest-full-last.txt`](../../FHD/test_reports/pytest-full-last.txt)（最近一次全量 pytest 快照；旧 `pytest-v10-baseline.txt` 未随仓保留） |
 | 目标 | `0 failed / 0 errors / 0 xpassed` |
 
 ## 影响
