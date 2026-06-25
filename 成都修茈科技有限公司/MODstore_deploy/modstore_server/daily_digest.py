@@ -465,6 +465,14 @@ def _run_scheduled_digest_vibe_prep(
                 ai.get("patch"),
                 ai.get("update"),
             )
+            try:
+                from modstore_server.employee_collab_reporter import report_action_items
+
+                report_action_items(day=day, record_id=record_id)
+            except Exception:
+                logger.exception(
+                    "collab report (action items) failed record_id=%s", record_id
+                )
         except Exception:
             logger.exception("daily digest: action items store failed record_id=%s", record_id)
     if result.get("ok"):
@@ -2050,6 +2058,17 @@ def run_daily_digest_email() -> Dict[str, Any]:
             delivery_rows=delivery_rows,
             delivered=any_delivered,
         )
+        if record_id and meeting_minutes_html:
+            try:
+                from modstore_server.employee_collab_reporter import report_meeting_minutes
+
+                report_meeting_minutes(
+                    record_id=int(record_id), day=day, minutes_html=meeting_minutes_html
+                )
+            except Exception:
+                logger.exception(
+                    "collab report (meeting minutes) failed record_id=%s", record_id
+                )
         if record_id:
             try:
                 from modstore_server.release_train import bump_release_train

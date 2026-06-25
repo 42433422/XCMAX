@@ -32,7 +32,13 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.MarkChatUnread
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
@@ -75,6 +81,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.xiuci.xcagi.mobile.core.model.AiGroupCandidateDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDraft
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
@@ -82,6 +89,8 @@ import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
+import com.xiuci.xcagi.mobile.ui.components.mobile.pressScaleButton
+import com.xiuci.xcagi.mobile.ui.components.mobile.pressScaleClickable
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -301,12 +310,7 @@ internal fun GroupConversationRow(
     val dimmed = group.is_hidden || !group.is_followed
     Surface(
         color = if (group.is_pinned) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxWidth().then(
-            if (onLongClick != null)
-                Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            else
-                Modifier.clickable(onClick = onClick)
-        ),
+        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = 11.dp),
@@ -406,7 +410,13 @@ fun AiGroupChatScreen(
     val sending by vm.groupSending.collectAsState()
     val userAvatar by vm.userAvatarSource.collectAsState()
     val modInfos by vm.modInfos.collectAsState()
-    val allEmployees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
+    val candidates by vm.groupMemberCandidates.collectAsState()
+    // 候选优先用后端 SSOT(含超级员工);为空时用本地 workflow_employees 兜底,避免无网/无权限时回归。
+    val memberCandidates =
+        remember(candidates, modInfos) {
+            if (candidates.isNotEmpty()) candidates
+            else modInfos.aiEmployeeProfiles().map { it.toGroupCandidate() }
+        }
     var input by remember { mutableStateOf("") }
     var showMembers by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -437,14 +447,15 @@ fun AiGroupChatScreen(
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
     LaunchedEffect(Unit) { vm.refreshModInfos() }
+    LaunchedEffect(Unit) { vm.loadGroupMemberCandidates() }
 
     if (showMembers && g != null) {
         GroupMembersSheet(
             group = g,
-            allEmployees = allEmployees,
+            candidates = memberCandidates,
             onDismiss = { showMembers = false },
-            onAdd = { emp ->
-                vm.addGroupMember(g.id, emp.employeeId, emp.modId, emp.name, emp.avatarUrl.orEmpty(), emp.summary)
+            onAdd = { c ->
+                vm.addGroupMember(g.id, c.employee_id, c.mod_id, c.name, c.avatar, c.summary)
             },
             onRemove = { employeeId -> vm.removeGroupMember(g.id, employeeId) },
         )
@@ -657,7 +668,7 @@ private fun GroupInputBar(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Box(
-                    Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onVoice),
+                    Modifier.size(40.dp).clip(CircleShape).pressScaleButton(onClick = onVoice),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -692,7 +703,7 @@ private fun GroupInputBar(
                 Box(
                     Modifier.size(40.dp).clip(CircleShape)
                         .background(if (canSend) XcagiTheme.extra.weChatOnline else MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable(enabled = canSend, onClick = onSend),
+                        .pressScaleButton(onClick = onSend, enabled = canSend),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -714,14 +725,14 @@ private fun GroupInputBar(
 @Composable
 private fun GroupMembersSheet(
     group: AiGroupDto,
-    allEmployees: List<AiEmployeeProfile>,
+    candidates: List<AiGroupCandidateDto>,
     onDismiss: () -> Unit,
-    onAdd: (AiEmployeeProfile) -> Unit,
+    onAdd: (AiGroupCandidateDto) -> Unit,
     onRemove: (String) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val memberIds = remember(group) { group.members.map { it.employee_id }.toSet() }
-    val addable = remember(allEmployees, memberIds) { allEmployees.filter { it.employeeId !in memberIds } }
+    val addable = remember(candidates, memberIds) { candidates.filter { it.employee_id !in memberIds } }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().padding(bottom = Spacing.xxl)) {
@@ -734,7 +745,13 @@ private fun GroupMembersSheet(
                 ) {
                     AppAvatar(imageSource = m.avatar.ifBlank { null }, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 38.dp, shape = RoundedCornerShape(8.dp))
                     Spacer(Modifier.width(Spacing.md))
-                    Text(m.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Text(m.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                        if (isSuperEmployee(m.mod_id)) {
+                            Spacer(Modifier.width(6.dp))
+                            SuperEmployeeBadge()
+                        }
+                    }
                     IconButton(onClick = { onRemove(m.employee_id) }) {
                         Icon(Icons.Default.PersonRemove, contentDescription = "移除", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                     }
@@ -746,7 +763,7 @@ private fun GroupMembersSheet(
 
             if (addable.isEmpty()) {
                 Text(
-                    if (allEmployees.isEmpty()) "暂无可用 AI 员工，先在「AI员工」里同步" else "已把所有 AI 员工都拉进群了",
+                    if (candidates.isEmpty()) "暂无可用 AI 员工，先在「AI员工」里同步" else "已把所有 AI 员工都拉进群了",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
@@ -758,10 +775,16 @@ private fun GroupMembersSheet(
                             Modifier.fillMaxWidth().clickable { onAdd(emp) }.padding(horizontal = Spacing.lg, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            AppAvatar(imageSource = emp.avatarUrl, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 38.dp, shape = RoundedCornerShape(8.dp))
+                            AppAvatar(imageSource = emp.avatar.ifBlank { null }, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 38.dp, shape = RoundedCornerShape(8.dp))
                             Spacer(Modifier.width(Spacing.md))
                             Column(Modifier.weight(1f)) {
-                                Text(emp.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(emp.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                                    if (emp.is_super) {
+                                        Spacer(Modifier.width(6.dp))
+                                        SuperEmployeeBadge()
+                                    }
+                                }
                                 Text(emp.summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
                             Icon(Icons.Default.Add, contentDescription = "添加", tint = XcagiTheme.extra.brandBlue, modifier = Modifier.size(22.dp))
@@ -772,6 +795,34 @@ private fun GroupMembersSheet(
         }
     }
 }
+
+/** 超级员工标识：employee 标记 mod_id == "super-employee"（后端 SSOT 约定，不硬编码 id）。 */
+private fun isSuperEmployee(modId: String): Boolean = modId == "super-employee"
+
+@Composable
+private fun SuperEmployeeBadge() {
+    Surface(shape = RoundedCornerShape(4.dp), color = XcagiTheme.extra.brandBlue.copy(alpha = 0.12f)) {
+        Text(
+            "超级员工",
+            style = MaterialTheme.typography.labelSmall,
+            color = XcagiTheme.extra.brandBlue,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+        )
+    }
+}
+
+/** 本地 workflow_employees → 群候选(兜底用,均非超级员工)。 */
+private fun AiEmployeeProfile.toGroupCandidate(): AiGroupCandidateDto =
+    AiGroupCandidateDto(
+        employee_id = employeeId,
+        mod_id = modId,
+        name = name,
+        avatar = avatarUrl.orEmpty(),
+        summary = summary,
+        department_key = "",
+        is_super = false,
+    )
 
 // ══════════════════════════════════════════
 //  微信式发起群聊：多选 AI 员工 → 一次建群
@@ -784,11 +835,18 @@ fun AiGroupCreateScreen(
     onCreated: () -> Unit,
 ) {
     val modInfos by vm.modInfos.collectAsState()
-    val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
+    val candidates by vm.groupMemberCandidates.collectAsState()
+    // 候选优先用后端 SSOT(含超级员工);为空时本地 workflow_employees 兜底。
+    val employees =
+        remember(candidates, modInfos) {
+            if (candidates.isNotEmpty()) candidates
+            else modInfos.aiEmployeeProfiles().map { it.toGroupCandidate() }
+        }
     val selectedKeys = remember { mutableStateListOf<String>() }
     var name by remember { mutableStateOf("") }
     var creating by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.refreshModInfos() }
+    LaunchedEffect(Unit) { vm.loadGroupMemberCandidates() }
     val picked = remember(selectedKeys.toList(), employees) { employees.filter { it.key in selectedKeys } }
     val autoName = remember(picked) { picked.joinToString("、") { it.name }.take(40) }
 
@@ -808,7 +866,7 @@ fun AiGroupCreateScreen(
                         onClick = {
                             creating = true
                             val drafts = picked.map {
-                                AiGroupMemberDraft(it.employeeId, it.modId, it.name, it.avatarUrl.orEmpty(), it.summary)
+                                AiGroupMemberDraft(it.employee_id, it.mod_id, it.name, it.avatar, it.summary)
                             }
                             val finalName = name.ifBlank { autoName }.ifBlank { "新建群聊" }
                             vm.createGroupWithMembers(finalName, drafts) { g ->
@@ -855,10 +913,16 @@ fun AiGroupCreateScreen(
                                 onCheckedChange = { if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key) },
                             )
                             Spacer(Modifier.width(Spacing.sm))
-                            AppAvatar(imageSource = e.avatarUrl, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 40.dp, shape = RoundedCornerShape(8.dp))
+                            AppAvatar(imageSource = e.avatar.ifBlank { null }, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 40.dp, shape = RoundedCornerShape(8.dp))
                             Spacer(Modifier.width(Spacing.md))
                             Column(Modifier.weight(1f)) {
-                                Text(e.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(e.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                                    if (e.is_super) {
+                                        Spacer(Modifier.width(6.dp))
+                                        SuperEmployeeBadge()
+                                    }
+                                }
                                 Text(e.summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
                         }

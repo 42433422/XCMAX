@@ -2001,6 +2001,13 @@ async def mobile_ai_circle_posts(
         )
     from app.application.ai_circle_service import list_posts
 
+    try:
+        from app.application import employee_circle_sync
+
+        await employee_circle_sync.sync_modstore_reports()
+    except Exception:  # noqa: BLE001 - 同步失败不影响交流圈展示
+        logger.warning("circle: modstore report sync skipped", exc_info=True)
+
     uid, _, _ = _ai_circle_user(user)
     posts = list_posts(user_id=uid, limit=limit)
     profiles = _ai_circle_employee_profiles()

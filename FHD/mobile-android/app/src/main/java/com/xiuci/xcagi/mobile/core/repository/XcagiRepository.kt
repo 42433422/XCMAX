@@ -10,6 +10,7 @@ import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.db.ModInfoCacheEntity
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
+import com.xiuci.xcagi.mobile.core.model.AiGroupCandidateDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
 import com.xiuci.xcagi.mobile.core.model.AiGroupDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberBody
@@ -1438,6 +1439,13 @@ class XcagiRepository @Inject constructor(
     // ── AI 群聊 ──
     suspend fun loadAiGroups(): Result<List<AiGroupDto>> = aiGroupCall {
         fhd().getAiGroups().let { if (it.success) Result.success(it.data?.groups.orEmpty()) else fail(it) }
+    }
+
+    /** 群成员候选(普通员工 + 超级员工),供建群/拉人选人列表使用。 */
+    suspend fun loadGroupMemberCandidates(): Result<List<AiGroupCandidateDto>> = aiGroupCall {
+        fhd().getAiGroupCandidates().let {
+            if (it.success) Result.success(it.data?.candidates.orEmpty()) else fail(it)
+        }
     }
 
     suspend fun createAiGroup(name: String): Result<AiGroupDto?> = aiGroupCall {

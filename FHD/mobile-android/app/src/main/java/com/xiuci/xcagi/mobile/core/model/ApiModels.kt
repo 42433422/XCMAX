@@ -142,6 +142,22 @@ data class AiGroupMessageBody(
     val mentions: List<String> = emptyList(),
 )
 
+/** 可拉入群聊的 AI 员工候选(普通员工 + 超级员工)。后端 SSOT,含 is_super 标志。 */
+data class AiGroupCandidateDto(
+    val employee_id: String = "",
+    val mod_id: String = "",
+    val name: String = "",
+    val avatar: String = "",
+    val summary: String = "",
+    val department_key: String = "",
+    val is_super: Boolean = false,
+) {
+    val key: String
+        get() = "$mod_id:$employee_id"
+}
+
+data class AiGroupCandidatesData(val candidates: List<AiGroupCandidateDto> = emptyList())
+
 data class MeData(
     val user: UserDto? = null,
     val permissions: List<String>? = null,
