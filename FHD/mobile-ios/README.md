@@ -76,13 +76,39 @@ GitHub Actions 入口: `FHD/.github/workflows/release-ios.yml`。默认只跑模
 - `IOS_TEAM_ID`
 - `IOS_CERTIFICATE_P12_BASE64`
 - `IOS_CERTIFICATE_PASSWORD`
-- `IOS_PROVISION_PROFILE_BASE64`
+- `IOS_PROVISION_PROFILE_ENTERPRISE_BASE64`
+- `IOS_PROVISION_PROFILE_PERSONAL_BASE64`
 - `IOS_KEYCHAIN_PASSWORD`
 - `APP_STORE_CONNECT_API_KEY_ID`
 - `APP_STORE_CONNECT_API_ISSUER_ID`
 - `APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64`
 
-`XCAGIMobile` 与 `XCAGIMobilePersonal` 是两个 Bundle ID,如果两个都要上架,需要在 Apple Developer / App Store Connect 分别注册并各自准备 provisioning profile。
+`XCAGIMobile` 与 `XCAGIMobilePersonal` 是两个 Bundle ID。workflow 会按 scheme 自动选取 profile secret:
+
+- `XCAGIMobile` → `IOS_PROVISION_PROFILE_ENTERPRISE_BASE64`
+- `XCAGIMobilePersonal` → `IOS_PROVISION_PROFILE_PERSONAL_BASE64`
+
+兼容旧分支时,可以额外保留 `IOS_PROVISION_PROFILE_BASE64` 指向企业版 profile,但当前分支已不再依赖该单 profile 配置。
+
+如果需要自动化 Apple Developer 门户与 GitHub Secrets,优先使用:
+
+```bash
+bash scripts/create-app-store-profile.sh \
+  --scheme XCAGIMobile \
+  --profile-name XCAGIMobile-AppStore-Enterprise-20260625B
+
+bash scripts/sync-ios-signing-secrets.sh \
+  --repo 42433422/XCMAX \
+  --team-id G26WSH472M \
+  --p12 /path/to/ios_distribution.p12 \
+  --p12-password '***' \
+  --profile-enterprise /path/to/enterprise.mobileprovision \
+  --profile-personal /path/to/personal.mobileprovision \
+  --api-key-p8 /path/to/AuthKey_XXXXXX.p8 \
+  --api-key-id XXXXXX \
+  --api-issuer-id XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX \
+  --keychain-password '***'
+```
 
 ## 后端基址
 

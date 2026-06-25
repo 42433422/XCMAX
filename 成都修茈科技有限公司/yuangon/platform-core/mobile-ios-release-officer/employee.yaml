@@ -1,7 +1,7 @@
 id: mobile-ios-release-officer
 name: iOS 发版员
-version: "1.0.0"
-domain: P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
+version: "1.1.0"
+domain: P-S iOS 渠道发布：双 SKU Bundle ID、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
 owner: admin
 area: platform-core
 five_line_id: prod_software
@@ -28,7 +28,8 @@ llm_default: "auto"
 
 capabilities:
   - ios.release.audit
-  - mobile.signing.verify
+  - ios.provisioning.profile.manage
+  - ios.signing.secret.sync
 
 skills:
   - skills/skill-mobile-ios-release-officer.md
@@ -52,6 +53,6 @@ examples:
       dry_run: true
 
 changelog:
-  - version: "1.0.0"
-    date: "2026-06-03"
-    note: "六部门编制：P-S iOS 发版专岗（XcodeGen + TestFlight/App Store Connect 渠道）"
+  - version: "1.1.0"
+    date: "2026-06-25"
+    note: "补齐双 SKU provisioning profile、GitHub Secrets 同步与 Apple Developer 门户自动化 runbook"
