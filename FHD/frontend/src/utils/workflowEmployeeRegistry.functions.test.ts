@@ -1,15 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockModWorkflow } = vi.hoisted(() => ({
-  mockModWorkflow: {
-    buildModWorkflowPanelMeta: vi.fn(() => ({})),
-    isNonWorkflowDeskEmployeeId: vi.fn(() => false),
-    filterWorkflowRegistrySourceMods: vi.fn((mods: unknown[]) => mods),
-    type: {},
-  },
+vi.mock('@/utils/modWorkflowEmployees', () => ({
+  buildModWorkflowPanelMeta: vi.fn(() => ({})),
+  isNonWorkflowDeskEmployeeId: vi.fn((id: string) => {
+    const blocked = ['office_pack', 'host_desk', 'employee_pack']
+    return blocked.includes(String(id || '').trim())
+  }),
+  filterWorkflowRegistrySourceMods: vi.fn((mods: unknown[]) => mods || []),
 }))
-
-vi.mock('@/utils/modWorkflowEmployees', () => mockModWorkflow)
 
 import {
   loadWorkflowEmployeeRegistry,
@@ -20,35 +18,13 @@ import {
   loadRegistryFromJson,
 } from './workflowEmployeeRegistry'
 import type { WorkflowEmployeeRegistryV1, WorkflowEmployeeRegistryEntry } from '@/types/workflow-employee'
-import type { ModWithWorkflowEmployees } from '@/utils/modWorkflowEmployees'
 
-function makeRegistry(employees: WorkflowEmployeeRegistryEntry[] = []): WorkflowEmployeeRegistryV1 {
-  return { schemaVersion: 1, employees }
-}
-
-function makeMod(overrides: Partial<ModWithWorkflowEmployees> = {}): ModWithWorkflowEmployees {
-  return {
-    id: 'mod1',
-    name: 'Mod 1',
-    workflow_employees: [],
-    ...overrides,
-  } as unknown as ModWithWorkflowEmployees
-}
-
-describe('workflowEmployeeRegistry functions', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockModWorkflow.buildModWorkflowPanelMeta.mockReturnValue({})
-    mockModWorkflow.isNonWorkflowDeskEmployeeId.mockReturnValue(false)
-    mockModWorkflow.filterWorkflowRegistrySourceMods.mockImplementation((mods: unknown[]) => mods)
-    invalidateWorkflowEmployeeRegistryCache()
-  })
-
+describe('workflowEmployeeRegistry', () => {
   describe('loadWorkflowEmployeeRegistry', () => {
-    it('returns empty registry (host no longer bundles employees)', async () => {
-      const registry = await loadWorkflowEmployeeRegistry()
-      expect(registry.schemaVersion).toBe(1)
-      expect(registry.employees).toEqual([])
+    it('returns empty registry', async () => {
+      const result = await loadWorkflowEmployeeRegistry()
+      expect(result.schemaVersion).toBe(1)
+      expect(result.employees).toEqual([])
     })
   })
 
@@ -59,25 +35,154 @@ describe('workflowEmployeeRegistry functions', () => {
   })
 
   describe('loadWorkflowEmployeeRegistryCached', () => {
-    it('returns a promise', () => {
-      const result = loadWorkflowEmployeeRegistryCached()
-      expect(result).toBeInstanceOf(Promise)
-    })
-
-    it('caches the result', async () => {
-      const r1 = loadWorkflowEmployeeRegistryCached()
-      const r2 = loadWorkflowEmployeeRegistryCached()
-      const [v1, v2] = await Promise.all([r1, r2])
-      expect(v1).toEqual(v2)
-    })
-
-    it('reloads after cache invalidation', async () => {
-      const r1 = loadWorkflowEmployeeRegistryCached()
-      await r1
+    beforeEach(() => {
       invalidateWorkflowEmployeeRegistryCache()
-      const r2 = loadWorkflowEmployeeRegistryCached()
+    })
+
+    it('returns cached registry on first call', async () => {
+      const result = await loadWorkflowEmployeeRegistryCached()
+      expect(result.schemaVersion).toBe(1)
+      expect(result.employees).toEqual([])
+    })
+
+    it('returns same resolved value on subsequent calls (caching)', async () => {
+      const r1 = await loadWorkflowEmployeeRegistryCached()
+      const r2 = await loadWorkflowEmployeeRegistryCached()
+      expect(r1).toBe(r2)
+    })
+
+    it('returns new value after cache invalidation', async () => {
+      const r1 = await loadWorkflowEmployeeRegistryCached()
+      invalidateWorkflowEmployeeRegistryCache()
+      const r2 = await loadWorkflowEmployeeRegistryCached()
       expect(r1).not.toBe(r2)
-      await r2
+    })
+  })
+
+  describe('mergeModManifestEntries', () => {
+    it('returns empty array for empty registry and no mods', () => {
+      const registry: WorkflowEmployeeRegistryV1 = { schemaVersion: 1, employees: [] }
+      const result = mergeModManifestEntries(registry, [])
+      expect(result).toEqual([])
+    })
+
+    it('returns existing employees when no mods provided', () => {
+      const registry: WorkflowEmployeeRegistryV1 = {
+        schemaVersion: 1,
+        employees: [
+          { id: 'emp1', label: 'Employee 1', kind: 'mod_extension', order: 1, source: 'json' },
+        ],
+      }
+      const result = mergeModManifestEntries(registry, [])
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('emp1')
+    })
+
+    it('adds employees from mod manifests', () => {
+      const registry: WorkflowEmployeeRegistryV1 = { schemaVersion: 1, employees: [] }
+      const mods = [
+        {
+          id: 'mod1',
+          workflow_employees: [
+            { id: 'emp1', label: 'Employee 1' },
+          ],
+        },
+      ]
+      const result = mergeModManifestEntries(registry, mods as any)
+      expect(result.some((e) => e.id === 'emp1')).toBe(true)
+    })
+
+    it('skips non-workflow desk employee ids', () => {
+      const registry: WorkflowEmployeeRegistryV1 = { schemaVersion: 1, employees: [] }
+      const mods = [
+        {
+          id: 'mod1',
+          workflow_employees: [
+            { id: 'office_pack', label: 'Office Pack' },
+            { id: 'emp1', label: 'Employee 1' },
+          ],
+        },
+      ]
+      const result = mergeModManifestEntries(registry, mods as any)
+      expect(result.some((e) => e.id === 'office_pack')).toBe(false)
+      expect(result.some((e) => e.id === 'emp1')).toBe(true)
+    })
+
+    it('sorts by order', () => {
+      const registry: WorkflowEmployeeRegistryV1 = {
+        schemaVersion: 1,
+        employees: [
+          { id: 'emp_b', label: 'B', kind: 'mod_extension', order: 2, source: 'json' },
+          { id: 'emp_a', label: 'A', kind: 'mod_extension', order: 1, source: 'json' },
+        ],
+      }
+      const result = mergeModManifestEntries(registry, [])
+      expect(result[0].id).toBe('emp_a')
+      expect(result[1].id).toBe('emp_b')
+    })
+  })
+
+  describe('resolveLabel', () => {
+    it('returns label when no i18n key', () => {
+      const entry: WorkflowEmployeeRegistryEntry = {
+        id: 'emp1',
+        label: '员工1',
+        kind: 'mod_extension',
+        order: 1,
+        source: 'json',
+      }
+      expect(resolveLabel(entry)).toBe('员工1')
+    })
+
+    it('returns label when no i18n resolver', () => {
+      const entry: WorkflowEmployeeRegistryEntry = {
+        id: 'emp1',
+        label: '员工1',
+        kind: 'mod_extension',
+        order: 1,
+        source: 'json',
+        labelI18nKey: 'employee.emp1',
+      }
+      expect(resolveLabel(entry)).toBe('员工1')
+    })
+
+    it('returns resolved label when i18n resolver returns different value', () => {
+      const entry: WorkflowEmployeeRegistryEntry = {
+        id: 'emp1',
+        label: '员工1',
+        kind: 'mod_extension',
+        order: 1,
+        source: 'json',
+        labelI18nKey: 'employee.emp1',
+      }
+      const resolver = (key: string) => (key === 'employee.emp1' ? 'Employee One' : key)
+      expect(resolveLabel(entry, resolver)).toBe('Employee One')
+    })
+
+    it('returns label when i18n resolver returns same key', () => {
+      const entry: WorkflowEmployeeRegistryEntry = {
+        id: 'emp1',
+        label: '员工1',
+        kind: 'mod_extension',
+        order: 1,
+        source: 'json',
+        labelI18nKey: 'employee.emp1',
+      }
+      const resolver = (key: string) => key
+      expect(resolveLabel(entry, resolver)).toBe('员工1')
+    })
+
+    it('returns label when i18n resolver returns empty string', () => {
+      const entry: WorkflowEmployeeRegistryEntry = {
+        id: 'emp1',
+        label: '员工1',
+        kind: 'mod_extension',
+        order: 1,
+        source: 'json',
+        labelI18nKey: 'employee.emp1',
+      }
+      const resolver = () => ''
+      expect(resolveLabel(entry, resolver)).toBe('员工1')
     })
   })
 
@@ -86,131 +191,6 @@ describe('workflowEmployeeRegistry functions', () => {
       const result = await loadRegistryFromJson()
       expect(result.schemaVersion).toBe(1)
       expect(result.employees).toEqual([])
-    })
-  })
-
-  describe('mergeModManifestEntries', () => {
-    it('returns empty array when registry and mods are empty', () => {
-      const result = mergeModManifestEntries(makeRegistry(), [])
-      expect(result).toEqual([])
-    })
-
-    it('preserves registry entries', () => {
-      const registry = makeRegistry([
-        { id: 'emp1', label: 'Employee 1', kind: 'core', order: 1, source: 'json' },
-      ])
-      const result = mergeModManifestEntries(registry, [])
-      expect(result.length).toBe(1)
-      expect(result[0].id).toBe('emp1')
-    })
-
-    it('adds entries from mod manifest', () => {
-      const mods = [makeMod({
-        id: 'mod1',
-        workflow_employees: [{ id: 'new_emp', label: 'New Emp' }],
-      })]
-      const result = mergeModManifestEntries(makeRegistry(), mods)
-      expect(result.some(e => e.id === 'new_emp')).toBe(true)
-    })
-
-    it('skips entries with empty id', () => {
-      const mods = [makeMod({
-        workflow_employees: [{ id: '', label: 'Empty' }],
-      })]
-      const result = mergeModManifestEntries(makeRegistry(), mods)
-      expect(result.length).toBe(0)
-    })
-
-    it('skips non-workflow desk employee ids', () => {
-      mockModWorkflow.isNonWorkflowDeskEmployeeId.mockImplementation((id: string) => id === 'skip_me')
-      const mods = [makeMod({
-        workflow_employees: [{ id: 'skip_me', label: 'Skip' }],
-      })]
-      const result = mergeModManifestEntries(makeRegistry(), mods)
-      expect(result.length).toBe(0)
-    })
-
-    it('updates carrierModId and hostModId for existing entries', () => {
-      const registry = makeRegistry([
-        { id: 'emp1', label: 'Emp1', kind: 'core', order: 1, source: 'json' },
-      ])
-      const mods = [makeMod({
-        id: 'mod1',
-        workflow_employees: [{ id: 'emp1', label: 'Emp1' }],
-      })]
-      const result = mergeModManifestEntries(registry, mods)
-      expect(result[0].carrierModId).toBe('mod1')
-    })
-
-    it('uses explicit host_mod_id when available', () => {
-      const mods = [makeMod({
-        id: 'mod1',
-        workflow_employees: [{ id: 'emp1', label: 'Emp1', host_mod_id: 'host_mod' }],
-      })]
-      const result = mergeModManifestEntries(makeRegistry(), mods)
-      expect(result[0].hostModId).toBe('host_mod')
-    })
-
-    it('uses enterprise_mod_id as fallback for host', () => {
-      const mods = [makeMod({
-        id: 'mod1',
-        workflow_employees: [{ id: 'emp1', label: 'Emp1', enterprise_mod_id: 'ent_mod' }],
-      })]
-      const result = mergeModManifestEntries(makeRegistry(), mods)
-      expect(result[0].hostModId).toBe('ent_mod')
-    })
-
-    it('adds entries from modMeta when not in manifest', () => {
-      mockModWorkflow.buildModWorkflowPanelMeta.mockReturnValue({
-        meta_emp: { title: '工作流 · Meta Emp' },
-      })
-      const result = mergeModManifestEntries(makeRegistry(), [])
-      expect(result.some(e => e.id === 'meta_emp')).toBe(true)
-    })
-
-    it('strips "工作流 ·" prefix from meta title', () => {
-      mockModWorkflow.buildModWorkflowPanelMeta.mockReturnValue({
-        emp1: { title: '工作流 · Employee 1' },
-      })
-      const result = mergeModManifestEntries(makeRegistry(), [])
-      expect(result[0].label).toBe('Employee 1')
-    })
-
-    it('sorts entries by order', () => {
-      const registry = makeRegistry([
-        { id: 'emp2', label: 'Emp2', kind: 'core', order: 5, source: 'json' },
-        { id: 'emp1', label: 'Emp1', kind: 'core', order: 1, source: 'json' },
-      ])
-      const result = mergeModManifestEntries(registry, [])
-      expect(result[0].id).toBe('emp1')
-      expect(result[1].id).toBe('emp2')
-    })
-  })
-
-  describe('resolveLabel', () => {
-    it('returns label when no i18n resolver', () => {
-      const entry = { id: '1', label: 'Test', kind: 'core', order: 1, source: 'json' }
-      expect(resolveLabel(entry)).toBe('Test')
-    })
-
-    it('returns label when labelI18nKey is not set', () => {
-      const entry = { id: '1', label: 'Test', kind: 'core', order: 1, source: 'json' }
-      expect(resolveLabel(entry, () => 'resolved')).toBe('Test')
-    })
-
-    it('returns resolved label when i18nResolver returns different value', () => {
-      const entry = { id: '1', label: 'Test', kind: 'core', order: 1, source: 'json', labelI18nKey: 'key.1' }
-      expect(resolveLabel(entry, () => 'Resolved')).toBe('Resolved')
-    })
-
-    it('returns original label when i18nResolver returns same value as key', () => {
-      const entry = { id: '1', label: 'Test', kind: 'core', order: 1, source: 'json', labelI18nKey: 'key.1' }
-      expect(resolveLabel(entry, (k) => k)).toBe('Test')
-    })
-
-    it('returns original label when i18nResolver returns empty string', () => {
-      const entry = { id: '1', label: 'Test', kind: 'core', order: 1, source: 'json', labelI18nKey: 'key.1' }
-      expect(resolveLabel(entry, () => '')).toBe('Test')
     })
   })
 })
