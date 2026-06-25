@@ -91,6 +91,7 @@ object ApiEndpoints {
     const val ADMIN_CURSOR_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/cursor-super-employee/messages"
 
     // AI 群聊
+    const val GIT_BRANCHES = "$BASE/git/branches"
     const val AI_GROUPS = "$BASE/ai-groups"
     const val AI_GROUP_MESSAGES = "$BASE/ai-groups/{groupId}/messages"
     const val AI_GROUP_MEMBERS = "$BASE/ai-groups/{groupId}/members"

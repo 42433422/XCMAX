@@ -140,6 +140,19 @@ data class AiGroupMessageBody(
     val message: String = "",
     val sender_name: String = "我",
     val mentions: List<String> = emptyList(),
+    val dispatch: Boolean = false,
+    val branch_context: String = "",
+    val branch: String = "",
+)
+
+data class GitBranchDto(
+    val name: String = "",
+    val current: Boolean = false,
+    val remote: Boolean = false,
+)
+
+data class GitBranchListData(
+    val branches: List<GitBranchDto> = emptyList(),
 )
 
 data class MeData(

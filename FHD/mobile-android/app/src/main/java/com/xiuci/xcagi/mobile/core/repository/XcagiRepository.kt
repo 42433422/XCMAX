@@ -19,6 +19,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.MarketAuthResponse
 import com.xiuci.xcagi.mobile.core.model.MarketLoginBody
@@ -1541,15 +1542,30 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    suspend fun loadGitBranches(): Result<List<GitBranchDto>> = aiGroupCall {
+        fhd().getGitBranches().let {
+            if (it.success) Result.success(it.data?.branches.orEmpty()) else fail(it)
+        }
+    }
+
     suspend fun postAiGroupMessage(
         groupId: String,
         message: String,
         mentions: List<String> = emptyList(),
         senderName: String = "我",
+        dispatch: Boolean = false,
+        branchContext: String = "",
     ): Result<AiGroupPostData> = aiGroupCall {
         fhd().postAiGroupMessage(
             groupId,
-            AiGroupMessageBody(message = message, sender_name = senderName, mentions = mentions),
+            AiGroupMessageBody(
+                message = message,
+                sender_name = senderName,
+                mentions = mentions,
+                dispatch = dispatch,
+                branch_context = branchContext,
+                branch = branchContext,
+            ),
         ).let { if (it.success) Result.success(it.data ?: AiGroupPostData()) else fail(it) }
     }
 

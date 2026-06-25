@@ -52,7 +52,6 @@ from app.application.super_employee_service import (
     _utc_now,
 )
 
-
 # ───────────────────── helpers ─────────────────────
 
 
@@ -1258,6 +1257,7 @@ class TestCommitAndPush:
             ok, msg = svc._commit_and_push(str(tmp_path), "branch", "task")
             assert ok is True
             assert "已 push" in msg
+            assert svc._git.call_args_list[-1].args[4] == "HEAD:branch"
 
     def test_exception_returns_false(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
@@ -1299,6 +1299,22 @@ class TestPrepareWorktree:
             wt_path, branch = result
             assert "super-employee/codex/" in branch
 
+    def test_worktree_add_selected_branch_uses_detached_ref(self, tmp_path) -> None:
+        svc = _make_svc(tmp_path, cli_runner=_null_runner)
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_result.stdout = ""
+        with patch.object(svc, "_is_git_repo", return_value=True), \
+             patch.object(svc, "_resolve_branch_ref", return_value="origin/feature/mobile"), \
+             patch.object(svc, "_git", return_value=mock_result) as mock_git:
+            result = svc._prepare_worktree(str(tmp_path), "task", "origin/feature/mobile")
+            assert result is not None
+            _, branch = result
+            assert branch == "feature/mobile"
+            assert "--detach" in mock_git.call_args.args
+            assert mock_git.call_args.args[-1] == "origin/feature/mobile"
+
     def test_worktree_add_exception(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         with patch.object(svc, "_is_git_repo", return_value=True), \
@@ -1315,6 +1331,19 @@ class TestRunDevTaskLoop:
         with patch.object(svc, "_prepare_worktree", return_value=None):
             result = svc._run_dev_task_loop("/fake/cli", "do task", str(tmp_path))
             assert "cli answer" in result
+
+    def test_selected_branch_worktree_fail_does_not_write_live_checkout(self, tmp_path) -> None:
+        svc = _make_svc(tmp_path, cli_runner=_stdout_runner("cli answer"))
+        with patch.object(svc, "_prepare_worktree", return_value=None), \
+             patch.object(svc, "_run_cli_once") as run_once:
+            result = svc._run_dev_task_loop(
+                "/fake/cli",
+                "do task",
+                str(tmp_path),
+                {"branch_context": "feature/mobile"},
+            )
+            assert "选中的工作分支不可用" in result
+            run_once.assert_not_called()
 
     def test_verify_fail_triggers_fix(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("fixed"))

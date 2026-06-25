@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -1601,6 +1603,182 @@ def _mobile_group_mode(request: Request) -> str:
     )
 
 
+def _clean_mobile_git_branch(raw: Any) -> str:
+    branch = str(raw or "").strip()
+    if branch.startswith("refs/heads/"):
+        branch = branch.removeprefix("refs/heads/")
+    if branch.startswith("refs/remotes/"):
+        branch = branch.removeprefix("refs/remotes/")
+    if branch.startswith("origin/"):
+        branch = branch.removeprefix("origin/")
+    branch = re.sub(r"[^A-Za-z0-9._/-]+", "-", branch)[:180].strip("/.")
+    if not branch or branch in {"HEAD", "origin/HEAD", ".", ".."}:
+        return ""
+    if ".." in branch or "//" in branch or "@{" in branch or branch.endswith(".lock"):
+        return ""
+    return branch
+
+
+def _mobile_branch_context_from_body(body: AiGroupMessageBody) -> str:
+    context_raw = getattr(body, "context", {})
+    context = context_raw if isinstance(context_raw, dict) else {}
+    return _clean_mobile_git_branch(
+        getattr(body, "branch_context", "")
+        or getattr(body, "branch", "")
+        or context.get("branch_context")
+        or context.get("branch")
+    )
+
+
+def _mobile_git_repo_root() -> Path | None:
+    candidates: list[Path] = []
+    for key in (
+        "XCMAX_REPO_ROOT",
+        "FHD_REPO_ROOT",
+        "DEVFLEET_REPO_ROOT",
+        "CODEX_WORKSPACE",
+        "WORKSPACE_ROOT",
+    ):
+        value = str(os.environ.get(key) or "").strip()
+        if value:
+            candidates.append(Path(value).expanduser())
+    candidates.append(Path.cwd())
+    candidates.extend(Path(__file__).resolve().parents)
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            roots = [candidate, *candidate.parents] if candidate.exists() else [candidate]
+        except RuntimeError:
+            roots = [candidate]
+        for root in roots:
+            if root in seen:
+                continue
+            seen.add(root)
+            if (root / ".git").exists():
+                return root
+    return None
+
+
+def _git_no_prompt_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
+    env.setdefault("GIT_ASKPASS", "true")
+    return env
+
+
+def _mobile_git_branches_from_repo(repo: Path) -> list[dict[str, Any]]:
+    current = ""
+    try:
+        cur = subprocess.run(
+            ["git", "-C", str(repo), "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=_git_no_prompt_env(),
+            check=False,
+        )
+        if cur.returncode == 0:
+            current = _clean_mobile_git_branch(cur.stdout)
+    except Exception:  # noqa: BLE001
+        current = ""
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/heads",
+                "refs/remotes/origin",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=_git_no_prompt_env(),
+            check=False,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    if result.returncode != 0:
+        return []
+    branches: dict[str, dict[str, Any]] = {}
+    for line in result.stdout.splitlines():
+        raw = line.strip()
+        if not raw or raw == "origin/HEAD":
+            continue
+        remote = raw.startswith("origin/")
+        name = _clean_mobile_git_branch(raw)
+        if not name:
+            continue
+        row = branches.setdefault(name, {"name": name, "current": False, "remote": False})
+        row["current"] = bool(row["current"] or name == current)
+        row["remote"] = bool(row["remote"] or remote)
+    return _sort_mobile_git_branches(branches.values())
+
+
+def _mobile_git_branches_from_remote() -> list[dict[str, Any]]:
+    remote_url = str(
+        os.environ.get("XCMAX_GIT_REMOTE_URL")
+        or os.environ.get("FHD_GIT_REMOTE_URL")
+        or "https://github.com/42433422/XCMAX.git"
+    ).strip()
+    if not remote_url:
+        return []
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--heads", remote_url],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=_git_no_prompt_env(),
+            check=False,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    if result.returncode != 0:
+        return []
+    branches: dict[str, dict[str, Any]] = {}
+    for line in result.stdout.splitlines():
+        if "refs/heads/" not in line:
+            continue
+        name = _clean_mobile_git_branch(line.rsplit("refs/heads/", 1)[-1])
+        if name:
+            branches[name] = {"name": name, "current": False, "remote": True}
+    return _sort_mobile_git_branches(branches.values())
+
+
+def _sort_mobile_git_branches(rows) -> list[dict[str, Any]]:
+    branches = list(rows)
+    branches.sort(
+        key=lambda item: (
+            not bool(item.get("current")),
+            0 if item.get("name") in {"main", "master"} else 1,
+            str(item.get("name") or "").lower(),
+        )
+    )
+    return branches[:200]
+
+
+@extension_router.get("/git/branches")
+async def mobile_git_branches(request: Request, user=Depends(get_mobile_user)):
+    """列出手机端可选工作分支：优先本地 repo，部署包无 .git 时退到远端 heads。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    try:
+        repo = _mobile_git_repo_root()
+        branches = _mobile_git_branches_from_repo(repo) if repo else []
+        if not branches:
+            branches = _mobile_git_branches_from_remote()
+        return format_mobile_response(data={"branches": branches})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_git_branches")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
 @extension_router.get("/ai-groups")
 async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user)):
     """列出当前用户的 AI 群聊（首次自动按 6 个部门种出 6 个群）。"""
@@ -1693,6 +1871,7 @@ async def mobile_ai_group_post(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
+        branch_context = _mobile_branch_context_from_body(body)
         result = await AiGroupChatService(mode=_mobile_group_mode(request)).post_message(
             user_id=uid,
             group_id=group_id,
@@ -1700,6 +1879,7 @@ async def mobile_ai_group_post(
             sender_name=body.sender_name or "我",
             mentions=body.mentions,
             dispatch=bool(body.dispatch),
+            branch_context=branch_context,
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
