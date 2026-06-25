@@ -161,6 +161,22 @@ def _ensure_mobile_device_table() -> None:
         logger.warning("mobile_device_tokens ensure: %s", exc)
 
 
+def _ensure_outbox_table() -> None:
+    try:
+        from sqlalchemy import inspect
+
+        from app.db.models.mobile_notification import MobileNotificationOutbox
+        from app.db.session import get_db
+
+        with get_db() as db:
+            bind = db.get_bind()
+            insp = inspect(bind)
+            if not insp.has_table(MobileNotificationOutbox.__tablename__):
+                MobileNotificationOutbox.__table__.create(bind, checkfirst=True)
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("mobile_notification_outbox ensure: %s", exc)
+
+
 # ── 中继用户解析（使用 RECOVERABLE_ERRORS，需留在主模块以支持测试 patch） ──
 
 
@@ -765,6 +781,56 @@ async def mobile_device_unregister(
             MobileDeviceToken.fcm_token == fcm_token.strip(),
         ).delete()
     return format_mobile_response(data={"unregistered": True})
+
+
+@extension_router.get("/notifications/pending")
+async def mobile_notifications_pending(
+    limit: int = Query(50, ge=1, le=200),
+    user=Depends(get_mobile_user),
+):
+    """自建推送后台通道:返回未送达的离线通知并标记 delivered（客户端 WorkManager 轮询）。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    _ensure_outbox_table()
+    import json as _json
+
+    from app.db.models.mobile_notification import MobileNotificationOutbox
+    from app.db.session import get_db
+    from app.utils.time import utc_now_naive
+
+    items: list[dict] = []
+    with get_db() as db:
+        rows = (
+            db.query(MobileNotificationOutbox)
+            .filter(
+                MobileNotificationOutbox.user_id == user.id,
+                MobileNotificationOutbox.delivered.is_(False),
+            )
+            .order_by(MobileNotificationOutbox.created_at.asc())
+            .limit(limit)
+            .all()
+        )
+        now = utc_now_naive()
+        for r in rows:
+            try:
+                data = _json.loads(r.data_json or "{}")
+            except (ValueError, TypeError):
+                data = {}
+            items.append(
+                {
+                    "id": r.id,
+                    "title": r.title,
+                    "body": r.body,
+                    "route": r.route,
+                    "channel": r.channel,
+                    "data": data,
+                }
+            )
+            r.delivered = True
+            r.delivered_at = now
+    return format_mobile_response(data={"notifications": items})
 
 
 # ── 配对 ──
