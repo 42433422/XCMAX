@@ -88,6 +88,29 @@ def test_sync_duty_roster_targets_in_sync():
     )
 
 
+# ── 跨部署副本守卫：codegen 文件在 FHD/MODstore ↔ MODstore_deploy 间不漂移 ──
+# MODstore_deploy(独立部署包)与 FHD/MODstore 各持一份 duty_roster.py,二者都是
+# 从同一 SSOT(config/duty_roster.json)codegen 生成,必须逐字节一致。sync 生成器的
+# 5 目标只覆盖 FHD 侧,deploy 副本不在其列——本守卫补上跨部署边界这一段,防止
+# 只重生成 FHD 副本而 deploy 副本悄悄漂移。deploy 包缺失(FHD-only 检出)则跳过。
+_MODSTORE_DEPLOY = REPO / "成都修茈科技有限公司" / "MODstore_deploy"
+
+
+def test_modstore_deploy_duty_roster_no_drift():
+    deploy_copy = _MODSTORE_DEPLOY / "modstore_server" / "duty_roster.py"
+    if not deploy_copy.is_file():
+        import pytest
+
+        pytest.skip("MODstore_deploy 不在本检出中(独立部署包),跳过跨部署副本守卫")
+    fhd_copy = FHD / "MODstore" / "modstore_server" / "duty_roster.py"
+    assert fhd_copy.is_file(), "FHD/MODstore/modstore_server/duty_roster.py 缺失"
+    assert deploy_copy.read_bytes() == fhd_copy.read_bytes(), (
+        "duty_roster.py 在 FHD/MODstore 与 MODstore_deploy 间已漂移:二者均 codegen 自 "
+        "config/duty_roster.json,须同步重生成。先 python scripts/dev/sync_duty_roster.py "
+        "--generate,再把 FHD/MODstore/modstore_server/duty_roster.py 同步到 MODstore_deploy。"
+    )
+
+
 # ── 守卫：前端 EMP_ID_LAYER 不得与 SSOT enterprise_employees 重叠 ──────────
 def test_frontend_emp_id_layer_no_overlap_with_ssot():
     import re

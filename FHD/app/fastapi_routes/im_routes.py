@@ -178,6 +178,31 @@ def im_list_contacts(
         db.close()
 
 
+@router.get("/api/im/fixed-contacts")
+def im_fixed_contacts(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """桌面端消息页固定联系人组成(surface SSOT: device=desktop × side)。
+
+    side 由 session 判定:管理端(admin)= 平台员工 + 超级员工;企业端(enterprise) 再含专属客服。
+    返回 {device, side, top, bottom}(以 platform 为界切分),前端按
+    top + 平台员工(动态) + bottom 拼装,顺序即 surface_composition 声明序。
+    """
+    _ensure_schema()
+    db = HostSessionLocal()
+    try:
+        side = "admin" if _is_admin_customer_service_session(request, db) else "enterprise"
+        from app.application.surface_contacts import fixed_contacts
+
+        return {"success": True, **fixed_contacts("desktop", side)}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("im_fixed_contacts")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
 @router.get("/api/im/unread-total")
 def im_unread_total(
     request: Request,
