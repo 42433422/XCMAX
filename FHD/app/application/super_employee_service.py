@@ -1670,8 +1670,15 @@ class SuperEmployeeService:
         return raw not in {"0", "false", "off", "disabled"}
 
     def _git(self, cwd: str, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess:
+        env = os.environ.copy()
+        env.setdefault("GIT_TERMINAL_PROMPT", "0")
+        env.setdefault("GIT_ASKPASS", "true")
         return subprocess.run(
-            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=timeout
+            ["git", "-C", cwd, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
         )
 
     def _is_git_repo(self, cwd: str) -> bool:

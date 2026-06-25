@@ -1876,6 +1876,19 @@ class TestIsGitRepoBoundary:
             )
             assert svc._is_git_repo(str(tmp_path)) is True
 
+    def test_git_runs_without_interactive_prompts(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GIT_TERMINAL_PROMPT", raising=False)
+        monkeypatch.delenv("GIT_ASKPASS", raising=False)
+        svc = _make_svc(tmp_path)
+        with patch("app.application.super_employee_service.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                [], 0, stdout="true", stderr=""
+            )
+            svc._git(str(tmp_path), "status")
+        env = mock_run.call_args.kwargs["env"]
+        assert env["GIT_TERMINAL_PROMPT"] == "0"
+        assert env["GIT_ASKPASS"] == "true"
+
 
 # ─────────────── _clean_cli_stdout ───────────────────────────────
 
