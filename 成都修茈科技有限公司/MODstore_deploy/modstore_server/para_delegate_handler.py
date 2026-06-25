@@ -528,9 +528,7 @@ def _select_local_device(devices: list, tool_name: str) -> list:
     """一级：只挑「本机」一台。配置 MODSTORE_PARA_DEVICE_ID → is_primary → 首台合格。
     识别到的本机若不合格(离线/工具未装/占用)则返空，由上层升二级。"""
     local_id = (
-        os.environ.get("MODSTORE_PARA_DEVICE_ID")
-        or os.environ.get("DEVFLEET_DEVICE_ID")
-        or ""
+        os.environ.get("MODSTORE_PARA_DEVICE_ID") or os.environ.get("DEVFLEET_DEVICE_ID") or ""
     ).strip()
     if local_id:
         for item in devices:
@@ -551,9 +549,7 @@ def _select_fleet_devices(devices: list, req: Dict[str, Any], tool_name: str) ->
     raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
     target = raw.get("target_devices")
     targets = (
-        {str(x).strip() for x in target if str(x).strip()}
-        if isinstance(target, list)
-        else {"all"}
+        {str(x).strip() for x in target if str(x).strip()} if isinstance(target, list) else {"all"}
     )
     candidates: list = []
     for item in devices:

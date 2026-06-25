@@ -21,7 +21,6 @@ from modstore_server.mobile_release_loop import LoopDeps, run_mobile_release_loo
 from modstore_server.release_consensus import ReadinessVerdict
 from modstore_server.release_version_discovery import PlatformDiff, ReleaseProposal
 
-
 # ── mobile_ota ─────────────────────────────────────────────────────────────
 
 
@@ -47,7 +46,9 @@ def test_android_download_url_shape():
 
 def test_set_platform_release_writes_block(tmp_path, monkeypatch):
     p = tmp_path / "download_release.json"
-    p.write_text(json.dumps({"marketing_version": "10.0.0", "android_version": "10.0.0"}), encoding="utf-8")
+    p.write_text(
+        json.dumps({"marketing_version": "10.0.0", "android_version": "10.0.0"}), encoding="utf-8"
+    )
     monkeypatch.setattr(mobile_ota.download_release, "write_public_manifests", lambda rel: [])
     res = mobile_ota.set_platform_release(
         "harmony", latest_code=100100, latest_name="10.1.0", path=p
@@ -72,7 +73,9 @@ def test_discover_from_version_md_text():
 
 
 def test_discover_override_wins():
-    prop = release_version_discovery.discover_target(target_override="11.0.0", version_md_text="", rel={})
+    prop = release_version_discovery.discover_target(
+        target_override="11.0.0", version_md_text="", rel={}
+    )
     assert prop.target_version == "11.0.0" and prop.source == "override"
 
 
@@ -180,7 +183,9 @@ def _deps(**over) -> LoopDeps:
 
     base = dict(
         discover=lambda: _proposal(),
-        readiness=lambda p, prop: ReadinessVerdict(p, True, prop.diff_for(p).current_name, prop.target_version),
+        readiness=lambda p, prop: ReadinessVerdict(
+            p, True, prop.diff_for(p).current_name, prop.target_version
+        ),
         bump_version=lambda t: True,
         request_approval=lambda rec: True,
         build=build,
@@ -195,7 +200,10 @@ def _deps(**over) -> LoopDeps:
 
 def test_loop_shadow_aligned_stops_before_irreversible():
     calls: Dict[str, Any] = {}
-    deps = _deps(_calls=calls, build=lambda p, t: (_ for _ in ()).throw(AssertionError("build 不该在 shadow 调用")))
+    deps = _deps(
+        _calls=calls,
+        build=lambda p, t: (_ for _ in ()).throw(AssertionError("build 不该在 shadow 调用")),
+    )
     res = run_mobile_release_loop(deps, mode="shadow")
     assert res["status"] == "shadow_aligned" and res["consensus"] == "aligned"
     assert res["per_platform"] == []  # 未触发构建
@@ -203,7 +211,9 @@ def test_loop_shadow_aligned_stops_before_irreversible():
 
 def test_loop_blocked_when_platform_not_ready():
     deps = _deps(
-        readiness=lambda p, prop: ReadinessVerdict(p, p != "harmony", blockers=[] if p != "harmony" else ["构建未绿"])
+        readiness=lambda p, prop: ReadinessVerdict(
+            p, p != "harmony", blockers=[] if p != "harmony" else ["构建未绿"]
+        )
     )
     res = run_mobile_release_loop(deps, mode="primary")
     assert res["status"] == "blocked" and res["ok"] is False

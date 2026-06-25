@@ -36,7 +36,9 @@ class DispatchResult:
 HttpFn = Callable[..., Dict[str, Any]]
 
 
-def _default_http_post(url: str, *, json_body: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
+def _default_http_post(
+    url: str, *, json_body: Dict[str, Any], headers: Dict[str, str]
+) -> Dict[str, Any]:
     import httpx
 
     r = httpx.post(url, json=json_body, headers=headers, timeout=30.0)
@@ -95,7 +97,9 @@ class CiDispatcher:
             return DispatchResult(False, workflow, ref, error="repo 未配置")
         url = f"{_API}/repos/{self.repo}/actions/workflows/{workflow}/dispatches"
         try:
-            resp = self._post(url, json_body={"ref": ref, "inputs": inputs}, headers=self._headers())
+            resp = self._post(
+                url, json_body={"ref": ref, "inputs": inputs}, headers=self._headers()
+            )
         except Exception as e:  # noqa: BLE001
             return DispatchResult(False, workflow, ref, error=f"dispatch 异常：{str(e)[:200]}")
         status = int(resp.get("status") or 0)

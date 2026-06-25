@@ -16,7 +16,6 @@ from typing import Any, Dict, List, Tuple
 from sqlalchemy import func
 
 from modstore_server.employee_executor import execute_employee_task
-from modstore_server.platform_llm_scope import platform_llm_scoped
 from modstore_server.models import (
     CatalogItem,
     EmployeeExecutionMetric,
@@ -26,6 +25,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
 

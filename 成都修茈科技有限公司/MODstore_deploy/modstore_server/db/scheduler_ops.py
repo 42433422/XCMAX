@@ -30,9 +30,7 @@ class JobRun(Base):
     error = Column(Text, nullable=False, default="")
     # 集群下记录是哪个节点跑的（来自 node_coordinator）；单机留空。
     node_id = Column(String(64), nullable=False, default="")
-    created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc), index=True
-    )
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 
 __all__ = ["JobRun"]
