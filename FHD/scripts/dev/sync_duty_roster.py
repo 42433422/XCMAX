@@ -36,7 +36,8 @@ SSOT_JSON = FHD / "config" / "duty_roster.json"
 MANIFESTS_DIR = FHD / "mods" / "_employees"
 
 TARGETS = {
-    "modstore": FHD / "MODstore" / "modstore_server" / "duty_roster.py",
+    # FHD/MODstore 废弃树已删除（见 upbeat-albattani 整合）；真身 = MODstore_deploy。
+    "modstore": ROOT / "成都修茈科技有限公司" / "MODstore_deploy" / "modstore_server" / "duty_roster.py",
     "frontend": FHD / "frontend" / "src" / "domain" / "yuangonDutyRoster.ts",
     "catalog": FHD / "app" / "infrastructure" / "mods" / "catalog_visibility.py",
     "mobile": FHD
