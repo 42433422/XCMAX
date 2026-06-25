@@ -59,6 +59,7 @@ def _daily_pipeline_lock_wait_seconds(stage: str) -> int:
 
 def _run_daily_pipeline_stage(stage: str, fn: Callable[[], Any]) -> Any:
     from modstore_server.daily_pipeline_lock import acquire_daily_pipeline_lock
+    from modstore_server.scheduler_runtime import record_skip, track_job_run
 
     wait_seconds = _daily_pipeline_lock_wait_seconds(stage)
     with acquire_daily_pipeline_lock(stage=stage, timeout_seconds=wait_seconds) as lock:
@@ -69,8 +70,12 @@ def _run_daily_pipeline_stage(stage: str, fn: Callable[[], Any]) -> Any:
                 lock.get("reason"),
                 wait_seconds,
             )
+            record_skip(stage, reason=str(lock.get("reason") or ""))
             return {"ok": True, "skipped": True, **lock}
-        return fn()
+        # Record every stage run to the job-run ledger so a silently stalled stage
+        # (digest frozen while the heartbeat keeps pulsing) surfaces via last_success.
+        with track_job_run(stage):
+            return fn()
 
 
 def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> None:

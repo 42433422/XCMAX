@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.contexts.flags import is_event_primary_enabled
-from app.neuro_async_bridge import run_coroutine_on_neuro_loop
+from app.neuro_async_bridge import get_neuro_main_loop, run_coroutine_on_neuro_loop
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.command_gateway import get_command_gateway
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
@@ -20,12 +20,43 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _neuro_runtime_ready() -> bool:
+    """True only when the bus is actually serving on a reachable loop.
+
+    Fail-safe guard for the foot-gun where ``XCAGI_EVENT_PRIMARY`` is enabled in a
+    deployment that runs without the NeuroBus loop (e.g. ``XCAGI_NEURO_INTENT=0``):
+    without this, a shipment write would dispatch onto a dead bus and return
+    ``success=False`` instead of degrading to the proven direct path.
+    """
+    if get_neuro_main_loop() is None:
+        return False
+    try:
+        return bool(get_neuro_bus().is_running)
+    except RECOVERABLE_ERRORS:
+        return False
+
+
 class ShipmentApplicationServiceEventPrimary:
     def __init__(self, core: ShipmentApplicationService) -> None:
         self._core = core
 
     def __getattr__(self, name: str):
         return getattr(self._core, name)
+
+    def _use_bus(self, op: str) -> bool:
+        """Route through NeuroBus only when event-primary is on AND the bus is live.
+
+        When the flag is on but the bus is down, degrade to the core path with a loud
+        warning so the degraded state is observable rather than a silent write failure.
+        """
+        if not is_event_primary_enabled("shipment"):
+            return False
+        if not _neuro_runtime_ready():
+            logger.warning(
+                "event-primary enabled but NeuroBus not ready; %s falls back to core path", op
+            )
+            return False
+        return True
 
     async def _dispatch_command(
         self, event_type: str, payload: dict, timeout: float = 120.0
@@ -56,7 +87,7 @@ class ShipmentApplicationServiceEventPrimary:
         contact_person: str = "",
         contact_phone: str = "",
     ) -> dict[str, Any]:
-        if not is_event_primary_enabled("shipment"):
+        if not self._use_bus("shipment.create"):
             return self._core.create_shipment(unit_name, items_data, contact_person, contact_phone)
         payload = {
             "shipment_id": f"PENDING-{uuid.uuid4().hex[:12]}",
@@ -71,7 +102,7 @@ class ShipmentApplicationServiceEventPrimary:
         )
 
     def cancel_shipment(self, shipment_id: int) -> dict[str, Any]:
-        if not is_event_primary_enabled("shipment"):
+        if not self._use_bus("shipment.cancel"):
             return self._core.cancel_shipment(shipment_id)
         return cast(
             dict[str, Any],
@@ -84,7 +115,7 @@ class ShipmentApplicationServiceEventPrimary:
         )
 
     def delete_shipment(self, shipment_id: int) -> dict[str, Any]:
-        if not is_event_primary_enabled("shipment"):
+        if not self._use_bus("shipment.delete"):
             return self._core.delete_shipment(shipment_id)
         return cast(
             dict[str, Any],
@@ -92,7 +123,7 @@ class ShipmentApplicationServiceEventPrimary:
         )
 
     def mark_as_printed(self, shipment_id: int, printer_name: str = "") -> dict[str, Any]:
-        if not is_event_primary_enabled("shipment"):
+        if not self._use_bus("shipment.print"):
             return self._core.mark_as_printed(shipment_id, printer_name)
         return cast(
             dict[str, Any],

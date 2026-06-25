@@ -43,7 +43,12 @@ services:
       PYTHONPATH: /app
       XCAGI_UVICORN_RELOAD: "0"
       XCAGI_ENV: production
-      FHD_SKIP_ALEMBIC: ${FHD_SKIP_ALEMBIC:-1}
+      # Alembic head is the single source of truth for any real DB. The entrypoint
+      # runs `alembic upgrade head` only when DATABASE_URL is non-empty, so this
+      # default of 0 leaves the SQLite single-host path (empty DATABASE_URL) on
+      # create_all+ensure while ensuring a Postgres DATABASE_URL is actually
+      # migrated rather than silently skipped. Matches helm values-prod.yaml.
+      FHD_SKIP_ALEMBIC: ${FHD_SKIP_ALEMBIC:-0}
       DATABASE_URL: ${DATABASE_URL:-}
       VECTOR_DB_URL: ${VECTOR_DB_URL:-}
     env_file:
