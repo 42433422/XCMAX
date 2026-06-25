@@ -120,6 +120,7 @@ jobs:
             echo "已配置正式签名 keystore"
           fi
       - name: Assemble Release (enterprise only)
+        id: assemble
         env:
           XCAGI_ANDROID_KEYSTORE: ${{ steps.signing.outputs.configured == 'true' && 'signing/xcagi-release.jks' || '' }}
           XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -127,9 +128,25 @@ jobs:
           XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           XCAGI_REQUIRE_RELEASE_SIGNING: ${{ steps.signing.outputs.configured == 'true' && '1' || '0' }}
         run: |
+          # 治根:stamp 真实递增 versionCode(构建时间戳),让 OTA 自更新能合法触发。
+          # 之前 versionCode 写死 10、永不递增,是「永久发现新版本」假提示的根因。
+          # versionName 不在此覆盖,守 VERSION.md 的 v10 锚点(build.gradle 默认 10.0.0)。
+          VCODE=$(date +%s)
+          echo "android_version_code=$VCODE" >> "$GITHUB_OUTPUT"
           ./gradlew assembleEnterpriseRelease \
+            -PandroidVersionCode="$VCODE" \
             -PuploadCrashlyticsMapping=${{ github.event.inputs.upload_crashlytics_mapping == true && 'true' || 'false' }} \
             --no-daemon
+          {
+            echo "### 📱 Android release versionCode = \`$VCODE\`"
+            echo ""
+            echo "部署时**必须**把服务器 \`.env\` 设为同一个数,否则装机后仍会无限「发现新版本」:"
+            echo '```'
+            echo "XCAGI_ANDROID_LATEST_VERSION_CODE=$VCODE"
+            echo "XCAGI_ANDROID_MIN_VERSION_CODE=10"
+            echo "XCAGI_ANDROID_LATEST_VERSION_NAME=${{ steps.release_version.outputs.version }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Stage mobile package distribution
         run: |
           bash ../mobile-harmony/scripts/stage-release-packages.sh \
