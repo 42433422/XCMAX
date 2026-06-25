@@ -828,7 +828,7 @@ constructor(
                     .onFailure { snack("群消息加载失败", true) }
             }
 
-    fun sendGroupMessage(groupId: String, text: String, mentions: List<String> = emptyList()) {
+    fun sendGroupMessage(groupId: String, text: String, mentions: List<String> = emptyList(), dispatch: Boolean = false) {
         val body = text.trim()
         if (body.isBlank() || _groupSending.value) return
         // 本地先回显用户消息
@@ -842,7 +842,7 @@ constructor(
         )
         _groupSending.value = true
         viewModelScope.launch {
-            repo.postAiGroupMessage(groupId, body, mentions)
+            repo.postAiGroupMessage(groupId, body, mentions, dispatch = dispatch)
                 .onSuccess { data ->
                     // 用服务端权威消息替换尾部（去掉本地回显，拼接服务端返回的 user+ai）
                     val withoutLocalTail = _groupMessages.value.dropLastWhile { it.id.startsWith("local-") }
