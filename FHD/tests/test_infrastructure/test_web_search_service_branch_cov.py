@@ -396,6 +396,15 @@ class TestSerpapiSearch:
 
 
 class TestKittenWebSearchExtra:
+    @pytest.fixture(autouse=True)
+    def _reset_rate_buckets(self) -> Any:
+        """每个测试前清空全局 rate buckets，避免状态污染。"""
+        import app.infrastructure.web_search.service as web_search_mod
+        old = web_search_mod._rate_buckets.copy()
+        web_search_mod._rate_buckets.clear()
+        yield
+        web_search_mod._rate_buckets = old
+
     @pytest.mark.asyncio
     async def test_query_truncated_to_max_len(self) -> None:
         long_query = "x" * 500
