@@ -17,7 +17,8 @@ ANCHORS: list[tuple[str, str]] = [
     ("package.json", r'"version"\s*:\s*"([\d.]+)"'),
     ("app/fastapi_app/factory.py", r'version="([\d.]+)"'),
     ("app/infrastructure/mods/manifest.py", r'current_version\s*=\s*"([\d.]+)"'),
-    ("mobile-android/app/build.gradle.kts", r'versionName\s*=\s*"([\d.]+)"'),
+    # versionName 可由 CI 注入(-PandroidVersionName)以 stamp 发版名;v10 锚点体现在 fallback 默认值。
+    ("mobile-android/app/build.gradle.kts", r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"'),
 ]
 
 
