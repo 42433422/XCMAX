@@ -1546,10 +1546,16 @@ class XcagiRepository @Inject constructor(
         message: String,
         mentions: List<String> = emptyList(),
         senderName: String = "我",
+        dispatch: Boolean = false,
     ): Result<AiGroupPostData> = aiGroupCall {
         fhd().postAiGroupMessage(
             groupId,
-            AiGroupMessageBody(message = message, sender_name = senderName, mentions = mentions),
+            AiGroupMessageBody(
+                message = message,
+                sender_name = senderName,
+                mentions = mentions,
+                dispatch = dispatch,
+            ),
         ).let { if (it.success) Result.success(it.data ?: AiGroupPostData()) else fail(it) }
     }
 

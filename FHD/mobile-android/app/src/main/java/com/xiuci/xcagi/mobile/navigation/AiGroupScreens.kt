@@ -78,6 +78,8 @@ import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.core.model.AiGroupDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDraft
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
+import com.xiuci.xcagi.mobile.core.model.AiGroupBubbleTone
+import com.xiuci.xcagi.mobile.core.model.AiGroupMessageUi
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
@@ -418,6 +420,7 @@ fun AiGroupChatScreen(
     val allEmployees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
     var input by remember { mutableStateOf("") }
     var showMembers by remember { mutableStateOf(false) }
+    var dispatchMode by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val haptics = rememberHaptics()
     val g = group
@@ -504,11 +507,13 @@ fun AiGroupChatScreen(
                 value = input,
                 onValueChange = { input = it },
                 sending = sending,
+                dispatchMode = dispatchMode,
+                onToggleDispatch = { dispatchMode = !dispatchMode },
                 onVoice = { startGroupVoice() },
                 onSend = {
                     if (g != null && input.isNotBlank()) {
                         haptics.confirm()
-                        vm.sendGroupMessage(g.id, input.trim())
+                        vm.sendGroupMessage(g.id, input.trim(), dispatch = dispatchMode)
                         input = ""
                     }
                 },
@@ -548,7 +553,7 @@ fun AiGroupChatScreen(
                     GroupBubble(message = m, userAvatarUrl = userAvatar)
                 }
                 if (sending) {
-                    item { GroupTypingRow() }
+                    item { GroupTypingRow(dispatchMode = dispatchMode) }
                 }
             }
         }
@@ -558,6 +563,16 @@ fun AiGroupChatScreen(
 @Composable
 private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
     val isUser = message.role == "user"
+    val ui = AiGroupMessageUi.resolve(message.kind, message.status, message.body)
+    val bubbleColor =
+        when (ui.bubbleTone) {
+            AiGroupBubbleTone.DISCUSSION -> Color(0xFFFAF5FF)
+            AiGroupBubbleTone.ROUTING -> Color(0xFFF0FDFA)
+            AiGroupBubbleTone.WORK -> Color(0xFFF7FBFF)
+            AiGroupBubbleTone.ACCEPTANCE -> Color(0xFFF0FDF4)
+            AiGroupBubbleTone.ACCEPTANCE_REVIEW -> Color(0xFFFFF7ED)
+            AiGroupBubbleTone.CHAT -> MaterialTheme.colorScheme.surface
+        }
     Row(
         Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -581,6 +596,24 @@ private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
                     modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
                 )
             }
+            if (!isUser && ui.badge.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (ui.needsReview) Color(0xFFFFF7ED) else Color(0xFFEEF4FF),
+                    border = androidx.compose.foundation.BorderStroke(
+                        0.5.dp,
+                        if (ui.needsReview) Color(0xFFFED7AA) else Color(0xFFC9DCFF),
+                    ),
+                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                ) {
+                    Text(
+                        ui.badge,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (ui.needsReview) Color(0xFFB45309) else Color(0xFF245BDB),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
             Surface(
                 modifier = Modifier.widthIn(max = 260.dp),
                 shape = RoundedCornerShape(
@@ -589,7 +622,7 @@ private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
                     bottomStart = 12.dp,
                     bottomEnd = 12.dp,
                 ),
-                color = if (isUser) XcagiTheme.extra.chatUserBubble else MaterialTheme.colorScheme.surface,
+                color = if (isUser) XcagiTheme.extra.chatUserBubble else bubbleColor,
                 shadowElevation = 1.dp,
                 tonalElevation = 0.5.dp,
             ) {
@@ -614,7 +647,8 @@ private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
 }
 
 @Composable
-private fun GroupTypingRow() {
+private fun GroupTypingRow(dispatchMode: Boolean) {
+    val label = AiGroupMessageUi.sendingLabel(dispatchMode)
     Row(
         Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
         verticalAlignment = Alignment.Top,
@@ -639,7 +673,7 @@ private fun GroupTypingRow() {
                 CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    "AI 成员正在回复…",
+                    label,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -653,10 +687,13 @@ private fun GroupInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     sending: Boolean,
+    dispatchMode: Boolean,
+    onToggleDispatch: () -> Unit,
     onVoice: () -> Unit,
     onSend: () -> Unit,
 ) {
     val canSend = value.isNotBlank() && !sending
+    val placeholder = if (dispatchMode) "派工给群成员（@成员 可点对点派工）" else "发群消息（@成员 可单独点名）"
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Column {
             HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -677,6 +714,21 @@ private fun GroupInputBar(
                     )
                 }
                 Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (dispatchMode) Color(0xFFEEF4FF) else MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .height(32.dp)
+                        .clickable(enabled = !sending, onClick = onToggleDispatch),
+                ) {
+                    Box(Modifier.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "派工",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (dispatchMode) Color(0xFF245BDB) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.background,
                     modifier = Modifier.weight(1f).height(40.dp),
@@ -691,7 +743,7 @@ private fun GroupInputBar(
                         decorationBox = { inner ->
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                                 if (value.isEmpty()) {
-                                    Text("发群消息（@成员 可单独点名）", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(placeholder, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 inner()
                             }
