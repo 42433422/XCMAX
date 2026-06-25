@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """触点/授权类 AI 员工：商店上架与种子安装（无 host_foundation 依赖，便于生产增量部署）。"""
 
 from __future__ import annotations

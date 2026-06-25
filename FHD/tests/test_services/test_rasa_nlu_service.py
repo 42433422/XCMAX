@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """RASA NLU 深度落地单元测试。
 
 对标 reviewer 提出的"RASA 仅停留在配置阶段，未看到深度落地证据"：本组

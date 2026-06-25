@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_pack 工具执行（委托 employee_runtime.executor）。"""
 
 from __future__ import annotations

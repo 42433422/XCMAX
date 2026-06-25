@@ -153,6 +153,18 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "meetings",
+        lambda: __import__("app.fastapi_routes.meeting_routes", fromlist=["router"]).router,
+    )
+    _mount(
+        registry,
+        "meetings_mobile",
+        lambda: (
+            __import__("app.fastapi_routes.meeting_routes", fromlist=["mobile_router"]).mobile_router
+        ),
+    )
+    _mount(
+        registry,
         "mobile_api",
         lambda: __import__("app.fastapi_routes.mobile_api", fromlist=["router"]).router,
     )

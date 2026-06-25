@@ -15,6 +15,7 @@ export struct ChatPage {
   @Consume loading: boolean;
   @Consume selectedTab: number;
   @Consume selectedEmployeeKey: string;
+  @Consume superDispatchMode: string;
 
   onSendChatMessage: () => void = () => {};
 
@@ -88,12 +89,15 @@ export struct ChatPage {
       .layoutWeight(1);
 
       Column({ space: 8 }) {
-        Row({ space: 8 }) {
-          this.ModeChip('快速', true);
-          this.ModeChip('深度', false);
-          this.ModeChip('识图', false);
+        // 派工模式三态控件：仅超级员工会话（super:*）显示。替代后端关键词自动判断。
+        if (this.activeConversationId.indexOf('super:') === 0) {
+          Row({ space: 8 }) {
+            this.ModeChip('自动', 'auto');
+            this.ModeChip('直答', 'chat');
+            this.ModeChip('多设备', 'code');
+          }
+          .width('100%');
         }
-        .width('100%');
 
         Row({ space: 10 }) {
           TextInput({ placeholder: '发送消息', text: this.chatInput })
@@ -163,14 +167,19 @@ export struct ChatPage {
     .padding({ top: index === 0 ? 0 : 2 });
   }
 
+  // 派工模式 chip：点击切换 superDispatchMode（auto/chat/code），高亮当前选中。
   @Builder
-  ModeChip(label: string, active: boolean) {
+  ModeChip(label: string, value: string) {
     Text(label)
       .fontSize(12)
-      .fontColor(active ? '#1D4ED8' : '#4B5563')
+      .fontColor(this.superDispatchMode === value ? '#1D4ED8' : '#4B5563')
       .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-      .backgroundColor(active ? '#E8F0FF' : '#FFFFFF')
+      .backgroundColor(this.superDispatchMode === value ? '#E8F0FF' : '#FFFFFF')
       .borderRadius(10)
-      .border({ width: 1, color: active ? '#C7D7FE' : '#E5E7EB' });
+      .border({ width: 1, color: this.superDispatchMode === value ? '#C7D7FE' : '#E5E7EB' })
+      .onClick(() => {
+        this.superDispatchMode = value;
+      });
   }
+
 }

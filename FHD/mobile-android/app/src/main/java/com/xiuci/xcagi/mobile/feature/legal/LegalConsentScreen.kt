@@ -81,7 +81,7 @@ fun LegalConsentScreen(
             ) {
                 Image(
                     painter = painterResource(R.mipmap.ic_launcher_foreground),
-                    contentDescription = null,
+                    contentDescription = "XCAGI 企业智能工作平台",
                     modifier = Modifier.size(64.dp),
                     contentScale = ContentScale.Fit,
                 )

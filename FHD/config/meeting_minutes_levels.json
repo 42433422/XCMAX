@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "description": "会议纪要 SSOT 三级派生定义（标签 + 派生关系）。后端与三端前端共读此真相源；prompt 不在此处，留在代码 app/services/meeting_minutes/pipeline.py。",
+  "levels": [
+    {
+      "id": "level1_script",
+      "label": "剧本式实录",
+      "short": "剧本",
+      "derives_from": "raw",
+      "hint": "清洗口语转写、标注说话人，整理成剧本/对白式会议实录。这是真相源。"
+    },
+    {
+      "id": "level2_architecture",
+      "label": "架构图式总结",
+      "short": "架构图",
+      "derives_from": "level1_script",
+      "hint": "从剧本派生议题/决策/行动项/依赖，渲染成 Mermaid 架构图 + 提纲。",
+      "render": "mermaid"
+    },
+    {
+      "id": "level3_plain",
+      "label": "说人话",
+      "short": "说人话",
+      "derives_from": "level2_architecture",
+      "hint": "把架构图的抽象节点换成日常生活的事物与大白话来讲，作为架构图的人话版替代呈现。"
+    }
+  ]
+}

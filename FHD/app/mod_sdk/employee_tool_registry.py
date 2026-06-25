@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """已安装 employee_pack → OpenAI function 工具注册表（Planner / workflow 合并）。"""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """所有 Mod 物理视图不得使用 ``../`` 相对 import。"""
 
 from __future__ import annotations

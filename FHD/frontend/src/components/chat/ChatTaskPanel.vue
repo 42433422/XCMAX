@@ -27,8 +27,11 @@
                 v-model="customOrderNumberModel"
                 type="text"
                 class="form-control form-control-sm"
+                :class="{ 'is-invalid': orderNumberInvalid }"
                 style="max-width:180px;height:28px;"
-                :placeholder="$t('chat.orderNumberPlaceholder')"
+                maxlength="20"
+                :aria-invalid="orderNumberInvalid"
+                placeholder="ORD-2025-001"
               >
               <button
                 type="button"
@@ -39,6 +42,9 @@
               >
                 {{ orderNumberFetching ? $t('chat.fetchingOrderNumber') : $t('chat.fetchOrderNumber') }}
               </button>
+              <div class="order-number-help" :class="{ 'order-number-help-error': orderNumberInvalid }">
+                {{ orderNumberInvalid ? orderNumberInvalidText : orderNumberHelpText }}
+              </div>
             </div>
             <div v-else-if="taskOrderNumber" style="margin-top:6px;color:var(--app-text-secondary);font-size:var(--app-font-size-caption);">
               {{ $t('chat.orderNumber') }}{{ taskOrderNumber }}
@@ -60,7 +66,7 @@
               </tbody>
             </table>
             <div v-if="!currentTask.completed" class="task-actions">
-              <button class="btn btn-success btn-sm" data-action="confirm-task" @click="$emit('confirm-task')" :disabled="isExecuting">
+              <button class="btn btn-success btn-sm" data-action="confirm-task" @click="onConfirmTask" :disabled="isExecuting">
                 {{ isExecuting ? $t('chat.executing') : (currentTask?.type === 'excel_import' ? $t('chat.confirmImport') : $t('chat.confirmExecute')) }}
               </button>
               <button class="btn btn-secondary btn-sm" data-action="cancel-task" @click="$emit('cancel-task')" :disabled="isExecuting">
@@ -280,8 +286,10 @@ import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskItem } from '@/composables/useChatPersistence'
 import { workflowProgressIsIdle } from '@/workflow/coreWorkflowTaskUi'
+import { useAppDialogStore } from '@/stores/appDialog'
 
 useI18n()
+const appDialog = useAppDialogStore()
 
 type WorkflowTaskPayload = {
   workflowProgressPct?: number
@@ -350,6 +358,32 @@ const customOrderNumberModel = computed({
   get: () => props.currentTask?.customOrderNumber ?? '',
   set: (value: string) => emit('set-custom-order-number', value),
 })
+
+// Order number: alphanumeric + hyphens only, up to 20 chars.
+const ORDER_NUMBER_PATTERN = /^[A-Za-z0-9-]+$/
+
+const orderNumberInvalid = computed(() => {
+  const value = customOrderNumberModel.value.trim()
+  if (!value) return false
+  return !ORDER_NUMBER_PATTERN.test(value)
+})
+
+const orderNumberHelpText = '仅限字母、数字和连字符，最多 20 个字符'
+const orderNumberInvalidText = '格式无效：仅支持字母、数字和连字符'
+
+async function onConfirmTask(): Promise<void> {
+  if (props.isExecuting) return
+  // Block confirm when the manually entered order number is malformed.
+  if (props.currentTask?.type === 'shipment_generate' && orderNumberInvalid.value) {
+    return
+  }
+  const confirmed = await appDialog.showConfirm(
+    '确定要执行此任务吗？此操作可能需要授权令牌。',
+    { title: '确认执行', danger: false },
+  )
+  if (!confirmed) return
+  emit('confirm-task')
+}
 </script>
 
 <style scoped>
@@ -400,6 +434,20 @@ const customOrderNumberModel = computed({
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.task-order-number-row .form-control.is-invalid {
+  border-color: #dc2626;
+}
+
+.order-number-help {
+  flex-basis: 100%;
+  font-size: var(--app-font-size-caption);
+  color: var(--app-text-caption);
+}
+
+.order-number-help-error {
+  color: #dc2626;
 }
 
 .task-filter-btn {

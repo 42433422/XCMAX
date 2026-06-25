@@ -41,7 +41,10 @@
 
       <p class="aiopen-hero-status">{{ statusText }}</p>
       <p v-if="mcpHealthText" class="aiopen-mcp-health" :class="{ ok: mcpHealthy }">{{ mcpHealthText }}</p>
-      <p v-if="panelError" class="aiopen-hero-warn">{{ panelError }}</p>
+      <p v-if="panelError" class="aiopen-hero-warn">
+        <span>{{ panelError }}</span>
+        <button type="button" class="aiopen-hero-warn-retry" @click="loadPanel">刷新</button>
+      </p>
 
       <button
         class="aiopen-primary-btn"
@@ -923,11 +926,28 @@ onBeforeUnmount(() => { wsClient?.close(); wsClient = null })
   line-height: 1.45;
 }
 .aiopen-hero-warn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 6px 20px 0;
   font-size: 11px;
   color: #b45309;
   text-align: center;
 }
+.aiopen-hero-warn-retry {
+  flex-shrink: 0;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid #fbbf24;
+  background: #fffbeb;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.aiopen-hero-warn-retry:hover { background: #fef3c7; }
 
 .aiopen-primary-btn {
   display: block;

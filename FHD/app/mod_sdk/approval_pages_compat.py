@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 K：审批业务 Vue 页经 ``xcagi-approval-bridge`` Mod 路由提供。"""
 
 from __future__ import annotations

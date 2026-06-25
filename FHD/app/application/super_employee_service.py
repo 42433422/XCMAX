@@ -121,6 +121,42 @@ def _codex_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) 
     ]
 
 
+def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    # Cursor Agent CLI headless（cursor agent --print）。stream-json 作心跳；
+    # --trust 跳过无 TTY 时的 workspace 信任提示；--force 允许在 cwd 内改/建文件。
+    trust_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_TRUST")
+            or os.environ.get("XCMAX_CURSOR_AGENT_TRUST")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
+    force_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_FORCE")
+            or os.environ.get("XCMAX_CURSOR_AGENT_FORCE")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
+    cmd = [
+        cli_path,
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+    ]
+    if trust_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--trust")
+    if force_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--force")
+    cmd.append(prompt)
+    return cmd
+
+
 def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
     # Claude Code 无头模式（print）。stream-json：工作时持续吐事件(工具调用/文本)，
     # 作为"还在干活"的心跳，配合 idle-timeout 实现"只要在工作就不超时"。
@@ -199,6 +235,29 @@ CLAUDE_PROFILE = SuperEmployeeToolProfile(
     cli_reads_output_file=False,
     cli_stream_json=True,
     cli_command_builder=_claude_cli_command,
+)
+
+CURSOR_PROFILE = SuperEmployeeToolProfile(
+    employee_id="cursor-super-employee",
+    employee_name="超级员工-Cursor",
+    display_tool="Cursor",
+    tool_name="cursor_agent",
+    capability_key="cursor_cli",
+    storage_subdir="cursor_super_employee",
+    result_kind="cursor_result",
+    direct_kind="cursor_direct",
+    env_super_prefix="XCMAX_CURSOR_SUPER_EMPLOYEE",
+    env_tool_prefix="XCMAX_CURSOR",
+    cli_binary="cursor",
+    cli_extra_candidates=(
+        "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+        os.path.expanduser("~/.local/bin/cursor"),
+        "/opt/homebrew/bin/cursor",
+        "/usr/local/bin/cursor",
+    ),
+    cli_reads_output_file=False,
+    cli_stream_json=True,
+    cli_command_builder=_cursor_cli_command,
 )
 
 
@@ -303,7 +362,8 @@ class SuperEmployeeService:
                 "status": "completed",
                 "accepted": True,
                 "queued": False,
-                "device_scope": "all_devices",
+                "para_tier": 1,
+                "device_scope": "local_device",
                 "dispatcher": f"{self._p.tool_name}_cli",
             }
             return {
@@ -351,6 +411,8 @@ class SuperEmployeeService:
                     "dispatch": {
                         **dispatch,
                         "status": "completed",
+                        "para_tier": 1,
+                        "device_scope": "local_device",
                         "fallback": f"{self._p.tool_name}_cli",
                     },
                     "message": self._public_message(user_msg),
@@ -369,6 +431,7 @@ class SuperEmployeeService:
                 "task_id": str(dispatch.get("task_id") or ""),
                 "task_status": str(dispatch.get("task_status") or ""),
                 "dispatcher": str(dispatch.get("dispatcher") or ""),
+                "para_tier": dispatch.get("para_tier"),
                 "scope": self._grant.scope.value,
                 "workspace_id": self._grant.workspace_id or "",
                 "devices": dispatch.get("devices")
@@ -525,7 +588,7 @@ class SuperEmployeeService:
                 token = self._para_token(client, api_url)
                 devices_body = self._para_request(client, api_url, token, "GET", "/api/devices")
                 devices = devices_body.get("devices") if isinstance(devices_body, dict) else []
-                selected = self._select_para_devices(
+                tier, selected = self._select_devices_by_tier(
                     devices if isinstance(devices, list) else [], request
                 )
                 if not selected:
@@ -540,7 +603,10 @@ class SuperEmployeeService:
                 for device in selected:
                     prepared.append(self._ensure_para_device(client, api_url, token, device))
 
-                return self._create_para_task(client, api_url, token, request, prepared), ""
+                return (
+                    self._create_para_task(client, api_url, token, request, prepared, tier=tier),
+                    "",
+                )
         except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as exc:
             return None, f"para_api_unreachable: {exc}"
         except Exception as exc:  # noqa: BLE001
@@ -622,6 +688,28 @@ class SuperEmployeeService:
             raise RuntimeError(self._error_message(body, f"Para API 请求失败 ({resp.status_code})"))
         return body
 
+    def _device_eligible(self, item: Any) -> bool:
+        """单台设备能否承接派工：在线 + 目标工具已装且非占用 + 具备能力。
+
+        一级(本机单设备)与二级(多设备)选择共用此判定；不含 target_devices
+        过滤(由各调用方按需另行处理)。
+        """
+        if not isinstance(item, dict):
+            return False
+        if str(item.get("status") or "") != "online":
+            return False
+        tool = self._device_tool(item, self._p.tool_name)
+        if tool and str(tool.get("status") or "") == "not_installed":
+            return False
+        if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
+            return False
+        capabilities = (
+            item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
+        )
+        if not tool and capabilities.get(self._p.capability_key) is not True:
+            return False
+        return True
+
     def _select_para_devices(
         self,
         devices: list[Any],
@@ -635,9 +723,7 @@ class SuperEmployeeService:
         )
         candidates: list[dict[str, Any]] = []
         for item in devices:
-            if not isinstance(item, dict):
-                continue
-            if str(item.get("status") or "") != "online":
+            if not self._device_eligible(item):
                 continue
             if (
                 "all" not in targets
@@ -645,22 +731,121 @@ class SuperEmployeeService:
                 and str(item.get("name") or "") not in targets
             ):
                 continue
-            tool = self._device_tool(item, self._p.tool_name)
-            if tool and str(tool.get("status") or "") == "not_installed":
-                continue
-            if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
-                continue
-            capabilities = (
-                item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
-            )
-            if not tool and capabilities.get(self._p.capability_key) is not True:
-                continue
             candidates.append(item)
 
         workers = [item for item in candidates if not item.get("isPrimary")]
         selected = workers or candidates
         max_devices = self._max_para_devices(request)
         return selected[:max_devices]
+
+    # ── Para 分级派工：一级=本机单设备，二级=多设备协同 ──
+    #
+    # 「本机 CLI」并入 Para 后不再是绕开派工的进程内旁路，而是 Para 派工状态机里
+    # 的显式一级状态(para_tier=1)：把任务派给一台在线的本机/主设备，与二级走同一
+    # 条 /api/tasks 管线。默认一级优先，仅当任务确需多设备并行/分工、或本机无可用
+    # 设备、或调用方显式要求时升二级。设备的配对(bind_code)与 e2e-agent 拉起属于
+    # DevFleet/运维侧，FHD 只消费已在线的设备、不伪造设备行。
+
+    def _local_device_id(self) -> str:
+        """配置的本机设备 ID(可选)。未配则按 is_primary / 首台合格设备兜底。"""
+        return (
+            os.environ.get(f"{self._p.env_super_prefix}_DEVICE_ID")
+            or os.environ.get("MODSTORE_PARA_DEVICE_ID")
+            or os.environ.get("DEVFLEET_DEVICE_ID")
+            or ""
+        ).strip()
+
+    def _resolve_para_tier(self, request: dict[str, Any]) -> int:
+        """决定该请求走一级(1)还是二级(2)。默认一级，按需升二级。"""
+        raw_context = (
+            request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
+        )
+        forced = (
+            (
+                os.environ.get(f"{self._p.env_super_prefix}_PARA_FORCE_TIER")
+                or os.environ.get("MODSTORE_PARA_FORCE_TIER")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
+        if forced in {"1", "local", "single", "本机"}:
+            return 1
+        if forced in {"2", "fleet", "multi", "多设备"}:
+            return 2
+
+        tier_hint = (
+            str(raw_context.get("para_tier") or raw_context.get("tier") or "").strip().lower()
+        )
+        if tier_hint in {"2", "fleet", "multi", "multi_device", "多设备"}:
+            return 2
+        if tier_hint in {"1", "local", "single", "本机"}:
+            return 1
+
+        if raw_context.get("escalate") in (True, 1, "1", "true", "yes", "on"):
+            return 2
+        try:
+            if int(raw_context.get("max_devices") or 0) > 1:
+                return 2
+        except (TypeError, ValueError):
+            pass
+
+        target = request.get("target_devices")
+        if isinstance(target, list):
+            specific = [s for s in (str(x).strip() for x in target) if s and s != "all"]
+            if len(specific) > 1:
+                return 2
+
+        text = f"{request.get('task') or ''} {request.get('prompt') or ''}"
+        if any(m in text for m in ("多设备", "所有设备", "全部设备", "调用所有设备", "跨设备")):
+            return 2
+        return 1
+
+    def _select_local_device(
+        self,
+        devices: list[Any],
+        request: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """一级：只挑「本机」一台设备。
+
+        本机识别优先级：① 配置的本机 device_id；② is_primary 主设备；③ 都无从
+        识别时退而取首台合格设备(单设备派工)。识别到的本机若不合格(离线/工具未装/
+        占用)则返回空，由上层 _select_devices_by_tier 升二级到其它设备——这正是
+        「本机无 CLI → 升二级」的语义所在。
+        """
+        local_id = self._local_device_id()
+        if local_id:
+            for item in devices:
+                if isinstance(item, dict) and str(item.get("id") or "") == local_id:
+                    return [item] if self._device_eligible(item) else []
+            return []  # 配了本机 id 但不在设备列表 → 本机不可用, 交由升二级
+
+        for item in devices:
+            if isinstance(item, dict) and item.get("isPrimary"):
+                return [item] if self._device_eligible(item) else []
+
+        for item in devices:
+            if self._device_eligible(item):
+                return [item]
+        return []
+
+    def _select_devices_by_tier(
+        self,
+        devices: list[Any],
+        request: dict[str, Any],
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """按 tier 选设备，返回 (实际 tier, 选中设备列表)。
+
+        一级优先：先选本机单设备；本机无合格设备则自动升二级选多设备。
+        """
+        tier = self._resolve_para_tier(request)
+        if tier == 1:
+            local = self._select_local_device(devices, request)
+            if local:
+                return 1, local
+            # 一级想跑但本机无可用设备 → 升二级
+            return 2, self._select_para_devices(devices, request)
+        return 2, self._select_para_devices(devices, request)
 
     def _ensure_para_device(
         self,
@@ -692,6 +877,7 @@ class SuperEmployeeService:
         token: str,
         request: dict[str, Any],
         devices: list[dict[str, Any]],
+        tier: int = 2,
     ) -> dict[str, Any]:
         raw_context = (
             request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
@@ -747,7 +933,8 @@ class SuperEmployeeService:
             "status": "accepted",
             "accepted": True,
             "queued": False,
-            "device_scope": "all_devices",
+            "para_tier": tier,
+            "device_scope": "local_device" if tier == 1 else "all_devices",
             "dispatcher": "para_api",
             "mcp_tool_equivalent": "devfleet_dispatch_task",
             "api_url": api_url,
@@ -1998,6 +2185,7 @@ __all__ = [
     "DISPATCHER_MESSAGE_KIND",
     "CODEX_PROFILE",
     "CLAUDE_PROFILE",
+    "CURSOR_PROFILE",
     "SuperEmployeeService",
     "SuperEmployeeToolProfile",
 ]

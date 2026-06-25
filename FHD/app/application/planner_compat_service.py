@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Planner 兼容对话服务（3d）：供宿主 /api/ai/* 与 Mod facade 共用。"""
 
 from __future__ import annotations

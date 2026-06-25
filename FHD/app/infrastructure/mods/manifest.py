@@ -15,6 +15,28 @@ from .artifact_constants import ARTIFACT_MOD, normalize_artifact
 logger = logging.getLogger(__name__)
 
 
+def _normalize_dependencies(raw: Any) -> dict[str, str]:
+    """Coerce a manifest ``dependencies`` field into ``{dep_id: version_spec}``.
+
+    The canonical schema is a mapping of dependency id -> version spec, e.g.
+    ``{"xcagi": ">=10.0.0"}``. For backward compatibility some manifests declare
+    dependencies as a bare list of ids (``["other_mod"]``); those are treated as
+    ``{id: "*"}`` (any version). Any other shape is ignored (empty dict) so that
+    ``validate_dependencies`` never raises ``AttributeError`` at load time and
+    masks the real cause as a generic backend failure.
+    """
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items() if str(k).strip()}
+    if isinstance(raw, list):
+        return {str(x).strip(): "*" for x in raw if str(x).strip()}
+    if raw not in (None, ""):
+        logger.warning(
+            "Mod dependencies field ignored: expected dict or list, got %r",
+            type(raw).__name__,
+        )
+    return {}
+
+
 @dataclass
 class ModMetadata:
     id: str
@@ -107,7 +129,7 @@ class ModMetadata:
             description=data.get("description", ""),
             artifact=normalize_artifact(data),
             bundle=bundle,
-            dependencies=data.get("dependencies", {}),
+            dependencies=_normalize_dependencies(data.get("dependencies")),
             backend_entry=backend.get("entry", ""),
             backend_init=backend.get("init", ""),
             frontend_routes=frontend.get("routes", ""),
@@ -157,7 +179,9 @@ def parse_manifest(mod_path: str) -> ModMetadata | None:
 
 
 def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool:
-    for dep_id, version_spec in metadata.dependencies.items():
+    # Normalize defensively: most metadata flows through ``from_dict`` (already a
+    # dict), but a ``ModMetadata`` constructed directly may still carry a list.
+    for dep_id, version_spec in _normalize_dependencies(metadata.dependencies).items():
         if dep_id == "xcagi":
             if not _check_xcagi_version(version_spec):
                 logger.warning(

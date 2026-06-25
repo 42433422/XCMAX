@@ -20,9 +20,17 @@
 
       <p v-if="!modsStore.isLoaded && !modsStore.loadError" class="muted">正在加载 Mod 列表…</p>
       <p v-else-if="modsStore.loadError" class="muted text-warn">{{ modsStore.loadError }}</p>
-      <p v-else-if="modsStore.isLoaded && !modMeta" class="muted text-warn">
-        未找到 id 为 <code>{{ modId }}</code> 的扩展（请确认 manifest 已由后端扫描）。
-      </p>
+      <div v-else-if="modsStore.isLoaded && !modMeta" class="notfound-card">
+        <p class="muted text-warn notfound-msg">
+          未找到 id 为 <code>{{ modId }}</code> 的扩展（请确认 manifest 已由后端扫描）。
+        </p>
+        <div class="action">
+          <button type="button" class="btn btn-ghost" @click="goChat">← 返回助手</button>
+          <button type="button" class="btn" @click="router.push({ name: 'mod-store' })">
+            浏览扩展商店
+          </button>
+        </div>
+      </div>
 
       <div v-if="menu.length" class="grid">
         <router-link
@@ -245,5 +253,16 @@ onMounted(async () => {
 .push-msg {
   margin-top: 16px;
   white-space: pre-wrap;
+}
+
+.notfound-card {
+  padding: 20px 22px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fffbeb;
+}
+
+.notfound-msg {
+  margin: 0 0 14px;
 }
 </style>

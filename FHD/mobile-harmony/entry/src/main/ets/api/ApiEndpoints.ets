@@ -75,6 +75,12 @@ export class ApiEndpoints {
 
   // 管理员
   static readonly ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES: string = `${ApiEndpoints.BASE}/admin/codex-super-employee/messages`;
+  static readonly ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES: string = `${ApiEndpoints.BASE}/admin/claude-super-employee/messages`;
+
+  // 会议纪要 SSOT（三级派生）
+  static readonly MEETING_LEVELS: string = `${ApiEndpoints.BASE}/meetings/levels`;
+  static readonly MEETING_GENERATE: string = `${ApiEndpoints.BASE}/meetings/generate-all`;
+  static readonly MEETING_DETAIL: string = `${ApiEndpoints.BASE}/meetings/{id}`;
 
   // AI 圈子(朋友圈)
   static readonly CIRCLE_POSTS: string = `${ApiEndpoints.BASE}/circle/posts`;

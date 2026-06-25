@@ -19,27 +19,50 @@
 
     <section class="discover-section">
       <h2>扩展与市场</h2>
-      <button type="button" class="discover-cell" @click="goMods">
+      <button
+        type="button"
+        class="discover-cell"
+        :disabled="navigating !== null"
+        :aria-busy="navigating === 'mod-store'"
+        @click="goMods"
+      >
         <i class="fa fa-puzzle-piece" aria-hidden="true"></i>
         <div>
           <strong>MOD 市场</strong>
           <span>浏览与安装行业 Mod</span>
         </div>
-        <i class="fa fa-chevron-right muted" aria-hidden="true"></i>
+        <i
+          v-if="navigating === 'mod-store'"
+          class="fa fa-spinner fa-spin muted"
+          aria-hidden="true"
+        ></i>
+        <i v-else class="fa fa-chevron-right muted" aria-hidden="true"></i>
       </button>
-      <button type="button" class="discover-cell" @click="goTools">
+      <button
+        type="button"
+        class="discover-cell"
+        :disabled="navigating !== null"
+        :aria-busy="navigating === 'tools'"
+        @click="goTools"
+      >
         <i class="fa fa-wrench" aria-hidden="true"></i>
         <div>
           <strong>工具箱</strong>
           <span>更多扩展能力与实用工具</span>
         </div>
-        <i class="fa fa-chevron-right muted" aria-hidden="true"></i>
+        <i
+          v-if="navigating === 'tools'"
+          class="fa fa-spinner fa-spin muted"
+          aria-hidden="true"
+        ></i>
+        <i v-else class="fa fa-chevron-right muted" aria-hidden="true"></i>
       </button>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -47,16 +70,30 @@ const modstoreWebUrl = String(
   import.meta.env.VITE_MODSTORE_WEB_URL || 'https://xiu-ci.com/market/workbench/unified',
 ).replace(/\/$/, '');
 
+// Tracks the in-flight route name during navigation so buttons can show a
+// loading state and disable to prevent double-navigation. null = idle.
+const navigating = ref<string | null>(null);
+
 function openWorkbench() {
   window.open(modstoreWebUrl, '_blank', 'noopener,noreferrer');
 }
 
+async function navigateTo(name: string) {
+  if (navigating.value !== null) return;
+  navigating.value = name;
+  try {
+    await router.push({ name });
+  } finally {
+    navigating.value = null;
+  }
+}
+
 function goMods() {
-  void router.push({ name: 'mod-store' });
+  void navigateTo('mod-store');
 }
 
 function goTools() {
-  void router.push({ name: 'tools' });
+  void navigateTo('tools');
 }
 </script>
 
@@ -112,6 +149,15 @@ function goTools() {
 
 .discover-cell:active {
   transform: scale(0.98);
+}
+
+.discover-cell:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.discover-cell:disabled:active {
+  transform: none;
 }
 
 .discover-cell strong {

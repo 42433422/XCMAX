@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
@@ -15,8 +16,10 @@ from modstore_server.models import (
     WorkflowExecution,
     get_session_factory,
 )
-from modstore_server.quota_middleware import consume_llm_credit, require_llm_credit
+from modstore_server.quota_middleware import require_llm_credit
 from modstore_server.workflow_api.schemas import WorkflowExecuteBody
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,6 +28,7 @@ router = APIRouter()
 async def execute_workflow(
     workflow_id: int,
     body: WorkflowExecuteBody,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
@@ -62,11 +66,26 @@ async def execute_workflow(
         execution.status = "completed"
         execution.output_data = json.dumps(output_data)
         execution.completed_at = datetime.now(timezone.utc)
+        # 统一计费 + 防免费洞：删计次后，java 后端经 JavaWallet 结算、python 后端扣钱包，
+        # 永不免费（见 llm_billing.bill_internal_llm_floor）。
         try:
-            with sf() as qdb2:
-                consume_llm_credit(qdb2, user.id, 1)
-        except Exception:
-            pass
+            from modstore_server.llm_billing import (
+                authorization_header,
+                bill_internal_llm_floor,
+            )
+
+            await bill_internal_llm_floor(
+                authorization_header(request),
+                user_id=user.id,
+                label=f"workflow:{workflow_id}",
+            )
+        except Exception as bill_err:  # noqa: BLE001 — 计费失败不阻断执行，但记日志可见
+            logger.warning(
+                "workflow execute billing failed (user=%s wf=%s): %s",
+                user.id,
+                workflow_id,
+                bill_err,
+            )
     except Exception as e:
         failure_message = str(e)
         execution.status = "failed"

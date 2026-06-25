@@ -66,7 +66,7 @@
     }
   },
   "super_employees": {
-    "_doc": "超级员工(2级)身份真相源。独立人格、不纳入 Persona。运行配置(CLI命令/派工)仍在 super_employee_service。id/display_name 须与 CLAUDE_PROFILE/CODEX_PROFILE 一致(守卫校验)。",
+    "_doc": "超级员工(2级)身份真相源。独立人格、不纳入 Persona。运行配置(CLI命令/派工)仍在 super_employee_service。id/display_name 须与 CLAUDE_PROFILE/CODEX_PROFILE/CURSOR_PROFILE 一致(守卫校验)。",
     "claude-super-employee": {
       "id": "claude-super-employee",
       "tier": "super",
@@ -82,6 +82,14 @@
       "display_tool": "Codex",
       "avatar_letter": "超",
       "summary": "Codex 超级员工 · 多设备派工"
+    },
+    "cursor-super-employee": {
+      "id": "cursor-super-employee",
+      "tier": "super",
+      "display_name": "超级员工-Cursor",
+      "display_tool": "Cursor",
+      "avatar_letter": "超",
+      "summary": "Cursor 超级员工 · 多设备派工"
     }
   },
   "factory_employees": {

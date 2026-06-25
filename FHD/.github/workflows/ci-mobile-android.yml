@@ -70,7 +70,8 @@ jobs:
           fi
       - name: Ensure gradlew executable
         run: chmod +x ./gradlew
-      - name: Assemble Debug (personal + enterprise)
-        run: ./gradlew assemblePersonalDebug assembleEnterpriseDebug --no-daemon
+      - name: Assemble Debug (enterprise)
+        # 个人版已停产（config/product.yaml editions.personal=discontinued）：仅构建企业版。
+        run: ./gradlew assembleEnterpriseDebug --no-daemon
       - name: Lint
-        run: ./gradlew lintPersonalDebug --no-daemon
+        run: ./gradlew lintEnterpriseDebug --no-daemon

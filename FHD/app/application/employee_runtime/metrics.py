@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工运行时执行指标（进程内计数，供诊断/可观测）。"""
 
 from __future__ import annotations

@@ -71,6 +71,12 @@ data class ClaudeSuperEmployeeMobileMessageBody(
     val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
 )
 
+data class CursorSuperEmployeeMobileMessageBody(
+    val body: String = "",
+    val message: String = "",
+    val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
+)
+
 // ── AI 群聊 ──
 data class AiGroupMemberDto(
     val employee_id: String = "",
@@ -175,6 +181,50 @@ data class ChatResponse(
     val reply: String? = null,
     val message: String? = null,
     val data: JsonElement? = null,
+)
+
+// ── 会议纪要 SSOT 三级派生 ────────────────────────────────────────────────
+
+data class MeetingGenerateBody(
+    val raw_transcript: String,
+    val title: String? = null,
+)
+
+data class MeetingMinuteData(
+    val id: Int = 0,
+    val title: String? = null,
+    val status: String = "",
+    val source_hash: String = "",
+    val level1_script: String? = null,
+    val level2_architecture: String? = null,
+    val level3_plain: String? = null,
+    val error_message: String? = null,
+)
+
+data class MeetingLevelDef(
+    val id: String = "",
+    val label: String = "",
+    val short: String? = null,
+    val derives_from: String = "",
+    val render: String? = null,
+)
+
+data class MeetingLevelsData(
+    val version: Int = 1,
+    val levels: List<MeetingLevelDef> = emptyList(),
+)
+
+data class VoiceTranscribeData(
+    val text: String = "",
+    val language: String? = null,
+    val audio_seconds: Double? = null,
+)
+
+/** /api/voice/transcribe 的响应壳（非 mobile/v1 MobileEnvelope）。 */
+data class VoiceTranscribeResponse(
+    val success: Boolean = false,
+    val data: VoiceTranscribeData? = null,
+    val detail: String? = null,
 )
 
 data class ApprovalItem(
