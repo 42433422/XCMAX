@@ -86,7 +86,6 @@ def get_ai_product_parser() -> AIProductParser:
 
 
 from app.infrastructure.skills import execute_skill, get_skill_registry
-from app.services.products_service import ProductsService
 
 
 def get_products_service() -> ProductsService:
@@ -114,6 +113,9 @@ def get_product_import_service() -> ProductImportService:
 def get_extract_log_service() -> ExtractLogService:
     """获取提取日志服务单例"""
     return get_service_registry().extract_log_service
+
+
+from app.services.products_service import ProductsService
 
 
 __all__ = [

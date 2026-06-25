@@ -69,7 +69,7 @@ def test_execute_task_waits_for_real_codex_result(monkeypatch):
                     "kind": "codex_result",
                     "dispatch_request_id": "req-1",
                     "task_id": "para-1",
-                    "body": "真实 Codex 已完成",
+                    "body": "真实 Codex 已完成。改动文件：app/application/ai_group_chat_service.py；验证：pytest tests/test_application/test_ai_group_chat_service.py 通过。",
                 }
             ]
 
@@ -84,7 +84,164 @@ def test_execute_task_waits_for_real_codex_result(monkeypatch):
     )
 
     assert result["_relay_status"] == "completed"
-    assert result["codex"]["assistant_message"]["body"] == "真实 Codex 已完成"
+    assert "改动文件" in result["codex"]["assistant_message"]["body"]
+
+
+def test_execute_task_marks_blocked_terminal_result_as_blocked(monkeypatch):
+    from app.services import mobile_relay_desktop_client as relay
+
+    class FakeCodexService:
+        def invoke(self, **kwargs):
+            return {
+                "dispatch": {
+                    "request_id": "req-blocked",
+                    "task_id": "para-blocked",
+                    "status": "accepted",
+                    "accepted": True,
+                },
+                "assistant_message": {"role": "system", "body": "已派发"},
+            }
+
+        def list_messages(self, **kwargs):
+            return [
+                {
+                    "role": "assistant",
+                    "kind": "codex_result",
+                    "dispatch_request_id": "req-blocked",
+                    "task_id": "para-blocked",
+                    "body": "BLOCKED: 未完成；当前没有执行权限，未修改文件。",
+                }
+            ]
+
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", FakeCodexService)
+    result = relay._execute_task(
+        {
+            "task_id": "relay-task-blocked",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {"message": "修复并测试移动端派工闭环"},
+        }
+    )
+
+    assert result["_relay_status"] == "blocked"
+    assert result["ok"] is False
+    assert "BLOCKED" in result["error"]
+
+
+def test_execute_task_routes_explicit_merge_message_to_git_op(monkeypatch):
+    from app.services import mobile_relay_desktop_client as relay
+
+    captured = {}
+
+    def fake_handle_git_op(kind, payload):
+        captured["kind"] = kind
+        captured["payload"] = payload
+        return {"ok": True, "_relay_status": "completed", "reply": "merged"}
+
+    class ShouldNotRunCodex:
+        def __init__(self):
+            raise AssertionError("merge text should not call CLI")
+
+    monkeypatch.setattr(relay, "handle_git_op", fake_handle_git_op)
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", ShouldNotRunCodex)
+
+    result = relay._execute_task(
+        {
+            "task_id": "relay-task-merge",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {
+                "message": (
+                    "MERGE_BRANCH_TASK_SOURCE_mobile-group/task-123"
+                    "_TARGET_CURRENT_feat/quality-to-9_CHECK_GIT_STATUS_FIRST"
+                )
+            },
+        }
+    )
+
+    assert result["reply"] == "merged"
+    assert captured["kind"] == "git.merge"
+    assert captured["payload"]["branch"] == "mobile-group/task-123"
+    assert captured["payload"]["target_branch"] == "feat/quality-to-9"
+
+
+def test_execute_task_does_not_treat_generic_merge_word_as_git_op(monkeypatch):
+    from app.services import mobile_relay_desktop_client as relay
+
+    class FakeCodexService:
+        def invoke(self, **kwargs):
+            return {
+                "dispatch": {"status": "completed", "accepted": True},
+                "assistant_message": {
+                    "body": (
+                        "已合并首页和个人资料页的交互逻辑。"
+                        "改动文件：mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/navigation/ChatScreen.kt；"
+                        "验证：./gradlew testEnterpriseDebugUnitTest 通过。"
+                    )
+                },
+            }
+
+    def fail_git_op(kind, payload):
+        raise AssertionError("generic development wording should not call git op")
+
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", FakeCodexService)
+    monkeypatch.setattr(relay, "handle_git_op", fail_git_op)
+
+    result = relay._execute_task(
+        {
+            "task_id": "relay-task-generic-merge",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {
+                "message": "合并首页和个人资料页的交互逻辑，修复测试",
+                "context": {"branch": "mobile-group/task-123"},
+            },
+        }
+    )
+
+    assert result["_relay_status"] == "completed"
+    assert "已合并首页" in result["codex"]["assistant_message"]["body"]
+
+
+def test_execute_task_blocks_progress_body_without_evidence(monkeypatch):
+    from app.services import mobile_relay_desktop_client as relay
+
+    class FakeCodexService:
+        def invoke(self, **kwargs):
+            return {
+                "dispatch": {
+                    "request_id": "req-progress",
+                    "task_id": "para-progress",
+                    "status": "accepted",
+                    "accepted": True,
+                },
+                "assistant_message": {"role": "system", "body": "已派发"},
+            }
+
+        def list_messages(self, **kwargs):
+            return [
+                {
+                    "role": "assistant",
+                    "kind": "codex_result",
+                    "dispatch_request_id": "req-progress",
+                    "task_id": "para-progress",
+                    "body": "正在搜索代码库中与群组任务讨论相关的实现；正在实现移动端展示。",
+                }
+            ]
+
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", FakeCodexService)
+    result = relay._execute_task(
+        {
+            "task_id": "relay-task-progress",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {"message": "修复超级开发部任务讨论和验收假阳性"},
+        }
+    )
+
+    assert result["_relay_status"] == "blocked"
+    assert result["ok"] is False
+    assert "正在搜索" in result["error"]
 
 
 def test_execute_task_marks_dispatch_unavailable_as_blocked(monkeypatch):

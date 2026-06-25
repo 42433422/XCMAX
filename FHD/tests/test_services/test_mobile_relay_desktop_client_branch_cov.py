@@ -59,7 +59,6 @@ from app.services.mobile_relay_desktop_client import (
     stop_desktop_relay_poller,
 )
 
-
 # ---------------------------------------------------------------------------
 # autouse fixture: isolate global state between tests
 # ---------------------------------------------------------------------------
