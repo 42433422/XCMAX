@@ -13,7 +13,7 @@ on:
         required: false
         type: string
       scheme:
-        description: Xcode scheme to archive
+        description: Xcode scheme to archive (`XCAGIMobile` current main line)
         required: true
         type: choice
         default: XCAGIMobile
@@ -71,10 +71,11 @@ jobs:
           echo "marketing_version=${raw}" >> "${GITHUB_OUTPUT}"
           echo "build_number=${build}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build both iOS schemes for simulator
+      - name: Build iOS simulator target(s)
         env:
           IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
           IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+          IOS_SCHEMES: ${{ github.event.inputs.scheme }}
         run: bash scripts/ci-build-ios.sh
 
       - name: Configure App Store signing
@@ -146,7 +147,7 @@ jobs:
         run: bash scripts/archive-ios.sh --export
 
       - name: Upload IPA artifact
-        if: ${{ github.event.inputs.export_ipa == 'true' }}
+        if: ${{ github.event.inputs.export_ipa == 'true' && always() }}
         uses: actions/upload-artifact@v4
         with:
           name: xcagi-ios-${{ github.event.inputs.scheme }}-${{ steps.version.outputs.marketing_version }}
