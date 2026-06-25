@@ -1,12 +1,12 @@
 # iOS 发版员技能
 
-职责：P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。
+职责：P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
 
 ## 执行步骤
 
-1. 检查 Xcode scheme、证书配置占位、版本号和归档条件。
-2. 运行允许的静态检查与测试门禁。
-3. 签名、上传和发布必须经人工确认，禁止读取私钥正文。
+1. 检查 `FHD/mobile-ios/project.yml`、scheme、Bundle ID、版本号、AppIcon、entitlements 与发布脚本。
+2. 运行允许的 XcodeGen / iOS Simulator build / archive 门禁。
+3. 签名、上传和发布必须经人工确认，禁止读取或回显私钥正文。
 
 ## 输出契约
 

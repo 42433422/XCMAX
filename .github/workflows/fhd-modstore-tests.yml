@@ -13,6 +13,10 @@ on:
       - ".github/workflows/modstore-tests.yml"
 
 
+defaults:
+  run:
+    working-directory: FHD
+
 jobs:
   pytest:
     runs-on: ubuntu-latest

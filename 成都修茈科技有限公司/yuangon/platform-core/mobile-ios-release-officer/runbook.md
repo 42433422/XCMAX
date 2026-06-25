@@ -1,17 +1,17 @@
         # Runbook：iOS 发版员 (`mobile-ios-release-officer`)
 
-## iOS 规划中状态
+## iOS 已落地状态
 
-`FHD/mobile-ios/` 目录尚未创建，`release-ios.yml` 待建。本岗当前职责：
+`FHD/mobile-ios/` 已具备 SwiftUI 原生工程源码、XcodeGen `project.yml`、AppIcon 生成脚本、模拟器构建脚本与 App Store archive/export 脚本。本岗当前职责：
 
-1. 监控 Android 岗（`mobile-android-release-officer`）产物就绪信号
-2. 维护 `FHD/XCAGI/resources/` 公共资源层（scope 中已声明）
-3. 当 iOS 工程建立后，按 `MOBILE_ANDROID.md` 模式补充 TestFlight/App Store 发版流程
+1. 维护 `FHD/mobile-ios/project.yml`、Bundle ID、entitlements、版本号与 AppIcon。
+2. 维护 `FHD/.github/workflows/release-ios.yml` 的 simulator build、签名、IPA 导出和 App Store Connect 上传门禁。
+3. 在 Apple 账号密钥缺失时明确报告 `IOS_TEAM_ID`、证书、profile、App Store Connect API Key 等缺口，不伪造发布成功。
 
 
         ## 职责摘要
 
-        P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。
+        P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
 
         ## 上游 Handoff 契约
 
@@ -23,8 +23,8 @@
 ### handoff: mobile-android-release-officer → 本岗（iOS 岗专用）
 - **触发条件**：Android 双 SKU APK/AAB 产物就绪 + `verify_version_anchors.py` 绿
 - **输入**：`release-apk/` 产物路径、build.gradle.kts 版本锚点、smoke 通过报告
-- **门禁**：Android 发版未完成时 iOS 工程暂停；版本锚点必须 10.0.0 对齐
-- **当前状态**：FHD/mobile-ios/ 规划中，release-ios.yml 待建
+- **门禁**：Android 发版未完成时 iOS 发版只允许 dry-run；版本锚点必须 10.0.0 对齐
+- **当前状态**：`FHD/mobile-ios/` 已落地；`release-ios.yml` 负责 XcodeGen / simulator build / archive-export
 
 
         ## Handlers
@@ -37,7 +37,7 @@
         ## 核心 Scope
 
         - `FHD/mobile-ios/**`
-- `FHD/.github/workflows/release-desktop.yml`
+- `FHD/.github/workflows/release-ios.yml`
 - `FHD/XCAGI/resources/**`
 - `yuangon/platform-core/mobile-ios-release-officer/**`
 

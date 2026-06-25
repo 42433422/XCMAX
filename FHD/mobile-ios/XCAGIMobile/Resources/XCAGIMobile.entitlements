@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  推送能力(对标 Android PushRegistrar)。真机取 APNs token 需:
+	  1) Xcode target → Signing & Capabilities 保持 Push Notifications;
+	  2) 在 Apple Developer 配置 APNs 密钥 / 证书。
+	  仅跑模拟器或暂不接推送时,可删除本文件并移除 project.yml 的 CODE_SIGN_ENTITLEMENTS。
+	  发布时将 development 改为 production(或交由 Xcode 自动管理)。
+	-->
+	<key>aps-environment</key>
+	<string>$(APS_ENVIRONMENT)</string>
+</dict>
+</plist>
