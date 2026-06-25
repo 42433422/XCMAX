@@ -560,6 +560,7 @@ class AiGroupChatService:
         text: str,
         sender_name: str = "我",
         mentions: list[str] | None = None,
+        execute: bool = False,
     ) -> dict[str, Any]:
         body = (text or "").strip()
         if not body:
@@ -585,6 +586,7 @@ class AiGroupChatService:
         history = self.get_messages(user_id=user_id, group_id=group_id, limit=CONTEXT_TURNS)
         history = history + [self._public_message(user_msg)]
 
+        discussion: list[dict[str, Any]] = []
         for member in responders:
             reply = await self._ai_reply(group, member, history, user_id=user_id)
             ai_msg = self._message_row(
@@ -597,7 +599,21 @@ class AiGroupChatService:
                 body=reply,
             )
             new_messages.append(ai_msg)
+            discussion.append(ai_msg)
             history = history + [self._public_message(ai_msg)]
+
+        # 讨论后执行：把讨论结论综合成任务，派给群里的超级员工以「任务模式」真正执行，结果回群。
+        if execute:
+            exec_msg = await self._execute_after_discussion(
+                group=group,
+                user_id=user_id,
+                group_id=group_id,
+                user_text=body,
+                discussion=discussion,
+                mentions=mentions,
+            )
+            if exec_msg is not None:
+                new_messages.append(exec_msg)
 
         self._append_messages(new_messages)
         return {
@@ -649,8 +665,10 @@ class AiGroupChatService:
         system = (
             f"你是群聊「{group_name}」里的 AI 成员「{me}」。{summary}\n"
             f"群成员有：{roster}。\n"
-            "请只代表你自己、用一两句话简洁地回应群里用户的最新消息；"
-            "不要替其他成员发言，不要复述别人说过的话，不要加“作为AI”之类的免责声明。"
+            "这是一场多成员协作讨论：先看群里同事刚才的发言，再用一两句话表态——"
+            "可以赞同并补充、提出不同看法、或指出风险与更优方案，推动讨论向"
+            "「一个能落地执行的结论」收敛。只代表你自己发言、言之有物，不要逐字复述别人，"
+            "不要替其他成员发言，不要加“作为AI”之类的免责声明。"
         )
         transcript = "\n".join(
             f"{m.get('sender_name')}：{m.get('body')}" for m in history[-CONTEXT_TURNS:]
@@ -701,7 +719,8 @@ class AiGroupChatService:
             f"你是群聊「{group_name}」里的成员「{me}」。\n"
             f"群成员有：{roster}。\n"
             f"【群最近对话】\n{transcript}\n\n"
-            f"请以「{me}」身份回应最新这条消息，用一两句话简洁回应。"
+            f"这是多成员协作讨论：先看同事刚才的发言，再以「{me}」身份用一两句话表态——"
+            "可赞同补充、提不同看法、或指出风险与更优做法，推动讨论向一个可落地执行的结论收敛。"
         )
         try:
             if employee_id == "codex-super-employee":
@@ -725,6 +744,85 @@ class AiGroupChatService:
             return f"（{me} 暂时无法回应）"
         except Exception as exc:  # noqa: BLE001
             return f"（{me} 暂时无法回应：{str(exc)[:120]}）"
+
+    @staticmethod
+    def _super_service(employee_id: str):
+        """按超级员工 id 取对应服务实例。"""
+        from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
+        from app.application.codex_super_employee_service import CodexSuperEmployeeService
+        from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+
+        if employee_id == "codex-super-employee":
+            return CodexSuperEmployeeService()
+        if employee_id == "cursor-super-employee":
+            return CursorSuperEmployeeService()
+        return ClaudeSuperEmployeeService()
+
+    async def _execute_after_discussion(
+        self,
+        *,
+        group: dict[str, Any],
+        user_id: int,
+        group_id: str,
+        user_text: str,
+        discussion: list[dict[str, Any]],
+        mentions: list[str] | None,
+    ) -> dict[str, Any] | None:
+        """讨论后执行：选一个超级员工以「任务模式」执行讨论结论，结果回群。
+
+        与讨论回复(强制 ``mode=chat`` 只聊天)不同，这里**不**强制 chat —— 让超级员工经
+        Para tier-1 / 本机 CLI 真正派工执行；群里没有超级员工则返回 ``None``（无可执行者）。
+        """
+        members = [m for m in group.get("members", []) if isinstance(m, dict)]
+        supers = [m for m in members if str(m.get("employee_id")) in _SUPER_EMPLOYEE_IDS]
+        if not supers:
+            return None
+        # 选执行者：优先 @ 到的超级员工，否则群里第一个超级员工。
+        explicit = {str(x).strip() for x in (mentions or []) if str(x).strip()}
+        for m in members:
+            name = str(m.get("name") or "")
+            if name and f"@{name}" in (user_text or ""):
+                explicit.add(str(m.get("employee_id")))
+        executor = next(
+            (m for m in supers if str(m.get("employee_id")) in explicit),
+            supers[0],
+        )
+        employee_id = str(executor.get("employee_id") or "")
+        me = str(executor.get("name") or employee_id)
+        points = (
+            "\n".join(f"- {m.get('sender_name')}：{m.get('body')}" for m in discussion)
+            or "（无讨论要点）"
+        )
+        brief = (
+            f"群「{group.get('name') or 'AI 群聊'}」经多成员讨论后决定执行以下任务。\n"
+            f"【原始需求】{user_text}\n"
+            f"【讨论要点】\n{points}\n\n"
+            "请综合讨论结论执行该任务，完成后简述你做了什么、产出在哪。"
+        )
+        try:
+            service = self._super_service(employee_id)
+            # 任务模式：不传 mode=chat，让 invoke 据任务派工/执行（Para tier-1 / 本机 CLI）。
+            result = service.invoke(
+                user_id=int(user_id),
+                message=brief,
+                context={"source": "ai_group_chat_execute"},
+            )
+            assistant = result.get("assistant_message") or {}
+            body = str(assistant.get("body") or "").strip()
+            status = str(result.get("status") or assistant.get("status") or "").strip()
+            if not body:
+                body = f"（{me} 已接收任务并派工执行{f'：{status}' if status else ''}）"
+        except Exception as exc:  # noqa: BLE001
+            body = f"（{me} 执行任务失败：{str(exc)[:160]}）"
+        return self._message_row(
+            user_id=user_id,
+            group_id=group_id,
+            role="ai",
+            sender_id=employee_id,
+            sender_name=me,
+            sender_avatar=str(executor.get("avatar") or ""),
+            body=body,
+        )
 
     # ── 部门种子 ──
 
