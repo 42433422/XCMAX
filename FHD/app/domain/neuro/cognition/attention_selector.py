@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.domain.neuro.cognition.working_memory import MemoryItem, WorkingMemorySnapshot
+from app.infrastructure.llm.token_estimator import estimate_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -62,15 +63,6 @@ def _jaccard(a: set[str], b: set[str]) -> float:
     inter = len(a & b)
     union = len(a | b)
     return inter / union if union else 0.0
-
-
-def _estimate_tokens(text: str) -> int:
-    """粗略估算 token 数：中文 1 字 ≈ 1.5 token，英文 1 词 ≈ 1.3 token。"""
-    if not text:
-        return 0
-    cn_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
-    en_words = len(re.findall(r"[a-zA-Z]+", text))
-    return int(cn_chars * 1.5 + en_words * 1.3)
 
 
 class AttentionSelector:
@@ -138,7 +130,7 @@ class AttentionSelector:
         for score, _idx, item in scored:
             if len(selected) >= self._max_items:
                 break
-            item_tokens = _estimate_tokens(item.content)
+            item_tokens = estimate_tokens(item.content)
             if used_tokens + item_tokens > self._token_budget:
                 continue
             # 填充分数

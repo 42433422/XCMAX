@@ -41,7 +41,12 @@ def _coerce_int(value: Any) -> int:
         return 0
 
 
-def _build_llm_trace(provider: Any, result: dict[str, Any], latency_ms: float) -> dict[str, Any]:
+def _build_llm_trace(
+    provider: Any,
+    result: dict[str, Any],
+    latency_ms: float,
+    compression: Any | None = None,
+) -> dict[str, Any]:
     from app.infrastructure.billing.model_usage import estimate_llm_cost_units
 
     adapter = getattr(provider, "_adapter", None)
@@ -57,7 +62,8 @@ def _build_llm_trace(provider: Any, result: dict[str, Any], latency_ms: float) -
         or getattr(provider, "model_name", "")
         or ""
     )
-    usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+    raw_usage = result.get("usage")
+    usage = raw_usage if isinstance(raw_usage, dict) else {}
     prompt_tokens = _coerce_int(usage.get("prompt_tokens"))
     completion_tokens = _coerce_int(usage.get("completion_tokens"))
     total_tokens = _coerce_int(usage.get("total_tokens"))
@@ -66,7 +72,7 @@ def _build_llm_trace(provider: Any, result: dict[str, Any], latency_ms: float) -
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
     )
-    return {
+    trace: dict[str, Any] = {
         "provider_id": provider_id,
         "provider": provider_name,
         "model": model,
@@ -78,6 +84,25 @@ def _build_llm_trace(provider: Any, result: dict[str, Any], latency_ms: float) -
         "billing_status": "metered" if cost_units else "unmetered",
         "billing_source": "estimated_token_units",
     }
+
+    # 扩展：上下文压缩元数据（由 ContextWindowManager 注入）
+    if compression is not None:
+        from app.application.agent_orchestrator.context_window_manager import (
+            CONTEXT_WINDOW_MANAGER_VERSION,
+        )
+
+        trace["pre_compression_message_count"] = compression.pre_message_count
+        trace["post_compression_message_count"] = compression.post_message_count
+        trace["pre_compression_prompt_tokens"] = compression.pre_estimated_tokens
+        trace["post_compression_prompt_tokens"] = compression.post_estimated_tokens
+        trace["tokens_saved"] = compression.tokens_saved
+        trace["compression_strategy"] = compression.strategy
+        trace["compression_latency_ms"] = round(float(compression.compression_latency_ms), 2)
+        trace["context_window_manager_version"] = CONTEXT_WINDOW_MANAGER_VERSION
+        if compression.summary_llm_call is not None:
+            trace["summary_llm_call"] = compression.summary_llm_call.to_dict()
+
+    return trace
 
 
 class ApiMixin(NeuroEventPublisherMixin):
@@ -156,6 +181,21 @@ class ApiMixin(NeuroEventPublisherMixin):
                 return None
 
             logger.info("🤖 [LLM] provider=%s", provider.provider_id)
+
+            # 上下文压缩：调 LLM 前按 token 预算裁剪 + 必要时摘要旧轮次
+            # 失败不阻断主对话（manager 内部已捕获，最坏情况返回 noop）
+            from app.application.agent_orchestrator.context_window_manager import (
+                get_context_window_manager,
+            )
+
+            cwm = get_context_window_manager()
+            compression = await cwm.compress(
+                messages,
+                user_id=str(getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""),
+                provider=provider,
+            )
+            messages = compression.messages
+
             result = await provider.chat_completion(
                 messages=messages,
                 temperature=temperature,
@@ -164,7 +204,7 @@ class ApiMixin(NeuroEventPublisherMixin):
             )
             if result:
                 latency_ms = (time.perf_counter() - t0) * 1000.0
-                trace = _build_llm_trace(provider, result, latency_ms)
+                trace = _build_llm_trace(provider, result, latency_ms, compression=compression)
                 result["_xcagi_trace"] = trace
                 self._last_llm_trace = trace
                 # 持久化 token 用量到本地账本（供 llm-ops-engineer 查询）
@@ -210,6 +250,24 @@ class ApiMixin(NeuroEventPublisherMixin):
                     )
                 except RECOVERABLE_ERRORS:
                     pass
+                # 可观测性：压缩节省 token 时通知 NeuroBus（独立于主调用 roundtrip）
+                if compression.tokens_saved > 0:
+                    try:
+                        from app.neuro_bus.application_neuro_bridge import (
+                            neuro_notify_ai_model_roundtrip,
+                        )
+
+                        neuro_notify_ai_model_roundtrip(
+                            model="context-window-manager",
+                            latency_ms=compression.compression_latency_ms,
+                            token_count=compression.tokens_saved,
+                            user_id=str(
+                                getattr(getattr(self, "modstore_adapter", None), "user_id", "")
+                                or ""
+                            ),
+                        )
+                    except RECOVERABLE_ERRORS:
+                        pass
             return result
 
         except RECOVERABLE_ERRORS as e:
@@ -500,7 +558,9 @@ class ApiMixin(NeuroEventPublisherMixin):
         messages = [{"role": "system", "content": system_prompt}]
 
         if context.conversation_history:
-            messages.extend(context.conversation_history[-10:])
+            # 全量传入历史，由 ContextWindowManager 在 call_llm_api 内统一按 token 预算裁剪
+            # （消除"内存 20 / 喂 LLM 10 / persona 看全量 20"的三层不一致）
+            messages.extend(context.conversation_history)
 
         messages.append({"role": "user", "content": message})
 
