@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """宿主发行版（edition）策略：generic / minimal / full。"""
 
 from __future__ import annotations

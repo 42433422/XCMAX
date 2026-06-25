@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 S2：Planner 工具执行须经 planner_tools 门面分派。"""
 
 from __future__ import annotations

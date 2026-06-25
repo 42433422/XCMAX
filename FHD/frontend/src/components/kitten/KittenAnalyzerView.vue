@@ -234,7 +234,8 @@
           :disabled="isChatLoading || isDatasetParsing"
           @click="sendMessage"
         >
-          发送
+          <i v-if="isChatLoading" class="fa fa-spinner fa-pulse" aria-hidden="true"></i>
+          {{ isChatLoading ? '发送中…' : '发送' }}
         </button>
       </div>
     </div>

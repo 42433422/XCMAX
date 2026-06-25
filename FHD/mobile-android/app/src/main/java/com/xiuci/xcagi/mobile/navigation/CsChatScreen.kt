@@ -270,7 +270,7 @@ private fun CsMessageBubble(
             ) {
                 Icon(
                     painter = painterResource(R.mipmap.ic_launcher_foreground),
-                    contentDescription = null,
+                    contentDescription = "客服头像",
                     modifier = Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onPrimary,
                 )

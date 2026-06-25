@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """桥接 mod 物理目录存在性辅助。
 
 平台桥接 mod（xcagi-*-bridge 等）的物理目录是**可选打包产物**：facade 逻辑由

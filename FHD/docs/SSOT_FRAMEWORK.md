@@ -91,7 +91,10 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 | 2 | CONFIG（领域不存在/已禁用） |
 | 3 | EXEC（插件执行异常） |
 
-## 当前登记领域（10 个，全部启用）
+## 当前登记领域（12 个，全部启用）
+
+> 2026-06-23：补登记 `employee-roster` / `db-schema` 两个此前游离的真相源；
+> 实测 `deps` / `k8s-manifests` 旧文档所记 31 / 51 漂移已不存在（均为 0）。
 
 ### 核心 5 域（MVP 范围，有 sync 能力）
 
@@ -109,16 +112,27 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 |------|------|------|-----------|------|---------|
 | test-files | lint | FHD/tests/ | test_files.py（禁止临时文件） | 无 | OK |
 | deploy-scripts | lint | FHD/scripts/deploy/ | deploy_scripts.py（shebang/set -e） | 无 | OK（有警告） |
-| deps | sync+verify | FHD/pyproject.toml | deps.py（pyproject vs requirements*.txt） | 无（需人工 reconcile） | DRIFT（31 处） |
+| deps | sync+verify | FHD/pyproject.toml | deps.py（pyproject vs requirements*.txt） | 无（需人工 reconcile） | OK（server-api/ml 包名集合一致，0 漂移） |
 | error-codes | lint | FHD/app/http/error_codes.py | error_codes.py（常量自洽） | 无 | OK |
-| k8s-manifests | verify | FHD/k8s/ | k8s.py（SSOT vs XCAGI/k8s） | 无（derived 已弃用） | DRIFT（51 处） |
+| k8s-manifests | verify | FHD/k8s/ | k8s.py（SSOT vs XCAGI/k8s） | 无（derived 已弃用） | OK（XCAGI/k8s 已清理，0 漂移） |
+
+### 补登记 2 域（2026-06-23，此前游离于注册表外）
+
+| 领域 | 模式 | SSOT | check 适配 | sync | 当前状态 |
+|------|------|------|-----------|------|---------|
+| employee-roster | sync | FHD/config/duty_roster.json | ../scripts/dev/sync_duty_roster.py --check（4 派生目标） | ../scripts/dev/sync_duty_roster.py --generate | OK |
+| db-schema | verify | FHD/alembic/versions/ | ../scripts/guard_alembic_single_head.py（单 head/无悬挂，纯 stdlib） | 无（alembic 收敛中） | OK |
+
+> 注：`db-schema` 的完整 ORM-parity（`alembic upgrade head == models`）由独立的
+> `fhd-alembic-ssot.yml` 的 `ssot-parity` job 单独把关（advisory，待一次 PG 绿后转 blocking）；
+> 注册表内的 check 只做轻量结构守卫，避免 `ssot gate` 依赖 DB。
 
 ## 安全护栏
 
 1. **dry-run 默认**：`ssot sync` 不加 `--apply` 只打印，不写盘；`version_sync.py` 默认 dry-run
 2. **插件只包装不修改**：现有脚本零改动，适配器只转发调用
 3. **禁用领域不参与 check/gate**：`enabled: false` 的领域被 `check/gate` 拒绝（exit 2）
-4. **CI 门禁 advisory**：MVP 阶段 `ssot-drift-gate` job 使用 `continue-on-error: true`，不阻断流水线
+4. **CI 门禁 blocking**：`ssot-drift-gate` job 已于 2026-06-23 去掉 `continue-on-error`（漂移则 exit 1 阻断流水线）。升级依据：deps/k8s 静态核实 0 漂移，version/coverage/alembic-single-head 为既有硬门（绿）；12 域全绿由本 PR 的 `ssot-drift-gate` job 在合并前终验（红则自动拦截，不会带病合入 main）
 5. **drift 输出纯净 JSON**：subprocess 输出被静默，保证 CI 可解析
 6. **version_sync count=1**：只替换第一个匹配，避免 `python_version = "3.11"` 被 `version = "..."` pattern 误匹配
 7. **check/sync 同源**：version_sync.py 复用 verify_version_anchors.py 的 ANCHORS 列表，保证"检测的锚点 = 同步的锚点"
@@ -140,13 +154,13 @@ python -m pytest tests/test_dev/ -v
 
 ## CI 集成
 
-`fhd-ci-cd.yml` 中新增 `ssot-drift-gate` job（advisory）：
+`fhd-ci-cd.yml` 中 `ssot-drift-gate` job（blocking）：
 
 ```yaml
 ssot-drift-gate:
-  name: SSOT Drift Gate (advisory)
+  name: SSOT Drift Gate
   runs-on: ubuntu-latest
-  continue-on-error: true
+  continue-on-error: false
   steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
@@ -172,6 +186,7 @@ ssot-drift-gate:
 
 ## 后续路线
 
-- **P3**：将 advisory gate 升级为 blocking gate（需先解决 deps/k8s-manifests 的真实漂移）
-- **deps reconcile**：人工决策 requirements.txt 与 pyproject.toml 的差异（补 pyproject 或改 requirements）
-- **k8s-manifests cleanup**：git rm FHD/XCAGI/k8s/（derived 已弃用，README 声明）
+- ✅ **P3 已完成（2026-06-23）**：advisory gate 升级为 blocking gate（deps/k8s 实测 0 漂移，无需 reconcile）
+- ✅ **deps reconcile**：核实 server-api/ml 包名集合与 requirements*.txt 一致，0 漂移
+- ✅ **k8s-manifests cleanup**：FHD/XCAGI/k8s/ 已清理（derived 弃用），插件返回 OK
+- **下一步**：`db-schema` 的 alembic ssot-parity job 待一次 PG 绿后从 advisory 转 blocking（见 fhd-alembic-ssot.yml）

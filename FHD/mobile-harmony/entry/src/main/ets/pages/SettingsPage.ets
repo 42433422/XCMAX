@@ -9,15 +9,20 @@ export struct SettingsPage {
   @Consume loading: boolean;
   @Consume companyBrand: string;
   @Consume baseUrl: string;
+  @Consume relayDesktopId: string;
 
   onBack: () => void = () => {};
   onSetBiometric: (enabled: boolean) => void = () => {};
   onSetThemeMode: (mode: string) => void = () => {};
   onSubmitFeedback: (message: string, onDone: () => void) => void = () => {};
   onCheckForUpdate: () => void = () => {};
+  onBindRelayDesktop: (code: string, onDone: (ok: boolean, msg: string) => void) => void = () => {};
 
   @State feedback: string = '';
   @State feedbackSubmitted: boolean = false;
+  @State relayCode: string = '';
+  @State relayBinding: boolean = false;
+  @State relayMsg: string = '';
 
   build() {
     Column() {
@@ -25,6 +30,7 @@ export struct SettingsPage {
       Scroll() {
         Column({ space: 12 }) {
           this.SecuritySection();
+          this.RelaySection();
           this.AppearanceSection();
           this.FeedbackSection();
           this.VersionSection();
@@ -170,6 +176,89 @@ export struct SettingsPage {
       .onClick(() => {
         this.onSetThemeMode(mode);
       });
+  }
+
+  @Builder
+  RelaySection() {
+    Column() {
+      this.SectionCaption('电脑执行端');
+      Column({ space: 10 }) {
+        Row({ space: 12 }) {
+          Text('派')
+            .width(32)
+            .height(32)
+            .borderRadius(8)
+            .fontSize(16)
+            .fontColor('#1D4ED8')
+            .textAlign(TextAlign.Center)
+            .backgroundColor('#E8F0FF');
+          Column({ space: 2 }) {
+            Text('绑定电脑执行端')
+              .fontSize(15)
+              .fontColor('#111827');
+            Text(this.relayDesktopId.length > 0
+              ? '已绑定，超级员工任务经云中继派到该电脑'
+              : '输入电脑端显示的 6 位设备码，离线也能派工')
+              .fontSize(12)
+              .fontColor(this.relayDesktopId.length > 0 ? '#15803D' : '#6B7280');
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1);
+        }
+        .width('100%')
+        .padding(14);
+
+        TextInput({ text: this.relayCode, placeholder: '6 位设备码' })
+          .width('100%')
+          .height(44)
+          .fontSize(15)
+          .fontColor('#111827')
+          .type(InputType.Number)
+          .maxLength(6)
+          .backgroundColor('#F9FAFB')
+          .borderRadius(10)
+          .border({ width: 1, color: '#E5E7EB' })
+          .padding(10)
+          .onChange((value: string) => {
+            this.relayCode = value;
+          });
+
+        Button(this.relayBinding ? '绑定中…' : (this.relayDesktopId.length > 0 ? '重新绑定' : '绑定'))
+          .height(44)
+          .width('100%')
+          .fontSize(15)
+          .fontColor('#FFFFFF')
+          .backgroundColor(this.relayCode.trim().length === 6 && !this.relayBinding ? '#2563EB' : '#9CA3AF')
+          .borderRadius(12)
+          .enabled(this.relayCode.trim().length === 6 && !this.relayBinding && !this.loading)
+          .onClick(() => {
+            const code = this.relayCode.trim();
+            if (code.length !== 6) return;
+            this.relayBinding = true;
+            this.relayMsg = '';
+            this.onBindRelayDesktop(code, (ok: boolean, msg: string) => {
+              this.relayBinding = false;
+              this.relayMsg = msg;
+              if (ok) {
+                this.relayCode = '';
+              }
+            });
+          });
+
+        if (this.relayMsg.length > 0) {
+          Text(this.relayMsg)
+            .fontSize(12)
+            .fontColor('#6B7280')
+            .width('100%');
+        }
+      }
+      .width('100%')
+      .padding(14)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(14)
+      .border({ width: 1, color: '#E5E7EB' });
+    }
+    .width('100%');
   }
 
   @Builder

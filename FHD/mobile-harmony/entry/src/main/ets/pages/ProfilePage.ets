@@ -93,6 +93,7 @@ export struct ProfilePage {
             this.FeatureCell('圈', '#B45309', 'AI圈子', 'aicircle');
             this.FeatureCell('扫', '#166534', '扫一扫', 'scan');
             this.FeatureCell('字', '#C2410C', '文字识别', 'ocr');
+            this.FeatureCell('纪', '#0F766E', '会议纪要', 'meeting');
             this.FeatureCell('店', '#4338CA', '应用市场', 'market');
             this.FeatureCell('桥', '#6B7280', '服务桥', 'bridge');
             this.FeatureCell('尾', '#92400E', '长尾分析', 'longtail');

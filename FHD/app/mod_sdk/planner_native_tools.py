@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 F：Planner 工具 handler 由 Mod backend 提供（优先于宿主 workflow）。"""
 
 from __future__ import annotations

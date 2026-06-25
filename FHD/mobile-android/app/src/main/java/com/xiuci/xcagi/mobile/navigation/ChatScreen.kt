@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Difference
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -153,6 +155,9 @@ private fun parseEmployeeConversationRef(conversationId: String?): EmployeeConve
 internal fun isCodexConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CODEX
 
+internal fun isCursorConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.CURSOR
+
 internal fun isClaudeConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CLAUDE
 
@@ -162,6 +167,7 @@ internal fun chatAvatarFallback(
 ): AppAvatarFallback =
     when {
         isCodexConversation(conversationId) -> AppAvatarFallback.CODEX
+        isCursorConversation(conversationId) -> AppAvatarFallback.CURSOR
         isClaudeConversation(conversationId) -> AppAvatarFallback.CLAUDE
         hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
         else -> AppAvatarFallback.ASSISTANT
@@ -176,6 +182,7 @@ fun ChatScreen(
     onBack: (() -> Unit)? = null,
     onOpenMod: (String) -> Unit = {},
     onOpenOcr: () -> Unit = {},
+    onOpenMeetingMinutes: () -> Unit = {},
     onOpenProfile: (() -> Unit)? = null,
     onOpenEmployeeProfile: (String, String) -> Unit = { _, _ -> },
 ) {
@@ -220,6 +227,16 @@ fun ChatScreen(
             }
 
     fun startVoiceInput() {
+        // 优先用应用内语音面板（统一的脉冲环 UI、视觉一致、可控）；
+        // 仅在设备无 SpeechRecognizer 时才兜底系统语音识别界面。
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            val hasPermission =
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                            PackageManager.PERMISSION_GRANTED
+            if (hasPermission) showVoiceSheet = true
+            else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
         val intent =
                 Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(
@@ -232,23 +249,25 @@ fun ChatScreen(
         try {
             speechIntentLauncher.launch(intent)
         } catch (_: ActivityNotFoundException) {
-            // 无系统语音 UI → 回退到 app 内识别器(需录音权限)。
-            if (SpeechRecognizer.isRecognitionAvailable(context)) {
-                val hasPermission =
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                                PackageManager.PERMISSION_GRANTED
-                if (hasPermission) showVoiceSheet = true
-                else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            } else {
-                vm.snack("当前设备未提供语音输入")
-            }
+            vm.snack("当前设备未提供语音输入")
         }
     }
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
     val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
     val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
+    val cursorConversation = remember(conversationId) { isCursorConversation(conversationId) }
     val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
+    // 员工隔离：会议纪要等小C专属能力仅在小C(助手)会话出现。
+    // 平台员工(employeeRef)/超级员工(codex/cursor/claude)/客服(CS)会话一律不得使用。
+    val assistantConversation = remember(conversationId, employeeRef) {
+        employeeRef == null &&
+            !isCodexConversation(conversationId) &&
+            !isCursorConversation(conversationId) &&
+            !isClaudeConversation(conversationId) &&
+            conversationId?.trim() != PinnedIds.CS
+    }
+    val superMode by vm.superMode.collectAsState()
     val employeeProfile =
         remember(employeeRef, employees) {
             employeeRef?.let { ref -> employees.findEmployee(ref.modId, ref.employeeId) }
@@ -257,6 +276,7 @@ fun ChatScreen(
         when {
             employeeProfile != null -> employeeProfile.name
             codexConversation -> "超级员工-Codex"
+            cursorConversation -> "超级员工-Cursor"
             claudeConversation -> "超级员工-Claude"
             else -> conversationTitle
         }
@@ -341,9 +361,21 @@ fun ChatScreen(
                         iconTint = MaterialTheme.colorScheme.secondary,
                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
                         showArrow = true,
-                        showDivider = false,
+                        showDivider = assistantConversation,
                         onClick = { showMoreSheet = false; onOpenOcr() },
                     )
+                    // 会议纪要为小C专属：仅在小C(助手)会话展示，员工/超级员工/客服会话隐藏（员工隔离）。
+                    if (assistantConversation) {
+                        WeCell(
+                            title = "会议纪要",
+                            subtitle = "录音转写，一键生成三级纪要（剧本→架构图→说人话）",
+                            iconTint = MaterialTheme.colorScheme.secondary,
+                            iconBg = MaterialTheme.colorScheme.secondaryContainer,
+                            showArrow = true,
+                            showDivider = false,
+                            onClick = { showMoreSheet = false; onOpenMeetingMinutes() },
+                        )
+                    }
                 }
             }
         }
@@ -378,7 +410,10 @@ fun ChatScreen(
                 onVoice = { startVoiceInput() },
                 onMore = { showMoreSheet = true },
                 gitBranch = gitBranch,
-                showDevTools = claudeConversation || codexConversation,
+                showDevTools = claudeConversation || codexConversation || cursorConversation,
+                showModes = claudeConversation || codexConversation || cursorConversation,
+                superMode = superMode,
+                onSuperModeChange = { vm.setSuperMode(it) },
                 onGitMerge = { gitBranch?.let { vm.gitMerge(it, conversationId) } },
                 onGitDiff = { gitBranch?.let { vm.gitDiff(it, conversationId) } },
                 onGitDiscard = { gitBranch?.let { vm.gitDiscard(it, conversationId) } },
@@ -645,6 +680,9 @@ private fun ImInputBar(
     onMore: (() -> Unit)? = null,
     gitBranch: String? = null,
     showDevTools: Boolean = false,
+    showModes: Boolean = false,
+    superMode: String = "auto",
+    onSuperModeChange: (String) -> Unit = {},
     onGitMerge: () -> Unit = {},
     onGitDiff: () -> Unit = {},
     onGitDiscard: () -> Unit = {},
@@ -658,6 +696,10 @@ private fun ImInputBar(
         Column {
             // 顶部分隔线
             HorizontalDivider(thickness = 0.5.dp, color = imDivider())
+            // 派工模式三态控件：自动/直答/多设备（替代后端关键词自动判断）。超级员工聊天里常驻。
+            if (showModes) {
+                SuperEmployeeModeBar(mode = superMode, onModeChange = onSuperModeChange)
+            }
             // 开发工具条：超级员工聊天里常驻（钉钉式输入框上方一排）。
             // 有分支时点亮可合并/查看/丢弃；无分支置灰，点了提示先发开发任务。
             if (showDevTools) {
@@ -690,7 +732,7 @@ private fun ImInputBar(
 
                 // 输入框（微信风格：圆角矩形+浅灰背景）
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.weight(1f).height(38.dp),
                 ) {
@@ -703,7 +745,7 @@ private fun ImInputBar(
                             color = imTextPrimary(),
                             fontSize = 15.sp,
                         ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(XcagiTheme.extra.weChatOnline),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(XcagiTheme.extra.brandBlue),
                         decorationBox = { inner ->
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                                 if (value.isEmpty()) {
@@ -719,39 +761,57 @@ private fun ImInputBar(
                     )
                 }
 
-                // 发送/停止（常驻显示，微信风格圆角按钮+按压动画）
+                // 右侧动作（微信式）：流式→"停止" pill；有输入→"发送" pill；空白→收成"＋"功能入口。
                 var pressed by remember { mutableStateOf(false) }
                 val scale by animateFloatAsState(
                     targetValue = if (pressed) 0.92f else 1f,
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
                     label = "sendScale",
                 )
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = if (streaming) MaterialTheme.colorScheme.errorContainer else XcagiTheme.extra.weChatOnline,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .scale(scale)
-                        .pointerInput(streaming) {
-                            detectTapGestures(
-                                onPress = {
-                                    pressed = true
-                                    awaitRelease()
-                                    pressed = false
-                                },
-                                onTap = {
-                                    if (streaming) { haptics.tap(); onStop() }
-                                    else { haptics.confirm(); onSend() }
-                                },
+                val hasInput = value.isNotBlank()
+                if (streaming || hasInput) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (streaming) MaterialTheme.colorScheme.errorContainer
+                                else XcagiTheme.extra.brandBlue,
+                        modifier = Modifier
+                            .height(38.dp)
+                            .scale(scale)
+                            .pointerInput(streaming) {
+                                detectTapGestures(
+                                    onPress = {
+                                        pressed = true
+                                        awaitRelease()
+                                        pressed = false
+                                    },
+                                    onTap = {
+                                        if (streaming) { haptics.tap(); onStop() }
+                                        else { haptics.confirm(); onSend() }
+                                    },
+                                )
+                            },
+                    ) {
+                        Box(
+                            Modifier.fillMaxHeight().padding(horizontal = 17.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                if (streaming) "停止" else "发送",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 15.sp,
+                                ),
+                                color = if (streaming) MaterialTheme.colorScheme.error else Color.White,
                             )
-                        },
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
+                        }
+                    }
+                } else if (onMore != null) {
+                    IconButton(onClick = onMore, modifier = Modifier.size(38.dp)) {
                         Icon(
-                            if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
-                            contentDescription = if (streaming) "停止" else "发送",
-                            tint = if (streaming) MaterialTheme.colorScheme.error else Color.White,
-                            modifier = Modifier.size(20.dp),
+                            Icons.Default.Add,
+                            contentDescription = "更多",
+                            tint = imTextPrimary(),
+                            modifier = Modifier.size(26.dp),
                         )
                     }
                 }
@@ -764,6 +824,51 @@ private fun ImInputBar(
 //  情境功能键条（开发任务分支：合并/diff/丢弃）
 //  仿钉钉/微信：输入框上方一排快捷键，跟着场景出现、用完即走
 // ══════════════════════════════════════════
+// 派工模式三态控件（自动 / 直答 / 多设备）。替代后端 _TASK_MARKERS 关键词自动判断：
+// 自动=交后端按内容判断；直答=单设备 CLI 直答；多设备=强制 Para 多设备派工。
+@Composable
+private fun SuperEmployeeModeBar(
+    mode: String,
+    onModeChange: (String) -> Unit,
+) {
+    val haptics = rememberHaptics()
+    val options = listOf(
+        "auto" to "自动",
+        "chat" to "直答",
+        "code" to "多设备",
+    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEach { (value, label) ->
+            val selected = mode == value
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color =
+                    if (selected) XcagiTheme.extra.weChatOnline.copy(alpha = 0.14f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.clickable {
+                    if (!selected) {
+                        haptics.tap()
+                        onModeChange(value)
+                    }
+                },
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (selected) XcagiTheme.extra.weChatOnline else imTextSecondary(),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun GitActionBar(
     branch: String?,
@@ -782,7 +887,7 @@ private fun GitActionBar(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Default.CallMerge,
-                contentDescription = null,
+                contentDescription = "待处理分支",
                 tint = imTextSecondary(),
                 modifier = Modifier.size(13.dp),
             )
@@ -803,7 +908,7 @@ private fun GitActionBar(
             GitChip(
                 "合并到主干",
                 Icons.Default.CallMerge,
-                XcagiTheme.extra.weChatOnline,
+                XcagiTheme.extra.brandBlue,
                 filled = active,
                 dimmed = !active,
             ) {

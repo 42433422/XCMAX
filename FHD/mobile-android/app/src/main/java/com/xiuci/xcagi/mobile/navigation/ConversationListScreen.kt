@@ -28,28 +28,38 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,7 +89,7 @@ import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 // ═══════════════════════════════════════════
 // 首页 — 会话列表（微信风格）
 // ═══════════════════════════════════════════
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConversationListScreen(
         vm: AppViewModel,
@@ -127,54 +137,33 @@ fun ConversationListScreen(
                 else aiGroups.filter { it.name.contains(searchQuery, ignoreCase = true) }
             }
 
-    // 长按群聊时的操作菜单
+    // 长按群聊时的操作菜单（微信/钉钉式底部动作面板）
     longPressGroup?.let { g ->
-        AlertDialog(
-            onDismissRequest = { longPressGroup = null },
-            title = { Text(g.name.ifBlank { "群聊操作" }) },
-            text = {
-                Column {
-                    TextButton(onClick = { vm.markGroupUnread(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text("标为未读") }
-                    TextButton(onClick = { vm.toggleGroupPin(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_pinned) "取消置顶" else "置顶聊天") }
-                    TextButton(onClick = { vm.toggleGroupFollowed(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_followed) "不再关注" else "恢复关注") }
-                    TextButton(onClick = { vm.toggleGroupHidden(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text(if (g.is_hidden) "显示该聊天" else "不显示该聊天") }
-                    TextButton(onClick = { vm.deleteGroup(g.id); longPressGroup = null; haptics.tap() }, modifier = Modifier.fillMaxWidth()) { Text("删除该聊天", color = MaterialTheme.colorScheme.error) }
-                }
-            },
-            confirmButton = { TextButton(onClick = { longPressGroup = null }) { Text("关闭") } },
+        ConversationActionSheet(
+                title = g.name.ifBlank { "群聊操作" },
+                onDismiss = { longPressGroup = null },
+                actions = listOf(
+                        ConversationAction("标为未读") { vm.markGroupUnread(g.id); longPressGroup = null; haptics.tap() },
+                        ConversationAction(if (g.is_pinned) "取消置顶" else "置顶聊天") { vm.toggleGroupPin(g.id); longPressGroup = null; haptics.tap() },
+                        ConversationAction(if (g.is_followed) "不再关注" else "恢复关注") { vm.toggleGroupFollowed(g.id); longPressGroup = null; haptics.tap() },
+                        ConversationAction(if (g.is_hidden) "显示该聊天" else "不显示该聊天") { vm.toggleGroupHidden(g.id); longPressGroup = null; haptics.tap() },
+                        ConversationAction("删除该聊天", danger = true) { vm.deleteGroup(g.id); longPressGroup = null; haptics.tap() },
+                ),
         )
     }
 
-    // 长按会话时的操作菜单
+    // 长按会话时的操作菜单（微信/钉钉式底部动作面板）
     longPressItem?.let { item ->
-        AlertDialog(
-            onDismissRequest = { longPressItem = null },
-            title = { Text(item.title.ifBlank { "会话操作" }) },
-            text = {
-                Column {
-                    TextButton(
-                            onClick = { vm.toggleConversationUnread(item.id); longPressItem = null; haptics.tap() },
-                            modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (item.unreadCount > 0) "标为已读" else "标为未读") }
-                    TextButton(
-                            onClick = { vm.toggleConversationPin(item.id); longPressItem = null; haptics.tap() },
-                            modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (item.isPinned) "取消置顶" else "置顶聊天") }
-                    TextButton(
-                            onClick = { vm.toggleConversationFollowed(item.id); longPressItem = null; haptics.tap() },
-                            modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (item.isFollowed) "不再关注" else "恢复关注") }
-                    TextButton(
-                            onClick = { vm.toggleConversationHidden(item.id); longPressItem = null; haptics.tap() },
-                            modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (item.isHidden) "显示该聊天" else "不显示该聊天") }
-                    TextButton(
-                            onClick = { vm.deleteConversation(item.id); longPressItem = null; haptics.tap() },
-                            modifier = Modifier.fillMaxWidth(),
-                    ) { Text("删除该聊天", color = MaterialTheme.colorScheme.error) }
-                }
-            },
-            confirmButton = { TextButton(onClick = { longPressItem = null }) { Text("关闭") } },
+        ConversationActionSheet(
+                title = item.title.ifBlank { "会话操作" },
+                onDismiss = { longPressItem = null },
+                actions = listOf(
+                        ConversationAction(if (item.unreadCount > 0) "标为已读" else "标为未读") { vm.toggleConversationUnread(item.id); longPressItem = null; haptics.tap() },
+                        ConversationAction(if (item.isPinned) "取消置顶" else "置顶聊天") { vm.toggleConversationPin(item.id); longPressItem = null; haptics.tap() },
+                        ConversationAction(if (item.isFollowed) "不再关注" else "恢复关注") { vm.toggleConversationFollowed(item.id); longPressItem = null; haptics.tap() },
+                        ConversationAction(if (item.isHidden) "显示该聊天" else "不显示该聊天") { vm.toggleConversationHidden(item.id); longPressItem = null; haptics.tap() },
+                        ConversationAction("删除该聊天", danger = true) { vm.deleteConversation(item.id); longPressItem = null; haptics.tap() },
+                ),
         )
     }
 
@@ -244,36 +233,41 @@ fun ConversationListScreen(
                 ) {
                     // AI 群聊（6 个部门群，学微信直接出现在消息页）
                     items(filteredGroups, key = { "group:${it.id}" }) { group ->
-                        GroupConversationRow(
-                            group = group,
-                            onClick = { onOpenGroup(group) },
-                            onLongClick = { haptics.confirm(); longPressGroup = group },
-                        )
-                        HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                thickness = 0.5.dp,
-                                modifier = Modifier.padding(start = 84.dp),
-                        )
+                        Column(Modifier.animateItemPlacement()) {
+                            GroupConversationRow(
+                                group = group,
+                                onClick = { onOpenGroup(group) },
+                                onLongClick = { haptics.confirm(); longPressGroup = group },
+                            )
+                            HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                    thickness = 0.5.dp,
+                                    modifier = Modifier.padding(start = 84.dp),
+                            )
+                        }
                     }
                     items(filtered, key = { it.id }) { item ->
-                        ConversationCell(
-                                item = item,
-                                onClick = {
-                                    when (item.id) {
-                                        PinnedIds.ASSISTANT -> onOpenAssistant()
-                                        PinnedIds.CS -> onOpenCustomerService()
-                                        PinnedIds.CODEX -> onOpenConversation(PinnedIds.CODEX)
-                                        PinnedIds.CLAUDE -> onOpenConversation(PinnedIds.CLAUDE)
-                                        else -> onOpenConversation(item.id)
-                                    }
-                                },
-                                onLongClick = { haptics.confirm(); longPressItem = item },
-                        )
-                        HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                thickness = 0.5.dp,
-                                modifier = Modifier.padding(start = 84.dp),
-                        )
+                        Column(Modifier.animateItemPlacement()) {
+                            ConversationCell(
+                                    item = item,
+                                    onClick = {
+                                        when (item.id) {
+                                            PinnedIds.ASSISTANT -> onOpenAssistant()
+                                            PinnedIds.CS -> onOpenCustomerService()
+                                            PinnedIds.CODEX -> onOpenConversation(PinnedIds.CODEX)
+                                            PinnedIds.CURSOR -> onOpenConversation(PinnedIds.CURSOR)
+                                            PinnedIds.CLAUDE -> onOpenConversation(PinnedIds.CLAUDE)
+                                            else -> onOpenConversation(item.id)
+                                        }
+                                    },
+                                    onLongClick = { haptics.confirm(); longPressItem = item },
+                            )
+                            HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                    thickness = 0.5.dp,
+                                    modifier = Modifier.padding(start = 84.dp),
+                            )
+                        }
                     }
 
                     if (!hasEcosystemEmployees && searchQuery.isBlank() && selectedFilter == ConversationFilter.ALL) {
@@ -322,6 +316,70 @@ private enum class ConversationFilter {
     ALL,
     PINNED,
     UNREAD,
+}
+
+// ═══════════════════════════════════════════
+// 长按操作面板（微信/钉钉式底部 ModalBottomSheet）
+// ═══════════════════════════════════════════
+private data class ConversationAction(
+        val label: String,
+        val danger: Boolean = false,
+        val onClick: () -> Unit,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConversationActionSheet(
+        title: String,
+        onDismiss: () -> Unit,
+        actions: List<ConversationAction>,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    // 点动作时先播放收起动画再执行，质感更顺滑；动画失败也兜底执行。
+    fun runThenClose(action: () -> Unit) {
+        scope.launch { sheetState.hide() }.invokeOnCompletion { action() }
+    }
+    ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(bottom = Spacing.lg)) {
+            if (title.isNotBlank()) {
+                Box(
+                        Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                        contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                            title,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            actions.forEachIndexed { index, action ->
+                Box(
+                        Modifier.fillMaxWidth()
+                                .height(52.dp)
+                                .clickable { runThenClose(action.onClick) },
+                        contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                            action.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (action.danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                if (index < actions.lastIndex) {
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -406,13 +464,45 @@ private fun HeaderPlusMenu(
         IconButton(onClick = { expanded = true }) {
             Icon(Icons.Default.Add, contentDescription = "更多", tint = MaterialTheme.colorScheme.onSurface)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(text = { Text("发起群聊") }, onClick = { expanded = false; onStartGroupChat() })
-            DropdownMenuItem(text = { Text("扫一扫") }, onClick = { expanded = false; onOpenScan() })
-            DropdownMenuItem(text = { Text("AI员工") }, onClick = { expanded = false; onOpenEmployees() })
-            DropdownMenuItem(text = { Text("通讯录") }, onClick = { expanded = false; onOpenContacts() })
-            DropdownMenuItem(text = { Text("交流圈") }, onClick = { expanded = false; onOpenDiscover() })
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            shape = RoundedCornerShape(14.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shadowElevation = 12.dp,
+            modifier = Modifier.width(188.dp),
+        ) {
+            PlusMenuRow(Icons.Default.Groups, "发起群聊") { expanded = false; onStartGroupChat() }
+            PlusMenuRow(Icons.Default.QrCodeScanner, "扫一扫") { expanded = false; onOpenScan() }
+            PlusMenuRow(Icons.Default.SmartToy, "AI 员工") { expanded = false; onOpenEmployees() }
+            PlusMenuRow(Icons.Default.Contacts, "通讯录") { expanded = false; onOpenContacts() }
+            PlusMenuRow(Icons.Default.Public, "交流圈") { expanded = false; onOpenDiscover() }
         }
+    }
+}
+
+@Composable
+private fun PlusMenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = XcagiTheme.extra.brandBlue,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(14.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -445,7 +535,7 @@ internal fun SearchBarField(
         ) {
             Icon(
                     Icons.Default.Search,
-                    contentDescription = null,
+                    contentDescription = "搜索会话",
                     tint = XcagiTheme.extra.n400,
                     modifier = Modifier.size(20.dp),
             )
@@ -771,6 +861,7 @@ private fun ConversationCell(
                     ConversationType.PINNED_ASSISTANT,
                     ConversationType.PINNED_CS,
                     ConversationType.PINNED_CODEX,
+                    ConversationType.PINNED_CURSOR,
                     ConversationType.PINNED_CLAUDE -> PinnedAvatar(type = item.type)
                     else -> AppAvatar(
                         imageSource = item.avatarUrl,
@@ -903,6 +994,7 @@ private fun PinnedAvatar(type: ConversationType) {
         ConversationType.PINNED_ASSISTANT -> AssistantAvatar()
         ConversationType.PINNED_CS -> CsAvatar()
         ConversationType.PINNED_CODEX -> CodexAvatar()
+        ConversationType.PINNED_CURSOR -> CursorAvatar()
         ConversationType.PINNED_CLAUDE -> ClaudeAvatar()
         else -> AssistantAvatar()
     }
@@ -941,6 +1033,17 @@ private fun CodexAvatar() {
     )
 }
 
+/** 超级员工-Cursor 头像 */
+@Composable
+private fun CursorAvatar() {
+    AppAvatar(
+        fallback = AppAvatarFallback.CURSOR,
+        size = 52.dp,
+        shape = MaterialTheme.shapes.small,
+        contentDescription = "超级员工-Cursor",
+    )
+}
+
 /** 超级员工-Claude 头像 */
 @Composable
 private fun ClaudeAvatar() {
@@ -955,7 +1058,7 @@ private fun ClaudeAvatar() {
 // ═══════════════════════════════════════════
 // 时间格式化
 // ═══════════════════════════════════════════
-private fun formatTimestamp(ts: Long): String {
+internal fun formatTimestamp(ts: Long): String {
     if (ts <= 0L) return ""
     val now = System.currentTimeMillis()
     val diffMs = now - ts

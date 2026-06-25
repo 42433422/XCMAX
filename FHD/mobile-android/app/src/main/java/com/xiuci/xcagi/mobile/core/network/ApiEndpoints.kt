@@ -79,6 +79,7 @@ object ApiEndpoints {
     // 管理员
     const val ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/codex-super-employee/messages"
     const val ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/claude-super-employee/messages"
+    const val ADMIN_CURSOR_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/cursor-super-employee/messages"
 
     // AI 群聊
     const val AI_GROUPS = "$BASE/ai-groups"
@@ -102,4 +103,13 @@ object ApiEndpoints {
 
     // 钱包 / 余额
     const val WALLET_BALANCE = "$BASE/wallet/balance"
+
+    // 会议纪要 SSOT（三级派生）
+    const val MEETING_LEVELS = "$BASE/meetings/levels"
+    const val MEETING_GENERATE = "$BASE/meetings/generate-all"
+    const val MEETING_LIST = "$BASE/meetings"
+    const val MEETING_DETAIL = "$BASE/meetings/{id}"
+
+    // 录音转写（与桌面/Web 共用同一 ASR 端点，非 mobile/v1 命名空间）
+    const val VOICE_TRANSCRIBE = "api/voice/transcribe"
 }

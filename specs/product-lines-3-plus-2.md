@@ -1,10 +1,25 @@
 # XCMAX 产品线策略（3+2）
 
 > 状态：当前执行口径
-> 更新日期：2026-06-17
-> 适用范围：`XCMAX/` 根仓、`FHD/`、`成都修茈科技有限公司/`、`FHD/mobile-android/`
+> 更新日期：2026-06-24
+> 适用范围：`XCMAX/` 根仓、`FHD/`、`成都修茈科技有限公司/`、`FHD/mobile-android/`、`FHD/mobile-harmony/`、`FHD/mobile-ios/`
+> 机器真相源：本文件为散文策略口径；**三端 × 渠道 × 发行版的机器可校验真相源是 [`FHD/config/product.yaml`](../FHD/config/product.yaml)**（`python scripts/dev/ssot_plugins/product.py check` 守卫）。两者冲突以 product.yaml 为准并经 PR 修正本文件。
 
 ## 1. 决策摘要
+
+XCMAX 产品按 **三端** 交付，每端的发行版与渠道见下表（与 `config/product.yaml` 对齐）：
+
+| 端 | 说明 | 发行版 | 渠道 / 平台 | 路径 |
+|----|------|--------|------------|------|
+| 服务器官网端 | AI 员工商店 / Mod 分发、授权、订阅、支付、更新源 | **不区分**个人/企业 | Web | `成都修茈科技有限公司/` |
+| 电脑端 | 企业桌面 ERP + AI 主交付 | **仅企业版**（个人版停产） | Windows、macOS | `FHD/` |
+| 手机端 | 桌面端的移动协同助手 | **仅企业版**（个人版停产） | 安卓 / 苹果 / 鸿蒙（**三渠道进度须同步**） | `FHD/mobile-android/`、`FHD/mobile-ios/`、`FHD/mobile-harmony/` |
+
+手机三渠道状态：安卓 active、鸿蒙 active、苹果 in_development（原生 SwiftUI 工程在分支待并入主干，并入后补版本锚点）。
+
+## 1.1 业务线视角（3+2，与三端互为映射）
+
+“端视角” 与历史 “业务线视角” 是同一产品的两种切法：员工商店≈官网端、企业桌面≈电脑端、移动协同≈手机端；个人版在两种视角下都已停产/冻结。
 
 XCMAX 当前按 **三条主线 + 个人版冻结** 推进：
 
@@ -107,11 +122,14 @@ XCMAX 当前按 **三条主线 + 个人版冻结** 推进：
 
 | 目录 | 归属线 | 说明 |
 |------|--------|------|
-| `FHD/` | 企业桌面 ERP + AI | 主产品；后端、前端、桌面打包、企业交付文档 |
-| `FHD/mobile-android/` | 移动 AI 协同 App | Android 原生客户端 |
-| `成都修茈科技有限公司/` | AI 员工商店 | MODstore、官网、支付和员工市场 |
+| `FHD/` | 企业桌面 ERP + AI | 主产品；后端、前端、桌面打包（Windows/macOS）、企业交付文档 |
+| `FHD/mobile-android/` | 移动 AI 协同 App（安卓） | Android 原生客户端（active） |
+| `FHD/mobile-harmony/` | 移动 AI 协同 App（鸿蒙） | HarmonyOS 原生客户端（active，enterprise-only） |
+| `FHD/mobile-ios/` | 移动 AI 协同 App（苹果） | iOS 原生 SwiftUI 客户端（in_development，工程在分支待并入主干） |
+| `成都修茈科技有限公司/` | AI 员工商店（官网端） | MODstore、官网、支付和员工市场；不区分个人/企业发行版 |
 | `specs/` | 跨线规划 | 产品线、任务、周报、技术债治理 |
-| `FHD/docs/_archive/FHD-个人/` | 个人版冻结 | 只读归档与兼容说明 |
+| `FHD/config/product.yaml` | 产品形态机器真相源 | 三端 × 渠道 × 发行版；`product.py check` 守卫 |
+| `FHD/docs/_archive/FHD-个人/` | 个人版停产/冻结 | 只读归档与兼容说明 |
 
 ## 6. 当前不做
 

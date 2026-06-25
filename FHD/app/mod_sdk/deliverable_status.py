@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """可交付状态聚合：供验收、前端首启引导与技术支持诊断。"""
 
 from __future__ import annotations

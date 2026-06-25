@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """客户交付清单：行业包 ↔ 账号定制 Mod（legacy id）映射。"""
 
 from __future__ import annotations

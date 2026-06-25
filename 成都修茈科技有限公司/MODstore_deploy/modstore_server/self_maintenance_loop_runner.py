@@ -710,7 +710,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             if (
                 isinstance(item, dict)
                 and item.get("kind") == "failed_steps"
-                and int(item.get("retry_count") or 1) >= max_retries
+                and int(item.get("retry_count") or 0) > max_retries
             ):
                 item["escalated"] = True
                 logger.warning(
@@ -718,15 +718,31 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     item.get("run_id"),
                     max_retries,
                 )
-        memory["open_items"] = [
-            item
-            for item in open_items_raw
-            if not (
+        escalated_items = []
+        kept_items = []
+        for item in open_items_raw:
+            if (
                 isinstance(item, dict)
                 and item.get("kind") == "failed_steps"
-                and int(item.get("retry_count") or 1) >= max_retries
-            )
-        ]
+                and int(item.get("retry_count") or 0) > max_retries
+            ):
+                escalated_items.append(item)
+            else:
+                kept_items.append(item)
+
+        memory["open_items"] = kept_items
+        closed_items = memory.get("closed_items")
+        if not isinstance(closed_items, list):
+            closed_items = []
+        closed_at = _iso(_utc_now())
+        for item in escalated_items:
+            closed_items.append({
+                "actor": "self_maintenance",
+                "closed_at": closed_at,
+                "original_item": item,
+                "resolution_reason": "max_retries_exceeded",
+            })
+        memory["closed_items"] = closed_items[-200:]
     last_decision = memory.get("last_policy_decision")
     if isinstance(last_decision, dict) and str(last_decision.get("reason") or "") in {
         "review_or_qa_reported_risk",
@@ -1192,6 +1208,28 @@ def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
     return any(term in text for term in transient_terms)
 
 
+def _loop_platform_bench_override() -> Optional[tuple]:
+    """后台自维护/进化 loop 默认走平台派发：LLM 成本记平台密钥、不查/扣用户 ``llm_calls`` 配额。
+
+    与 digest 产线一致——后台自治 loop 不该按「用户调用」计量。``_first_user_id()`` 返回的是
+    第一个真实用户，挂到其月度配额上几小时就 ``403 配额不足: llm_calls``（生产实测疯跑 99.6%
+    失败、进化引擎误把配额失败当 prompt 问题狂改的根因）。返回平台 bench (provider, model) 作为
+    ``bench_llm_override`` → cognition ``use_platform_dispatch=True`` → 不经 require_llm_credit；
+    ``user_id`` 仍透传给 RAG/指标。关闭（回退按用户配额）：``MODSTORE_SELF_MAINTENANCE_PLATFORM_LLM=0``。
+    """
+    if not _env_bool("MODSTORE_SELF_MAINTENANCE_PLATFORM_LLM", True):
+        return None
+    try:
+        from modstore_server.services.llm import resolve_platform_bench_llm
+
+        rp, rm = resolve_platform_bench_llm()
+        if rp and rm:
+            return (rp, rm)
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
 def _execute_employee_task_with_retries(
     employee_id: str,
     task_text: str,
@@ -1202,6 +1240,7 @@ def _execute_employee_task_with_retries(
     retries = max(0, _env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", 2))
     delay_sec = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRY_DELAY_SEC", 10))
     attempts = retries + 1
+    bench_override = _loop_platform_bench_override()
     result: Dict[str, Any] = {}
     for attempt in range(1, attempts + 1):
         device_wait = _wait_for_para_device_online()
@@ -1218,6 +1257,7 @@ def _execute_employee_task_with_retries(
             task_text,
             input_data,
             user_id=user_id,
+            bench_llm_override=bench_override,
         )
         if _employee_result_ok(result):
             result["self_maintenance_retry_attempts"] = attempt

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """解耦进度聚合（供 GET /api/platform-shell/decoupling-progress）。"""
 
 from __future__ import annotations

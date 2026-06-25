@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-XCAUTO_DEFAULT_BASE_URL = "https://xiu-ci.com/v1"
+from app.infrastructure.topology import LLM_V1_BASE_URL
+
+XCAUTO_DEFAULT_BASE_URL = LLM_V1_BASE_URL
 XCAUTO_DEFAULT_MODEL = "xcauto-account"
 _XCAUTO_PROVIDER_ALIASES = {"xcauto", "xcauto-account", "xcauto-default", "xiuci", "xiuci-account"}
 

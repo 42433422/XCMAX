@@ -15,6 +15,9 @@ import {
   CirclePostsData,
   CsInfo,
   CustomersData,
+  MeetingGenerateBody,
+  MeetingLevelsData,
+  MeetingMinuteData,
   MobileEnvelope,
   MobileFixedContactsData,
   MobileHomeData,
@@ -22,8 +25,21 @@ import {
   MobileMeData,
   MobileModsData,
   PairingExchangeData,
+  RelayConfirmCodeBody,
+  RelayConfirmCodeData,
+  RelayDesktop,
+  RelayDesktopsData,
+  RelayTask,
+  RelayTaskContext,
+  RelayTaskCreateBody,
+  RelayTaskData,
   ServiceBridgeData,
   ShipmentsData,
+  SuperEmployeeContext,
+  SuperEmployeeInvokeData,
+  SuperEmployeeMessageBody,
+  SuperEmployeeMessageRow,
+  SuperEmployeeMessagesData,
   WalletBalanceData
 } from '../models/MobileModels';
 
@@ -154,6 +170,97 @@ export class MobileApiClient {
     return response;
   }
 
+  // ── 超级员工（Codex/Claude）派工 ──
+  // tool: 'claude' 走 Claude 端点，其余走 Codex。mode: 'auto'|'chat'|'code'。
+  private superEmployeePath(tool: string): string {
+    return tool === 'claude'
+      ? ApiEndpoints.ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES
+      : ApiEndpoints.ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES;
+  }
+
+  async superEmployeeInvoke(tool: string, message: string, mode: string): Promise<SuperEmployeeInvokeData> {
+    const context: SuperEmployeeContext = {
+      source: 'mobile_chat',
+      client_surface: 'mobile'
+    };
+    if (mode === 'chat') {
+      context.mode = 'chat';
+    } else if (mode === 'code') {
+      context.mode = 'code';
+      context.mode_explicit = true;
+    }
+    const body: SuperEmployeeMessageBody = {
+      message: message,
+      body: message,
+      context: context
+    };
+    const envelope = await this.request<SuperEmployeeInvokeData>(
+      this.superEmployeePath(tool),
+      http.RequestMethod.POST,
+      body
+    );
+    return envelope.data || {};
+  }
+
+  async superEmployeeMessages(tool: string): Promise<SuperEmployeeMessageRow[]> {
+    const envelope = await this.request<SuperEmployeeMessagesData>(
+      `${this.superEmployeePath(tool)}?limit=80`,
+      http.RequestMethod.GET
+    );
+    return envelope.data?.messages || [];
+  }
+
+  // ── relay 离线通路：绑定桌面执行端 + 经云中继派任务 ──
+  // 6 位设备码绑定一台已配对桌面，返回 relay_id 供后续派任务。
+  async relayConfirmCode(code: string): Promise<RelayConfirmCodeData> {
+    const body: RelayConfirmCodeBody = { code: code.trim() };
+    const envelope = await this.request<RelayConfirmCodeData>(
+      ApiEndpoints.RELAY_MOBILE_CONFIRM_CODE,
+      http.RequestMethod.POST,
+      body
+    );
+    return envelope.data || {};
+  }
+
+  // 列出本账号已绑定的桌面执行端（用于登录后自动恢复 relay 绑定）。
+  async relayDesktops(): Promise<RelayDesktop[]> {
+    const envelope = await this.request<RelayDesktopsData>(
+      ApiEndpoints.RELAY_MOBILE_DESKTOPS,
+      http.RequestMethod.GET
+    );
+    return envelope.data?.items || [];
+  }
+
+  async relayCreateTask(relayId: string, kind: string, message: string, mode: string): Promise<RelayTask> {
+    const context: RelayTaskContext = {
+      source: 'mobile_chat',
+      client_surface: 'mobile'
+    };
+    if (mode === 'chat') {
+      context.mode = 'chat';
+    } else if (mode === 'code') {
+      context.mode = 'code';
+      context.mode_explicit = true;
+    }
+    const body: RelayTaskCreateBody = {
+      relay_id: relayId,
+      kind: kind,
+      payload: { message: message, context: context }
+    };
+    const envelope = await this.request<RelayTaskData>(
+      ApiEndpoints.RELAY_TASKS,
+      http.RequestMethod.POST,
+      body
+    );
+    return envelope.data?.task || {};
+  }
+
+  async relayTaskStatus(taskId: string): Promise<RelayTask> {
+    const path = ApiEndpoints.RELAY_TASKS_DETAIL.replace('{taskId}', taskId);
+    const envelope = await this.request<RelayTaskData>(path, http.RequestMethod.GET);
+    return envelope.data?.task || {};
+  }
+
   // ── 审批流 ──
   async approvals(): Promise<ApprovalItem[]> {
     const envelope = await this.request<ApprovalItem[]>(ApiEndpoints.APPROVAL_REQUESTS, http.RequestMethod.GET);
@@ -200,6 +307,20 @@ export class MobileApiClient {
     const body: ChatRequestBody = { message: message, session_id: 'cs' };
     const response = await this.rawRequest<ChatResponseData>('api/cs/chat', http.RequestMethod.POST, body);
     return response;
+  }
+
+  // ── 会议纪要 SSOT（三级派生） ──
+  async meetingLevels(): Promise<MeetingLevelsData> {
+    const envelope = await this.request<MeetingLevelsData>(
+      ApiEndpoints.MEETING_LEVELS, http.RequestMethod.GET);
+    return envelope.data || ({ version: 1, levels: [] } as MeetingLevelsData);
+  }
+
+  async generateMeetingMinutes(transcript: string, title?: string): Promise<MeetingMinuteData> {
+    const body: MeetingGenerateBody = { raw_transcript: transcript, title: title };
+    const envelope = await this.request<MeetingMinuteData>(
+      ApiEndpoints.MEETING_GENERATE, http.RequestMethod.POST, body);
+    return envelope.data || ({ status: 'failed' } as MeetingMinuteData);
   }
 
   // ── AI 圈子(朋友圈) ──

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 N：NeuroBus 领域处理器注册经 ``xcagi-neuro-bus-bridge`` 编排（实现仍在宿主）。"""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_pack 运行时：磁盘加载、V2 解析、EmployeeAgent 执行器。"""
 
 from app.application.employee_runtime.executor import execute_employee_task_local

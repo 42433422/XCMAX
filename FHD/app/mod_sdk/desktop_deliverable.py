@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """桌面/发行版启动时确保 Mod 种子与加载（可交付首启）。"""
 
 from __future__ import annotations
