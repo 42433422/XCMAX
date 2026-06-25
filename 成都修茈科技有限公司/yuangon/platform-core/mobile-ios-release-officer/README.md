@@ -3,11 +3,11 @@
         **area**：`platform-core`  
         **yuangon 路径**：`成都修茈科技有限公司/yuangon/platform-core/mobile-ios-release-officer/`
 
-> **发版入口**：`FHD/mobile-ios/` 已落地，`FHD/.github/workflows/release-ios.yml` 负责 XcodeGen、模拟器构建、双 SKU profile 选取、IPA 导出与 App Store Connect 上传。
+> **发版入口**：`FHD/mobile-ios/` 已落地，`FHD/.github/workflows/release-ios.yml` 负责 XcodeGen、模拟器构建、主线签名、IPA 导出与 App Store Connect 上传。
 
         ## 职责
 
-        P-S iOS 渠道发布：双 SKU Bundle ID、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
+        XCAGI iOS 渠道发布：主线上架、冻结兼容 SKU、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
 
         ## 上游依赖 (`depends_on`)
 

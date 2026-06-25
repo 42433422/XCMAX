@@ -1,12 +1,12 @@
-# XcodeGen 工程定义 —— 修茈 iOS App(对标 mobile-android / mobile-harmony)。
+# XcodeGen 工程定义 —— XCAGI iOS App(对标 mobile-android / mobile-harmony)。
 #
 # 本机无 Xcode 时无法生成 .xcodeproj;在装有 Xcode 的 Mac 上执行:
 #   brew install xcodegen      # 一次性
 #   cd FHD/mobile-ios && xcodegen generate
 #   open XCAGIMobile.xcodeproj
-# 两个 scheme(对标 Android personal/enterprise flavor):
-#   XCAGIMobile          → 企业版(com.xiuci.xcagi.mobile.enterprise)
-#   XCAGIMobilePersonal  → 个人版(com.xiuci.xcagi.mobile.personal,定义 PERSONAL 编译条件)
+# 两个 scheme(保留 Android personal/enterprise 兼容能力):
+#   XCAGIMobile          → 当前主发版 / App Store 线(com.xiuci.xcagi.mobile.enterprise)
+#   XCAGIMobilePersonal  → 冻结兼容线(com.xiuci.xcagi.mobile.personal,定义 PERSONAL 编译条件)
 #
 # 无第三方依赖;系统框架(SwiftUI/Foundation/Network/Security/LocalAuthentication/
 # AVFoundation/Vision/PhotosUI/WebKit/UserNotifications)由 import 自动链接。
@@ -43,7 +43,7 @@ settings:
       APS_ENVIRONMENT: production
 
 targets:
-  # ── 企业版(默认)──
+  # ── 当前主发版 / App Store 线 ──
   XCAGIMobile:
     type: application
     platform: iOS
@@ -53,14 +53,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiuci.xcagi.mobile.enterprise
         PRODUCT_NAME: XCAGIMobile
-        APP_DISPLAY_NAME: 修茈企业
+        APP_DISPLAY_NAME: XCAGI
       configs:
         Debug:
           CODE_SIGN_IDENTITY: Apple Development
         Release:
           CODE_SIGN_IDENTITY: Apple Distribution
 
-  # ── 个人版(MODstore 基址;定义 PERSONAL 编译条件切换 AppConfig.sku)──
+  # ── 冻结兼容线(MODstore 基址;定义 PERSONAL 编译条件切换 AppConfig.sku)──
   XCAGIMobilePersonal:
     type: application
     platform: iOS
@@ -70,7 +70,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiuci.xcagi.mobile.personal
         PRODUCT_NAME: XCAGIMobilePersonal
-        APP_DISPLAY_NAME: 修茈个人
+        APP_DISPLAY_NAME: XCAGI Personal
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: PERSONAL
       configs:
         Debug:

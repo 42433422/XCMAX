@@ -46,7 +46,7 @@
 
 ### 已闭合(累计)
 - ✅ **WebView 登录态注入对齐 Android**:`ModWebView` 精确镜像 `WebViewTokenScript.kt` —— 市场页(`xiu-ci.com`)注入 `localStorage.modstore_token` 不加 Authorization;局域网 FHD(http+内网)注入 `session_id` cookie + Bearer 头;并发 `window.__XCAGI_CLIENT__='ios'` / `xcagi-client-ready` 事件。
-- ✅ **个人版 SKU**:`project.yml` 新增 `XCAGIMobilePersonal` target/scheme(`com.xiuci.xcagi.mobile.personal`,定义 `PERSONAL` 编译条件 → `AppConfig.sku=.personal` → MODstore 基址);对标 Android personal/enterprise flavor。
+- ✅ **个人版兼容 SKU**:`project.yml` 保留 `XCAGIMobilePersonal` target/scheme(`com.xiuci.xcagi.mobile.personal`,定义 `PERSONAL` 编译条件 → `AppConfig.sku=.personal` → MODstore 基址);当前产品线口径下仅作冻结兼容,不作为 iOS 当前上架主线。
 - ✅ **推送能力工程预置**:entitlements + 后台模式 + project.yml 接线已就位(差 Apple 侧密钥)。
 - ✅ **注册页**(对标 Android `RegisterScreen`):`RegisterView`(用户名/密码/邮箱 → FHD `api/auth/register`),登录页可进入。
 - ✅ **服务桥工单回复**(对标 Android `BridgeScreen`):服务桥列表项可回复 —— `service-bridge/requests/{id}/respond`(PUT,状态 resolved/processing/closed)。

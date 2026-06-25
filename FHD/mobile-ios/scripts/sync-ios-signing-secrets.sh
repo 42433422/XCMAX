@@ -9,7 +9,7 @@ Usage:
     --p12 <certificate.p12> \
     --p12-password <password> \
     --profile-enterprise <enterprise.mobileprovision> \
-    --profile-personal <personal.mobileprovision> \
+    [--profile-personal <personal.mobileprovision>] \
     --api-key-p8 <AuthKey_XXXXXX.p8> \
     --api-key-id <KEY_ID> \
     --api-issuer-id <ISSUER_ID> \
@@ -20,8 +20,9 @@ Usage:
 
 The script verifies:
   - the P12 can be decoded,
-  - both provisioning profiles match the expected bundle IDs,
-  - both provisioning profiles embed the same certificate serial as the P12.
+  - the enterprise provisioning profile matches the current main-line bundle ID,
+  - the enterprise provisioning profile embeds the same certificate serial as the P12,
+  - when provided, the personal provisioning profile also matches its frozen compatibility bundle ID.
 
 If not in --dry-run mode, it updates GitHub Actions secrets with gh CLI.
 EOF
@@ -59,7 +60,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for required in team_id p12 p12_password profile_enterprise profile_personal api_key_p8 api_key_id api_issuer_id keychain_password; do
+for required in team_id p12 p12_password profile_enterprise api_key_p8 api_key_id api_issuer_id keychain_password; do
   if [[ -z "${!required}" ]]; then
     echo "Missing required argument: ${required}" >&2
     usage >&2
@@ -67,12 +68,17 @@ for required in team_id p12 p12_password profile_enterprise profile_personal api
   fi
 done
 
-for path_arg in p12 profile_enterprise profile_personal api_key_p8; do
+for path_arg in p12 profile_enterprise api_key_p8; do
   if [[ ! -f "${!path_arg}" ]]; then
     echo "File not found: ${!path_arg}" >&2
     exit 2
   fi
 done
+
+if [[ -n "${profile_personal}" && ! -f "${profile_personal}" ]]; then
+  echo "File not found: ${profile_personal}" >&2
+  exit 2
+fi
 
 if [[ -z "${repo}" ]]; then
   repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
@@ -146,8 +152,6 @@ fi
 
 IFS=$'\t' read -r enterprise_name enterprise_uuid enterprise_app_id enterprise_serial enterprise_fingerprint \
   <<<"$(decode_profile "${profile_enterprise}" enterprise)"
-IFS=$'\t' read -r personal_name personal_uuid personal_app_id personal_serial personal_fingerprint \
-  <<<"$(decode_profile "${profile_personal}" personal)"
 
 expected_enterprise_app_id="${team_id}.com.xiuci.xcagi.mobile.enterprise"
 expected_personal_app_id="${team_id}.com.xiuci.xcagi.mobile.personal"
@@ -164,21 +168,34 @@ expected_personal_app_id="${team_id}.com.xiuci.xcagi.mobile.personal"
   echo "Enterprise profile cert serial mismatch: ${enterprise_serial} != ${p12_serial}" >&2
   exit 1
 }
-[[ "${personal_serial}" == "${p12_serial}" ]] || {
-  echo "Personal profile cert serial mismatch: ${personal_serial} != ${p12_serial}" >&2
-  exit 1
-}
 
 printf 'P12 serial: %s\n' "${p12_serial}"
 printf 'P12 fingerprint: %s\n' "${p12_fingerprint}"
 printf 'Enterprise profile: %s (%s) [%s]\n' "${enterprise_name}" "${enterprise_uuid}" "${enterprise_app_id}"
-printf 'Personal profile: %s (%s) [%s]\n' "${personal_name}" "${personal_uuid}" "${personal_app_id}"
+
+if [[ -n "${profile_personal}" ]]; then
+  IFS=$'\t' read -r personal_name personal_uuid personal_app_id personal_serial personal_fingerprint \
+    <<<"$(decode_profile "${profile_personal}" personal)"
+
+  [[ "${personal_app_id}" == "${expected_personal_app_id}" ]] || {
+    echo "Personal profile bundle ID mismatch: ${personal_app_id}" >&2
+    exit 1
+  }
+  [[ "${personal_serial}" == "${p12_serial}" ]] || {
+    echo "Personal profile cert serial mismatch: ${personal_serial} != ${p12_serial}" >&2
+    exit 1
+  }
+
+  printf 'Personal profile: %s (%s) [%s]\n' "${personal_name}" "${personal_uuid}" "${personal_app_id}"
+fi
 
 gh_set_secret "IOS_TEAM_ID" "${team_id}"
 gh_set_secret "IOS_CERTIFICATE_P12_BASE64" "$(b64_file "${p12}")"
 gh_set_secret "IOS_CERTIFICATE_PASSWORD" "${p12_password}"
 gh_set_secret "IOS_PROVISION_PROFILE_ENTERPRISE_BASE64" "$(b64_file "${profile_enterprise}")"
-gh_set_secret "IOS_PROVISION_PROFILE_PERSONAL_BASE64" "$(b64_file "${profile_personal}")"
+if [[ -n "${profile_personal}" ]]; then
+  gh_set_secret "IOS_PROVISION_PROFILE_PERSONAL_BASE64" "$(b64_file "${profile_personal}")"
+fi
 if [[ "${set_legacy_profile_secret}" -eq 1 ]]; then
   gh_set_secret "IOS_PROVISION_PROFILE_BASE64" "$(b64_file "${profile_enterprise}")"
 fi

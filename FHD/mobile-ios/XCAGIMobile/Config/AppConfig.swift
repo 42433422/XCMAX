@@ -2,16 +2,17 @@ import Foundation
 
 /// 全局常量(对标 Android `BuildConfig` 与 mobile-harmony `BUILD_HARMONY.md`)。
 ///
-/// 企业版默认走 `https://xiu-ci.com/fhd-api`;桌面端配对后由 `pairing/exchange`
-/// 下发的 `api_base_url` 覆盖为局域网主机(默认端口 17500),并持久化。
+/// 当前对外主线为 `XCAGI`(`XCAGIMobile`),默认走 `https://xiu-ci.com/fhd-api`;
+/// 冻结兼容线 `XCAGIMobilePersonal` 仅保留历史 `PERSONAL` 编译条件与 MODstore 基址。
+/// 桌面端配对后由 `pairing/exchange` 下发的 `api_base_url` 覆盖为局域网主机(默认端口 17500),并持久化。
 enum AppConfig {
-    /// 产品 SKU(对标 Android flavor:personal / enterprise)。
+    /// 构建 SKU。当前主发版使用 `enterprise`;`personal` 仅作冻结兼容。
     enum Sku: String {
         case personal
         case enterprise
     }
 
-    /// 当前构建的 SKU(对标 Android flavor)。personal target 定义 `PERSONAL` 编译条件。
+    /// 当前构建的 SKU。兼容 target `XCAGIMobilePersonal` 定义 `PERSONAL` 编译条件。
     #if PERSONAL
     static let sku: Sku = .personal
     #else
@@ -20,10 +21,10 @@ enum AppConfig {
 
     static let companyName = "成都修茈科技有限公司"
 
-    /// MODstore(个人版)基址。
+    /// 冻结兼容线(MODstore)基址。
     static let modstoreBaseURL = "https://xiu-ci.com"
 
-    /// 企业版 FHD 基址(注入 `/fhd-api`,与桌面企业版登录后端同源)。
+    /// 当前主发版 FHD 基址(注入 `/fhd-api`,与桌面企业版登录后端同源)。
     static let enterpriseBaseURL = "https://xiu-ci.com/fhd-api"
 
     /// 桌面端默认端口(局域网配对回落)。
