@@ -525,6 +525,54 @@ async def image_openai_compatible(
     return {"ok": True, "images": images, "raw": data}
 
 
+def _size_to_aspect_ratio(size: str) -> str:
+    """把 WxH 尺寸近似映射到 Imagen 支持的宽高比集合。"""
+    try:
+        w, h = (int(x) for x in str(size or "").lower().split("x", 1))
+    except (ValueError, TypeError):
+        return "1:1"
+    if w <= 0 or h <= 0:
+        return "1:1"
+    ratio = w / h
+    candidates = {"1:1": 1.0, "4:3": 4 / 3, "3:4": 3 / 4, "16:9": 16 / 9, "9:16": 9 / 16}
+    return min(candidates, key=lambda k: abs(candidates[k] - ratio))
+
+
+async def image_google_imagen(
+    api_key: str,
+    model: str,
+    prompt: str,
+    *,
+    size: str = "1024x1024",
+    n: int = 1,
+) -> Dict[str, Any]:
+    """Google Imagen（generativelanguage `:predict`）原生生图。"""
+    mdl = model or "imagen-3.0-generate-002"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{mdl}:predict"
+    body: Dict[str, Any] = {
+        "instances": [{"prompt": prompt}],
+        "parameters": {
+            "sampleCount": max(1, min(int(n or 1), 4)),
+            "aspectRatio": _size_to_aspect_ratio(size),
+        },
+    }
+    async with httpx.AsyncClient(timeout=_LLM_TIMEOUT, limits=_LLM_LIMITS) as client:
+        r = await client.post(url, params={"key": api_key}, json=body)
+        text = r.text
+    if r.status_code >= 400:
+        return {"ok": False, "status": r.status_code, "error": text[:2000]}
+    data = r.json()
+    images: List[str] = []
+    for item in data.get("predictions") or []:
+        if not isinstance(item, dict):
+            continue
+        b64 = item.get("bytesBase64Encoded") or item.get("b64_json")
+        if b64:
+            mime = str(item.get("mimeType") or "image/png")
+            images.append(f"data:{mime};base64,{b64}")
+    return {"ok": True, "images": images, "raw": data}
+
+
 async def image_dispatch(
     provider: str,
     *,
@@ -535,10 +583,20 @@ async def image_dispatch(
     size: str = "1024x1024",
     n: int = 1,
 ) -> Dict[str, Any]:
-    if provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
+    if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
+        b = _normalize_openai_base(provider, base_url)
+        return await image_openai_compatible(
+            b, api_key, model or "gpt-image-1", prompt, size=size, n=n
+        )
+    if provider == "google":
+        return await image_google_imagen(api_key, model, prompt, size=size, n=n)
+    if provider == "anthropic":
         return {
             "ok": False,
-            "error": f"provider {provider} does not expose OpenAI-compatible images API",
+            "error": "Anthropic（Claude）不提供图像生成 API（仅文本与视觉理解）；"
+            "请改用 OpenAI、SiliconFlow、Google Imagen 等生图厂商。",
         }
-    b = _normalize_openai_base(provider, base_url)
-    return await image_openai_compatible(b, api_key, model or "gpt-image-1", prompt, size=size, n=n)
+    return {
+        "ok": False,
+        "error": f"供应商「{provider}」未提供可用的图像生成接口；请改用 OpenAI 兼容生图厂商或 Google Imagen。",
+    }
