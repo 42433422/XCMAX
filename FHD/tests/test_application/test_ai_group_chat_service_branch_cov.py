@@ -37,12 +37,13 @@ from app.application.ai_group_chat_service import (
     MAX_RESPONDERS,
     SUPER_DISCUSSION_DEFAULT_ROUNDS,
     SUPER_DISCUSSION_MAX_ROUNDS,
+    AiGroupChatService,
     _append_super_employees,
-    _dept_key_to_employee_ids,
     _default_departments,
     _default_duty_employee_loader,
     _default_enterprise_departments,
     _default_enterprise_employee_loader,
+    _dept_key_to_employee_ids,
     _employee_manifest,
     _env_float,
     _is_required_group_member,
@@ -51,9 +52,7 @@ from app.application.ai_group_chat_service import (
     _utc_now,
     _with_required_group_members,
     _xiaoc_assistant_member,
-    AiGroupChatService,
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -2160,7 +2159,8 @@ class TestSuperDiscussionReply:
             group=group, member=member, task="做任务",
             history=[], discussion_turns=[], round_index=1,
         )
-        assert "按职责待命" in result
+        assert "改动文件、命令和测试结果" in result
+        assert "按职责待命" not in result
 
     @pytest.mark.asyncio
     async def test_super_discussion_reply_exception(self, tmp_path: Path):
@@ -2175,6 +2175,7 @@ class TestSuperDiscussionReply:
             history=[], discussion_turns=[], round_index=1,
         )
         assert "暂时不能参与讨论" in result
+        assert "我判断这是" in result
 
     @pytest.mark.asyncio
     async def test_super_discussion_reply_no_success_returns_error(self, tmp_path: Path):
@@ -2188,7 +2189,8 @@ class TestSuperDiscussionReply:
             group=group, member=member, task="做任务",
             history=[], discussion_turns=[], round_index=1,
         )
-        assert "按职责待命" in result
+        assert "改动文件、命令和测试结果" in result
+        assert "按职责待命" not in result
         assert "模型错误" in result
 
     @pytest.mark.asyncio
@@ -2203,7 +2205,8 @@ class TestSuperDiscussionReply:
             group=group, member=member, task="做任务",
             history=[], discussion_turns=[], round_index=1,
         )
-        assert "按职责待命" in result
+        assert "改动文件、命令和测试结果" in result
+        assert "按职责待命" not in result
 
     @pytest.mark.asyncio
     async def test_super_discussion_reply_no_error_field(self, tmp_path: Path):
@@ -2217,7 +2220,8 @@ class TestSuperDiscussionReply:
             group=group, member=member, task="做任务",
             history=[], discussion_turns=[], round_index=1,
         )
-        assert "按职责待命" in result
+        assert "改动文件、命令和测试结果" in result
+        assert "按职责待命" not in result
 
     @pytest.mark.asyncio
     async def test_super_discussion_reply_non_dict_result(self, tmp_path: Path):
@@ -2231,7 +2235,8 @@ class TestSuperDiscussionReply:
             group=group, member=member, task="做任务",
             history=[], discussion_turns=[], round_index=1,
         )
-        assert "按职责待命" in result
+        assert "改动文件、命令和测试结果" in result
+        assert "按职责待命" not in result
 
     @pytest.mark.asyncio
     async def test_super_discussion_reply_truncates_to_600(self, tmp_path: Path):
@@ -2259,7 +2264,8 @@ class TestSuperDiscussionReply:
             group=group, member=member, task="做任务",
             history=[], discussion_turns=[], round_index=1,
         )
-        assert result == "ok"
+        assert "我判断这是" in result
+        assert "模型回复过于空泛" in result
 
     @pytest.mark.asyncio
     async def test_super_discussion_reply_with_no_group_name(self, tmp_path: Path):
@@ -2273,7 +2279,8 @@ class TestSuperDiscussionReply:
             group=group, member=member, task="做任务",
             history=[], discussion_turns=[], round_index=1,
         )
-        assert result == "ok"
+        assert "我判断这是" in result
+        assert "模型回复过于空泛" in result
 
 
 # ---------------------------------------------------------------------------
