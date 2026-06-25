@@ -60,7 +60,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../api'
+import { api, setAuthTokens } from '../api'
 
 const router = useRouter()
 const username = ref('')
@@ -133,7 +133,7 @@ async function doRegister() {
       return
     }
     const res = await api.register(username.value, password.value, em, code)
-    localStorage.setItem('modstore_token', res.token)
+    setAuthTokens(res)
     await router.push('/')
   } catch (e) {
     err.value = e.message

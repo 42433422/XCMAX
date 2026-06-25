@@ -7,84 +7,179 @@ function apiBase(): string {
 
 const BASE = apiBase()
 
+export const ACCESS_TOKEN_KEY = 'modstore_token'
+export const REFRESH_TOKEN_KEY = 'modstore_refresh_token'
+
 export interface CheckoutData {
   item_id?: number | string
   plan_id?: string
   subject?: string
   total_amount?: number | string
   wallet_recharge?: boolean
+  pay_channel?: string
+  pay_type?: string
   [key: string]: unknown
 }
 
-interface CheckoutSignPayload extends Record<string, string> {
-  item_id: string
+/** 服务端 ``/api/payment/sign-checkout`` 返回，已含 request_id/timestamp/signature。 */
+interface PaymentSignResponse {
   plan_id: string
-  request_id: string
+  item_id: number
+  total_amount: number
   subject: string
-  timestamp: string
-  total_amount: string
-  wallet_recharge: 'true' | 'false'
+  wallet_recharge: boolean
+  request_id: string
+  timestamp: number
+  signature: string
+}
+
+export interface AuthResponse {
+  access_token?: string
+  refresh_token?: string
+  /** 旧后端兼容字段 */
+  token?: string
+  ok?: boolean
+  user?: { id: number; username?: string; email?: string; is_admin?: boolean }
 }
 
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: BodyInit | null
 }
 
-function getToken(): string {
-  return localStorage.getItem('modstore_token') || ''
+// ---- token 存储（access + refresh）-----------------------------------------
+
+export function getToken(): string {
+  const raw = localStorage.getItem(ACCESS_TOKEN_KEY)
+  return raw && raw !== 'undefined' && raw !== 'null' ? raw : ''
 }
 
-function amountSignStr(n: number | string | null | undefined): string {
-  const x = Number(n)
-  if (!Number.isFinite(x)) return '0'
-  if (x === Math.trunc(x)) return String(Math.trunc(x))
-  const s = x.toFixed(6).replace(/\.?0+$/, '')
-  return s || '0'
+function getRefreshToken(): string {
+  const raw = localStorage.getItem(REFRESH_TOKEN_KEY)
+  return raw && raw !== 'undefined' && raw !== 'null' ? raw : ''
 }
 
-export function buildCheckoutSignData(
-  data: CheckoutData,
-  requestId: string,
-  timestamp: number | string,
-): CheckoutSignPayload {
-  const itemId = Number(data.item_id ?? 0) | 0
-  const planId = String(data.plan_id ?? '').trim()
-  const subject = String(data.subject ?? '').trim()
-  const walletRecharge = Boolean(data.wallet_recharge)
-  return {
-    item_id: String(itemId),
-    plan_id: planId,
-    request_id: String(requestId),
-    subject,
-    timestamp: String(Math.floor(Number(timestamp))),
-    total_amount: amountSignStr(data.total_amount ?? 0),
-    wallet_recharge: walletRecharge ? 'true' : 'false',
+/** 写入登录/刷新返回的双令牌；兼容旧后端 ``token`` 字段。 */
+export function setAuthTokens(res: AuthResponse | null | undefined): void {
+  const access = res?.access_token || res?.token
+  if (access) localStorage.setItem(ACCESS_TOKEN_KEY, access)
+  if (res?.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, res.refresh_token)
+}
+
+export function clearAuthTokens(): void {
+  localStorage.removeItem(ACCESS_TOKEN_KEY)
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
+}
+
+// ---- CSRF（双提交 Cookie，与后端 CSRFMiddleware 对齐）----------------------
+
+function readCsrfTokenFromCookie(): string | null {
+  if (typeof document === 'undefined') return null
+  for (const part of document.cookie.split(';')) {
+    const s = part.trim()
+    if (s.startsWith('csrf_token=')) {
+      const v = s.slice('csrf_token='.length)
+      try {
+        return decodeURIComponent(v)
+      } catch {
+        return v
+      }
+    }
   }
+  return null
 }
 
-function paymentSecretKey(): string {
-  const fromEnv = (import.meta.env?.VITE_PAYMENT_SECRET ?? '').toString().trim()
-  return fromEnv || 'default_secret_key'
+/**
+ * 写操作（非 GET/HEAD/OPTIONS）若无 Bearer，则附带与 Cookie 一致的 X-CSRF-Token。
+ * 后端对带 Bearer 的请求豁免 CSRF（无 Cookie 凭据，不存在 CSRF 面），故此处与之一致。
+ */
+function attachCsrfHeader(headers: Record<string, string>, method: string): void {
+  const m = method.toUpperCase()
+  if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return
+  if (headers['Authorization'] || headers['authorization']) return
+  if (headers['X-CSRF-Token']) return
+  const tok = readCsrfTokenFromCookie()
+  if (tok) headers['X-CSRF-Token'] = tok
 }
 
-function generateRequestId(): string {
-  return 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+// ---- access token 刷新（401 时一次性重试）---------------------------------
+
+let refreshInFlight: Promise<string | null> | null = null
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return null
+  const r = await fetch(`${BASE}/api/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  })
+  let data: AuthResponse | null = null
+  try {
+    const text = await r.text()
+    data = text ? (JSON.parse(text) as AuthResponse) : null
+  } catch {
+    data = null
+  }
+  if (!r.ok) {
+    clearAuthTokens()
+    return null
+  }
+  setAuthTokens(data)
+  return data?.access_token || data?.token || null
 }
 
-export async function generateSignature(
-  data: Record<string, string>,
-  secret: string,
-): Promise<string> {
-  const sortedKeys = Object.keys(data).sort()
-  const signString = sortedKeys.map((k) => `${k}=${data[k]}`).join('&') + secret
-  const encoder = new TextEncoder()
-  const dataBuffer = encoder.encode(signString)
-  const buffer = await crypto.subtle.digest('SHA-256', dataBuffer)
-  const hexArray = Array.from(new Uint8Array(buffer))
-  return hexArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+function refreshAccessTokenOnce(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken().finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
 }
 
-async function req<T = any>(path: string, opts: RequestOptions = {}): Promise<T> {
+function shouldSkipRefresh(path: string): boolean {
+  return (
+    path.includes('/api/auth/login') ||
+    path.includes('/api/auth/register') ||
+    path.includes('/api/auth/login-with-code') ||
+    path.includes('/api/auth/refresh') ||
+    path.includes('/api/auth/send-')
+  )
+}
+
+function looksLikeAuthFailure(path: string, status: number): boolean {
+  const pathOnly = path.split('?')[0] || path
+  return (
+    status === 401 ||
+    (status === 403 &&
+      (path.includes('/api/payment') ||
+        path.includes('/api/wallet') ||
+        path.includes('/api/refunds') ||
+        path.includes('/api/admin') ||
+        pathOnly === '/api/auth/me'))
+  )
+}
+
+function errorMessage(data: unknown, fallback: string): string {
+  const d = (data as { detail?: unknown } | null)?.detail
+  if (Array.isArray(d)) {
+    return d
+      .map((x: unknown) => {
+        if (typeof x === 'object' && x !== null && 'msg' in x) {
+          return String((x as { msg?: unknown }).msg ?? JSON.stringify(x))
+        }
+        return JSON.stringify(x)
+      })
+      .join('; ')
+  }
+  if (typeof d === 'string') return d
+  if (d && typeof d === 'object') return JSON.stringify(d)
+  return fallback
+}
+
+// 默认返回类型保持 ``any``（与重构前一致；严格化属 P0-7 范畴，不在本次安全修复范围）。
+async function req<T = any>(path: string, opts: RequestOptions = {}, authAttempt = 0): Promise<T> {
   const method = (opts.method || 'GET').toUpperCase()
   const headers: Record<string, string> = { ...((opts.headers as Record<string, string>) || {}) }
   const token = getToken()
@@ -103,7 +198,8 @@ async function req<T = any>(path: string, opts: RequestOptions = {}): Promise<T>
       headers['Content-Type'] = 'application/json'
     }
   }
-  const r = await fetch(`${BASE}${path}`, { ...opts, method, headers, body })
+  attachCsrfHeader(headers, method)
+  const r = await fetch(`${BASE}${path}`, { ...opts, method, headers, body, credentials: 'include' })
   const text = await r.text()
   let data: unknown = null
   try {
@@ -111,33 +207,25 @@ async function req<T = any>(path: string, opts: RequestOptions = {}): Promise<T>
   } catch {
     data = { detail: text || r.statusText }
   }
+  // access token 过期：用 refresh token 静默刷新一次后重试原请求。
+  if (
+    looksLikeAuthFailure(path, r.status) &&
+    authAttempt === 0 &&
+    getToken() &&
+    !shouldSkipRefresh(path)
+  ) {
+    const newToken = await refreshAccessTokenOnce()
+    if (newToken) return req<T>(path, opts, 1)
+  }
   if (!r.ok) {
-    const d = (data as { detail?: unknown } | null)?.detail
-    let msg: string
-    if (Array.isArray(d)) {
-      msg = d
-        .map((x: unknown) => {
-          if (typeof x === 'object' && x !== null && 'msg' in x) {
-            return String((x as { msg?: unknown }).msg ?? JSON.stringify(x))
-          }
-          return JSON.stringify(x)
-        })
-        .join('; ')
-    } else if (typeof d === 'string') {
-      msg = d
-    } else if (d && typeof d === 'object') {
-      msg = JSON.stringify(d)
-    } else {
-      msg = r.statusText
-    }
-    throw new Error(msg)
+    throw new Error(errorMessage(data, r.statusText))
   }
   return data as T
 }
 
 export const api = {
   register: (username: string, password: string, email: string, verificationCode = '') =>
-    req('/api/auth/register', {
+    req<AuthResponse>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({
         username,
@@ -147,7 +235,10 @@ export const api = {
       }),
     }),
   login: (username: string, password: string) =>
-    req('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    req<AuthResponse>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
   me: () => req('/api/auth/me'),
 
   sendVerificationCode: (email: string) =>
@@ -155,7 +246,10 @@ export const api = {
   sendRegisterVerificationCode: (email: string) =>
     req('/api/auth/send-register-code', { method: 'POST', body: JSON.stringify({ email }) }),
   loginWithCode: (email: string, code: string) =>
-    req('/api/auth/login-with-code', { method: 'POST', body: JSON.stringify({ email, code }) }),
+    req<AuthResponse>('/api/auth/login-with-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    }),
 
   balance: () => req('/api/wallet/balance'),
   recharge: (amount: number | string, description?: string) =>
@@ -180,6 +274,7 @@ export const api = {
   downloadItem: (id: number | string) => {
     const token = getToken()
     return fetch(`${BASE}/api/market/catalog/${id}/download`, {
+      credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }).then(async (r) => {
       if (!r.ok) {
@@ -214,19 +309,36 @@ export const api = {
     req(`/api/admin/transactions?limit=${limit}&offset=${offset}`),
 
   paymentPlans: () => req('/api/payment/plans'),
+  /**
+   * 下单：签名完全在服务端完成（``/api/payment/sign-checkout`` 用仅存于后端环境
+   * 的 PAYMENT_SECRET_KEY 计算 HMAC），前端不接触任何密钥，仅传业务参数。
+   */
   paymentCheckout: async (data: CheckoutData) => {
-    const requestId = generateRequestId()
-    const timestamp = Math.floor(Date.now() / 1000)
-    const signPayload = buildCheckoutSignData(data, requestId, timestamp)
-    const signature = await generateSignature(signPayload, paymentSecretKey())
-    return req('/api/payment/checkout', {
+    const sign = await req<PaymentSignResponse>('/api/payment/sign-checkout', {
       method: 'POST',
       body: JSON.stringify({
-        ...data,
-        request_id: requestId,
-        timestamp,
-        signature,
+        plan_id: data.plan_id ?? '',
+        item_id: Number(data.item_id ?? 0) || 0,
+        total_amount: Number(data.total_amount ?? 0) || 0,
+        subject: data.subject ?? '',
+        wallet_recharge: Boolean(data.wallet_recharge),
       }),
+    })
+    const checkoutBody: Record<string, unknown> = {
+      plan_id: sign.plan_id ?? '',
+      item_id: sign.item_id ?? 0,
+      total_amount: sign.total_amount ?? 0,
+      subject: sign.subject ?? '',
+      wallet_recharge: Boolean(sign.wallet_recharge),
+      request_id: sign.request_id,
+      timestamp: sign.timestamp,
+      signature: sign.signature,
+    }
+    if (data.pay_channel) checkoutBody.pay_channel = data.pay_channel
+    if (data.pay_type) checkoutBody.pay_type = data.pay_type
+    return req('/api/payment/checkout', {
+      method: 'POST',
+      body: JSON.stringify(checkoutBody),
     })
   },
   paymentQuery: (orderId: string | number) => req(`/api/payment/query/${orderId}`),
@@ -248,9 +360,13 @@ export const api = {
   importZIP: async (file: File, replace = true) => {
     const fd = new FormData()
     fd.append('file', file)
+    const headers: Record<string, string> = {}
+    if (getToken()) headers['Authorization'] = `Bearer ${getToken()}`
+    attachCsrfHeader(headers, 'POST')
     const r = await fetch(`${BASE}/api/mods/import?replace=${replace}`, {
       method: 'POST',
-      headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+      credentials: 'include',
+      headers,
       body: fd,
     })
     const data = await r.json().catch(() => ({}) as Record<string, unknown>)
