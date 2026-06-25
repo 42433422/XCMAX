@@ -5,6 +5,7 @@ import { ChatPage } from './ChatPage';
 export struct MessagesPage {
   @Consume activeConversationId: string;
   @Consume conversations: ConversationSummary[];
+  @State searchQuery: string = '';
 
   onOpenConversation: (item: ConversationSummary) => void = () => {};
   onSendChatMessage: () => void = () => {};
@@ -39,6 +40,13 @@ export struct MessagesPage {
           ForEach(this.conversations, (item: ConversationSummary) => {
             this.ConversationRow(item);
           }, (item: ConversationSummary) => item.id);
+
+          if (this.filtered().length === 0) {
+            Text(this.searchQuery.trim().length > 0 ? '没有匹配的会话' : '暂无会话')
+              .fontSize(14)
+              .fontColor('#9CA3AF')
+              .margin({ top: 28 });
+          }
         }
         .width('100%')
         .padding({ bottom: 18 });
@@ -133,6 +141,21 @@ export struct MessagesPage {
     .onClick(() => {
       this.onOpenConversation(item);
     });
+  }
+
+  // 按标题/副标题大小写不敏感过滤会话（对齐 Android ConversationListScreen 搜索）。
+  private filtered(): ConversationSummary[] {
+    const q = this.searchQuery.trim().toLowerCase();
+    if (q.length === 0) {
+      return this.conversations;
+    }
+    const out: ConversationSummary[] = [];
+    for (const item of this.conversations) {
+      if (item.title.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q)) {
+        out.push(item);
+      }
+    }
+    return out;
   }
 
   @Builder

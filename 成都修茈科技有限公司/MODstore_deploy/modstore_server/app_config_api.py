@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from modstore_server import mobile_ota
 from modstore_server.market_shared import _get_current_user
 from modstore_server.models import LandingContactSubmission, User, get_session_factory
 
@@ -32,36 +33,18 @@ _APP_FILING_APPROVED = (
     "on",
 )
 
-# versionCode / versionName 对齐 FHD/VERSION.md v10 锚点与 mobile-android/app/build.gradle.kts
-_ANDROID_MIN_VERSION = int(os.environ.get("XCAGI_ANDROID_MIN_VERSION_CODE", "10") or "10")
-_ANDROID_LATEST_VERSION = int(os.environ.get("XCAGI_ANDROID_LATEST_VERSION_CODE", "10") or "10")
-_ANDROID_LATEST_NAME = (
-    os.environ.get("XCAGI_ANDROID_LATEST_VERSION_NAME", "10.0.0").strip() or "10.0.0"
-)
-_ANDROID_FORCE_UPDATE = os.environ.get("XCAGI_ANDROID_FORCE_UPDATE", "").strip() in (
-    "1",
-    "true",
-    "yes",
-)
-
-
-def _apk_url(sku: str) -> str:
-    base = (os.environ.get("XCAGI_ANDROID_DOWNLOAD_BASE") or _DEFAULT_BASE).rstrip("/")
-    if sku == "enterprise":
-        return f"{base}/download/enterprise/XCAGI-Enterprise-Android-{_ANDROID_LATEST_NAME}.apk"
-    return f"{base}/download/personal/XCAGI-Personal-Android-{_ANDROID_LATEST_NAME}.apk"
-
-
-@router.get("/app/config", summary="Android/iOS 客户端配置（合规、版本）")
+@router.get("/app/config", summary="Android/HarmonyOS/iOS 客户端配置（合规、按平台版本）")
 def api_app_config(
     platform: str = Query("android", max_length=32),
     sku: str = Query("personal", pattern="^(personal|enterprise)$"),
 ) -> Dict[str, Any]:
     base = (os.environ.get("XCAGI_PUBLIC_BASE_URL") or _DEFAULT_BASE).rstrip("/")
     sku_norm = sku if sku in ("personal", "enterprise") else "personal"
-    return {
+    # 按平台版本视图（download_release.json#mobile 数据源 + env 兼容）。
+    rel = mobile_ota.platform_release(platform, sku=sku_norm)
+    out: Dict[str, Any] = {
         "ok": True,
-        "platform": platform,
+        "platform": rel["platform"],
         "sku": sku_norm,
         "privacy_url": f"{base}/legal/privacy",
         "terms_url": f"{base}/legal/terms",
@@ -70,13 +53,22 @@ def api_app_config(
         "app_filing_approved": _APP_FILING_APPROVED,
         "app_filing_beian_url": "https://beian.miit.gov.cn/",
         "app_filing_number": _APP_FILING_NUMBER,
-        "min_android_version": _ANDROID_MIN_VERSION,
-        "latest_android_version": _ANDROID_LATEST_VERSION,
-        "latest_android_version_name": _ANDROID_LATEST_NAME,
-        "force_update": _ANDROID_FORCE_UPDATE,
-        "apk_download_url": _apk_url(sku_norm),
+        # 通用按平台字段
+        "available": rel["available"],
+        "min_version_code": rel["min_code"],
+        "latest_version_code": rel["latest_code"],
+        "latest_version_name": rel["latest_name"],
+        "force_update": rel["force_update"],
+        "download_url": rel["download_url"],
         "feedback_email": os.environ.get("XCAGI_FEEDBACK_EMAIL", "support@xiu-ci.com").strip(),
     }
+    # 向后兼容：现有 Android 客户端仍读旧字段名。
+    if rel["platform"] == "android":
+        out["min_android_version"] = rel["min_code"]
+        out["latest_android_version"] = rel["latest_code"]
+        out["latest_android_version_name"] = rel["latest_name"]
+        out["apk_download_url"] = rel["download_url"]
+    return out
 
 
 class AppFeedbackDTO(BaseModel):

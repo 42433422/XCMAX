@@ -42,6 +42,11 @@ function emptyDutyRoster(): DutyRosterData {
 @Component
 struct Index {
   private api: MobileApiClient = new MobileApiClient(DEFAULT_BASE_URL);
+  private sse: SseChatClient = new SseChatClient();
+  private session: SessionStore = new SessionStore();
+  private connectivity: ConnectivityMonitor = new ConnectivityMonitor();
+  private db: OfflineDb = new OfflineDb();
+  private sync: MobileSyncRepository | null = null;
   private notifier: NotificationManager = NotificationManager.getInstance();
   private store: LocalStore = LocalStore.getInstance();
 
@@ -57,6 +62,7 @@ struct Index {
   @Provide loginAccountKind: string = 'admin';
   @Provide statusText: string = '连接企业端移动服务';
   @Provide loading: boolean = false;
+  @Provide isOnline: boolean = true;
   @State loggedIn: boolean = false;
   @Provide selectedTab: number = TAB_MESSAGES;
   @Provide selectedEmployeeKey: string = '';
@@ -205,6 +211,71 @@ struct Index {
     this.store.saveSession(snapshot);
   }
 
+  aboutToAppear(): void {
+    this.db.init(getContext(this) as common.Context).then(() => {}, () => {});
+    this.restoreSession();
+    this.connectivity.start((online: boolean) => {
+      this.isOnline = online;
+      if (!online) {
+        this.statusText = '网络已断开，正在重连…';
+      }
+    });
+  }
+
+  aboutToDisappear(): void {
+    this.connectivity.stop();
+  }
+
+  // 冷启动恢复持久化的登录态（对齐 Android 自动恢复会话），失败则停留登录页。
+  private async restoreSession(): Promise<void> {
+    try {
+      await this.session.init(getContext(this) as common.Context);
+      const snap = await this.session.load();
+      if (snap.baseUrl.length > 0) {
+        this.baseUrl = snap.baseUrl;
+        this.api.setBaseUrl(snap.baseUrl);
+      }
+      if (snap.accessToken.length > 0) {
+        this.accessToken = snap.accessToken;
+        this.api.setAccessToken(snap.accessToken);
+        this.sessionId = snap.sessionId;
+        this.accountKind = cleanText(snap.accountKind, this.accountKind);
+        this.loginAccountKind = cleanText(snap.loginAccountKind, this.loginAccountKind);
+        this.displayName = cleanText(snap.displayName, this.displayName);
+        this.companyBrand = cleanText(snap.companyBrand, this.companyBrand);
+        this.loggedIn = true;
+        this.statusText = '已恢复登录，正在同步企业数据...';
+        await this.loadHome();
+        this.statusText = `已恢复登录 · ${this.mods.length} 个模块、${this.employees.length} 位员工`;
+        this.triggerSync();
+      }
+    } catch (err) {
+      // 恢复失败不致命：停留在登录页。
+    }
+  }
+
+  // 登录成功后持久化会话，供下次冷启动恢复。
+  private async persistSession(): Promise<void> {
+    const snap: SessionSnapshot = {
+      baseUrl: this.baseUrl,
+      accessToken: this.accessToken,
+      sessionId: this.sessionId,
+      accountKind: this.accountKind,
+      loginAccountKind: this.loginAccountKind,
+      displayName: this.displayName,
+      companyBrand: this.companyBrand
+    };
+    try {
+      await this.session.saveAuth(snap);
+    } catch (err) {
+    }
+  }
+
+  // 登出清除持久化会话（fire-and-forget）。
+  private clearSession(): void {
+    this.session.clear().then(() => {}, () => {});
+  }
+
   build() {
     Column() {
       if (this.loggedIn && this.biometricEnabled && !this.unlocked) {
@@ -303,6 +374,9 @@ struct Index {
       // 恢复 relay 绑定（已绑定桌面 → 超级员工走离线中继；未绑定不影响其它功能）。
       await this.refreshRelayBinding();
       this.statusText = `已同步 ${this.mods.length} 个模块、${this.employees.length} 位员工`;
+      await this.persistSession();
+      this.triggerSync();
+      Analytics.logKv('login_success', 'kind', this.accountKind);
     } catch (err) {
       this.statusText = `登录失败：${this.errorMessage(err)}`;
     } finally {
@@ -331,6 +405,7 @@ struct Index {
         throw new Error('绑定返回地址无效');
       }
       this.api.setBaseUrl(this.baseUrl);
+      await this.session.saveBaseUrl(this.baseUrl);
       this.statusText = `已切换到 ${this.baseUrl}`;
     } catch (err) {
       this.statusText = `绑定失败：${this.errorMessage(err)}`;
@@ -397,6 +472,8 @@ struct Index {
     const text = this.chatInput.trim();
     if (text.length === 0) return;
     this.chatInput = '';
+    // 当前轮之前的历史作为 recent_messages 上下文（对齐 Android SseChatClient）。
+    const recent = this.recentMessagesContext();
     this.messages = this.messages.concat([{ role: 'user', text: text }]);
     // 占位的助手气泡，SSE token 逐字写入
     this.messages = this.messages.concat([{ role: 'assistant', text: '' }]);
