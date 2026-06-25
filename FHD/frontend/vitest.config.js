@@ -84,10 +84,10 @@ export default defineConfig({
       // 2026-06-24：全量补测（~1100+ 测试，60+ 文件）恢复真实覆盖至 89.64/79.75/77.9/89.64，
       //   阈值恢复至 ratchet baseline floor（89/79/77/89），棘轮门禁通过。
       thresholds: {
-        lines: 91,
-        branches: 80,
+        lines: 92,
+        branches: 81,
         functions: 82,
-        statements: 91,
+        statements: 92,
       },
     },
   },

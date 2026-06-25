@@ -1,21 +1,21 @@
 {
   "_note": "覆盖率棘轮基线（只升不降）。后端行 floor SSOT = pyproject.toml fail_under；backend_lines_floor 为镜像（只读参考）。分支 floor 与前端各项 floor 为本文件 SSOT。由 coverage_ratchet.py --bump 维护；updated/last_measured 记录最近 bump 时的实测值。",
-  "updated": "2026-06-25",
+  "updated": "2026-06-26",
   "backend_lines_floor": 84,
   "backend_branch_floor": 73,
   "frontend_floors": {
-    "lines": 91,
-    "branches": 80,
+    "lines": 92,
+    "branches": 81,
     "functions": 82,
-    "statements": 91
+    "statements": 92
   },
   "last_measured": {
     "backend_lines": 84.46,
     "backend_branches": 73.63,
-    "frontend_lines": 92.36,
-    "frontend_branches": 81.74,
-    "frontend_functions": 83.59,
-    "frontend_statements": 92.36
+    "frontend_lines": 93.11,
+    "frontend_branches": 82.13,
+    "frontend_functions": 83.99,
+    "frontend_statements": 93.11
   },
   "last_measured_commit": "3d9df84de",
   "last_measured_date": "2026-06-20"
