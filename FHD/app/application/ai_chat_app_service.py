@@ -223,6 +223,15 @@ class AIChatApplicationService:
             return resp
 
         self._handle_confirmation_flow(user_id, message, file_context)
+
+        # 小C 派工：若消息是把任务派给某员工，走统一工单闭环（建单→派工→收口），
+        # 优先于下方 planner 的关键词派工。无明确派工意图则返回 None 让普通流程接管。
+        dispatch_result = self._try_handle_task_dispatch(
+            user_id=user_id, message=message, source=source, context=ctx
+        )
+        if dispatch_result is not None:
+            return _finalize(dispatch_result)
+
         workflow_result = self._try_handle_dynamic_workflow(
             user_id=user_id,
             message=message,
@@ -1768,6 +1777,61 @@ class AIChatApplicationService:
         except RECOVERABLE_ERRORS:
             logger.exception("multimodal autonomous run failed; falling back to legacy chat")
             return None
+
+    def _try_handle_task_dispatch(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        source: str | None,
+        context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """小C 派工分支：命中则入队（后台执行）并返回受理回执，否则返回 None。"""
+        try:
+            from app.application.task_dispatch import (
+                WorkOrderStatus,
+                get_task_dispatch_service,
+            )
+
+            outcome = get_task_dispatch_service().handle_chat_dispatch(
+                user_id=user_id, message=message, context=context
+            )
+        except RECOVERABLE_ERRORS:
+            logger.warning("派工处理异常，回退普通对话流程", exc_info=True)
+            return None
+
+        if not outcome:
+            return None
+
+        work_order = outcome.get("work_order") or {}
+        status = outcome.get("status")
+        assignee = work_order.get("assignee_name") or work_order.get("assignee_id") or "员工"
+        tier_label = "超级员工" if work_order.get("assignee_tier") == "super" else "平台员工"
+        summary = str(outcome.get("result_summary") or "").strip()
+
+        in_progress = {
+            WorkOrderStatus.PENDING.value,
+            WorkOrderStatus.DISPATCHED.value,
+            WorkOrderStatus.RUNNING.value,
+        }
+        if status == WorkOrderStatus.SUCCEEDED.value:
+            head = f"已把任务派给{tier_label}「{assignee}」并完成。"
+        elif outcome.get("queued") or status in in_progress:
+            head = f"已把任务派给{tier_label}「{assignee}」，正在后台执行。"
+        else:
+            head = f"派给{tier_label}「{assignee}」未成功。"
+
+        text = f"{head}\n\n{summary}".strip() if summary else head
+        ai_result = {
+            "text": text,
+            "action": "task_dispatch",
+            "data": {
+                "work_order": work_order,
+                "status": status,
+                "ok": outcome.get("ok"),
+            },
+        }
+        return self._build_response(ai_result, source, message)
 
     def _try_handle_dynamic_workflow(
         self,

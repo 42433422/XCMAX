@@ -320,6 +320,9 @@ def _cognition_fhd(
         return {"reasoning": "", "error": str(exc)[:800], "input": normalized, "memory": memory}
     if raw.get("error"):
         return {"reasoning": "", "error": raw["error"], "input": normalized, "memory": memory}
+    from app.application.employee_runtime.billing import bill_employee_llm_from_dict
+
+    bill_employee_llm_from_dict(raw, source="employee_runtime.cognition")
     choices = raw.get("choices") or []
     text = ""
     if choices and isinstance(choices[0], dict):
