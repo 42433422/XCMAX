@@ -4,6 +4,21 @@
 > **字段写入权限**与**校验规则**。实现遵循「单一真相源（SSOT）+ 自动派生」：每个维度只有一个
 > 持久化写入点，所有运行时身份/档位均由真相源派生，不再由前端登录入口决定。
 
+## 零、身份权威总则（云端为准）
+
+> 一句话：**认证与身份归属以云端（修茈市场）为准；本地 `users` / `sessions` 行只是会向云端收敛的缓存。任何身份冲突，以云端签发的已验签凭证为准。**
+
+| 事项 | 唯一权威 | 本地角色 |
+|------|---------|---------|
+| 认证（是不是这个人） | 修茈市场 `/api/auth/*`（企业版本地不存密码） | 仅管理员应急本地登录（市场不可达时，见 `enterprise_login_flow`） |
+| 账号身份 / 档位（`account_kind`） | 由 `User.tier` 派生，**市场身份只能向上提升**（见 §2.1） | `User.tier` 为本地真相源，登录时向云端收敛（只升不降） |
+| 会员等级 | 修茈市场 `GET /api/payment/my-plan` | `Session.market_membership_tier`（缓存） |
+| 跨端令牌 | 修茈市场 JWT（`modstore_token`） | 各端 localStorage / DataStore / 内存皆为缓存 |
+
+- **「只升不降」是有意设计**：云端临时不可达或抖动（如市场 403）不得导致本地把用户降权、丢访问；登录自动派生只允许提升。要下调档位须显式走管理端，不走登录链。
+- **推论**：所有本地缓存（`users` 行、各端 token、`mobile_relay_desktop.json`）皆可重建——丢了就重新登录 / 重新配对从云端拉回，**绝不作为冲突时的权威**。
+- 解析入口与移动端 JWT 契约见 §九；守卫见 `account-identity` 域（`config/ssot.yaml`）。
+
 ## 一、四维真相源
 
 | 维度 | 真相源字段 | 取值 | 写入点 | 派生消费点 |
@@ -140,3 +155,56 @@ warehouses / storage_locations / inventory_ledger / inventory_transactions。
 - [web_jwt.py](../app/security/web_jwt.py)：HS256 + iss/aud/exp，access(12h) / refresh(14d) 一次性轮转。
 - 登录响应附带 `web_tokens`；`POST /api/auth/token/refresh` 轮转。
 - `resolve_session_user` 仅在 `XCAGI_WEB_JWT_AUTH=1` 且 session 校验失败后，才用 web JWT 验签按 user_id 加载用户（默认关 → 有状态 session 行为零变化）。**开启该 flag + 前端改用 Bearer JWT 即为正式无状态化切换点。**
+
+## 九、身份解析单一入口与移动端 JWT 契约
+
+> 登记「请求 → 当前用户」的**唯一解析入口**，与移动端 JWT 作为云端身份载体的契约。补 §8（Web 无状态 JWT）未覆盖的移动端。
+
+### 9.1 唯一解析入口
+
+| 端 | 入口函数 | 规则 |
+|----|---------|------|
+| Web / 桌面 | `resolve_session_user(request)`（[app/infrastructure/auth/dependencies.py](../app/infrastructure/auth/dependencies.py)） | session_id（Cookie/Header）→ `sessions` 表 → `User`；失败且 `XCAGI_WEB_JWT_AUTH=1` 时回退 web JWT 验签 |
+| 移动端 | `get_mobile_user(request)`（[app/fastapi_routes/mobile_api.py](../app/fastapi_routes/mobile_api.py)） | Bearer 移动 JWT 优先 → `User`；降级 `resolve_session_user` |
+
+**禁止**在入口之外的业务代码里自行「从 JWT / 请求拼一个用户对象」。新增解析必须收敛到上述入口。
+
+### 9.2 移动 JWT = 云端签发的身份载体
+
+- 移动 JWT 由本端在**市场认证通过后**签发（`issue_mobile_tokens`，`aud=xcagi-mobile`，HS256），故它携带的是**云端已确认的身份**，不是客户端自述。
+- 因此 `get_mobile_user` 在本地 `users` 行缺失 / 过期时**信任已验签的 JWT**——这是**设计**（本地行只是缓存），不是兜底漏洞。
+- 物理中继会话（`session_id` 以 `mobile-relay-` 开头）或管理端（`account_kind ∈ {admin, admin_portal}`）下本地表可能滞后于云端，`_mobile_user_from_jwt_payload` 据已验签 payload 重建身份；该路径**仅限**上述两类，且每次走该路径会打 `WARNING` 日志（可观测的降级）。
+
+### 9.3 受控的「造身份」点（白名单）与守卫
+
+仅以下位置允许创建 / 重建身份，且均以云端为前置权威：
+
+| 位置 | 性质 |
+|------|------|
+| `_jit_create_local_user_for_enterprise`（`domains/auth/routes.py`） | 市场验证通过后 JIT 写本地缓存 |
+| `authenticate_oidc_user`（`auth_app_service.py`） | OIDC provider 验证后 JIT |
+| `_mobile_user_from_jwt_payload`（`mobile_api.py`） | 云端 JWT 身份载体（见 §9.2） |
+| `UserService.create_user`（`user_app_service.py`） | 管理端显式建号（真实 `password_hash`） |
+| 演示账号（`surface_audit_demo_account.py`） | 仅 `XCAGI_CS_DEMO_MODE=1` |
+
+> **已收口**（原空密码占位债）：`admin_set_user_profile`（`xcmax_admin.py`）预置占位用户改用**不可用哨兵哈希** `generate_password_hash(uuid.uuid4().hex)`，本地无可登录密码（登录走云端）；并在 `check_password_hash`（[app/utils/password_hash.py](../app/utils/password_hash.py)）增加「空/空白哈希一律拒绝」的防御纵深。守卫白名单已移除该点——任何位置再写空密码 `User(...)` 即 DRIFT。
+
+守卫：[scripts/dev/ssot_plugins/account_identity.py](../scripts/dev/ssot_plugins/account_identity.py) 用 AST 扫描 `app/` 内的身份伪造模式（JWT→`SimpleNamespace` 用户、空密码 `User(...)`），白名单外新增即 DRIFT；已在 [config/ssot.yaml](../config/ssot.yaml) 注册为 `account-identity` 域（mode=lint，advisory）。新增受控点须先登记本节再加白名单。
+
+## 十、重启 / 更新的状态语义（哪些会丢、哪些不丢）
+
+> 把「重启 / 更新后什么变了」写明，杜绝**静默**的真相漂移。原则：要么持久（落盘 / DB / 云端），要么**显式声明易失且 fail-closed**。
+
+| 状态 | 存储 | 重启 / 更新后 | 性质 |
+|------|------|--------------|------|
+| 设备身份 `device_id` | `{app_data_dir}/device_id`（落盘 UUID） | **不变**（换端口 / 改主机名 / 更新均不变） | 持久；旧 `hostname:port` 已废，仅留作 label。实现 [app/utils/device_identity.py](../app/utils/device_identity.py) |
+| 桌面中继绑定 | 云端 `mobile_relay_desktops` 表 + `{app_data_dir}/mobile_relay_desktop.json`（缓存） | **不变**（云端权威；本地 json 可重建） | 持久 |
+| LAN 配对 nonce / 6 位码 | 进程内存（5 分钟一次性） | **失效**（重新出码即可） | **易失（按设计，fail-closed）**——丢了只是「码过期」，无安全风险 |
+| refresh 防重放（已消费 jti） | 进程内存 + 可选 Redis | `SECRET_KEY` 未配→**全 token 失效**(fail-closed)；已配 + 无 Redis→**重放窗口重开**（待收口） | 半持久 |
+| 移动 / 桌面 token | 客户端本地（DataStore / localStorage / 内存）+ 服务端 Session | 见 §零：本地皆缓存，丢了重新登录 / 配对从云端拉回 | 缓存 |
+
+### refresh 防重放的持久化缺口（已知，非静默）
+- `SECRET_KEY` 未配置（典型桌面）：进程级随机密钥，重启后**所有** token 失效 → 不存在重放（fail-closed）。
+- `SECRET_KEY` 已配置 + **无 Redis** + 重启：已消费 jti 黑名单清空，未过期的 refresh token 可被重放一次。**单副本生产**才会命中。
+- 收口：多副本 / 生产配置 Redis（已支持 `_redis_blacklist`）即持久；命中风险组合时 `mobile_jwt` 打**一次性 WARNING**（可观测）。DB 持久化为后续可选项。
+- 实现：[app/security/mobile_jwt.py](../app/security/mobile_jwt.py)。

@@ -23,6 +23,7 @@ from app.application.codex_super_employee_service import CodexSuperEmployeeServi
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.infrastructure.topology import FHD_API_BASE_URL
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
+from app.utils.device_identity import get_stable_device_id
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
@@ -119,7 +120,9 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
     device_label = label.strip() or f"XCAGI 桌面执行端 - {socket.gethostname()}"
     body = {
         "label": device_label,
-        "device_id": f"{socket.gethostname()}:{port}",
+        # 稳定设备身份（落盘 UUID）：换端口 / 改主机名 / 更新后仍是同一台设备。
+        # hostname:port 仅作人类可读信息，已在 label / capabilities 体现。
+        "device_id": get_stable_device_id(),
         "relay_base_url": base_url,
         "capabilities": {
             "codex": True,

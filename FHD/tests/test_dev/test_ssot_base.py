@@ -15,9 +15,14 @@ def test_load_registry_returns_domains():
     from scripts.dev.ssot_plugins.base import load_registry
 
     domains = load_registry(ROOT / "config" / "ssot.yaml")
-    assert len(domains) == 11
+    assert len(domains) == 15
     names = [d["name"] for d in domains]
-    assert "mods" in names and "version" in names and "service-topology" in names
+    assert (
+        "mods" in names
+        and "version" in names
+        and "service-topology" in names
+        and "account-identity" in names
+    )
 
 
 def test_load_registry_enabled_filter():
@@ -25,7 +30,7 @@ def test_load_registry_enabled_filter():
     from scripts.dev.ssot_plugins.base import load_registry
 
     domains = load_registry(ROOT / "config" / "ssot.yaml", enabled_only=True)
-    assert len(domains) == 11  # 全部 11 域已启用
+    assert len(domains) == 15  # 全部 15 域已启用
     assert all(d.get("enabled", True) for d in domains)
 
 

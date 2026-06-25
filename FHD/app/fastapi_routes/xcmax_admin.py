@@ -707,13 +707,23 @@ async def admin_set_user_profile(
                 status_code=422,
             )
     try:
+        import uuid
+
         from app.db.models.user import User
         from app.db.session import get_db
+        from app.utils.password_hash import generate_password_hash
 
         with get_db() as db:
             user = db.query(User).filter(User.username == username).first()
             if user is None:
-                user = User(username=username, password="", role="user")
+                # 管理端预置占位用户：本地不留可登录密码，登录只能走云端市场
+                # （身份真相源见 docs/account_system_ssot.md §零 / §9.3）。
+                # 用不可用哨兵哈希（随机内容的合法哈希），绝不写空密码。
+                user = User(
+                    username=username,
+                    password=generate_password_hash(uuid.uuid4().hex),
+                    role="user",
+                )
                 db.add(user)
                 db.flush()
 
