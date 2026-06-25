@@ -1,6 +1,6 @@
 import SwiftUI
 import PhotosUI
-import Vision
+@preconcurrency import Vision
 import UIKit
 import AVFoundation
 

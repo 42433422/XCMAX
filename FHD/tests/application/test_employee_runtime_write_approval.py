@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_runtime.write_approval 写操作审批门 + compose_gates 单元测试。"""
 
 from __future__ import annotations

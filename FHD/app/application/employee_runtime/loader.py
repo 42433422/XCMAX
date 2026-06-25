@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """从 mods/_employees 磁盘加载 employee_pack manifest 与 V2 配置。"""
 
 from __future__ import annotations

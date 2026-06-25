@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 J：模型付费 API 经 ``xcagi-model-payment-bridge`` 门面。"""
 
 from __future__ import annotations

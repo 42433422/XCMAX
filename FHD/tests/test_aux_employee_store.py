@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """触点/授权类 AI 员工：商店上架与 bridge 侧栏解耦。"""
 
 from __future__ import annotations

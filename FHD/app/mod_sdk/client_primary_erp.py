@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """宿主 client_primary_erp_mod_id 与客户 Mod 自管库路由（太阳鸟等）。"""
 
 from __future__ import annotations

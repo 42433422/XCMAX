@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileScaffold
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeDialog
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileStatusChip
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockButton
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockOutlinedButton
@@ -183,19 +184,16 @@ fun ApprovalDetailScreen(vm: AppViewModel, id: Int, onBack: () -> Unit) {
     }
 
     confirmAction?.let { action ->
-        AlertDialog(
-            onDismissRequest = { confirmAction = null },
-            title = { Text(if (action == "approve") "确认通过" else "确认驳回") },
-            text = { Text(if (action == "approve") "确定通过该审批？" else "确定驳回该审批？") },
-            confirmButton = {
-                TextButton({
-                    if (action == "approve") vm.approve(id, opinion, onBack)
-                    else vm.reject(id, opinion, onBack)
-                    confirmAction = null
-                }) { Text("确定") }
-            },
-            dismissButton = {
-                TextButton({ confirmAction = null }) { Text("取消") }
+        WeDialog(
+            onDismiss = { confirmAction = null },
+            title = if (action == "approve") "确认通过" else "确认驳回",
+            message = if (action == "approve") "确定通过该审批？" else "确定驳回该审批？",
+            confirmText = "确定",
+            confirmDanger = action != "approve",
+            onConfirm = {
+                if (action == "approve") vm.approve(id, opinion, onBack)
+                else vm.reject(id, opinion, onBack)
+                confirmAction = null
             },
         )
     }

@@ -20,9 +20,6 @@ REPO = Path(__file__).resolve().parents[3]
 EMP_ROOT = REPO / "FHD" / "mods" / "_employees"
 YUANGON_ROOT = REPO / "成都修茈科技有限公司" / "yuangon"
 
-# ios scope placeholder note
-IOS_PLANNED_NOTE = "# NOTE: FHD/mobile-ios/ 目录规划中，release-ios.yml 待建"
-
 HANDLER_DOCS = {
     "llm_md": "接收 Markdown 任务描述，调用 LLM 输出结构化结果",
     "echo": "调试用：原样返回输入，用于 smoke 测试",
@@ -60,8 +57,8 @@ HANDOFF_HUB_DOCS: dict[str, str] = {
 ### handoff: mobile-android-release-officer → 本岗（iOS 岗专用）
 - **触发条件**：Android 双 SKU APK/AAB 产物就绪 + `verify_version_anchors.py` 绿
 - **输入**：`release-apk/` 产物路径、build.gradle.kts 版本锚点、smoke 通过报告
-- **门禁**：Android 发版未完成时 iOS 工程暂停；版本锚点必须 10.0.0 对齐
-- **当前状态**：FHD/mobile-ios/ 规划中，release-ios.yml 待建
+- **门禁**：Android 发版未完成时 iOS 发版只允许 dry-run；版本锚点必须 10.0.0 对齐
+- **当前状态**：`FHD/mobile-ios/` 已落地；`release-ios.yml` 负责 XcodeGen / simulator build / archive-export
 """,
     "security-secrets-guard": """\
 ### handoff: security-secrets-guard → 本岗
@@ -98,7 +95,7 @@ def _make_employee_yaml(pkg_id: str, mf: dict) -> str:
 
     ios_note = ""
     if pkg_id == "mobile-ios-release-officer":
-        ios_note = "# NOTE: scope FHD/mobile-ios/** 规划中，release-ios.yml 待建\n"
+        ios_note = "# NOTE: scope FHD/mobile-ios/** 已落地，release-ios.yml 为发版入口\n"
 
     def _quote_if_needed(s: str) -> str:
         """Quote glob strings that contain YAML-special characters."""
@@ -179,7 +176,7 @@ def _make_readme(pkg_id: str, mf: dict) -> str:
 
     ios_warning = ""
     if pkg_id == "mobile-ios-release-officer":
-        ios_warning = "\n> **注意**：`FHD/mobile-ios/` 目录规划中，`release-ios.yml` 待建。当前岗位处于待命状态。\n"
+        ios_warning = "\n> **发版入口**：`FHD/mobile-ios/` 已落地，`FHD/.github/workflows/release-ios.yml` 负责 XcodeGen、模拟器构建、IPA 导出与 App Store Connect 上传。\n"
 
     return textwrap.dedent(f"""\
         # {name} (`{pkg_id}`)
@@ -247,13 +244,13 @@ def _make_runbook(pkg_id: str, mf: dict) -> str:
     if pkg_id == "mobile-ios-release-officer":
         ios_note = """\
 
-## iOS 规划中状态
+## iOS 已落地状态
 
-`FHD/mobile-ios/` 目录尚未创建，`release-ios.yml` 待建。本岗当前职责：
+`FHD/mobile-ios/` 已具备 SwiftUI 原生工程源码、XcodeGen `project.yml`、AppIcon 生成脚本、模拟器构建脚本与 App Store archive/export 脚本。本岗当前职责：
 
-1. 监控 Android 岗（`mobile-android-release-officer`）产物就绪信号
-2. 维护 `FHD/XCAGI/resources/` 公共资源层（scope 中已声明）
-3. 当 iOS 工程建立后，按 `MOBILE_ANDROID.md` 模式补充 TestFlight/App Store 发版流程
+1. 维护 `FHD/mobile-ios/project.yml`、Bundle ID、entitlements、版本号与 AppIcon。
+2. 维护 `FHD/.github/workflows/release-ios.yml` 的 simulator build、签名、IPA 导出和 App Store Connect 上传门禁。
+3. 在 Apple 账号密钥缺失时明确报告 `IOS_TEAM_ID`、证书、profile、App Store Connect API Key 等缺口，不伪造发布成功。
 
 """
 

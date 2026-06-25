@@ -126,7 +126,6 @@ ignore = [
     "UP042",   # replace-str-enum (历史兼容)
     "UP035",   # deprecated-import (历史兼容)
     "UP045",   # non-pep604-annotation-optional (历史 Optional[X] 写法)
-    "UP009",   # utf8-encoding-declaration (历史文件头编码声明)
     "UP006",   # non-pep585-annotation (历史 List/Dict/Tuple 类型注解)
     "SIM102",  # collapsible-if
     "SIM103",  # needless-bool
@@ -143,7 +142,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["F841", "F401", "BLE001"]
-"app/application/*_app_service_v2.py" = ["F403", "F405"]
 "app/fastapi_routes/mobile_api_extensions.py" = ["F811"]
 "app/services/__init__.py" = ["F403", "F405", "F401", "F821"]
 "app/db/__init__.py" = ["F403", "F405", "F401", "F821"]
@@ -196,6 +194,12 @@ exclude = [
 [[tool.mypy.overrides]]
 module = "tests.*"
 ignore_errors = true
+
+# modstore_server 为可选外部包（MODstore 部署时安装），路由层 try/except 回退到本地 JSON，
+# 故对 mypy 标记为 ignore_missing_imports 而非在代码中散布 # type: ignore。
+[[tool.mypy.overrides]]
+module = "modstore_server.*"
+ignore_missing_imports = true
 
 # pytest 配置唯一真相源（2026-05-04 整合）：
 # - 旧 pytest.ini 已删除；当前 addopts 保留为不含 --cov，与历史 pytest.ini 的有效行为一致，

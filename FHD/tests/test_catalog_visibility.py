@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """远端 Catalog 可见性过滤。"""
 
 from app.services.catalog_visibility import is_planned_duty_employee_pack, is_public_catalog_row

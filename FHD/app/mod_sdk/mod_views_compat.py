@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 O / O+：Mod 包内物理 Vue 视图注册表。"""
 
 from __future__ import annotations

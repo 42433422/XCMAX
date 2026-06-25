@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工能力声明值对象。
 
 从 manifest 的 ``employee.capabilities`` 与 ``employee_config_v2.cognition.skills``

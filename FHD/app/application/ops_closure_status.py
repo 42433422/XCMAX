@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """运维闭环状态聚合：MODstore 值班 health + 本地 employee_pack 安装对照。"""
 
 from __future__ import annotations

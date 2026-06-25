@@ -2,6 +2,11 @@ package com.xiuci.xcagi.mobile.core.speech
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -111,16 +116,42 @@ fun VoiceInputSheet(
                     label = "micScale",
             )
             Box(
-                    modifier = Modifier.size(80.dp).clip(CircleShape)
-                            .background(micColor.copy(alpha = 0.12f)),
+                    modifier = Modifier.size(132.dp),
                     contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                        Icons.Default.Mic,
-                        contentDescription = "语音输入",
-                        tint = micColor,
-                        modifier = Modifier.size(40.dp).scale(micScale),
-                )
+                // 聆听时的脉冲环（两层错相位向外扩散淡出）——premium「正在听」反馈
+                if (isListening) {
+                    val pulse = rememberInfiniteTransition(label = "voicePulse")
+                    listOf(0, 750).forEach { delayMs ->
+                        val p by pulse.animateFloat(
+                                initialValue = 0f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                        animation = tween(1500, delayMillis = delayMs),
+                                        repeatMode = RepeatMode.Restart,
+                                ),
+                                label = "ring$delayMs",
+                        )
+                        Box(
+                                modifier = Modifier
+                                        .size((84 + p * 46).dp)
+                                        .clip(CircleShape)
+                                        .background(micColor.copy(alpha = (1f - p) * 0.16f)),
+                        )
+                    }
+                }
+                Box(
+                        modifier = Modifier.size(84.dp).clip(CircleShape)
+                                .background(micColor.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                            Icons.Default.Mic,
+                            contentDescription = "语音输入",
+                            tint = micColor,
+                            modifier = Modifier.size(40.dp).scale(micScale),
+                    )
+                }
             }
 
             Spacer(Modifier.height(Spacing.md))
@@ -213,11 +244,11 @@ private fun CircleAction(
 /** 简易音量波形：5 根随音量起伏的竖条。 */
 @Composable
 private fun Waveform(level: Float, color: androidx.compose.ui.graphics.Color) {
-    val weights = listOf(0.4f, 0.7f, 1f, 0.7f, 0.4f)
+    val weights = listOf(0.3f, 0.5f, 0.72f, 0.9f, 1f, 0.9f, 0.72f, 0.5f, 0.3f)
     Row(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.height(28.dp),
+            modifier = Modifier.height(30.dp),
     ) {
         weights.forEach { w ->
             val target = (6f + level * 22f * w).dp

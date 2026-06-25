@@ -75,6 +75,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
@@ -82,6 +83,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -160,6 +171,7 @@ fun WeTopBar(
     rightLabelIsAgent: Boolean = false,
     customActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    Column {
     TopAppBar(
         title = {
             Text(
@@ -262,6 +274,11 @@ fun WeTopBar(
         ),
         windowInsets = WindowInsets(0.dp),
     )
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        )
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1555,6 +1572,238 @@ fun WeBottomNavBar(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeSwitch  ─  微信/iOS 风开关：胶囊轨道 + 白拇指 + 弹性滑动 + 品牌绿
+// 替代一眼"安卓默认"的 M3 Switch
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun WeSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onColor: Color = XcagiTheme.extra.weChatOnline,
+) {
+    val haptics = rememberHaptics()
+    val trackW = 46.dp
+    val trackH = 28.dp
+    val thumb = 22.dp
+    val pad = 3.dp
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) trackW - thumb - pad else pad,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "weSwitchThumb",
+    )
+    val trackColor by animateColorAsState(
+        targetValue =
+            if (checked) onColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.28f),
+        label = "weSwitchTrack",
+    )
+    Box(
+        modifier
+            .size(width = trackW, height = trackH)
+            .clip(RoundedCornerShape(trackH / 2))
+            .background(trackColor)
+            .alpha(if (enabled) 1f else 0.5f)
+            .then(
+                if (enabled) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        haptics.tap()
+                        onCheckedChange(!checked)
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .offset(x = thumbOffset)
+                .size(thumb)
+                .shadow(2.dp, CircleShape)
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeDialog  ─  iOS/微信 风居中弹窗：标题 + 内容 + 左右按钮（竖线分隔）
+// 替代左对齐的 M3 AlertDialog，质感更"成熟"
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun WeDialog(
+    onDismiss: () -> Unit,
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    confirmText: String = "确定",
+    dismissText: String? = "取消",
+    confirmDanger: Boolean = false,
+) {
+    val haptics = rememberHaptics()
+    val confirmTint =
+        if (confirmDanger) MaterialTheme.colorScheme.error else XcagiTheme.extra.brandBlue
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.width(290.dp),
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (message.isNotBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                Row(Modifier.fillMaxWidth().height(50.dp)) {
+                    if (dismissText != null) {
+                        DialogButton(
+                            text = dismissText,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        ) { haptics.tap(); onDismiss() }
+                        VerticalDivider(
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                    }
+                    DialogButton(
+                        text = confirmText,
+                        tint = confirmTint,
+                        bold = true,
+                        modifier = Modifier.weight(1f),
+                    ) { haptics.confirm(); onConfirm() }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DialogButton(
+    text: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    bold: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier
+            .fillMaxHeight()
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = if (bold) FontWeight.Medium else FontWeight.Normal,
+            ),
+            color = tint,
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeField  ─  独立输入框（微信/钉钉式：浅灰填充 + 圆角 + 品牌光标，无浮动标签）
+// 替代一眼"安卓默认"的 M3 OutlinedTextField（适合非 cell 的独立输入场景）
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun WeField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    singleLine: Boolean = true,
+    enabled: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    leading: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = XcagiTheme.extra.weChatInputBg,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 46.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (leading != null) {
+                leading()
+                Spacer(Modifier.width(8.dp))
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 13.dp),
+                singleLine = singleLine,
+                enabled = enabled,
+                visualTransformation = visualTransformation,
+                keyboardOptions = keyboardOptions,
+                keyboardActions = keyboardActions,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                ),
+                cursorBrush = SolidColor(XcagiTheme.extra.brandBlue),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty() && placeholder.isNotBlank()) {
+                            Text(
+                                placeholder,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            )
+                        }
+                        inner()
+                    }
+                },
+            )
+            if (trailing != null) {
+                Spacer(Modifier.width(8.dp))
+                trailing()
             }
         }
     }

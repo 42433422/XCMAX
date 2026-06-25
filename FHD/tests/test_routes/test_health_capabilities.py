@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """健康 / 诊断端点测试。
 
 这些测试针对 reviewer 关注的"RASA、pgvector 仅在配置阶段"：

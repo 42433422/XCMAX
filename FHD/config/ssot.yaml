@@ -114,3 +114,33 @@ domains:
     mode: verify
     check: python scripts/dev/ssot_plugins/k8s.py check
     sync: null
+
+  # ===== 此前游离于注册表外的真相源（2026-06-23 补登记）=====
+  - name: employee-roster
+    owner: hr-platform
+    enabled: true
+    # 员工/部门花名册 SSOT；生成器在仓库根 scripts/dev/（非 FHD/scripts/）。
+    # check 脚本以 Path(__file__) 自解析路径，cwd=FHD 时用 ../ 引用即可。
+    ssot: FHD/config/duty_roster.json
+    derived:
+      - FHD/MODstore/modstore_server/duty_roster.py
+      - FHD/frontend/src/domain/yuangonDutyRoster.ts
+      - FHD/app/infrastructure/mods/catalog_visibility.py
+      - FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets
+    mode: sync
+    check: python ../scripts/dev/sync_duty_roster.py --check
+    sync: python ../scripts/dev/sync_duty_roster.py --generate
+
+  - name: db-schema
+    owner: backend
+    enabled: true
+    # DB schema 收敛中：alembic 正成为唯一真相源（取代 create_all + ensure_*）。
+    # 此处 check = 纯 stdlib 结构守卫（单 head / 无悬挂 down_revision），无重依赖、随处可跑。
+    # 完整 ORM-parity（alembic upgrade head == models）由 fhd-alembic-ssot.yml 的
+    # ssot-parity job 单独把关（advisory，待一次 PG 绿后转 blocking）。
+    ssot: FHD/alembic/versions/
+    derived:
+      - FHD/app/db/
+    mode: verify
+    check: python ../scripts/guard_alembic_single_head.py
+    sync: null

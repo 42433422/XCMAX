@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 OpenAPI 与实际路由一致性测试（pytest 版）
 

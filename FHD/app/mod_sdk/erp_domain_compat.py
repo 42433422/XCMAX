@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 C/G：产品 / 出货 / 微信等领域 API 经 ``xcagi-erp-domain-bridge`` 门面。"""
 
 from __future__ import annotations

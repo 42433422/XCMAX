@@ -381,6 +381,10 @@ import {
   fetchClaudeSuperEmployeeMessages,
   sendClaudeSuperEmployeeMessage,
 } from '@/api/claudeSuperEmployee';
+import {
+  fetchCursorSuperEmployeeMessages,
+  sendCursorSuperEmployeeMessage,
+} from '@/api/cursorSuperEmployee';
 
 type CurrentUserPayload = {
   user?: { id?: number };
@@ -404,6 +408,14 @@ type ClaudeSuperEmployeeEntry = {
   is_claude_super_employee: true;
 };
 
+type CursorSuperEmployeeEntry = {
+  id: 'cursor-super-employee';
+  display_name: '超级员工-Cursor';
+  username: 'cursor-super-employee';
+  subtitle: '全设备协同 · Agent 派工';
+  is_cursor_super_employee: true;
+};
+
 type DutyEmployeeEntry = {
   id: string;
   display_name: string;
@@ -417,7 +429,7 @@ type DutyEmployeeEntry = {
   is_duty_employee_entry: true;
 };
 
-type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | DutyEmployeeEntry;
+type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | DutyEmployeeEntry;
 type PinnedImEntry = ImContact | SystemEmployeeEntry;
 type CodexDisplayMessage = CodexSuperEmployeeMessage & {
   streaming?: boolean;
@@ -485,6 +497,14 @@ const CLAUDE_SUPER_EMPLOYEE_ENTRY: ClaudeSuperEmployeeEntry = {
   username: 'claude-super-employee',
   subtitle: '全设备协同 · 排比派工',
   is_claude_super_employee: true,
+};
+
+const CURSOR_SUPER_EMPLOYEE_ENTRY: CursorSuperEmployeeEntry = {
+  id: 'cursor-super-employee',
+  display_name: '超级员工-Cursor',
+  username: 'cursor-super-employee',
+  subtitle: '全设备协同 · Agent 派工',
+  is_cursor_super_employee: true,
 };
 
 const localUserId = ref<number | null>(null);
@@ -566,21 +586,36 @@ const codexApiScope = computed<CodexSuperEmployeeApiScope>(() =>
   isAdminConsoleSpa() ? 'admin' : 'mobile',
 );
 
-// 当前激活的超级员工是否为 Claude（Codex/Claude 共用同一套合成器与轮询，仅端点不同）。
-const isClaudeActive = computed(() =>
-  Boolean(activeSystemEntry.value && isClaudeSuperEmployeeEntry(activeSystemEntry.value)),
-);
+type ActiveSuperTool = 'codex' | 'claude' | 'cursor';
+
+function activeSuperTool(entry: SystemEmployeeEntry | null): ActiveSuperTool | null {
+  if (!entry) return null;
+  if (isCodexSuperEmployeeEntry(entry)) return 'codex';
+  if (isClaudeSuperEmployeeEntry(entry)) return 'claude';
+  if (isCursorSuperEmployeeEntry(entry)) return 'cursor';
+  return null;
+}
 
 function fetchActiveSuperMessages(): Promise<CodexSuperEmployeeMessage[]> {
-  return isClaudeActive.value
-    ? fetchClaudeSuperEmployeeMessages({ scope: codexApiScope.value })
-    : fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
+  const tool = activeSuperTool(activeSystemEntry.value);
+  if (tool === 'claude') {
+    return fetchClaudeSuperEmployeeMessages({ scope: codexApiScope.value });
+  }
+  if (tool === 'cursor') {
+    return fetchCursorSuperEmployeeMessages({ scope: codexApiScope.value });
+  }
+  return fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
 }
 
 function sendActiveSuperMessage(message: string, context: Record<string, unknown>) {
-  return isClaudeActive.value
-    ? sendClaudeSuperEmployeeMessage(message, context, { scope: codexApiScope.value })
-    : sendCodexSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
+  const tool = activeSuperTool(activeSystemEntry.value);
+  if (tool === 'claude') {
+    return sendClaudeSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
+  }
+  if (tool === 'cursor') {
+    return sendCursorSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
+  }
+  return sendCodexSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
 }
 
 const codexSenderLabel = computed(() =>
@@ -643,7 +678,7 @@ const filteredContacts = computed(() => {
 
 const pinnedContacts = computed<PinnedImEntry[]>(() => {
   if (isAdminCustomerServiceConsole.value) {
-    return [CODEX_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
+    return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
   }
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
 });
@@ -662,11 +697,22 @@ function isClaudeSuperEmployeeEntry(entry: PinnedImEntry): entry is ClaudeSuperE
   return 'is_claude_super_employee' in entry && entry.is_claude_super_employee;
 }
 
-/** 超级员工（Codex / Claude）共用同一套合成器、消息管线与轮询。 */
+function isCursorSuperEmployeeEntry(entry: PinnedImEntry): entry is CursorSuperEmployeeEntry {
+  return 'is_cursor_super_employee' in entry && entry.is_cursor_super_employee;
+}
+
+/** 超级员工（Codex / Claude / Cursor）共用同一套合成器、消息管线与轮询。 */
 function isSuperEmployeeEntry(
   entry: PinnedImEntry | null,
-): entry is CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry {
-  return Boolean(entry && (isCodexSuperEmployeeEntry(entry) || isClaudeSuperEmployeeEntry(entry)));
+): entry is CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry {
+  return Boolean(
+    entry
+    && (
+      isCodexSuperEmployeeEntry(entry)
+      || isClaudeSuperEmployeeEntry(entry)
+      || isCursorSuperEmployeeEntry(entry)
+    ),
+  );
 }
 
 function isDutyEmployeeEntry(entry: PinnedImEntry | null): entry is DutyEmployeeEntry {
@@ -682,6 +728,7 @@ function pinnedEntryPreview(entry: PinnedImEntry): string {
 function pinnedAvatarText(entry: PinnedImEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return 'Codex';
   if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
+  if (isCursorSuperEmployeeEntry(entry)) return 'Cursor';
   if (isDutyEmployeeEntry(entry)) return avatarText(entry.display_name);
   return avatarText(entry.display_name);
 }
@@ -706,6 +753,7 @@ function systemEntryIdentity(entry: SystemEmployeeEntry): string {
 function systemEntryDispatch(entry: SystemEmployeeEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return '全设备 Codex';
   if (isClaudeSuperEmployeeEntry(entry)) return '全设备 Claude';
+  if (isCursorSuperEmployeeEntry(entry)) return '全设备 Cursor';
   if (entry.api_base_path) return `${dutyContactLabel(entry.phone_channel)} · ${entry.api_base_path}`;
   return dutyContactLabel(entry.phone_channel);
 }
@@ -883,7 +931,7 @@ function isCodexDispatcherMessage(message: CodexSuperEmployeeMessage): boolean {
 }
 
 function isCodexResultMessage(message: CodexSuperEmployeeMessage): boolean {
-  if (message.kind === 'codex_result') return true;
+  if (typeof message.kind === 'string' && message.kind.endsWith('_result')) return true;
   return message.role === 'assistant' && !isCodexDispatcherMessage(message);
 }
 
@@ -893,6 +941,9 @@ function isCodexStreamingMessage(message: CodexDisplayMessage): boolean {
 
 function codexMessageRoleLabel(message: CodexSuperEmployeeMessage): string {
   if (message.role === 'user') return codexSenderLabel.value;
+  const tool = activeSuperTool(activeSystemEntry.value);
+  if (tool === 'claude') return 'Claude';
+  if (tool === 'cursor') return 'Cursor';
   return 'Codex';
 }
 

@@ -79,6 +79,7 @@ object ApiEndpoints {
     // 管理员
     const val ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/codex-super-employee/messages"
     const val ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/claude-super-employee/messages"
+    const val ADMIN_CURSOR_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/cursor-super-employee/messages"
 
     // AI 群聊
     const val AI_GROUPS = "$BASE/ai-groups"

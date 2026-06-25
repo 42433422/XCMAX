@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工协作依赖图值对象。
 
 把 ``collaboration.depends_on`` 建模为有向图，提供：

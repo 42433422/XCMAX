@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工触发器：事件匹配与 publish_employee_task_failed。"""
 
 from __future__ import annotations
