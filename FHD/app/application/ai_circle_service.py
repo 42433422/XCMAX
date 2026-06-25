@@ -103,6 +103,44 @@ def record_employee_activity(
         logger.warning("failed to persist AI circle employee event", exc_info=True)
 
 
+def upsert_employee_post(
+    *,
+    employee_id: str,
+    author_name: str,
+    body: str,
+    source_ref: str,
+    source_type: str = "loop_report",
+    created_at: datetime | None = None,
+) -> int | None:
+    """幂等投影一条员工汇报动态（按 ``source_ref`` 去重）。已存在返回 ``None``，新建返回 id。
+
+    供 FHD 从 MODstore 汇报流拉取后投影使用：``source_ref`` 用 MODstore 消息的稳定标识，
+    ``unique`` 约束 + 先查保证同一条汇报只落一条动态。
+    """
+    employee = str(employee_id or "").strip()
+    content = str(body or "").strip()
+    ref = str(source_ref or "").strip()[:160]
+    if not employee or not content or not ref:
+        return None
+    ensure_ai_circle_tables()
+    with get_db() as db:
+        if db.query(AiCirclePost.id).filter(AiCirclePost.source_ref == ref).first() is not None:
+            return None
+        row = AiCirclePost(
+            author_kind="employee",
+            employee_id=employee,
+            author_name=(author_name or employee).strip()[:128] or employee,
+            body=content[:2000],
+            source_type=str(source_type or "loop_report")[:48],
+            source_ref=ref,
+        )
+        if created_at is not None:
+            row.created_at = created_at
+        db.add(row)
+        db.flush()
+        return int(row.id)
+
+
 def list_posts(*, user_id: int, limit: int = 50) -> list[dict[str, Any]]:
     ensure_ai_circle_tables()
     safe_limit = max(1, min(int(limit), 100))
