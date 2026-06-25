@@ -97,8 +97,9 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
                 root,
             )
             return {"ok": True, "skipped": True, "reason": "repo_root_not_git", "root": root}
-    except Exception:
-        logger.exception("daily orchestrator: is_git_repo 守卫异常，继续按原逻辑")
+    except Exception as e:
+        logger.exception("daily orchestrator: is_git_repo guard exception, failing fast")
+        return {"ok": False, "error": "git_validation_failed", "reason": str(e)[:200]}
     prefix = os.environ.get("MODSTORE_DEPLOY_PUSH_BRANCH_PREFIX", "auto/daily-").strip()
     day = datetime.now(timezone.utc).strftime("%Y%m%d")
     # 同日幂等：每日汇总分支名固定（无随机后缀），同一天重跑复用同一分支 + 同一 PR，根治分支爆炸。
@@ -280,6 +281,19 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         result["branch_cleanup"] = prune_stale_branches(root, base=base_ref)
     except Exception:
         logger.exception("daily orchestrator: branch cleanup skipped")
+
+    if staged_id:
+        try:
+            from modstore_server.employee_collab_reporter import report_staged_change
+
+            report_staged_change(
+                staged_id=int(staged_id),
+                branch=branch,
+                files=files_n,
+                pr_url=str((result.get("pr") or {}).get("pr_url") or ""),
+            )
+        except Exception:
+            logger.exception("collab report (staged change) failed staged_id=%s", staged_id)
 
     return result
 

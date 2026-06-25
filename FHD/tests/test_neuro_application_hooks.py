@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Application 桥接轻量单测（mock 发布，不依赖总线队列）。"""
 
 from unittest.mock import patch

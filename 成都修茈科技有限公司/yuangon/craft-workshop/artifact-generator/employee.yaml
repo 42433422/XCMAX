@@ -16,7 +16,7 @@ triggers:
   on_error: true
   on_quality_fail: true
   on_coverage_miss: false
-  max_patch_budget_tokens: 3000
+  max_patch_budget_tokens: 4000
   max_patch_steps: 4
 sla:
   timeout_seconds: 120

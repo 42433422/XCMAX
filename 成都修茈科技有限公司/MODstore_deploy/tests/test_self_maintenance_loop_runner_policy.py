@@ -5,18 +5,18 @@ from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
     _assess_branch_auto_merge_policy,
     _employee_result_ok,
-    _first_user_id,
     _guest_auth_headers,
     _has_high_risk_report,
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _qa_task_text,
-    _review_task_text,
     _resume_review_qa_candidate,
+    _review_task_text,
+    _self_maintenance_actor_user_id,
     _structured_report_gate,
     _update_loop_memory,
-    close_loop_memory_items,
     clean_baseline_path,
+    close_loop_memory_items,
     ensure_clean_baseline,
     loop_memory_path,
 )
@@ -50,9 +50,7 @@ def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypa
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
-    files = [
-        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
-    ]
+    files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
     memory = {
         "open_items": [
             {
@@ -253,12 +251,25 @@ def test_guest_auth_headers_can_mint_local_guest_token(monkeypatch, tmp_path):
     assert cache["token"] == token
 
 
-def test_first_user_id_does_not_require_is_active_column(monkeypatch):
+def test_self_maintenance_actor_defaults_to_platform_identity(monkeypatch):
+    """无 env 覆盖时默认 0 = 平台身份(认知走平台密钥旁路,不计真实用户配额)。"""
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_USER_ID", raising=False)
 
-    user_id = _first_user_id()
+    assert _self_maintenance_actor_user_id() == 0
 
-    assert isinstance(user_id, int)
+
+def test_self_maintenance_actor_env_override_wins(monkeypatch):
+    """运维可用 MODSTORE_SELF_MAINTENANCE_USER_ID 覆盖为某个真实用户。"""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_USER_ID", "42")
+
+    assert _self_maintenance_actor_user_id() == 42
+
+
+def test_self_maintenance_actor_invalid_env_falls_back_to_platform(monkeypatch):
+    """非法 env 值不致崩,回落平台身份 0。"""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_USER_ID", "not-an-int")
+
+    assert _self_maintenance_actor_user_id() == 0
 
 
 def test_employee_result_rejects_e2e_codex_timeout():
@@ -267,9 +278,7 @@ def test_employee_result_rejects_e2e_codex_timeout():
             "ok": True,
             "status": "completed",
             "outputs": [
-                {
-                    "message": "[e2e-agent] Codex CLI 失败: Codex CLI timeout after 600000ms"
-                }
+                {"message": "[e2e-agent] Codex CLI 失败: Codex CLI timeout after 600000ms"}
             ],
         }
     }

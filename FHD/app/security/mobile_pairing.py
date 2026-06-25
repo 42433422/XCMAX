@@ -1,4 +1,8 @@
-"""桌面 QR 配对短期 nonce 存储（进程内 + 可选文件）。
+"""桌面 QR 配对短期 nonce 存储（**进程内、按设计易失**）。
+
+5 分钟一次性配对码，仅存进程内存：后端重启即失效 = fail-closed（用户重新出码即可，
+无安全风险）。跨网络的**持久**配对走云端 ``mobile_relay_desktops`` 表，不在此。
+重启语义见 docs/account_system_ssot.md §十。
 
 v2: 新增 6 位数字配对码(shortCode)支持，QR 可携带 host/port 作为首次绑定直连兜底。
 """

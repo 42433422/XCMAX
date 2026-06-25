@@ -28,7 +28,9 @@ MAX_RESPONDERS = 6
 # 喂给单个 AI 的群历史条数。
 CONTEXT_TURNS = 10
 # 超级员工 employee_id 集合：命中时走专用 invoke 通道而非 mod_employee_complete。
-_SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset({"codex-super-employee", "claude-super-employee"})
+_SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset(
+    {"codex-super-employee", "claude-super-employee", "cursor-super-employee"}
+)
 
 CompletionFn = Callable[[list[dict[str, str]]], Awaitable[dict[str, Any]]]
 
@@ -191,17 +193,21 @@ def _default_duty_employee_loader() -> list[dict[str, Any]]:
 
 
 def _append_super_employees(employees: list[dict[str, Any]]) -> None:
-    """追加超级员工（Codex / Claude）到员工列表，使其可被拉入群聊。
+    """追加超级员工（Codex / Cursor / Claude）到员工列表，使其可被拉入群聊。
 
     超级员工不属于任何部门（department_key 留空），不参与部门群自动补员，
     仅出现在手机端选人列表中供用户手动拉入。
     """
     try:
-        from app.application.super_employee_service import CLAUDE_PROFILE, CODEX_PROFILE
+        from app.application.super_employee_service import (
+            CLAUDE_PROFILE,
+            CODEX_PROFILE,
+            CURSOR_PROFILE,
+        )
     except Exception:  # noqa: BLE001 - 超级员工模块不可用时静默跳过
         return
     existing = {str(e.get("employee_id") or "") for e in employees if isinstance(e, dict)}
-    for profile in (CODEX_PROFILE, CLAUDE_PROFILE):
+    for profile in (CODEX_PROFILE, CURSOR_PROFILE, CLAUDE_PROFILE):
         if profile.employee_id in existing:
             continue
         employees.append(
@@ -425,6 +431,42 @@ class AiGroupChatService:
         if changed:
             self._rewrite_groups(all_groups)
 
+    def list_member_candidates(self) -> list[dict[str, Any]]:
+        """返回可拉入群聊的全部 AI 员工候选（普通员工 + 超级员工）。
+
+        数据源为本服务 mode 对应的 ``employee_loader``（admin/enterprise），
+        其中已通过 :func:`_append_super_employees` 追加 Codex / Claude 超级员工，
+        因此手机端选人列表据此即可覆盖全部 AI 员工，无需在前端硬编码超级员工 ID。
+
+        返回 ``[{employee_id, mod_id, name, avatar, summary, department_key, is_super}]``，
+        按 ``employee_id`` 去重。``is_super`` 供前端打"超级员工"徽标用。
+        """
+        try:
+            raw = self._employee_loader() or []
+        except Exception:  # noqa: BLE001 - 加载失败返回空列表，前端优雅降级
+            raw = []
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for emp in raw:
+            if not isinstance(emp, dict):
+                continue
+            eid = str(emp.get("employee_id") or "").strip()
+            if not eid or eid in seen:
+                continue
+            seen.add(eid)
+            out.append(
+                {
+                    "employee_id": eid,
+                    "mod_id": str(emp.get("mod_id") or ""),
+                    "name": str(emp.get("name") or eid)[:60],
+                    "avatar": str(emp.get("avatar") or ""),
+                    "summary": str(emp.get("summary") or "")[:280],
+                    "department_key": str(emp.get("department_key") or ""),
+                    "is_super": eid in _SUPER_EMPLOYEE_IDS,
+                }
+            )
+        return out
+
     def create_group(self, *, user_id: int, name: str) -> dict[str, Any]:
         title = (name or "").strip()
         if not title:
@@ -554,6 +596,7 @@ class AiGroupChatService:
         text: str,
         sender_name: str = "我",
         mentions: list[str] | None = None,
+        execute: bool = False,
     ) -> dict[str, Any]:
         body = (text or "").strip()
         if not body:
@@ -579,6 +622,7 @@ class AiGroupChatService:
         history = self.get_messages(user_id=user_id, group_id=group_id, limit=CONTEXT_TURNS)
         history = history + [self._public_message(user_msg)]
 
+        discussion: list[dict[str, Any]] = []
         for member in responders:
             reply = await self._ai_reply(group, member, history, user_id=user_id)
             ai_msg = self._message_row(
@@ -591,7 +635,21 @@ class AiGroupChatService:
                 body=reply,
             )
             new_messages.append(ai_msg)
+            discussion.append(ai_msg)
             history = history + [self._public_message(ai_msg)]
+
+        # 讨论后执行：把讨论结论综合成任务，派给群里的超级员工以「任务模式」真正执行，结果回群。
+        if execute:
+            exec_msg = await self._execute_after_discussion(
+                group=group,
+                user_id=user_id,
+                group_id=group_id,
+                user_text=body,
+                discussion=discussion,
+                mentions=mentions,
+            )
+            if exec_msg is not None:
+                new_messages.append(exec_msg)
 
         self._append_messages(new_messages)
         return {
@@ -643,8 +701,10 @@ class AiGroupChatService:
         system = (
             f"你是群聊「{group_name}」里的 AI 成员「{me}」。{summary}\n"
             f"群成员有：{roster}。\n"
-            "请只代表你自己、用一两句话简洁地回应群里用户的最新消息；"
-            "不要替其他成员发言，不要复述别人说过的话，不要加“作为AI”之类的免责声明。"
+            "这是一场多成员协作讨论：先看群里同事刚才的发言，再用一两句话表态——"
+            "可以赞同并补充、提出不同看法、或指出风险与更优方案，推动讨论向"
+            "「一个能落地执行的结论」收敛。只代表你自己发言、言之有物，不要逐字复述别人，"
+            "不要替其他成员发言，不要加“作为AI”之类的免责声明。"
         )
         transcript = "\n".join(
             f"{m.get('sender_name')}：{m.get('body')}" for m in history[-CONTEXT_TURNS:]
@@ -680,6 +740,7 @@ class AiGroupChatService:
         """
         from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
         from app.application.codex_super_employee_service import CodexSuperEmployeeService
+        from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 
         employee_id = str(member.get("employee_id") or "")
         me = str(member.get("name") or employee_id)
@@ -694,11 +755,14 @@ class AiGroupChatService:
             f"你是群聊「{group_name}」里的成员「{me}」。\n"
             f"群成员有：{roster}。\n"
             f"【群最近对话】\n{transcript}\n\n"
-            f"请以「{me}」身份回应最新这条消息，用一两句话简洁回应。"
+            f"这是多成员协作讨论：先看同事刚才的发言，再以「{me}」身份用一两句话表态——"
+            "可赞同补充、提不同看法、或指出风险与更优做法，推动讨论向一个可落地执行的结论收敛。"
         )
         try:
             if employee_id == "codex-super-employee":
                 service = CodexSuperEmployeeService()
+            elif employee_id == "cursor-super-employee":
+                service = CursorSuperEmployeeService()
             else:
                 service = ClaudeSuperEmployeeService()
             # 群聊场景强制走 CLI 直答（mode=chat），避免 transcript 里包含
@@ -716,6 +780,85 @@ class AiGroupChatService:
             return f"（{me} 暂时无法回应）"
         except Exception as exc:  # noqa: BLE001
             return f"（{me} 暂时无法回应：{str(exc)[:120]}）"
+
+    @staticmethod
+    def _super_service(employee_id: str):
+        """按超级员工 id 取对应服务实例。"""
+        from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
+        from app.application.codex_super_employee_service import CodexSuperEmployeeService
+        from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+
+        if employee_id == "codex-super-employee":
+            return CodexSuperEmployeeService()
+        if employee_id == "cursor-super-employee":
+            return CursorSuperEmployeeService()
+        return ClaudeSuperEmployeeService()
+
+    async def _execute_after_discussion(
+        self,
+        *,
+        group: dict[str, Any],
+        user_id: int,
+        group_id: str,
+        user_text: str,
+        discussion: list[dict[str, Any]],
+        mentions: list[str] | None,
+    ) -> dict[str, Any] | None:
+        """讨论后执行：选一个超级员工以「任务模式」执行讨论结论，结果回群。
+
+        与讨论回复(强制 ``mode=chat`` 只聊天)不同，这里**不**强制 chat —— 让超级员工经
+        Para tier-1 / 本机 CLI 真正派工执行；群里没有超级员工则返回 ``None``（无可执行者）。
+        """
+        members = [m for m in group.get("members", []) if isinstance(m, dict)]
+        supers = [m for m in members if str(m.get("employee_id")) in _SUPER_EMPLOYEE_IDS]
+        if not supers:
+            return None
+        # 选执行者：优先 @ 到的超级员工，否则群里第一个超级员工。
+        explicit = {str(x).strip() for x in (mentions or []) if str(x).strip()}
+        for m in members:
+            name = str(m.get("name") or "")
+            if name and f"@{name}" in (user_text or ""):
+                explicit.add(str(m.get("employee_id")))
+        executor = next(
+            (m for m in supers if str(m.get("employee_id")) in explicit),
+            supers[0],
+        )
+        employee_id = str(executor.get("employee_id") or "")
+        me = str(executor.get("name") or employee_id)
+        points = (
+            "\n".join(f"- {m.get('sender_name')}：{m.get('body')}" for m in discussion)
+            or "（无讨论要点）"
+        )
+        brief = (
+            f"群「{group.get('name') or 'AI 群聊'}」经多成员讨论后决定执行以下任务。\n"
+            f"【原始需求】{user_text}\n"
+            f"【讨论要点】\n{points}\n\n"
+            "请综合讨论结论执行该任务，完成后简述你做了什么、产出在哪。"
+        )
+        try:
+            service = self._super_service(employee_id)
+            # 任务模式：不传 mode=chat，让 invoke 据任务派工/执行（Para tier-1 / 本机 CLI）。
+            result = service.invoke(
+                user_id=int(user_id),
+                message=brief,
+                context={"source": "ai_group_chat_execute"},
+            )
+            assistant = result.get("assistant_message") or {}
+            body = str(assistant.get("body") or "").strip()
+            status = str(result.get("status") or assistant.get("status") or "").strip()
+            if not body:
+                body = f"（{me} 已接收任务并派工执行{f'：{status}' if status else ''}）"
+        except Exception as exc:  # noqa: BLE001
+            body = f"（{me} 执行任务失败：{str(exc)[:160]}）"
+        return self._message_row(
+            user_id=user_id,
+            group_id=group_id,
+            role="ai",
+            sender_id=employee_id,
+            sender_name=me,
+            sender_avatar=str(executor.get("avatar") or ""),
+            body=body,
+        )
 
     # ── 部门种子 ──
 

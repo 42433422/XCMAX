@@ -16,6 +16,8 @@ import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
 import com.xiuci.xcagi.mobile.core.model.AiCirclePost
 import com.xiuci.xcagi.mobile.core.model.ApprovalDetail
 import com.xiuci.xcagi.mobile.core.model.ListItem
+import com.xiuci.xcagi.mobile.core.model.MeetingLevelDef
+import com.xiuci.xcagi.mobile.core.model.MeetingMinuteData
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.ModMenuItem
 import com.xiuci.xcagi.mobile.core.network.PairingQrCodec
@@ -221,6 +223,79 @@ constructor(
     private val _chatMessages = MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val chatMessages: StateFlow<List<Pair<String, String>>> = _chatMessages.asStateFlow()
 
+    // 超级员工派工模式三态控件：auto=按内容自动判断 / chat=单设备直答 / code=多设备派工。
+    // 仅对超级员工会话（Codex/Claude/Cursor）生效，替代后端 _TASK_MARKERS 关键词自动判断。
+    private val _superMode = MutableStateFlow("auto")
+    val superMode: StateFlow<String> = _superMode.asStateFlow()
+    fun setSuperMode(mode: String) {
+        _superMode.value = when (mode.trim().lowercase()) {
+            "chat", "code" -> mode.trim().lowercase()
+            else -> "auto"
+        }
+    }
+
+    // ── 会议纪要 SSOT（三级派生） ──────────────────────────────────────────
+    private val _meetingLevels = MutableStateFlow<List<MeetingLevelDef>>(
+        listOf(
+            MeetingLevelDef("level1_script", "剧本式实录", "剧本", "raw"),
+            MeetingLevelDef("level2_architecture", "架构图式总结", "架构图", "level1_script", "mermaid"),
+            MeetingLevelDef("level3_plain", "说人话", "说人话", "level2_architecture"),
+        ),
+    )
+    val meetingLevels: StateFlow<List<MeetingLevelDef>> = _meetingLevels.asStateFlow()
+
+    private val _meetingResult = MutableStateFlow<MeetingMinuteData?>(null)
+    val meetingResult: StateFlow<MeetingMinuteData?> = _meetingResult.asStateFlow()
+
+    private val _meetingGenerating = MutableStateFlow(false)
+    val meetingGenerating: StateFlow<Boolean> = _meetingGenerating.asStateFlow()
+
+    private val _meetingTranscribing = MutableStateFlow(false)
+    val meetingTranscribing: StateFlow<Boolean> = _meetingTranscribing.asStateFlow()
+
+    private val _meetingError = MutableStateFlow("")
+    val meetingError: StateFlow<String> = _meetingError.asStateFlow()
+
+    fun loadMeetingLevels() {
+        viewModelScope.launch {
+            repo.meetingLevels().onSuccess { cfg ->
+                if (cfg.levels.isNotEmpty()) _meetingLevels.value = cfg.levels
+            }
+        }
+    }
+
+    /** 录音字节转写 → 返回文本（screen 负责把文本追加到原文）。 */
+    fun transcribeMeeting(audio: ByteArray, mime: String, onText: (String) -> Unit) {
+        _meetingError.value = ""
+        _meetingTranscribing.value = true
+        viewModelScope.launch {
+            repo.transcribeMeetingAudio(audio, mime)
+                .onSuccess { onText(it) }
+                .onFailure { _meetingError.value = it.message?.take(60) ?: "转写失败" }
+            _meetingTranscribing.value = false
+        }
+    }
+
+    /** 一次性生成三级会议纪要。 */
+    fun generateMeetingMinutes(transcript: String) {
+        val text = transcript.trim()
+        if (text.isEmpty() || _meetingGenerating.value) return
+        _meetingError.value = ""
+        _meetingGenerating.value = true
+        viewModelScope.launch {
+            repo.generateMeetingMinutes(text)
+                .onSuccess { _meetingResult.value = it }
+                .onFailure {
+                    _meetingError.value = it.message?.take(80) ?: "生成失败"
+                    _meetingResult.value = MeetingMinuteData(
+                        status = "failed",
+                        error_message = it.message,
+                    )
+                }
+            _meetingGenerating.value = false
+        }
+    }
+
     private val _items = MutableStateFlow<List<ListItem>>(emptyList())
     val items: StateFlow<List<ListItem>> = _items.asStateFlow()
 
@@ -288,6 +363,12 @@ constructor(
     val currentGroup: StateFlow<com.xiuci.xcagi.mobile.core.model.AiGroupDto?> = _currentGroup.asStateFlow()
     private val _groupSending = MutableStateFlow(false)
     val groupSending: StateFlow<Boolean> = _groupSending.asStateFlow()
+    // 群成员候选(普通员工 + 超级员工),来自后端 SSOT 候选端点。
+    private val _groupMemberCandidates =
+            MutableStateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupCandidateDto>>(emptyList())
+    val groupMemberCandidates:
+            StateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupCandidateDto>> =
+            _groupMemberCandidates.asStateFlow()
 
     private val _walletBalance = MutableStateFlow<WalletBalanceDto?>(null)
     val walletBalance: StateFlow<WalletBalanceDto?> = _walletBalance.asStateFlow()
@@ -320,6 +401,7 @@ constructor(
                 val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
                 val fixedItems = fixedConversationItems(
                         showCodex = isEnterprise || adminMode,
+                        showCursor = isEnterprise || adminMode,
                         showClaude = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                         timestamps = timestamps,
@@ -724,6 +806,12 @@ constructor(
                 repo.loadAiGroups().onSuccess { _aiGroups.value = it }
             }
 
+    /** 拉取群成员候选(普通员工 + 超级员工)。静默失败,屏幕侧用 aiEmployeeProfiles() 兜底。 */
+    fun loadGroupMemberCandidates() =
+            viewModelScope.launch {
+                repo.loadGroupMemberCandidates().onSuccess { _groupMemberCandidates.value = it }
+            }
+
     fun createAiGroup(name: String) =
             viewModelScope.launch {
                 repo.createAiGroup(name)
@@ -1052,13 +1140,10 @@ constructor(
     private fun com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo.contactSubtitle(
             source: String?,
     ): String {
-        val channel = phone_channel.contactChannelLabel()
-        val aiNo = id.takeIf { it.isNotBlank() }?.let { "AI号 $it" }.orEmpty()
-        val summary =
-                panel_summary.ifBlank {
-                    source?.let { "来自 $it" }.orEmpty()
-                }
-        return listOf(channel, aiNo, summary).filter { it.isNotBlank() }.joinToString(" · ")
+        // 微信式：副标题只显示员工简介，不堆"管理端工作台 · AI号 xxx · …"这类后台技术串。
+        return panel_summary.trim().ifBlank {
+            (source?.let { "来自 $it" } ?: phone_channel.contactChannelLabel()).trim()
+        }
     }
 
     private fun String.contactChannelLabel(): String =
@@ -1071,6 +1156,7 @@ constructor(
 
     private fun fixedConversationItems(
             showCodex: Boolean,
+            showCursor: Boolean,
             showClaude: Boolean,
             showCustomerService: Boolean,
             timestamps: Map<String, Long>,
@@ -1100,6 +1186,21 @@ constructor(
                             subtitle = cachedConversationPreview(PinnedIds.CODEX, previews)
                                 .ifBlank { "全设备协同" },
                             timestamp = cachedConversationTimestamp(PinnedIds.CODEX, timestamps),
+                            isOnline = true,
+                            isPinned = true,
+                    )
+                )
+        }
+
+        if (showCursor) {
+                items.add(
+                    ConversationItem(
+                            id = PinnedIds.CURSOR,
+                            type = ConversationType.PINNED_CURSOR,
+                            title = "超级员工-Cursor",
+                            subtitle = cachedConversationPreview(PinnedIds.CURSOR, previews)
+                                .ifBlank { "全设备协同 · Agent" },
+                            timestamp = cachedConversationTimestamp(PinnedIds.CURSOR, timestamps),
                             isOnline = true,
                             isPinned = true,
                     )
@@ -1502,7 +1603,7 @@ constructor(
                 // 切换会话：取消上一个会话仍在进行的流式任务并清空，避免消息串台到当前会话。
                 chatJob?.cancel()
                 _chatMessages.value = emptyList()
-                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE) {
+                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CURSOR || conversationId == PinnedIds.CLAUDE) {
                     // relay/直答的回复存在本地缓存，云端历史接口里没有(且登录过期会 401)，
                     // 故 super-employee 会话以本地缓存为准；本地为空才取云端历史兜底。
                     val local = repo.loadCachedChat(conversationId)
@@ -1510,9 +1611,11 @@ constructor(
                         _chatMessages.value = local
                     } else {
                         val remote =
-                                if (conversationId == PinnedIds.CLAUDE)
-                                        repo.loadClaudeSuperEmployeeMessages()
-                                else repo.loadCodexSuperEmployeeMessages()
+                                when (conversationId) {
+                                    PinnedIds.CLAUDE -> repo.loadClaudeSuperEmployeeMessages()
+                                    PinnedIds.CURSOR -> repo.loadCursorSuperEmployeeMessages()
+                                    else -> repo.loadCodexSuperEmployeeMessages()
+                                }
                         remote.onSuccess { _chatMessages.value = it }
                                 .onFailure { _chatMessages.value = emptyList() }
                     }
@@ -1614,6 +1717,11 @@ constructor(
         _streaming.value = true
         var acc = ""
         val sessionId = conversationId ?: "default"
+        // 派工模式仅对超级员工会话生效；其他会话恒为 auto，避免把控件状态泄漏到普通对话。
+        val effectiveMode =
+                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE)
+                        _superMode.value
+                else "auto"
         chatJob =
                 viewModelScope.launch {
                     if (repo.hasNativeFhdAuth()) {
@@ -1622,6 +1730,7 @@ constructor(
                                 text,
                                 conversationId,
                                 sessionId,
+                                superMode = effectiveMode,
                                 onToken = { t ->
                                     acc += t
                                     _chatMessages.value =
@@ -1657,6 +1766,7 @@ constructor(
                                 text,
                                 conversationId,
                                 sessionId,
+                                superMode = effectiveMode,
                                 onToken = { t ->
                                     acc += t
                                     _chatMessages.value =
@@ -1864,9 +1974,25 @@ constructor(
 
     fun toggleAiCircleLike(postId: Int) =
             viewModelScope.launch {
+                // 乐观更新：先本地翻转点赞态与计数，失败再回滚，保证按一下即时反馈
+                val before = _aiCirclePosts.value
+                _aiCirclePosts.value = before.map { p ->
+                    if (p.id == postId) {
+                        val liked = !p.liked_by_me
+                        p.copy(
+                            liked_by_me = liked,
+                            like_count = (p.like_count + if (liked) 1 else -1).coerceAtLeast(0),
+                        )
+                    } else {
+                        p
+                    }
+                }
                 repo.toggleAiCircleLike(postId)
                         .onSuccess { loadAiCirclePosts() }
-                        .onFailure { snack(productErrorMessage(it.message, "点赞失败"), true) }
+                        .onFailure {
+                            _aiCirclePosts.value = before // 回滚
+                            snack(productErrorMessage(it.message, "点赞失败"), true)
+                        }
             }
 
     fun addAiCircleComment(postId: Int, body: String, onSuccess: () -> Unit = {}) =

@@ -112,174 +112,258 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
         "label": "O-A 获客部",
         "five_line_id": "ops_acquisition",
         "subzones": {
-            "public-acquisition": {"label": "公域获客 O1", "ids": [
-                "site-content-editor",
-                "seo-sitemap-curator",
-                "marketing-site-builder",
-            ]},
-            "crm-pipeline": {"label": "CRM 与商机 O2-O3", "ids": [
-                "user-customer-service-officer",
-                "intake-dispatcher",
-                "modstore-backend-api",
-            ]},
-            "billing": {"label": "收费对账 O4/O10", "ids": [
-                "payment-billing-reconciler",
-            ]},
-            "delivery-feedback": {"label": "交付反馈签收 O5/O7-O8", "ids": [
-                "deploy-release-officer",
-                "change-request-auditor",
-                "test-qa-runner",
-                "enterprise-adoption-officer",
-                "delivery-receipt-officer",
-            ]},
+            "public-acquisition": {
+                "label": "公域获客 O1",
+                "ids": [
+                    "site-content-editor",
+                    "seo-sitemap-curator",
+                    "marketing-site-builder",
+                ],
+            },
+            "crm-pipeline": {
+                "label": "CRM 与商机 O2-O3",
+                "ids": [
+                    "user-customer-service-officer",
+                    "intake-dispatcher",
+                    "modstore-backend-api",
+                ],
+            },
+            "billing": {
+                "label": "收费对账 O4/O10",
+                "ids": [
+                    "payment-billing-reconciler",
+                ],
+            },
+            "delivery-feedback": {
+                "label": "交付反馈签收 O5/O7-O8",
+                "ids": [
+                    "deploy-release-officer",
+                    "change-request-auditor",
+                    "test-qa-runner",
+                    "enterprise-adoption-officer",
+                    "delivery-receipt-officer",
+                ],
+            },
         },
     },
     "ops_partner": {
         "label": "O-B 伙伴部",
         "five_line_id": "ops_partner",
         "subzones": {
-            "partner-onboard": {"label": "生态接入 B1", "ids": [
-                "ecosystem-partner-onboard-officer",
-            ]},
-            "joint-catalog": {"label": "联合 catalog B2", "ids": [
-                "ecosystem-joint-catalog-officer",
-            ]},
-            "delivery-bridge": {"label": "生态交付 B3", "ids": [
-                "ecosystem-delivery-reporter",
-            ]},
-            "investor-portal": {"label": "投资方视图 B4", "ids": [
-                "ecosystem-investor-portal-officer",
-            ]},
-            "revenue-share": {"label": "分润对账 B5", "ids": [
-                "ecosystem-revenue-share-reconciler",
-            ]},
+            "partner-onboard": {
+                "label": "生态接入 B1",
+                "ids": [
+                    "ecosystem-partner-onboard-officer",
+                ],
+            },
+            "joint-catalog": {
+                "label": "联合 catalog B2",
+                "ids": [
+                    "ecosystem-joint-catalog-officer",
+                ],
+            },
+            "delivery-bridge": {
+                "label": "生态交付 B3",
+                "ids": [
+                    "ecosystem-delivery-reporter",
+                ],
+            },
+            "investor-portal": {
+                "label": "投资方视图 B4",
+                "ids": [
+                    "ecosystem-investor-portal-officer",
+                ],
+            },
+            "revenue-share": {
+                "label": "分润对账 B5",
+                "ids": [
+                    "ecosystem-revenue-share-reconciler",
+                ],
+            },
         },
     },
     "prod_web": {
         "label": "P-W 网站部",
         "five_line_id": "prod_web",
         "subzones": {
-            "static-site": {"label": "营销静态 P1a", "ids": [
-                "site-content-editor",
-                "seo-sitemap-curator",
-                "marketing-site-builder",
-                "flask-entry-keeper",
-            ]},
-            "market-spa": {"label": "市场 SPA P1b", "ids": [
-                "market-frontend-dev",
-            ]},
-            "workbench": {"label": "工作台 P1c", "ids": [
-                "workbench-ux-stylist",
-                "daily-orchestrator",
-                "task-router-officer",
-                "vibe-coding-maintainer",
-            ]},
-            "modstore-api": {"label": "MODstore 后端 P1d", "ids": [
-                "modstore-backend-api",
-                "employee-pack-curator",
-                "java-payment-bridge-officer",
-            ]},
-            "docs-seo": {"label": "文档 SEO P1e", "ids": [
-                "doc-knowledge-curator",
-                "seo-sitemap-curator",
-            ]},
-            "nginx-deploy": {"label": "nginx 部署 P1f", "ids": [
-                "nginx-config-engineer",
-                "deploy-release-officer",
-            ]},
+            "static-site": {
+                "label": "营销静态 P1a",
+                "ids": [
+                    "site-content-editor",
+                    "seo-sitemap-curator",
+                    "marketing-site-builder",
+                    "flask-entry-keeper",
+                ],
+            },
+            "market-spa": {
+                "label": "市场 SPA P1b",
+                "ids": [
+                    "market-frontend-dev",
+                ],
+            },
+            "workbench": {
+                "label": "工作台 P1c",
+                "ids": [
+                    "workbench-ux-stylist",
+                    "daily-orchestrator",
+                    "task-router-officer",
+                    "vibe-coding-maintainer",
+                ],
+            },
+            "modstore-api": {
+                "label": "MODstore 后端 P1d",
+                "ids": [
+                    "modstore-backend-api",
+                    "employee-pack-curator",
+                    "java-payment-bridge-officer",
+                ],
+            },
+            "docs-seo": {
+                "label": "文档 SEO P1e",
+                "ids": [
+                    "doc-knowledge-curator",
+                    "seo-sitemap-curator",
+                ],
+            },
+            "nginx-deploy": {
+                "label": "nginx 部署 P1f",
+                "ids": [
+                    "nginx-config-engineer",
+                    "deploy-release-officer",
+                ],
+            },
         },
     },
     "prod_mod": {
         "label": "P-M Mod 部",
         "five_line_id": "prod_mod",
         "subzones": {
-            "craft-pipeline": {"label": "Craft 13 步 P2", "ids": [
-                "intent-analyst",
-                "employee-planner",
-                "artifact-generator",
-                "quality-validator",
-                "miniapp-builder",
-                "script-binder",
-                "workflow-automator",
-                "pack-registrar",
-                "sandbox-tester",
-                "code-validator",
-                "self-checker",
-                "host-checker",
-                "hex-quality-assessor",
-            ]},
-            "sandbox-catalog": {"label": "沙盒 catalog P3", "ids": [
-                "sandbox-tester",
-                "code-validator",
-                "self-checker",
-                "mods-and-eskill-curator",
-                "test-qa-runner",
-            ]},
-            "mod-ota": {"label": "Mod OTA P6", "ids": [
-                "push-update-context-officer",
-                "pack-registrar",
-            ]},
-            "roster-quality": {"label": "编制质检", "ids": [
-                "employee-interview-assistant",
-                "employee-pack-quality-interviewer",
-            ]},
+            "craft-pipeline": {
+                "label": "Craft 13 步 P2",
+                "ids": [
+                    "intent-analyst",
+                    "employee-planner",
+                    "artifact-generator",
+                    "quality-validator",
+                    "miniapp-builder",
+                    "script-binder",
+                    "workflow-automator",
+                    "pack-registrar",
+                    "sandbox-tester",
+                    "code-validator",
+                    "self-checker",
+                    "host-checker",
+                    "hex-quality-assessor",
+                ],
+            },
+            "sandbox-catalog": {
+                "label": "沙盒 catalog P3",
+                "ids": [
+                    "sandbox-tester",
+                    "code-validator",
+                    "self-checker",
+                    "mods-and-eskill-curator",
+                    "test-qa-runner",
+                ],
+            },
+            "mod-ota": {
+                "label": "Mod OTA P6",
+                "ids": [
+                    "push-update-context-officer",
+                    "pack-registrar",
+                ],
+            },
+            "roster-quality": {
+                "label": "编制质检",
+                "ids": [
+                    "employee-interview-assistant",
+                    "employee-pack-quality-interviewer",
+                ],
+            },
         },
     },
     "prod_software": {
         "label": "P-S 软件部",
         "five_line_id": "prod_software",
         "subzones": {
-            "core-coding": {"label": "核心编码 P2", "ids": [
-                "fhd-core-maintainer",
-                "vibe-coding-maintainer",
-            ]},
-            "testing": {"label": "自动测试 P3", "ids": [
-                "test-qa-runner",
-                "sandbox-tester",
-                "code-validator",
-                "self-checker",
-            ]},
-            "build-release": {"label": "构建发布 P4-P5", "ids": [
-                "pack-registrar",
-                "deploy-release-officer",
-                "change-request-auditor",
-                "mobile-android-release-officer",
-                "mobile-ios-release-officer",
-                "mobile-harmony-release-officer",
-            ]},
-            "ota-monitor": {"label": "OTA 监控 P6-P7", "ids": [
-                "push-update-context-officer",
-                "log-monitor-incident",
-                "host-checker",
-            ]},
-            "orchestration": {"label": "编排迭代 P9-P10", "ids": [
-                "daily-orchestrator",
-                "intake-dispatcher",
-                "task-router-officer",
-                "dbops-engineer",
-                "llm-ops-engineer",
-            ]},
+            "core-coding": {
+                "label": "核心编码 P2",
+                "ids": [
+                    "fhd-core-maintainer",
+                    "vibe-coding-maintainer",
+                ],
+            },
+            "testing": {
+                "label": "自动测试 P3",
+                "ids": [
+                    "test-qa-runner",
+                    "sandbox-tester",
+                    "code-validator",
+                    "self-checker",
+                ],
+            },
+            "build-release": {
+                "label": "构建发布 P4-P5",
+                "ids": [
+                    "pack-registrar",
+                    "deploy-release-officer",
+                    "change-request-auditor",
+                    "mobile-android-release-officer",
+                    "mobile-ios-release-officer",
+                    "mobile-harmony-release-officer",
+                ],
+            },
+            "ota-monitor": {
+                "label": "OTA 监控 P6-P7",
+                "ids": [
+                    "push-update-context-officer",
+                    "log-monitor-incident",
+                    "host-checker",
+                ],
+            },
+            "orchestration": {
+                "label": "编排迭代 P9-P10",
+                "ids": [
+                    "daily-orchestrator",
+                    "intake-dispatcher",
+                    "task-router-officer",
+                    "dbops-engineer",
+                    "llm-ops-engineer",
+                ],
+            },
         },
     },
     "shared_retention": {
         "label": "S-R 归档部",
         "five_line_id": "shared_retention",
         "subzones": {
-            "ttl-janitor": {"label": "TTL 清理 R1", "ids": [
-                "retention-officer",
-            ]},
-            "commit-guards": {"label": "提交门禁 R2", "ids": [
-                "security-secrets-guard",
-            ]},
-            "legacy-archive": {"label": "legacy 归档 R3", "ids": [
-                "retention-officer",
-                "legacy-archive-curator",
-            ]},
-            "alert-cve": {"label": "告警 CVE R4", "ids": [
-                "log-monitor-incident",
-                "daily-orchestrator",
-                "security-secrets-guard",
-            ]},
+            "ttl-janitor": {
+                "label": "TTL 清理 R1",
+                "ids": [
+                    "retention-officer",
+                ],
+            },
+            "commit-guards": {
+                "label": "提交门禁 R2",
+                "ids": [
+                    "security-secrets-guard",
+                ],
+            },
+            "legacy-archive": {
+                "label": "legacy 归档 R3",
+                "ids": [
+                    "retention-officer",
+                    "legacy-archive-curator",
+                ],
+            },
+            "alert-cve": {
+                "label": "告警 CVE R4",
+                "ids": [
+                    "log-monitor-incident",
+                    "daily-orchestrator",
+                    "security-secrets-guard",
+                ],
+            },
         },
     },
 }
@@ -331,10 +415,32 @@ def normalize_employee_pack_id(pkg_id: Optional[str]) -> str:
     return str(pkg_id or "").strip().lower()
 
 
-def employee_partition_meta() -> Dict[str, object]:
-    """员工分区元数据（供 employee_runtime / market_shared 使用）。"""
+def employee_partition_meta(pkg_id: Optional[str], artifact: Optional[str]) -> Dict[str, object]:
+    """统一员工隔离元数据。
+
+    - ``employee_scope=duty``：管理端上岗员工，只用于编制、调度、自维护。
+    - ``employee_scope=store``：商店员工，可购买、下载、普通用户执行。
+    - 非 ``employee_pack`` 不归入员工口径。
+    """
+    art = str(artifact or "").strip()
+    pid = normalize_employee_pack_id(pkg_id)
+    is_employee = art == "employee_pack"
+    is_duty = is_employee and is_planned_duty_employee_id(pid)
+    is_store = is_employee and bool(pid) and not is_duty
+    if is_duty:
+        scope = "duty"
+        source = "duty_roster"
+    elif is_store:
+        scope = "store"
+        source = "market_catalog"
+    else:
+        scope = ""
+        source = "non_employee_artifact"
     return {
-        "planned_ids": all_planned_employee_ids(),
-        "areas": dict(YUANGON_AREAS),
-        "departments": dict(SIX_LINE_DEPARTMENTS),
+        "employee_scope": scope,
+        "employee_source": source,
+        "is_duty_employee": is_duty,
+        "is_store_employee": is_store,
+        "yuangon_area": yuangon_area_for_pkg(pid) if is_duty else None,
+        "market_visible": is_store,
     }

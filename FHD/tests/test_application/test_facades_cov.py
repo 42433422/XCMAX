@@ -68,6 +68,19 @@ class TestShipmentEventPrimaryFallback:
 class TestShipmentEventPrimaryEnabled:
     """When event-primary is ON, methods go through NeuroBus command pipeline."""
 
+    @pytest.fixture(autouse=True)
+    def _neuro_runtime_ready(self):
+        """Make the bus-readiness gate pass so these tests exercise the command path.
+
+        The mock bus's ``is_running`` is truthy by default; only the loop must be
+        non-None for ``_neuro_runtime_ready()`` to return True.
+        """
+        with patch(
+            "app.application.facades.shipment_event_primary.get_neuro_main_loop",
+            return_value=MagicMock(),
+        ):
+            yield
+
     def _patch_bus_success(self, result=None):
         if result is None:
             result = {"success": True, "id": 42}
@@ -103,12 +116,12 @@ class TestShipmentEventPrimaryEnabled:
             result = facade.create_shipment("公司A", [])
         assert result["success"] is True
 
-    def test_create_shipment_event_primary_bus_not_running(self):
+    def test_create_shipment_event_primary_dispatch_rejected(self):
         facade, core, flag = _make_facade(event_primary_enabled=True)
         gw = MagicMock()
         gw.prepare_command_event.return_value = "rid-1"
         bus = MagicMock()
-        bus.publish.return_value = False  # bus rejected
+        bus.publish.return_value = False  # bus rejected at dispatch time
 
         with (
             flag,
@@ -216,3 +229,44 @@ class TestShipmentEventPrimaryEnabled:
             result = facade.create_shipment("公司A", [])
         assert result["success"] is False
         assert "loop error" in result["message"]
+
+
+class TestShipmentEventPrimaryFailSafe:
+    """Event-primary degrades to the core path when the NeuroBus runtime is not serving.
+
+    Guards the foot-gun where ``XCAGI_EVENT_PRIMARY`` is enabled in a deployment that
+    runs without the bus (e.g. ``XCAGI_NEURO_INTENT=0``): the write must succeed via the
+    direct path, not fail.
+    """
+
+    def test_create_degrades_to_core_when_loop_absent(self):
+        facade, core, flag = _make_facade(event_primary_enabled=True)
+        with (
+            flag,
+            patch(
+                "app.application.facades.shipment_event_primary.get_neuro_main_loop",
+                return_value=None,
+            ),
+        ):
+            result = facade.create_shipment("公司A", [])
+        core.create_shipment.assert_called_once()
+        assert result["success"] is True
+
+    def test_create_degrades_to_core_when_bus_stopped(self):
+        facade, core, flag = _make_facade(event_primary_enabled=True)
+        stopped_bus = MagicMock()
+        stopped_bus.is_running = False
+        with (
+            flag,
+            patch(
+                "app.application.facades.shipment_event_primary.get_neuro_main_loop",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.application.facades.shipment_event_primary.get_neuro_bus",
+                return_value=stopped_bus,
+            ),
+        ):
+            result = facade.cancel_shipment(5)
+        core.cancel_shipment.assert_called_once_with(5)
+        assert result["success"] is True

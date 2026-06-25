@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """pgvector 落地结构断言。
 
 reviewer 的担心：pgvector "只写了配置，运行时没真用上"。

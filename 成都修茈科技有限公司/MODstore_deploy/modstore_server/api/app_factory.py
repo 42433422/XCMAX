@@ -206,7 +206,13 @@ def _init_event_subscribers() -> None:
         logger.exception("domain event subscribers failed to install")
 
 
+_failed_bg_jobs: list[str] = []
+
+
 def _init_background_jobs() -> None:
+    global _failed_bg_jobs
+    _failed_bg_jobs = []  # Reset for each app creation
+
     if os.environ.get("MODSTORE_RUN_BACKGROUND_JOBS", "0") != "1":
         logger.info(
             "Background jobs (outbox/scheduler) SKIPPED "
@@ -225,6 +231,7 @@ def _init_background_jobs() -> None:
     except Exception:
         logger.exception("outbox dispatcher worker failed to start")
         print("[bg-jobs] outbox worker FAILED", flush=True)
+        _failed_bg_jobs.append("outbox_worker")
 
     try:
         from modstore_server.subscription_renewer import start_subscription_scheduler
@@ -234,6 +241,7 @@ def _init_background_jobs() -> None:
     except Exception:
         logger.exception("subscription auto-renew scheduler failed to start")
         print("[bg-jobs] subscription scheduler FAILED", flush=True)
+        _failed_bg_jobs.append("subscription_renewer")
 
     try:
         from modstore_server.backup_event_subscriber import register_backup_event_subscribers
@@ -243,6 +251,7 @@ def _init_background_jobs() -> None:
     except Exception:
         logger.exception("backup event subscribers registration failed")
         print("[bg-jobs] backup event subscribers FAILED", flush=True)
+        _failed_bg_jobs.append("backup_subscribers")
 
     try:
         from modstore_server.workflow_scheduler import start_scheduler as start_workflow_scheduler
@@ -254,6 +263,7 @@ def _init_background_jobs() -> None:
             "workflow scheduler failed to start (daily digest / inbox poll / workflow cron)"
         )
         print("[bg-jobs] workflow scheduler FAILED", flush=True)
+        _failed_bg_jobs.append("workflow_scheduler")
 
     try:
         from modstore_server.craft_steps import register_all_craft_steps
@@ -263,6 +273,13 @@ def _init_background_jobs() -> None:
     except Exception:
         logger.exception("craft step registry failed to load")
         print("[bg-jobs] craft step registry FAILED", flush=True)
+        _failed_bg_jobs.append("craft_steps")
+
+    # Fail fast if critical jobs failed and env var is set
+    if _failed_bg_jobs and os.environ.get("MODSTORE_STARTUP_FAIL_ON_BG_JOBS") == "1":
+        raise RuntimeError(
+            f"Critical background jobs failed to start: {', '.join(_failed_bg_jobs)}"
+        )
 
 
 def _register_core_routes(app: FastAPI, cfg: AppConfig) -> None:
@@ -314,10 +331,12 @@ def _register_core_routes(app: FastAPI, cfg: AppConfig) -> None:
         from modstore_server.api import (
             debug,
             health,
+            scheduler_runtime_api,
             sync,
         )
 
         app.include_router(health.router)
+        app.include_router(scheduler_runtime_api.router)
         app.include_router(admin_events.router)
         app.include_router(config_routes.router)
         app.include_router(catalog.router)
@@ -480,6 +499,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     _init_background_jobs()
 
+    # Track failed background jobs in app state for runtime visibility
+    app.state.failed_background_jobs = _failed_bg_jobs
+
     @app.on_event("startup")
     async def _warm_edge_tts_on_startup() -> None:
         try:
@@ -513,6 +535,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 stop_scheduler()
             except Exception:
                 logger.exception("workflow scheduler shutdown failed")
+            try:
+                from modstore_server.eventing.db_outbox import _default_worker
+
+                if _default_worker is not None:
+                    _default_worker.stop(timeout=5.0)
+            except Exception:
+                logger.exception("outbox worker shutdown failed")
 
     return app
 

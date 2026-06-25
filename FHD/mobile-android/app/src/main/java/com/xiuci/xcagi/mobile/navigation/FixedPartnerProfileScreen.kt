@@ -54,6 +54,7 @@ internal object FixedPartnerKinds {
     const val ASSISTANT = "assistant"
     const val CUSTOMER_SERVICE = "cs"
     const val CODEX = "codex"
+    const val CURSOR = "cursor"
     const val CLAUDE = "claude"
 }
 
@@ -81,6 +82,7 @@ fun FixedPartnerProfileScreen(
     val assistantAvatarColor = XcagiTheme.extra.brandBlue
     val customerServiceAvatarColor = XcagiTheme.extra.weChatOnline
     val codexAvatarColor = XcagiTheme.extra.n700
+    val cursorAvatarColor = XcagiTheme.extra.brandBlue
     val claudeAvatarColor = XcagiTheme.extra.momentAccent
 
     LaunchedEffect(partnerKind) {
@@ -96,6 +98,7 @@ fun FixedPartnerProfileScreen(
             assistantAvatarColor,
             customerServiceAvatarColor,
             codexAvatarColor,
+            cursorAvatarColor,
             claudeAvatarColor,
         ) {
             fixedPartnerProfileSpec(
@@ -104,6 +107,7 @@ fun FixedPartnerProfileScreen(
                 assistantAvatarColor = assistantAvatarColor,
                 customerServiceAvatarColor = customerServiceAvatarColor,
                 codexAvatarColor = codexAvatarColor,
+                cursorAvatarColor = cursorAvatarColor,
                 claudeAvatarColor = claudeAvatarColor,
             )
         }
@@ -183,6 +187,7 @@ private fun fixedPartnerProfileSpec(
     assistantAvatarColor: Color,
     customerServiceAvatarColor: Color,
     codexAvatarColor: Color,
+    cursorAvatarColor: Color,
     claudeAvatarColor: Color,
 ): FixedPartnerProfileSpec? =
     when (partnerKind) {
@@ -197,6 +202,18 @@ private fun fixedPartnerProfileSpec(
                 circleLabels = listOf("派工", "协同", "开发"),
                 avatarFallback = AppAvatarFallback.CODEX,
                 avatarColor = codexAvatarColor,
+            )
+        FixedPartnerKinds.CURSOR ->
+            FixedPartnerProfileSpec(
+                name = "超级员工-Cursor",
+                alias = "全设备协同 · Agent 派工",
+                accountId = "XCAGI-CURSOR",
+                summary = "与 Codex/Claude 同构的超级员工，把任务派发到在线 Cursor Agent 工作设备；派工不可用时回退本机 Cursor CLI 直答。",
+                source = "XCAGI 超级员工 · Cursor 通道",
+                abilityLabels = listOf("多设备派工", "开发任务", "Agent 直答", "本地 CLI"),
+                circleLabels = listOf("派工", "协同", "开发"),
+                avatarFallback = AppAvatarFallback.CURSOR,
+                avatarColor = cursorAvatarColor,
             )
         FixedPartnerKinds.CLAUDE ->
             FixedPartnerProfileSpec(

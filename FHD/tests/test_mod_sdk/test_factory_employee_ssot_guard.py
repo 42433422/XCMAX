@@ -11,10 +11,11 @@ from app.mod_sdk import assistant_ssot
 
 
 def test_super_employee_ids_contract_unchanged():
-    # 既有契约：客户面超级员工恰好两个，不被工厂角色污染。
+    # 客户面超级员工 = Claude/Codex/Cursor 三个，不被工厂角色污染。
     assert assistant_ssot.super_employee_ids() == {
         "claude-super-employee",
         "codex-super-employee",
+        "cursor-super-employee",
     }
 
 

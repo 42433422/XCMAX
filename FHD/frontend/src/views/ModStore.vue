@@ -129,6 +129,14 @@
 
         <div v-else-if="loadError && !filteredMods.length" class="state-msg store-load-error">
           <i class="fa fa-exclamation-triangle"></i> {{ loadError }}
+          <button
+            type="button"
+            class="btn btn-primary btn-sm store-load-error__retry"
+            :disabled="loading || refreshing"
+            @click="loadMods(true)"
+          >
+            <i class="fa fa-refresh" :class="{ 'fa-spin': loading }"></i> 重试
+          </button>
         </div>
 
         <div v-else-if="filteredMods.length === 0" class="state-msg muted">

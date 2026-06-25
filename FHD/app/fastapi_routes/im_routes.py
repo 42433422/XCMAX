@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.application.execution_scope import factory_context
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.application.workspaces import get_workspace_registry
@@ -86,10 +87,7 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     sid = ws.cookies.get(cookie_name) or ws.query_params.get("session_id")
     if not sid:
         return None
-    try:
-        from app.services import get_session_service
-    except ImportError:
-        from app.application.facades.session_facade import get_session_service
+    from app.application.facades.session_facade import get_session_service
 
     user = get_session_service().validate_session(str(sid).strip())
     if user is None:
@@ -112,10 +110,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
     if not offline:
         return
     try:
-        try:
-            from app.services.mobile_push import notify_user as notify_mobile_user
-        except ImportError:
-            from app.application.mobile_push_app_service import notify_mobile_user
+        from app.application.mobile_push_app_service import notify_mobile_user
 
         preview = (body or "").strip()[:120] or "新消息"
         for uid in offline:
@@ -178,6 +173,31 @@ def im_list_contacts(
         return {"success": True, "contacts": contacts}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_contacts")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.get("/api/im/fixed-contacts")
+def im_fixed_contacts(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """桌面端消息页固定联系人组成(surface SSOT: device=desktop × side)。
+
+    side 由 session 判定:管理端(admin)= 平台员工 + 超级员工;企业端(enterprise) 再含专属客服。
+    返回 {device, side, top, bottom}(以 platform 为界切分),前端按
+    top + 平台员工(动态) + bottom 拼装,顺序即 surface_composition 声明序。
+    """
+    _ensure_schema()
+    db = HostSessionLocal()
+    try:
+        side = "admin" if _is_admin_customer_service_session(request, db) else "enterprise"
+        from app.application.surface_contacts import fixed_contacts
+
+        return {"success": True, **fixed_contacts("desktop", side)}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("im_fixed_contacts")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
         db.close()
@@ -430,6 +450,61 @@ def claude_super_employee_invoke(
         db.close()
 
 
+@router.get("/api/admin/cursor-super-employee/messages")
+def cursor_super_employee_messages(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+    limit: int = Query(default=80, ge=1, le=200),
+):
+    """管理端 Cursor 超级员工软件内对话记录。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return {"success": True, "messages": messages}
+    except RECOVERABLE_ERRORS:
+        logger.exception("cursor_super_employee_messages")
+        return JSONResponse(
+            {"success": False, "message": "服务暂时不可用，请稍后重试"}, status_code=500
+        )
+    finally:
+        db.close()
+
+
+@router.post("/api/admin/cursor-super-employee/messages")
+def cursor_super_employee_invoke(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端 Cursor 超级员工软件内调用入口。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        text = str(body.get("message") or body.get("body") or "").strip()
+        context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        # 管理端=平台操作者：铸造工厂授权（受 XCMAX_FACTORY_CAPABILITY_TOKEN 门控，未配则降产品域）。
+        workspace_id = str(body.get("workspace_id") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=workspace_id, base=context)
+        result = CursorSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
+        return {"success": True, **result}
+    except ValueError:
+        return JSONResponse({"success": False, "message": "请求参数有误"}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        logger.exception("cursor_super_employee_invoke")
+        return JSONResponse(
+            {"success": False, "message": "服务暂时不可用，请稍后重试"}, status_code=500
+        )
+    finally:
+        db.close()
+
+
 # ── 顶层管理端「项目工厂」控制台（闭环：选项目 → 选工厂员工 → 派工）──
 
 
@@ -480,6 +555,7 @@ def admin_factory_employees(
         tool_endpoint = {
             "Claude": "/api/admin/claude-super-employee/messages",
             "Codex": "/api/admin/codex-super-employee/messages",
+            "Cursor": "/api/admin/cursor-super-employee/messages",
         }
         items = [
             {
@@ -524,6 +600,25 @@ def admin_ai_groups_list(request: Request, user: CurrentUser = Depends(require_i
         return {"success": True, "groups": groups}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("admin_ai_groups_list")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.get("/api/admin/ai-groups/candidates")
+def admin_ai_group_candidates(
+    request: Request, user: CurrentUser = Depends(require_identified_user)
+):
+    """可拉入群聊的 AI 员工候选（普通员工 + 超级员工）。
+
+    供手机端建群/加成员的选人列表使用，覆盖全部 AI 员工。
+    """
+    denied = _ai_group_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        candidates = AiGroupChatService().list_member_candidates()
+        return {"success": True, "candidates": candidates}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_ai_group_candidates")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
@@ -586,6 +681,7 @@ async def admin_ai_group_post(
             text=str(body.get("message") or ""),
             sender_name=str(body.get("sender_name") or "我"),
             mentions=mentions if isinstance(mentions, list) else None,
+            execute=bool(body.get("execute")),
         )
         return {"success": True, **result}
     except ValueError as exc:

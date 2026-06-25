@@ -130,11 +130,20 @@ class AiModelPrice(Base):
     input_price_per_1k = Column(Numeric(12, 6), default=0.0)
     output_price_per_1k = Column(Numeric(12, 6), default=0.0)
     min_charge = Column(Numeric(12, 2), default=0.01)
+    # 多模态计费：pricing_mode 决定计费口径（默认 token，与历史行为一致）。
+    # token=按 input/output_price_per_1k；其余按 price_per_unit × 单位数量。
+    # 单位含义见 unit_name：image(张)/second(秒)/page(页)/kchar(千字符)/call(次)。
+    pricing_mode = Column(String(32), default="token")
+    price_per_unit = Column(Numeric(12, 6), nullable=True)
+    unit_name = Column(String(32), default="")
     official_input_price_per_1k = Column(Numeric(12, 6), nullable=True)
     official_output_price_per_1k = Column(Numeric(12, 6), nullable=True)
     official_min_charge = Column(Numeric(12, 2), nullable=True)
     official_source = Column(String(512), default="")
     official_synced_at = Column(DateTime, nullable=True)
+    # 图片生成按「张」计费的单价（元/张）。为空时回退环境默认价。与按 token 的
+    # input/output_price_per_1k 互不影响：生图走该列，对话走 token 列。
+    price_per_image = Column(Numeric(12, 6), nullable=True)
     enabled = Column(Boolean, default=True, index=True)
     updated_at = Column(
         DateTime,

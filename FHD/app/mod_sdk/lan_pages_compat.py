@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 K：LAN 授权页经 Mod 路由提供（与宿主 /lan-gate 并存）。"""
 
 from __future__ import annotations

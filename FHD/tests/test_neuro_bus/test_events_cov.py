@@ -1,405 +1,38 @@
-"""Coverage tests for neuro_bus event dataclasses.
+"""Behavior tests for neuro_bus event base class and domain event subclasses.
 
-Strategy: event subclasses call super().__post_init__() but NeuroEvent has no
-__post_init__. We patch NeuroEvent to add a no-op __post_init__ that sets
-self.payload if absent, then call __post_init__ directly to exercise branches.
+These tests assert concrete, observable behavior:
+
+1. ``NeuroEvent`` base API — serialization round-trips, dedup-key determinism,
+   priority ordering, expiry, metadata reminting, fluent builders, and the
+   ``DomainEvent`` / ``IntentEvent`` helpers. This is the engine every domain
+   event depends on, so its behavior is pinned down with ``==`` assertions.
+
+2. Domain event subclasses (order / wechat / auth) — class-level
+   ``event_type`` / ``priority`` defaults, and the real required-field
+   validation in each ``__post_init__``: every required field is checked, the
+   valid case passes, and the missing-field case raises ``ValueError`` with the
+   exact message.
+
+Design bug (see ``TestDataclassConstructionBug`` and suspected_bugs):
+the domain events are ``@dataclass`` subclasses of ``NeuroEvent``, but
+``NeuroEvent`` is a plain class with no ``__post_init__``. Each subclass'
+``__post_init__`` starts with ``super().__post_init__()``, which raises
+``AttributeError`` -- so constructing any of these events the normal way
+(``OrderSubmittedEvent(...)``) always fails before the payload validation can
+run, and ``payload`` is never even a dataclass field. The validation code is
+therefore unreachable via real construction. We exercise it directly by
+binding the *real* (unpatched) subclass ``__post_init__`` to a real instance
+and supplying only the missing ``NeuroEvent.__post_init__`` base hook so
+``super()`` resolves -- the code under test is the subclass validation itself.
 """
 
 from __future__ import annotations
 
+import json
+import time
 from unittest.mock import patch
 
 import pytest
-
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
-
-
-def _make(cls, payload: dict, **fields):
-    """Create an event instance bypassing the broken __init__ chain."""
-    ev = object.__new__(cls)
-    ev.event_type = fields.get("event_type", "test.event")
-    ev.priority = fields.get("priority", EventPriority.NORMAL)
-    ev.payload = payload
-    return ev
-
-
-def _call_post_init(ev):
-    """Call __post_init__ with NeuroEvent.__post_init__ patched as a no-op."""
-    with patch.object(NeuroEvent, "__post_init__", lambda self: None, create=True):
-        type(ev).__post_init__(ev)
-
-
-# ---------------------------------------------------------------------------
-# order_events
-# ---------------------------------------------------------------------------
-
-from app.neuro_bus.events.order_events import (
-    OrderCancelledEvent,
-    OrderFulfilledEvent,
-    OrderItemUpdatedEvent,
-    OrderPaidEvent,
-    OrderPaymentFailedEvent,
-    OrderRefundedEvent,
-    OrderShippedEvent,
-    OrderStatusChangedEvent,
-    OrderSubmittedEvent,
-)
-
-
-class TestOrderSubmittedEvent:
-    def test_valid(self):
-        ev = _make(OrderSubmittedEvent, {"order_id": "1", "customer_id": "c", "items": []})
-        _call_post_init(ev)  # no exception
-
-    def test_missing_order_id(self):
-        ev = _make(OrderSubmittedEvent, {"customer_id": "c", "items": []})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-    def test_missing_customer_id(self):
-        ev = _make(OrderSubmittedEvent, {"order_id": "1", "items": []})
-        with pytest.raises(ValueError, match="customer_id"):
-            _call_post_init(ev)
-
-    def test_missing_items(self):
-        ev = _make(OrderSubmittedEvent, {"order_id": "1", "customer_id": "c"})
-        with pytest.raises(ValueError, match="items"):
-            _call_post_init(ev)
-
-
-class TestOrderPaidEvent:
-    def test_valid(self):
-        ev = _make(OrderPaidEvent, {"order_id": "1", "payment_id": "p", "amount": 100})
-        _call_post_init(ev)
-
-    def test_missing_order_id(self):
-        ev = _make(OrderPaidEvent, {"payment_id": "p", "amount": 100})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-    def test_missing_payment_id(self):
-        ev = _make(OrderPaidEvent, {"order_id": "1", "amount": 100})
-        with pytest.raises(ValueError, match="payment_id"):
-            _call_post_init(ev)
-
-    def test_missing_amount(self):
-        ev = _make(OrderPaidEvent, {"order_id": "1", "payment_id": "p"})
-        with pytest.raises(ValueError, match="amount"):
-            _call_post_init(ev)
-
-
-class TestOrderPaymentFailedEvent:
-    def test_valid(self):
-        ev = _make(OrderPaymentFailedEvent, {"order_id": "1"})
-        _call_post_init(ev)
-
-    def test_missing_order_id(self):
-        ev = _make(OrderPaymentFailedEvent, {})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-
-class TestOrderFulfilledEvent:
-    def test_valid(self):
-        ev = _make(OrderFulfilledEvent, {"order_id": "1"})
-        _call_post_init(ev)
-
-    def test_missing_order_id(self):
-        ev = _make(OrderFulfilledEvent, {})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-
-class TestOrderShippedEvent:
-    def test_valid(self):
-        ev = _make(OrderShippedEvent, {"order_id": "1", "shipment_id": "s", "tracking_number": "T"})
-        _call_post_init(ev)
-
-    def test_missing_order_id(self):
-        ev = _make(OrderShippedEvent, {"shipment_id": "s", "tracking_number": "T"})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-    def test_missing_shipment_id(self):
-        ev = _make(OrderShippedEvent, {"order_id": "1", "tracking_number": "T"})
-        with pytest.raises(ValueError, match="shipment_id"):
-            _call_post_init(ev)
-
-    def test_missing_tracking_number(self):
-        ev = _make(OrderShippedEvent, {"order_id": "1", "shipment_id": "s"})
-        with pytest.raises(ValueError, match="tracking_number"):
-            _call_post_init(ev)
-
-
-class TestOrderCancelledEvent:
-    def test_valid(self):
-        ev = _make(OrderCancelledEvent, {"order_id": "1"})
-        _call_post_init(ev)
-
-    def test_missing_order_id(self):
-        ev = _make(OrderCancelledEvent, {})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-
-class TestOrderRefundedEvent:
-    def test_valid(self):
-        ev = _make(OrderRefundedEvent, {"order_id": "1", "refund_id": "r", "refund_amount": 50})
-        _call_post_init(ev)
-
-    def test_missing_order_id(self):
-        ev = _make(OrderRefundedEvent, {"refund_id": "r", "refund_amount": 50})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-    def test_missing_refund_id(self):
-        ev = _make(OrderRefundedEvent, {"order_id": "1", "refund_amount": 50})
-        with pytest.raises(ValueError, match="refund_id"):
-            _call_post_init(ev)
-
-    def test_missing_refund_amount(self):
-        ev = _make(OrderRefundedEvent, {"order_id": "1", "refund_id": "r"})
-        with pytest.raises(ValueError, match="refund_amount"):
-            _call_post_init(ev)
-
-
-class TestOrderItemUpdatedEvent:
-    def test_valid(self):
-        ev = _make(OrderItemUpdatedEvent, {"order_id": "1", "item_id": "i", "changes": {}})
-        _call_post_init(ev)
-
-    def test_missing_order_id(self):
-        ev = _make(OrderItemUpdatedEvent, {"item_id": "i", "changes": {}})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-    def test_missing_item_id(self):
-        ev = _make(OrderItemUpdatedEvent, {"order_id": "1", "changes": {}})
-        with pytest.raises(ValueError, match="item_id"):
-            _call_post_init(ev)
-
-    def test_missing_changes(self):
-        ev = _make(OrderItemUpdatedEvent, {"order_id": "1", "item_id": "i"})
-        with pytest.raises(ValueError, match="changes"):
-            _call_post_init(ev)
-
-
-class TestOrderStatusChangedEvent:
-    def test_valid(self):
-        ev = _make(
-            OrderStatusChangedEvent, {"order_id": "1", "old_status": "draft", "new_status": "paid"}
-        )
-        _call_post_init(ev)
-
-    def test_missing_order_id(self):
-        ev = _make(OrderStatusChangedEvent, {"old_status": "draft", "new_status": "paid"})
-        with pytest.raises(ValueError, match="order_id"):
-            _call_post_init(ev)
-
-    def test_missing_old_status(self):
-        ev = _make(OrderStatusChangedEvent, {"order_id": "1", "new_status": "paid"})
-        with pytest.raises(ValueError, match="old_status"):
-            _call_post_init(ev)
-
-    def test_missing_new_status(self):
-        ev = _make(OrderStatusChangedEvent, {"order_id": "1", "old_status": "draft"})
-        with pytest.raises(ValueError, match="new_status"):
-            _call_post_init(ev)
-
-
-# ---------------------------------------------------------------------------
-# wechat_events
-# ---------------------------------------------------------------------------
-
-from app.neuro_bus.events.wechat_events import (
-    WeChatContactAddedEvent,
-    WeChatContactUpdatedEvent,
-    WeChatLoginStatusChangedEvent,
-    WeChatMessageReceivedEvent,
-    WeChatMessageSentEvent,
-    WeChatTaskCompletedEvent,
-    WeChatTaskCreatedEvent,
-)
-
-
-class TestWeChatMessageReceivedEvent:
-    # required: message_id, from_user, message_type, content
-    def test_valid(self):
-        ev = _make(
-            WeChatMessageReceivedEvent,
-            {"message_id": "m1", "from_user": "u1", "message_type": "text", "content": "hi"},
-        )
-        _call_post_init(ev)
-
-    def test_missing_message_id(self):
-        ev = _make(
-            WeChatMessageReceivedEvent, {"from_user": "u1", "message_type": "text", "content": "hi"}
-        )
-        with pytest.raises(ValueError, match="message_id"):
-            _call_post_init(ev)
-
-    def test_missing_from_user(self):
-        ev = _make(
-            WeChatMessageReceivedEvent,
-            {"message_id": "m1", "message_type": "text", "content": "hi"},
-        )
-        with pytest.raises(ValueError, match="from_user"):
-            _call_post_init(ev)
-
-    def test_missing_content(self):
-        ev = _make(
-            WeChatMessageReceivedEvent,
-            {"message_id": "m1", "from_user": "u1", "message_type": "text"},
-        )
-        with pytest.raises(ValueError, match="content"):
-            _call_post_init(ev)
-
-
-class TestWeChatMessageSentEvent:
-    # required: message_id, to_user, message_type, status
-    def test_valid(self):
-        ev = _make(
-            WeChatMessageSentEvent,
-            {"message_id": "m1", "to_user": "u1", "message_type": "text", "status": "ok"},
-        )
-        _call_post_init(ev)
-
-    def test_missing_message_id(self):
-        ev = _make(
-            WeChatMessageSentEvent, {"to_user": "u1", "message_type": "text", "status": "ok"}
-        )
-        with pytest.raises(ValueError, match="message_id"):
-            _call_post_init(ev)
-
-    def test_missing_to_user(self):
-        ev = _make(
-            WeChatMessageSentEvent, {"message_id": "m1", "message_type": "text", "status": "ok"}
-        )
-        with pytest.raises(ValueError, match="to_user"):
-            _call_post_init(ev)
-
-
-class TestWeChatContactAddedEvent:
-    # required: contact_id, contact_name, source
-    def test_valid(self):
-        ev = _make(
-            WeChatContactAddedEvent, {"contact_id": "c", "contact_name": "Alice", "source": "scan"}
-        )
-        _call_post_init(ev)
-
-    def test_missing_contact_id(self):
-        ev = _make(WeChatContactAddedEvent, {"contact_name": "Alice", "source": "scan"})
-        with pytest.raises(ValueError, match="contact_id"):
-            _call_post_init(ev)
-
-    def test_missing_contact_name(self):
-        ev = _make(WeChatContactAddedEvent, {"contact_id": "c", "source": "scan"})
-        with pytest.raises(ValueError, match="contact_name"):
-            _call_post_init(ev)
-
-    def test_missing_source(self):
-        ev = _make(WeChatContactAddedEvent, {"contact_id": "c", "contact_name": "Alice"})
-        with pytest.raises(ValueError, match="source"):
-            _call_post_init(ev)
-
-
-class TestWeChatContactUpdatedEvent:
-    # required: contact_id only
-    def test_valid(self):
-        ev = _make(WeChatContactUpdatedEvent, {"contact_id": "c"})
-        _call_post_init(ev)
-
-    def test_missing_contact_id(self):
-        ev = _make(WeChatContactUpdatedEvent, {})
-        with pytest.raises(ValueError, match="contact_id"):
-            _call_post_init(ev)
-
-
-class TestWeChatLoginStatusChangedEvent:
-    # required: account_id, old_status, new_status
-    def test_valid(self):
-        ev = _make(
-            WeChatLoginStatusChangedEvent,
-            {"account_id": "a1", "old_status": "offline", "new_status": "online"},
-        )
-        _call_post_init(ev)
-
-    def test_missing_account_id(self):
-        ev = _make(WeChatLoginStatusChangedEvent, {"old_status": "offline", "new_status": "online"})
-        with pytest.raises(ValueError, match="account_id"):
-            _call_post_init(ev)
-
-    def test_missing_old_status(self):
-        ev = _make(WeChatLoginStatusChangedEvent, {"account_id": "a1", "new_status": "online"})
-        with pytest.raises(ValueError, match="old_status"):
-            _call_post_init(ev)
-
-    def test_missing_new_status(self):
-        ev = _make(WeChatLoginStatusChangedEvent, {"account_id": "a1", "old_status": "offline"})
-        with pytest.raises(ValueError, match="new_status"):
-            _call_post_init(ev)
-
-
-class TestWeChatTaskCreatedEvent:
-    # required: task_id, task_type, target_contacts, content
-    def test_valid(self):
-        ev = _make(
-            WeChatTaskCreatedEvent,
-            {"task_id": "t1", "task_type": "broadcast", "target_contacts": [], "content": "msg"},
-        )
-        _call_post_init(ev)
-
-    def test_missing_task_id(self):
-        ev = _make(
-            WeChatTaskCreatedEvent,
-            {"task_type": "broadcast", "target_contacts": [], "content": "msg"},
-        )
-        with pytest.raises(ValueError, match="task_id"):
-            _call_post_init(ev)
-
-    def test_missing_task_type(self):
-        ev = _make(
-            WeChatTaskCreatedEvent, {"task_id": "t1", "target_contacts": [], "content": "msg"}
-        )
-        with pytest.raises(ValueError, match="task_type"):
-            _call_post_init(ev)
-
-    def test_missing_content(self):
-        ev = _make(
-            WeChatTaskCreatedEvent,
-            {"task_id": "t1", "task_type": "broadcast", "target_contacts": []},
-        )
-        with pytest.raises(ValueError, match="content"):
-            _call_post_init(ev)
-
-
-class TestWeChatTaskCompletedEvent:
-    # required: task_id, success_count, failed_count
-    def test_valid(self):
-        ev = _make(
-            WeChatTaskCompletedEvent, {"task_id": "t1", "success_count": 3, "failed_count": 0}
-        )
-        _call_post_init(ev)
-
-    def test_missing_task_id(self):
-        ev = _make(WeChatTaskCompletedEvent, {"success_count": 3, "failed_count": 0})
-        with pytest.raises(ValueError, match="task_id"):
-            _call_post_init(ev)
-
-    def test_missing_success_count(self):
-        ev = _make(WeChatTaskCompletedEvent, {"task_id": "t1", "failed_count": 0})
-        with pytest.raises(ValueError, match="success_count"):
-            _call_post_init(ev)
-
-    def test_missing_failed_count(self):
-        ev = _make(WeChatTaskCompletedEvent, {"task_id": "t1", "success_count": 3})
-        with pytest.raises(ValueError, match="failed_count"):
-            _call_post_init(ev)
-
-
-# ---------------------------------------------------------------------------
-# auth_events
-# ---------------------------------------------------------------------------
 
 from app.neuro_bus.events.auth_events import (
     LoginFailedEvent,
@@ -411,162 +44,570 @@ from app.neuro_bus.events.auth_events import (
     UserPermissionRevokedEvent,
     UserRegisteredEvent,
 )
+from app.neuro_bus.events.base import (
+    DomainEvent,
+    EventMetadata,
+    EventPriority,
+    IntentEvent,
+    NeuroEvent,
+)
+from app.neuro_bus.events.order_events import (
+    OrderCancelledEvent,
+    OrderFulfilledEvent,
+    OrderItemUpdatedEvent,
+    OrderPaidEvent,
+    OrderPaymentFailedEvent,
+    OrderRefundedEvent,
+    OrderShippedEvent,
+    OrderStatusChangedEvent,
+    OrderSubmittedEvent,
+)
+from app.neuro_bus.events.wechat_events import (
+    WeChatContactAddedEvent,
+    WeChatContactUpdatedEvent,
+    WeChatLoginStatusChangedEvent,
+    WeChatMessageReceivedEvent,
+    WeChatMessageSentEvent,
+    WeChatTaskCompletedEvent,
+    WeChatTaskCreatedEvent,
+)
+
+# ===========================================================================
+# NeuroEvent base class — real, fully-working API
+# ===========================================================================
 
 
-class TestUserLoginEvent:
-    # required: user_id, login_method, ip_address
-    def test_valid(self):
-        ev = _make(
-            UserLoginEvent, {"user_id": "u1", "login_method": "password", "ip_address": "1.2.3.4"}
+class TestNeuroEventConstruction:
+    def test_init_sets_core_fields_and_default_priority(self):
+        ev = NeuroEvent("order.paid", {"order_id": "1"})
+        assert ev.event_type == "order.paid"
+        assert ev.payload == {"order_id": "1"}
+        # default priority is NORMAL when not specified
+        assert ev.priority is EventPriority.NORMAL
+
+    def test_explicit_priority_is_kept(self):
+        ev = NeuroEvent("x", {}, priority=EventPriority.CRITICAL)
+        assert ev.priority is EventPriority.CRITICAL
+
+    def test_kwargs_are_merged_into_payload(self):
+        ev = NeuroEvent("x", {"a": 1}, foo="bar", baz=2)
+        assert ev.payload == {"a": 1, "foo": "bar", "baz": 2}
+
+    def test_metadata_autogenerated_with_defaults(self):
+        ev = NeuroEvent("x", {})
+        # default metadata: domain "global", source "unknown", retry config
+        assert ev.metadata.domain == "global"
+        assert ev.metadata.source == "unknown"
+        assert ev.metadata.max_retries == 3
+        assert ev.metadata.timeout_ms == 5000
+        # a dedup_key is always generated when absent
+        assert isinstance(ev.metadata.dedup_key, str)
+        assert len(ev.metadata.dedup_key) == 32
+
+    def test_external_metadata_is_reminted_by_default(self):
+        # Re-using an event_id would be dropped by queue dedup; default path
+        # remints a fresh identity and clears the inbound dedup_key.
+        meta = EventMetadata(event_id="FIXED", dedup_key="STALE")
+        ev = NeuroEvent("x", {}, metadata=meta)
+        assert ev.metadata.event_id != "FIXED"
+        assert ev.metadata.dedup_key not in (None, "STALE")
+        assert len(ev.metadata.dedup_key) == 32
+
+    def test_preserve_queue_identity_keeps_external_metadata(self):
+        meta = EventMetadata(event_id="FIXED", dedup_key="KEEP")
+        ev = NeuroEvent("x", {}, metadata=meta, preserve_queue_identity=True)
+        assert ev.metadata.event_id == "FIXED"
+        assert ev.metadata.dedup_key == "KEEP"
+
+
+class TestNeuroEventSerialization:
+    def test_to_dict_shape_and_priority_is_int(self):
+        ev = NeuroEvent("order.paid", {"order_id": "1"}, priority=EventPriority.HIGH)
+        d = ev.to_dict()
+        assert set(d.keys()) == {"event_type", "priority", "metadata", "payload"}
+        assert d["event_type"] == "order.paid"
+        # priority is serialized as its int value, not the enum
+        assert d["priority"] == EventPriority.HIGH.value == 1
+        assert d["payload"] == {"order_id": "1"}
+        assert d["metadata"]["domain"] == "global"
+
+    def test_to_json_parses_back_to_to_dict(self):
+        ev = NeuroEvent("e", {"k": "v"}, priority=EventPriority.LOW)
+        assert json.loads(ev.to_json()) == ev.to_dict()
+
+    def test_from_dict_reassigns_event_id_by_default(self):
+        ev = NeuroEvent("e", {"k": "v"}, priority=EventPriority.HIGH)
+        d = ev.to_dict()
+        rebuilt = NeuroEvent.from_dict(d)
+        # payload / type / priority round-trip exactly
+        assert rebuilt.event_type == "e"
+        assert rebuilt.payload == {"k": "v"}
+        assert rebuilt.priority is EventPriority.HIGH
+        # but identity is reminted so it can be re-published without dedup loss
+        assert rebuilt.metadata.event_id != d["metadata"]["event_id"]
+
+    def test_from_dict_preserve_keeps_event_id(self):
+        ev = NeuroEvent("e", {"k": "v"})
+        d = ev.to_dict()
+        rebuilt = NeuroEvent.from_dict(d, preserve_queue_identity=True)
+        assert rebuilt.metadata.event_id == d["metadata"]["event_id"]
+
+
+class TestNeuroEventDedupKey:
+    def test_dedup_key_stable_for_same_type_keys_and_timestamp(self):
+        # dedup key is f(type, sorted payload keys, ms timestamp) — value-independent
+        a = NeuroEvent(
+            "t",
+            {"x": 1, "y": 2},
+            metadata=EventMetadata(timestamp=1000.0),
+            preserve_queue_identity=True,
         )
-        _call_post_init(ev)
-
-    def test_missing_user_id(self):
-        ev = _make(UserLoginEvent, {"login_method": "password", "ip_address": "1.2.3.4"})
-        with pytest.raises(ValueError, match="user_id"):
-            _call_post_init(ev)
-
-    def test_missing_login_method(self):
-        ev = _make(UserLoginEvent, {"user_id": "u1", "ip_address": "1.2.3.4"})
-        with pytest.raises(ValueError, match="login_method"):
-            _call_post_init(ev)
-
-    def test_missing_ip_address(self):
-        ev = _make(UserLoginEvent, {"user_id": "u1", "login_method": "password"})
-        with pytest.raises(ValueError, match="ip_address"):
-            _call_post_init(ev)
-
-
-class TestUserLogoutEvent:
-    # required: user_id
-    def test_valid(self):
-        ev = _make(UserLogoutEvent, {"user_id": "u1"})
-        _call_post_init(ev)
-
-    def test_missing_user_id(self):
-        ev = _make(UserLogoutEvent, {})
-        with pytest.raises(ValueError, match="user_id"):
-            _call_post_init(ev)
-
-
-class TestUserRegisteredEvent:
-    # required: user_id, username, registration_source
-    def test_valid(self):
-        ev = _make(
-            UserRegisteredEvent,
-            {"user_id": "u1", "username": "alice", "registration_source": "web"},
+        b = NeuroEvent(
+            "t",
+            {"y": 99, "x": 99},
+            metadata=EventMetadata(timestamp=1000.0),
+            preserve_queue_identity=True,
         )
-        _call_post_init(ev)
+        assert a.get_dedup_key() == b.get_dedup_key()
 
-    def test_missing_user_id(self):
-        ev = _make(UserRegisteredEvent, {"username": "alice", "registration_source": "web"})
-        with pytest.raises(ValueError, match="user_id"):
-            _call_post_init(ev)
-
-    def test_missing_username(self):
-        ev = _make(UserRegisteredEvent, {"user_id": "u1", "registration_source": "web"})
-        with pytest.raises(ValueError, match="username"):
-            _call_post_init(ev)
-
-    def test_missing_registration_source(self):
-        ev = _make(UserRegisteredEvent, {"user_id": "u1", "username": "alice"})
-        with pytest.raises(ValueError, match="registration_source"):
-            _call_post_init(ev)
-
-
-class TestUserPasswordChangedEvent:
-    # required: user_id
-    def test_valid(self):
-        ev = _make(UserPasswordChangedEvent, {"user_id": "u1"})
-        _call_post_init(ev)
-
-    def test_missing_user_id(self):
-        ev = _make(UserPasswordChangedEvent, {})
-        with pytest.raises(ValueError, match="user_id"):
-            _call_post_init(ev)
-
-
-class TestUserPermissionGrantedEvent:
-    # required: user_id, permission, granted_by
-    def test_valid(self):
-        ev = _make(
-            UserPermissionGrantedEvent,
-            {"user_id": "u1", "permission": "admin", "granted_by": "root"},
+    def test_dedup_key_differs_when_event_type_differs(self):
+        a = NeuroEvent(
+            "type.a",
+            {"x": 1},
+            metadata=EventMetadata(timestamp=1000.0),
+            preserve_queue_identity=True,
         )
-        _call_post_init(ev)
-
-    def test_missing_user_id(self):
-        ev = _make(UserPermissionGrantedEvent, {"permission": "admin", "granted_by": "root"})
-        with pytest.raises(ValueError, match="user_id"):
-            _call_post_init(ev)
-
-    def test_missing_permission(self):
-        ev = _make(UserPermissionGrantedEvent, {"user_id": "u1", "granted_by": "root"})
-        with pytest.raises(ValueError, match="permission"):
-            _call_post_init(ev)
-
-    def test_missing_granted_by(self):
-        ev = _make(UserPermissionGrantedEvent, {"user_id": "u1", "permission": "admin"})
-        with pytest.raises(ValueError, match="granted_by"):
-            _call_post_init(ev)
-
-
-class TestUserPermissionRevokedEvent:
-    # required: user_id, permission, revoked_by
-    def test_valid(self):
-        ev = _make(
-            UserPermissionRevokedEvent,
-            {"user_id": "u1", "permission": "admin", "revoked_by": "root"},
+        b = NeuroEvent(
+            "type.b",
+            {"x": 1},
+            metadata=EventMetadata(timestamp=1000.0),
+            preserve_queue_identity=True,
         )
-        _call_post_init(ev)
+        assert a.get_dedup_key() != b.get_dedup_key()
 
-    def test_missing_user_id(self):
-        ev = _make(UserPermissionRevokedEvent, {"permission": "admin", "revoked_by": "root"})
-        with pytest.raises(ValueError, match="user_id"):
-            _call_post_init(ev)
-
-    def test_missing_permission(self):
-        ev = _make(UserPermissionRevokedEvent, {"user_id": "u1", "revoked_by": "root"})
-        with pytest.raises(ValueError, match="permission"):
-            _call_post_init(ev)
-
-    def test_missing_revoked_by(self):
-        ev = _make(UserPermissionRevokedEvent, {"user_id": "u1", "permission": "admin"})
-        with pytest.raises(ValueError, match="revoked_by"):
-            _call_post_init(ev)
-
-
-class TestLoginFailedEvent:
-    # required: username, reason, ip_address
-    def test_valid(self):
-        ev = _make(
-            LoginFailedEvent, {"username": "alice", "reason": "bad_pw", "ip_address": "1.2.3.4"}
+    def test_remint_queue_identity_changes_event_id_and_dedup(self):
+        ev = NeuroEvent(
+            "t", {}, metadata=EventMetadata(timestamp=1000.0), preserve_queue_identity=True
         )
-        _call_post_init(ev)
-
-    def test_missing_username(self):
-        ev = _make(LoginFailedEvent, {"reason": "bad_pw", "ip_address": "1.2.3.4"})
-        with pytest.raises(ValueError, match="username"):
-            _call_post_init(ev)
-
-    def test_missing_reason(self):
-        ev = _make(LoginFailedEvent, {"username": "alice", "ip_address": "1.2.3.4"})
-        with pytest.raises(ValueError, match="reason"):
-            _call_post_init(ev)
-
-    def test_missing_ip_address(self):
-        ev = _make(LoginFailedEvent, {"username": "alice", "reason": "bad_pw"})
-        with pytest.raises(ValueError, match="ip_address"):
-            _call_post_init(ev)
+        old_id = ev.metadata.event_id
+        old_key = ev.metadata.dedup_key
+        ev.remint_queue_identity()
+        assert ev.metadata.event_id != old_id
+        # dedup key regenerated (timestamp advanced -> different hash)
+        assert isinstance(ev.metadata.dedup_key, str)
+        assert len(ev.metadata.dedup_key) == 32
+        assert ev.metadata.dedup_key != old_key
 
 
-class TestTokenRefreshedEvent:
-    # required: user_id
-    def test_valid(self):
-        ev = _make(TokenRefreshedEvent, {"user_id": "u1"})
-        _call_post_init(ev)
+class TestNeuroEventOrderingAndExpiry:
+    def test_lt_orders_by_priority_value(self):
+        critical = NeuroEvent("a", {}, priority=EventPriority.CRITICAL)  # 0
+        low = NeuroEvent("b", {}, priority=EventPriority.LOW)  # 3
+        assert critical < low
+        assert not (low < critical)
 
-    def test_missing_user_id(self):
-        ev = _make(TokenRefreshedEvent, {})
-        with pytest.raises(ValueError, match="user_id"):
-            _call_post_init(ev)
+    def test_lt_returns_notimplemented_for_non_event(self):
+        ev = NeuroEvent("a", {})
+        assert ev.__lt__(42) is NotImplemented
+
+    def test_priority_queue_sorts_critical_first(self):
+        import heapq
+
+        normal = NeuroEvent("n", {}, priority=EventPriority.NORMAL)
+        critical = NeuroEvent("c", {}, priority=EventPriority.CRITICAL)
+        background = NeuroEvent("b", {}, priority=EventPriority.BACKGROUND)
+        heap: list[NeuroEvent] = []
+        for ev in (normal, background, critical):
+            heapq.heappush(heap, ev)
+        assert heapq.heappop(heap).event_type == "c"  # CRITICAL pops first
+
+    def test_is_expired_true_when_elapsed_exceeds_timeout(self):
+        ev = NeuroEvent("a", {})
+        ev.metadata.timestamp = time.time() - 10  # 10s ago
+        ev.metadata.timeout_ms = 100  # 0.1s budget
+        assert ev.is_expired() is True
+
+    def test_is_expired_false_within_timeout(self):
+        ev = NeuroEvent("a", {})
+        ev.metadata.timestamp = time.time()
+        ev.metadata.timeout_ms = 1_000_000
+        assert ev.is_expired() is False
+
+
+class TestNeuroEventFluentBuilders:
+    def test_with_source_domain_timeout_return_self_and_set_values(self):
+        ev = NeuroEvent("a", {})
+        returned = ev.with_source("svc").with_domain("order").with_timeout(777)
+        assert returned is ev
+        assert ev.metadata.source == "svc"
+        assert ev.metadata.domain == "order"
+        assert ev.metadata.timeout_ms == 777
+
+    def test_with_trace_sets_trace_and_promotes_span_to_parent(self):
+        ev = NeuroEvent("a", {})
+        original_span = ev.metadata.span_id
+        ev.with_trace("trace-1", "span-2")
+        assert ev.metadata.trace_id == "trace-1"
+        assert ev.metadata.span_id == "span-2"
+        # previous span becomes the parent span
+        assert ev.metadata.parent_span_id == original_span
+
+    def test_with_trace_without_span_keeps_existing_span(self):
+        ev = NeuroEvent("a", {})
+        original_span = ev.metadata.span_id
+        ev.with_trace("trace-only")
+        assert ev.metadata.trace_id == "trace-only"
+        assert ev.metadata.span_id == original_span
+        assert ev.metadata.parent_span_id is None
+
+
+class TestEventMetadata:
+    def test_to_dict_round_trips_all_fields(self):
+        meta = EventMetadata(
+            event_id="e1",
+            correlation_id="c1",
+            source="svc",
+            domain="order",
+            retry_count=2,
+        )
+        d = meta.to_dict()
+        assert d["event_id"] == "e1"
+        assert d["correlation_id"] == "c1"
+        assert d["source"] == "svc"
+        assert d["domain"] == "order"
+        assert d["retry_count"] == 2
+        # reconstruct from dict yields an equivalent metadata object
+        assert EventMetadata(**d).to_dict() == d
+
+
+class TestDomainEvent:
+    def test_event_type_is_namespaced_and_payload_annotated(self):
+        de = DomainEvent("order", "created", "agg-1", {"k": "v"}, version=3)
+        assert de.event_type == "order.created"
+        assert de.metadata.domain == "order"
+        assert de.aggregate_id == "agg-1"
+        assert de.version == 3
+        # aggregate id / version are injected into the payload
+        assert de.payload["_aggregate_id"] == "agg-1"
+        assert de.payload["_version"] == 3
+        assert de.payload["k"] == "v"
+
+    def test_default_version_is_one(self):
+        de = DomainEvent("billing", "charged", "agg-9", {})
+        assert de.version == 1
+        assert de.payload["_version"] == 1
+
+
+class TestIntentEvent:
+    def test_default_subtype_priority_and_domain(self):
+        ie = IntentEvent("book_flight", "u1", 0.9, "book a flight")
+        assert ie.event_type == IntentEvent.INTENT_RECOGNIZED == "intent.recognized"
+        assert ie.priority is EventPriority.HIGH
+        assert ie.metadata.domain == "intent"
+        assert ie.payload == {
+            "intent_type": "book_flight",
+            "user_id": "u1",
+            "confidence": 0.9,
+            "raw_text": "book a flight",
+        }
+
+    @pytest.mark.parametrize(
+        ("intent_type", "expected_timeout"),
+        [
+            ("greeting", 1),  # reflex tier
+            ("emergency_stop", 1),
+            ("help", 10),  # subconscious tier
+            ("status_check", 10),
+            ("book_flight", 200),  # default conscious tier
+        ],
+    )
+    def test_timeout_tiers_by_intent_type(self, intent_type, expected_timeout):
+        ie = IntentEvent(intent_type, "u", 0.5, "text")
+        assert ie.metadata.timeout_ms == expected_timeout
+
+
+# ===========================================================================
+# Domain event subclasses — defaults + required-field validation
+# ===========================================================================
+
+
+def _run_validation(cls, payload):
+    """Run the real subclass ``__post_init__`` validation against a real instance.
+
+    Only the missing ``NeuroEvent.__post_init__`` base hook is supplied (so the
+    subclass' ``super().__post_init__()`` resolves to a no-op). The subclass'
+    own ``__post_init__`` -- the validation under test -- is NOT patched.
+    """
+    inst = object.__new__(cls)  # genuine instance of the real class
+    inst.payload = payload
+    with patch.object(NeuroEvent, "__post_init__", lambda self: None, create=True):
+        cls.__post_init__(inst)
+    return inst
+
+
+def _assert_each_required_field_validated(cls, full_payload, required_fields):
+    """Valid payload passes; dropping any single required field raises ValueError."""
+    # valid payload -> no exception, payload preserved verbatim
+    inst = _run_validation(cls, dict(full_payload))
+    assert inst.payload == full_payload
+
+    for field in required_fields:
+        partial = {k: v for k, v in full_payload.items() if k != field}
+        with pytest.raises(ValueError) as exc:
+            _run_validation(cls, partial)
+        # exact message, not just a substring match
+        assert str(exc.value) == f"{cls.__name__} 缺少必要字段: {field}"
+
+
+# --- order events ----------------------------------------------------------
+
+ORDER_CASES = [
+    (
+        OrderSubmittedEvent,
+        "order.submitted",
+        EventPriority.HIGH,
+        {"order_id": "1", "customer_id": "c", "items": []},
+        ["order_id", "customer_id", "items"],
+    ),
+    (
+        OrderPaidEvent,
+        "order.paid",
+        EventPriority.HIGH,
+        {"order_id": "1", "payment_id": "p", "amount": 100},
+        ["order_id", "payment_id", "amount"],
+    ),
+    (
+        OrderPaymentFailedEvent,
+        "order.payment_failed",
+        EventPriority.HIGH,
+        {"order_id": "1"},
+        ["order_id"],
+    ),
+    (
+        OrderFulfilledEvent,
+        "order.fulfilled",
+        EventPriority.NORMAL,
+        {"order_id": "1"},
+        ["order_id"],
+    ),
+    (
+        OrderShippedEvent,
+        "order.shipped",
+        EventPriority.NORMAL,
+        {"order_id": "1", "shipment_id": "s", "tracking_number": "T"},
+        ["order_id", "shipment_id", "tracking_number"],
+    ),
+    (
+        OrderCancelledEvent,
+        "order.cancelled",
+        EventPriority.HIGH,
+        {"order_id": "1"},
+        ["order_id"],
+    ),
+    (
+        OrderRefundedEvent,
+        "order.refunded",
+        EventPriority.HIGH,
+        {"order_id": "1", "refund_id": "r", "refund_amount": 50},
+        ["order_id", "refund_id", "refund_amount"],
+    ),
+    (
+        OrderItemUpdatedEvent,
+        "order.item_updated",
+        EventPriority.NORMAL,
+        {"order_id": "1", "item_id": "i", "changes": {}},
+        ["order_id", "item_id", "changes"],
+    ),
+    (
+        OrderStatusChangedEvent,
+        "order.status_changed",
+        EventPriority.NORMAL,
+        {"order_id": "1", "old_status": "draft", "new_status": "paid"},
+        ["order_id", "old_status", "new_status"],
+    ),
+]
+
+
+# --- wechat events ---------------------------------------------------------
+
+WECHAT_CASES = [
+    (
+        WeChatMessageReceivedEvent,
+        "wechat.message_received",
+        EventPriority.HIGH,
+        {"message_id": "m1", "from_user": "u1", "message_type": "text", "content": "hi"},
+        ["message_id", "from_user", "message_type", "content"],
+    ),
+    (
+        WeChatMessageSentEvent,
+        "wechat.message_sent",
+        EventPriority.NORMAL,
+        {"message_id": "m1", "to_user": "u1", "message_type": "text", "status": "ok"},
+        ["message_id", "to_user", "message_type", "status"],
+    ),
+    (
+        WeChatContactAddedEvent,
+        "wechat.contact_added",
+        EventPriority.NORMAL,
+        {"contact_id": "c", "contact_name": "Alice", "source": "scan"},
+        ["contact_id", "contact_name", "source"],
+    ),
+    (
+        WeChatContactUpdatedEvent,
+        "wechat.contact_updated",
+        EventPriority.LOW,
+        {"contact_id": "c"},
+        ["contact_id"],
+    ),
+    (
+        WeChatTaskCreatedEvent,
+        "wechat.task_created",
+        EventPriority.NORMAL,
+        {"task_id": "t1", "task_type": "broadcast", "target_contacts": [], "content": "msg"},
+        ["task_id", "task_type", "target_contacts", "content"],
+    ),
+    (
+        WeChatTaskCompletedEvent,
+        "wechat.task_completed",
+        EventPriority.NORMAL,
+        {"task_id": "t1", "success_count": 3, "failed_count": 0},
+        ["task_id", "success_count", "failed_count"],
+    ),
+    (
+        WeChatLoginStatusChangedEvent,
+        "wechat.login_status_changed",
+        EventPriority.HIGH,
+        {"account_id": "a1", "old_status": "offline", "new_status": "online"},
+        ["account_id", "old_status", "new_status"],
+    ),
+]
+
+
+# --- auth events -----------------------------------------------------------
+
+AUTH_CASES = [
+    (
+        UserLoginEvent,
+        "auth.user_login",
+        EventPriority.HIGH,
+        {"user_id": "u1", "login_method": "password", "ip_address": "1.2.3.4"},
+        ["user_id", "login_method", "ip_address"],
+    ),
+    (
+        UserLogoutEvent,
+        "auth.user_logout",
+        EventPriority.NORMAL,
+        {"user_id": "u1"},
+        ["user_id"],
+    ),
+    (
+        UserRegisteredEvent,
+        "auth.user_registered",
+        EventPriority.NORMAL,
+        {"user_id": "u1", "username": "alice", "registration_source": "web"},
+        ["user_id", "username", "registration_source"],
+    ),
+    (
+        UserPasswordChangedEvent,
+        "auth.password_changed",
+        EventPriority.HIGH,
+        {"user_id": "u1"},
+        ["user_id"],
+    ),
+    (
+        UserPermissionGrantedEvent,
+        "auth.permission_granted",
+        EventPriority.NORMAL,
+        {"user_id": "u1", "permission": "admin", "granted_by": "root"},
+        ["user_id", "permission", "granted_by"],
+    ),
+    (
+        UserPermissionRevokedEvent,
+        "auth.permission_revoked",
+        EventPriority.NORMAL,
+        {"user_id": "u1", "permission": "admin", "revoked_by": "root"},
+        ["user_id", "permission", "revoked_by"],
+    ),
+    (
+        LoginFailedEvent,
+        "auth.login_failed",
+        EventPriority.HIGH,
+        {"username": "alice", "reason": "bad_pw", "ip_address": "1.2.3.4"},
+        ["username", "reason", "ip_address"],
+    ),
+    (
+        TokenRefreshedEvent,
+        "auth.token_refreshed",
+        EventPriority.LOW,
+        {"user_id": "u1"},
+        ["user_id"],
+    ),
+]
+
+
+ALL_CASES = ORDER_CASES + WECHAT_CASES + AUTH_CASES
+
+
+@pytest.mark.parametrize(
+    ("cls", "expected_type", "expected_priority", "_payload", "_required"),
+    ALL_CASES,
+    ids=[c[0].__name__ for c in ALL_CASES],
+)
+def test_class_level_defaults(cls, expected_type, expected_priority, _payload, _required):
+    """Every event declares the documented event_type / priority as class defaults."""
+    assert cls.event_type == expected_type
+    assert cls.priority is expected_priority
+
+
+@pytest.mark.parametrize(
+    ("cls", "_type", "_priority", "full_payload", "required_fields"),
+    ALL_CASES,
+    ids=[c[0].__name__ for c in ALL_CASES],
+)
+def test_required_field_validation(cls, _type, _priority, full_payload, required_fields):
+    """Valid payload passes; each missing required field raises the exact ValueError."""
+    _assert_each_required_field_validated(cls, full_payload, required_fields)
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [c[0] for c in ALL_CASES],
+    ids=[c[0].__name__ for c in ALL_CASES],
+)
+def test_empty_payload_reports_first_missing_field(cls):
+    """An empty payload fails validation with a ValueError naming a required field."""
+    with pytest.raises(ValueError, match="缺少必要字段"):
+        _run_validation(cls, {})
+
+
+# ===========================================================================
+# Documented design bug: normal construction is broken
+# ===========================================================================
+
+
+class TestDataclassConstructionBug:
+    """Constructing any domain event the normal way raises AttributeError.
+
+    The subclasses are @dataclass over a non-dataclass NeuroEvent whose
+    __post_init__ does not exist, so super().__post_init__() blows up. This is
+    a real bug (see suspected_bugs); these tests pin the current behavior.
+    """
+
+    @pytest.mark.parametrize(
+        "cls",
+        [c[0] for c in ALL_CASES],
+        ids=[c[0].__name__ for c in ALL_CASES],
+    )
+    def test_construction_raises_attributeerror(self, cls):
+        with pytest.raises(AttributeError, match="__post_init__"):
+            cls()
+
+    def test_payload_is_not_a_dataclass_field(self):
+        import dataclasses
+
+        # The only dataclass fields are event_type and priority; there is no way
+        # to pass a payload through the generated __init__, so the required-field
+        # validation can never receive real data via normal construction.
+        names = {f.name for f in dataclasses.fields(OrderSubmittedEvent)}
+        assert names == {"event_type", "priority"}
+        assert "payload" not in names

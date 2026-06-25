@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
-"""SSOT 声明 lint 工具：扫描 md 文件中的 SSOT 声明，与 SSOT_INDEX.md 比对。
+"""SSOT 声明 lint 工具：扫描 md 文件中的 SSOT 声明，与 config/ssot.yaml 的 doc_registry 比对。
 
-检测两类冲突：
-  1. 未登记的 SSOT 声明：某 md 文件声称 SSOT 但不在 SSOT_INDEX.md 登记表中
-  2. SSOT 文件未声明：SSOT_INDEX.md 中登记的 SSOT 文件本身未含 SSOT 声明
+唯一真相源 = FHD/config/ssot.yaml（doc_registry + retired 段）。本工具直接读它（不再解析
+SSOT_INDEX.md —— 后者现为 ssot.yaml 的派生视图，由 gen_ssot_index.py 生成）。
+
+检测三类问题：
+  1. 未登记的 SSOT 声明：某 md 文件声称 SSOT 但不在 doc_registry 中
+  2. SSOT 文件未声明：doc_registry 中登记的 SSOT 文件本身未含 SSOT 声明
+  3. 派生视图过期：SSOT_INDEX.md 与 ssot.yaml 不一致（硬失败，不受 --strict 影响）
 
 用法：
-  python scripts/dev/docs_ssot_lint.py            # 仅打印告警，退出码 0
-  python scripts/dev/docs_ssot_lint.py --strict   # 告警即退出码 1（CI 门禁）
+  python scripts/dev/docs_ssot_lint.py            # 声明告警仅打印（退出码 0）；派生过期则 1
+  python scripts/dev/docs_ssot_lint.py --strict   # 声明告警亦退出码 1（CI 门禁）
 """
+from __future__ import annotations
+
 import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Optional
+
+# 让本脚本无论从何目录调用都能 import 同目录的 gen_ssot_index（doc_registry 唯一读取点）
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gen_ssot_index  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]  # XCMAX/
 FHD_ROOT = REPO_ROOT / "FHD"
@@ -24,10 +33,6 @@ SCAN_DIRS = [FHD_ROOT / "docs", REPO_ROOT / "docs"]
 IGNORE_DIRS = {REPO_ROOT / "docs" / "superpowers"}
 
 CLAIM_PATTERN = re.compile(r"(唯一真相源|SSOT|单一事实来源)", re.IGNORECASE)
-# Markdown link in table cell: [text](path)
-LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
-# Table separator row: |------|------|
-SEPARATOR_PATTERN = re.compile(r"^\|[\s\-:]+\|")
 # Filename containing "ssot" (e.g., mods_ssot.py, CI_SSOT.md, repo-ssot-dayclose-*.md)
 FILENAME_SSOT_PATTERN = re.compile(r"[\w./-]*[sS][sS][oO][tT][\w-]*\.\w+", re.IGNORECASE)
 # Backtick-quoted code span: `...`
@@ -36,134 +41,6 @@ BACKTICK_PATTERN = re.compile(r"`[^`]+`")
 MD_LINK_PATTERN = re.compile(r"\[[^\]]*\]\([^)]*\)")
 # Meta-references to the registry/lint tool itself (not claims)
 META_REF_PATTERN = re.compile(r"(SSOT_INDEX\.md|docs_ssot_lint\.py)", re.IGNORECASE)
-
-
-def parse_ssot_index(index_path: Path) -> dict[str, Path]:
-    """解析 SSOT_INDEX.md 的领域登记表，返回 {领域: SSOT 文件路径}。
-
-    只解析"## 领域 SSOT 登记表"下的表格，跳过"已退役"表格与其他章节。
-    """
-    if not index_path.exists():
-        return {}
-
-    content = index_path.read_text(encoding="utf-8")
-    lines = content.splitlines()
-
-    registered: dict[str, Path] = {}
-    in_registration_table = False
-
-    for line in lines:
-        stripped = line.strip()
-
-        # Track which section we're in
-        if stripped == "## 领域 SSOT 登记表":
-            in_registration_table = True
-            continue
-        elif stripped.startswith("## "):
-            # New section header → exit registration table
-            in_registration_table = False
-            continue
-
-        if not in_registration_table:
-            continue
-
-        # Must be a table row
-        if not stripped.startswith("|"):
-            continue
-
-        # Skip separator rows (|------|------|)
-        if SEPARATOR_PATTERN.match(stripped):
-            continue
-
-        # Parse table row: | 领域 | SSOT 文档 | 说明 |
-        parts = [p.strip() for p in stripped.split("|")]
-        # parts[0] and parts[-1] are empty (before/after the outer |)
-        if len(parts) < 4:
-            continue
-
-        domain = parts[1]
-        ssot_cell = parts[2]
-
-        # Skip header row
-        if domain == "领域" or "SSOT 文档" in ssot_cell:
-            continue
-
-        # Extract link path from [text](path)
-        link_match = LINK_PATTERN.search(ssot_cell)
-        if link_match:
-            rel_path = link_match.group(2)
-        else:
-            rel_path = ssot_cell.strip()
-
-        if not rel_path:
-            continue
-
-        # Resolve path relative to SSOT_INDEX.md's directory (FHD/docs/)
-        resolved = (index_path.parent / rel_path).resolve()
-        registered[domain] = resolved
-
-    return registered
-
-
-def parse_retired_files(index_path: Path) -> set[Path]:
-    """解析 SSOT_INDEX.md 的"已退役 SSOT"表格，返回退役文件路径集合。
-
-    退役文件是指针化文件，本身会包含 SSOT 字样指向新 SSOT，不应视为未登记声明。
-    """
-    if not index_path.exists():
-        return set()
-
-    content = index_path.read_text(encoding="utf-8")
-    lines = content.splitlines()
-
-    retired: set[Path] = set()
-    in_retired_table = False
-
-    for line in lines:
-        stripped = line.strip()
-
-        if stripped == "## 已退役 SSOT（指针化）":
-            in_retired_table = True
-            continue
-        elif stripped.startswith("## "):
-            in_retired_table = False
-            continue
-
-        if not in_retired_table:
-            continue
-
-        if not stripped.startswith("|"):
-            continue
-
-        if SEPARATOR_PATTERN.match(stripped):
-            continue
-
-        # Parse table row: | 原文档 | 指向 | 原因 |
-        parts = [p.strip() for p in stripped.split("|")]
-        if len(parts) < 4:
-            continue
-
-        original_cell = parts[1]
-
-        # Skip header row
-        if "原文档" in original_cell:
-            continue
-
-        # Extract link path from [text](path) if present
-        link_match = LINK_PATTERN.search(original_cell)
-        if link_match:
-            rel_path = link_match.group(2)
-        else:
-            # Strip trailing parenthetical like "（覆盖率章节）"
-            rel_path = re.sub(r"[（(].*?[)）]", "", original_cell).strip()
-
-        if not rel_path:
-            continue
-
-        resolved = (index_path.parent / rel_path).resolve()
-        retired.add(resolved)
-
-    return retired
 
 
 def is_real_claim(line: str) -> bool:
@@ -190,10 +67,10 @@ def is_real_claim(line: str) -> bool:
     return bool(CLAIM_PATTERN.search(stripped))
 
 
-def scan_claims(scan_dirs: list[Path], retired_files: Optional[set] = None) -> list[tuple[Path, int, str]]:
+def scan_claims(scan_dirs: list[Path], retired_files: set | None = None) -> list[tuple[Path, int, str]]:
     """扫描所有 md 文件，返回 [(文件绝对路径, 行号, 匹配行文本)]。
 
-    跳过 SSOT_INDEX.md 本身（它是登记表，不是 SSOT 声明）。
+    跳过 SSOT_INDEX.md 本身（它是派生视图，不是 SSOT 声明）。
     跳过已退役的指针化文件（它们含 SSOT 字样但只是重定向指针）。
     仅保留真正的 SSOT 声明（排除文件名、代码 span、链接目标中的 ssot）。
     """
@@ -217,7 +94,7 @@ def scan_claims(scan_dirs: list[Path], retired_files: Optional[set] = None) -> l
             if any(resolved.is_relative_to(d) for d in IGNORE_DIRS if d.exists()):
                 continue
 
-            # Skip SSOT_INDEX.md itself (it's the registry, not a claim)
+            # Skip SSOT_INDEX.md itself (it's the derived view, not a claim)
             if resolved == ssot_index_resolved:
                 continue
 
@@ -244,18 +121,20 @@ def scan_claims(scan_dirs: list[Path], retired_files: Optional[set] = None) -> l
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="扫描 md 文件中的 SSOT 声明，与 SSOT_INDEX.md 比对，检测未登记或冲突的 SSOT 声明。"
+        description="扫描 md 文件中的 SSOT 声明，与 config/ssot.yaml 的 doc_registry 比对，"
+        "检测未登记或冲突的 SSOT 声明；并校验 SSOT_INDEX.md 派生视图是否过期。"
     )
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="告警即退出码 1（用于 CI 门禁）",
+        help="声明告警即退出码 1（用于 CI 门禁）",
     )
     args = parser.parse_args()
 
-    registered = parse_ssot_index(SSOT_INDEX)
+    # 登记表唯一源 = ssot.yaml 的 doc_registry / retired（不再解析 SSOT_INDEX.md）
+    registered = gen_ssot_index.registered_paths()
     registered_paths: set[Path] = set(registered.values())
-    retired_files = parse_retired_files(SSOT_INDEX)
+    retired_files = gen_ssot_index.retired_paths()
     claims = scan_claims(SCAN_DIRS, retired_files)
 
     conflicts = 0
@@ -292,6 +171,15 @@ def main() -> int:
     print(
         f"[INFO] total claims: {total_claims}, registered: {len(registered)}, conflicts: {conflicts}"
     )
+
+    # 派生视图过期是确定性漂移，硬失败（不受 --strict 影响），与 coverage/version 等派生门禁一致
+    stale = not gen_ssot_index.is_fresh()
+    if stale:
+        print(
+            "[FAIL] SSOT_INDEX.md 与 config/ssot.yaml 不一致（派生视图过期）；"
+            "请运行 python scripts/dev/gen_ssot_index.py 重新生成"
+        )
+        return 1
 
     if conflicts > 0 and args.strict:
         return 1

@@ -32,19 +32,24 @@ android {
 
     flavorDimensions += "sku"
     productFlavors {
-        create("personal") {
-            dimension = "sku"
-            applicationIdSuffix = ".personal"
-            resValue("string", "app_name", "XCAGI 个人版")
-            buildConfigField("String", "PRODUCT_SKU", "\"personal\"")
-            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.personal"
-        }
+        // 企业版是唯一在产发行版（config/product.yaml editions.enterprise=active），默认变体。
         create("enterprise") {
             dimension = "sku"
             applicationIdSuffix = ".enterprise"
             resValue("string", "app_name", "XCAGI 企业版")
             buildConfigField("String", "PRODUCT_SKU", "\"enterprise\"")
             manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.enterprise"
+        }
+        // 个人版已停产（config/product.yaml editions.personal=discontinued）：默认不生成 personal flavor，
+        // 仅保留未来恢复入口 —— 显式 `-PincludeDiscontinuedSku=true` 才重新挂载。
+        if (project.findProperty("includeDiscontinuedSku") == "true") {
+            create("personal") {
+                dimension = "sku"
+                applicationIdSuffix = ".personal"
+                resValue("string", "app_name", "XCAGI 个人版")
+                buildConfigField("String", "PRODUCT_SKU", "\"personal\"")
+                manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.personal"
+            }
         }
     }
 

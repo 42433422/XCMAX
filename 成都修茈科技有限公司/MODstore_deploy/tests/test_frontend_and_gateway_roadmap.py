@@ -34,7 +34,8 @@ def test_package_json_build_script_pins_vite():
 
     pkg = json.loads((MARKET / "package.json").read_text(encoding="utf-8"))
     assert pkg["scripts"]["build"] == "vite build"
-    assert pkg["scripts"]["test:coverage"].startswith("vitest run --coverage")
+    script = pkg["scripts"]["test:coverage"]
+    assert "vitest run" in script and "--coverage" in script
 
 
 def test_middleware_keeps_market_dist_as_single_source():

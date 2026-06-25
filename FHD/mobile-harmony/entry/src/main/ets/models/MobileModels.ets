@@ -20,6 +20,36 @@ export interface MobileEnvelope<T> {
   data?: T;
 }
 
+// ── 会议纪要 SSOT 三级派生 ──
+export interface MeetingGenerateBody {
+  raw_transcript: string;
+  title?: string;
+}
+
+export interface MeetingMinuteData {
+  id?: number;
+  title?: string;
+  status?: string;
+  source_hash?: string;
+  level1_script?: string;
+  level2_architecture?: string;
+  level3_plain?: string;
+  error_message?: string;
+}
+
+export interface MeetingLevelDef {
+  id?: string;
+  label?: string;
+  short?: string;
+  derives_from?: string;
+  render?: string;
+}
+
+export interface MeetingLevelsData {
+  version?: number;
+  levels?: MeetingLevelDef[];
+}
+
 export interface MobileLoginData {
   user?: UserDto;
   session_id?: string;
@@ -123,6 +153,25 @@ export interface ChatResponseData {
   data?: ChatPayload;
 }
 
+// 增量同步（/sync/pull）返回投影，对齐 Android MobileSyncRepository。
+export interface SyncAiChange {
+  session_id: string;
+  role: string;
+  content: string;
+}
+
+export interface SyncApprovalRow {
+  id: number;
+  title: string;
+  status: string;
+}
+
+export interface SyncPullData {
+  cursor?: number;
+  ai_changes?: SyncAiChange[];
+  approvals?: SyncApprovalRow[];
+}
+
 export interface ConversationSummary {
   id: string;
   title: string;
@@ -131,6 +180,115 @@ export interface ConversationSummary {
   avatar: string;
   source: string;
   employeeKey: string;
+  // 后端 surface SSOT 派生的路由('assistant_chat'=小C走Persona / 'cs'=专属客服走cs-officer);员工/普通会话留空。
+  route?: string;
+}
+
+// ── 超级员工（Codex/Claude）派工调用 ──
+// 派工模式三态控件 → context.mode：自动(不带)/直答(chat)/多设备(code+mode_explicit)。
+export interface SuperEmployeeContext {
+  source?: string;
+  client_surface?: string;
+  target_devices?: string[];
+  mode?: string;
+  mode_explicit?: boolean;
+}
+
+export interface SuperEmployeeMessageBody {
+  message: string;
+  body: string;
+  context: SuperEmployeeContext;
+}
+
+// list_messages / invoke().messages[] 里的单条消息行
+export interface SuperEmployeeMessageRow {
+  id?: string;
+  role?: string;
+  body?: string;
+  kind?: string;
+  status?: string;
+  dispatch_request_id?: string;
+  task_id?: string;
+  created_at?: string;
+}
+
+export interface SuperEmployeeDispatch {
+  request_id?: string;
+  task_id?: string;
+  status?: string;
+  accepted?: boolean;
+}
+
+// POST .../{codex,claude}-super-employee/messages 的 data（invoke 返回）
+export interface SuperEmployeeInvokeData {
+  dispatch?: SuperEmployeeDispatch;
+  assistant_message?: SuperEmployeeMessageRow;
+  message?: SuperEmployeeMessageRow;
+  messages?: SuperEmployeeMessageRow[];
+}
+
+// GET .../{codex,claude}-super-employee/messages 的 data
+export interface SuperEmployeeMessagesData {
+  messages?: SuperEmployeeMessageRow[];
+}
+
+// ── relay 离线通路：手机经云中继派发到已绑定的桌面执行端 ──
+export interface RelayConfirmCodeBody {
+  code: string;
+}
+
+export interface RelayDesktop {
+  relay_id?: string;
+  name?: string;
+  online?: boolean;
+}
+
+// POST /relay/mobile/confirm-code 的 data
+export interface RelayConfirmCodeData {
+  relay_id?: string;
+  desktop?: RelayDesktop;
+}
+
+// GET /relay/mobile/desktops 的 data
+export interface RelayDesktopsData {
+  items?: RelayDesktop[];
+  count?: number;
+}
+
+export interface RelayTaskContext {
+  source?: string;
+  client_surface?: string;
+  mode?: string;
+  mode_explicit?: boolean;
+}
+
+export interface RelayTaskPayload {
+  message: string;
+  context: RelayTaskContext;
+}
+
+export interface RelayTaskCreateBody {
+  relay_id: string;
+  kind: string;
+  payload: RelayTaskPayload;
+}
+
+// 任务回写结果：error / codex.assistant_message.body / reply（codex 字段对 claude 同样适用，relay 统一包在 codex 下）
+export interface RelayTaskResult {
+  error?: string;
+  reply?: string;
+  codex?: SuperEmployeeInvokeData;
+}
+
+export interface RelayTask {
+  task_id?: string;
+  status?: string;
+  result?: RelayTaskResult;
+}
+
+// POST /relay/tasks 与 GET /relay/tasks/{taskId} 的 data
+export interface RelayTaskData {
+  task?: RelayTask;
 }
 
 // 联系人固定区条目（后端 /contacts/fixed 派生：assistant/dedicated_cs/super）

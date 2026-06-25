@@ -21,7 +21,9 @@ from fastapi.responses import JSONResponse
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.application.execution_scope import factory_context
+from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _admin_employee_match_keys,
@@ -63,6 +65,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     AuthQrConfirmBody,
     ClaudeSuperEmployeeMobileMessageBody,
     CodexSuperEmployeeMobileMessageBody,
+    CursorSuperEmployeeMobileMessageBody,
     DeviceRegisterBody,
     MobileServiceBridgeRespondBody,
     OidcExchangeBody,
@@ -101,7 +104,6 @@ from app.security.mobile_pairing import (
     issue_pairing_nonce,
     lookup_by_shortcode,
 )
-from app.services.mobile_relay_service import MobileRelayService
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -228,7 +230,7 @@ def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] 
     if not _host_is_private_or_loopback(host):
         return None
     try:
-        from app.services.mobile_relay_desktop_client import register_desktop_relay
+        from app.application.facades.mobile_relay_facade import register_desktop_relay
 
         relay = register_desktop_relay(host=host, port=port)
     except RECOVERABLE_ERRORS as exc:
@@ -1269,6 +1271,81 @@ async def mobile_admin_codex_super_employee_invoke(
         )
 
 
+@extension_router.get("/admin/cursor-super-employee/messages")
+async def mobile_admin_cursor_super_employee_messages(
+    request: Request,
+    limit: int = Query(default=80, ge=1, le=200),
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的 Cursor 超级员工对话记录。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS:
+        logger.exception("mobile_admin_cursor_super_employee_messages")
+        return JSONResponse(
+            format_mobile_response(None, "服务暂时不可用，请稍后重试", success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/admin/cursor-super-employee/messages")
+async def mobile_admin_cursor_super_employee_invoke(
+    request: Request,
+    body: CursorSuperEmployeeMobileMessageBody,
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的软件内 Cursor 调用入口。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    text = (body.message or body.body or "").strip()
+    context = dict(body.context or {})
+    context.setdefault("source", "mobile_im")
+    context.setdefault("client_surface", "mobile")
+    context.setdefault("target_devices", ["all"])
+    # 仅平台管理账号铸造工厂授权；企业(客户)账号一律产品域（此路由 admin/enterprise 共用）。
+    if (
+        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        == "admin"
+    ):
+        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=_wsid, base=context)
+    try:
+        result = CursorSuperEmployeeService().invoke(
+            user_id=uid,
+            message=text,
+            context=context,
+        )
+        return format_mobile_response(data=result)
+    except ValueError:
+        return JSONResponse(
+            format_mobile_response(None, "请求参数有误", success=False, code=400),
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("mobile_admin_cursor_super_employee_invoke")
+        return JSONResponse(
+            format_mobile_response(None, "服务暂时不可用，请稍后重试", success=False, code=500),
+            status_code=500,
+        )
+
+
 @extension_router.get("/admin/claude-super-employee/messages")
 async def mobile_admin_claude_super_employee_messages(
     request: Request,
@@ -1338,6 +1415,74 @@ async def mobile_admin_claude_super_employee_invoke(
         )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_admin_claude_super_employee_invoke")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.get("/admin/cursor-super-employee/messages")
+async def mobile_admin_cursor_super_employee_messages(
+    request: Request,
+    limit: int = Query(default=80, ge=1, le=200),
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的 Cursor 超级员工对话记录。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_cursor_super_employee_messages")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/admin/cursor-super-employee/messages")
+async def mobile_admin_cursor_super_employee_invoke(
+    request: Request,
+    body: CursorSuperEmployeeMobileMessageBody,
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的软件内 Cursor 调用入口。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    text = (body.message or body.body or "").strip()
+    context = dict(body.context or {})
+    context.setdefault("source", "mobile_im")
+    context.setdefault("device_scope", "all_devices")
+    context.setdefault("target_devices", ["all"])
+    try:
+        result = CursorSuperEmployeeService().invoke(
+            user_id=uid,
+            message=text,
+            context=context,
+        )
+        return format_mobile_response(data=result)
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400),
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_cursor_super_employee_invoke")
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
             status_code=500,
@@ -1457,6 +1602,7 @@ async def mobile_ai_group_post(
             text=body.message,
             sender_name=body.sender_name or "我",
             mentions=body.mentions,
+            execute=bool(body.execute),
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
@@ -1855,6 +2001,13 @@ async def mobile_ai_circle_posts(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     from app.application.ai_circle_service import list_posts
+
+    try:
+        from app.application import employee_circle_sync
+
+        await employee_circle_sync.sync_modstore_reports()
+    except Exception:  # noqa: BLE001 - 同步失败不影响交流圈展示
+        logger.warning("circle: modstore report sync skipped", exc_info=True)
 
     uid, _, _ = _ai_circle_user(user)
     posts = list_posts(user_id=uid, limit=limit)
@@ -2462,7 +2615,7 @@ async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    from app.services.user_cs_employee_runner import EMPLOYEE_MOD_ID
+    from app.application.facades.user_cs_employee_facade import EMPLOYEE_MOD_ID
 
     return format_mobile_response(
         data={
@@ -2488,7 +2641,7 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
             format_mobile_response(None, "消息不能为空", success=False, code=400),
             status_code=400,
         )
-    from app.services.user_cs_employee_runner import EMPLOYEE_MOD_ID, run_user_cs_employee
+    from app.application.facades.user_cs_employee_facade import EMPLOYEE_MOD_ID, run_user_cs_employee
 
     message_id = f"cs_{uuid.uuid4().hex[:12]}"
     username = _safe_user_text(user, "username")

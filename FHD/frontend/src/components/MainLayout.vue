@@ -85,6 +85,7 @@
       <slot></slot>
     </div>
     <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" />
+    <MeetingMinutesPanel />
     <VirtualCursor />
     <OnboardingTutorial />
     <TutorialOverlay v-if="!onboardingTutorialStore.active" />
@@ -114,6 +115,7 @@ import { customerServiceHostPathFromModPath } from '@/utils/customerServicePageP
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
+import MeetingMinutesPanel from './meeting/MeetingMinutesPanel.vue'
 import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'

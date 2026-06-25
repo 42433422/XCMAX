@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.models import IncidentEvent, User, get_session_factory
 
-
 ROLE_FALLBACKS = {
     "scout": ["change-request-auditor", "daily-orchestrator"],
     "fix": ["vibe-coding-maintainer", "daily-orchestrator"],
@@ -34,7 +33,9 @@ def _payload(row: IncidentEvent) -> Dict[str, Any]:
 
 
 def _admin_user_id(session) -> int:
-    row = session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()  # noqa: E712
+    row = (
+        session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
+    )  # noqa: E712
     if row:
         return int(row.id)
     row = session.query(User).order_by(User.id.asc()).first()
@@ -62,16 +63,43 @@ def _pick_role(role: str, candidates: List[str], used: set[str]) -> str:
     if override and override not in used:
         return override
     preferred_exact = {
-        "fix": ("code-validator", "vibe-coding-maintainer", "workflow-automator", "daily-orchestrator"),
-        "scout": ("workflow-automator", "self-checker", "host-checker", "intent-analyst", "quality-validator"),
-        "verify": ("sandbox-tester", "test-qa-runner", "quality-validator", "change-request-auditor"),
+        "fix": (
+            "code-validator",
+            "vibe-coding-maintainer",
+            "workflow-automator",
+            "daily-orchestrator",
+        ),
+        "scout": (
+            "workflow-automator",
+            "self-checker",
+            "host-checker",
+            "intent-analyst",
+            "quality-validator",
+        ),
+        "verify": (
+            "sandbox-tester",
+            "test-qa-runner",
+            "quality-validator",
+            "change-request-auditor",
+        ),
     }.get(role, ())
     for eid in preferred_exact:
         if eid in candidates and eid not in used:
             return eid
     role_terms = {
         "fix": ("fix", "maintainer", "vibe", "code", "orchestrator"),
-        "scout": ("workflow", "self", "host", "intent", "quality", "triage", "audit", "review", "security", "guard"),
+        "scout": (
+            "workflow",
+            "self",
+            "host",
+            "intent",
+            "quality",
+            "triage",
+            "audit",
+            "review",
+            "security",
+            "guard",
+        ),
         "verify": ("qa", "test", "verify", "auditor"),
     }.get(role, ())
     for eid in candidates:
@@ -139,7 +167,9 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         ev = session.get(IncidentEvent, int(event_id))
         if ev is None:
             return {"claimed": False, "ok": False, "reason": "incident_not_found"}
-        if int(ev.dispatched_count or 0) > 0 and not _env_bool("MODSTORE_INCIDENT_TEAM_REDISPATCH", False):
+        if int(ev.dispatched_count or 0) > 0 and not _env_bool(
+            "MODSTORE_INCIDENT_TEAM_REDISPATCH", False
+        ):
             return {"claimed": False, "ok": True, "reason": "incident_already_dispatched"}
         payload = _payload(ev)
         event_type = str(ev.event_type or "")
@@ -165,7 +195,10 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         route: Dict[str, Any] = {}
         bench_override = None
         try:
-            from modstore_server.incident_model_router import bench_override_for_route, route_for_incident
+            from modstore_server.incident_model_router import (
+                bench_override_for_route,
+                route_for_incident,
+            )
 
             route = route_for_incident(event_type=event_type, payload=payload, role=role)
             bench_override = bench_override_for_route(route)

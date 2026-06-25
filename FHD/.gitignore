@@ -1,4 +1,11 @@
 # ============================================================================
+# Runtime secrets / local state (NEVER commit — 由 get_app_data_dir() dev 回落
+# 写入仓库根，含 token / 本机路径。见 mobile_relay_desktop_client.py。)
+# ============================================================================
+mobile_relay_desktop.json
+wechat_decrypt_runtime.json
+
+# ============================================================================
 # Python
 # ============================================================================
 __pycache__/
@@ -54,7 +61,15 @@ htmlcov/
 *.cover
 coverage.xml
 coverage.json
+# Point-in-time coverage dumps at FHD root (slipped past bare coverage.json above)
+/coverage_*.json
+/coverage-*.json
 coverage/
+# 仓库根的 coverage.py 转储（瞬时产物，曾被误提交 ~38MB）；真正的棘轮基线在 FHD/metrics/ 下，不受此影响。
+# Anchored with a leading slash so SSOT baselines under metrics/ stay tracked.
+/coverage*.json
+# Non-standard frontend coverage output dirs (coverage-target/, coverage-current/, ...)
+frontend/coverage-*/
 .tox/
 .vector_index/
 
@@ -75,6 +90,10 @@ XCAGI/data/desktop-dev/
 XCAGI/data/enterprise-desktop/
 data/model_payment_orders.json
 customer_products_final_corrected.db
+# Runtime RAG index (dataset_rag_app_service.py writes datasets.json + *.sqlite under get_app_data_dir(); pure runtime data)
+/dataset_rag/
+# Test-DB toggle state (test_db_manager runtime state; held leaked Windows local paths, not a seed)
+XCAGI/.test_db_state.json
 
 # Stray local scratch (historical)
 XCAGI/dy
@@ -140,6 +159,9 @@ scripts/package/upload-release.env
 **/应用私钥*.txt
 **/应用私钥*.pem
 .tmp_alipay_pkg/
+# 桌面中继运行时配对状态（mobile_relay_desktop_client.py 自动写入，含 desktop_token/pairing_code，
+# 轮换敏感字段；dev/源码运行时 get_app_data_dir() 回落到 FHD 根，故在此忽略避免污染工作树/入库）
+/mobile_relay_desktop.json
 
 # ============================================================================
 # Runtime output / generated / user data
@@ -248,3 +270,14 @@ migration_status_report.txt
 # mutmut 3.x 变异测试沙箱与缓存（运行时生成约80M，勿提交）
 mutants/
 .mutmut-cache
+
+# 移动端签名材料与构建产物（CI 由 secret 运行时解码生成，严禁提交）
+mobile-harmony/signing/
+mobile-harmony/artifacts/
+mobile-ios/*.xcodeproj/
+mobile-ios/build/
+*.p12
+*.p7b
+*.mobileprovision
+*.keystore
+*.jks

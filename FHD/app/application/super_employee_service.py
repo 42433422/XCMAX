@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -38,6 +39,22 @@ from app.application.workspaces import WorkspaceError, get_workspace_registry
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
+
+# 按消息文件路径共享的写锁：串行化 append / 全量重写，防并发写截断/丢行
+# （多个 service 实例可能指向同一文件，故按路径键而非按实例）。
+_MESSAGE_FILE_LOCKS: dict[str, threading.RLock] = {}
+_MESSAGE_LOCKS_GUARD = threading.Lock()
+
+
+def _message_file_lock(path: Path) -> threading.RLock:
+    key = str(path)
+    with _MESSAGE_LOCKS_GUARD:
+        lock = _MESSAGE_FILE_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _MESSAGE_FILE_LOCKS[key] = lock
+        return lock
+
 
 DEFAULT_PARA_API_URL = "http://127.0.0.1:3001"
 DISPATCHER_MESSAGE_KIND = "dispatcher"
@@ -121,6 +138,42 @@ def _codex_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) 
     ]
 
 
+def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    # Cursor Agent CLI headless（cursor agent --print）。stream-json 作心跳；
+    # --trust 跳过无 TTY 时的 workspace 信任提示；--force 允许在 cwd 内改/建文件。
+    trust_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_TRUST")
+            or os.environ.get("XCMAX_CURSOR_AGENT_TRUST")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
+    force_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_FORCE")
+            or os.environ.get("XCMAX_CURSOR_AGENT_FORCE")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
+    cmd = [
+        cli_path,
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+    ]
+    if trust_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--trust")
+    if force_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--force")
+    cmd.append(prompt)
+    return cmd
+
+
 def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
     # Claude Code 无头模式（print）。stream-json：工作时持续吐事件(工具调用/文本)，
     # 作为"还在干活"的心跳，配合 idle-timeout 实现"只要在工作就不超时"。
@@ -138,6 +191,36 @@ def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str)
         perm,
         prompt,
     ]
+
+
+def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    # Cursor Agent CLI headless（cursor agent --print）。stream-json 作心跳；
+    # --trust 跳过无 TTY 时的 workspace 信任提示；--force 允许在 cwd 内改/建文件。
+    trust_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_TRUST")
+            or os.environ.get("XCMAX_CURSOR_AGENT_TRUST")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
+    force_raw = (
+        (
+            os.environ.get("DEVFLEET_CURSOR_FORCE")
+            or os.environ.get("XCMAX_CURSOR_AGENT_FORCE")
+            or "1"
+        )
+        .strip()
+        .lower()
+    )
+    cmd = [cli_path, "agent", "--print", "--output-format", "stream-json"]
+    if trust_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--trust")
+    if force_raw not in {"0", "false", "off", "disabled"}:
+        cmd.append("--force")
+    cmd.append(prompt)
+    return cmd
 
 
 @dataclass(frozen=True)
@@ -201,6 +284,29 @@ CLAUDE_PROFILE = SuperEmployeeToolProfile(
     cli_command_builder=_claude_cli_command,
 )
 
+CURSOR_PROFILE = SuperEmployeeToolProfile(
+    employee_id="cursor-super-employee",
+    employee_name="超级员工-Cursor",
+    display_tool="Cursor",
+    tool_name="cursor_agent",
+    capability_key="cursor_cli",
+    storage_subdir="cursor_super_employee",
+    result_kind="cursor_result",
+    direct_kind="cursor_direct",
+    env_super_prefix="XCMAX_CURSOR_SUPER_EMPLOYEE",
+    env_tool_prefix="XCMAX_CURSOR",
+    cli_binary="cursor",
+    cli_extra_candidates=(
+        "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+        os.path.expanduser("~/.local/bin/cursor"),
+        "/opt/homebrew/bin/cursor",
+        "/usr/local/bin/cursor",
+    ),
+    cli_reads_output_file=False,
+    cli_stream_json=True,
+    cli_command_builder=_cursor_cli_command,
+)
+
 
 class SuperEmployeeService:
     """Persist software-internal tool calls and optionally dispatch them out."""
@@ -251,7 +357,10 @@ class SuperEmployeeService:
         text = (message or "").strip()
         if not text:
             raise ValueError("message 不能为空")
-        ctx = context if isinstance(context, dict) else {}
+        ctx = dict(context) if isinstance(context, dict) else {}
+        # 隔离作用域：把发起用户写进 ctx，向下传到会话键/工作区键，实现按用户隔离
+        # （避免多用户共享同一条 CLI 续接会话 / 同一 worktree）。
+        ctx.setdefault("_scope_user_id", str(int(user_id)))
         # 解析执行授权（deny-by-default：缺/错平台令牌即产品域），随后立即把令牌抹出 context，
         # 确保它绝不流入 dispatch 请求 / messages.jsonl / Para 载荷 / 日志。
         self._grant = CapabilityGrant.resolve(ctx)
@@ -303,7 +412,8 @@ class SuperEmployeeService:
                 "status": "completed",
                 "accepted": True,
                 "queued": False,
-                "device_scope": "all_devices",
+                "para_tier": 1,
+                "device_scope": "local_device",
                 "dispatcher": f"{self._p.tool_name}_cli",
             }
             return {
@@ -351,6 +461,8 @@ class SuperEmployeeService:
                     "dispatch": {
                         **dispatch,
                         "status": "completed",
+                        "para_tier": 1,
+                        "device_scope": "local_device",
                         "fallback": f"{self._p.tool_name}_cli",
                     },
                     "message": self._public_message(user_msg),
@@ -369,8 +481,10 @@ class SuperEmployeeService:
                 "task_id": str(dispatch.get("task_id") or ""),
                 "task_status": str(dispatch.get("task_status") or ""),
                 "dispatcher": str(dispatch.get("dispatcher") or ""),
+                "para_tier": dispatch.get("para_tier"),
                 "scope": self._grant.scope.value,
                 "workspace_id": self._grant.workspace_id or "",
+                "para_tier": dispatch.get("para_tier"),
                 "devices": dispatch.get("devices")
                 if isinstance(dispatch.get("devices"), list)
                 else [],
@@ -525,7 +639,7 @@ class SuperEmployeeService:
                 token = self._para_token(client, api_url)
                 devices_body = self._para_request(client, api_url, token, "GET", "/api/devices")
                 devices = devices_body.get("devices") if isinstance(devices_body, dict) else []
-                selected = self._select_para_devices(
+                tier, selected = self._select_devices_by_tier(
                     devices if isinstance(devices, list) else [], request
                 )
                 if not selected:
@@ -540,7 +654,10 @@ class SuperEmployeeService:
                 for device in selected:
                     prepared.append(self._ensure_para_device(client, api_url, token, device))
 
-                return self._create_para_task(client, api_url, token, request, prepared), ""
+                return (
+                    self._create_para_task(client, api_url, token, request, prepared, tier=tier),
+                    "",
+                )
         except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as exc:
             return None, f"para_api_unreachable: {exc}"
         except Exception as exc:  # noqa: BLE001
@@ -622,6 +739,28 @@ class SuperEmployeeService:
             raise RuntimeError(self._error_message(body, f"Para API 请求失败 ({resp.status_code})"))
         return body
 
+    def _device_eligible(self, item: Any) -> bool:
+        """单台设备能否承接派工：在线 + 目标工具已装且非占用 + 具备能力。
+
+        一级(本机单设备)与二级(多设备)选择共用此判定；不含 target_devices
+        过滤(由各调用方按需另行处理)。
+        """
+        if not isinstance(item, dict):
+            return False
+        if str(item.get("status") or "") != "online":
+            return False
+        tool = self._device_tool(item, self._p.tool_name)
+        if tool and str(tool.get("status") or "") == "not_installed":
+            return False
+        if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
+            return False
+        capabilities = (
+            item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
+        )
+        if not tool and capabilities.get(self._p.capability_key) is not True:
+            return False
+        return True
+
     def _select_para_devices(
         self,
         devices: list[Any],
@@ -635,9 +774,7 @@ class SuperEmployeeService:
         )
         candidates: list[dict[str, Any]] = []
         for item in devices:
-            if not isinstance(item, dict):
-                continue
-            if str(item.get("status") or "") != "online":
+            if not self._device_eligible(item):
                 continue
             if (
                 "all" not in targets
@@ -645,22 +782,121 @@ class SuperEmployeeService:
                 and str(item.get("name") or "") not in targets
             ):
                 continue
-            tool = self._device_tool(item, self._p.tool_name)
-            if tool and str(tool.get("status") or "") == "not_installed":
-                continue
-            if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
-                continue
-            capabilities = (
-                item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
-            )
-            if not tool and capabilities.get(self._p.capability_key) is not True:
-                continue
             candidates.append(item)
 
         workers = [item for item in candidates if not item.get("isPrimary")]
         selected = workers or candidates
         max_devices = self._max_para_devices(request)
         return selected[:max_devices]
+
+    # ── Para 分级派工：一级=本机单设备，二级=多设备协同 ──
+    #
+    # 「本机 CLI」并入 Para 后不再是绕开派工的进程内旁路，而是 Para 派工状态机里
+    # 的显式一级状态(para_tier=1)：把任务派给一台在线的本机/主设备，与二级走同一
+    # 条 /api/tasks 管线。默认一级优先，仅当任务确需多设备并行/分工、或本机无可用
+    # 设备、或调用方显式要求时升二级。设备的配对(bind_code)与 e2e-agent 拉起属于
+    # DevFleet/运维侧，FHD 只消费已在线的设备、不伪造设备行。
+
+    def _local_device_id(self) -> str:
+        """配置的本机设备 ID(可选)。未配则按 is_primary / 首台合格设备兜底。"""
+        return (
+            os.environ.get(f"{self._p.env_super_prefix}_DEVICE_ID")
+            or os.environ.get("MODSTORE_PARA_DEVICE_ID")
+            or os.environ.get("DEVFLEET_DEVICE_ID")
+            or ""
+        ).strip()
+
+    def _resolve_para_tier(self, request: dict[str, Any]) -> int:
+        """决定该请求走一级(1)还是二级(2)。默认一级，按需升二级。"""
+        raw_context = (
+            request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
+        )
+        forced = (
+            (
+                os.environ.get(f"{self._p.env_super_prefix}_PARA_FORCE_TIER")
+                or os.environ.get("MODSTORE_PARA_FORCE_TIER")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
+        if forced in {"1", "local", "single", "本机"}:
+            return 1
+        if forced in {"2", "fleet", "multi", "多设备"}:
+            return 2
+
+        tier_hint = (
+            str(raw_context.get("para_tier") or raw_context.get("tier") or "").strip().lower()
+        )
+        if tier_hint in {"2", "fleet", "multi", "multi_device", "多设备"}:
+            return 2
+        if tier_hint in {"1", "local", "single", "本机"}:
+            return 1
+
+        if raw_context.get("escalate") in (True, 1, "1", "true", "yes", "on"):
+            return 2
+        try:
+            if int(raw_context.get("max_devices") or 0) > 1:
+                return 2
+        except (TypeError, ValueError):
+            pass
+
+        target = request.get("target_devices")
+        if isinstance(target, list):
+            specific = [s for s in (str(x).strip() for x in target) if s and s != "all"]
+            if len(specific) > 1:
+                return 2
+
+        text = f"{request.get('task') or ''} {request.get('prompt') or ''}"
+        if any(m in text for m in ("多设备", "所有设备", "全部设备", "调用所有设备", "跨设备")):
+            return 2
+        return 1
+
+    def _select_local_device(
+        self,
+        devices: list[Any],
+        request: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """一级：只挑「本机」一台设备。
+
+        本机识别优先级：① 配置的本机 device_id；② is_primary 主设备；③ 都无从
+        识别时退而取首台合格设备(单设备派工)。识别到的本机若不合格(离线/工具未装/
+        占用)则返回空，由上层 _select_devices_by_tier 升二级到其它设备——这正是
+        「本机无 CLI → 升二级」的语义所在。
+        """
+        local_id = self._local_device_id()
+        if local_id:
+            for item in devices:
+                if isinstance(item, dict) and str(item.get("id") or "") == local_id:
+                    return [item] if self._device_eligible(item) else []
+            return []  # 配了本机 id 但不在设备列表 → 本机不可用, 交由升二级
+
+        for item in devices:
+            if isinstance(item, dict) and item.get("isPrimary"):
+                return [item] if self._device_eligible(item) else []
+
+        for item in devices:
+            if self._device_eligible(item):
+                return [item]
+        return []
+
+    def _select_devices_by_tier(
+        self,
+        devices: list[Any],
+        request: dict[str, Any],
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """按 tier 选设备，返回 (实际 tier, 选中设备列表)。
+
+        一级优先：先选本机单设备；本机无合格设备则自动升二级选多设备。
+        """
+        tier = self._resolve_para_tier(request)
+        if tier == 1:
+            local = self._select_local_device(devices, request)
+            if local:
+                return 1, local
+            # 一级想跑但本机无可用设备 → 升二级
+            return 2, self._select_para_devices(devices, request)
+        return 2, self._select_para_devices(devices, request)
 
     def _ensure_para_device(
         self,
@@ -692,6 +928,7 @@ class SuperEmployeeService:
         token: str,
         request: dict[str, Any],
         devices: list[dict[str, Any]],
+        tier: int = 2,
     ) -> dict[str, Any]:
         raw_context = (
             request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
@@ -747,7 +984,8 @@ class SuperEmployeeService:
             "status": "accepted",
             "accepted": True,
             "queued": False,
-            "device_scope": "all_devices",
+            "para_tier": tier,
+            "device_scope": "local_device" if tier == 1 else "all_devices",
             "dispatcher": "para_api",
             "mcp_tool_equivalent": "devfleet_dispatch_task",
             "api_url": api_url,
@@ -873,9 +1111,10 @@ class SuperEmployeeService:
         return row
 
     def _append_messages(self, messages: list[dict[str, Any]]) -> None:
-        with self._messages_path.open("a", encoding="utf-8") as fh:
-            for msg in messages:
-                fh.write(_safe_json_line(msg))
+        with _message_file_lock(self._messages_path):
+            with self._messages_path.open("a", encoding="utf-8") as fh:
+                for msg in messages:
+                    fh.write(_safe_json_line(msg))
 
     def _read_all_message_rows(self) -> list[dict[str, Any]]:
         if not self._messages_path.exists():
@@ -893,9 +1132,10 @@ class SuperEmployeeService:
         return rows
 
     def _write_all_message_rows(self, rows: list[dict[str, Any]]) -> None:
-        with self._messages_path.open("w", encoding="utf-8") as fh:
-            for row in rows:
-                fh.write(_safe_json_line(row))
+        with _message_file_lock(self._messages_path):
+            with self._messages_path.open("w", encoding="utf-8") as fh:
+                for row in rows:
+                    fh.write(_safe_json_line(row))
 
     def _sync_para_task_updates(self, *, user_id: int, rows: list[dict[str, Any]]) -> None:
         changed = False
@@ -1080,9 +1320,17 @@ class SuperEmployeeService:
             logger.warning("写 session store 失败", exc_info=True)
 
     def _session_key(self, context: dict[str, Any]) -> str:
-        """会话键：手机端是单一 pinned 会话，按工具名即可隔离 claude/codex 各自一条续接会话。"""
-        conv = str((context or {}).get("conversation_id") or "").strip()
-        return f"{self._p.tool_name}:{conv}" if conv else self._p.tool_name
+        """会话键 = 工具 × 用户 × 会话。
+
+        含 ``_scope_user_id``（由 :meth:`invoke` 注入）→ 多用户对同一超级员工各自一条
+        独立 CLI 续接会话 + 独立 worktree，杜绝跨用户上下文/工作区串台；派工场景再带
+        ``conversation_id``（= work_order_id）做到每工单一独立会话。
+        """
+        ctx = context or {}
+        conv = str(ctx.get("conversation_id") or "").strip()
+        uid = str(ctx.get("_scope_user_id") or "").strip()
+        base = f"{self._p.tool_name}:u{uid}" if uid else self._p.tool_name
+        return f"{base}:{conv}" if conv else base
 
     def _ensure_session_workspace(self, key: str) -> tuple[str | None, str | None]:
         """持久隔离工作区：同一会话复用一个 git worktree（不碰 live checkout、不破坏运行中的 FHD）。"""
@@ -1153,13 +1401,20 @@ class SuperEmployeeService:
         ).strip() or "acceptEdits"
 
     def _apply_scope_to_cmd(self, cmd: list[str]) -> list[str]:
-        """信任墙第 4 层（纵深防御）：产品域收紧 claude 的工具面。
+        """按授权域调整 CLI 工具面（信任墙第 4 层，纵深防御）。
 
-        把 ``--permission-mode`` 降到 ``default`` 并显式禁用写/执行类工具，使被注入的产品域
-        会话即便被诱导喊 git/shell，那些工具也压根没注册 → 硬失败而非软拒绝。工厂域不动；
-        codex 命令构造默认已是 ``--sandbox read-only``，此处不改。
+        - **工厂/管理域**（平台操作者派工自己的开发任务）：升档到「工作区内全权限」，
+          让超级员工真正能改文件 / 跑命令 / git——claude → ``bypassPermissions``、
+          codex → ``--sandbox workspace-write``（写/执行限定在 ``-C cwd`` 工作区，不放整机）。
+          可用 env 进一步调档。
+        - **产品/客户域**：claude ``--permission-mode`` 降到 ``default`` 并禁用写/执行类工具，
+          即便被诱导喊 git/shell 也压根没注册 → 硬失败而非软拒绝；codex 仍 ``read-only``。
         """
-        if self._grant.is_factory or self._p.cli_binary != "claude" or not cmd:
+        if not cmd:
+            return cmd
+        if self._grant.is_factory:
+            return self._elevate_factory_cmd(cmd)
+        if self._p.cli_binary != "claude":
             return cmd
         out: list[str] = []
         i = 0
@@ -1174,6 +1429,46 @@ class SuperEmployeeService:
             prompt = out.pop()  # prompt 恒为末位参数
             out += ["--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit", prompt]
         return out
+
+    def _elevate_factory_cmd(self, cmd: list[str]) -> list[str]:
+        """工厂/管理域放开到「工作区内全权限」。产品/客户域永不经过此函数。
+
+        约束靠 ``-C cwd``（codex）/ 工作目录（claude）落在指定 workspace；env 可调档：
+        ``DEVFLEET_CLAUDE_FACTORY_PERMISSION_MODE`` / ``DEVFLEET_CODEX_FACTORY_SANDBOX``
+        （想收回到只读，设为 ``acceptEdits`` / ``read-only`` 即可）。
+        """
+        binary = self._p.cli_binary
+        if binary == "claude":
+            mode = (
+                os.environ.get("DEVFLEET_CLAUDE_FACTORY_PERMISSION_MODE") or "bypassPermissions"
+            ).strip() or "bypassPermissions"
+            out: list[str] = []
+            i = 0
+            replaced = False
+            while i < len(cmd):
+                if cmd[i] == "--permission-mode" and i + 1 < len(cmd):
+                    out += ["--permission-mode", mode]
+                    i += 2
+                    replaced = True
+                    continue
+                out.append(cmd[i])
+                i += 1
+            if not replaced:
+                prompt = out.pop()  # prompt 恒为末位参数
+                out += ["--permission-mode", mode, prompt]
+            return out
+        if binary == "codex":
+            sandbox = (
+                os.environ.get("DEVFLEET_CODEX_FACTORY_SANDBOX") or "workspace-write"
+            ).strip() or "workspace-write"
+            out = list(cmd)
+            for i in range(len(out) - 1):
+                if out[i] == "--sandbox":
+                    out[i + 1] = sandbox
+                    break
+            return out
+        # cursor：--force 已默认开启 cwd 内写权限，无需额外升档。
+        return cmd
 
     def _conversation_cmd(
         self, cli_path: str, prompt: str, resume_session_id: str | None
@@ -1998,6 +2293,7 @@ __all__ = [
     "DISPATCHER_MESSAGE_KIND",
     "CODEX_PROFILE",
     "CLAUDE_PROFILE",
+    "CURSOR_PROFILE",
     "SuperEmployeeService",
     "SuperEmployeeToolProfile",
 ]

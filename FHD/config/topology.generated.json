@@ -1,0 +1,94 @@
+{
+  "_generated_from": "config/service_topology.yaml",
+  "_note": "DO NOT EDIT BY HAND — run scripts/dev/service_topology_ssot.py generate --apply",
+  "env_overrides": {
+    "dev": {
+      "fhd_api_listen_port": 42422,
+      "host": "127.0.0.1",
+      "scheme": "http"
+    }
+  },
+  "host": "xiu-ci.com",
+  "must_run_processes": [
+    "web",
+    "modstore-scheduler"
+  ],
+  "nginx_routes": [
+    {
+      "path": "/fhd-api",
+      "service": "fhd-api",
+      "upstream_port": 5100
+    },
+    {
+      "path": "/market",
+      "service": "modstore"
+    },
+    {
+      "path": "/v1",
+      "service": "llm-gateway"
+    },
+    {
+      "path": "/ws/im",
+      "service": "im-ws"
+    }
+  ],
+  "processes": [
+    {
+      "detect": "gunicorn",
+      "must_run": true,
+      "name": "web",
+      "note": "FastAPI 主进程",
+      "service": "fhd-api"
+    },
+    {
+      "detect": "modstore-scheduler",
+      "must_run": true,
+      "name": "modstore-scheduler",
+      "note": "loops/定时任务真正执行者（独立进程，易被忘开）",
+      "service": "modstore"
+    },
+    {
+      "detect": "mobile_relay_desktop_client",
+      "must_run": false,
+      "name": "desktop-relay-poller",
+      "note": "桌面端 4s 轮询中继",
+      "service": "desktop-fhd"
+    }
+  ],
+  "scheme": "https",
+  "services": {
+    "desktop-fhd": {
+      "listen_port": 17500,
+      "role": "relay-node",
+      "runner": "electron-local"
+    },
+    "fhd-api": {
+      "health": "/health",
+      "hosts_relay_queue": true,
+      "listen_port": 5000,
+      "must_run": true,
+      "nginx_upstream_port": 5100,
+      "runner": "gunicorn (web)"
+    },
+    "im-ws": {
+      "listen_port": null,
+      "protocol": "wss"
+    },
+    "llm-gateway": {
+      "listen_port": null
+    },
+    "modstore": {
+      "listen_port": 8765,
+      "must_run": true,
+      "runner": "modstore_server"
+    }
+  },
+  "urls": {
+    "FHD_API_BASE_URL": "https://xiu-ci.com/fhd-api",
+    "IM_WS_URL": "wss://xiu-ci.com/ws/im",
+    "LLM_V1_BASE_URL": "https://xiu-ci.com/v1",
+    "MARKET_BASE_URL": "https://xiu-ci.com/market",
+    "MARKET_CATALOG_URL": "https://xiu-ci.com/api/market/catalog",
+    "SITE_ROOT_URL": "https://xiu-ci.com"
+  }
+}

@@ -21,7 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import func, or_
 
-from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA
+from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
 from modstore_server.models import (
     EmployeeChangeRequest,
     EmployeeCollabMessage,
@@ -33,6 +33,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,7 @@ def create_collab_thread(
     participants: Sequence[str],
     created_by_employee_id: str,
     context: Optional[Dict[str, Any]] = None,
+    emit_event: bool = True,
 ) -> Dict[str, Any]:
     pids = _dedupe_strs(participants)
     if created_by_employee_id and created_by_employee_id not in pids:
@@ -180,11 +182,12 @@ def create_collab_thread(
         session.add(row)
         session.commit()
         tid = int(row.id)
-    _publish_event(
-        "employee.collab.thread_created",
-        {"thread_id": tid, "participants": pids, "title": (title or "")[:256]},
-        source=created_by_employee_id or "system",
-    )
+    if emit_event:
+        _publish_event(
+            "employee.collab.thread_created",
+            {"thread_id": tid, "participants": pids, "title": (title or "")[:256]},
+            source=created_by_employee_id or "system",
+        )
     return {"ok": True, "thread_id": tid, "participants": pids}
 
 
@@ -195,7 +198,13 @@ def post_collab_message(
     content: str,
     mentions: Optional[Sequence[str]] = None,
     payload: Optional[Dict[str, Any]] = None,
+    emit_event: bool = True,
 ) -> Dict[str, Any]:
+    """向协作线程投递一条消息。
+
+    ``emit_event=False`` 时跳过 ``employee.collab.message_created`` 事件发布——
+    供自动化「工作汇报」批量投递使用，避免每条汇报都触发 incident 编排/派单。
+    """
     if int(thread_id or 0) <= 0:
         return {"ok": False, "error": "invalid thread_id"}
     text = str(content or "").strip()
@@ -220,17 +229,18 @@ def post_collab_message(
         session.commit()
         mid = int(row.id)
 
-    _publish_event(
-        "employee.collab.message_created",
-        {
-            "thread_id": int(thread_id),
-            "message_id": mid,
-            "sender_employee_id": sender_employee_id,
-            "mentions": mention_ids,
-            "content_excerpt": text[:500],
-        },
-        source=sender_employee_id or "system",
-    )
+    if emit_event:
+        _publish_event(
+            "employee.collab.message_created",
+            {
+                "thread_id": int(thread_id),
+                "message_id": mid,
+                "sender_employee_id": sender_employee_id,
+                "mentions": mention_ids,
+                "content_excerpt": text[:500],
+            },
+            source=sender_employee_id or "system",
+        )
 
     mention_suggestion_id: Optional[int] = None
     if mention_ids:
@@ -450,6 +460,7 @@ def _build_subtask_text(summary: str, detail: str, payload: Dict[str, Any]) -> s
     return "\n".join(x for x in lines if x).strip()[:4000]
 
 
+@platform_llm_scoped
 def dispatch_suggestion(
     suggestion_id: int,
     *,
@@ -544,9 +555,17 @@ def dispatch_suggestion(
         },
         source="suggestion_dispatcher",
     )
+
+    try:
+        from modstore_server.employee_collab_reporter import report_suggestion_dispatched
+
+        report_suggestion_dispatched(suggestion_id=sid)
+    except Exception:
+        logger.exception("collab report (suggestion) failed sid=%s", sid)
     return {"ok": True, "suggestion_id": sid, "dispatch_result": result}
 
 
+@platform_llm_scoped
 def dispatch_pending_suggestions(limit: int = 20) -> Dict[str, Any]:
     lim = max(1, min(int(limit or 20), 100))
     sf = get_session_factory()
@@ -696,6 +715,7 @@ def list_pending_brief_tasks(limit: int = 100, *, status: str = "") -> List[Dict
         ]
 
 
+@platform_llm_scoped
 def dispatch_pending_brief_tasks(limit: int = 20) -> Dict[str, Any]:
     lim = max(1, min(int(limit or 20), 100))
     sf = get_session_factory()
@@ -765,6 +785,14 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> Dict[str, Any]:
                     row2.completed_at = datetime.now(timezone.utc)
                     session.commit()
             failed += 1
+    if task_ids:
+        try:
+            from modstore_server.employee_collab_reporter import report_brief_task
+
+            for _tid in task_ids:
+                report_brief_task(task_id=_tid)
+        except Exception:
+            logger.exception("collab report (brief tasks) failed")
     if processed > 0:
         _publish_event(
             "employee.brief_todo.dispatched",
@@ -860,6 +888,40 @@ class _PlatformBenchLlmClient:
         return str(out.get("content") or "")
 
 
+def _evolution_failure_candidates(
+    session, *, cutoff, min_failures: int, limit: int
+) -> List[Tuple[str, int]]:
+    """近窗口内 prompt-可修失败 ≥ ``min_failures`` 的员工 ``(employee_id, fail_count)``。
+
+    排除配额/计费（QUOTA）和限流/超时（TRANSIENT）类基建失败——改 prompt 无法修复。
+    """
+    _infra_kinds = [FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT]
+    not_infra = or_(
+        EmployeeExecutionMetric.failure_kind.is_(None),
+        ~EmployeeExecutionMetric.failure_kind.in_(_infra_kinds),
+    )
+    rows = (
+        session.query(
+            EmployeeExecutionMetric.employee_id,
+            func.count(EmployeeExecutionMetric.id).label("fail_count"),
+        )
+        .filter(
+            EmployeeExecutionMetric.created_at >= cutoff,
+            EmployeeExecutionMetric.status != "success",
+            not_infra,
+        )
+        .group_by(EmployeeExecutionMetric.employee_id)
+        .order_by(func.count(EmployeeExecutionMetric.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        (str(r[0] or "").strip(), int(r[1] or 0))
+        for r in rows
+        if str(r[0] or "").strip() and int(r[1] or 0) >= min_failures
+    ]
+
+
 def _alert_evolution_quota_circuit_break(quota_failures: int, lookback_hours: int) -> None:
     """配额耗尽触发自进化熔断：高优先级告警日志（供 ops 监控/告警管道捕获）。
 
@@ -875,6 +937,7 @@ def _alert_evolution_quota_circuit_break(quota_failures: int, lookback_hours: in
     )
 
 
+@platform_llm_scoped
 def run_employee_evolution_scan(
     *,
     lookback_hours: int = 24,
@@ -891,11 +954,12 @@ def run_employee_evolution_scan(
 
     sf = get_session_factory()
     with sf() as session:
-        # 仅关心最近窗口中失败较多的员工 —— 但必须排除「配额/计费/403」类失败：
-        # 改 prompt 无法修复额度耗尽，继续重写只会再发一次 LLM 调用、放大 403 死亡螺旋。
-        not_quota = or_(
+        # 仅关心最近窗口中失败较多的员工 —— 但必须排除「配额/计费」和「限流/超时」类基建失败：
+        # 改 prompt 无法修复额度耗尽或网关抖动，继续重写只会再发 LLM 调用、放大死亡螺旋。
+        _infra = [FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT]
+        not_infra_inline = or_(
             EmployeeExecutionMetric.failure_kind.is_(None),
-            EmployeeExecutionMetric.failure_kind != FAILURE_KIND_QUOTA,
+            ~EmployeeExecutionMetric.failure_kind.in_(_infra),
         )
         rows = (
             session.query(
@@ -905,7 +969,7 @@ def run_employee_evolution_scan(
             .filter(
                 EmployeeExecutionMetric.created_at >= cutoff,
                 EmployeeExecutionMetric.status != "success",
-                not_quota,
+                not_infra_inline,
             )
             .group_by(EmployeeExecutionMetric.employee_id)
             .order_by(func.count(EmployeeExecutionMetric.id).desc())
@@ -952,10 +1016,12 @@ def run_employee_evolution_scan(
 
     from modstore_server.employee_ai_pipeline import refine_system_prompt
     from modstore_server.employee_runtime import load_employee_pack, parse_employee_config_v2
+    from modstore_server.llm_quota import is_quota_exhausted
     from modstore_server.runtime_async import run_coro_sync
 
     created = 0
     processed = 0
+    quota_aborted = False
     for employee_id, fail_count in candidates:
         processed += 1
         try:
@@ -1005,6 +1071,19 @@ def run_employee_evolution_scan(
         except Exception as exc:
             result = None
             err = str(exc)
+
+        # 配额失败 != prompt 失败：平台 LLM 额度耗尽时 refine 必然 403，继续变异 prompt
+        # 只会空烧已耗尽的预算（生产曾因此恶性空转）。一旦识别到配额耗尽就熔断整轮扫描——
+        # 同一台 bench LLM 客户端对后续所有候选人也会撞同一堵墙。
+        if err and is_quota_exhausted(err):
+            quota_aborted = True
+            logger.warning(
+                "员工自进化已熔断：平台 LLM 配额耗尽（employee=%s, err=%s）；"
+                "配额失败不是 prompt 问题，跳过本轮所有 prompt 变异",
+                employee_id,
+                str(err)[:200],
+            )
+            break
 
         improved = ""
         diff_expl = ""
@@ -1107,6 +1186,14 @@ def run_employee_evolution_scan(
                 source="evolution-engine",
             )
 
+        if evolution_record_id:
+            try:
+                from modstore_server.employee_collab_reporter import report_evolution
+
+                report_evolution(evolution_record_id=evolution_record_id)
+            except Exception:
+                logger.exception("collab report (evolution) failed id=%s", evolution_record_id)
+
     return {
         "ok": True,
         "enabled": True,
@@ -1115,6 +1202,8 @@ def run_employee_evolution_scan(
         "lookback_hours": lookback_hours,
         "min_failures": min_failures,
         "quota_failures": quota_fail_total,
+        "quota_aborted": quota_aborted,
+        **({"aborted_reason": "llm_quota_exhausted"} if quota_aborted else {}),
     }
 
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_pack 安装后热加载路由与 registry。"""
 
 from __future__ import annotations

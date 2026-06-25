@@ -91,9 +91,7 @@ def test_copytree_filtered_excludes_runtime_state_files(tmp_path):
     assert not (target / "modstore_server" / "vector_data").exists()
 
 
-def test_run_narrow_ci_validation_overlay_prepare_failure_is_structured(
-    tmp_path, monkeypatch
-):
+def test_run_narrow_ci_validation_overlay_prepare_failure_is_structured(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_CR_NARROW_CI_RUFF", "0")
     deploy = tmp_path / "MODstore_deploy"
     (deploy / "modstore_server").mkdir(parents=True)

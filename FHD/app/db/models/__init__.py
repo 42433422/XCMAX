@@ -1,4 +1,5 @@
 from app.db.models.agent import AgentRunRecord
+from app.db.models.work_order import WorkOrder
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.neuro_event_log import NeuroEventLog
 from app.db.models.butler_profile import ButlerUserProfile
@@ -29,6 +30,7 @@ from app.db.models.inventory import (
     Warehouse,
 )
 from app.db.models.material import Material
+from app.db.models.meeting_minutes import MeetingMinute
 from app.db.models.mobile_device import MobileDeviceToken
 from app.db.models.permission import Permission, Role, role_permissions
 from app.db.models.product import Product
@@ -53,6 +55,7 @@ from app.db import tenant_filter as _tenant_filter  # noqa: E402,F401
 __all__ = [
     "PurchaseUnit",
     "AgentRunRecord",
+    "WorkOrder",
     "AiCirclePost",
     "AiCircleReaction",
     "AiCircleComment",
@@ -73,6 +76,7 @@ __all__ = [
     "AIConversationSession",
     "UserPreference",
     "Material",
+    "MeetingMinute",
     "Warehouse",
     "StorageLocation",
     "InventoryLedger",

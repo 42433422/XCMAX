@@ -77,6 +77,12 @@ class ClaudeSuperEmployeeMobileMessageBody(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
+class CursorSuperEmployeeMobileMessageBody(BaseModel):
+    message: str = Field(default="", max_length=4000)
+    body: str = Field(default="", max_length=4000)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
 class AiGroupCreateBody(BaseModel):
     name: str = Field(default="", max_length=60)
 
@@ -93,6 +99,8 @@ class AiGroupMessageBody(BaseModel):
     message: str = Field(default="", max_length=4000)
     sender_name: str = Field(default="我", max_length=60)
     mentions: list[str] = Field(default_factory=list)
+    # 讨论后执行：true 则群成员讨论完，派群里的超级员工以任务模式真正执行，结果回群。
+    execute: bool = Field(default=False)
 
 
 class MobileServiceBridgeRespondBody(BaseModel):

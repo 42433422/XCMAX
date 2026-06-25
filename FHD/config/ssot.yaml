@@ -52,19 +52,39 @@ domains:
       - FHD/app/fastapi_app/factory.py#FastAPI(version=)
       - FHD/app/infrastructure/mods/manifest.py#current_version
       - FHD/mobile-android/app/build.gradle.kts#versionName
+      - FHD/mobile-harmony/AppScope/app.json5#versionName
+      # iOS：原生工程并入主干后补锚点（config/product.yaml ends.mobile.channels.ios=in_development）
     mode: sync+verify
     check: python scripts/dev/verify_version_anchors.py
     # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本
     sync: python scripts/dev/version_sync.py --apply
 
+  - name: models
+    owner: ai-platform
+    enabled: true
+    ssot: FHD/config/models.yaml
+    derived:
+      - FHD/config/models.generated.json
+      - 成都修茈科技有限公司/MODstore_deploy/modstore_server/config/models.generated.json
+      - 成都修茈科技有限公司/MODstore_deploy/market/src/config/modelsGenerated.ts
+    mode: sync+verify
+    check: python scripts/dev/ssot_plugins/models.py check
+    # sync 命令自带 --apply（ssot sync models 默认 dry-run 只打印，不透传）
+    sync: python scripts/dev/ssot_plugins/models.py sync --apply
+
   - name: docs-ssot
     owner: docs
     enabled: true
-    ssot: FHD/docs/SSOT_INDEX.md
-    derived: []
-    mode: lint
+    # SSOT 源已上移到本文件的 doc_registry/retired 段；SSOT_INDEX.md 现为派生视图（请勿手改）。
+    ssot: FHD/config/ssot.yaml
+    derived:
+      - FHD/docs/SSOT_INDEX.md
+    mode: generate
+    # check = docs_ssot_lint.py：① 校验 SSOT_INDEX.md 与本文件 doc_registry 同步（硬失败）
+    #         ② 扫描其它 md 的未登记 SSOT 声明（软告警，--strict 时硬失败）
     check: python scripts/dev/docs_ssot_lint.py
-    sync: null
+    # sync = 从本文件 doc_registry/retired 重新生成 SSOT_INDEX.md
+    sync: python scripts/dev/gen_ssot_index.py
 
   # ===== 已启用域（lint/verify，advisory gate 不阻断）=====
   - name: test-files
@@ -105,6 +125,16 @@ domains:
     check: python scripts/dev/ssot_plugins/error_codes.py check
     sync: null
 
+  - name: product
+    owner: product
+    enabled: true
+    ssot: FHD/config/product.yaml
+    derived: []
+    mode: lint
+    # 三端×渠道×发行版真相源；校验版本三渠道同步 + personal 停产防漂移（代码/CI/构建）
+    check: python scripts/dev/ssot_plugins/product.py check
+    sync: null
+
   - name: k8s-manifests
     owner: devops
     enabled: true
@@ -114,3 +144,127 @@ domains:
     mode: verify
     check: python scripts/dev/ssot_plugins/k8s.py check
     sync: null
+
+  # ===== 此前游离于注册表外的真相源（2026-06-23 补登记）=====
+  - name: employee-roster
+    owner: FHD/mod_sdk
+    enabled: true
+    # 编制结构（areas/departments + 企业端四层/员工）+ 员工元数据（manifest name/description）
+    ssot: FHD/config/duty_roster.json
+    derived:
+      - FHD/frontend/src/domain/yuangonDutyRoster.ts
+      - FHD/MODstore/modstore_server/duty_roster.py
+      - FHD/app/infrastructure/mods/catalog_visibility.py
+      - FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets
+      - FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts
+    mode: generate
+    # 唯一生成器 sync_duty_roster.py（5 目标）；--check 守卫漂移，对应 test_employee_ssot.py
+    check: python scripts/dev/sync_duty_roster.py --check
+    sync: python scripts/dev/sync_duty_roster.py --generate
+
+  - name: db-schema
+    owner: backend
+    enabled: true
+    # DB schema 收敛中：alembic 正成为唯一真相源（取代 create_all + ensure_*）。
+    # 此处 check = 纯 stdlib 结构守卫（单 head / 无悬挂 down_revision），无重依赖、随处可跑。
+    # 完整 ORM-parity（alembic upgrade head == models）由 fhd-alembic-ssot.yml 的
+    # ssot-parity job 单独把关（advisory，待一次 PG 绿后转 blocking）。
+    ssot: FHD/alembic/versions/
+    derived:
+      - FHD/app/db/
+    mode: verify
+    check: python ../scripts/guard_alembic_single_head.py
+    sync: null
+  - name: service-topology
+    owner: devops
+    enabled: true
+    ssot: FHD/config/service_topology.yaml
+    derived:
+      - FHD/app/infrastructure/topology.py
+      - FHD/frontend/src/constants/topology.ts
+      - FHD/mobile-harmony/entry/src/main/ets/models/ServiceTopology.ets
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt
+      - FHD/config/topology.generated.json
+    mode: sync+verify
+    check: python scripts/dev/service_topology_ssot.py check
+    sync: python scripts/dev/service_topology_ssot.py generate --apply
+
+  - name: account-identity
+    owner: backend
+    enabled: true
+    # 真相源声明：云端（修茈市场）为身份权威，本地 users/sessions 为收敛缓存。
+    ssot: FHD/docs/account_system_ssot.md
+    derived: []
+    mode: lint
+    # 棘轮守卫：冻结已知造身份点，白名单外新增即 DRIFT（见 docs §9.3）。
+    check: python scripts/dev/ssot_plugins/account_identity.py check
+    sync: null
+# ===== 文档真相源登记（doc_registry）=====
+# 唯一登记表：「某概念的唯一真相源是哪份文档」。取代旧 SSOT_INDEX.md 的手维护表格。
+# FHD/docs/SSOT_INDEX.md 由 scripts/dev/gen_ssot_index.py 从本段自动生成（请勿手改 md）。
+# docs_ssot_lint.py 也直接读本段（不再解析 md），从此 ssot.yaml 为唯一源。
+# doc 路径均相对仓根（XCMAX/）。
+doc_registry:
+  - key: coverage
+    label: coverage（覆盖率）
+    doc: FHD/docs/reports/COVERAGE_RAMP.md
+    desc: 后端/前端覆盖率基线、目标、棘轮 floor
+  - key: ci
+    label: ci（CI/CD）
+    doc: docs/CI_SSOT.md
+    desc: 根仓 .github/workflows/ 唯一调度入口
+  - key: mod
+    label: mod（Mod 开发）
+    doc: FHD/docs/guides/MOD_AUTHORING_GUIDE.md
+    desc: Mod 开发规范、mods/ 为唯一编辑源
+  - key: version
+    label: version（产品版本）
+    doc: FHD/VERSION.md
+    desc: v10 锁定、版本锚点 10.0.0
+  - key: route
+    label: route（路由）
+    doc: FHD/docs/reports/WAVE2_ROUTE_SSOT.md
+    desc: RouteRegistry + mounts/* 路由 SSOT
+  - key: git
+    label: git（Git 仓库）
+    doc: FHD/docs/reports/GIT_WORKTREE_RECOVERY.md
+    desc: 根仓 XCMAX/ 为 Git SSOT
+  - key: mypy
+    label: mypy（类型检查）
+    doc: FHD/pyproject.toml
+    desc: '[tool.mypy] 配置'
+  - key: deps
+    label: deps（依赖锁定）
+    doc: FHD/docs/guides/DEPENDENCY_LOCKS.md
+    desc: Python/Node 依赖锁定策略
+  - key: auth
+    label: auth（授权市场）
+    doc: FHD/docs/guides/AUTH_MARKET_CONTRACT.md
+    desc: 授权与市场契约
+  - key: compliance
+    label: compliance（合规）
+    doc: FHD/docs/evidence/compliance-tier2/00-control-matrix.md
+    desc: Tier2 合规控制矩阵
+  - key: ssot-framework
+    label: ssot-framework（SSOT 框架）
+    doc: FHD/docs/SSOT_FRAMEWORK.md
+    desc: 统一注册表 ssot.yaml + ssot_cli 编排器
+  - key: claimed-vs-actual
+    label: claimed-vs-actual（对外声称 vs 实测）
+    doc: FHD/docs/CLAIMED_VS_ACTUAL.md
+    desc: 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成
+  - key: coverage-metrics
+    label: coverage-metrics（覆盖率唯一数字）
+    doc: FHD/metrics/coverage-dual-summary.json
+    desc: 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径）
+
+# ===== 已退役 SSOT（指针化）=====
+# 旧 SSOT 文档已收敛到新源，仅保留为重定向指针。
+retired:
+  - from: FHD/docs/reports/COVERAGE_GAP.md
+    to: FHD/docs/reports/COVERAGE_RAMP.md
+    reason: 覆盖率 SSOT 收敛
+  - from: FHD/docs/reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md
+    note: 覆盖率章节
+    to: FHD/docs/reports/COVERAGE_RAMP.md
+    reason: 覆盖率 SSOT 收敛

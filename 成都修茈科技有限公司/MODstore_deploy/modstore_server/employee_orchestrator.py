@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -147,6 +148,7 @@ def dispatch_subtasks(
     created_by_user_id: int = 0,
     max_concurrency: int = 2,
     allow_high_risk_real_run: bool = False,
+    bench_llm_override: Optional[Tuple[str, str]] = None,
 ) -> Dict[str, Any]:
     """按 SubTask 列表的拓扑顺序执行（depends_on 决定顺序，同层并行）。
 
@@ -176,6 +178,7 @@ def dispatch_subtasks(
             completed=completed,
             max_concurrency=max_concurrency,
             allow_high_risk_real_run=allow_high_risk_real_run,
+            bench_llm_override=bench_llm_override,
         )
         for r in layer_results:
             completed[r["employee_id"]] = r
@@ -207,6 +210,7 @@ def dispatch_subtasks(
             completed=completed,
             max_concurrency=max_concurrency,
             allow_high_risk_real_run=allow_high_risk_real_run,
+            bench_llm_override=bench_llm_override,
         )
         for r in followup_results:
             completed[r["employee_id"]] = r
@@ -251,6 +255,7 @@ def _run_layer(
     completed: Dict[str, Any],
     max_concurrency: int,
     allow_high_risk_real_run: bool,
+    bench_llm_override: Optional[Tuple[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     from modstore_server.employee_executor import execute_employee_task
 
@@ -269,6 +274,7 @@ def _run_layer(
                 st.task_brief,
                 input_data,
                 user_id=uid,
+                bench_llm_override=bench_llm_override,
             )
             ok, reason = _evaluate_execution_success(result if isinstance(result, dict) else {})
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
@@ -306,7 +312,9 @@ def _run_layer(
 
     results = []
     with ThreadPoolExecutor(max_workers=min(max_concurrency, len(layer))) as pool:
-        futures = {pool.submit(_run_one, st): st for st in layer}
+        # 用 copy_context() 把当前上下文（含平台模型作用域）带进池内线程，
+        # 否则后台 loop 的平台作用域会在子线程丢失而静默回落到用户配额。
+        futures = {pool.submit(contextvars.copy_context().run, _run_one, st): st for st in layer}
         for fut in as_completed(futures):
             results.append(fut.result())
     return results

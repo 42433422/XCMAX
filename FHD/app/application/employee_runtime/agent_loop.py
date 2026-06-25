@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工多轮工具调用循环（OpenAI function-calling ReAct）。
 
 替换旧的单轮 ``agent_runner._chat_completion``：员工 ``agent`` handler 现在可以
@@ -139,6 +138,10 @@ def run_employee_agent_loop(
                 "rounds": rounds,
                 "tool_calls": tool_trace,
             }
+
+        from app.application.employee_runtime.billing import bill_employee_llm_from_completion
+
+        bill_employee_llm_from_completion(completion, source="employee_runtime.agent_loop")
 
         msg = completion.choices[0].message
         tcs = getattr(msg, "tool_calls", None) or []

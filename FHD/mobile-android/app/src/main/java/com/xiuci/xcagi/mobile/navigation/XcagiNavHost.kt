@@ -99,6 +99,7 @@ import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.UpdateDownload
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeDialog
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackData
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackType
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBottomNavBar
@@ -400,6 +401,10 @@ fun XcagiNavHost(
                     com.xiuci.xcagi.mobile.feature.scan.ScanQrScreen(vm) { nav.popBackStack() }
                 }
                 composable(Routes.SETTINGS) { SettingsScreen(vm) { nav.popBackStack() } }
+                composable(Routes.MEETING_MINUTES) {
+                    androidx.compose.runtime.LaunchedEffect(Unit) { vm.loadMeetingLevels() }
+                    MeetingMinutesScreen(vm) { nav.popBackStack() }
+                }
                 composable(Routes.AUTH) {
                     AuthScreen(
                             vm,
@@ -545,6 +550,7 @@ fun XcagiNavHost(
                                 )
                             },
                             onOpenOcr = { nav.navigate(Routes.OCR) },
+                            onOpenMeetingMinutes = { nav.navigate(Routes.MEETING_MINUTES) },
                     )
                 }
                 // 普通会话对话 — 复用 ChatScreen（带 conversationId）
@@ -559,6 +565,7 @@ fun XcagiNavHost(
                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
                     val pinnedPartnerKind = when (conversationId) {
                         PinnedIds.CODEX -> FixedPartnerKinds.CODEX
+                        PinnedIds.CURSOR -> FixedPartnerKinds.CURSOR
                         PinnedIds.CLAUDE -> FixedPartnerKinds.CLAUDE
                         else -> null
                     }
@@ -577,6 +584,7 @@ fun XcagiNavHost(
                                 )
                             },
                             onOpenOcr = { nav.navigate(Routes.OCR) },
+                            onOpenMeetingMinutes = { nav.navigate(Routes.MEETING_MINUTES) },
                             onOpenEmployeeProfile = { modId, employeeId ->
                                 nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
                             },
@@ -687,6 +695,7 @@ fun XcagiNavHost(
                                         when (partnerKind) {
                                             FixedPartnerKinds.CUSTOMER_SERVICE -> Routes.CS_CHAT
                                             FixedPartnerKinds.CODEX -> Routes.conversationChat(PinnedIds.CODEX)
+                                            FixedPartnerKinds.CURSOR -> Routes.conversationChat(PinnedIds.CURSOR)
                                             FixedPartnerKinds.CLAUDE -> Routes.conversationChat(PinnedIds.CLAUDE)
                                             else -> Routes.AI_CHAT
                                         }

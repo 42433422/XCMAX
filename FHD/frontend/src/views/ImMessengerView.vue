@@ -218,6 +218,20 @@
           class="im-compose im-compose--codex"
           @submit.prevent="onCodexSend"
         >
+          <div class="im-compose-modes" role="group" aria-label="派工模式">
+            <button
+              v-for="opt in CODEX_MODE_OPTIONS"
+              :key="opt.value"
+              type="button"
+              class="im-compose-mode"
+              :class="{ 'is-active': codexMode === opt.value }"
+              :title="opt.hint"
+              :aria-pressed="codexMode === opt.value"
+              @click="codexMode = opt.value"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
           <input
             ref="codexInputEl"
             v-model="codexDraft"
@@ -349,6 +363,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import {
   createDirectConversation,
+  fetchDesktopFixedContacts,
   fetchImContacts,
   fetchImConversations,
   fetchImMessages,
@@ -357,6 +372,7 @@ import {
   sendImMessage,
   type ImContact,
   type ImConversationSummary,
+  type ImFixedEntry,
   type ImMessage,
 } from '@/api/im';
 import api from '@/api';
@@ -381,6 +397,10 @@ import {
   fetchClaudeSuperEmployeeMessages,
   sendClaudeSuperEmployeeMessage,
 } from '@/api/claudeSuperEmployee';
+import {
+  fetchCursorSuperEmployeeMessages,
+  sendCursorSuperEmployeeMessage,
+} from '@/api/cursorSuperEmployee';
 
 type CurrentUserPayload = {
   user?: { id?: number };
@@ -404,6 +424,14 @@ type ClaudeSuperEmployeeEntry = {
   is_claude_super_employee: true;
 };
 
+type CursorSuperEmployeeEntry = {
+  id: 'cursor-super-employee';
+  display_name: '超级员工-Cursor';
+  username: 'cursor-super-employee';
+  subtitle: '全设备协同 · Agent 派工';
+  is_cursor_super_employee: true;
+};
+
 type DutyEmployeeEntry = {
   id: string;
   display_name: string;
@@ -417,7 +445,7 @@ type DutyEmployeeEntry = {
   is_duty_employee_entry: true;
 };
 
-type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | DutyEmployeeEntry;
+type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | DutyEmployeeEntry;
 type PinnedImEntry = ImContact | SystemEmployeeEntry;
 type CodexDisplayMessage = CodexSuperEmployeeMessage & {
   streaming?: boolean;
@@ -487,6 +515,14 @@ const CLAUDE_SUPER_EMPLOYEE_ENTRY: ClaudeSuperEmployeeEntry = {
   is_claude_super_employee: true,
 };
 
+const CURSOR_SUPER_EMPLOYEE_ENTRY: CursorSuperEmployeeEntry = {
+  id: 'cursor-super-employee',
+  display_name: '超级员工-Cursor',
+  username: 'cursor-super-employee',
+  subtitle: '全设备协同 · Agent 派工',
+  is_cursor_super_employee: true,
+};
+
 const localUserId = ref<number | null>(null);
 const conversations = ref<ImConversationSummary[]>([]);
 const activeConversationId = ref<number | null>(null);
@@ -494,6 +530,22 @@ const activeSystemEntry = ref<SystemEmployeeEntry | null>(null);
 const codexMessages = ref<CodexSuperEmployeeMessage[]>([]);
 const codexDraft = ref('');
 const codexBusy = ref(false);
+// 派工模式三态控件（替代后端 _TASK_MARKERS 关键词自动判断）：
+//   auto → 不下发 mode，交后端关键词分类器（保持原行为）
+//   chat → mode=chat，单设备 CLI 直答
+//   code → mode=code + mode_explicit，强制 Para 多设备派工（relay 不再剥离）
+type CodexMode = 'auto' | 'chat' | 'code';
+const CODEX_MODE_OPTIONS: ReadonlyArray<{ value: CodexMode; label: string; hint: string }> = [
+  { value: 'auto', label: '自动', hint: '按内容自动判断：闲聊直答，开发任务派工' },
+  { value: 'chat', label: '直答', hint: '单设备 CLI 直接回答，不派工' },
+  { value: 'code', label: '多设备', hint: '强制派发到全部在线设备协同执行' },
+];
+const codexMode = ref<CodexMode>('auto');
+function codexModeContext(): Record<string, unknown> {
+  if (codexMode.value === 'chat') return { mode: 'chat' };
+  if (codexMode.value === 'code') return { mode: 'code', mode_explicit: true };
+  return {};
+}
 const codexDispatch = ref<CodexSuperEmployeeDispatch | null>(null);
 const codexStreamBody = ref('');
 const codexStreamMessageId = ref('');
@@ -503,6 +555,8 @@ const codexStreamActive = ref(false);
 const messages = ref<ImMessage[]>([]);
 const draft = ref('');
 const dutyEmployees = ref<DutyEmployeeEntry[]>([]);
+// 桌面端固定区组成(surface SSOT: device=desktop × side),驱动 pinnedContacts 顺序。
+const desktopFixed = ref<{ top: ImFixedEntry[]; bottom: ImFixedEntry[] }>({ top: [], bottom: [] });
 const dutyEmployeeMessages = ref<Record<string, DutyEmployeeChatMessage[]>>({});
 const dutyEmployeeDraft = ref('');
 const dutyEmployeeBusy = ref(false);
@@ -566,21 +620,36 @@ const codexApiScope = computed<CodexSuperEmployeeApiScope>(() =>
   isAdminConsoleSpa() ? 'admin' : 'mobile',
 );
 
-// 当前激活的超级员工是否为 Claude（Codex/Claude 共用同一套合成器与轮询，仅端点不同）。
-const isClaudeActive = computed(() =>
-  Boolean(activeSystemEntry.value && isClaudeSuperEmployeeEntry(activeSystemEntry.value)),
-);
+type ActiveSuperTool = 'codex' | 'claude' | 'cursor';
+
+function activeSuperTool(entry: SystemEmployeeEntry | null): ActiveSuperTool | null {
+  if (!entry) return null;
+  if (isCodexSuperEmployeeEntry(entry)) return 'codex';
+  if (isClaudeSuperEmployeeEntry(entry)) return 'claude';
+  if (isCursorSuperEmployeeEntry(entry)) return 'cursor';
+  return null;
+}
 
 function fetchActiveSuperMessages(): Promise<CodexSuperEmployeeMessage[]> {
-  return isClaudeActive.value
-    ? fetchClaudeSuperEmployeeMessages({ scope: codexApiScope.value })
-    : fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
+  const tool = activeSuperTool(activeSystemEntry.value);
+  if (tool === 'claude') {
+    return fetchClaudeSuperEmployeeMessages({ scope: codexApiScope.value });
+  }
+  if (tool === 'cursor') {
+    return fetchCursorSuperEmployeeMessages({ scope: codexApiScope.value });
+  }
+  return fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
 }
 
 function sendActiveSuperMessage(message: string, context: Record<string, unknown>) {
-  return isClaudeActive.value
-    ? sendClaudeSuperEmployeeMessage(message, context, { scope: codexApiScope.value })
-    : sendCodexSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
+  const tool = activeSuperTool(activeSystemEntry.value);
+  if (tool === 'claude') {
+    return sendClaudeSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
+  }
+  if (tool === 'cursor') {
+    return sendCursorSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
+  }
+  return sendCodexSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
 }
 
 const codexSenderLabel = computed(() =>
@@ -641,9 +710,38 @@ const filteredContacts = computed(() => {
   );
 });
 
+// surface SSOT 的 super 条目 id → 本视图带行为(对话面板/轮询)的强类型超级员工条目。
+function mapFixedSuper(entry: ImFixedEntry): PinnedImEntry | null {
+  if (entry.id === 'claude-super-employee') return CLAUDE_SUPER_EMPLOYEE_ENTRY;
+  if (entry.id === 'codex-super-employee') return CODEX_SUPER_EMPLOYEE_ENTRY;
+  return null;
+}
+
+function mapFixedEntries(entries: ImFixedEntry[]): PinnedImEntry[] {
+  const out: PinnedImEntry[] = [];
+  for (const e of entries) {
+    if (e.kind === 'super') {
+      const mapped = mapFixedSuper(e);
+      if (mapped) out.push(mapped);
+    } else if (e.kind === 'dedicated_cs') {
+      out.push(...contacts.value.filter((c) => isEnterpriseDedicatedContact(c)));
+    }
+  }
+  return out;
+}
+
+// surface SSOT 未加载时的回退:super 内部 SSOT 声明序 = Claude → Codex。
+const SUPER_SSOT_ORDER: PinnedImEntry[] = [CLAUDE_SUPER_EMPLOYEE_ENTRY, CODEX_SUPER_EMPLOYEE_ENTRY];
+
 const pinnedContacts = computed<PinnedImEntry[]>(() => {
   if (isAdminCustomerServiceConsole.value) {
-    return [CODEX_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
+    // 顺序由 surface_composition('desktop','admin')=[platform, super] 驱动:
+    // top(platform 之前) + 平台员工(动态) + bottom(platform 之后,含超级员工)。
+    const top = mapFixedEntries(desktopFixed.value.top);
+    const bottom = desktopFixed.value.bottom.length
+      ? mapFixedEntries(desktopFixed.value.bottom)
+      : SUPER_SSOT_ORDER;
+    return [...top, ...dutyEmployees.value, ...bottom];
   }
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
 });
@@ -662,11 +760,22 @@ function isClaudeSuperEmployeeEntry(entry: PinnedImEntry): entry is ClaudeSuperE
   return 'is_claude_super_employee' in entry && entry.is_claude_super_employee;
 }
 
-/** 超级员工（Codex / Claude）共用同一套合成器、消息管线与轮询。 */
+function isCursorSuperEmployeeEntry(entry: PinnedImEntry): entry is CursorSuperEmployeeEntry {
+  return 'is_cursor_super_employee' in entry && entry.is_cursor_super_employee;
+}
+
+/** 超级员工（Codex / Claude / Cursor）共用同一套合成器、消息管线与轮询。 */
 function isSuperEmployeeEntry(
   entry: PinnedImEntry | null,
-): entry is CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry {
-  return Boolean(entry && (isCodexSuperEmployeeEntry(entry) || isClaudeSuperEmployeeEntry(entry)));
+): entry is CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry {
+  return Boolean(
+    entry
+    && (
+      isCodexSuperEmployeeEntry(entry)
+      || isClaudeSuperEmployeeEntry(entry)
+      || isCursorSuperEmployeeEntry(entry)
+    ),
+  );
 }
 
 function isDutyEmployeeEntry(entry: PinnedImEntry | null): entry is DutyEmployeeEntry {
@@ -682,6 +791,7 @@ function pinnedEntryPreview(entry: PinnedImEntry): string {
 function pinnedAvatarText(entry: PinnedImEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return 'Codex';
   if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
+  if (isCursorSuperEmployeeEntry(entry)) return 'Cursor';
   if (isDutyEmployeeEntry(entry)) return avatarText(entry.display_name);
   return avatarText(entry.display_name);
 }
@@ -706,6 +816,7 @@ function systemEntryIdentity(entry: SystemEmployeeEntry): string {
 function systemEntryDispatch(entry: SystemEmployeeEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return '全设备 Codex';
   if (isClaudeSuperEmployeeEntry(entry)) return '全设备 Claude';
+  if (isCursorSuperEmployeeEntry(entry)) return '全设备 Cursor';
   if (entry.api_base_path) return `${dutyContactLabel(entry.phone_channel)} · ${entry.api_base_path}`;
   return dutyContactLabel(entry.phone_channel);
 }
@@ -883,7 +994,7 @@ function isCodexDispatcherMessage(message: CodexSuperEmployeeMessage): boolean {
 }
 
 function isCodexResultMessage(message: CodexSuperEmployeeMessage): boolean {
-  if (message.kind === 'codex_result') return true;
+  if (typeof message.kind === 'string' && message.kind.endsWith('_result')) return true;
   return message.role === 'assistant' && !isCodexDispatcherMessage(message);
 }
 
@@ -893,6 +1004,9 @@ function isCodexStreamingMessage(message: CodexDisplayMessage): boolean {
 
 function codexMessageRoleLabel(message: CodexSuperEmployeeMessage): string {
   if (message.role === 'user') return codexSenderLabel.value;
+  const tool = activeSuperTool(activeSystemEntry.value);
+  if (tool === 'claude') return 'Claude';
+  if (tool === 'cursor') return 'Cursor';
   return 'Codex';
 }
 
@@ -1323,6 +1437,7 @@ async function onCodexSend(): Promise<void> {
       source: codexContextSource.value,
       client_surface: codexApiScope.value === 'mobile' ? 'mobile' : 'admin_console',
       target_devices: ['all'],
+      ...codexModeContext(),
     });
     codexDispatch.value = result.dispatch ?? null;
     codexMessages.value = result.messages;
@@ -1418,6 +1533,9 @@ async function loadContacts(): Promise<void> {
   contactsLoading.value = true;
   try {
     contacts.value = await fetchImContacts();
+    // 桌面固定区组成由 surface SSOT 端点驱动(fail-safe:失败返回空段→回退 SSOT 声明序)。
+    const fixed = await fetchDesktopFixedContacts();
+    desktopFixed.value = { top: fixed.top, bottom: fixed.bottom };
     imApiReachable.value = true;
   } catch (error) {
     showAppToast(error instanceof Error ? error.message : '加载联系人失败', 'error');
@@ -2184,6 +2302,35 @@ onUnmounted(() => {
   position: relative;
   z-index: 30;
   background: #fff;
+  flex-wrap: wrap;
+}
+.im-compose-modes {
+  flex-basis: 100%;
+  display: flex;
+  gap: 6px;
+}
+.im-compose-mode {
+  padding: 4px 12px;
+  border: 1px solid var(--xc-color-border, #e6e9ef);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--xc-color-text-secondary, #5a6478);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background 150ms ease;
+}
+.im-compose-mode:hover {
+  border-color: var(--xc-color-primary, #0052d9);
+}
+.im-compose-mode.is-active {
+  background: var(--xc-color-primary, #0052d9);
+  border-color: var(--xc-color-primary, #0052d9);
+  color: #fff;
 }
 .im-compose-input {
   flex: 1;

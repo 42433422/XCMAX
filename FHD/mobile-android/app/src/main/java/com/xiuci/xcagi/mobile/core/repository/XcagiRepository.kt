@@ -10,6 +10,7 @@ import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.db.ModInfoCacheEntity
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
+import com.xiuci.xcagi.mobile.core.model.AiGroupCandidateDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
 import com.xiuci.xcagi.mobile.core.model.AiGroupDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberBody
@@ -18,12 +19,16 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.MarketAuthResponse
 import com.xiuci.xcagi.mobile.core.model.MarketLoginBody
 import com.xiuci.xcagi.mobile.core.model.MarketPasswordLoginBody
 import com.xiuci.xcagi.mobile.core.model.MarketRegisterBody
 import com.xiuci.xcagi.mobile.core.model.MarketSendCodeBody
+import com.xiuci.xcagi.mobile.core.model.MeetingGenerateBody
+import com.xiuci.xcagi.mobile.core.model.MeetingLevelsData
+import com.xiuci.xcagi.mobile.core.model.MeetingMinuteData
 import com.xiuci.xcagi.mobile.core.model.ModIndustry
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.ModMenuItem
@@ -67,8 +72,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.map
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import retrofit2.HttpException
 import retrofit2.Retrofit
@@ -506,6 +514,50 @@ class XcagiRepository @Inject constructor(
     suspend fun fetchAppConfig(): Result<AppConfigResponse> = try {
         val cfg = modstore().appConfig(sku = BuildConfig.PRODUCT_SKU)
         Result.success(cfg)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    // ── 会议纪要 SSOT（三级派生） ──────────────────────────────────────────
+    suspend fun meetingLevels(): Result<MeetingLevelsData> = try {
+        val env = fhd().meetingLevels()
+        env.data?.let { Result.success(it) } ?: fail(env)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    /** 一次性生成三级会议纪要（剧本式 → 架构图式 → 说人话）。 */
+    suspend fun generateMeetingMinutes(
+        transcript: String,
+        title: String? = null,
+    ): Result<MeetingMinuteData> = try {
+        val env = fhd().generateMeetingMinutes(MeetingGenerateBody(transcript, title))
+        env.data?.let { Result.success(it) } ?: fail(env)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    /** 录音字节 → 文本（复用桌面/Web 同一 ASR 端点 /api/voice/transcribe）。 */
+    suspend fun transcribeMeetingAudio(
+        audio: ByteArray,
+        mime: String,
+    ): Result<String> = try {
+        val ext = when {
+            mime.contains("webm") -> "webm"
+            mime.contains("ogg") -> "ogg"
+            mime.contains("mp4") || mime.contains("m4a") -> "m4a"
+            mime.contains("wav") -> "wav"
+            else -> "m4a"
+        }
+        val body = audio.toRequestBody(mime.toMediaTypeOrNull())
+        val part = MultipartBody.Part.createFormData("file", "meeting.$ext", body)
+        val resp = fhd().transcribeAudio(part)
+        val text = resp.data?.text?.trim().orEmpty()
+        if (resp.success && text.isNotEmpty()) {
+            Result.success(text)
+        } else {
+            Result.failure(IllegalStateException(resp.detail ?: "未识别到内容"))
+        }
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -1023,6 +1075,7 @@ class XcagiRepository @Inject constructor(
         message: String,
         conversationId: String? = null,
         sessionId: String = "default",
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -1031,8 +1084,9 @@ class XcagiRepository @Inject constructor(
         cacheChatMessage(sessionId = sessionId, role = "user", text = message)
         val acc = StringBuilder()
 
-        if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE) {
+        if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CURSOR || conversationId == PinnedIds.CLAUDE) {
             val isClaude = conversationId == PinnedIds.CLAUDE
+            val isCursor = conversationId == PinnedIds.CURSOR
             val tokenSink: (String) -> Unit = { t -> acc.append(t); onToken(t) }
             // 捕获最终回复用于本地持久化：relay 路径真正的结果经 onDone 下发（不进 acc），
             // 必须在此截获，否则缓存到的只是"思考中…"等状态闲话。
@@ -1040,20 +1094,26 @@ class XcagiRepository @Inject constructor(
             val doneSink: (String) -> Unit = { full -> finalReply = full; onDone(full) }
             // 连不到本地 PC 但已配对中继电脑 → 经服务器中继到本地电脑执行（超级员工必须本地设备）。
             val relayId = if (!isPcReachable()) sessionStore.relayDesktopId() else ""
+            val relayKind = when {
+                isClaude -> "claude.invoke"
+                isCursor -> "cursor.invoke"
+                else -> "codex.invoke"
+            }
             if (relayId.isNotBlank()) {
                 streamRelayCodexTask(
                     relayId = relayId,
                     message = message,
-                    kind = if (isClaude) "claude.invoke" else "codex.invoke",
+                    kind = relayKind,
                     conversationId = conversationId ?: "",
+                    superMode = superMode,
                     onToken = tokenSink,
                     onDone = doneSink,
                     onError = onError,
                 )
-            } else if (isClaude) {
-                streamClaudeSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
-            } else {
-                streamCodexSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
+            } else when {
+                isClaude -> streamClaudeSuperEmployeeChat(message = message, superMode = superMode, onToken = tokenSink, onDone = doneSink, onError = onError)
+                isCursor -> streamCursorSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
+                else -> streamCodexSuperEmployeeChat(message = message, superMode = superMode, onToken = tokenSink, onDone = doneSink, onError = onError)
             }
             val finalText = finalReply.ifBlank { acc.toString() }
             if (finalText.isNotBlank()) {
@@ -1064,21 +1124,9 @@ class XcagiRepository @Inject constructor(
 
         val useCloud = !isPcReachable()
         if (useCloud) {
-            val relayId = sessionStore.relayDesktopId()
-            if (relayId.isNotBlank()) {
-                streamRelayCodexTask(
-                    relayId = relayId,
-                    message = message,
-                    conversationId = conversationId ?: "",
-                    onToken = { t ->
-                        acc.append(t)
-                        onToken(t)
-                    },
-                    onDone = onDone,
-                    onError = onError,
-                )
-                return
-            }
+            // 员工隔离：CLI 中继（streamRelayCodexTask）仅限超级员工会话（见上方 CODEX/CURSOR/CLAUDE 分支已各自处理 relay）。
+            // 小C / 普通对话 / 客服 / 平台员工绝不串入 relay——否则一旦绑定桌面，小C 会被桌面 codex CLI 接管，
+            // 连带「会议纪要」等小C意图（normal_chat_dispatch）也因消息被劫持而无法触发。普通会话始终走云端正常对话后端。
             preferCloudIfLanUnreachable()
         }
         // 构造上下文：取最近6条对话（与桌面端 useChatRequest.ts slice(-6) 一致）
@@ -1114,8 +1162,20 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    // 派工模式三态控件（自动/直答/多设备）→ 后端 context.mode 片段。
+    //   auto → 空 map：交后端 _TASK_MARKERS 关键词分类器，保持原行为
+    //   chat → 单设备 CLI 直答（relay 不剥离 chat）
+    //   code → 强制 Para 多设备派工；mode_explicit 让 relay 不再剥离该 mode
+    private fun superEmployeeModeContext(superMode: String): Map<String, Any?> =
+        when (superMode.trim().lowercase()) {
+            "chat" -> mapOf("mode" to "chat")
+            "code" -> mapOf("mode" to "code", "mode_explicit" to true)
+            else -> emptyMap()
+        }
+
     private suspend fun streamCodexSuperEmployeeChat(
         message: String,
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -1132,8 +1192,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
-                    ),
+                    ) + superEmployeeModeContext(superMode),
                 ),
             )
             if (!response.success) {
@@ -1190,6 +1249,7 @@ class XcagiRepository @Inject constructor(
     // 超级员工-Claude：与 Codex 同构（排比 Para 多设备派工），仅工具/端点不同。
     private suspend fun streamClaudeSuperEmployeeChat(
         message: String,
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
@@ -1206,8 +1266,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
-                    ),
+                    ) + superEmployeeModeContext(superMode),
                 ),
             )
             if (!response.success) {
@@ -1261,6 +1320,80 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    // 超级员工-Cursor：与 Codex/Claude 同构（排比 Para 多设备派工），仅工具/端点不同。
+    private suspend fun streamCursorSuperEmployeeChat(
+        message: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        try {
+            val statusPrefix = "已提交到超级员工-Cursor，正在执行"
+            onToken(statusPrefix)
+            var emitted = statusPrefix
+
+            val response = fhd().postCursorSuperEmployeeMessage(
+                body = CursorSuperEmployeeMobileMessageBody(
+                    message = message,
+                    body = message,
+                    context = mapOf(
+                        "source" to "mobile_chat",
+                        "client_surface" to "mobile",
+                        "mode" to "code",
+                    ),
+                ),
+            )
+            if (!response.success) {
+                onError(response.message.ifBlank { "超级员工-Cursor 调用失败" })
+                return
+            }
+
+            val requestId = extractDispatchRequestId(response.data)
+            val taskId = extractTaskId(response.data)
+            val immediate = extractCodexMessageText(response.data, requestId, taskId)
+            if (immediate.isNotBlank()) {
+                val immediateTrimmed = immediate.trim()
+                val delta = immediateTrimmed.removePrefix(emitted)
+                if (delta.isNotBlank()) {
+                    onToken(delta)
+                    emitted = immediateTrimmed
+                }
+                onDone(immediateTrimmed)
+                return
+            }
+
+            var finalText = ""
+            repeat(60) {
+                delay(1000)
+                val polled = fetchMatchingCursorMessage(requestId, taskId)
+                if (polled.isNotBlank()) {
+                    finalText = polled.trim()
+                    if (finalText != emitted) {
+                        val delta = finalText.removePrefix(emitted)
+                        if (delta.isNotBlank()) {
+                            onToken(delta)
+                        }
+                        emitted = finalText
+                    }
+                    onDone(finalText)
+                    return
+                }
+                val progressText = "已提交到超级员工-Cursor，正在执行 $requestId"
+                if (progressText != emitted) {
+                    onToken("\n$progressText")
+                    emitted = progressText
+                }
+            }
+
+            finalText = "已提交到超级员工-Cursor，任务将在电脑端执行后回写。"
+            onDone(finalText)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onError(e.message ?: "超级员工-Cursor 调用失败")
+        }
+    }
+
     private suspend fun fetchLatestCodexMessage(): String =
         fetchMatchingCodexMessage(requestId = null, taskId = null)
 
@@ -1270,6 +1403,19 @@ class XcagiRepository @Inject constructor(
     ): String {
         return try {
             val response = fhd().getClaudeSuperEmployeeMessages(80)
+            if (!response.success) return ""
+            extractCodexMessageFromList(response.data?.get("messages"), requestId, taskId)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private suspend fun fetchMatchingCursorMessage(
+        requestId: String?,
+        taskId: String?,
+    ): String {
+        return try {
+            val response = fhd().getCursorSuperEmployeeMessages(80)
             if (!response.success) return ""
             extractCodexMessageFromList(response.data?.get("messages"), requestId, taskId)
         } catch (_: Exception) {
@@ -1293,6 +1439,13 @@ class XcagiRepository @Inject constructor(
     // ── AI 群聊 ──
     suspend fun loadAiGroups(): Result<List<AiGroupDto>> = aiGroupCall {
         fhd().getAiGroups().let { if (it.success) Result.success(it.data?.groups.orEmpty()) else fail(it) }
+    }
+
+    /** 群成员候选(普通员工 + 超级员工),供建群/拉人选人列表使用。 */
+    suspend fun loadGroupMemberCandidates(): Result<List<AiGroupCandidateDto>> = aiGroupCall {
+        fhd().getAiGroupCandidates().let {
+            if (it.success) Result.success(it.data?.candidates.orEmpty()) else fail(it)
+        }
     }
 
     suspend fun createAiGroup(name: String): Result<AiGroupDto?> = aiGroupCall {
@@ -1494,6 +1647,40 @@ class XcagiRepository @Inject constructor(
             Result.failure(e)
         }
 
+    suspend fun loadCursorSuperEmployeeMessages(limit: Int = 80): Result<List<Pair<String, String>>> =
+        try {
+            syncRouterFromStore()
+            preferCloudIfLanUnreachable()
+            val response = fhd().getCursorSuperEmployeeMessages(limit)
+            if (!response.success) {
+                Result.failure(Exception(response.message.ifBlank { "加载超级员工会话失败" }))
+            } else {
+                val rawMessages = response.data?.get("messages")
+                val rows = codexMessageRows(rawMessages)
+                rows
+                    .mapNotNull { row ->
+                        ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"])
+                    }
+                    .maxOrNull()
+                    ?.let { latestTs ->
+                        val latestRow = rows.maxByOrNull { row ->
+                            ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"]) ?: 0L
+                        }
+                        val preview = latestRow?.let { row ->
+                            val role = row["role"]?.toString()?.trim()?.lowercase().orEmpty()
+                            val body = row["body"]?.toString()?.trim().orEmpty()
+                            if (body.isNotBlank() && role in setOf("user", "assistant") && !isCodexSchedulerNotice(row)) {
+                                formatMessagePreview(role, body)
+                            } else ""
+                        }.orEmpty()
+                        markConversationActivity(PinnedIds.CURSOR, latestTs, preview)
+                    }
+                Result.success(codexMessagesToPairs(rawMessages))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
     private fun extractCodexMessageText(
         data: Map<String, Any?>?,
         requestId: String?,
@@ -1652,12 +1839,17 @@ class XcagiRepository @Inject constructor(
         message: String,
         kind: String = "codex.invoke",
         conversationId: String = "",
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
     ) {
         try {
-            val toolLabel = if (kind.startsWith("claude")) "Claude" else "Codex"
+            val toolLabel = when {
+                kind.startsWith("claude") -> "Claude"
+                kind.startsWith("cursor") -> "Cursor"
+                else -> "Codex"
+            }
             // 中继任务由 Retrofit 直接发起，不走 SSE 的 401/403 刷新重试。
             // 先用 refresh token 更新 FHD access token，避免保留登录态的手机在 token
             // 过期后只能看到“重新登录”，实际请求根本到不了电脑执行端。
@@ -1668,10 +1860,11 @@ class XcagiRepository @Inject constructor(
                     kind = kind,
                     payload = mapOf(
                         "message" to message,
-                        "context" to mapOf(
-                            "source" to "mobile_chat",
-                            "client_surface" to "mobile",
-                            "mode" to "code",
+                        "context" to (
+                            mapOf(
+                                "source" to "mobile_chat",
+                                "client_surface" to "mobile",
+                            ) + superEmployeeModeContext(superMode)
                         ),
                     ),
                 ),
@@ -1796,7 +1989,11 @@ class XcagiRepository @Inject constructor(
     ): Boolean {
         val taskId = sessionStore.inflightRelayTask(conversationId)
         if (taskId.isBlank()) return false
-        val toolLabel = if (conversationId == PinnedIds.CLAUDE) "Claude" else "Codex"
+        val toolLabel = when (conversationId) {
+            PinnedIds.CLAUDE -> "Claude"
+            PinnedIds.CURSOR -> "Cursor"
+            else -> "Codex"
+        }
         var reply = ""
         try {
             refreshFhdAccessToken()
@@ -1837,11 +2034,12 @@ class XcagiRepository @Inject constructor(
         message: String,
         conversationId: String? = null,
         sessionId: String = "default",
+        superMode: String = "auto",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
     ) {
-        streamChat(message, conversationId, sessionId, onToken, onDone, onError)
+        streamChat(message, conversationId, sessionId, superMode, onToken, onDone, onError)
     }
 
     suspend fun loadCachedChat(sessionId: String = "default"): List<Pair<String, String>> =

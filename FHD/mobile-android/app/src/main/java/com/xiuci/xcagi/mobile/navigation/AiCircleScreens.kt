@@ -24,22 +24,29 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +55,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.xiuci.xcagi.mobile.core.model.AiCircleComment
+import com.xiuci.xcagi.mobile.core.model.AiCirclePost
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo
 import com.xiuci.xcagi.mobile.ui.AppViewModel
@@ -176,20 +185,17 @@ fun AiCircleScreen(
     val modInfos by vm.modInfos.collectAsState()
     val displayName by vm.displayName.collectAsState()
     val avatarSource by vm.userAvatarSource.collectAsState()
+    val posts by vm.aiCirclePosts.collectAsState()
+    val loading by vm.aiCircleLoading.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
 
-    LaunchedEffect(Unit) { vm.refreshModInfos() }
+    LaunchedEffect(Unit) {
+        vm.refreshModInfos()
+        vm.loadAiCirclePosts()
+    }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         WeTopBar(title = "AI交流圈", onBack = onBack)
-
-        if (employees.isEmpty()) {
-            MobileEmptyState(
-                message = "暂无 AI 员工动态",
-                onRetry = { vm.refreshModInfos(showError = true) },
-            )
-            return@Column
-        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -202,15 +208,37 @@ fun AiCircleScreen(
                     avatarUri = avatarSource,
                 )
             }
-            itemsIndexed(
-                items = employees,
-                key = { index, employee -> "${employee.key}:$index" },
-            ) { index, employee ->
-                AiMomentCard(
-                    employee = employee,
-                    index = index,
-                    onClick = { onOpenEmployee(employee.modId, employee.employeeId) },
-                )
+            if (posts.isEmpty()) {
+                item {
+                    Box(
+                        Modifier.fillMaxWidth().padding(top = 56.dp, bottom = 24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (loading) "正在加载动态…" else "暂无动态，AI 员工的工作汇报会出现在这里",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                itemsIndexed(
+                    items = posts,
+                    key = { _, post -> post.id },
+                ) { _, post ->
+                    AiCirclePostCard(
+                        post = post,
+                        onLike = { vm.toggleAiCircleLike(post.id) },
+                        onComment = { text -> vm.addAiCircleComment(post.id, text) },
+                        onOpenHome = {
+                            val eid = post.employee_id?.trim().orEmpty()
+                            if (eid.isNotBlank()) {
+                                employees.firstOrNull { it.employeeId == eid }
+                                    ?.let { onOpenEmployee(it.modId, it.employeeId) }
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -307,69 +335,98 @@ private fun AiCircleHeader(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AiMomentCard(
-    employee: AiEmployeeProfile,
-    index: Int,
-    onClick: () -> Unit,
+private fun AiCirclePostCard(
+    post: AiCirclePost,
+    onLike: () -> Unit,
+    onComment: (String) -> Unit,
+    onOpenHome: () -> Unit,
 ) {
+    val showCommentInput = remember(post.id) { mutableStateOf(false) }
+    val draft = remember(post.id) { mutableStateOf("") }
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
     ) {
         Column {
-            Row(Modifier.padding(start = 16.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
-                AiEmployeeAvatar(employee = employee, size = 42.dp)
+            Row(Modifier.padding(start = 16.dp, end = 14.dp, top = 12.dp, bottom = 4.dp)) {
+                AppAvatar(
+                    imageSource = post.author_avatar,
+                    fallback = AppAvatarFallback.AI_EMPLOYEE,
+                    size = 42.dp,
+                    shape = CircleShape,
+                    contentDescription = post.author_name,
+                )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                employee.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = XcagiTheme.extra.momentAccent,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                employee.momentSourceLine(index),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
-                        Icon(
-                            Icons.Default.MoreHoriz,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
                     Text(
-                        employee.momentBody(index),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(top = 8.dp),
-                        maxLines = 3,
+                        post.author_name.ifBlank { "AI员工" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = XcagiTheme.extra.momentAccent,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    FlowRow(
+                    if (post.body.isNotBlank()) {
+                        Text(
+                            post.body,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                    Row(
                         modifier = Modifier.padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        employee.abilityLabels().take(3).forEach { label ->
-                            AiAbilityChip(label)
+                        Text(
+                            formatCircleTime(post.created_at),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        CircleActionButton(
+                            icon = if (post.liked_by_me) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            label = if (post.like_count > 0) "赞 ${post.like_count}" else "赞",
+                            tint = if (post.liked_by_me) Color(0xFFE5484D) else XcagiTheme.extra.momentAccent,
+                            onClick = onLike,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        CircleActionButton(
+                            icon = Icons.Default.ChatBubbleOutline,
+                            label = "评论",
+                            tint = XcagiTheme.extra.momentAccent,
+                            onClick = { showCommentInput.value = !showCommentInput.value },
+                        )
+                        if (!post.employee_id.isNullOrBlank()) {
+                            Spacer(Modifier.width(12.dp))
+                            CircleActionButton(
+                                icon = Icons.Default.Person,
+                                label = "主页",
+                                tint = XcagiTheme.extra.momentAccent,
+                                onClick = onOpenHome,
+                            )
                         }
                     }
-                    AiMomentActionBar(employee = employee, index = index)
-                    AiMomentReplyBox(employee = employee, index = index)
+                    if (post.comments.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        CircleComments(post.comments)
+                    }
+                    if (showCommentInput.value) {
+                        Spacer(Modifier.height(6.dp))
+                        CircleCommentInput(
+                            value = draft.value,
+                            onValueChange = { draft.value = it },
+                            onSend = {
+                                val t = draft.value.trim()
+                                if (t.isNotEmpty()) {
+                                    onComment(t)
+                                    draft.value = ""
+                                    showCommentInput.value = false
+                                }
+                            },
+                        )
+                    }
                 }
             }
             Box(
@@ -384,100 +441,82 @@ private fun AiMomentCard(
 }
 
 @Composable
-private fun AiMomentActionBar(
-    employee: AiEmployeeProfile,
-    index: Int,
+private fun CircleActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            employee.momentTime(index),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(18.dp),
         )
-        AiMomentActionText("赞")
-        Spacer(Modifier.width(16.dp))
-        AiMomentActionText("评论")
-        Spacer(Modifier.width(16.dp))
-        AiMomentActionText("主页")
+        Spacer(Modifier.width(4.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = tint,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
 @Composable
-private fun AiMomentActionText(label: String) {
-    Text(
-        label,
-        style = MaterialTheme.typography.labelMedium,
-        color = XcagiTheme.extra.momentAccent,
-        fontWeight = FontWeight.Medium,
-    )
-}
-
-@Composable
-private fun AiMomentReplyBox(
-    employee: AiEmployeeProfile,
-    index: Int,
-) {
+private fun CircleComments(comments: List<AiCircleComment>) {
     Surface(
-        modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraSmall,
         color = XcagiTheme.extra.replyBoxBg,
     ) {
         Column(Modifier.padding(horizontal = 9.dp, vertical = 6.dp)) {
-            Text(
-                "小C助理：${employee.assistantReply(index)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                "专属客服：需要人工协同时我会接上。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 3.dp),
-            )
+            comments.forEach { comment ->
+                Text(
+                    "${comment.author_name.ifBlank { "用户" }}：${comment.body}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 1.dp),
+                )
+            }
         }
     }
 }
 
-private fun AiEmployeeProfile.momentTime(index: Int): String =
-    listOf("刚刚", "8分钟前", "23分钟前", "1小时前", "今天 09:40", "昨天 18:12")[index % 6]
-
-private fun AiEmployeeProfile.momentSourceLine(index: Int): String {
-    val source =
-        if (marketPkgId.isNotBlank()) {
-            "AI市场同步"
-        } else {
-            sourceLabel
+@Composable
+private fun CircleCommentInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            placeholder = { Text("写评论…", style = MaterialTheme.typography.bodySmall) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium,
+        )
+        TextButton(onClick = onSend, enabled = value.isNotBlank()) {
+            Text("发送")
         }
-    val state = listOf("在线值守", "整理能力边界", "等待任务", "可被呼叫")[index % 4]
-    return "$source · $state"
-}
-
-private fun AiEmployeeProfile.momentBody(index: Int): String {
-    val text = summary.replace('\n', ' ').trim()
-    val shortSummary = if (text.length > 56) "${text.take(56)}…" else text
-    val primaryAbility = abilityLabels().firstOrNull().orEmpty()
-    return when (index % 4) {
-        0 -> "今天在值守「${title.ifBlank { name }}」，主要处理${primaryAbility.ifBlank { "企业协同" }}。$shortSummary"
-        1 -> "刚更新了能力说明：$shortSummary"
-        2 -> "我已在手机端待命，适合我的事项会先拆成清单再推进。"
-        else -> "按岗位边界工作，复杂问题会和小C助理一起衔接。"
     }
 }
 
-private fun AiEmployeeProfile.assistantReply(index: Int): String =
-    when (index % 3) {
-        0 -> "已把 ${name} 放进员工通讯录，可以从主页直接发起会话。"
-        1 -> "这位员工的资料已和企业端同步。"
-        else -> "收到，后续任务会优先按员工职责分派。"
-    }
+// 后端返回 ISO 时间(如 2026-06-24T07:53:32…)，取「日期 时:分」轻量展示，避免解析时区出错。
+private fun formatCircleTime(iso: String): String {
+    if (iso.isBlank()) return ""
+    val cleaned = iso.replace('T', ' ')
+    return if (cleaned.length >= 16) cleaned.substring(0, 16) else cleaned
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable

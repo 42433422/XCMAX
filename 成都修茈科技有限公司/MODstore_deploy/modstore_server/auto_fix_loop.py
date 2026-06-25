@@ -207,6 +207,8 @@ def _patch_requirement(rel_path: str, package: str, fix_version: str) -> Optiona
 
     root = str(repo_root())
     full_path = os.path.join(root, rel_path)
+    if os.path.islink(full_path):
+        return None
     if not os.path.isfile(full_path):
         return None
 
@@ -233,6 +235,8 @@ def _patch_pyproject_dependency(rel_path: str, package: str, fix_version: str) -
 
     root = str(repo_root())
     full_path = os.path.join(root, rel_path)
+    if os.path.islink(full_path):
+        return None
     if not os.path.isfile(full_path):
         return None
 
@@ -366,7 +370,9 @@ def trigger_dependabot_autofix(
         return {"ok": True, "skipped": True, "reason": f"not dependabot PR: {sender_login}"}
 
     pr_number = int(pr_event.get("number", 0) or 0)
-    pr_url = str(pr_event.get("html_url", "") or pr_event.get("pull_request", {}).get("html_url", ""))
+    pr_url = str(
+        pr_event.get("html_url", "") or pr_event.get("pull_request", {}).get("html_url", "")
+    )
     pr_title = str(pr_event.get("title", "") or pr_event.get("pull_request", {}).get("title", ""))
 
     # 从 PR 标题解析版本变更类型

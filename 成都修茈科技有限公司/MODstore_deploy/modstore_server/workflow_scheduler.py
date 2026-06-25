@@ -59,6 +59,7 @@ def _daily_pipeline_lock_wait_seconds(stage: str) -> int:
 
 def _run_daily_pipeline_stage(stage: str, fn: Callable[[], Any]) -> Any:
     from modstore_server.daily_pipeline_lock import acquire_daily_pipeline_lock
+    from modstore_server.scheduler_runtime import record_skip, track_job_run
 
     wait_seconds = _daily_pipeline_lock_wait_seconds(stage)
     with acquire_daily_pipeline_lock(stage=stage, timeout_seconds=wait_seconds) as lock:
@@ -69,8 +70,12 @@ def _run_daily_pipeline_stage(stage: str, fn: Callable[[], Any]) -> Any:
                 lock.get("reason"),
                 wait_seconds,
             )
+            record_skip(stage, reason=str(lock.get("reason") or ""))
             return {"ok": True, "skipped": True, **lock}
-        return fn()
+        # Record every stage run to the job-run ledger so a silently stalled stage
+        # (digest frozen while the heartbeat keeps pulsing) surfaces via last_success.
+        with track_job_run(stage):
+            return fn()
 
 
 def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> None:
@@ -421,6 +426,43 @@ def start_scheduler() -> None:
     except Exception:
         logger.exception("register daily release_train orchestrator cron failed")
 
+    def _mobile_release_loop_job() -> None:
+        try:
+            from modstore_server.mobile_release_loop import run as run_mobile_release_loop_entry
+
+            r = run_mobile_release_loop_entry()
+            logger.info(
+                "mobile release loop: mode=%s status=%s consensus=%s target=%s",
+                r.get("mode"),
+                r.get("status"),
+                r.get("consensus"),
+                r.get("target_version"),
+            )
+        except Exception:
+            logger.exception("mobile release loop job failed")
+
+    try:
+        from modstore_server.mobile_release_loop import cron_trigger_for_mobile_release_loop
+
+        # 默认关：闭环虽 shadow 安全，注册仍需显式开启，避免在未接真管线时静默上线。
+        if _env_bool("MODSTORE_MOBILE_RELEASE_LOOP_CRON_ENABLED", False):
+            _scheduler.add_job(
+                _mobile_release_loop_job,
+                cron_trigger_for_mobile_release_loop(),
+                id="mobile_release_loop_job",
+                replace_existing=True,
+                misfire_grace_time=_business_misfire_grace_time(),
+                coalesce=True,
+                max_instances=1,
+            )
+        else:
+            logger.info(
+                "mobile release loop cron disabled (default); "
+                "set MODSTORE_MOBILE_RELEASE_LOOP_CRON_ENABLED=1 to register (runs shadow unless MODE=primary)"
+            )
+    except Exception:
+        logger.exception("register mobile release loop cron failed")
+
     def _daily_backup_job() -> None:
         try:
             from modstore_server.daily_backup_job import run_daily_backup_job
@@ -478,12 +520,17 @@ def start_scheduler() -> None:
         global _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS
         global _LAST_TIME_RAIL_OBSERVABILITY_MISSING
         try:
-            from modstore_server.time_rail_workflow import collect_node_runtime_status, sync_missing_evidence_backlog
+            from modstore_server.time_rail_workflow import (
+                collect_node_runtime_status,
+                sync_missing_evidence_backlog,
+            )
 
             threshold = int(os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_THRESHOLD", "3"))
             sync_limit = int(os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_LIMIT", "32"))
             min_queue_gap = int(os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_MIN_QUEUE_GAP", "1"))
-            cooldown_seconds = int(os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_COOLDOWN_SECONDS", str(10 * 60)))
+            cooldown_seconds = int(
+                os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_COOLDOWN_SECONDS", str(10 * 60))
+            )
             if threshold < 1:
                 threshold = 1
             if sync_limit < 1:
@@ -803,7 +850,9 @@ def start_scheduler() -> None:
 
     _scheduler.add_job(
         _predictive_maintenance_job,
-        IntervalTrigger(hours=max(1, _env_int("MODSTORE_PREDICTIVE_MAINTENANCE_INTERVAL_HOURS", 6))),
+        IntervalTrigger(
+            hours=max(1, _env_int("MODSTORE_PREDICTIVE_MAINTENANCE_INTERVAL_HOURS", 6))
+        ),
         id="predictive_maintenance_forecast",
         replace_existing=True,
         coalesce=True,

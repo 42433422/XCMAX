@@ -35,6 +35,8 @@ DEFAULT_OUTPUT_PRICE_PER_1K = Decimal(os.environ.get("COSER_DEFAULT_OUTPUT_PRICE
 DEFAULT_MIN_CHARGE = Decimal(os.environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
 DEFAULT_PREAUTH_CHARGE = Decimal(os.environ.get("COSER_DEFAULT_PREAUTH_CHARGE", "0.05"))
 DEFAULT_SERVICE_FEE_MULTIPLIER = Decimal(os.environ.get("COSER_SERVICE_FEE_MULTIPLIER", "1.5"))
+# 图片生成默认单价（元/张）。管理员可在 ai_model_prices.price_per_image 按模型覆盖。
+DEFAULT_IMAGE_PRICE_PER_UNIT = Decimal(os.environ.get("COSER_DEFAULT_IMAGE_PRICE_PER_UNIT", "0.45"))
 
 _WINDOWS: dict[str, list[float]] = {}
 
@@ -307,6 +309,71 @@ def estimate_preauthorization(
     return money(max(calculate_charge(session, provider, model, estimated), DEFAULT_PREAUTH_CHARGE))
 
 
+def image_unit_price(session: Session, provider: str, model: str) -> Decimal:
+    """单张生图价（元/张）：优先 ai_model_prices.price_per_image，回退环境默认价。
+
+    与 token 计费不同，生图单价即用户最终单张价（管理员直接设定面向用户的价格），
+    不再叠加 service_fee_multiplier，便于「0.45/张」这类直观定价。
+    """
+    row = (
+        session.query(AiModelPrice)
+        .filter(
+            AiModelPrice.provider == provider,
+            AiModelPrice.model == model,
+            AiModelPrice.enabled == True,  # noqa: E712
+        )
+        .first()
+    )
+    if row is not None and getattr(row, "price_per_image", None) is not None:
+        return Decimal(str(row.price_per_image))
+    return DEFAULT_IMAGE_PRICE_PER_UNIT
+
+
+def calculate_image_charge(session: Session, provider: str, model: str, count: int) -> Decimal:
+    """按张计费：单价 × 张数，并以模型 min_charge 兜底。"""
+    n = max(1, int(count or 1))
+    _in, _out, min_charge = model_price(session, provider, model)
+    amount = image_unit_price(session, provider, model) * Decimal(n)
+    return money(max(amount, min_charge))
+
+
+def estimate_image_preauthorization(
+    session: Session, provider: str, model: str, count: int
+) -> Decimal:
+    """生图预授权：张数已知，按上限预授（实际结算可下调）。"""
+    return money(
+        max(calculate_image_charge(session, provider, model, count), DEFAULT_PREAUTH_CHARGE)
+    )
+
+
+def save_image_call_log(
+    session: Session,
+    *,
+    user_id: int,
+    provider: str,
+    model: str,
+    count: int,
+    charge: Decimal,
+    hold_no: str = "",
+) -> None:
+    """生图成功的用量审计（复用 LlmCallLog，token 字段记 0）。"""
+    session.add(
+        LlmCallLog(
+            user_id=user_id,
+            provider=provider,
+            model=model,
+            status="success",
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            estimated=False,
+            charge_amount=float(charge),
+            hold_no=hold_no,
+        )
+    )
+    session.commit()
+
+
 def _client_ip(request: Request | None) -> str:
     if not request:
         return ""
@@ -480,6 +547,45 @@ def authorization_header(request: Request | None) -> str:
 
 def new_request_id() -> str:
     return "llm_" + uuid.uuid4().hex
+
+
+async def bill_internal_llm_floor(
+    authorization: str,
+    *,
+    user_id: int,
+    label: str = "internal",
+    amount: Optional[Decimal] = None,
+) -> Decimal:
+    """统一「内部/服务端 LLM 工作单元」计费下限，**防免费洞**。
+
+    计次配额 ``llm_calls`` 退役后，用户面后台/工作流这类「一次执行收一笔」的调用需要一个
+    跨双后端的统一计费点，否则在 ``PAYMENT_BACKEND=java`` 下 ``consume_llm_credit`` 直接
+    ``return "java_wallet"`` 不扣 → 免费。
+
+    - **Java 后端**：经 ``JavaWalletClient`` 预授权+结算（带 HTTP 登录态 ``authorization``）。
+    - **python 后端**：经 ``consume_llm_credit`` 扣钱包 ¥（独立 session，不干扰调用方事务）。
+
+    金额 = ``max(amount, COSER_DEFAULT_MIN_CHARGE)``——能给真实 token ¥ 就按真实收，给不出
+    就保底最低，永不免费。返回实际计费金额。
+    """
+    min_charge = money(os.environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
+    charge = amount if (amount is not None and money(amount) > min_charge) else min_charge
+    charge = money(charge)
+
+    wallet = JavaWalletClient()
+    if wallet.enabled:
+        request_id = new_request_id()
+        hold = await wallet.preauthorize(authorization, charge, label, label, request_id)
+        await wallet.settle(authorization, hold, charge, request_id)
+        return charge
+
+    # python 后端：独立 session 扣钱包，避免提交调用方事务
+    from modstore_server.models import get_session_factory
+    from modstore_server.quota_middleware import consume_llm_credit
+
+    with get_session_factory()() as s:
+        consume_llm_credit(s, user_id, charge=charge)
+    return charge
 
 
 def save_success_log(

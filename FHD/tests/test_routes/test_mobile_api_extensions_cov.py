@@ -112,8 +112,20 @@ class TestAiCircleEmployeeProfiles:
         }
         with patch.object(m, "_mobile_mod_items", return_value=[mod]):
             result = m._ai_circle_employee_profiles()
-        assert "emp1" in result
-        assert result["emp1"]["name"] == "Alice"
+        # employee-specific market_avatar wins over the mod-level avatar
+        assert result == {"emp1": {"name": "Alice", "avatar": "http://x/emp.png"}}
+
+    def test_employee_falls_back_to_mod_avatar(self, m):
+        """employee without market_avatar → inherits the mod-level avatar_url."""
+        mod = {
+            "id": "mod1",
+            "avatar_url": "http://x/mod.png",
+            "workflow_employees": [{"id": "emp2", "label": "Bob"}],
+        }
+        with patch.object(m, "_mobile_mod_items", return_value=[mod]):
+            result = m._ai_circle_employee_profiles()
+        assert result["emp2"]["name"] == "Bob"
+        assert result["emp2"]["avatar"] == "http://x/mod.png"
 
 
 # ============================================================
@@ -236,8 +248,11 @@ class TestResolveMobileRelayUser:
             patch.object(m, "_mobile_user_public_dict", return_value=pub),
             patch("app.db.session.get_db", return_value=mock_db),
         ):
-            m._resolve_mobile_relay_user(u, prefer_admin=False)
+            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
+        # The resolved row is detached from the session before returning its public dict.
         mock_db.expunge.assert_called_once_with(mock_row)
+        assert result == pub
+        assert result["id"] == 3
 
     def test_recoverable_error_prefer_admin_returns_fallback(self, m):
         """branch [209,211]: RECOVERABLE_ERRORS + prefer_admin → _relay_admin_fallback_user."""
@@ -281,7 +296,7 @@ class TestRegisterDesktopRelayForPairing:
         with (
             patch.object(m, "_host_is_private_or_loopback", return_value=True),
             patch(
-                "app.services.mobile_relay_desktop_client.register_desktop_relay",
+                "app.application.facades.mobile_relay_facade.register_desktop_relay",
                 side_effect=err_class("fail"),
             ),
         ):
@@ -295,7 +310,7 @@ class TestRegisterDesktopRelayForPairing:
         with (
             patch.object(m, "_host_is_private_or_loopback", return_value=True),
             patch(
-                "app.services.mobile_relay_desktop_client.register_desktop_relay",
+                "app.application.facades.mobile_relay_facade.register_desktop_relay",
                 return_value=None,
             ),
         ):
@@ -309,14 +324,15 @@ class TestRegisterDesktopRelayForPairing:
         with (
             patch.object(m, "_host_is_private_or_loopback", return_value=True),
             patch(
-                "app.services.mobile_relay_desktop_client.register_desktop_relay",
+                "app.application.facades.mobile_relay_facade.register_desktop_relay",
                 return_value={"relay_id": "r1", "desktop_token": "secret", "pairing_code": "1234"},
             ),
         ):
             result = m._register_desktop_relay_for_pairing("192.168.1.1", 5000)
-        assert result is not None
+        # desktop_token must be stripped from the public relay payload (secret).
         assert "desktop_token" not in result
         assert result["relay_id"] == "r1"
+        assert result["pairing_code"] == "1234"
 
 
 # ============================================================
@@ -354,10 +370,13 @@ class TestMobileModItems:
         return mgr
 
     def test_dict_mod_branch(self, m):
-        """branch [372,374] not taken: dict mod processed."""
+        """dict mod → normalized item built from dict keys; employees enriched."""
         mod = {
             "id": "m1",
             "name": "Mod1",
+            "version": "2.3",
+            "author": "acme",
+            "primary": True,
             "workflow_employees": [{"id": "e1", "label": "Alice"}],
         }
         with (
@@ -366,7 +385,7 @@ class TestMobileModItems:
             ),
             patch(
                 "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
-                return_value=[],
+                return_value=[{"id": "e1", "label": "Alice (enriched)"}],
             ),
             patch(
                 "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item",
@@ -374,22 +393,30 @@ class TestMobileModItems:
             ),
         ):
             result = m._mobile_mod_items()
-        assert any(i["id"] == "m1" for i in result)
+        assert len(result) == 1
+        item = result[0]
+        assert item["id"] == "m1"
+        assert item["name"] == "Mod1"
+        assert item["version"] == "2.3"
+        assert item["author"] == "acme"
+        assert item["primary"] is True
+        # employees come from the enrich hook, not the raw dict
+        assert item["workflow_employees"] == [{"id": "e1", "label": "Alice (enriched)"}]
 
     def test_object_mod_branch(self, m):
-        """branch [372,374]: non-dict mod → object attribute path."""
+        """non-dict mod → normalized item built from object attributes."""
         mod = SimpleNamespace(
             id="m2",
             name="Mod2",
             workflow_employees=[],
-            frontend_menu=[],
+            frontend_menu=[{"id": "menu1"}],
             frontend_menu_overrides=[],
             version="1.0",
             author="x",
             description="d",
             primary=False,
-            industry={},
-            avatar="",
+            industry={"id": "ind1"},
+            avatar="http://x/av.png",
             logo="",
             icon="",
         )
@@ -407,7 +434,17 @@ class TestMobileModItems:
             ),
         ):
             result = m._mobile_mod_items()
-        assert any(i["id"] == "m2" for i in result)
+        assert len(result) == 1
+        item = result[0]
+        assert item["id"] == "m2"
+        assert item["name"] == "Mod2"
+        assert item["version"] == "1.0"
+        assert item["description"] == "d"
+        assert item["primary"] is False
+        assert item["industry"] == {"id": "ind1"}
+        # avatar resolves from .avatar first; frontend_menu preserved as a list
+        assert item["avatar_url"] == "http://x/av.png"
+        assert item["frontend_menu"] == [{"id": "menu1"}]
 
     def test_mid_empty_skips_item(self, m):
         """branch [402,item not appended]: mid empty → skip."""
@@ -442,8 +479,14 @@ class TestMobileModItems:
             ),
         ):
             result = m._mobile_mod_items()
+        # On OPERATIONAL_ERRORS the function swallows the error, hands a fresh empty
+        # list to the duty-mod upsert, and returns that same list (here unchanged,
+        # because upsert is mocked out).
         upsert_mock.assert_called_once()
-        assert isinstance(result, list)
+        passed_items = upsert_mock.call_args.args[0]
+        assert passed_items == []
+        assert result == []
+        assert result is passed_items
 
 
 # ============================================================
@@ -452,13 +495,101 @@ class TestMobileModItems:
 
 
 class TestAdminEmployeeItems:
-    def test_market_profiles_none(self, m):
-        """branch [432,433] not taken: market_profiles=None."""
+    def test_market_profiles_none_builds_full_duty_item(self, m):
+        """market_profiles=None → profile lookup skipped; full duty item built."""
         raw = {"id": "emp1", "name": "Bob"}
         with (
             patch(
                 "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
                 return_value=[raw],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._compact_text",
+                side_effect=lambda x: x or "",
+            ),
+            patch("app.fastapi_routes.mobile_api_extensions._apply_market_profile") as apply_mock,
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys",
+                return_value=[],
+            ) as match_mock,
+        ):
+            result = m._admin_employee_items(market_profiles=None)
+        assert len(result) == 1
+        item = result[0]
+        assert item["id"] == "emp1"
+        # name is fanned out into label/title/panel_title for the various UIs.
+        assert item["name"] == "Bob"
+        assert item["label"] == "Bob"
+        assert item["title"] == "Bob"
+        assert item["panel_title"] == "Bob"
+        assert item["status"] == "on_duty"
+        assert item["api_base_path"] == "/api/admin/employees/emp1"
+        assert item["phone_channel"] == "admin-duty"
+        assert item["is_duty_employee"] is True
+        # market_profiles falsy → match-key lookup never runs.
+        match_mock.assert_not_called()
+        # _apply_market_profile is still called, but with profile=None.
+        assert apply_mock.call_args.args[1] is None
+
+    def test_market_profiles_truthy_profile_found(self, m):
+        """profile found in market_profiles → that profile is applied to the item."""
+        raw = {"id": "emp2", "name": "Carol"}
+        found_profile = {"market_avatar": "http://x/c.png"}
+        profiles = {"key1": found_profile}
+        with (
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
+                return_value=[raw],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._compact_text",
+                side_effect=lambda x: x or "",
+            ),
+            patch("app.fastapi_routes.mobile_api_extensions._apply_market_profile") as apply_mock,
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys",
+                return_value=["key1"],
+            ),
+        ):
+            result = m._admin_employee_items(market_profiles=profiles)
+        assert [i["id"] for i in result] == ["emp2"]
+        # The matched profile is the exact object passed to _apply_market_profile.
+        assert apply_mock.call_args.args[1] is found_profile
+
+    def test_market_profiles_truthy_profile_not_found(self, m):
+        """match keys miss every profile → _apply_market_profile gets profile=None."""
+        raw = {"id": "emp3", "name": "Dave"}
+        profiles = {"other_key": {"data": 1}}
+        with (
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
+                return_value=[raw],
+            ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._compact_text",
+                side_effect=lambda x: x or "",
+            ),
+            patch("app.fastapi_routes.mobile_api_extensions._apply_market_profile") as apply_mock,
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys",
+                return_value=["missing"],
+            ),
+        ):
+            result = m._admin_employee_items(market_profiles=profiles)
+        assert [i["id"] for i in result] == ["emp3"]
+        assert apply_mock.call_args.args[1] is None
+
+    def test_blank_employee_id_skipped_and_sorted(self, m):
+        """rows with no id are skipped; remaining items sorted by id ascending."""
+        rows = [
+            {"id": "zeta", "name": "Z"},
+            {"id": "", "name": "Ghost"},  # no id → skipped entirely
+            {"id": "alpha", "name": "A"},
+        ]
+        with (
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
+                return_value=rows,
             ),
             patch(
                 "app.fastapi_routes.mobile_api_extensions._compact_text",
@@ -471,51 +602,7 @@ class TestAdminEmployeeItems:
             ),
         ):
             result = m._admin_employee_items(market_profiles=None)
-        assert any(i["id"] == "emp1" for i in result)
-
-    def test_market_profiles_truthy_profile_found(self, m):
-        """branch [432,433],[459,460]: profile found in market_profiles."""
-        raw = {"id": "emp2", "name": "Carol"}
-        profiles = {"key1": {"market_avatar": "http://x/c.png"}}
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
-                return_value=[raw],
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._compact_text",
-                side_effect=lambda x: x or "",
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._apply_market_profile"),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys",
-                return_value=["key1"],
-            ),
-        ):
-            result = m._admin_employee_items(market_profiles=profiles)
-        assert any(i["id"] == "emp2" for i in result)
-
-    def test_market_profiles_truthy_profile_not_found(self, m):
-        """branch [460,464]: none of the match keys found in profiles."""
-        raw = {"id": "emp3", "name": "Dave"}
-        profiles = {"other_key": {"data": 1}}
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._load_admin_duty_records",
-                return_value=[raw],
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._compact_text",
-                side_effect=lambda x: x or "",
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._apply_market_profile"),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._admin_employee_match_keys",
-                return_value=["missing"],
-            ),
-        ):
-            result = m._admin_employee_items(market_profiles=profiles)
-        assert any(i["id"] == "emp3" for i in result)
+        assert [i["id"] for i in result] == ["alpha", "zeta"]
 
 
 # ============================================================
@@ -531,12 +618,16 @@ class TestAdminDutyModItem:
         assert result is None
 
     def test_with_employees_returns_dict(self, m):
-        """branch [475,477]: employees present → mod dict."""
-        emps = [{"id": "e1"}]
+        """branch [475,477]: employees present → synthetic admin-duty mod dict."""
+        emps = [{"id": "e1"}, {"id": "e2"}]
         with patch.object(m, "_admin_employee_items", return_value=emps):
             result = m._admin_duty_mod_item()
-        assert result is not None
         assert result["id"] == "admin-duty-employees"
+        assert result["primary"] is True
+        assert result["workflow_employees"] == emps
+        assert result["industry"] == {"id": "管理端", "name": "管理端"}
+        # description embeds the employee count.
+        assert "2" in result["description"]
 
 
 class TestUpsertAdminDutyModItem:
@@ -603,9 +694,21 @@ class TestMobilePairingIssue:
             patch.object(m, "_register_desktop_relay_for_pairing", return_value=relay),
         ):
             result = await m.mobile_pairing_issue(body=body, request=request)
-        body_data = result.get("data") if isinstance(result, dict) else None
-        # Should not raise
-        assert result is not None
+        assert result["code"] == 200
+        assert result["success"] is True
+        data = result["data"]
+        # relay present + non-empty pairing_code → shortCode/code echo the relay code,
+        # and relay metadata is merged into the payload.
+        assert data["relay"] == relay
+        assert data["relay_id"] == "r1"
+        assert data["relay_base_url"] == "https://relay.example"
+        assert data["shortCode"] == "CODE99"
+        assert data["code"] == "CODE99"
+        # qr_json is replaced by the relay's qr_json with the LAN payload nested as fallback.
+        assert data["qr_json"]["a"] == 1
+        assert "lan_fallback" in data["qr_json"]
+        assert data["deep_link"].startswith("xcagi://relay-pairing?")
+        assert "code=CODE99" in data["deep_link"]
 
     @pytest.mark.asyncio
     async def test_relay_present_without_relay_code(self, m):
@@ -631,7 +734,13 @@ class TestMobilePairingIssue:
             patch.object(m, "_register_desktop_relay_for_pairing", return_value=relay),
         ):
             result = await m.mobile_pairing_issue(body=body, request=request)
-        assert result is not None
+        data = result["data"]
+        # relay present but pairing_code empty → relay metadata merged but NO shortCode/code.
+        assert data["relay"] == relay
+        assert data["relay_id"] == "r2"
+        assert "shortCode" not in data
+        assert "code" not in data
+        assert "lan_fallback" in data["qr_json"]
 
     @pytest.mark.asyncio
     async def test_relay_absent(self, m):
@@ -651,7 +760,12 @@ class TestMobilePairingIssue:
             patch.object(m, "_register_desktop_relay_for_pairing", return_value=None),
         ):
             result = await m.mobile_pairing_issue(body=body, request=request)
-        assert result is not None
+        data = result["data"]
+        # relay is None → payload is the bare enriched nonce, no relay keys injected.
+        assert data["nonce"] == "n3"
+        assert "relay" not in data
+        assert "relay_id" not in data
+        assert "shortCode" not in data
 
 
 # ============================================================
@@ -660,21 +774,26 @@ class TestMobilePairingIssue:
 
 
 class TestMobileServiceBridgeRequests:
-    def _mock_db(self):
+    def _mock_db(self, rows=None, total=0):
+        """DB whose query object records each .filter() call and yields ``rows``."""
+        rows = rows or []
         db = MagicMock()
         db.__enter__ = MagicMock(return_value=db)
         db.__exit__ = MagicMock(return_value=False)
         q = MagicMock()
         q.filter.return_value = q
-        q.count.return_value = 0
-        q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
+        q.count.return_value = total
+        q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
         db.query.return_value = q
+        self._q = q
         return db
 
     @pytest.mark.asyncio
-    async def test_status_filter(self, m):
-        """branch [839,840]: status filter applied."""
-        db = self._mock_db()
+    async def test_status_filter_applied_and_paginated(self, m):
+        """status filter → exactly one .filter() applied; response is paginated."""
+        row = MagicMock()
+        row.to_dict.return_value = {"id": 1, "status": "pending"}
+        db = self._mock_db(rows=[row], total=1)
         with patch("app.db.session.get_db", return_value=db):
             result = await m.mobile_service_bridge_requests(
                 request=MagicMock(),
@@ -685,12 +804,19 @@ class TestMobileServiceBridgeRequests:
                 per_page=20,
                 user=_user(),
             )
-        assert result is not None
+        # Only the status filter branch should run → exactly one filter() call.
+        assert self._q.filter.call_count == 1
+        assert result["code"] == 200
+        data = result["data"]
+        assert data["items"] == [{"id": 1, "status": "pending"}]
+        assert data["pagination"]["total"] == 1
+        assert data["pagination"]["page"] == 1
+        assert data["pagination"]["per_page"] == 20
 
     @pytest.mark.asyncio
     async def test_source_instance_id_filter(self, m):
-        """branch [841,842]: source_instance_id filter applied."""
-        db = self._mock_db()
+        """source_instance_id only → one filter; empty result paginates total=0."""
+        db = self._mock_db(rows=[], total=0)
         with patch("app.db.session.get_db", return_value=db):
             result = await m.mobile_service_bridge_requests(
                 request=MagicMock(),
@@ -701,23 +827,46 @@ class TestMobileServiceBridgeRequests:
                 per_page=20,
                 user=_user(),
             )
-        assert result is not None
+        assert self._q.filter.call_count == 1
+        assert result["data"]["items"] == []
+        assert result["data"]["pagination"]["total"] == 0
+        assert result["data"]["pagination"]["total_pages"] == 0
 
     @pytest.mark.asyncio
-    async def test_request_type_filter(self, m):
-        """branch [843,844]: request_type filter applied."""
-        db = self._mock_db()
+    async def test_all_three_filters_applied(self, m):
+        """all three optional filters set → exactly three .filter() calls."""
+        db = self._mock_db(rows=[], total=0)
         with patch("app.db.session.get_db", return_value=db):
             result = await m.mobile_service_bridge_requests(
                 request=MagicMock(),
-                status=None,
-                source_instance_id=None,
+                status="pending",
+                source_instance_id="inst-001",
                 request_type="mobile_ai_customer_service",
                 page=1,
                 per_page=20,
                 user=_user(),
             )
-        assert result is not None
+        assert self._q.filter.call_count == 3
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_no_filters_applied(self, m):
+        """no optional filters → zero .filter() calls, still 200 with pagination."""
+        db = self._mock_db(rows=[], total=0)
+        with patch("app.db.session.get_db", return_value=db):
+            result = await m.mobile_service_bridge_requests(
+                request=MagicMock(),
+                status=None,
+                source_instance_id=None,
+                request_type=None,
+                page=2,
+                per_page=10,
+                user=_user(),
+            )
+        assert self._q.filter.call_count == 0
+        assert result["data"]["pagination"]["page"] == 2
+        assert result["data"]["pagination"]["per_page"] == 10
+        assert result["data"]["pagination"]["has_prev"] is True
 
     @pytest.mark.asyncio
     async def test_unauthorized(self, m):
@@ -848,14 +997,19 @@ class TestMobileRelayDesktops:
 
     @pytest.mark.asyncio
     async def test_success(self, m):
-        """branch [1002,1007]: uid > 0 → list desktops."""
+        """branch [1002,1007]: uid > 0 → list desktops, count reflects items."""
+        desktops = [{"relay_id": "r1"}, {"relay_id": "r2"}]
         with (
             patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
             patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
         ):
-            svc_cls.return_value.list_desktops.return_value = []
+            svc_cls.return_value.list_desktops.return_value = desktops
             result = await m.mobile_relay_desktops(user=_user(uid=5))
-        assert result is not None
+        # service is scoped to the resolved uid
+        svc_cls.return_value.list_desktops.assert_called_once_with(user_id=5)
+        assert result["code"] == 200
+        assert result["data"]["items"] == desktops
+        assert result["data"]["count"] == 2
 
     @pytest.mark.asyncio
     async def test_recoverable_error(self, m):
@@ -975,7 +1129,8 @@ class TestMobileAdminEmployees:
 
     @pytest.mark.asyncio
     async def test_success(self, m):
-        """branch [1118,1120]: err is None → proceed."""
+        """branch [1118,1120]: admin ok → items + market metadata echoed back."""
+        items = [{"id": "e1"}, {"id": "e2"}]
         with (
             patch(
                 "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
@@ -983,12 +1138,17 @@ class TestMobileAdminEmployees:
             ),
             patch(
                 "app.fastapi_routes.mobile_api_extensions._load_market_ai_employee_profile_index",
-                new=AsyncMock(return_value=({}, False, "")),
+                new=AsyncMock(return_value=({"p1": {}}, True, "warn-msg")),
             ),
-            patch.object(m, "_admin_employee_items", return_value=[]),
+            patch.object(m, "_admin_employee_items", return_value=items),
         ):
             result = await m.mobile_admin_employees(request=MagicMock(), user=_user())
-        assert result is not None
+        data = result["data"]
+        assert data["items"] == items
+        assert data["count"] == 2
+        assert data["market_connected"] is True
+        assert data["market_profile_count"] == 1
+        assert data["market_error"] == "warn-msg"
 
 
 # ============================================================
@@ -1011,13 +1171,18 @@ class TestMobileAdminFeatures:
 
     @pytest.mark.asyncio
     async def test_success(self, m):
-        """branch [1136,1138]: err is None → return features."""
+        """branch [1136,1138]: admin ok → returns ADMIN_MOBILE_FEATURES with count."""
         with patch(
             "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
             return_value=({}, None),
         ):
             result = await m.mobile_admin_features(request=MagicMock(), user=_user())
-        assert result is not None
+        data = result["data"]
+        assert data["items"] is m.ADMIN_MOBILE_FEATURES
+        assert data["count"] == len(m.ADMIN_MOBILE_FEATURES)
+        # The feature catalog is non-empty and each entry is a dict.
+        assert data["count"] > 0
+        assert all(isinstance(f, dict) for f in data["items"])
 
 
 # ============================================================
@@ -1553,8 +1718,8 @@ class TestMobileAiCirclePosts:
         assert result.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_profile_match(self, m):
-        """branch [1499,1500]: profile found for employee_id."""
+    async def test_profile_match_overwrites_author(self, m):
+        """profile found for employee_id → post author name/avatar overwritten."""
         post = {"employee_id": "emp1", "author_name": "default", "author_avatar": None}
         profiles = {"emp1": {"name": "Alice", "avatar": "http://x/a.png"}}
         with (
@@ -1563,7 +1728,25 @@ class TestMobileAiCirclePosts:
             patch.object(m, "_ai_circle_user", return_value=(1, "user", None)),
         ):
             result = await m.mobile_ai_circle_posts(limit=50, user=_user())
-        assert result is not None
+        data = result["data"]
+        assert data["count"] == 1
+        enriched = data["items"][0]
+        assert enriched["author_name"] == "Alice"
+        assert enriched["author_avatar"] == "http://x/a.png"
+
+    @pytest.mark.asyncio
+    async def test_no_profile_match_keeps_author(self, m):
+        """no profile for the post's employee_id → original author untouched."""
+        post = {"employee_id": "emp_x", "author_name": "Bob", "author_avatar": "orig.png"}
+        with (
+            patch("app.application.ai_circle_service.list_posts", return_value=[post]),
+            patch.object(m, "_ai_circle_employee_profiles", return_value={"emp1": {}}),
+            patch.object(m, "_ai_circle_user", return_value=(1, "user", None)),
+        ):
+            result = await m.mobile_ai_circle_posts(limit=50, user=_user())
+        enriched = result["data"]["items"][0]
+        assert enriched["author_name"] == "Bob"
+        assert enriched["author_avatar"] == "orig.png"
 
 
 class TestMobileAiCircleCreatePost:
@@ -1657,66 +1840,89 @@ class TestMobileNavMenu:
 
     @pytest.mark.asyncio
     async def test_admin_role_all_items_visible(self, m):
-        """branch [1683,1684]: visible_keys is None (admin) → all items."""
+        """admin → all core items + admin-entitlements appended, account_kind=admin."""
         u = _user(uid=1, role="admin")
         with patch.object(m, "_mobile_mod_items", return_value=[]):
             result = await m.mobile_nav_menu(user=u)
-        assert result is not None
+        data = result["data"]
+        assert data["account_kind"] == "admin"
+        keys = [i["key"] for i in data["items"]]
+        # all 12 core items present, every one tagged source=core
+        assert keys == [c["key"] for c in m._CORE_NAV_ITEMS] + ["admin-entitlements"]
+        assert all(i["source"] == "core" for i in data["items"])
+        # admin-only item is appended last
+        assert data["items"][-1]["key"] == "admin-entitlements"
+        assert data["items"][-1]["path"] == "/admin-entitlements"
 
     @pytest.mark.asyncio
     async def test_enterprise_role_filtered_items(self, m):
-        """branch [1683,1684],[1684,1685]: visible_keys not None → filter."""
+        """enterprise → visible-key filter applied, NO admin-entitlements item."""
         u = _user(uid=2, role="enterprise")
         with patch.object(m, "_mobile_mod_items", return_value=[]):
             result = await m.mobile_nav_menu(user=u)
-        assert result is not None
+        data = result["data"]
+        assert data["account_kind"] == "enterprise"
+        keys = {i["key"] for i in data["items"]}
+        # enterprise whitelist excludes the admin item
+        assert "admin-entitlements" not in keys
+        assert keys == m._ROLE_VISIBLE_KEYS["enterprise"]
 
     @pytest.mark.asyncio
     async def test_mod_with_frontend_menu_entry(self, m):
-        """branch [1701,1702]: frontend_menu is list with valid entry."""
+        """a mod with a valid frontend_menu entry → a source=mod nav item is appended."""
         u = _user(uid=1, role="admin")
         mod = {
             "id": "testmod",
             "name": "Test Mod",
             "frontend_menu": [
-                {"id": "entry1", "label": "Entry", "path": "/entry1", "icon": "fa-cube"}
+                {"id": "entry1", "label": "Entry", "path": "/entry1", "icon": "fa-star"}
             ],
         }
         with patch.object(m, "_mobile_mod_items", return_value=[mod]):
             result = await m.mobile_nav_menu(user=u)
-        assert result is not None
+        mod_items = [i for i in result["data"]["items"] if i["source"] == "mod"]
+        assert len(mod_items) == 1
+        entry = mod_items[0]
+        assert entry["key"] == "mod-entry1"
+        assert entry["name"] == "Entry"
+        assert entry["path"] == "/entry1"
+        assert entry["icon"] == "fa-star"
+        assert entry["mod_id"] == "testmod"
 
     @pytest.mark.asyncio
     async def test_mod_with_non_list_frontend_menu(self, m):
-        """branch [1699,1700]: frontend_menu not a list → continue."""
+        """frontend_menu not a list → that mod contributes no nav items."""
         u = _user(uid=1, role="admin")
         mod = {"id": "testmod", "name": "Test Mod", "frontend_menu": "not-a-list"}
         with patch.object(m, "_mobile_mod_items", return_value=[mod]):
             result = await m.mobile_nav_menu(user=u)
-        assert result is not None
+        assert [i for i in result["data"]["items"] if i["source"] == "mod"] == []
 
     @pytest.mark.asyncio
-    async def test_operational_error_in_mod_items(self, m):
-        """branch [1718,1719]: OPERATIONAL_ERRORS in mod section → logged, continues."""
+    async def test_operational_error_in_mod_items_still_returns_core(self, m):
+        """mod enumeration raises → core nav still returned (error swallowed)."""
         u = _user(uid=1, role="admin")
         err_class = list(m.OPERATIONAL_ERRORS)[0] if m.OPERATIONAL_ERRORS else Exception
         with patch.object(m, "_mobile_mod_items", side_effect=err_class("boom")):
             result = await m.mobile_nav_menu(user=u)
-        # Should still return 200 even if mod items fail
-        assert result is not None
+        data = result["data"]
+        assert result["code"] == 200
+        # no mod items, but all core items survived
+        assert [i for i in data["items"] if i["source"] == "mod"] == []
+        assert data["items"][-1]["key"] == "admin-entitlements"
 
     @pytest.mark.asyncio
-    async def test_mod_menu_entry_non_dict(self, m):
-        """branch [1702,1703]: menu_entry not dict → continue."""
+    async def test_mod_menu_entry_non_dict_skipped(self, m):
+        """menu_entry that is not a dict → skipped, no mod nav item produced."""
         u = _user(uid=1, role="admin")
         mod = {"id": "testmod", "name": "Test", "frontend_menu": ["not-a-dict"]}
         with patch.object(m, "_mobile_mod_items", return_value=[mod]):
             result = await m.mobile_nav_menu(user=u)
-        assert result is not None
+        assert [i for i in result["data"]["items"] if i["source"] == "mod"] == []
 
     @pytest.mark.asyncio
-    async def test_mod_menu_entry_no_id(self, m):
-        """branch [1705,1706]: menu_entry dict but no id → continue."""
+    async def test_mod_menu_entry_no_id_skipped(self, m):
+        """menu_entry dict lacking id/key → skipped, no mod nav item produced."""
         u = _user(uid=1, role="admin")
         mod = {
             "id": "testmod",
@@ -1725,7 +1931,7 @@ class TestMobileNavMenu:
         }
         with patch.object(m, "_mobile_mod_items", return_value=[mod]):
             result = await m.mobile_nav_menu(user=u)
-        assert result is not None
+        assert [i for i in result["data"]["items"] if i["source"] == "mod"] == []
 
 
 # ============================================================
@@ -1779,8 +1985,20 @@ class TestMobileAuthOidcExchangePayloadKey:
             patch("app.security.mobile_jwt.issue_mobile_tokens", return_value=fake_tokens),
         ):
             result = await m.mobile_auth_oidc_exchange(body=body)
-        # Result is a format_mobile_response dict
-        assert result is not None
+        data = result["data"]
+        assert result["code"] == 200
+        assert data["user"] == {"id": 7}
+        assert data["session_id"] == "sess123"
+        assert data["account_kind"] == "enterprise"
+        # issued mobile tokens are spread into the response
+        assert data["access_token"] == "jwt"
+        assert data["refresh_token"] == "rjwt"
+        # present + non-None optional key → copied through
+        assert data["market_access_token"] == "mkt_tok"
+        # present but None → NOT copied through
+        assert "market_refresh_token" not in data
+        # absent optional keys → not present
+        assert "company_brand" not in data
 
 
 # ============================================================
@@ -1810,8 +2028,15 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer bad"), user=_user())
-        # returns a dict/response with the "尚未绑定市场账号" message
-        assert result is not None
+        # no market token → degraded 200 placeholder, not an error response
+        assert result["code"] == 200
+        data = result["data"]
+        assert data["message"] == "尚未绑定市场账号"
+        assert data["balance"] is None
+        assert data["currency"] == "CNY"
+        assert data["membership_level"] is None
+        assert data["byok_configured"] is False
+        assert data["synced"] is False
 
     @pytest.mark.asyncio
     async def test_bearer_jwt_sets_sid(self, m):
@@ -1835,7 +2060,11 @@ class TestMobileWalletBalance:
             result = await m.mobile_wallet_balance(
                 request=self._req("Bearer valid_jwt"), user=_user()
             )
-        assert result is not None
+        # valid JWT → session token used, wallet overview returns balance 100.50
+        data = result["data"]
+        assert data["balance"] == 100.50
+        assert data["currency"] == "CNY"
+        assert data["synced"] is True
 
     @pytest.mark.asyncio
     async def test_jwt_payload_none_falls_to_session_id_from_request(self, m):
@@ -1857,7 +2086,12 @@ class TestMobileWalletBalance:
             result = await m.mobile_wallet_balance(
                 request=self._req("Bearer bad_jwt"), user=_user()
             )
-        assert result is not None
+        # JWT invalid → session_id_from_request path; all proxies error → degraded values
+        data = result["data"]
+        assert data["balance"] is None
+        assert data["synced"] is False
+        assert data["byok_configured"] is False
+        assert data["currency"] == "CNY"
 
     @pytest.mark.asyncio
     async def test_wallet_proxy_error_falls_back(self, m):
@@ -1880,7 +2114,11 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
-        assert result is not None
+        # overview errored → fell back to /api/wallet/balance which returned 50.00
+        data = result["data"]
+        assert data["balance"] == 50.00
+        assert data["currency"] == "CNY"
+        assert data["synced"] is True
 
     @pytest.mark.asyncio
     async def test_membership_as_string(self, m):
@@ -1906,7 +2144,13 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
-        assert result is not None
+        # membership is a bare string → membership_level == it; experience stays None
+        data = result["data"]
+        assert data["balance"] == 200.00
+        assert data["membership_level"] == "gold"
+        assert data["experience"] is None
+        assert data["byok_count"] == 0
+        assert data["byok_configured"] is False
 
     @pytest.mark.asyncio
     async def test_membership_as_dict_with_experience(self, m):
@@ -1932,7 +2176,13 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
-        assert result is not None
+        # membership dict → level + experience extracted; 1 BYOK provider override
+        data = result["data"]
+        assert data["balance"] == 300.00
+        assert data["membership_level"] == "vip"
+        assert data["experience"] == 1000
+        assert data["byok_count"] == 1
+        assert data["byok_configured"] is True
 
     @pytest.mark.asyncio
     async def test_both_wallet_calls_fail(self, m):
@@ -1954,7 +2204,13 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
-        assert result is not None
+        # both overview AND balance fallback errored → wallet_obj empty, fully degraded
+        data = result["data"]
+        assert data["balance"] is None
+        assert data["currency"] == "CNY"
+        assert data["synced"] is False
+        assert data["membership_level"] is None
+        assert data["byok_count"] == 0
 
     @pytest.mark.asyncio
     async def test_plan_proxy_error(self, m):
@@ -1980,7 +2236,12 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
-        assert result is not None
+        # wallet ok (10.00) but plan errored → balance present, membership absent
+        data = result["data"]
+        assert data["balance"] == 10.00
+        assert data["synced"] is True
+        assert data["membership_level"] is None
+        assert data["byok_count"] == 0
 
     @pytest.mark.asyncio
     async def test_byok_providers(self, m):
@@ -2006,7 +2267,11 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
-        assert result is not None
+        # 2 providers but only 1 has_user_override → byok_count counts exactly that one
+        data = result["data"]
+        assert data["balance"] == 50.00
+        assert data["byok_count"] == 1
+        assert data["byok_configured"] is True
 
     @pytest.mark.asyncio
     async def test_latest_session_market_token_fallback(self, m):
@@ -2020,14 +2285,19 @@ class TestMobileWalletBalance:
             ),
             patch(
                 "app.fastapi_routes.market_account._auth_header", return_value="Bearer fallback_tok"
-            ),
+            ) as auth_hdr,
             patch(
                 "app.fastapi_routes.market_account._proxy_json",
                 new=AsyncMock(return_value={"__proxy_error__": True}),
             ),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
-        assert result is not None
+        # session token empty → latest_session_market_token used to build auth header
+        auth_hdr.assert_called_once_with("fallback_tok")
+        # all proxies error → degraded result, but still 200
+        assert result["code"] == 200
+        assert result["data"]["balance"] is None
+        assert result["data"]["synced"] is False
 
     @pytest.mark.asyncio
     async def test_wallet_obj_has_wallet_sub_key(self, m):
@@ -2053,4 +2323,8 @@ class TestMobileWalletBalance:
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
-        assert result is not None
+        # overview returns a {"wallet": {...}} envelope → the nested dict is unwrapped
+        data = result["data"]
+        assert data["balance"] == 77.77
+        assert data["currency"] == "USD"
+        assert data["synced"] is True

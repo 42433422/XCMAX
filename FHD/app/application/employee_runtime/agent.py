@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """EmployeeAgent：真正员工运行时编排对象。
 
 把此前散落在 ``executor.execute_employee_task_local`` 的流程收敛为一个对象，并补齐：
@@ -221,6 +220,14 @@ class EmployeeAgent:
             len(task or ""),
             session_id or "-",
         )
+        from app.application.employee_runtime.billing import (
+            begin_employee_billing,
+            end_employee_billing,
+        )
+
+        _billing_token = begin_employee_billing(
+            user_id=user_id, run_id=session_id or employee_id, employee_id=employee_id
+        )
         try:
             pack = load_employee_pack_from_disk(employee_id)
             manifest = pack.get("manifest") or {}
@@ -364,6 +371,8 @@ class EmployeeAgent:
                 "error": str(exc)[:800],
                 "executed_at": datetime.now(UTC).isoformat(),
             }
+        finally:
+            end_employee_billing(_billing_token)
 
     # ---- 结果构造（与历史结构一致） ----
     def _blocked_result(

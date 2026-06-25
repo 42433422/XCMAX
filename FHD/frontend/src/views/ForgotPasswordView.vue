@@ -188,6 +188,9 @@ async function resetPassword() {
           <span>{{ loading ? '提交中...' : '重置密码' }}</span>
           <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
         </button>
+        <router-link v-if="infoMessage" class="btn-back-login" :to="loginBackRoute">
+          返回登录
+        </router-link>
       </form>
 
       <p class="page-footer-link">
@@ -323,6 +326,15 @@ async function resetPassword() {
 .login-submit:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.btn-back-login {
+  display: block;
+  margin-top: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #0052d9;
+  text-decoration: none;
 }
 
 .page-footer-link {

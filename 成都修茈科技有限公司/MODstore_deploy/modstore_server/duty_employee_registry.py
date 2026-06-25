@@ -74,4 +74,3 @@ def get_duty_employee_record(pack_id: str) -> Optional[Dict[str, Any]]:
 
 def list_duty_employee_records() -> List[Dict[str, Any]]:
     return [duty_employee_records()[k] for k in sorted(duty_employee_records())]
-

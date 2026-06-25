@@ -108,6 +108,29 @@ async def chat_dispatch_via_session(
     Keeps ``employee_executor`` / ``workflow_nl_graph`` off direct ``llm_*`` imports.
     """
 
+    # 后台 loop 平台作用域：强制平台 Key + 零配额，绝不计入任何用户。
+    # 这是统一兜底——无论调用来自路由器、cognition 还是其它路径，只要处于作用域内，
+    # 都改走平台 only；无平台 Key 时干净失败而不是回落到用户配额（避免钱漏）。
+    try:
+        from modstore_server.platform_llm_scope import platform_llm_scope_active
+
+        _platform_scope = platform_llm_scope_active()
+    except Exception:
+        _platform_scope = False
+    if _platform_scope:
+        p_prov, p_mdl = resolve_platform_bench_llm()
+        if not p_prov or not p_mdl:
+            return {
+                "ok": False,
+                "error": (
+                    "平台未配置可用 LLM（后台 loop 已跳过以避免计入用户配额；"
+                    "请配置平台 API Key 或 MODSTORE_EMPLOYEE_BENCH_PROVIDER / "
+                    "MODSTORE_EMPLOYEE_BENCH_MODEL）"
+                ),
+                "status": "platform_llm_unconfigured",
+            }
+        return await chat_dispatch_via_platform_only(p_prov, p_mdl, messages, max_tokens=max_tokens)
+
     from modstore_server.llm_chat_proxy import chat_dispatch
     from modstore_server.llm_key_resolver import (
         OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
@@ -124,7 +147,7 @@ async def chat_dispatch_via_session(
 
     uid = int(user_id or 0)
     if uid > 0:
-        from modstore_server.quota_middleware import consume_llm_credit, require_llm_credit
+        from modstore_server.quota_middleware import require_llm_credit
 
         require_llm_credit(session, uid, 1)
 
@@ -138,8 +161,16 @@ async def chat_dispatch_via_session(
         forbid_reasoning_fallback=forbid_reasoning_fallback,
     )
     if uid > 0 and result.get("ok"):
+        # 统一计费：按 token 算出 ¥ 金额从钱包扣（计次配额已退役）。
         try:
-            consume_llm_credit(session, uid, 1)
+            from modstore_server.llm_billing import calculate_charge, usage_from_response
+            from modstore_server.quota_middleware import consume_llm_credit
+
+            usage = usage_from_response(
+                result.get("usage") or {}, messages, str(result.get("content") or "")
+            )
+            charge = calculate_charge(session, provider, model, usage)
+            consume_llm_credit(session, uid, 1, charge=charge)
         except Exception:
             pass
     return result

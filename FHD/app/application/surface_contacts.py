@@ -50,10 +50,11 @@ def _dedicated_cs_entry() -> dict[str, Any]:
 
 def _super_entries() -> list[dict[str, Any]]:
     # 身份取自 ai_workforce SSOT(super_employees);运行配置仍在 super_employee_service。
+    # 动态迭代 SSOT 注册表(按声明顺序),新增超级员工(如 Cursor)只改 ai_workforce.json 即自动上各端,
+    # 不再硬编码白名单——否则会像 Cursor 那样"加了服务却没进固定联系人",造成两端员工数漂移。
     registry = assistant_ssot.super_employees()
     out: list[dict[str, Any]] = []
-    for emp_id in ("claude-super-employee", "codex-super-employee"):
-        meta = registry.get(emp_id)
+    for emp_id, meta in registry.items():
         if not isinstance(meta, dict):
             continue
         # 纵深防御：内部工厂角色绝不进客户/管理选人器（与 factory_employees 分离的二道闸）。

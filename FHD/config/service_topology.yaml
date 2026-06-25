@@ -1,0 +1,75 @@
+# 服务拓扑 SSOT —— 唯一真相源（手工编辑此文件，其余皆派生）
+#
+# 派生器:  scripts/dev/service_topology_ssot.py
+#   check     校验所有派生产物与本文件一致（CI 阻断）
+#   generate --apply   重新生成所有派生产物
+#
+# 派生产物（请勿手改，改这里再 generate）:
+#   - app/infrastructure/topology.py                         (Python 常量)
+#   - frontend/src/constants/topology.ts                     (TypeScript)
+#   - mobile-harmony/entry/src/main/ets/models/ServiceTopology.ets  (ArkTS)
+#   - mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt (Kotlin)
+#   - config/topology.generated.json                         (机器可读，健康探针消费)
+#
+# 边界: nginx / compose / systemd 不自动生成，仅由 check 做 verify-only 校验。
+
+schema_version: 1
+
+public:
+  host: xiu-ci.com
+  scheme: https
+
+# 命名公共 URL：path 相对 public.host；生成器拼成 <scheme>://<host><path>。
+# 每条会生成一个常量（const_name），四端同名。
+public_urls:
+  - { const_name: SITE_ROOT_URL,     path: "" }
+  - { const_name: FHD_API_BASE_URL,  path: /fhd-api }          # 中继队列 + 企业后端
+  - { const_name: MARKET_BASE_URL,   path: /market }
+  - { const_name: LLM_V1_BASE_URL,   path: /v1 }               # OpenAI 兼容网关
+  - { const_name: MARKET_CATALOG_URL, path: /api/market/catalog }
+  - { const_name: IM_WS_URL,         path: /ws/im, scheme: wss }
+
+# 进程/服务清单：listen_port = 进程 bind 端口；nginx_upstream_port = nginx proxy_pass 端口
+# （两者可不同——这正是过去各写各、要收敛的歧义）。
+services:
+  fhd-api:
+    listen_port: 5000
+    nginx_upstream_port: 5100
+    runner: "gunicorn (web)"
+    health: /health
+    must_run: true
+    hosts_relay_queue: true
+  modstore:
+    listen_port: 8765
+    runner: modstore_server
+    must_run: true
+  llm-gateway:
+    listen_port: null            # 外部/上游网关，无本地监听端口
+  im-ws:
+    listen_port: null
+    protocol: wss
+  desktop-fhd:
+    listen_port: 17500
+    runner: electron-local
+    role: relay-node             # 桌面端反向注册 + 轮询云端中继
+
+# nginx path → service 映射（部署侧 verify-only 校验锚点；不生成 nginx 配置）
+nginx_routes:
+  - { path: /fhd-api, service: fhd-api, upstream_port: 5100 }
+  - { path: /market,  service: modstore }
+  - { path: /v1,      service: llm-gateway }
+  - { path: /ws/im,   service: im-ws }
+
+# 「必须同时活着」清单（健康探针消费）——少起一个就静默坏的那些进程
+# detect = pgrep -f 模式（best-effort；按生产命令行写，dev 可能不匹配，仅作启发式）
+processes:
+  - { name: web,                  must_run: true, service: fhd-api,  detect: "gunicorn", note: "FastAPI 主进程" }
+  - { name: modstore-scheduler,   must_run: true, service: modstore, detect: "modstore-scheduler", note: "loops/定时任务真正执行者（独立进程，易被忘开）" }
+  - { name: desktop-relay-poller, must_run: false, service: desktop-fhd, detect: "mobile_relay_desktop_client", note: "桌面端 4s 轮询中继" }
+
+# 环境覆盖：dev 与 prod 不同，不假装统一。生成的常量默认取 prod。
+env_overrides:
+  dev:
+    scheme: http
+    host: 127.0.0.1
+    fhd_api_listen_port: 42422

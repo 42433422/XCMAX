@@ -73,6 +73,10 @@ export function fixedToConversation(f: FixedContactDto): ConversationSummary {
     convId = 'assistant';
   } else if (f.kind === 'dedicated_cs') {
     convId = 'customer-service';
+  } else if (f.kind === 'super') {
+    // 稳定 convId 编码工具（id 形如 codex-super-employee / claude-super-employee），
+    // 供聊天页识别"这是超级员工会话、走哪个工具"。
+    convId = f.id.toLowerCase().indexOf('claude') >= 0 ? 'super:claude' : 'super:codex';
   }
   return {
     id: convId,
@@ -81,7 +85,8 @@ export function fixedToConversation(f: FixedContactDto): ConversationSummary {
     badge: badge,
     avatar: f.avatar,
     source: 'fixed',
-    employeeKey: ''
+    employeeKey: '',
+    route: f.route
   };
 }
 

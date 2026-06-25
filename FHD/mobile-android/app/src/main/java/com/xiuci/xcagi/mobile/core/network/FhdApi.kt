@@ -7,6 +7,7 @@ import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
+import com.xiuci.xcagi.mobile.core.model.AiGroupCandidatesData
 import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
 import com.xiuci.xcagi.mobile.core.model.AiGroupListData
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberBody
@@ -16,19 +17,27 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
 import com.xiuci.xcagi.mobile.core.model.AiGroupWrap
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.MeetingGenerateBody
+import com.xiuci.xcagi.mobile.core.model.MeetingLevelsData
+import com.xiuci.xcagi.mobile.core.model.MeetingMinuteData
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.MeData
+import com.xiuci.xcagi.mobile.core.model.VoiceTranscribeResponse
 import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.model.CsMessageResponseDto
 import com.xiuci.xcagi.mobile.model.CsMessagesListDto
+import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Streaming
@@ -346,9 +355,22 @@ interface FhdApi {
         @Body body: ClaudeSuperEmployeeMobileMessageBody,
     ): MobileEnvelope<Map<String, Any?>>
 
+    @GET(ApiEndpoints.ADMIN_CURSOR_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun getCursorSuperEmployeeMessages(
+        @Query("limit") limit: Int = 80,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ADMIN_CURSOR_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun postCursorSuperEmployeeMessage(
+        @Body body: CursorSuperEmployeeMobileMessageBody,
+    ): MobileEnvelope<Map<String, Any?>>
+
     // ── AI 群聊 ──
     @GET(ApiEndpoints.AI_GROUPS)
     suspend fun getAiGroups(): MobileEnvelope<AiGroupListData>
+
+    @GET(ApiEndpoints.AI_GROUP_CANDIDATES)
+    suspend fun getAiGroupCandidates(): MobileEnvelope<AiGroupCandidatesData>
 
     @POST(ApiEndpoints.AI_GROUPS)
     suspend fun createAiGroup(@Body body: AiGroupCreateBody): MobileEnvelope<AiGroupWrap>
@@ -415,4 +437,21 @@ interface FhdApi {
 
     @GET(ApiEndpoints.WALLET_BALANCE)
     suspend fun mobileWalletBalance(): MobileEnvelope<WalletBalanceDto>
+
+    // ── 会议纪要 SSOT（三级派生） ──────────────────────────────────────────
+    @GET(ApiEndpoints.MEETING_LEVELS)
+    suspend fun meetingLevels(): MobileEnvelope<MeetingLevelsData>
+
+    @POST(ApiEndpoints.MEETING_GENERATE)
+    suspend fun generateMeetingMinutes(
+        @Body body: MeetingGenerateBody,
+    ): MobileEnvelope<MeetingMinuteData>
+
+    @GET(ApiEndpoints.MEETING_DETAIL)
+    suspend fun getMeetingMinute(@Path("id") id: Int): MobileEnvelope<MeetingMinuteData>
+
+    /** 录音转写：直接上传音频 blob（webm/ogg/wav/m4a），复用桌面/Web 同一 ASR 端点。 */
+    @Multipart
+    @POST(ApiEndpoints.VOICE_TRANSCRIBE)
+    suspend fun transcribeAudio(@Part file: MultipartBody.Part): VoiceTranscribeResponse
 }

@@ -50,8 +50,17 @@ def _make_run(**kwargs) -> AgentRun:
 
 class TestTraceSafeValue:
     def test_depth_limit_converts_to_str(self):
+        # At/over depth 4 the recursion stops and the value is stringified
+        # rather than walked, so a dict comes back as its repr string.
         result = ct._trace_safe_value({"key": "val"}, depth=4)
+        assert result == str({"key": "val"})
+
+    def test_depth_limit_truncates_long_repr(self):
+        # The stringified value is also capped at _MAX_TRACE_STRING_CHARS.
+        big = {"k": "x" * (ct._MAX_TRACE_STRING_CHARS + 500)}
+        result = ct._trace_safe_value(big, depth=4)
         assert isinstance(result, str)
+        assert len(result) == ct._MAX_TRACE_STRING_CHARS
 
     def test_long_string_truncated(self):
         s = "x" * (ct._MAX_TRACE_STRING_CHARS + 100)
@@ -260,6 +269,16 @@ class TestLlmCallFromTrace:
         assert result is not None
         assert result.model == "gpt-4"
         assert result.provider_id == "openai"
+        assert result.prompt_tokens == 100
+        assert result.completion_tokens == 50
+        assert result.total_tokens == 150
+        # estimate is used because trace carries no explicit cost_units
+        assert result.cost_units == 10
+        assert result.billing_status == "metered"
+        assert result.billing_source == "estimated_token_units"
+        assert result.status == "completed"
+        # raw trace is stashed in metadata for downstream auditing
+        assert result.metadata["raw_trace"]["model"] == "gpt-4"
 
     def test_camel_case_fields(self):
         trace = {
@@ -274,7 +293,18 @@ class TestLlmCallFromTrace:
         ):
             result = ct._llm_call_from_trace(trace)
         assert result is not None
+        # camelCase keys must be parsed into every snake_case field
         assert result.provider_id == "azure"
+        # provider falls back to provider_id when no explicit provider given
+        assert result.provider == "azure"
+        assert result.model == "gpt-4o"
+        assert result.prompt_tokens == 200
+        assert result.completion_tokens == 100
+        assert result.total_tokens == 300
+        # cost_units comes from the estimate (no explicit cost_units in trace)
+        assert result.cost_units == 20
+        # non-zero cost flips billing_status to "metered"
+        assert result.billing_status == "metered"
 
     def test_invalid_status_normalized(self):
         trace = {
@@ -304,7 +334,8 @@ class TestLlmCallFromTrace:
         assert result is not None
         assert result.call_id == "cid-abc"
 
-    def test_error_field_creates_non_none_call(self):
+    def test_error_field_creates_call_marked_unmetered(self):
+        # An error alone (no tokens) is enough to materialize a call object.
         trace = {"error": "timeout", "provider": "openai", "model": "gpt-4"}
         with patch(
             "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=0
@@ -312,20 +343,37 @@ class TestLlmCallFromTrace:
             result = ct._llm_call_from_trace(trace)
         assert result is not None
         assert result.error == "timeout"
+        # zero cost_units -> billing_status defaults to "unmetered"
+        assert result.cost_units == 0
+        assert result.billing_status == "unmetered"
+        # status is not in the trace, so it normalizes to "completed"
+        assert result.status == "completed"
 
-    def test_metered_billing_status_when_cost_units(self):
+    def test_explicit_cost_units_bypasses_estimate(self):
         trace = {
             "provider": "openai",
             "model": "gpt-4",
             "total_tokens": 100,
             "cost_units": 5,
         }
+        estimate = MagicMock(return_value=999)
+        with patch("app.infrastructure.billing.model_usage.estimate_llm_cost_units", estimate):
+            result = ct._llm_call_from_trace(trace)
+        assert result is not None
+        # explicit cost_units > 0 -> estimator must NOT be consulted
+        estimate.assert_not_called()
+        assert result.cost_units == 5
+        assert result.billing_status == "metered"
+
+    def test_call_id_absent_generates_default(self):
+        # When no call_id is in the trace, the dataclass default kicks in.
+        trace = {"provider": "openai", "model": "gpt-4", "total_tokens": 10}
         with patch(
-            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=0
+            "app.infrastructure.billing.model_usage.estimate_llm_cost_units", return_value=1
         ):
             result = ct._llm_call_from_trace(trace)
         assert result is not None
-        assert result.billing_status == "metered"
+        assert result.call_id.startswith("llm_")
 
 
 # ===========================================================================
@@ -364,10 +412,16 @@ class TestAppendLlmCallsToRun:
             "usage_id": "u1",
             "usage_key": "k1",
         }
-        with patch("app.infrastructure.billing.model_usage.record_model_usage", return_value=entry):
+        record = MagicMock(return_value=entry)
+        with patch("app.infrastructure.billing.model_usage.record_model_usage", record):
             ct._append_llm_calls_to_run(run, [dup_call])
-        # The duplicate should be skipped
+        # The duplicate (identical signature) must be skipped entirely:
         assert len(run.llm_calls) == 1
+        # the originally-appended object is preserved, not the duplicate
+        assert run.llm_calls[0] is pre_call
+        # no billing recorded and no llm.completed event emitted for a skip
+        record.assert_not_called()
+        assert not any(e.event_type == "llm.completed" for e in run.events)
 
     def test_adds_new_calls_and_refreshes_metadata(self, repo):
         run = _make_run()
@@ -378,6 +432,7 @@ class TestAppendLlmCallsToRun:
             prompt_tokens=100,
             completion_tokens=50,
             total_tokens=150,
+            cost_units=10,
         )
         with patch(
             "app.infrastructure.billing.model_usage.record_model_usage",
@@ -390,8 +445,21 @@ class TestAppendLlmCallsToRun:
             },
         ):
             ct._append_llm_calls_to_run(run, [call])
+        # call appended
+        assert run.llm_calls == [call]
+        # metadata aggregates token + cost totals across all calls
         assert run.metadata["llm_call_count"] == 1
         assert run.metadata["llm_model"] == "gpt-4"
+        assert run.metadata["llm_provider"] == "openai"
+        assert run.metadata["llm_prompt_tokens_total"] == 100
+        assert run.metadata["llm_completion_tokens_total"] == 50
+        assert run.metadata["llm_token_total"] == 150
+        assert run.metadata["llm_cost_units_total"] == 10
+        # an llm.completed event is emitted for a successful call
+        completed = [e for e in run.events if e.event_type == "llm.completed"]
+        assert len(completed) == 1
+        assert completed[0].data["model"] == "gpt-4"
+        assert completed[0].data["total_tokens"] == 150
 
 
 # ===========================================================================
@@ -400,13 +468,19 @@ class TestAppendLlmCallsToRun:
 
 
 class TestRecordLlmUsageEntry:
-    def test_non_completed_returns_none(self):
+    def test_non_completed_returns_none_and_no_side_effects(self):
         run = _make_run()
         call = LLMCall(provider_id="x", provider="x", model="m", total_tokens=10, status="failed")
-        result = ct._record_llm_usage_entry(run, call)
+        record = MagicMock()
+        with patch("app.infrastructure.billing.model_usage.record_model_usage", record):
+            result = ct._record_llm_usage_entry(run, call)
+        # a non-completed call short-circuits before touching the ledger
         assert result is None
+        record.assert_not_called()
+        assert "model_usage_ledger_status" not in run.metadata
+        assert run.events == []
 
-    def test_debited_status_sets_balance(self):
+    def test_debited_status_sets_balance_and_emits_event(self):
         run = _make_run()
         call = LLMCall(provider_id="x", provider="x", model="m", total_tokens=10)
         entry = {
@@ -418,11 +492,29 @@ class TestRecordLlmUsageEntry:
             "wallet_debit": {"balance_after_units": 950, "balance_after_yuan": "9.50"},
         }
         with patch("app.infrastructure.billing.model_usage.record_model_usage", return_value=entry):
-            ct._record_llm_usage_entry(run, call)
-        assert run.metadata.get("model_wallet_balance_units") == 950
-        assert run.metadata.get("model_wallet_balance_yuan") == "9.50"
+            result = ct._record_llm_usage_entry(run, call)
+        # returned entry is the ledger result
+        assert result is entry
+        # wallet balances mirrored into run metadata
+        assert run.metadata["model_wallet_balance_units"] == 950
+        assert run.metadata["model_wallet_balance_yuan"] == "9.50"
+        # billing fields on the call are overwritten from the ledger entry
+        assert call.billing_status == "debited"
+        assert call.billing_source == "wallet"
+        # usage ledger trail recorded on the call + run metadata accounting
+        assert call.metadata["usage_ledger"]["usage_id"] == "u1"
+        assert call.metadata["usage_ledger"]["status"] == "recorded"
+        assert run.metadata["model_usage_ledger_status"] == "recorded"
+        assert run.metadata["model_usage_entry_count"] == 1
+        assert run.metadata["model_usage_cost_units_total"] == 5
+        # a debited event (not the generic recorded one) is emitted
+        debited = [e for e in run.events if e.event_type == "billing.debited"]
+        assert len(debited) == 1
+        assert debited[0].data["cost_units"] == 5
+        # run stays unaffected (not failed) on a successful debit
+        assert run.status == "running"
 
-    def test_insufficient_balance_sets_run_failed(self):
+    def test_insufficient_balance_fails_run_with_error(self):
         run = _make_run()
         call = LLMCall(provider_id="x", provider="x", model="m", total_tokens=10)
         entry = {
@@ -436,8 +528,13 @@ class TestRecordLlmUsageEntry:
         with patch("app.infrastructure.billing.model_usage.record_model_usage", return_value=entry):
             ct._record_llm_usage_entry(run, call)
         assert run.status == "failed"
+        assert run.error == "AI wallet balance insufficient"
+        assert run.metadata["model_wallet_balance_units"] == 0
+        assert any(e.event_type == "billing.insufficient_balance" for e in run.events)
+        # the generic recorded event must NOT be emitted on this failure branch
+        assert not any(e.event_type == "billing.recorded" for e in run.events)
 
-    def test_market_debit_failed_sets_run_failed(self):
+    def test_market_debit_failed_fails_run_with_error(self):
         run = _make_run()
         call = LLMCall(provider_id="x", provider="x", model="m", total_tokens=10)
         entry = {
@@ -451,19 +548,28 @@ class TestRecordLlmUsageEntry:
         with patch("app.infrastructure.billing.model_usage.record_model_usage", return_value=entry):
             ct._record_llm_usage_entry(run, call)
         assert run.status == "failed"
+        assert run.error == "AI market wallet debit failed"
+        assert any(e.event_type == "billing.debit_failed" for e in run.events)
 
-    def test_billing_record_failure_adds_event(self):
+    def test_billing_record_failure_adds_event_and_marks_metadata(self):
         run = _make_run()
         call = LLMCall(provider_id="x", provider="x", model="m", total_tokens=10)
+        # RuntimeError is in RECOVERABLE_ERRORS, so it is swallowed (tracing must
+        # never break the chat response) but recorded as a failure event.
         with patch(
             "app.infrastructure.billing.model_usage.record_model_usage",
             side_effect=RuntimeError("ledger down"),
         ):
             result = ct._record_llm_usage_entry(run, call)
         assert result is None
-        assert any(e.event_type == "billing.record_failed" for e in run.events)
+        assert run.metadata["model_usage_ledger_status"] == "failed"
+        failed = [e for e in run.events if e.event_type == "billing.record_failed"]
+        assert len(failed) == 1
+        assert failed[0].data["error"] == "ledger down"
+        # the run itself is NOT failed by a ledger write error
+        assert run.status == "running"
 
-    def test_unmetered_billing_recorded_event(self):
+    def test_unmetered_billing_emits_recorded_event(self):
         run = _make_run()
         call = LLMCall(provider_id="x", provider="x", model="m", total_tokens=10)
         entry = {
@@ -476,7 +582,14 @@ class TestRecordLlmUsageEntry:
         }
         with patch("app.infrastructure.billing.model_usage.record_model_usage", return_value=entry):
             ct._record_llm_usage_entry(run, call)
-        assert any(e.event_type == "billing.recorded" for e in run.events)
+        # the generic recorded event fires for unmetered usage
+        recorded = [e for e in run.events if e.event_type == "billing.recorded"]
+        assert len(recorded) == 1
+        # no wallet/failure side effects on the unmetered path
+        assert "model_wallet_balance_units" not in run.metadata
+        assert run.status == "running"
+        # wallet_debit None coerces to {} so no wallet_debit metadata on the call
+        assert "wallet_debit" not in call.metadata
 
 
 # ===========================================================================
@@ -495,25 +608,48 @@ class TestRetrievalCallFromPayload:
         assert result is not None
         assert result.status == "failed"
         assert result.error == "retrieval failed"
+        # query defaults from the supplied default_query when item has none
+        assert result.query == "query"
+        # retriever defaults to "rag" when unspecified
+        assert result.retriever == "rag"
 
     def test_with_chunks(self):
         item = {"chunks": [{"text": "chunk1", "chunk_index": 0}]}
         result = ct._retrieval_call_from_payload(item, default_query="find something")
         assert result is not None
         assert result.status == "completed"
+        assert result.error == ""
         assert len(result.chunks) == 1
+        # the chunk content is carried through verbatim
+        assert result.chunks[0]["text"] == "chunk1"
+        assert result.chunks[0]["chunk_index"] == 0
+        # top_k falls back to chunk count when not provided
+        assert result.top_k == 1
+        # default_query is adopted as the query
+        assert result.query == "find something"
 
     def test_with_citations(self):
         item = {"citations": [{"source": "doc.pdf", "text": "ref"}]}
         result = ct._retrieval_call_from_payload(item, default_query="q")
         assert result is not None
+        assert result.status == "completed"
         assert len(result.citations) == 1
+        assert result.citations[0]["source"] == "doc.pdf"
+        # citations-only (no chunks) => top_k stays 0 since no chunks to count
+        assert result.top_k == 0
 
-    def test_top_k_from_item(self):
+    def test_top_k_explicit_overrides_chunk_count(self):
         item = {"chunks": [{"text": "c"}], "top_k": 5}
         result = ct._retrieval_call_from_payload(item, default_query="q")
         assert result is not None
+        # explicit top_k=5 wins over the (1) chunk count
         assert result.top_k == 5
+
+    def test_source_resolved_from_dataset_id(self):
+        item = {"chunks": [{"text": "c"}], "dataset_id": "ds-42"}
+        result = ct._retrieval_call_from_payload(item, default_query="q")
+        assert result is not None
+        assert result.source == "ds-42"
 
 
 # ===========================================================================
@@ -539,12 +675,25 @@ class TestMemoryReferenceFromPayload:
         result = ct._memory_reference_from_payload(item, default_query="search")
         assert result is not None
         assert result.summary == "This is a memory summary"
+        assert result.status == "completed"
+        # hits carried through with content intact
+        assert len(result.hits) == 1
+        assert result.hits[0]["chunk_id"] == "c1"
+        assert result.hits[0]["content"] == "some memory"
+        # default query adopted, default memory_type/source applied
+        assert result.query == "search"
+        assert result.memory_type == "user_memory"
+        assert result.source == "user_memory_rag"
+        # hit_count metadata reflects number of hits
+        assert result.metadata["hit_count"] == 1
 
     def test_with_error(self):
         item = {"user_memory_error": "memory fetch failed", "user_memory_rag": True}
         result = ct._memory_reference_from_payload(item, default_query="q")
         assert result is not None
         assert result.status == "failed"
+        assert result.error == "memory fetch failed"
+        assert result.hits == []
 
     def test_with_userMemoryRag_marker(self):
         item = {
@@ -553,11 +702,25 @@ class TestMemoryReferenceFromPayload:
         }
         result = ct._memory_reference_from_payload(item, default_query="q")
         assert result is not None
+        # camelCase summary key is read
+        assert result.summary == "summary text"
+        assert result.status == "completed"
+        assert result.query == "q"
 
-    def test_summary_containing_UserMemoryRAG(self):
+    def test_summary_containing_UserMemoryRAG_token(self):
+        # No explicit marker key, but the literal "UserMemoryRAG" inside the
+        # summary text is itself a recognized marker.
         item = {"summary": "UserMemoryRAG context loaded"}
         result = ct._memory_reference_from_payload(item, default_query="q")
         assert result is not None
+        assert result.summary == "UserMemoryRAG context loaded"
+        assert result.status == "completed"
+
+    def test_summary_without_marker_token_returns_none(self):
+        # A summary without the special token and no marker key -> not a memory ref.
+        item = {"summary": "just a plain summary"}
+        result = ct._memory_reference_from_payload(item, default_query="q")
+        assert result is None
 
 
 # ===========================================================================
@@ -579,13 +742,26 @@ class TestArtifactFromOcrPayload:
         result = ct._artifact_from_ocr_payload(item)
         assert result is not None
         assert result.artifact_type == "ocr_text"
+        # uri taken from file_path, text + confidence surfaced in preview
+        assert result.uri == "/img.jpg"
+        assert result.preview["text"] == "OCR text"
+        assert result.preview["confidence"] == 0.95
+        # default source/name applied
+        assert result.source == "ocr"
+        assert result.name == "ocr_result"
+        assert result.metadata["parser_used"] == "ocr"
 
     def test_with_analysis_dict(self):
         item = {"text": "OCR", "analysis": {"key": "val"}, "file_path": "/p.png"}
         result = ct._artifact_from_ocr_payload(item)
         assert result is not None
+        assert result.artifact_type == "ocr_text"
+        # the analysis dict is preserved in the preview
+        assert result.preview["analysis"] == {"key": "val"}
+        # no structured_data -> no extracted fields
+        assert result.fields == []
 
-    def test_with_structured_data(self):
+    def test_with_structured_data_extracts_fields(self):
         item = {
             "text": "Invoice data",
             "structured_data": {"amount": "100", "date": "2024-01-01"},
@@ -594,6 +770,12 @@ class TestArtifactFromOcrPayload:
         result = ct._artifact_from_ocr_payload(item)
         assert result is not None
         assert result.artifact_type == "ocr_text"
+        # each structured_data entry becomes a {name, value} field
+        assert {"name": "amount", "value": "100"} in result.fields
+        assert {"name": "date", "value": "2024-01-01"} in result.fields
+        assert len(result.fields) == 2
+        # structured_data echoed into preview
+        assert result.preview["structured_data"]["amount"] == "100"
 
 
 # ===========================================================================
@@ -615,6 +797,10 @@ class TestArtifactFromFileAnalysisPayload:
         result = ct._artifact_from_file_analysis_payload(item)
         assert result is not None
         assert result.artifact_type == "database_file"
+        # saved_name drives both name and uri fallbacks
+        assert result.name == "test.db"
+        assert result.uri == "test.db"
+        assert result.metadata["parser_used"] == "sqlite_db"
 
     def test_excel_extension(self):
         item = {"extension": ".xlsx", "saved_name": "data.xlsx"}
@@ -649,6 +835,10 @@ class TestArtifactFromFileAnalysisPayload:
         result = ct._artifact_from_file_analysis_payload(item)
         assert result is not None
         assert len(result.fields) == 2
+        # each table becomes a field with its column list preserved
+        by_name = {f["name"]: f["columns"] for f in result.fields}
+        assert by_name["users"] == ["id", "name"]
+        assert by_name["orders"] == ["id", "user_id"]
 
 
 # ===========================================================================
@@ -709,12 +899,20 @@ class TestArtifactFromGeneratedDocumentPayload:
         result = ct._artifact_from_generated_document_payload(item)
         assert result is not None
         assert result.uri == "http://example.com/file.pdf"
+        assert result.name == "report.pdf"
+        # .pdf name => pdf_document type and pdf mime inferred
+        assert result.artifact_type == "pdf_document"
+        assert result.mime_type == "application/pdf"
 
     def test_with_document_nested(self):
         item = {"document": {"download_url": "http://x.com/f.docx", "file_name": "f.docx"}}
         result = ct._artifact_from_generated_document_payload(item)
         assert result is not None
         assert result.name == "f.docx"
+        # nested document fields resolve uri + office_document classification
+        assert result.uri == "http://x.com/f.docx"
+        assert result.artifact_type == "office_document"
+        assert "wordprocessingml" in result.mime_type
 
     def test_pickup_token_without_name_uri(self):
         # Must have at least one of name, uri, pickup_token
@@ -760,7 +958,12 @@ class TestArtifactFromExcelAnalysisPayload:
         result = ct._artifact_from_excel_analysis_payload(item)
         assert result is not None
         assert result.artifact_type == "excel_records"
+        # record_count derived from len(sample_rows)
         assert result.preview["record_count"] == 2
+        assert result.name == "report.xlsx"
+        # excel spreadsheet mime applied by default
+        assert "spreadsheetml" in result.mime_type
+        assert result.metadata["parser_used"] == "excel_analysis"
 
     def test_fields_filtered(self):
         item = {
@@ -769,7 +972,8 @@ class TestArtifactFromExcelAnalysisPayload:
         }
         result = ct._artifact_from_excel_analysis_payload(item)
         assert result is not None
-        assert len(result.fields) == 2
+        # the non-dict entry is dropped; only the two dict fields survive in order
+        assert result.fields == [{"name": "col1"}, {"name": "col2"}]
 
 
 # ===========================================================================
@@ -874,7 +1078,18 @@ class TestAttachChatTraceRun:
             return_value=repo,
         ):
             result = ct.attach_chat_trace_run(payload, message="q", user_id="u1")
-        assert "run_id" in result
+        # run_id + agent_run_id stamped at both root and data level
+        run_id = result["run_id"]
+        assert run_id.startswith("run_")
+        assert result["agent_run_id"] == run_id
+        assert result["data"]["run_id"] == run_id
+        assert result["data"]["agent_run_id"] == run_id
+        # the attached id corresponds to a real persisted run
+        persisted = repo.get(run_id)
+        assert persisted is not None
+        assert persisted.user_id == "u1"
+        # original payload content preserved
+        assert result["response"] == "done"
 
 
 # ===========================================================================
@@ -891,7 +1106,13 @@ class TestCreateChatTraceRun:
         ):
             run = ct.create_chat_trace_run(payload, message="test", user_id="u1")
         assert run.status == "waiting_user"
-        assert any(e.event_type == "step.waiting_user" for e in run.events)
+        waiting = [e for e in run.events if e.event_type == "step.waiting_user"]
+        assert len(waiting) == 1
+        # token_name is propagated into the waiting event payload
+        assert waiting[0].data["token_name"] == "api_key"
+        # run is persisted to the repository and resolves the explicit user
+        assert repo.get(run.run_id) is not None
+        assert run.user_id == "u1"
 
     def test_failed_status(self, repo):
         payload = {"success": False, "message": "error occurred", "error": "crashed"}
@@ -901,7 +1122,11 @@ class TestCreateChatTraceRun:
         ):
             run = ct.create_chat_trace_run(payload, message="test", user_id="u1")
         assert run.status == "failed"
+        # error message is derived from the payload "message" field
+        assert run.error == "error occurred"
         assert any(e.event_type == "run.failed" for e in run.events)
+        # success path event must not appear
+        assert not any(e.event_type == "run.completed" for e in run.events)
 
     def test_with_llm_trace(self, repo):
         payload = {
@@ -934,6 +1159,19 @@ class TestCreateChatTraceRun:
                 ):
                     run = ct.create_chat_trace_run(payload, message="test", user_id="u2")
         assert run.status == "completed"
+        # the _xcagi_trace was actually extracted into a recorded LLM call
+        assert len(run.llm_calls) == 1
+        captured = run.llm_calls[0]
+        assert captured.model == "gpt-4"
+        assert captured.provider == "openai"
+        assert captured.total_tokens == 100
+        assert captured.prompt_tokens == 70
+        assert captured.completion_tokens == 30
+        # token totals rolled up into run metadata + final_output
+        assert run.metadata["llm_token_total"] == 100
+        assert run.metadata["llm_call_count"] == 1
+        assert run.final_output["llm_token_total"] == 100
+        assert len(run.final_output["llm_calls"]) == 1
 
     def test_with_rag_chunks(self, repo):
         payload = {
@@ -947,6 +1185,16 @@ class TestCreateChatTraceRun:
         ):
             run = ct.create_chat_trace_run(payload, message="search query", user_id="u3")
         assert run.status == "completed"
+        # the chunk was extracted into a retrieval call keyed off the message
+        assert len(run.retrieval_calls) == 1
+        retrieval = run.retrieval_calls[0]
+        assert retrieval.query == "search query"
+        assert len(retrieval.chunks) == 1
+        assert retrieval.chunks[0]["text"] == "chunk1"
+        # retrieval metadata + final_output reflect the captured chunk
+        assert run.metadata["retrieval_chunk_count"] == 1
+        assert run.final_output["retrieval_chunk_count"] == 1
+        assert any(e.event_type == "rag.retrieved" for e in run.events)
 
 
 # ===========================================================================
@@ -965,14 +1213,21 @@ class TestFinalizeLegacyChatRun:
             result = ct.finalize_legacy_chat_run("any-run-id", payload, message="q")  # type: ignore[arg-type]
         assert result == payload
 
-    def test_run_not_found_calls_attach(self, repo):
+    def test_run_not_found_falls_back_to_attach_with_fresh_run(self, repo):
         payload = {"success": True, "response": "done"}
         with patch(
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
         ):
             result = ct.finalize_legacy_chat_run("nonexistent-run-id", payload, message="q")
-        assert "run_id" in result
+        # falls through to attach_chat_trace_run, which mints a brand-new run id
+        new_id = result["run_id"]
+        assert new_id != "nonexistent-run-id"
+        assert new_id.startswith("run_")
+        assert result["agent_run_id"] == new_id
+        # the requested id was never in the repo; the freshly-created one is
+        assert repo.get("nonexistent-run-id") is None
+        assert repo.get(new_id) is not None
 
     def test_with_existing_run(self, repo):
         run = _make_run()
@@ -983,7 +1238,13 @@ class TestFinalizeLegacyChatRun:
             return_value=repo,
         ):
             result = ct.finalize_legacy_chat_run(run.run_id, payload, message="q")
+        # the existing run is reused (id unchanged) and marked completed
         assert result["run_id"] == run.run_id
+        updated = repo.get(run.run_id)
+        assert updated is not None
+        assert updated.status == "completed"
+        assert any(e.event_type == "run.completed" for e in updated.events)
+        assert any(e.event_type == "planner.completed" for e in updated.events)
 
     def test_waiting_user_status(self, repo):
         run = _make_run()
@@ -997,6 +1258,9 @@ class TestFinalizeLegacyChatRun:
         updated = repo.get(run.run_id)
         assert updated is not None
         assert updated.status == "waiting_user"
+        assert any(e.event_type == "step.waiting_user" for e in updated.events)
+        # run_id is echoed back onto the returned payload
+        assert result["run_id"] == run.run_id
 
     def test_failed_status(self, repo):
         run = _make_run()
@@ -1010,6 +1274,10 @@ class TestFinalizeLegacyChatRun:
         updated = repo.get(run.run_id)
         assert updated is not None
         assert updated.status == "failed"
+        # error message is taken from the payload when the run carries none
+        assert updated.error == "failed hard"
+        assert any(e.event_type == "run.failed" for e in updated.events)
+        assert result["run_id"] == run.run_id
 
 
 # ===========================================================================
@@ -1070,13 +1338,23 @@ class TestAppendRetrievalCallsToFinalOutput:
         run.final_output = {"existing": "val"}
         ct._append_retrieval_calls_to_final_output(run)
         assert "retrieval_calls" not in run.final_output
+        # the existing final_output is left untouched
+        assert run.final_output == {"existing": "val"}
 
     def test_appends_when_calls_present(self):
         run = _make_run()
         call = RetrievalCall(query="q", retriever="rag", source="ds", top_k=3)
         run.retrieval_calls.append(call)
+        run.metadata["retrieval_chunk_count"] = 7
+        run.metadata["citation_count"] = 2
         ct._append_retrieval_calls_to_final_output(run)
-        assert "retrieval_calls" in run.final_output
+        # the call is serialized into final_output
+        assert len(run.final_output["retrieval_calls"]) == 1
+        assert run.final_output["retrieval_calls"][0]["query"] == "q"
+        assert run.final_output["retrieval_calls"][0]["top_k"] == 3
+        # aggregate counts copied from metadata
+        assert run.final_output["retrieval_chunk_count"] == 7
+        assert run.final_output["citation_count"] == 2
 
 
 # ===========================================================================
@@ -1087,18 +1365,28 @@ class TestAppendRetrievalCallsToFinalOutput:
 class TestAppendMemoryReferencesToFinalOutput:
     def test_empty_does_nothing(self):
         run = _make_run()
-        run.final_output = {}
+        run.final_output = {"keep": 1}
         ct._append_memory_references_to_final_output(run)
         assert "memory_references" not in run.final_output
+        assert run.final_output == {"keep": 1}
 
     def test_appends_when_refs_present(self):
         run = _make_run()
         ref = MemoryReference(
-            query="q", memory_type="user_memory", source="mem_rag", hits=[], summary="summ"
+            query="q",
+            memory_type="user_memory",
+            source="mem_rag",
+            hits=[{"chunk_id": "c1"}, {"chunk_id": "c2"}],
+            summary="summ",
         )
         run.memory_references.append(ref)
+        run.metadata["memory_hit_count"] = 2
         ct._append_memory_references_to_final_output(run)
-        assert "memory_references" in run.final_output
+        assert len(run.final_output["memory_references"]) == 1
+        serialized = run.final_output["memory_references"][0]
+        assert serialized["query"] == "q"
+        assert serialized["summary"] == "summ"
+        assert run.final_output["memory_hit_count"] == 2
 
 
 # ===========================================================================
@@ -1109,9 +1397,10 @@ class TestAppendMemoryReferencesToFinalOutput:
 class TestAppendArtifactsToFinalOutput:
     def test_empty_does_nothing(self):
         run = _make_run()
-        run.final_output = {}
+        run.final_output = {"x": 1}
         ct._append_artifacts_to_final_output(run)
         assert "artifacts" not in run.final_output
+        assert run.final_output == {"x": 1}
 
     def test_appends_when_artifacts_present(self):
         run = _make_run()
@@ -1119,7 +1408,12 @@ class TestAppendArtifactsToFinalOutput:
         run.artifacts.append(art)
         run.final_output = {}
         ct._append_artifacts_to_final_output(run)
-        assert "artifacts" in run.final_output
+        assert run.final_output["artifact_count"] == 1
+        assert len(run.final_output["artifacts"]) == 1
+        assert run.final_output["artifacts"][0]["artifact_type"] == "ocr_text"
+        assert run.final_output["artifacts"][0]["name"] == "img"
+        # no dataset ingests recorded -> key absent
+        assert "dataset_ingests" not in run.final_output
 
     def test_includes_dataset_ingests_if_in_metadata(self):
         run = _make_run()
@@ -1129,4 +1423,6 @@ class TestAppendArtifactsToFinalOutput:
         run.metadata["dataset_ingest_count"] = 1
         run.final_output = {}
         ct._append_artifacts_to_final_output(run)
-        assert "dataset_ingests" in run.final_output
+        # dataset ingest metadata is mirrored into final_output
+        assert run.final_output["dataset_ingests"] == [{"ds": "one"}]
+        assert run.final_output["dataset_ingest_count"] == 1
