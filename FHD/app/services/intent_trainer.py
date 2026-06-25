@@ -10,6 +10,8 @@
     python -m app.services.intent_trainer --data rasa/data/nlu.yml --model bert-base-chinese --epochs 5
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import logging
@@ -17,18 +19,47 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import torch
-from torch.utils.data import Dataset
-from transformers import (
-    AutoConfig,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    BertTokenizer,
-    DataCollatorWithPadding,
-    EarlyStoppingCallback,
-    Trainer,
-    TrainingArguments,
-)
+# torch / transformers 是可选的重型 ML 依赖（见 requirements-ml.txt / pyproject [project.optional-dependencies].ml）。
+# CI 与默认服务镜像不安装它们（deploy/requirements-server-api.txt 明确“去掉 torch 等大包”）。
+# 历史上这里在模块顶层无条件 import，使整个 test_intent_trainer*.py 在无 ML 栈的环境（含 CI）
+# 走 module-level skip——纯逻辑单元测试形同虚设。改为可选导入：标签/数据加载/切分/指标等纯逻辑
+# 在无 torch/transformers 时仍可导入与测试；仅真正用到张量/模型的训练-导出路径在调用期才需要它们。
+try:
+    import torch
+    from torch.utils.data import Dataset
+
+    HAS_TORCH = True
+except ImportError:  # pragma: no cover - 取决于运行环境是否安装了 torch
+    HAS_TORCH = False
+    torch = None  # type: ignore[assignment]
+    Dataset = object  # type: ignore[assignment,misc]  # 占位基类：无 torch 时仍能定义 IntentDataset
+
+try:
+    from transformers import (
+        AutoConfig,
+        AutoModelForSequenceClassification,
+        AutoTokenizer,
+        BertTokenizer,
+        DataCollatorWithPadding,
+        EarlyStoppingCallback,
+        Trainer,
+        TrainingArguments,
+    )
+
+    HAS_TRANSFORMERS = True
+except ImportError:  # pragma: no cover - 取决于运行环境是否安装了 transformers
+    HAS_TRANSFORMERS = False
+    # 占位符：让 `@patch("app.services.intent_trainer.AutoTokenizer")` 等 mock 目标可解析，
+    # 纯逻辑导入不受影响；真正（未打桩地）调用训练/导出函数时会在访问这些 None 符号处报错——
+    # 而唯一的运行时消费方 train_intent.py 自身在模块顶层 import torch，本就要求装好 ML 栈。
+    AutoConfig = None  # type: ignore[assignment]
+    AutoModelForSequenceClassification = None  # type: ignore[assignment]
+    AutoTokenizer = None  # type: ignore[assignment]
+    BertTokenizer = None  # type: ignore[assignment]
+    DataCollatorWithPadding = None  # type: ignore[assignment]
+    EarlyStoppingCallback = None  # type: ignore[assignment]
+    Trainer = None  # type: ignore[assignment]
+    TrainingArguments = None  # type: ignore[assignment]
 
 try:
     import yaml
@@ -272,7 +303,7 @@ def train_intent_model(
         greater_is_better=True,
         save_total_limit=2,
         report_to=["none"],
-        fp16=torch.cuda.is_available(),
+        fp16=bool(HAS_TORCH and torch.cuda.is_available()),
     )
 
     callbacks = []

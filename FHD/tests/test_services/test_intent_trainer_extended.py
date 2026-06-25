@@ -15,6 +15,7 @@ import pytest
 
 try:
     from app.services.intent_trainer import (
+        HAS_TORCH,
         HAS_YAML,
         ID_TO_LABEL,
         INTENT_LABELS,
@@ -509,6 +510,7 @@ class TestExportToOnnx:
             result = export_to_onnx("/fake/model/path", str(tmp_path / "model.onnx"))
             assert result is None
 
+    @pytest.mark.skipif(not HAS_TORCH, reason="torch 未安装（重型 ML 依赖，CI 默认不装）")
     def test_export_with_onnxruntime(self, tmp_path):
         """export_to_onnx should export when onnxruntime is available."""
         mock_tokenizer = MagicMock()

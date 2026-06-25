@@ -11,6 +11,7 @@ import pytest
 
 try:
     from app.services.intent_trainer import (
+        HAS_TORCH,
         HAS_YAML,
         ID_TO_LABEL,
         INTENT_LABELS,
@@ -57,6 +58,7 @@ class TestIntentDataset:
         ds = IntentDataset(examples, mock_tokenizer, max_length=32)
         assert len(ds) == 2
 
+    @pytest.mark.skipif(not HAS_TORCH, reason="torch 未安装（重型 ML 依赖，CI 默认不装）")
     def test_getitem_known_label(self):
         torch = pytest.importorskip("torch")
 
@@ -72,6 +74,7 @@ class TestIntentDataset:
         assert "labels" in item
         assert item["labels"].item() == LABEL_TO_ID["shipment_generate"]
 
+    @pytest.mark.skipif(not HAS_TORCH, reason="torch 未安装（重型 ML 依赖，CI 默认不装）")
     def test_getitem_unknown_label(self):
         torch = pytest.importorskip("torch")
 
