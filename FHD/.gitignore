@@ -256,3 +256,14 @@ migration_status_report.txt
 # mutmut 3.x 变异测试沙箱与缓存（运行时生成约80M，勿提交）
 mutants/
 .mutmut-cache
+
+# 移动端签名材料与构建产物（CI 由 secret 运行时解码生成，严禁提交）
+mobile-harmony/signing/
+mobile-harmony/artifacts/
+mobile-ios/*.xcodeproj/
+mobile-ios/build/
+*.p12
+*.p7b
+*.mobileprovision
+*.keystore
+*.jks

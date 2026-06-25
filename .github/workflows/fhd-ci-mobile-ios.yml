@@ -1,0 +1,51 @@
+# CI SSOT: generated from FHD/.github/workflows/ci-mobile-ios.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: ci-mobile-ios
+
+# iOS 编译验证(免签)——把"代码对标 Android/鸿蒙"升级为"每次 push 持续被 Xcode 编译验证"。
+# 真机/上架仍需 Apple Developer 账号(Team ID + 签名证书 + APNs 密钥),见
+# FHD/mobile-ios/PARITY_MATRIX.md。本 workflow 不签名、只在 macOS runner 上跑
+# xcodegen + xcodebuild(Simulator 目标,CODE_SIGNING_ALLOWED=NO),不需要任何 secret。
+
+on:
+  push:
+    paths:
+      - "FHD/mobile-ios/**"
+      - ".github/workflows/fhd-ci-mobile-ios.yml"
+  pull_request:
+    paths:
+      - "FHD/mobile-ios/**"
+      - ".github/workflows/fhd-ci-mobile-ios.yml"
+
+concurrency:
+  group: ci-mobile-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  build-unsigned:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: FHD/mobile-ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      # 仅企业版 scheme:手机端按产品 SSOT 为企业版(个人版已冻结)。
+      - name: Build enterprise scheme (unsigned, simulator)
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project XCAGIMobile.xcodeproj \
+            -scheme XCAGIMobile \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            -quiet

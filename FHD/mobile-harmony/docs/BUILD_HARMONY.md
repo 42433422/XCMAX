@@ -85,3 +85,33 @@ bash FHD/mobile-harmony/scripts/publish-release-harmony.sh \
   --harmony-artifact FHD/mobile-harmony/artifacts/XCAGI-Enterprise-Harmony-10.0.0.hap \
   --dry-run
 ```
+
+## 生产签名(AppGallery)与 CI 发版
+
+`build-profile.json5` 的 `signingConfigs` 默认为空 → 只能离线产出**未签名** HAP(smoke 用)。
+`build-hap.sh` / `publish-release-harmony.sh` 对 release **拒绝未签名 HAP**。要产出可上 AppGallery / 真机安装的**已签名** HAP，需配置华为签名材料 —— 与 iOS(`release-ios.yml`)、Android(`release-android.yml`)同构,经 GitHub secret 在 CI 运行时注入,**不提交任何密钥**。
+
+`release-harmony` workflow 在构建前会跑 `scripts/configure-harmony-signing.sh`:配齐 secret 时把 `.p12/.cer/.p7b` 解码进 `mobile-harmony/signing/`(已 gitignore)并 patch `build-profile.json5`(`signingConfigs[release]` + `products[default].signingConfig=release`);**secret 缺失时 no-op**,离线 unsigned smoke 构建不受影响。
+
+所需 GitHub secrets(仓库 Settings → Secrets and variables → Actions):
+
+| secret | 来源 | 必填 |
+|---|---|---|
+| `HARMONY_SIGN_STORE_P12_BASE64` | keystore `.p12` → `base64 -i xcagi.p12 \| pbcopy` | 是 |
+| `HARMONY_SIGN_CERT_BASE64` | 签名证书 `.cer`(AppGallery Connect 申请)→ base64 | 是 |
+| `HARMONY_SIGN_PROFILE_BASE64` | Provision Profile `.p7b` → base64 | 是 |
+| `HARMONY_SIGN_STORE_PASSWORD` | storePassword(从本地可用的 DevEco `build-profile.json5` 原样复制,通常是 DevEco 加密串) | 是 |
+| `HARMONY_SIGN_KEY_PASSWORD` | keyPassword(同上) | 是 |
+| `HARMONY_SIGN_KEY_ALIAS` | key 别名 | 是 |
+| `HARMONY_SIGN_ALG` | signAlg,默认 `SHA256withECDSA` | 否 |
+
+配齐后,在 Actions 里手动跑 **Release HarmonyOS**(`runner_label` 需指向装有 DevEco/HarmonyOS SDK 的 runner)即产出并发布签名 HAP。本地复现签名(会就地改 `build-profile.json5`,跑完用 `git checkout -- build-profile.json5` 还原):
+
+```bash
+HARMONY_SIGN_STORE_P12_BASE64=... HARMONY_SIGN_CERT_BASE64=... HARMONY_SIGN_PROFILE_BASE64=... \
+HARMONY_SIGN_STORE_PASSWORD=... HARMONY_SIGN_KEY_PASSWORD=... HARMONY_SIGN_KEY_ALIAS=... \
+  bash FHD/mobile-harmony/scripts/configure-harmony-signing.sh
+bash FHD/mobile-harmony/scripts/build-hap.sh --version 10.0.0 --mode release
+```
+
+> 注:`scripts/sign-openharmony-debug-hap.sh` 是 OpenHarmony **debug** 证书签名(仅供测试机安装),与上面的 AppGallery **生产**签名是两回事。

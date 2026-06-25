@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  本地手动导出 .ipa 模板。把 __TEAM_ID__ / __PROFILE_NAME__ 换成你的值后:
+
+    xcodegen generate
+    xcodebuild archive -project XCAGIMobile.xcodeproj -scheme XCAGIMobile \
+      -destination 'generic/platform=iOS' -archivePath build/XCAGIMobile.xcarchive
+    xcodebuild -exportArchive -archivePath build/XCAGIMobile.xcarchive \
+      -exportOptionsPlist ExportOptions.plist -exportPath build/export
+
+  CI 路径(.github/workflows/release-ios.yml)会用 secrets 在运行时生成等价 plist,
+  无需提交真实 team/profile。method 可选 app-store / ad-hoc / development。
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>app-store</string>
+  <key>teamID</key>
+  <string>__TEAM_ID__</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>com.xiuci.xcagi.mobile.enterprise</key>
+    <string>__PROFILE_NAME__</string>
+  </dict>
+  <key>stripSwiftSymbols</key>
+  <true/>
+  <key>compileBitcode</key>
+  <false/>
+</dict>
+</plist>

@@ -38,6 +38,8 @@
 | **macOS 桌面** | 签约级 | arm64 + x64 dmg |
 | **Web / 后端** | 签约级 | FastAPI + Vue SPA |
 | **Android** | **签约级** | Kotlin Compose 双 SKU；登录（密码/OTP/扫码）· SSE 对话 · 4 Tab · 工作台 WebView |
+| **iOS** | **工程级（编译验证级）** | SwiftUI 全量对标 Android；`ci-mobile-ios` 每次 push 跑 xcodegen + xcodebuild 免签编译验证；`release-ios` 签名→导出 ipa（含 TestFlight 钩子）流水线已就位。**待真机/上架**：填 `IOS_DIST_CERT_*`/`IOS_PROVISION_PROFILE_*`/`IOS_TEAM_ID` secret + APNs 密钥；占位 AppIcon 待替换正式图标。见 `mobile-ios/README.md`「发版与签名」 |
+| **HarmonyOS（鸿蒙）** | **工程级（离线构建级）** | ArkTS 全量对标 Android；`hvigor assembleHap` 离线可构建；`release-harmony` 经 `configure-harmony-signing.sh` 注入华为签名 secret→产出签名 HAP 的发版链路已就位。**待上架**：填 `HARMONY_SIGN_*` secret（.p12/.cer/.p7b + 口令）+ AppGallery 账号 + DevEco runner。见 `mobile-harmony/docs/BUILD_HARMONY.md`「生产签名」 |
 
 声称 vs 实测差距见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
 
