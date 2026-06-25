@@ -15,8 +15,9 @@ XCMAX 项目存在多个独立 SSOT 脚本（mods、ci-workflows、coverage、ve
 ## 架构
 
 ```
-config/ssot.yaml                    ← 唯一注册表（SSOT）
+config/ssot.yaml                    ← 唯一注册表（SSOT）：机器域 domains + 文档登记 doc_registry/retired
 scripts/dev/ssot_cli.py             ← 统一 CLI 入口
+scripts/dev/gen_ssot_index.py       ← 从 doc_registry/retired 生成 SSOT_INDEX.md（派生视图）
 scripts/dev/ssot_plugins/
   ├── base.py                       ← 注册表加载 + 命令执行
   ├── mods.py                       ← 适配 mods_ssot.py
@@ -57,6 +58,16 @@ domains:
 | `generate` | 从 SSOT 生成派生件 | 重新生成并 diff | 重新生成并覆盖 |
 | `ratchet` | 指标只升不降 | 比对当前 vs floor | 提升 floor 到当前值 |
 | `lint` | SSOT 自洽性检查 | 跑 lint | 无 sync（lint 模式无写盘） |
+
+## 文档登记表（doc_registry）→ SSOT_INDEX.md 派生
+
+历史上存在**两个**"登记表的登记表"：机器侧 `config/ssot.yaml`（domains）与文档侧 `docs/SSOT_INDEX.md`（手维护）。两个真相源 = 没有真相源。现已收敛为一个源：
+
+- `config/ssot.yaml` 新增 `doc_registry`（13 概念 → 唯一 SSOT 文档 + 说明）与 `retired`（已退役指针）两段，是文档登记的**唯一源**。
+- `docs/SSOT_INDEX.md` 由 `scripts/dev/gen_ssot_index.py` 从上述两段**自动生成**（带"请勿手改"横幅），是派生视图。
+- `scripts/dev/docs_ssot_lint.py` 直接读 `doc_registry`（不再解析 md），并校验 `SSOT_INDEX.md` 是否与 `ssot.yaml` 同步（过期则**硬失败**，不受 `--strict` 影响）。
+
+新增/修改文档 SSOT 登记的流程：改 `ssot.yaml` 的 `doc_registry` → 跑 `python scripts/dev/gen_ssot_index.py` → 提交 `ssot.yaml` 与 `SSOT_INDEX.md`。
 
 ## CLI 命令
 
@@ -104,7 +115,7 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 | ci-workflows | generate | FHD/.github/workflows | .github/workflows | ci_workflows.py check（header） | publish_ci_workflows_to_root.py ✅ |
 | coverage | ratchet+verify | coverage_ratchet_baseline.json | pyproject.toml + vitest.config.js | coverage_ratchet.py --check | coverage_ratchet.py --bump ✅ |
 | version | sync+verify | VERSION.md | 8 处代码锚点 | verify_version_anchors.py | version_sync.py --apply ✅ |
-| docs-ssot | lint | SSOT_INDEX.md | 所有 md 的 SSOT 声明 | docs_ssot_lint.py | 无（lint 模式） |
+| docs-ssot | generate | ssot.yaml（doc_registry） | SSOT_INDEX.md + 所有 md 声明 | docs_ssot_lint.py（含派生新鲜度） | gen_ssot_index.py ✅ |
 
 ### 扩展 5 域（lint/verify，advisory gate）
 
