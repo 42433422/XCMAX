@@ -5,7 +5,6 @@ from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
     _assess_branch_auto_merge_policy,
     _employee_result_ok,
-    _first_user_id,
     _guest_auth_headers,
     _has_high_risk_report,
     _is_transient_employee_dispatch_failure,
@@ -13,6 +12,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _qa_task_text,
     _review_task_text,
     _resume_review_qa_candidate,
+    _self_maintenance_actor_user_id,
     _structured_report_gate,
     _update_loop_memory,
     close_loop_memory_items,
@@ -253,12 +253,24 @@ def test_guest_auth_headers_can_mint_local_guest_token(monkeypatch, tmp_path):
     assert cache["token"] == token
 
 
-def test_first_user_id_does_not_require_is_active_column(monkeypatch):
+def test_self_maintenance_actor_defaults_to_platform_identity(monkeypatch):
+    # 默认无 env 覆盖时走平台身份 0：chat_dispatch_via_session 不再过个人
+    # llm_calls 配额闸，避免历史「记到 owner 配额→额度耗尽→403 死循环」根因。
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_USER_ID", raising=False)
 
-    user_id = _first_user_id()
+    assert _self_maintenance_actor_user_id() == 0
 
-    assert isinstance(user_id, int)
+
+def test_self_maintenance_actor_honors_env_override(monkeypatch):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_USER_ID", "7")
+
+    assert _self_maintenance_actor_user_id() == 7
+
+
+def test_self_maintenance_actor_falls_back_to_platform_on_bad_env(monkeypatch):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_USER_ID", "not-an-int")
+
+    assert _self_maintenance_actor_user_id() == 0
 
 
 def test_employee_result_rejects_e2e_codex_timeout():
