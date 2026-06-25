@@ -40,12 +40,18 @@ concurrency:
 
 jobs:
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-26
     defaults:
       run:
         working-directory: mobile-ios
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify Xcode SDK
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Install XcodeGen
         run: |
