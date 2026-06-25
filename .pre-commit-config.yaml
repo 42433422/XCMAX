@@ -67,6 +67,11 @@ repos:
         # 改 SSOT 源或派生产物时，校验四端常量/JSON 未漂移
         files: '^FHD/config/service_topology\.yaml$|^FHD/scripts/dev/service_topology_ssot\.py$|^FHD/app/infrastructure/topology\.py$|^FHD/frontend/src/constants/topology\.ts$|^FHD/config/topology\.generated\.json$'
         entry: bash -c 'cd FHD && python3 scripts/dev/service_topology_ssot.py check'
+      - id: mods-ssot-parity
+        name: Mod SSOT parity (FHD/mods -> FHD/XCAGI/mods)
+        # 任一 SSOT 源或导出副本变动时，拦住未同步的漂移；修复跑 mods_ssot.py sync
+        files: '^FHD/mods/|^FHD/XCAGI/mods/|^FHD/scripts/dev/mods_ssot\.py$'
+        entry: python3 FHD/scripts/dev/mods_ssot.py check
         language: system
         pass_filenames: false
         stages: [pre-commit]
