@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>$(APP_DISPLAY_NAME)</string>
+	<key>CFBundleName</key>
+	<string>XCAGIMobile</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<!-- 推送(远程通知后台模式) -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<!-- 隐私用途说明(扫码/OCR/生物识别核心流程的真机权限) -->
+	<key>NSCameraUsageDescription</key>
+	<string>扫码登录与拍照 OCR 识别需要访问相机。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>从相册选图进行 OCR 文字识别需要访问相册。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>使用面容 ID / 触控 ID 解锁应用。</string>
+	<!--
+	  ATS:生产走 https://xiu-ci.com;桌面端配对走局域网 http://<host>:17500。
+	  允许本地网络明文,以便企业内网/桌面配对联调。
+	-->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>发现并连接局域网内的桌面端主机以完成配对。</string>
+</dict>
+</plist>

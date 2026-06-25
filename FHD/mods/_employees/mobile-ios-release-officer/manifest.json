@@ -3,7 +3,7 @@
   "name": "iOS 发版员",
   "version": "1.0.0",
   "author": "admin",
-  "description": "P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。",
+  "description": "P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -33,10 +33,10 @@
       "version": "1.0.0",
       "artifact": "employee_pack",
       "name": "iOS 发版员",
-      "description": "P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。",
+      "description": "P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。",
       "owner": "admin",
       "area": "platform-core",
-      "domain": "P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。"
+      "domain": "P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。"
     },
     "perception": {
       "type": "text"
@@ -46,10 +46,10 @@
     },
     "cognition": {
       "agent": {
-        "system_prompt": "你是iOS 发版员。你的职责是：P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。。\n工作时先判断用户目标和可用上下文，只使用输入中给出的事实与工具结果；信息不足时先说明缺口并给出可继续推进的最小问题。\n输出应直接服务任务：先给结论或执行结果，再给必要依据、步骤和下一步建议。不得编造来源、数据、执行结果或不存在的系统能力。",
+        "system_prompt": "你是iOS 发版员。你的职责是：P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。\n工作时先判断用户目标和可用上下文，只使用输入中给出的事实与工具结果；信息不足时先说明缺口并给出可继续推进的最小问题。\n输出应直接服务任务：先给结论或执行结果，再给必要依据、步骤和下一步建议。不得编造来源、数据、执行结果或不存在的系统能力。",
         "role": {
           "name": "iOS 发版员",
-          "persona": "P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。",
+          "persona": "P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。",
           "tone": "professional",
           "expertise": [
             "task.analyze",
@@ -110,7 +110,7 @@
     "workspace_policy": {
       "scope_globs": [
         "FHD/mobile-ios/**",
-        "FHD/.github/workflows/release-desktop.yml",
+        "FHD/.github/workflows/release-ios.yml",
         "FHD/XCAGI/resources/**"
       ],
       "forbidden_globs": [
@@ -123,7 +123,7 @@
       "id": "mobile-ios-release-officer",
       "label": "iOS 发版员",
       "panel_title": "iOS 发版员",
-      "panel_summary": "P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。",
+      "panel_summary": "P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。",
       "api_base_path": "employees/mobile-ios-release-officer"
     }
   ],

@@ -1,7 +1,7 @@
 id: mobile-ios-release-officer
 name: iOS 发版员
 version: "1.0.0"
-domain: P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。
+domain: P-S iOS 渠道发布：XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
 owner: admin
 area: platform-core
 five_line_id: prod_software
@@ -10,7 +10,7 @@ also_serves: []
 
 scope_globs:
   - FHD/mobile-ios/**
-  - FHD/.github/workflows/release-desktop.yml
+  - FHD/.github/workflows/release-ios.yml
   - FHD/XCAGI/resources/**
 
 forbidden_globs:
@@ -54,4 +54,4 @@ examples:
 changelog:
   - version: "1.0.0"
     date: "2026-06-03"
-    note: "六部门编制：P-S iOS 发版专岗（planned 渠道）"
+    note: "六部门编制：P-S iOS 发版专岗（XcodeGen + TestFlight/App Store Connect 渠道）"
