@@ -23,7 +23,6 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-
 _PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}
 
 
