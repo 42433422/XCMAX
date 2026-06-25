@@ -20,7 +20,7 @@ def merge_source_code(output_file: str, *input_files):
     
     with open(output_file, 'w', encoding='utf-8') as outfile:
         outfile.write("=" * 80 + "\n")
-        outfile.write("XCAGI 企业 AI 员工平台 V9.0 - 源代码文档\n")
+        outfile.write("XCAGI 企业 AI 员工平台 V10.0.0 - 源代码文档\n")
         outfile.write("软件著作权申请专用\n")
         outfile.write(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         outfile.write("=" * 80 + "\n\n")
