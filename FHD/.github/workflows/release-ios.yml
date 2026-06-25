@@ -147,7 +147,7 @@ jobs:
         run: bash scripts/archive-ios.sh --export
 
       - name: Upload IPA artifact
-        if: ${{ github.event.inputs.export_ipa == 'true' }}
+        if: ${{ github.event.inputs.export_ipa == 'true' && always() }}
         uses: actions/upload-artifact@v4
         with:
           name: xcagi-ios-${{ github.event.inputs.scheme }}-${{ steps.version.outputs.marketing_version }}
