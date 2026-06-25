@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Tuple
 from sqlalchemy import func
 
 from modstore_server.employee_executor import execute_employee_task
+from modstore_server.platform_llm_scope import platform_llm_scoped
 from modstore_server.models import (
     CatalogItem,
     EmployeeExecutionMetric,
@@ -226,6 +227,7 @@ def rank_market_candidates(event_id: int) -> Dict[str, Any]:
         }
 
 
+@platform_llm_scoped
 def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
     if not _env_bool("MODSTORE_EMPLOYEE_TASK_MARKET_ENABLED", True):
         return {"ok": False, "claimed": False, "reason": "task_market_disabled"}

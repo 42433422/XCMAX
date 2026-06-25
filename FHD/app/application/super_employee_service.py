@@ -434,6 +434,7 @@ class SuperEmployeeService:
                 "para_tier": dispatch.get("para_tier"),
                 "scope": self._grant.scope.value,
                 "workspace_id": self._grant.workspace_id or "",
+                "para_tier": dispatch.get("para_tier"),
                 "devices": dispatch.get("devices")
                 if isinstance(dispatch.get("devices"), list)
                 else [],
@@ -1340,13 +1341,20 @@ class SuperEmployeeService:
         ).strip() or "acceptEdits"
 
     def _apply_scope_to_cmd(self, cmd: list[str]) -> list[str]:
-        """信任墙第 4 层（纵深防御）：产品域收紧 claude 的工具面。
+        """按授权域调整 CLI 工具面（信任墙第 4 层，纵深防御）。
 
-        把 ``--permission-mode`` 降到 ``default`` 并显式禁用写/执行类工具，使被注入的产品域
-        会话即便被诱导喊 git/shell，那些工具也压根没注册 → 硬失败而非软拒绝。工厂域不动；
-        codex 命令构造默认已是 ``--sandbox read-only``，此处不改。
+        - **工厂/管理域**（平台操作者派工自己的开发任务）：升档到「工作区内全权限」，
+          让超级员工真正能改文件 / 跑命令 / git——claude → ``bypassPermissions``、
+          codex → ``--sandbox workspace-write``（写/执行限定在 ``-C cwd`` 工作区，不放整机）。
+          可用 env 进一步调档。
+        - **产品/客户域**：claude ``--permission-mode`` 降到 ``default`` 并禁用写/执行类工具，
+          即便被诱导喊 git/shell 也压根没注册 → 硬失败而非软拒绝；codex 仍 ``read-only``。
         """
-        if self._grant.is_factory or self._p.cli_binary != "claude" or not cmd:
+        if not cmd:
+            return cmd
+        if self._grant.is_factory:
+            return self._elevate_factory_cmd(cmd)
+        if self._p.cli_binary != "claude":
             return cmd
         out: list[str] = []
         i = 0
@@ -1361,6 +1369,46 @@ class SuperEmployeeService:
             prompt = out.pop()  # prompt 恒为末位参数
             out += ["--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit", prompt]
         return out
+
+    def _elevate_factory_cmd(self, cmd: list[str]) -> list[str]:
+        """工厂/管理域放开到「工作区内全权限」。产品/客户域永不经过此函数。
+
+        约束靠 ``-C cwd``（codex）/ 工作目录（claude）落在指定 workspace；env 可调档：
+        ``DEVFLEET_CLAUDE_FACTORY_PERMISSION_MODE`` / ``DEVFLEET_CODEX_FACTORY_SANDBOX``
+        （想收回到只读，设为 ``acceptEdits`` / ``read-only`` 即可）。
+        """
+        binary = self._p.cli_binary
+        if binary == "claude":
+            mode = (
+                os.environ.get("DEVFLEET_CLAUDE_FACTORY_PERMISSION_MODE") or "bypassPermissions"
+            ).strip() or "bypassPermissions"
+            out: list[str] = []
+            i = 0
+            replaced = False
+            while i < len(cmd):
+                if cmd[i] == "--permission-mode" and i + 1 < len(cmd):
+                    out += ["--permission-mode", mode]
+                    i += 2
+                    replaced = True
+                    continue
+                out.append(cmd[i])
+                i += 1
+            if not replaced:
+                prompt = out.pop()  # prompt 恒为末位参数
+                out += ["--permission-mode", mode, prompt]
+            return out
+        if binary == "codex":
+            sandbox = (
+                os.environ.get("DEVFLEET_CODEX_FACTORY_SANDBOX") or "workspace-write"
+            ).strip() or "workspace-write"
+            out = list(cmd)
+            for i in range(len(out) - 1):
+                if out[i] == "--sandbox":
+                    out[i + 1] = sandbox
+                    break
+            return out
+        # cursor：--force 已默认开启 cwd 内写权限，无需额外升档。
+        return cmd
 
     def _conversation_cmd(
         self, cli_path: str, prompt: str, resume_session_id: str | None
