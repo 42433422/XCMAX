@@ -170,6 +170,10 @@ data:
   XCAGI_NEURO_BUS_LIFELINE: "1"
   XCAGI_NEURO_BUS_DLQ_AUTO: "1"
   XCAGI_NEURO_BUS_SLA_LOG: "1"
+  # Shipment write path goes event-primary on staging (canary before flipping the
+  # global XCAGI_EVENT_PRIMARY default). Fail-safe: degrades to direct writes if the
+  # bus is down. Mirror this in helm/xcagi/values.yaml.
+  XCAGI_EVENT_PRIMARY_SHIPMENT: "1"
   XCAGI_GLOBAL_RATE_LIMIT: "1"
   XCAGI_GLOBAL_RATE_LIMIT_MAX: "300"
   XCAGI_GLOBAL_RATE_LIMIT_WINDOW: "60"

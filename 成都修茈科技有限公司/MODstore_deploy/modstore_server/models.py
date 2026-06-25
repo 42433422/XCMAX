@@ -30,5 +30,6 @@ from modstore_server.db.knowledge import *  # noqa: F403,F401
 from modstore_server.db.llm_chat import *  # noqa: F403,F401
 from modstore_server.db.openapi import *  # noqa: F403,F401
 from modstore_server.db.ops_events import *  # noqa: F403,F401
+from modstore_server.db.scheduler_ops import *  # noqa: F403,F401
 from modstore_server.db.studio_assets import *  # noqa: F403,F401
 from modstore_server.db.workflow import *  # noqa: F403,F401
