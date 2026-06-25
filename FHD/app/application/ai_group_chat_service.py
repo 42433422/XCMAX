@@ -4,11 +4,12 @@
 不触碰现有人际 IM（``ImConversation`` 等）以零回归。
 
 SSOT 架构（双模式）：
-- **admin 模式**（管理端）：6 部门（``config/duty_roster.json``）+ 上岗员工（``duty_employee_registry.json``）
+- **admin 模式**（管理端）：6 部门 + 54 个编制员工均来自 ``config/duty_roster.json``；
+  ``duty_employee_registry.json`` 与 employee manifest 只补展示元数据。
 - **enterprise 模式**（企业端）：4 部门（工具层/执行层/服务层/管理层）+ 上架员工（MODstore）+ 未上架员工（宿主定制）
 
 部门 → 员工映射为自动派生：
-- admin: ``primary_department_for_pkg(employee_id)`` 从编制矩阵查归属
+- admin: 从 ``duty_roster.json`` 的 departments/subzones 展平员工归属
 - enterprise: ``resolve_enterprise_org_layer(emp_id, ...)`` 从 manifest enterprise_layer / ID 表 / 关键词推断
 """
 
@@ -18,6 +19,7 @@ import json
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,10 @@ _SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset(
 )
 
 CompletionFn = Callable[[list[dict[str, str]]], Awaitable[dict[str, Any]]]
+EmployeeExecutorFn = Callable[
+    [str, str, dict[str, Any], int],
+    dict[str, Any] | Awaitable[dict[str, Any]],
+]
 
 
 def _utc_now() -> str:
@@ -48,6 +54,17 @@ async def _default_completion(messages: list[dict[str, str]]) -> dict[str, Any]:
     from app.mod_sdk.mod_employee_llm import mod_employee_complete
 
     return await mod_employee_complete(messages, max_tokens=600, temperature=0.4)
+
+
+def _default_employee_executor(
+    employee_id: str,
+    task: str,
+    input_data: dict[str, Any],
+    user_id: int,
+) -> dict[str, Any]:
+    from app.application.employee_runtime.executor import execute_employee_task_local
+
+    return execute_employee_task_local(employee_id, task, input_data, user_id=user_id)
 
 
 def _default_departments() -> dict[str, Any]:
@@ -88,46 +105,24 @@ def _dept_key_to_employee_ids(depts: dict[str, Any]) -> dict[str, list[str]]:
     return mapping
 
 
-def _default_duty_employee_loader() -> list[dict[str, Any]]:
-    """admin 模式员工加载器：上岗员工（duty_employee_registry）。
+def _employee_manifest(employee_id: str) -> dict[str, Any]:
+    manifest = Path(__file__).resolve().parents[2] / "mods" / "_employees" / employee_id / "manifest.json"
+    try:
+        raw = json.loads(manifest.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
-    SSOT 为 ``duty_employee_registry.json``；若文件不存在（开发环境），
-    回退到 ``duty_roster.json`` 编制 ID × ``list_all_mods()`` 员工定义。
+
+def _default_duty_employee_loader() -> list[dict[str, Any]]:
+    """admin 模式员工加载器：``config/duty_roster.json`` 编制员工。
+
+    ``duty_roster.json`` 是员工 ID 与部门归属 SSOT；``duty_employee_registry.json`` 与
+    本地 employee manifest 仅补充名称、描述、头像等展示元数据。
     返回 ``[{employee_id, mod_id, name, avatar, summary, department_key}]``。
     """
-    from app.mod_sdk.duty_roster import (
-        load_departments,
-        load_duty_employee_records,
-        primary_department_for_pkg,
-    )
+    from app.mod_sdk.duty_roster import load_departments, load_duty_employee_records
 
-    # 优先走 SSOT：duty_employee_registry.json
-    records = load_duty_employee_records()
-    if records:
-        employees: list[dict[str, Any]] = []
-        for raw in records:
-            eid = str(raw.get("id") or raw.get("pkg_id") or "").strip()
-            if not eid:
-                continue
-            name = str(raw.get("name") or raw.get("label") or raw.get("title") or eid)[:60]
-            dept_key = str(raw.get("department_key") or "").strip()
-            if not dept_key:
-                dept_key = str(primary_department_for_pkg(eid) or "")
-            employees.append(
-                {
-                    "employee_id": eid,
-                    "mod_id": str(raw.get("mod_id") or raw.get("pkg_id") or eid),
-                    "name": name,
-                    "avatar": str(raw.get("avatar") or raw.get("logo") or raw.get("icon") or ""),
-                    "summary": str(raw.get("panel_summary") or raw.get("description") or "")[:280],
-                    "department_key": dept_key,
-                }
-            )
-        if employees:
-            _append_super_employees(employees)
-            return employees
-
-    # 回退：duty_roster 编制 ID × list_all_mods() 员工定义
     depts = load_departments()
     if not isinstance(depts, dict) or not depts:
         return []
@@ -137,57 +132,85 @@ def _default_duty_employee_loader() -> list[dict[str, Any]]:
             if eid not in emp_to_dept:
                 emp_to_dept[eid] = str(dept_key)
 
+    records_by_id: dict[str, dict[str, Any]] = {}
+    for raw in load_duty_employee_records():
+        eid = str(raw.get("id") or raw.get("pkg_id") or "").strip()
+        if eid and eid not in records_by_id:
+            records_by_id[eid] = raw
+
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
     except Exception:  # noqa: BLE001
-        return []
+        get_mod_manager = None  # type: ignore[assignment]
+
+    installed_by_id: dict[str, tuple[str, dict[str, Any], dict[str, Any]]] = {}
+    if get_mod_manager is not None:
+        try:
+            mods = get_mod_manager().list_all_mods() or []
+        except Exception:  # noqa: BLE001
+            mods = []
+        for m in mods:
+            if not isinstance(m, dict):
+                continue
+            mod_id = str(m.get("id") or m.get("mod_id") or "").strip()
+            wf = m.get("workflow_employees")
+            if not isinstance(wf, list):
+                continue
+            for emp in wf:
+                if not isinstance(emp, dict):
+                    continue
+                eid = str(emp.get("id") or "").strip()
+                if eid and eid not in installed_by_id:
+                    installed_by_id[eid] = (mod_id, emp, m)
 
     employees = []
-    try:
-        mods = get_mod_manager().list_all_mods() or []
-    except Exception:  # noqa: BLE001
-        return []
-    for m in mods:
-        if not isinstance(m, dict):
-            continue
-        mod_id = str(m.get("id") or m.get("mod_id") or "").strip()
-        wf = m.get("workflow_employees")
-        if not isinstance(wf, list):
-            continue
-        for emp in wf:
-            if not isinstance(emp, dict):
-                continue
-            eid = str(emp.get("id") or "").strip()
-            if not eid or eid not in emp_to_dept:
-                continue
-            name = str(
-                emp.get("name")
-                or emp.get("label")
-                or emp.get("title")
-                or emp.get("panel_title")
-                or eid
-            ).strip()
-            employees.append(
-                {
-                    "employee_id": eid,
-                    "mod_id": mod_id,
-                    "name": name[:60],
-                    "avatar": str(
-                        emp.get("avatar")
-                        or emp.get("avatar_url")
-                        or m.get("avatar")
-                        or m.get("logo")
-                        or ""
-                    ),
-                    "summary": str(
-                        emp.get("panel_summary")
-                        or emp.get("market_description")
-                        or m.get("description")
-                        or ""
-                    )[:280],
-                    "department_key": emp_to_dept.get(eid, ""),
-                }
-            )
+    for eid, dept_key in emp_to_dept.items():
+        raw = records_by_id.get(eid, {})
+        mod_id, emp, mod = installed_by_id.get(eid, ("", {}, {}))
+        manifest = _employee_manifest(eid)
+        manifest_employee = (
+            manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+        )
+        name = str(
+            raw.get("name")
+            or raw.get("label")
+            or raw.get("title")
+            or emp.get("name")
+            or emp.get("label")
+            or emp.get("title")
+            or emp.get("panel_title")
+            or manifest.get("name")
+            or manifest_employee.get("label")
+            or eid
+        ).strip()
+        employees.append(
+            {
+                "employee_id": eid,
+                "mod_id": str(raw.get("mod_id") or raw.get("pkg_id") or mod_id or eid),
+                "name": name[:60],
+                "avatar": str(
+                    raw.get("avatar")
+                    or raw.get("logo")
+                    or raw.get("icon")
+                    or emp.get("avatar")
+                    or emp.get("avatar_url")
+                    or mod.get("avatar")
+                    or mod.get("logo")
+                    or manifest.get("avatar")
+                    or ""
+                ),
+                "summary": str(
+                    raw.get("panel_summary")
+                    or raw.get("description")
+                    or emp.get("panel_summary")
+                    or emp.get("market_description")
+                    or mod.get("description")
+                    or manifest.get("description")
+                    or ""
+                )[:280],
+                "department_key": dept_key,
+            }
+        )
     _append_super_employees(employees)
     return employees
 
@@ -215,7 +238,8 @@ def _append_super_employees(employees: list[dict[str, Any]]) -> None:
                 "employee_id": profile.employee_id,
                 "mod_id": "super-employee",
                 "name": profile.employee_name,
-                "avatar": "",
+                "avatar": profile.avatar_path,
+                "avatar_key": profile.avatar_key,
                 "summary": f"{profile.display_tool} 超级员工，支持 CLI 直答与多设备派工。",
                 "department_key": "",
             }
@@ -318,6 +342,7 @@ class AiGroupChatService:
         self,
         storage_root: str | Path | None = None,
         completion_fn: CompletionFn | None = None,
+        employee_executor_fn: EmployeeExecutorFn | None = None,
         department_loader: Callable[[], dict[str, Any]] | None = None,
         employee_loader: Callable[[], list[dict[str, Any]]] | None = None,
         mode: str = "admin",
@@ -328,6 +353,7 @@ class AiGroupChatService:
         self._groups_path = self._root / "groups.jsonl"
         self._messages_path = self._root / "messages.jsonl"
         self._completion_fn = completion_fn or _default_completion
+        self._employee_executor_fn = employee_executor_fn or _default_employee_executor
         self._mode = mode if mode in ("admin", "enterprise") else "admin"
         if department_loader is not None:
             self._department_loader = department_loader
@@ -560,6 +586,7 @@ class AiGroupChatService:
         text: str,
         sender_name: str = "我",
         mentions: list[str] | None = None,
+        dispatch: bool = False,
     ) -> dict[str, Any]:
         body = (text or "").strip()
         if not body:
@@ -585,25 +612,39 @@ class AiGroupChatService:
         history = self.get_messages(user_id=user_id, group_id=group_id, limit=CONTEXT_TURNS)
         history = history + [self._public_message(user_msg)]
 
-        for member in responders:
-            reply = await self._ai_reply(group, member, history, user_id=user_id)
-            ai_msg = self._message_row(
+        work_orders: list[dict[str, Any]] = []
+        if dispatch:
+            dispatch_messages, work_orders = await self._dispatch_work(
+                group=group,
+                members=responders,
+                task=body,
                 user_id=user_id,
-                group_id=group_id,
-                role="ai",
-                sender_id=str(member.get("employee_id")),
-                sender_name=str(member.get("name") or member.get("employee_id")),
-                sender_avatar=str(member.get("avatar") or ""),
-                body=reply,
+                sender_name=sender_name or "我",
             )
-            new_messages.append(ai_msg)
-            history = history + [self._public_message(ai_msg)]
+            new_messages.extend(dispatch_messages)
+        else:
+            for member in responders:
+                reply = await self._ai_reply(group, member, history, user_id=user_id)
+                ai_msg = self._message_row(
+                    user_id=user_id,
+                    group_id=group_id,
+                    role="ai",
+                    sender_id=str(member.get("employee_id")),
+                    sender_name=str(member.get("name") or member.get("employee_id")),
+                    sender_avatar=str(member.get("avatar") or ""),
+                    body=reply,
+                )
+                new_messages.append(ai_msg)
+                history = history + [self._public_message(ai_msg)]
 
         self._append_messages(new_messages)
-        return {
+        result: dict[str, Any] = {
             "group": self._public_group(group, None),
             "messages": [self._public_message(m) for m in new_messages],
         }
+        if dispatch:
+            result["work_orders"] = work_orders
+        return result
 
     # ── 回复编排 ──
 
@@ -669,6 +710,214 @@ class AiGroupChatService:
             return str(res["content"]).strip()
         err = str((res or {}).get("error") or "").strip() if isinstance(res, dict) else ""
         return f"（{me} 暂时无法回应{f'：{err}' if err else ''}）"
+
+    async def _dispatch_work(
+        self,
+        *,
+        group: dict[str, Any],
+        members: list[dict[str, Any]],
+        task: str,
+        user_id: int,
+        sender_name: str,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        group_id = str(group.get("id") or "")
+        work_order_id = uuid.uuid4().hex
+        target_names = [str(m.get("name") or m.get("employee_id") or "") for m in members]
+        messages: list[dict[str, Any]] = [
+            self._message_row(
+                user_id=user_id,
+                group_id=group_id,
+                role="ai",
+                sender_id="ai-group-dispatcher",
+                sender_name="工作流调度",
+                sender_avatar="",
+                body=self._format_work_order_message(task, target_names),
+                kind="work_order",
+                status="assigned" if members else "blocked",
+                work_order_id=work_order_id,
+                payload={
+                    "task": task,
+                    "target_employee_ids": [str(m.get("employee_id") or "") for m in members],
+                },
+            )
+        ]
+        if not members:
+            return messages, [
+                {
+                    "work_order_id": work_order_id,
+                    "status": "blocked",
+                    "task": task,
+                    "target_employee_ids": [],
+                }
+            ]
+
+        work_orders: list[dict[str, Any]] = []
+        for member in members:
+            report = await self._execute_employee_work(
+                group=group,
+                member=member,
+                task=task,
+                work_order_id=work_order_id,
+                user_id=user_id,
+                sender_name=sender_name,
+            )
+            work_orders.append(report)
+            messages.append(
+                self._message_row(
+                    user_id=user_id,
+                    group_id=group_id,
+                    role="ai",
+                    sender_id=str(member.get("employee_id") or ""),
+                    sender_name=str(member.get("name") or member.get("employee_id") or ""),
+                    sender_avatar=str(member.get("avatar") or ""),
+                    body=self._format_work_report_message(member, report),
+                    kind="work_report",
+                    status=str(report.get("status") or ""),
+                    work_order_id=work_order_id,
+                    payload=report,
+                )
+            )
+        return messages, work_orders
+
+    async def _execute_employee_work(
+        self,
+        *,
+        group: dict[str, Any],
+        member: dict[str, Any],
+        task: str,
+        work_order_id: str,
+        user_id: int,
+        sender_name: str,
+    ) -> dict[str, Any]:
+        employee_id = str(member.get("employee_id") or "").strip()
+        employee_name = str(member.get("name") or employee_id).strip()
+        input_data = {
+            "source": "ai_group_chat",
+            "client_surface": "ai_group",
+            "invoke_mode": "group_dispatch",
+            "trigger": "ai_group_dispatch",
+            "allow_medium_risk": True,
+            "group_id": str(group.get("id") or ""),
+            "group_name": str(group.get("name") or ""),
+            "work_order_id": work_order_id,
+            "employee_id": employee_id,
+            "employee_name": employee_name,
+            "sender_name": sender_name,
+        }
+        try:
+            maybe_result = self._employee_executor_fn(employee_id, task, input_data, int(user_id))
+            raw = await maybe_result if isawaitable(maybe_result) else maybe_result
+            result = raw if isinstance(raw, dict) else {"success": False, "message": str(raw)}
+            success = bool(result.get("success"))
+            return {
+                "work_order_id": work_order_id,
+                "employee_id": employee_id,
+                "employee_name": employee_name,
+                "task": task,
+                "status": str(result.get("status") or ("done" if success else "failed")),
+                "success": success,
+                "summary": self._execution_summary(result),
+                "risk": self._execution_risk(result, success),
+                "raw": self._compact_result(result),
+            }
+        except Exception as exc:  # noqa: BLE001 - 单个员工失败不能阻断其他员工汇报
+            return {
+                "work_order_id": work_order_id,
+                "employee_id": employee_id,
+                "employee_name": employee_name,
+                "task": task,
+                "status": "failed",
+                "success": False,
+                "summary": str(exc)[:500],
+                "risk": "执行入口异常，需要重试或改派。",
+                "raw": {"error": str(exc)[:500]},
+            }
+
+    @staticmethod
+    def _format_work_order_message(task: str, target_names: list[str]) -> str:
+        if not target_names:
+            return f"【派工失败】没有可派工成员。\n任务：{task}"
+        owners = "、".join(name for name in target_names if name) or "群成员"
+        return (
+            f"【工作派单】{task}\n"
+            f"负责人：{owners}\n"
+            "节奏：接收任务 → 执行处理 → 在群里汇报结果、风险和下一步。"
+        )
+
+    @staticmethod
+    def _format_work_report_message(member: dict[str, Any], report: dict[str, Any]) -> str:
+        name = str(member.get("name") or member.get("employee_id") or "员工")
+        ok = bool(report.get("success"))
+        status = "完成" if ok else "失败"
+        summary = str(report.get("summary") or "").strip() or "无结果摘要"
+        risk = str(report.get("risk") or "").strip() or ("未发现阻塞。" if ok else "存在执行阻塞。")
+        next_step = "等待负责人验收或继续派下一步。" if ok else "请查看失败原因后重试、改派或补充上下文。"
+        return (
+            f"【{name} 执行汇报】\n"
+            f"状态：{status}\n"
+            f"结果：{summary}\n"
+            f"风险：{risk}\n"
+            f"下一步：{next_step}"
+        )
+
+    @staticmethod
+    def _execution_summary(result: dict[str, Any]) -> str:
+        candidates = (
+            result.get("summary"),
+            result.get("message"),
+            result.get("output"),
+            result.get("result"),
+            result.get("report"),
+        )
+        for value in candidates:
+            text = AiGroupChatService._stringify_summary(value)
+            if text:
+                return text[:1200]
+        data = result.get("data")
+        if isinstance(data, dict):
+            for key in ("summary", "message", "output", "result", "report"):
+                text = AiGroupChatService._stringify_summary(data.get(key))
+                if text:
+                    return text[:1200]
+        return AiGroupChatService._stringify_summary(result)[:1200]
+
+    @staticmethod
+    def _execution_risk(result: dict[str, Any], success: bool) -> str:
+        candidates = (result.get("risk"), result.get("risks"), result.get("blocker"))
+        for value in candidates:
+            text = AiGroupChatService._stringify_summary(value)
+            if text:
+                return text[:500]
+        data = result.get("data")
+        if isinstance(data, dict):
+            for key in ("risk", "risks", "blocker"):
+                text = AiGroupChatService._stringify_summary(data.get(key))
+                if text:
+                    return text[:500]
+        return "未发现阻塞。" if success else "执行失败，需负责人介入。"
+
+    @staticmethod
+    def _stringify_summary(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        try:
+            return json.dumps(value, ensure_ascii=False, separators=(",", ":"))[:1200]
+        except TypeError:
+            return str(value)[:1200]
+
+    @staticmethod
+    def _compact_result(result: dict[str, Any]) -> dict[str, Any]:
+        compact: dict[str, Any] = {}
+        for key in ("success", "status", "message", "summary", "task_id", "run_id", "error"):
+            if key in result:
+                value = result[key]
+                if value is None or isinstance(value, str | int | float | bool):
+                    compact[key] = value
+                else:
+                    compact[key] = AiGroupChatService._stringify_summary(value)
+        return compact
 
     async def _super_employee_reply(
         self,
@@ -814,7 +1063,7 @@ class AiGroupChatService:
         }
 
     def _public_message(self, row: dict[str, Any]) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "id": str(row.get("id") or ""),
             "group_id": str(row.get("group_id") or ""),
             "role": str(row.get("role") or "ai"),
@@ -824,6 +1073,13 @@ class AiGroupChatService:
             "body": str(row.get("body") or ""),
             "created_at": str(row.get("created_at") or ""),
         }
+        for key in ("kind", "status", "work_order_id"):
+            if row.get(key):
+                out[key] = str(row.get(key) or "")
+        payload = row.get("payload")
+        if isinstance(payload, dict):
+            out["payload"] = payload
+        return out
 
     def _message_row(
         self,
@@ -835,8 +1091,12 @@ class AiGroupChatService:
         sender_name: str,
         sender_avatar: str,
         body: str,
+        kind: str = "chat",
+        status: str = "",
+        work_order_id: str = "",
+        payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return {
+        row: dict[str, Any] = {
             "id": uuid.uuid4().hex,
             "user_id": int(user_id),
             "group_id": str(group_id),
@@ -847,6 +1107,15 @@ class AiGroupChatService:
             "body": body,
             "created_at": _utc_now(),
         }
+        if kind and kind != "chat":
+            row["kind"] = kind
+        if status:
+            row["status"] = status
+        if work_order_id:
+            row["work_order_id"] = work_order_id
+        if payload:
+            row["payload"] = payload
+        return row
 
     def _latest_previews(self, user_id: int) -> dict[str, dict[str, Any]]:
         previews: dict[str, dict[str, Any]] = {}

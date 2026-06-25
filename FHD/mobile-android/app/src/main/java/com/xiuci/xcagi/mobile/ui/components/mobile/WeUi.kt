@@ -142,7 +142,7 @@ fun WeTopBarAvatarAction(
 ) {
     Box(
         modifier
-            .size(32.dp)
+            .size(MessageAvatarLayout.topBarAvatarSize)
             .clip(CircleShape)
             .pressClickable(pressedScale = Press.ScaleStrong, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -150,7 +150,7 @@ fun WeTopBarAvatarAction(
         AppAvatar(
             imageSource = imageSource,
             fallback = fallback,
-            size = 32.dp,
+            size = MessageAvatarLayout.topBarAvatarSize,
             shape = CircleShape,
         )
     }

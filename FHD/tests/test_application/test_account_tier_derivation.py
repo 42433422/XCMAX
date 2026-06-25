@@ -17,12 +17,16 @@ class TestDeriveAccountTier:
     @pytest.mark.parametrize(
         "budget,expected",
         [
-            ("5 万以内", "normal"),
-            ("5–20 万", "pro"),  # 中文长连字符 U+2013
+            ("1–5 万", "normal"),  # 中文长连字符 U+2013
+            ("5–10 万", "pro"),
+            ("10–50 万", "max"),
+            ("50–100 万", "ultra"),
+            ("5-10万", "pro"),  # 短横变体
+            ("10-50万", "max"),
+            ("5 万以内", "normal"),  # 旧档位兼容
+            ("5–20 万", "pro"),
             ("20–50 万", "max"),
             ("50 万以上", "ultra"),
-            ("5-20万", "pro"),  # 短横变体
-            ("20-50万", "max"),
             ("", "normal"),
             (None, "normal"),
             ("暂未确定", "normal"),
@@ -33,7 +37,7 @@ class TestDeriveAccountTier:
         assert derive_account_tier(budget) == expected
 
     def test_all_outputs_valid(self):
-        for b in ("5 万以内", "5–20 万", "20–50 万", "50 万以上", None):
+        for b in ("1–5 万", "5–10 万", "10–50 万", "50–100 万", None):
             assert derive_account_tier(b) in VALID_ACCOUNT_TIERS
 
 

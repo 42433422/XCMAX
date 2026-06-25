@@ -41,11 +41,16 @@ def make_completion(seen: list[dict] | None = None):
 
 
 def make_service(
-    tmp_path: Path, seen: list[dict] | None = None, employees=None, mode: str = "admin"
+    tmp_path: Path,
+    seen: list[dict] | None = None,
+    employees=None,
+    mode: str = "admin",
+    executor=None,
 ) -> AiGroupChatService:
     return AiGroupChatService(
         storage_root=tmp_path,
         completion_fn=make_completion(seen),
+        employee_executor_fn=executor,
         department_loader=fake_enterprise_departments if mode == "enterprise" else fake_departments,
         employee_loader=(employees if callable(employees) else (lambda: employees or [])),
         mode=mode,
@@ -133,6 +138,106 @@ async def test_empty_group_only_stores_user_message(tmp_path: Path):
     gid = svc.list_groups(user_id=1)[0]["id"]  # 无成员
     result = await svc.post_message(user_id=1, group_id=gid, text="有人吗")
     assert [m["role"] for m in result["messages"]] == ["user"]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_message_creates_work_order_and_reports(tmp_path: Path):
+    calls: list[dict] = []
+
+    def executor(employee_id: str, task: str, input_data: dict, user_id: int):
+        calls.append(
+            {
+                "employee_id": employee_id,
+                "task": task,
+                "input_data": input_data,
+                "user_id": user_id,
+            }
+        )
+        return {"success": True, "summary": f"{employee_id} 已完成"}
+
+    svc = make_service(tmp_path, executor=executor)
+    gid = svc.list_groups(user_id=7)[0]["id"]
+    svc.add_member(user_id=7, group_id=gid, member={"employee_id": "e1", "name": "小销"})
+    svc.add_member(user_id=7, group_id=gid, member={"employee_id": "e2", "name": "小服"})
+
+    result = await svc.post_message(
+        user_id=7,
+        group_id=gid,
+        text="整理本周客户转化数据",
+        dispatch=True,
+    )
+
+    assert [c["employee_id"] for c in calls] == ["e1", "e2"]
+    assert all(c["task"] == "整理本周客户转化数据" for c in calls)
+    assert all(c["user_id"] == 7 for c in calls)
+    assert all(c["input_data"]["invoke_mode"] == "group_dispatch" for c in calls)
+    assert [m.get("kind") for m in result["messages"]] == [
+        None,
+        "work_order",
+        "work_report",
+        "work_report",
+    ]
+    reports = [m for m in result["messages"] if m.get("kind") == "work_report"]
+    assert {m["sender_id"] for m in reports} == {"e1", "e2"}
+    assert all("执行汇报" in m["body"] for m in reports)
+    assert all("风险：" in m["body"] for m in reports)
+    assert len(result["work_orders"]) == 2
+    assert len(svc.get_messages(user_id=7, group_id=gid)) == 4
+
+
+@pytest.mark.asyncio
+async def test_dispatch_mention_targets_one_employee_point_to_point(tmp_path: Path):
+    calls: list[str] = []
+
+    def executor(employee_id: str, task: str, input_data: dict, user_id: int):
+        calls.append(employee_id)
+        return {"success": True, "message": f"{employee_id} done"}
+
+    svc = make_service(tmp_path, executor=executor)
+    gid = svc.list_groups(user_id=1)[0]["id"]
+    employees = [
+        {"employee_id": "sales", "name": "销售"},
+        {"employee_id": "service", "name": "客服"},
+        {"employee_id": "ops", "name": "运营"},
+    ]
+    for member in employees:
+        svc.add_member(user_id=1, group_id=gid, member=member)
+
+    for member in employees:
+        calls.clear()
+        result = await svc.post_message(
+            user_id=1,
+            group_id=gid,
+            text=f"@{member['name']} 点对点测试：回报你的执行结果",
+            mentions=[member["employee_id"]],
+            dispatch=True,
+        )
+        assert calls == [member["employee_id"]]
+        reports = [m for m in result["messages"] if m.get("kind") == "work_report"]
+        assert len(reports) == 1
+        assert reports[0]["sender_id"] == member["employee_id"]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_failure_reports_without_blocking_other_employees(tmp_path: Path):
+    def executor(employee_id: str, task: str, input_data: dict, user_id: int):
+        if employee_id == "bad":
+            raise RuntimeError("工具不可用")
+        return {"success": True, "summary": "已处理"}
+
+    svc = make_service(tmp_path, executor=executor)
+    gid = svc.list_groups(user_id=1)[0]["id"]
+    svc.add_member(user_id=1, group_id=gid, member={"employee_id": "bad", "name": "失败员工"})
+    svc.add_member(user_id=1, group_id=gid, member={"employee_id": "ok", "name": "正常员工"})
+
+    result = await svc.post_message(user_id=1, group_id=gid, text="执行回归测试", dispatch=True)
+
+    reports = [m for m in result["messages"] if m.get("kind") == "work_report"]
+    by_sender = {m["sender_id"]: m for m in reports}
+    assert by_sender["bad"]["status"] == "failed"
+    assert "工具不可用" in by_sender["bad"]["body"]
+    assert by_sender["ok"]["status"] == "done"
+    assert "已处理" in by_sender["ok"]["body"]
 
 
 def test_create_custom_group(tmp_path: Path):

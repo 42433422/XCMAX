@@ -10,6 +10,11 @@ export type ModelPaymentPlan = {
   amount_cents: number;
   currency: string;
   badge: string | null;
+  quota_cents?: number;
+  duration_days?: number;
+  license_type?: 'trial' | 'permanent' | string;
+  expires_behavior?: 'freeze' | string;
+  account_tier?: 'normal' | 'pro' | 'max' | 'ultra' | string;
 };
 
 export type ModelPaymentIntegration = {

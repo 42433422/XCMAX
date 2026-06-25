@@ -87,6 +87,7 @@ import com.xiuci.xcagi.mobile.ui.ChatSuggestion
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
@@ -577,7 +578,11 @@ private fun ImBubble(
                 ),
             )
             .padding(
-                top = if (showAvatar) 12.dp else 4.dp,
+                top = if (showAvatar) {
+                    MessageAvatarLayout.bubbleTopPaddingWithAvatar
+                } else {
+                    MessageAvatarLayout.bubbleTopPaddingWithoutAvatar
+                },
                 bottom = 4.dp,
             ),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -589,12 +594,12 @@ private fun ImBubble(
                 AppAvatar(
                     imageSource = aiAvatarUrl,
                     fallback = aiAvatarFallback,
-                    size = 40.dp,
-                    shape = RoundedCornerShape(8.dp),
+                    size = MessageAvatarLayout.bubbleAvatarSize,
+                    shape = MessageAvatarLayout.bubbleAvatarShape(),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(MessageAvatarLayout.bubbleAvatarGap))
             } else {
-                Spacer(Modifier.width(48.dp))
+                Spacer(Modifier.width(MessageAvatarLayout.bubbleAvatarReservedWidth))
             }
         }
 
@@ -625,15 +630,15 @@ private fun ImBubble(
         // 用户头像
         if (isUser) {
             if (showAvatar) {
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(MessageAvatarLayout.bubbleAvatarGap))
                 AppAvatar(
                     imageSource = userAvatarUrl,
                     fallback = AppAvatarFallback.USER,
-                    size = 40.dp,
-                    shape = RoundedCornerShape(8.dp),
+                    size = MessageAvatarLayout.bubbleAvatarSize,
+                    shape = MessageAvatarLayout.bubbleAvatarShape(),
                 )
             } else {
-                Spacer(Modifier.width(48.dp))
+                Spacer(Modifier.width(MessageAvatarLayout.bubbleAvatarReservedWidth))
             }
         }
     }
@@ -902,8 +907,8 @@ private fun ChatEmptyState(
             AppAvatar(
                 imageSource = aiAvatarUrl,
                 fallback = aiAvatarFallback,
-                size = 72.dp,
-                shape = RoundedCornerShape(20.dp),
+                size = MessageAvatarLayout.emptyStateAvatarSize,
+                shape = MessageAvatarLayout.emptyStateAvatarShape(),
             )
             Spacer(Modifier.height(Spacing.md))
             Text(
@@ -1109,17 +1114,20 @@ fun AiEmployeeListScreen(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = Spacing.md, vertical = 10.dp),
+                                .padding(
+                                    horizontal = MessageAvatarLayout.employeePickerRowHorizontalPadding,
+                                    vertical = MessageAvatarLayout.employeePickerRowVerticalPadding,
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             AppAvatar(
                                 imageSource = employee.avatarUrl,
                                 fallback = AppAvatarFallback.AI_EMPLOYEE,
-                                size = 44.dp,
-                                shape = MaterialTheme.shapes.extraSmall,
+                                size = MessageAvatarLayout.employeePickerAvatarSize,
+                                shape = MessageAvatarLayout.employeePickerAvatarShape(),
                                 contentDescription = employee.name,
                             )
-                            Spacer(Modifier.width(Spacing.md))
+                            Spacer(Modifier.width(MessageAvatarLayout.employeePickerAvatarTextGap))
 
                             Column(Modifier.weight(1f)) {
                                 Text(
@@ -1153,7 +1161,11 @@ fun AiEmployeeListScreen(
                             )
                         }
                     }
-                    HorizontalDivider(thickness = 0.5.dp, color = imDivider(), modifier = Modifier.padding(start = 68.dp))
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color = imDivider(),
+                        modifier = Modifier.padding(start = MessageAvatarLayout.employeePickerDividerStart),
+                    )
                 }
             }
         }

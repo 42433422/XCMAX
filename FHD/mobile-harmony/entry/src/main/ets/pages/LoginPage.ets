@@ -32,11 +32,11 @@ export struct LoginPage {
               .backgroundColor('#101827');
 
             Column({ space: 4 }) {
-              Text('XCAGI 企业移动端')
+              Text('XCAGI 企业版')
                 .fontSize(24)
                 .fontWeight(FontWeight.Bold)
                 .fontColor('#101827');
-              Text('员工、会话、Codex 协同入口')
+              Text('企业 AI 员工与协同办公移动端')
                 .fontSize(14)
                 .fontColor('#506074');
             }

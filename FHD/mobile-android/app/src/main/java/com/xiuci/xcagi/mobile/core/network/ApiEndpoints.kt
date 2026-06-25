@@ -14,6 +14,8 @@ object ApiEndpoints {
 
     // 认证
     const val AUTH_LOGIN = "$BASE/auth/login"
+    const val AUTH_REGISTER = "$BASE/auth/register"
+    const val AUTH_SESSION_VALIDATE = "$BASE/auth/session/validate"
     const val AUTH_LOGIN_WITH_PHONE_CODE = "$BASE/auth/login-with-phone-code"
     const val AUTH_QR_CONFIRM = "$BASE/auth/qr/confirm"
     const val AUTH_OIDC_EXCHANGE = "$BASE/auth/oidc/exchange"
@@ -41,6 +43,12 @@ object ApiEndpoints {
     // MOD
     const val MODS = "$BASE/mods"
     const val PLATFORM_SHELL = "$BASE/platform-shell"
+    const val ONBOARDING_INDUSTRIES = "$BASE/onboarding/industries"
+    const val ONBOARDING_INDUSTRY_BASELINE = "$BASE/onboarding/industry-baseline"
+    const val INSTALL_HOST_FOUNDATION = "$BASE/mod-store/install-host-foundation"
+    const val INSTALL_MOD = "$BASE/mod-store/install"
+    const val INSTALL_INDUSTRY_SEED = "$BASE/mod-store/install-industry-seed"
+    const val INSTALL_CUSTOMER_DELIVERY_SEED = "$BASE/mod-store/install-customer-delivery-seed"
 
     // 首页
     const val HOME = "$BASE/home"
@@ -68,6 +76,7 @@ object ApiEndpoints {
     // 中继
     const val RELAY_MOBILE_CONFIRM = "$BASE/relay/mobile/confirm"
     const val RELAY_MOBILE_CONFIRM_CODE = "$BASE/relay/mobile/confirm-code"
+    const val RELAY_MOBILE_BIND_ACCOUNT = "$BASE/relay/mobile/bind-account"
     const val RELAY_MOBILE_DESKTOPS = "$BASE/relay/mobile/desktops"
     const val RELAY_TASKS = "$BASE/relay/tasks"
     const val RELAY_TASKS_DETAIL = "$BASE/relay/tasks/{taskId}"
@@ -103,4 +112,7 @@ object ApiEndpoints {
 
     // 钱包 / 余额
     const val WALLET_BALANCE = "$BASE/wallet/balance"
+    const val PAYMENT_PLANS = "$BASE/payment/plans"
+    const val PAYMENT_CHECKOUT = "$BASE/payment/checkout"
+    const val PAYMENT_QUERY = "$BASE/payment/query/{outTradeNo}"
 }

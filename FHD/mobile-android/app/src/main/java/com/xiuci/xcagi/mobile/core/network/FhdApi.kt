@@ -65,6 +65,9 @@ data class RegisterRequest(
     val password: String,
     val email: String? = null,
     val verification_code: String? = null,
+    val industry_id: String? = null,
+    val budget_range: String? = null,
+    val account_kind: String = "enterprise",
 )
 
 data class ApproveBody(val approver_id: Int, val opinion: String = "")
@@ -73,6 +76,7 @@ data class BridgeRespondBody(val response: String, val responded_by: String? = n
 data class PairingExchangeBody(val nonce: String = "", val code: String = "")
 data class RelayConfirmBody(val relay_id: String, val code: String)
 data class RelayConfirmCodeBody(val code: String)
+data class RelayBindAccountBody(val relay_id: String)
 data class RelayTaskCreateBody(
     val relay_id: String,
     val kind: String = "codex.invoke",
@@ -138,6 +142,12 @@ interface FhdApi {
 
     @POST(ApiEndpoints.AUTH_LOGIN)
     suspend fun mobileLogin(@Body body: MobileLoginRequest): MobileEnvelope<MobileLoginData>
+
+    @POST(ApiEndpoints.AUTH_REGISTER)
+    suspend fun mobileRegister(@Body body: RegisterRequest): MobileEnvelope<MobileLoginData>
+
+    @GET(ApiEndpoints.AUTH_SESSION_VALIDATE)
+    suspend fun mobileSessionValidate(): MobileEnvelope<Map<String, Any?>>
 
     @POST(ApiEndpoints.AUTH_LOGIN_WITH_PHONE_CODE)
     suspend fun mobileLoginWithPhone(@Body body: MobilePhoneLoginRequest): MobileEnvelope<MobileLoginData>
@@ -230,6 +240,24 @@ interface FhdApi {
     @GET(ApiEndpoints.PLATFORM_SHELL)
     suspend fun mobilePlatformShell(): MobileEnvelope<Map<String, Any?>>
 
+    @GET(ApiEndpoints.ONBOARDING_INDUSTRIES)
+    suspend fun mobileOnboardingIndustries(): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.ONBOARDING_INDUSTRY_BASELINE)
+    suspend fun mobileIndustryBaseline(@Query("industry_id") industryId: String): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.INSTALL_HOST_FOUNDATION)
+    suspend fun mobileInstallHostFoundation(@Query("edition") edition: String = "generic"): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.INSTALL_INDUSTRY_SEED)
+    suspend fun mobileInstallIndustrySeed(@Body body: Map<String, String>): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.INSTALL_MOD)
+    suspend fun mobileInstallMod(@Body body: Map<String, String>): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.INSTALL_CUSTOMER_DELIVERY_SEED)
+    suspend fun mobileInstallCustomerDeliverySeed(@Body body: Map<String, String>): MobileEnvelope<Map<String, Any?>>
+
     @GET(ApiEndpoints.HOME)
     suspend fun mobileHome(): MobileEnvelope<Map<String, Any?>>
 
@@ -283,6 +311,9 @@ interface FhdApi {
 
     @POST(ApiEndpoints.RELAY_MOBILE_CONFIRM_CODE)
     suspend fun relayConfirmCode(@Body body: RelayConfirmCodeBody): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.RELAY_MOBILE_BIND_ACCOUNT)
+    suspend fun relayBindAccount(@Body body: RelayBindAccountBody): MobileEnvelope<Map<String, Any?>>
 
     @GET(ApiEndpoints.RELAY_MOBILE_DESKTOPS)
     suspend fun relayDesktops(): MobileEnvelope<Map<String, Any?>>
@@ -426,4 +457,13 @@ interface FhdApi {
 
     @GET(ApiEndpoints.WALLET_BALANCE)
     suspend fun mobileWalletBalance(): MobileEnvelope<WalletBalanceDto>
+
+    @GET(ApiEndpoints.PAYMENT_PLANS)
+    suspend fun mobilePaymentPlans(): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.PAYMENT_CHECKOUT)
+    suspend fun mobilePaymentCheckout(@Body body: Map<String, Any?>): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.PAYMENT_QUERY)
+    suspend fun mobilePaymentQuery(@Path("outTradeNo") outTradeNo: String): MobileEnvelope<Map<String, Any?>>
 }

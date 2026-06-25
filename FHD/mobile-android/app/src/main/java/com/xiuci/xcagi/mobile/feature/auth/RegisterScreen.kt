@@ -1,8 +1,7 @@
 package com.xiuci.xcagi.mobile.feature.auth
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,147 +9,86 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.xiuci.xcagi.mobile.ui.AppViewModel
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthInputField
-import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
+import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 
 @Composable
-fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
-    var u by remember { mutableStateOf("") }
-    var p by remember { mutableStateOf("") }
-    var e by remember { mutableStateOf("") }
-    var agreed by remember { mutableStateOf(false) }
-    val canSubmit = u.isNotBlank() && p.isNotBlank() && e.isNotBlank() && agreed
+fun RegisterScreen(
+        onOpenWebForm: () -> Unit,
+        onLogin: () -> Unit = {},
+) {
+    val isEnterprise = ProductSkuConfig.isEnterprise
 
     Column(
             Modifier.fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp)
-                    .padding(top = 60.dp),
+                    .padding(top = 60.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Text(
-                "创建账号",
+                "账号注册",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
         )
-        Spacer(Modifier.height(6.dp))
         Text(
-                "注册 XCAGI 企业平台账号",
+                if (isEnterprise) "使用网页开户注册表单，和桌面端保持一致。"
+                else "使用网页注册表单创建账号。",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.outline,
         )
-        Spacer(Modifier.height(32.dp))
 
-        // 用户名
-        WeAuthInputField(
-                label = "用户名",
-                value = u,
-                onValueChange = { u = it },
-                singleLine = true,
-        )
-        Spacer(Modifier.height(12.dp))
-
-        // 密码
-        WeAuthInputField(
-                label = "密码",
-                value = p,
-                onValueChange = { p = it },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        )
-        Spacer(Modifier.height(12.dp))
-
-        // 邮箱
-        WeAuthInputField(
-                label = "邮箱",
-                value = e,
-                onValueChange = { e = it },
-                singleLine = true,
-        )
-        Spacer(Modifier.height(24.dp))
-
-        // 协议勾选
-        Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable { agreed = !agreed },
+        Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
-            Box(
-                    Modifier.size(16.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(
-                                    if (agreed) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.outlineVariant
-                            ),
-                    contentAlignment = Alignment.Center,
+            Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top,
             ) {
-                if (agreed)
-                        Icon(Icons.Default.Check, null, Modifier.size(12.dp), tint = Color.White)
+                Icon(Icons.Default.Language, contentDescription = null)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                            "网页登录表单",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                            "打开桌面端注册页填写用户名、邮箱、行业、预算区间、密码和确认密码。提交成功后回到 App 登录并继续启动配置。",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 19.sp,
+                    )
+                }
             }
-            Spacer(Modifier.size(6.dp))
-            Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.outline, fontSize = 12.sp)) {
-                            append("我已阅读并同意")
-                        }
-                        withStyle(
-                                SpanStyle(
-                                        color = XcagiTheme.extra.brandBlue,
-                                        fontSize = 12.sp,
-                                        textDecoration = TextDecoration.Underline
-                                )
-                        ) { append("《用户协议》") }
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.outline, fontSize = 12.sp)) {
-                            append("和")
-                        }
-                        withStyle(
-                                SpanStyle(
-                                        color = XcagiTheme.extra.brandBlue,
-                                        fontSize = 12.sp,
-                                        textDecoration = TextDecoration.Underline
-                                )
-                        ) { append("《隐私政策》") }
-                    }
-            )
         }
-        Spacer(Modifier.height(24.dp))
 
-        // 注册按钮
-        Box(
-                Modifier.fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(if (canSubmit) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.outlineVariant)
-                        .clickable(enabled = canSubmit) {
-                            vm.register(u, p, e) { if (it) onBack() }
-                        },
-                contentAlignment = Alignment.Center,
-        ) { Text("注册", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White) }
+        Button(onClick = onOpenWebForm, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Text("去网页填写注册表单")
+        }
+        OutlinedButton(onClick = onLogin, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Text("返回登录")
+        }
+        Spacer(Modifier.height(8.dp))
     }
 }

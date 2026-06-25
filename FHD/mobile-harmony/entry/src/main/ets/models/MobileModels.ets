@@ -20,6 +20,17 @@ export interface MobileEnvelope<T> {
   data?: T;
 }
 
+/** 消息页头像尺寸与位置 SSOT（对标 Android MessageAvatarLayout）。 */
+export const MESSAGE_AVATAR_LAYOUT = {
+  conversationAvatarSize: 48,
+  conversationAvatarRadius: 14,
+  conversationAvatarTextGap: 12,
+  conversationRowPadding: 14,
+  conversationRowMarginHorizontal: 14,
+  conversationCardRadius: 14,
+  conversationAvatarFontSize: 18
+};
+
 export interface MobileLoginData {
   user?: UserDto;
   session_id?: string;

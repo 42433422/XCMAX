@@ -46,6 +46,10 @@ class RelayMobileConfirmCodeBody(BaseModel):
     code: str = Field(..., min_length=4, max_length=16)
 
 
+class RelayMobileBindAccountBody(BaseModel):
+    relay_id: str = Field(..., min_length=8, max_length=80)
+
+
 class RelayTaskCreateBody(BaseModel):
     relay_id: str = Field(..., min_length=8, max_length=80)
     kind: str = Field(default="codex.invoke", max_length=64)
@@ -99,6 +103,7 @@ class AiGroupMessageBody(BaseModel):
     message: str = Field(default="", max_length=4000)
     sender_name: str = Field(default="我", max_length=60)
     mentions: list[str] = Field(default_factory=list)
+    dispatch: bool = Field(default=False)
 
 
 class MobileServiceBridgeRespondBody(BaseModel):

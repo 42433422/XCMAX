@@ -800,7 +800,18 @@ _INTAKE_PRIMARY_GOALS = frozenset(
 )
 _INTAKE_DIRECTIONS = frozenset({"少做表格单据", "流程更顺", "上AI助手", "和现有系统打通"})
 _INTAKE_TIMELINES = frozenset({"2 周内", "1 个月内", "1–3 个月", "季度内", "先评估"})
-_INTAKE_BUDGETS = frozenset({"5 万以内", "5–20 万", "20–50 万", "50 万以上"})
+_INTAKE_BUDGETS = frozenset(
+    {
+        "1–5 万",
+        "5–10 万",
+        "10–50 万",
+        "50–100 万",
+        "5 万以内",
+        "5–20 万",
+        "20–50 万",
+        "50 万以上",
+    }
+)
 _INTAKE_NEED_INTEGRATION = frozenset({"yes", "no"})
 
 _INTAKE_TEXT_LIMITS: Dict[str, int] = {
@@ -837,7 +848,7 @@ draft 字段名与含义（不确定则省略，禁止编造手机/邮箱/姓名
 - manualSteps, painGoals, sampleDesc: 文本
 - name, phone, email, company: 仅当用户明确提供时才填写
 - timeline: 2 周内、1 个月内、1–3 个月、季度内、先评估
-- budget: 5 万以内、5–20 万、20–50 万、50 万以上
+- budget: 1–5 万、5–10 万、10–50 万、50–100 万
 - needIntegration: yes 或 no
 - integrationNote, extraNote: 文本
 

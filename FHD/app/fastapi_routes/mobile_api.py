@@ -32,6 +32,16 @@ class MobileLoginRequest(BaseModel):
     account_kind: str = Field(default="enterprise", max_length=32)
 
 
+class MobileRegisterRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=128)
+    password: str = Field(..., min_length=1)
+    email: str = Field(default="", max_length=256)
+    verification_code: str = Field(default="", max_length=32)
+    industry_id: str = Field(default="通用", max_length=64)
+    budget_range: str = Field(default="", max_length=64)
+    account_kind: str = Field(default="enterprise", max_length=32)
+
+
 class MobileRefreshRequest(BaseModel):
     refresh_token: str = Field(..., min_length=10)
 
@@ -161,6 +171,118 @@ def _should_retry_mobile_admin_login(message: str, account_kind: str) -> bool:
     return "管理员账号不能从企业账号入口登录" in message or "管理员入口登录" in message
 
 
+def _mobile_auth_success_payload(
+    payload: dict[str, Any],
+    *,
+    account_kind: str,
+    fallback_username: str,
+) -> dict[str, Any] | None:
+    session_id = str(payload.get("session_id") or "").strip()
+    user_raw = payload.get("user")
+    if not session_id or not isinstance(user_raw, dict) or user_raw.get("id") is None:
+        return None
+    resolved_kind = str(payload.get("account_kind") or account_kind).strip() or account_kind
+    username = str(user_raw.get("username") or fallback_username).strip()
+    tokens = issue_mobile_tokens(
+        user_id=int(user_raw["id"]),
+        session_id=session_id,
+        account_kind=resolved_kind,
+        username=username,
+    )
+    data: dict[str, Any] = {
+        "user": user_raw,
+        "session_id": session_id,
+        "account_kind": resolved_kind,
+        **tokens,
+        "expires_in": 24 * 3600,
+    }
+    for key in (
+        "market_access_token",
+        "market_refresh_token",
+        "company_brand",
+        "tenant_id",
+        "tenant_name",
+        "market_is_admin",
+        "market_is_enterprise",
+        "entitled_mod_ids",
+        "tier",
+        "account_tier",
+        "budget_range",
+        "industry_id",
+        "entitled_industries",
+        "market_membership_tier",
+    ):
+        if key in payload and payload[key] is not None:
+            data[key] = payload[key]
+    return data
+
+
+def _mobile_auth_error_response(
+    payload: dict[str, Any],
+    status: int,
+    *,
+    fallback_message: str,
+) -> JSONResponse:
+    message = _web_login_error_message(payload)
+    if not message or message == "登录失败":
+        message = str(payload.get("message") or fallback_message).strip() or fallback_message
+    code = status if status >= 400 else 401
+    return JSONResponse(
+        format_mobile_response(
+            data={"error": message, "error_id": payload.get("error_id")},
+            message=message,
+            success=False,
+            code=code,
+        ),
+        status_code=code,
+    )
+
+
+@router.post("/auth/register", response_model=dict[str, Any])
+async def mobile_auth_register(body: MobileRegisterRequest):
+    """移动端注册：复用桌面 ``/api/auth/register``，成功后直接签发 mobile JWT。"""
+    from app.application.session_account_meta import normalize_account_kind
+    from app.fastapi_routes.domains.auth.routes import auth_register
+    from app.mod_sdk.product_skus import resolve_product_sku
+
+    sku = resolve_product_sku()
+    default_kind = "enterprise" if sku == "enterprise" else "personal"
+    account_kind = normalize_account_kind(body.account_kind, default=default_kind)
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/auth/register",
+        "headers": [],
+    }
+    request = Request(scope)
+    web_resp = await auth_register(
+        request,
+        {
+            "username": body.username.strip(),
+            "password": body.password,
+            "email": body.email.strip(),
+            "verification_code": body.verification_code.strip(),
+            "industry_id": body.industry_id.strip(),
+            "budget_range": body.budget_range.strip(),
+            "account_kind": account_kind,
+        },
+    )
+    payload, status = _parse_web_auth_login_response(web_resp)
+    if not payload.get("success"):
+        return _mobile_auth_error_response(payload, status, fallback_message="注册失败")
+    data = _mobile_auth_success_payload(
+        payload,
+        account_kind=account_kind,
+        fallback_username=body.username.strip(),
+    )
+    if data is None:
+        return JSONResponse(
+            format_mobile_response(data=None, message="会话创建失败", success=False, code=500),
+            status_code=500,
+        )
+    return format_mobile_response(data=data, message="注册成功")
+
+
 @router.post("/auth/login")
 async def mobile_auth_login(body: MobileLoginRequest):
     """与 Web ``POST /api/auth/login`` 共用认证逻辑（市场校验、JIT、account_kind、市场 token）。"""
@@ -217,9 +339,12 @@ async def mobile_auth_login(body: MobileLoginRequest):
                 status_code=code,
             )
 
-    session_id = str(payload.get("session_id") or "").strip()
-    user_raw = payload.get("user")
-    if not session_id or not isinstance(user_raw, dict) or user_raw.get("id") is None:
+    data = _mobile_auth_success_payload(
+        payload,
+        account_kind=account_kind,
+        fallback_username=body.username.strip(),
+    )
+    if data is None:
         return JSONResponse(
             format_mobile_response(
                 data=None,
@@ -229,30 +354,6 @@ async def mobile_auth_login(body: MobileLoginRequest):
             ),
             status_code=500,
         )
-
-    resolved_kind = str(payload.get("account_kind") or account_kind).strip() or account_kind
-    tokens = issue_mobile_tokens(
-        user_id=int(user_raw["id"]),
-        session_id=session_id,
-        account_kind=resolved_kind,
-        username=str(user_raw.get("username") or body.username.strip()),
-    )
-    data: dict[str, Any] = {
-        "user": user_raw,
-        "session_id": session_id,
-        "account_kind": resolved_kind,
-        **tokens,
-        "expires_in": 24 * 3600,
-    }
-    for key in (
-        "market_access_token",
-        "market_refresh_token",
-        "company_brand",
-        "market_is_admin",
-        "market_is_enterprise",
-    ):
-        if key in payload and payload[key] is not None:
-            data[key] = payload[key]
     return format_mobile_response(data=data, message="登录成功")
 
 
@@ -294,38 +395,16 @@ async def mobile_auth_login_with_phone(body: dict):
             ),
             status_code=code_out,
         )
-    session_id = str(payload.get("session_id") or "").strip()
-    user_raw = payload.get("user")
-    if not session_id or not isinstance(user_raw, dict) or user_raw.get("id") is None:
+    data = _mobile_auth_success_payload(
+        payload,
+        account_kind=account_kind,
+        fallback_username=phone,
+    )
+    if data is None:
         return JSONResponse(
             format_mobile_response(data=None, message="会话创建失败", success=False, code=500),
             status_code=500,
         )
-    resolved_kind = str(payload.get("account_kind") or account_kind).strip() or account_kind
-    tokens = issue_mobile_tokens(
-        user_id=int(user_raw["id"]),
-        session_id=session_id,
-        account_kind=resolved_kind,
-        username=str(user_raw.get("username") or phone),
-    )
-    data: dict[str, Any] = {
-        "user": user_raw,
-        "session_id": session_id,
-        "account_kind": resolved_kind,
-        **tokens,
-        "expires_in": 24 * 3600,
-    }
-    for key in (
-        "market_access_token",
-        "market_refresh_token",
-        "company_brand",
-        "tenant_id",
-        "tenant_name",
-        "market_is_admin",
-        "market_is_enterprise",
-    ):
-        if key in payload and payload[key] is not None:
-            data[key] = payload[key]
     return format_mobile_response(data=data, message="登录成功")
 
 
@@ -343,6 +422,85 @@ async def mobile_auth_refresh(body: MobileRefreshRequest):
             status_code=401,
         )
     return format_mobile_response(data={**tokens, "expires_in": 24 * 3600})
+
+
+@router.get("/auth/session/validate", response_model=dict[str, Any])
+async def mobile_auth_session_validate(request: Request, user=Depends(get_mobile_user)):
+    """移动端冷启动会话校验：校验 mobile JWT 绑定的 FHD session 并刷新权益。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(
+                data={"valid": False},
+                message="未授权",
+                success=False,
+                code=401,
+            ),
+            status_code=401,
+        )
+    auth_hdr = request.headers.get("Authorization") or ""
+    payload = verify_mobile_jwt(auth_hdr[7:].strip()) if auth_hdr.startswith("Bearer ") else None
+    session_id = str((payload or {}).get("session_id") or request.headers.get("X-Session-ID") or "").strip()
+    if not session_id:
+        return JSONResponse(
+            format_mobile_response(
+                data={"valid": False},
+                message="会话缺少 session_id",
+                success=False,
+                code=401,
+            ),
+            status_code=401,
+        )
+    from app.application.auth_app_service import get_auth_app_service
+    from app.application.session_account_meta import load_session_account_meta
+
+    auth_app_service = get_auth_app_service()
+    session_info = auth_app_service.session_manager.get_session_info(session_id)
+    if not session_info:
+        return JSONResponse(
+            format_mobile_response(
+                data={"valid": False},
+                message="会话无效或已过期",
+                success=False,
+                code=401,
+            ),
+            status_code=401,
+        )
+    entitled_mod_ids: list[str] = []
+    try:
+        from app.enterprise.mod_entitlements import sync_entitlements_for_session
+
+        entitled = await sync_entitlements_for_session(session_id)
+        if entitled:
+            entitled_mod_ids = sorted(entitled)
+    except RECOVERABLE_ERRORS:
+        logger.exception("mobile session validate entitlement sync failed")
+    market_token = ""
+    market_refresh = ""
+    try:
+        from app.fastapi_routes.market_account import (
+            resolve_valid_market_access_token,
+            session_market_refresh_token,
+        )
+
+        market_token = await resolve_valid_market_access_token(session_id)
+        market_refresh = session_market_refresh_token(session_id)
+    except RECOVERABLE_ERRORS:
+        logger.exception("mobile session validate market token refresh failed")
+    meta = load_session_account_meta(session_id) or {}
+    data: dict[str, Any] = {
+        "valid": True,
+        "session_id": session_id,
+        "user": _user_public_dict(user),
+        "session": session_info,
+        "account_kind": meta.get("account_kind") or (payload or {}).get("account_kind") or "enterprise",
+        "company_brand": meta.get("company_brand"),
+        "entitled_mod_ids": entitled_mod_ids,
+    }
+    if market_token:
+        data["market_access_token"] = market_token
+    if market_refresh:
+        data["market_refresh_token"] = market_refresh
+    return format_mobile_response(data=data, message="会话有效")
 
 
 @router.get("/host/discover-hint")

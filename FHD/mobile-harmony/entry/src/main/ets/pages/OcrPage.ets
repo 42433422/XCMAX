@@ -178,7 +178,7 @@ export struct OcrPage {
     this.recognizing = true;
     this.copied = false;
     try {
-      this.ocrText = 'XCMAX 企业端 OCR 识别结果\n\n发票号码：20260620-00482\n开票日期：2026-06-20\n金额（含税）：￥12,800.00\n购买方：成都修茈科技有限公司\n销售方：XCAGI 智能科技\n\n备注：本识别结果由企业端 OCR 引擎生成，移动端仅做展示与复制。';
+      this.ocrText = 'XCAGI 企业版 OCR 识别结果\n\n发票号码：20260620-00482\n开票日期：2026-06-20\n金额（含税）：￥12,800.00\n购买方：成都修茈科技有限公司\n销售方：示例供应商有限公司\n\n备注：本识别结果由企业端 OCR 引擎生成，移动端仅做展示与复制。';
     } catch (_err) {
       this.ocrText = '';
     } finally {

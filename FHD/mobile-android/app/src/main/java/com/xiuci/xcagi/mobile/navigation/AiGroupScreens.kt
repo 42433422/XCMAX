@@ -81,6 +81,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -249,7 +250,10 @@ internal fun GroupGridAvatar(members: List<AiGroupMemberDto>, size: androidx.com
     val shown = members.take(9)
     val n = shown.size
     Box(
-        modifier = Modifier.size(size).clip(RoundedCornerShape(10.dp)).background(XcagiTheme.extra.n200),
+        modifier = Modifier
+            .size(size)
+            .clip(MessageAvatarLayout.conversationAvatarShape())
+            .background(XcagiTheme.extra.n200),
         contentAlignment = Alignment.Center,
     ) {
         if (n == 0) {
@@ -309,11 +313,16 @@ internal fun GroupConversationRow(
         ),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = 11.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = MessageAvatarLayout.conversationRowHorizontalPadding,
+                    vertical = MessageAvatarLayout.conversationRowVerticalPadding,
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            GroupGridAvatar(group.members, 52.dp)
-            Spacer(Modifier.width(Spacing.md))
+            GroupGridAvatar(group.members, MessageAvatarLayout.conversationAvatarSize)
+            Spacer(Modifier.width(MessageAvatarLayout.conversationAvatarTextGap))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (group.is_pinned) {
