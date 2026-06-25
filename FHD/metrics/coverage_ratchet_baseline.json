@@ -6,16 +6,16 @@
   "frontend_floors": {
     "lines": 92,
     "branches": 81,
-    "functions": 82,
+    "functions": 90,
     "statements": 92
   },
   "last_measured": {
     "backend_lines": 88.11,
     "backend_branches": 81.33,
-    "frontend_lines": 93.11,
-    "frontend_branches": 82.13,
-    "frontend_functions": 83.99,
-    "frontend_statements": 93.11
+    "frontend_lines": 93.21,
+    "frontend_branches": 82.45,
+    "frontend_functions": 91.39,
+    "frontend_statements": 93.21
   },
   "last_measured_commit": "3d9df84de",
   "last_measured_date": "2026-06-20"
