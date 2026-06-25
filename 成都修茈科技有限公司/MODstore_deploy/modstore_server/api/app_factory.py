@@ -334,7 +334,10 @@ def _register_core_routes(app: FastAPI, cfg: AppConfig) -> None:
             sync,
         )
 
+        from modstore_server.api import scheduler_runtime_api
+
         app.include_router(health.router)
+        app.include_router(scheduler_runtime_api.router)
         app.include_router(admin_events.router)
         app.include_router(config_routes.router)
         app.include_router(catalog.router)
