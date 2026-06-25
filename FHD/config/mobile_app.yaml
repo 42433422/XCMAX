@@ -1,0 +1,26 @@
+# 手机 App 显示名 —— 三端(安卓 / iOS / 鸿蒙)单一真相源(SSOT)
+#
+# 改这里的 display_name,再把三端派生位置同步成同一值;
+# 一致性由 FHD/mobile-shared/scripts/verify_app_name.py 守卫(CI/本地可跑)。
+#
+# 企业版是当前唯一在产发行版(个人版已停产)。
+
+enterprise:
+  # 手机端三端统一显示名(桌面图标 / 系统设置 / 应用市场标题)
+  display_name: "XCAGI"
+
+# 派生位置(改 display_name 后这几处必须同步;verify 脚本对拍)
+derived:
+  android:
+    file: FHD/mobile-android/app/src/main/res/values/strings.xml
+    key: 'string[@name="app_name"]'
+  ios:
+    file: FHD/mobile-ios/project.yml
+    key: 'targets.XCAGIMobile.settings.base.APP_DISPLAY_NAME'
+  harmony:
+    file: FHD/mobile-harmony/entry/src/main/resources/base/element/string.json
+    key: 'string[name="app_name"].value'
+  harmony_appscope:
+    # ⚠️ 真正的启动器标签:AppScope/app.json5 label=$string:app_name → 这份 AppScope 字符串
+    file: FHD/mobile-harmony/AppScope/resources/base/element/string.json
+    key: 'string[name="app_name"].value'

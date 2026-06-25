@@ -48,7 +48,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiuci.xcagi.mobile.enterprise
         PRODUCT_NAME: XCAGIMobile
-        APP_DISPLAY_NAME: 修茈企业
+        APP_DISPLAY_NAME: XCAGI
 
   # ── 个人版(MODstore 基址;定义 PERSONAL 编译条件切换 AppConfig.sku)──
   XCAGIMobilePersonal:

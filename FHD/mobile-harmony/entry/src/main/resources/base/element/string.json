@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "app_name",
-      "value": "修辞企业版"
+      "value": "XCAGI"
     },
     {
       "name": "module_desc",
-      "value": "修辞企业版鸿蒙客户端"
+      "value": "XCAGI 鸿蒙客户端"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "修辞企业版入口"
+      "value": "XCAGI 入口"
     }
   ]
 }

@@ -16,7 +16,7 @@ export struct AboutPage {
   @State buildNumber: string = '20260620';
   @State officialUrl: string = 'https://xiu-ci.com';
   @State supportEmail: string = 'support@xiu-ci.com';
-  @State icpRecord: string = '蜀ICP备2025xxxxxx号';
+  @State icpRecord: string = '蜀ICP备2026015936号';
 
   onBack: () => void = () => {};
   onCheckUpdate: () => void = () => {};
