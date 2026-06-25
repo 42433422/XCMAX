@@ -53,7 +53,11 @@ signing_args=(
   "CURRENT_PROJECT_VERSION=${build_number}"
 )
 if [[ -n "${profile_specifier}" ]]; then
-  signing_args+=("CODE_SIGN_STYLE=Manual" "PROVISIONING_PROFILE_SPECIFIER=${profile_specifier}")
+  signing_args+=(
+    "CODE_SIGN_STYLE=Manual"
+    "PROVISIONING_PROFILE_SPECIFIER=${profile_specifier}"
+    "CODE_SIGN_IDENTITY=Apple Distribution"
+  )
 else
   signing_args+=("CODE_SIGN_STYLE=Automatic")
 fi

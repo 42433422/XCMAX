@@ -9,7 +9,7 @@ struct LegalConsentView: View {
             Spacer()
             Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 64)).foregroundColor(Theme.brand)
-            Text("欢迎使用修茈企业")
+            Text("欢迎使用 XCAGI")
                 .font(.title2).bold()
             Text("在开始前,请阅读并同意我们的服务条款与隐私政策。")
                 .font(.subheadline).foregroundColor(.secondary)

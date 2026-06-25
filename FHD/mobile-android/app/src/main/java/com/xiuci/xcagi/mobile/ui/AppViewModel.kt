@@ -30,6 +30,7 @@ import com.xiuci.xcagi.mobile.core.repository.XcagiRepository
 import com.xiuci.xcagi.mobile.core.sync.MobileSyncRepository
 import com.xiuci.xcagi.mobile.core.update.ApkUpdater
 import com.xiuci.xcagi.mobile.core.work.MobileSyncWorker
+import com.xiuci.xcagi.mobile.core.work.PushPollWorker
 import com.xiuci.xcagi.mobile.model.ConversationItem
 import com.xiuci.xcagi.mobile.model.ConversationType
 import com.xiuci.xcagi.mobile.model.CsInfoDto
@@ -197,7 +198,7 @@ constructor(
     private fun registerPushWithHint() {
         viewModelScope.launch {
             val result = pushRegistrar.registerAll()
-            if (!result.fcmRegistered && !result.jpushRegistered && result.hint != null) {
+            if (!result.fcmRegistered && result.hint != null) {
                 // Push is optional. Do not show SDK/API-key diagnostics as a blocking login error.
                 snack("消息提醒未开启，不影响登录和员工同步")
             }
@@ -1198,9 +1199,9 @@ constructor(
                 } catch (_: Exception) {
                     return
                 }
+        val constraints =
+                Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
         if (enabled) {
-            val constraints =
-                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             val req =
                     PeriodicWorkRequestBuilder<MobileSyncWorker>(15, TimeUnit.MINUTES)
                             .setConstraints(constraints)
@@ -1213,6 +1214,16 @@ constructor(
         } else {
             wm.cancelUniqueWork("xcagi_mobile_sync")
         }
+        // 自建推送后台轮询：始终调度（worker 内部按登录态自守），独立于自动同步开关。
+        val pushReq =
+                PeriodicWorkRequestBuilder<PushPollWorker>(15, TimeUnit.MINUTES)
+                        .setConstraints(constraints)
+                        .build()
+        wm.enqueueUniquePeriodicWork(
+                "xcagi_push_poll",
+                ExistingPeriodicWorkPolicy.UPDATE,
+                pushReq,
+        )
     }
 
     fun refreshMarketTokens() =
@@ -1263,9 +1274,7 @@ constructor(
                     msg.contains("connect", ignoreCase = true) ->
                     "连接不到电脑执行端，已尝试通过服务器中继，请稍后重试"
             msg.contains("Firebase", ignoreCase = true) ||
-                    msg.contains("FCM", ignoreCase = true) ||
-                    msg.contains("JPUSH", ignoreCase = true) ||
-                    msg.contains("极光", ignoreCase = true) ->
+                    msg.contains("FCM", ignoreCase = true) ->
                     "消息提醒未开启，不影响登录和员工同步"
             msg.isBlank() -> fallback
             msg.length > 80 -> fallback

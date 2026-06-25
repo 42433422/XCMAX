@@ -10,7 +10,7 @@ enum BiometricGate {
     }
 
     /// 发起一次解锁;成功返回 true。失败/取消返回 false。
-    static func authenticate(reason: String = "解锁修茈企业") async -> Bool {
+    static func authenticate(reason: String = "解锁 XCAGI") async -> Bool {
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {

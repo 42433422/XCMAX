@@ -1,4 +1,4 @@
-"""移动端推送：FCM + 极光 JPush（可选，无密钥时静默跳过）。"""
+"""移动端推送：FCM（可选）+ 自建推送（在线 WS 下发 + 离线队列）。极光 JPush 已移除。"""
 
 from __future__ import annotations
 
@@ -8,17 +8,11 @@ import os
 from typing import Any, Dict, List, Optional
 
 import httpx
+from sqlalchemy import inspect as sa_inspect
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-
-def _jpush_enabled() -> bool:
-    return bool(
-        (os.environ.get("JPUSH_APP_KEY") or "").strip()
-        and (os.environ.get("JPUSH_MASTER_SECRET") or "").strip()
-    )
 
 
 def _fcm_enabled() -> bool:
@@ -26,48 +20,6 @@ def _fcm_enabled() -> bool:
         os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
         or os.environ.get("FIREBASE_SERVICE_ACCOUNT")
     )
-
-
-def send_jpush(
-    registration_ids: List[str],
-    title: str,
-    body: str,
-    data: Optional[Dict[str, Any]] = None,
-) -> bool:
-    if not registration_ids or not _jpush_enabled():
-        return False
-    app_key = os.environ["JPUSH_APP_KEY"].strip()
-    master_secret = os.environ["JPUSH_MASTER_SECRET"].strip()
-    payload = {
-        "platform": "android",
-        "audience": {"registration_id": registration_ids},
-        "notification": {
-            "android": {
-                "alert": body,
-                "title": title,
-                "extras": data or {},
-            }
-        },
-        "message": {
-            "msg_content": body,
-            "title": title,
-            "extras": data or {},
-        },
-    }
-    try:
-        r = httpx.post(
-            "https://api.jpush.cn/v3/push",
-            auth=(app_key, master_secret),
-            json=payload,
-            timeout=15.0,
-        )
-        if r.status_code >= 400:
-            logger.warning("jpush failed: %s %s", r.status_code, r.text[:500])
-            return False
-        return True
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("jpush error: %s", exc)
-        return False
 
 
 def send_fcm(
@@ -139,20 +91,46 @@ def send_to_user_devices(
 ) -> Dict[str, bool]:
     """devices: rows with push_provider, push_token (or legacy fcm_token)."""
     fcm_tokens: List[str] = []
-    jpush_ids: List[str] = []
     for d in devices:
-        provider = (d.get("push_provider") or "fcm").strip().lower()
         tok = (d.get("push_token") or d.get("fcm_token") or "").strip()
         if not tok:
             continue
-        if provider == "jpush":
-            jpush_ids.append(tok)
-        else:
+        # 极光已移除；非 FCM 设备走自建推送（见 notify_user 的离线队列入账），不在此处发。
+        provider = (d.get("push_provider") or "fcm").strip().lower()
+        if provider in ("fcm", ""):
             fcm_tokens.append(tok)
     return {
         "fcm": send_fcm(fcm_tokens, title, body, data),
-        "jpush": send_jpush(jpush_ids, title, body, data),
     }
+
+
+def enqueue_outbox(
+    user_id: int, title: str, body: str, data: Optional[Dict[str, Any]] = None
+) -> bool:
+    """写入自建推送离线队列。客户端 /api/notifications/pending 轮询拉取(WorkManager 后台通道)。"""
+    from app.db.models.mobile_notification import MobileNotificationOutbox
+    from app.db.session import get_db
+
+    payload = data or {}
+    try:
+        with get_db() as db:
+            bind = db.get_bind()
+            if not sa_inspect(bind).has_table(MobileNotificationOutbox.__tablename__):
+                MobileNotificationOutbox.__table__.create(bind, checkfirst=True)
+            db.add(
+                MobileNotificationOutbox(
+                    user_id=int(user_id),
+                    title=(title or "")[:200],
+                    body=body or "",
+                    route=str(payload.get("route") or "")[:300],
+                    channel=str(payload.get("channel") or "")[:64],
+                    data_json=json.dumps(payload, ensure_ascii=False),
+                )
+            )
+        return True
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("enqueue_outbox error: %s", exc)
+        return False
 
 
 def notify_user(
@@ -171,4 +149,7 @@ def notify_user(
             }
             for r in rows
         ]
-    return send_to_user_devices(devices, title, body, data)
+    result = send_to_user_devices(devices, title, body, data)
+    # 自建推送后台通道:无论 FCM 是否送达,都入离线队列供轮询补发。
+    result["outbox"] = enqueue_outbox(user_id, title, body, data)
+    return result
