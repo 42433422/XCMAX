@@ -17,6 +17,7 @@ import pytest
 
 try:
     from app.services.intent_trainer import (
+        HAS_TRANSFORMERS,
         HAS_YAML,
         ID_TO_LABEL,
         INTENT_LABELS,
@@ -232,6 +233,9 @@ class TestIntentDatasetEdgeCases:
 
 
 class TestTrainIntentModel:
+    @pytest.mark.skipif(
+        not HAS_TRANSFORMERS, reason="transformers 未安装（重型 ML 依赖，CI 默认不装）"
+    )
     @patch("app.services.intent_trainer.Trainer")
     @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
     @patch("app.services.intent_trainer.AutoConfig.from_pretrained")
@@ -266,6 +270,9 @@ class TestTrainIntentModel:
 
 
 class TestExportToOnnx:
+    @pytest.mark.skipif(
+        not HAS_TRANSFORMERS, reason="transformers 未安装（重型 ML 依赖，CI 默认不装）"
+    )
     @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
     @patch("app.services.intent_trainer.AutoTokenizer.from_pretrained")
     def test_export_without_onnxruntime(self, mock_tokenizer, mock_model, tmp_path):

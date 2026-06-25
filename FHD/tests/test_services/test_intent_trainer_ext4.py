@@ -16,6 +16,8 @@ import pytest
 
 try:
     from app.services.intent_trainer import (
+        HAS_TORCH,
+        HAS_TRANSFORMERS,
         HAS_YAML,
         ID_TO_LABEL,
         INTENT_LABELS,
@@ -229,6 +231,9 @@ class TestTrainIntentModelErrors:
             with pytest.raises(ValueError, match="训练数据为空"):
                 train_intent_model(data_path="fake.json", output_dir=str(tmp_path / "out"))
 
+    @pytest.mark.skipif(
+        not HAS_TRANSFORMERS, reason="transformers 未安装（重型 ML 依赖，CI 默认不装）"
+    )
     @patch("app.services.intent_trainer.Trainer")
     @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
     @patch("app.services.intent_trainer.AutoConfig.from_pretrained")
@@ -266,6 +271,10 @@ class TestTrainIntentModelErrors:
 
 
 class TestExportToOnnxWithRuntime:
+    @pytest.mark.skipif(
+        not (HAS_TORCH and HAS_TRANSFORMERS),
+        reason="torch+transformers 未安装（重型 ML 依赖，CI 默认不装）",
+    )
     @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
     @patch("app.services.intent_trainer.AutoTokenizer.from_pretrained")
     @patch("app.services.intent_trainer.torch.onnx.export")
