@@ -55,6 +55,12 @@ htmlcov/
 coverage.xml
 coverage.json
 coverage/
+# Ad-hoc coverage dumps at FHD root (e.g. coverage_full.json, coverage-stable.json).
+# Anchored with a leading slash so SSOT baselines under metrics/ stay tracked.
+/coverage-*.json
+/coverage_*.json
+# Non-standard frontend coverage output dirs (coverage-target/, coverage-current/, ...)
+frontend/coverage-*/
 .tox/
 .vector_index/
 

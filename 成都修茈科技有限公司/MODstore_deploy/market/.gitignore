@@ -14,6 +14,11 @@ cov*.txt
 coverage_output.txt
 strict-*.txt
 
+# 覆盖率 JSON 产物目录（vitest/istanbul 临时输出，不入库）
+.tmp-*-cov/
+coverage-*/
+coverage-*.json
+
 # 本地运行输出
 out.txt
 err.txt
