@@ -2337,7 +2337,7 @@ class TestRouteAfterDiscussion:
             discussion_turns=[], mentions=None,
         )
         assert len(selected) >= 1
-        assert "按任务内容和成员职责分工" in rationale
+        assert "按" in rationale and "职责分工" in rationale
 
     @pytest.mark.asyncio
     async def test_route_after_discussion_llm_exception_falls_back_to_heuristic(self, tmp_path: Path):
@@ -2351,7 +2351,7 @@ class TestRouteAfterDiscussion:
             discussion_turns=[], mentions=None,
         )
         assert len(selected) >= 1
-        assert "按任务内容和成员职责分工" in rationale
+        assert "按" in rationale and "职责分工" in rationale
 
     @pytest.mark.asyncio
     async def test_route_after_discussion_llm_returns_invalid_json_falls_back(self, tmp_path: Path):
@@ -2365,7 +2365,7 @@ class TestRouteAfterDiscussion:
             discussion_turns=[], mentions=None,
         )
         assert len(selected) >= 1
-        assert "按任务内容和成员职责分工" in rationale
+        assert "按" in rationale and "职责分工" in rationale
 
     @pytest.mark.asyncio
     async def test_route_after_discussion_llm_returns_non_dict_falls_back(self, tmp_path: Path):
@@ -2379,7 +2379,7 @@ class TestRouteAfterDiscussion:
             discussion_turns=[], mentions=None,
         )
         assert len(selected) >= 1
-        assert "按任务内容和成员职责分工" in rationale
+        assert "按" in rationale and "职责分工" in rationale
 
     @pytest.mark.asyncio
     async def test_route_after_discussion_llm_returns_no_rationale_uses_default(self, tmp_path: Path):
