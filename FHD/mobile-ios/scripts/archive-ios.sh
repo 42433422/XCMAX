@@ -35,8 +35,14 @@ if [[ -z "${team_id}" ]]; then
 fi
 
 case "${scheme}" in
-  XCAGIMobile) bundle_id="com.xiuci.xcagi.mobile.enterprise" ;;
-  XCAGIMobilePersonal) bundle_id="com.xiuci.xcagi.mobile.personal" ;;
+  XCAGIMobile)
+    bundle_id="com.xiuci.xcagi.mobile.enterprise"
+    app_store_apple_id="${APP_STORE_CONNECT_APPLE_ID:-6784260401}"
+    ;;
+  XCAGIMobilePersonal)
+    bundle_id="com.xiuci.xcagi.mobile.personal"
+    app_store_apple_id="${APP_STORE_CONNECT_APPLE_ID:-}"
+    ;;
   *)
     echo "Unknown iOS scheme for provisioning profile mapping: ${scheme}" >&2
     exit 2
@@ -141,8 +147,14 @@ if [[ "${upload}" == "1" ]]; then
     -apiKey "${APP_STORE_CONNECT_API_KEY_ID}" \
     -apiIssuer "${APP_STORE_CONNECT_API_ISSUER_ID}"; then
     echo "iTMSTransporter upload failed; retrying with xcrun altool --upload-package." >&2
+    : "${app_store_apple_id:?APP_STORE_CONNECT_APPLE_ID is required for altool --upload-package}"
     xcrun altool \
       --upload-package "${ipa}" \
+      --type ios \
+      --apple-id "${app_store_apple_id}" \
+      --bundle-id "${bundle_id}" \
+      --bundle-version "${build_number}" \
+      --bundle-short-version-string "${marketing_version}" \
       --apiKey "${APP_STORE_CONNECT_API_KEY_ID}" \
       --apiIssuer "${APP_STORE_CONNECT_API_ISSUER_ID}" \
       --verbose
