@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 
 FHD = Path(__file__).resolve().parents[1]
-REPO = FHD.parent
 SSOT_JSON = FHD / "config" / "duty_roster.json"
 ENTERPRISE_LAYER_IDS = {"tools", "execution", "service", "management"}
 
@@ -77,7 +76,7 @@ def test_admin_on_duty_is_planned_intersect_installed():
 def test_sync_duty_roster_targets_in_sync():
     """合并后唯一生成器：5 目标（含企业端）与 SSOT 一致；漂移则失败提示重生成。"""
     result = subprocess.run(
-        [sys.executable, str(REPO / "scripts" / "dev" / "sync_duty_roster.py"), "--check"],
+        [sys.executable, str(FHD / "scripts" / "dev" / "sync_duty_roster.py"), "--check"],
         capture_output=True,
         text=True,
     )
