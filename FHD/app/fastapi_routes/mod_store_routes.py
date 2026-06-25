@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.mod_store_catalog_app import (
@@ -28,6 +28,30 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["mod-store"])
+
+
+def require_mod_admin(request: Request) -> Any:
+    """Mod「执行型」操作（安装 / 卸载 / 更新 / 重载等）的授权门——默认拒绝匿名。
+
+    安装一个 Mod = 在宿主进程内 ``exec_module`` 执行任意 Python（见
+    ``app.infrastructure.mods.mod_manager``），因此绝不能让匿名 LAN 客户端触发。
+    历史上这些路由零鉴权，仅靠 CSRF/LAN-CIDR 中间件兜底，而 CSRF 对任何带
+    ``Authorization: Bearer`` 前缀的请求直接放行（``app.middleware.csrf``），
+    等于任意网络可达者即可远程代码执行。
+
+    放行策略：
+
+    * **沙盒实例**（``XCAGI_SANDBOX_INSTANCE=1``）：MODstore 市场经机器 Bearer 把
+      ``.xcmod`` 推送到 ``fhd-sandbox-runtime`` 测试是设计内行为（与 CSRF 的同名
+      豁免一致），放行——沙盒本就是隔离的"装包即测"环境。
+    * **其余（生产 / 桌面 / 企业）**：要求已登录 ``tier == "admin"`` 账号，
+      复用既有「仅管理端」鉴权（与 ``set_industry`` 等敏感路由同款）。
+    """
+    if (os.environ.get("XCAGI_SANDBOX_INSTANCE") or "").strip() == "1":
+        return {"sandbox": True}
+    from app.infrastructure.auth.dependencies import require_admin_user
+
+    return require_admin_user(request)
 
 
 class ModStoreCatalogPayload(BaseModel):
@@ -576,14 +600,22 @@ async def mod_store_details(mod_id: str) -> ModStoreDetailResponse:
     raise HTTPException(status_code=404, detail="未找到该 MOD")
 
 
-@router.post("/upload", response_model=ModStoreNotImplementedResponse)
+@router.post(
+    "/upload",
+    response_model=ModStoreNotImplementedResponse,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_upload() -> ModStoreNotImplementedResponse:
     return ModStoreNotImplementedResponse(
         detail="上传 尚未在本后端实现；请将 Mod 包放入 XCAGI/mods 或通过 MODstore 工具链。"
     )
 
 
-@router.post("/install", response_model=ModStoreInstallResult)
+@router.post(
+    "/install",
+    response_model=ModStoreInstallResult,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_install(request: Request) -> ModStoreInstallResult:
     payload = await _request_payload(request)
     pkg_id = _safe_text(payload.get("pkg_id") or payload.get("mod_id"))
@@ -595,7 +627,11 @@ async def mod_store_install(request: Request) -> ModStoreInstallResult:
     return await _install_from_catalog(pkg_id, version, activate=activate)
 
 
-@router.post("/install-industry-seed", response_model=ModStoreInstallResult)
+@router.post(
+    "/install-industry-seed",
+    response_model=ModStoreInstallResult,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallResult:
     """L2：从 industry-seeds 池安装所选行业中性 Mod；池缺失时 Catalog 兜底。"""
     payload = await _request_payload(request)
@@ -614,7 +650,11 @@ async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallRe
     )
 
 
-@router.post("/install-customer-delivery-seed", response_model=ModStoreInstallResult)
+@router.post(
+    "/install-customer-delivery-seed",
+    response_model=ModStoreInstallResult,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_install_customer_delivery_seed(request: Request) -> ModStoreInstallResult:
     """账号定制交付：从服务器下载客户种子包并导入本地业务数据。"""
     payload = await _request_payload(request)
@@ -653,7 +693,7 @@ async def mod_store_install_customer_delivery_seed(request: Request) -> ModStore
     )
 
 
-@router.post("/reload-employees")
+@router.post("/reload-employees", dependencies=[Depends(require_mod_admin)])
 async def mod_store_reload_employees(request: Request) -> ModStoreSimpleResponse:
     """显式刷新 employee_pack HTTP 路由与 Planner 工具注册表（装包后双保险）。"""
     payload = await _request_payload(request)
@@ -668,7 +708,11 @@ async def mod_store_reload_employees(request: Request) -> ModStoreSimpleResponse
     )
 
 
-@router.post("/uninstall", response_model=ModStoreSimpleResponse)
+@router.post(
+    "/uninstall",
+    response_model=ModStoreSimpleResponse,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_uninstall(request: Request) -> ModStoreSimpleResponse:
     mod_id = await _body_value(request, "mod_id")
     if not mod_id:
@@ -679,7 +723,11 @@ async def mod_store_uninstall(request: Request) -> ModStoreSimpleResponse:
     return ModStoreSimpleResponse(success=bool(ok), message=message, data={"id": mod_id})
 
 
-@router.post("/update", response_model=ModStoreInstallResult)
+@router.post(
+    "/update",
+    response_model=ModStoreInstallResult,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_update(request: Request) -> ModStoreInstallResult:
     payload = await _request_payload(request)
     pkg_id = _safe_text(payload.get("pkg_id") or payload.get("mod_id"))
@@ -732,7 +780,11 @@ async def mod_store_delete_package(package_file: str) -> ModStoreNotImplementedR
     )
 
 
-@router.post("/index/rebuild", response_model=ModStoreRebuildResponse)
+@router.post(
+    "/index/rebuild",
+    response_model=ModStoreRebuildResponse,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_rebuild_index() -> ModStoreRebuildResponse:
     return ModStoreRebuildResponse(
         data={"indexed": 0, "failed": 0}, message="索引由磁盘 manifest 实时生成，无需重建。"
@@ -787,7 +839,11 @@ async def _install_host_foundation_internal(edition: str | None) -> ModStoreInst
     return ModStoreInstallResult(success=success, message=message, data=data)
 
 
-@router.post("/install-host-foundation", response_model=ModStoreSimpleResponse)
+@router.post(
+    "/install-host-foundation",
+    response_model=ModStoreSimpleResponse,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_install_host_foundation(
     edition: str | None = Query(None, description="minimal | generic | full"),
 ) -> ModStoreSimpleResponse:
@@ -806,7 +862,11 @@ async def mod_store_install_host_foundation(
         )
 
 
-@router.post("/bootstrap-edition-pack", response_model=ModStoreSimpleResponse)
+@router.post(
+    "/bootstrap-edition-pack",
+    response_model=ModStoreSimpleResponse,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_bootstrap_edition_pack(
     edition: str | None = Query(None, description="minimal | generic | full"),
 ) -> ModStoreSimpleResponse:
@@ -855,7 +915,11 @@ async def mod_store_bootstrap_edition_pack(
     )
 
 
-@router.post("/sync-modstore-library", response_model=ModStoreSimpleResponse)
+@router.post(
+    "/sync-modstore-library",
+    response_model=ModStoreSimpleResponse,
+    dependencies=[Depends(require_mod_admin)],
+)
 async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleResponse:
     """使用修茈 PAT（须含 ``mod:sync``）从线上 ``/v1/mod-sync`` 拉 zip 并安装到本机 ``mods/``。"""
     try:

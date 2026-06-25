@@ -23,6 +23,21 @@ class ModSignatureError(Exception):
     """MOD 签名验证错误"""
 
 
+def _safe_extract_all(zipf: zipfile.ZipFile, target_dir: str) -> None:
+    """防 Zip-Slip 的解压：逐成员校验落点不逃逸 ``target_dir`` 再解压。
+
+    CPython 的 ``ZipFile.extractall`` 自 3.x 起已剥离 ``..`` 与绝对路径前缀，
+    但我们显式再校验一层做纵深防御——既覆盖未来若改为手写解压的回归，也对
+    符号链接成员逃逸给出明确拒绝，而不是静默落到非预期目录。
+    """
+    dest_root = os.path.realpath(target_dir)
+    for member in zipf.namelist():
+        resolved = os.path.realpath(os.path.join(dest_root, member))
+        if resolved != dest_root and not resolved.startswith(dest_root + os.sep):
+            raise ModPackageError(f"检测到 Zip-Slip 路径穿越，拒绝解压成员：{member}")
+    zipf.extractall(dest_root)
+
+
 def _require_signed_mods() -> bool:
     """是否启用 fail-closed 强制验签（运维开关 XCAGI_REQUIRE_SIGNED_MODS）。
 
@@ -332,7 +347,7 @@ class ModPackage:
         os.makedirs(target_dir, exist_ok=True)
 
         with zipfile.ZipFile(package_path, "r") as zipf:
-            zipf.extractall(target_dir)
+            _safe_extract_all(zipf, target_dir)
 
             signature_file = "META-INF/signature.json"
             if signature_file in zipf.namelist():
