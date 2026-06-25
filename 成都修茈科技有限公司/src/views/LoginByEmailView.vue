@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../api'
+import { api, setAuthTokens } from '../api'
 
 const router = useRouter()
 const email = ref('')
@@ -95,7 +95,7 @@ async function doLogin() {
   loading.value = true
   try {
     const res = await api.loginWithCode(email.value, code.value)
-    localStorage.setItem('modstore_token', res.token)
+    setAuthTokens(res)
     window.location.href = '/'
   } catch (e) {
     err.value = e.message
