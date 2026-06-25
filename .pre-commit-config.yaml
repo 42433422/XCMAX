@@ -63,6 +63,28 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: ssot-duty-roster
+        name: 花名册派生件同步校验 (duty_roster.json ↔ 派生件)
+        # 改了 SSOT 或任一派生件就强制对账；漂移时本地拦截，须先跑
+        # `python scripts/dev/sync_duty_roster.py --generate` 重生再提交。
+        # 这是 main blocking SSOT gate 反复变红的两大根因之一（roster 改了不重生）。
+        files: '^FHD/config/duty_roster\.json$|^FHD/frontend/src/domain/yuangonDutyRoster\.ts$|^FHD/frontend/src/constants/enterpriseWorkflowEstablishment\.ts$|^FHD/MODstore/modstore_server/duty_roster\.py$|^FHD/app/infrastructure/mods/catalog_visibility\.py$|^FHD/mobile-harmony/entry/src/main/ets/models/MobileModels\.ets$'
+        entry: python3 scripts/dev/sync_duty_roster.py --check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: ssot-mods
+        name: Mod 导出副本同步校验 (FHD/mods ↔ XCAGI/mods)
+        # 改了 mods/ 或导出副本就强制对账；漂移（含孤儿 Mod）时本地拦截，须先跑
+        # `python FHD/scripts/dev/mods_ssot.py sync` 再提交。
+        # 另一根因：bulk-merge 丢掉 FHD/mods 的 SSOT 副本、只剩 XCAGI/mods 导出。
+        files: '^FHD/mods/|^FHD/XCAGI/mods/'
+        entry: python3 FHD/scripts/dev/mods_ssot.py check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
   # ----- FHD Python 格式化 / lint：Ruff 是唯一工具（import sort 由 Ruff I 规则处理） -----
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.6
