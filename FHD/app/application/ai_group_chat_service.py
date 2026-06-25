@@ -2846,7 +2846,10 @@ class AiGroupChatService:
             summary,
             result,
         )
-        unfinished = self._summary_indicates_unfinished(summary) or missing_evidence
+        raw_unfinished = self._summary_indicates_unfinished(
+            self._execution_evidence_text(result)
+        )
+        unfinished = self._summary_indicates_unfinished(summary) or raw_unfinished or missing_evidence
         success = status in {"completed", "done"} and result.get("ok") is not False and not unfinished
         effective_status = status
         if status in {"completed", "done"} and not success:
@@ -2995,8 +2998,12 @@ class AiGroupChatService:
             summary,
             report.get("raw") if isinstance(report.get("raw"), dict) else report,
         )
+        raw_unfinished = cls._summary_indicates_unfinished(cls._execution_evidence_text(report))
         if status in {"completed", "done"} and (
-            success is False or cls._summary_indicates_unfinished(summary) or missing_evidence
+            success is False
+            or cls._summary_indicates_unfinished(summary)
+            or raw_unfinished
+            or missing_evidence
         ):
             return "failed" if cls._summary_indicates_failed(summary) else "blocked"
         return "completed" if status == "done" else status
@@ -3024,9 +3031,7 @@ class AiGroupChatService:
     ) -> bool:
         if not cls._task_requires_execution_evidence(task):
             return False
-        evidence_text = " ".join(
-            part for part in (str(summary or ""), cls._stringify_summary(raw)) if part
-        )
+        evidence_text = cls._execution_evidence_text(summary, raw)
         return not cls._has_execution_evidence(evidence_text)
 
     @staticmethod
@@ -3056,6 +3061,54 @@ class AiGroupChatService:
         if _EVIDENCE_FILE_RE.search(value):
             return True
         return False
+
+    @classmethod
+    def _execution_evidence_text(cls, *values: Any) -> str:
+        chunks: list[str] = []
+
+        def walk(value: Any, *, depth: int = 0) -> None:
+            if value is None or depth > 6 or len(" ".join(chunks)) > 20000:
+                return
+            if isinstance(value, str):
+                text = value.strip()
+                if text:
+                    chunks.append(text)
+                return
+            if isinstance(value, dict):
+                priority = (
+                    "body",
+                    "summary",
+                    "message",
+                    "output",
+                    "report",
+                    "reply",
+                    "error",
+                    "reason",
+                    "risk",
+                    "assistant_message",
+                    "result",
+                    "data",
+                )
+                seen: set[str] = set()
+                for key in priority:
+                    if key in value:
+                        seen.add(key)
+                        walk(value.get(key), depth=depth + 1)
+                for key, child in value.items():
+                    if key not in seen:
+                        walk(child, depth=depth + 1)
+                return
+            if isinstance(value, list | tuple):
+                for item in value:
+                    walk(item, depth=depth + 1)
+                return
+            text = cls._stringify_summary(value)
+            if text:
+                chunks.append(text)
+
+        for value in values:
+            walk(value)
+        return " ".join(chunks)[:20000]
 
     @classmethod
     def _summary_is_research_only_without_evidence(cls, text: str) -> bool:
