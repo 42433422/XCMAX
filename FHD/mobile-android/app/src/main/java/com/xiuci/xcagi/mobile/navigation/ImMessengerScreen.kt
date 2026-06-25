@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +46,7 @@ import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockButton
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -95,13 +95,12 @@ fun ImMessengerScreen(
                     showArrow = false,
                     showDivider = false,
                 )
-                OutlinedTextField(
+                WeField(
                     value = peerIdText,
                     onValueChange = { peerIdText = it.filter(Char::isDigit).take(10) },
-                    placeholder = { Text("用户 ID") },
+                    placeholder = "用户 ID",
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg),
-                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.padding(horizontal = Spacing.lg),
                 )
                 Spacer(Modifier.height(Spacing.sm))
                 WeBlockButton(
@@ -163,14 +162,12 @@ fun ImMessengerScreen(
                     .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
+                WeField(
                     value = draft,
                     onValueChange = { draft = it.take(1000) },
-                    placeholder = { Text("输入消息") },
+                    placeholder = "输入消息",
                     modifier = Modifier.weight(1f),
-                    minLines = 1,
-                    maxLines = 4,
-                    shape = RoundedCornerShape(18.dp),
+                    singleLine = false,
                 )
                 Spacer(Modifier.width(Spacing.sm))
                 IconButton(

@@ -303,6 +303,92 @@ class TestValidateDependencies:
         assert ">=99.0.0" in caplog.text
 
 
+class TestListFormDependencies:
+    """Backward compat: manifests that declare ``dependencies`` as a list of ids.
+
+    Historically some mod manifests/tests used ``"dependencies": ["other_mod"]``
+    instead of the canonical dict ``{"other_mod": ">=1.0"}``. The list form must
+    be normalized to ``{id: "*"}`` so ``validate_dependencies`` never raises
+    ``AttributeError`` (which ``load_mod`` would mask as a generic backend
+    failure).
+    """
+
+    def test_from_dict_coerces_list_to_dict(self) -> None:
+        m = ModMetadata.from_dict(
+            {"id": "m", "name": "M", "version": "1.0", "dependencies": ["other_mod", "xcagi"]}
+        )
+        assert m.dependencies == {"other_mod": "*", "xcagi": "*"}
+
+    def test_from_dict_filters_blank_list_entries(self) -> None:
+        m = ModMetadata.from_dict(
+            {"id": "m", "name": "M", "version": "1.0", "dependencies": ["a", "", "  ", "b"]}
+        )
+        assert m.dependencies == {"a": "*", "b": "*"}
+
+    def test_from_dict_dict_form_unchanged(self) -> None:
+        # Regression guard: dict-form behavior must not be weakened.
+        m = ModMetadata.from_dict(
+            {
+                "id": "m",
+                "name": "M",
+                "version": "1.0",
+                "dependencies": {"xcagi": ">=10.0.0", "other_mod": "^1.0"},
+            }
+        )
+        assert m.dependencies == {"xcagi": ">=10.0.0", "other_mod": "^1.0"}
+
+    def test_from_dict_non_dict_non_list_ignored(self, caplog) -> None:
+        with caplog.at_level(logging.WARNING, logger="app.infrastructure.mods.manifest"):
+            m = ModMetadata.from_dict(
+                {"id": "m", "name": "M", "version": "1.0", "dependencies": "other_mod"}
+            )
+        assert m.dependencies == {}
+        assert "dependencies field ignored" in caplog.text
+
+    def test_parse_manifest_then_validate_missing_dep(self, tmp_path, caplog) -> None:
+        # End-to-end: a list-form manifest parses and validate rejects the
+        # missing dep cleanly (returns False) instead of raising AttributeError.
+        (tmp_path / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "id": "dep-mod",
+                    "name": "Dep Mod",
+                    "version": "1.0",
+                    "dependencies": ["nonexistent-mod"],
+                }
+            )
+        )
+        meta = parse_manifest(str(tmp_path))
+        assert meta is not None
+        assert meta.dependencies == {"nonexistent-mod": "*"}
+        with caplog.at_level(logging.WARNING, logger="app.infrastructure.mods.manifest"):
+            ok = validate_dependencies(meta, loaded_mods=[])
+        assert ok is False
+        assert "depends on nonexistent-mod which is not loaded" in caplog.text
+
+    def test_parse_manifest_then_validate_satisfied(self, tmp_path) -> None:
+        (tmp_path / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "id": "dep-mod",
+                    "name": "Dep Mod",
+                    "version": "1.0",
+                    "dependencies": ["other-mod"],
+                }
+            )
+        )
+        meta = parse_manifest(str(tmp_path))
+        assert meta is not None
+        assert validate_dependencies(meta, loaded_mods=["other-mod"]) is True
+
+    def test_validate_dependencies_tolerates_direct_list_construction(self) -> None:
+        # Defense-in-depth: a ModMetadata built directly (bypassing from_dict)
+        # with a list must not crash validate_dependencies.
+        m = ModMetadata(id="m", name="M", version="1.0", dependencies=["missing"])  # type: ignore[arg-type]
+        assert validate_dependencies(m, loaded_mods=[]) is False
+        assert validate_dependencies(m, loaded_mods=["missing"]) is True
+
+
 class TestCheckXcagiVersion:
     def test_version_geq_required(self) -> None:
         assert _check_xcagi_version(">=1.0.0") is True

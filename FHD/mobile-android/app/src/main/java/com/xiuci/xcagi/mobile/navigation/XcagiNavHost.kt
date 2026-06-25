@@ -99,6 +99,7 @@ import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.UpdateDownload
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeDialog
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackData
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackType
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBottomNavBar
@@ -559,6 +560,7 @@ fun XcagiNavHost(
                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
                     val pinnedPartnerKind = when (conversationId) {
                         PinnedIds.CODEX -> FixedPartnerKinds.CODEX
+                        PinnedIds.CURSOR -> FixedPartnerKinds.CURSOR
                         PinnedIds.CLAUDE -> FixedPartnerKinds.CLAUDE
                         else -> null
                     }
@@ -687,6 +689,7 @@ fun XcagiNavHost(
                                         when (partnerKind) {
                                             FixedPartnerKinds.CUSTOMER_SERVICE -> Routes.CS_CHAT
                                             FixedPartnerKinds.CODEX -> Routes.conversationChat(PinnedIds.CODEX)
+                                            FixedPartnerKinds.CURSOR -> Routes.conversationChat(PinnedIds.CURSOR)
                                             FixedPartnerKinds.CLAUDE -> Routes.conversationChat(PinnedIds.CLAUDE)
                                             else -> Routes.AI_CHAT
                                         }

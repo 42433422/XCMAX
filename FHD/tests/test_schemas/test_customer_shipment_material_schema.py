@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """customer / shipment / material schema 校验测试。"""
 
 from __future__ import annotations

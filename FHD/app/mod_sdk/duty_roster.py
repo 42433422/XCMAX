@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """编制矩阵 ID 加载（与 MODstore duty_roster / AdminDutyEmployeeGraph 对齐）。"""
 
 from __future__ import annotations

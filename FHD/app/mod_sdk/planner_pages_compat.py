@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 K：Planner 智能生态/智脑页经 ``xcagi-planner-bridge`` Mod 路由。"""
 
 from __future__ import annotations

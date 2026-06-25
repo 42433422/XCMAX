@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工触发绑定值对象。
 
 把 manifest 顶层 ``triggers``（on_error / on_quality_fail / on_coverage_miss）

@@ -16,39 +16,40 @@ import androidx.compose.ui.graphics.Color
  * 禁止页面内硬编码 Color(0xFF...)。
  */
 
-// ── 品牌色 ──
-private val BrandBlue = Color(0xFF3370FF)
-private val BrandBlueLight = Color(0xFF5B8FFF)
-private val BrandBlueDark = Color(0xFF1A50CC)
-private val BrandBlueContainer = Color(0xFFE8F0FF)
+// ── 品牌色 v5 —— 取自桌面端工作台色系（indigo #818cf8 / violet / emerald），
+//    刻意区别于微信绿+飞书蓝，避免"抄袭"观感，与桌面端保持同一品牌身份。 ──
+private val BrandBlue = Color(0xFF6366F1)          // 桌面 accent-indigo：浅色主色
+private val BrandBlueLight = Color(0xFF818CF8)     // 桌面 --color-primary：深色主色/亮一档
+private val BrandBlueDark = Color(0xFF4F46E5)      // indigo-600
+private val BrandBlueContainer = Color(0xFFEAEBFE) // 浅靛紫容器
 
-// ── 功能色 ──
-private val FuncGreen = Color(0xFF00B578)
-private val FuncGreenLight = Color(0xFF33C793)
-private val FuncGreenContainer = Color(0xFFE6F9F1)
-private val FuncDanger = Color(0xFFF54A45)
-private val FuncWarning = Color(0xFFED7B2F)
+// ── 功能色（桌面 accent-green / status 系）──
+private val FuncGreen = Color(0xFF10B981)          // emerald-500
+private val FuncGreenLight = Color(0xFF34D399)     // 桌面 --color-accent-green
+private val FuncGreenContainer = Color(0xFFE7FAF3)
+private val FuncDanger = Color(0xFFEF4444)         // 桌面 danger
+private val FuncWarning = Color(0xFFF59E0B)        // 桌面 warning
 
-// ── 微信色（聊天专用）──
-private val WeChatGreen = Color(0xFF95EC69)
-private val WeChatOnline = Color(0xFF07C160)
+// ── 活跃/在线点缀（用桌面翡翠绿，不用微信绿）──
+private val WeChatGreen = Color(0xFF95EC69)        // legacy 兼容（基本不用）
+private val WeChatOnline = Color(0xFF10B981)       // emerald 在线/活跃
 
-// ── 品牌渐变端色（钱包卡等）──
-private val BrandBlueGradientEnd = Color(0xFF5B8DEF)
+// ── 品牌渐变端色（钱包卡：indigo→violet，对齐桌面 --wb-gradient-accent #7c3aed→#4f46e5）──
+private val BrandBlueGradientEnd = Color(0xFF7C3AED) // violet-600
 
-// ── 聊天气泡（用户侧）──
-private val ChatUserBubbleLight = Color(0xFF7AD04F)   // 浅色：比微信深一档的绿
-private val ChatUserBubbleDark = Color(0xFF2E5E2A)    // 深色：深绿，承载浅色文字
-private val ChatBubbleTextLight = Color(0xFF1F2329)   // 浅色绿气泡上的近黑文字
-private val ChatBubbleTextDark = Color(0xFFE8F0E6)    // 深色绿气泡上的近白文字
+// ── 聊天气泡（用户侧 = 品牌靛紫气泡 + 白字，从根上区别于微信绿气泡）──
+private val ChatUserBubbleLight = Color(0xFF6366F1)
+private val ChatUserBubbleDark = Color(0xFF4F46E5)
+private val ChatBubbleTextLight = Color(0xFFFFFFFF)
+private val ChatBubbleTextDark = Color(0xFFEEF0FF)
 
-// ── AI 交流圈（朋友圈风）──
-private val MomentAccentLight = Color(0xFF1F6F50)     // 浅色：墨绿强调（昵称/操作/标签字）
-private val MomentAccentDark = Color(0xFF5BC08C)      // 深色：提亮的绿，保证对比度
-private val MomentChipBgLight = Color(0xFFEAF3EF)     // 浅色：能力标签浅绿底
-private val MomentChipBgDark = Color(0xFF22302A)      // 深色：绿调深底
-private val ReplyBoxBgLight = Color(0xFFF4F5F4)       // 浅色：回复框浅灰底
-private val ReplyBoxBgDark = Color(0xFF2E2E2E)        // 深色：与次级表面一致
+// ── AI 交流圈（朋友圈风，靛紫强调）──
+private val MomentAccentLight = Color(0xFF5145CD)
+private val MomentAccentDark = Color(0xFFA5B0FF)
+private val MomentChipBgLight = Color(0xFFECEDFE)
+private val MomentChipBgDark = Color(0xFF2A2A3D)
+private val ReplyBoxBgLight = Color(0xFFF4F5F7)
+private val ReplyBoxBgDark = Color(0xFF26262E)
 
 // ── 中性色（飞书同系）──
 private val N00 = Color(0xFFFFFFFF)
@@ -199,11 +200,11 @@ private val LightColors = lightColorScheme(
     primary = BrandBlue,
     onPrimary = Color.White,
     primaryContainer = BrandBlueContainer,
-    onPrimaryContainer = Color(0xFF0A1F6B),
+    onPrimaryContainer = Color(0xFF312E81),
     secondary = FuncGreen,
     onSecondary = Color.White,
     secondaryContainer = FuncGreenContainer,
-    onSecondaryContainer = Color(0xFF004D35),
+    onSecondaryContainer = Color(0xFF064E3B),
     tertiary = BrandBlue,
     background = N50,
     onBackground = N800,

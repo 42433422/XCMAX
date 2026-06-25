@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Kitten 分析/图表/报告路由冒烟（FastAPI 版）。
 
 覆盖 ``app.fastapi_routes.ai_kitten`` 全部 14 条路由：

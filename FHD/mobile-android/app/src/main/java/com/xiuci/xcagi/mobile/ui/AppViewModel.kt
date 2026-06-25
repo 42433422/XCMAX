@@ -320,6 +320,7 @@ constructor(
                 val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
                 val fixedItems = fixedConversationItems(
                         showCodex = isEnterprise || adminMode,
+                        showCursor = isEnterprise || adminMode,
                         showClaude = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                         timestamps = timestamps,
@@ -1052,13 +1053,10 @@ constructor(
     private fun com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo.contactSubtitle(
             source: String?,
     ): String {
-        val channel = phone_channel.contactChannelLabel()
-        val aiNo = id.takeIf { it.isNotBlank() }?.let { "AI号 $it" }.orEmpty()
-        val summary =
-                panel_summary.ifBlank {
-                    source?.let { "来自 $it" }.orEmpty()
-                }
-        return listOf(channel, aiNo, summary).filter { it.isNotBlank() }.joinToString(" · ")
+        // 微信式：副标题只显示员工简介，不堆"管理端工作台 · AI号 xxx · …"这类后台技术串。
+        return panel_summary.trim().ifBlank {
+            (source?.let { "来自 $it" } ?: phone_channel.contactChannelLabel()).trim()
+        }
     }
 
     private fun String.contactChannelLabel(): String =
@@ -1071,6 +1069,7 @@ constructor(
 
     private fun fixedConversationItems(
             showCodex: Boolean,
+            showCursor: Boolean,
             showClaude: Boolean,
             showCustomerService: Boolean,
             timestamps: Map<String, Long>,
@@ -1100,6 +1099,21 @@ constructor(
                             subtitle = cachedConversationPreview(PinnedIds.CODEX, previews)
                                 .ifBlank { "全设备协同" },
                             timestamp = cachedConversationTimestamp(PinnedIds.CODEX, timestamps),
+                            isOnline = true,
+                            isPinned = true,
+                    )
+                )
+        }
+
+        if (showCursor) {
+                items.add(
+                    ConversationItem(
+                            id = PinnedIds.CURSOR,
+                            type = ConversationType.PINNED_CURSOR,
+                            title = "超级员工-Cursor",
+                            subtitle = cachedConversationPreview(PinnedIds.CURSOR, previews)
+                                .ifBlank { "全设备协同 · Agent" },
+                            timestamp = cachedConversationTimestamp(PinnedIds.CURSOR, timestamps),
                             isOnline = true,
                             isPinned = true,
                     )
@@ -1502,7 +1516,7 @@ constructor(
                 // 切换会话：取消上一个会话仍在进行的流式任务并清空，避免消息串台到当前会话。
                 chatJob?.cancel()
                 _chatMessages.value = emptyList()
-                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CLAUDE) {
+                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CURSOR || conversationId == PinnedIds.CLAUDE) {
                     // relay/直答的回复存在本地缓存，云端历史接口里没有(且登录过期会 401)，
                     // 故 super-employee 会话以本地缓存为准；本地为空才取云端历史兜底。
                     val local = repo.loadCachedChat(conversationId)
@@ -1510,9 +1524,11 @@ constructor(
                         _chatMessages.value = local
                     } else {
                         val remote =
-                                if (conversationId == PinnedIds.CLAUDE)
-                                        repo.loadClaudeSuperEmployeeMessages()
-                                else repo.loadCodexSuperEmployeeMessages()
+                                when (conversationId) {
+                                    PinnedIds.CLAUDE -> repo.loadClaudeSuperEmployeeMessages()
+                                    PinnedIds.CURSOR -> repo.loadCursorSuperEmployeeMessages()
+                                    else -> repo.loadCodexSuperEmployeeMessages()
+                                }
                         remote.onSuccess { _chatMessages.value = it }
                                 .onFailure { _chatMessages.value = emptyList() }
                     }
@@ -1864,9 +1880,25 @@ constructor(
 
     fun toggleAiCircleLike(postId: Int) =
             viewModelScope.launch {
+                // 乐观更新：先本地翻转点赞态与计数，失败再回滚，保证按一下即时反馈
+                val before = _aiCirclePosts.value
+                _aiCirclePosts.value = before.map { p ->
+                    if (p.id == postId) {
+                        val liked = !p.liked_by_me
+                        p.copy(
+                            liked_by_me = liked,
+                            like_count = (p.like_count + if (liked) 1 else -1).coerceAtLeast(0),
+                        )
+                    } else {
+                        p
+                    }
+                }
                 repo.toggleAiCircleLike(postId)
                         .onSuccess { loadAiCirclePosts() }
-                        .onFailure { snack(productErrorMessage(it.message, "点赞失败"), true) }
+                        .onFailure {
+                            _aiCirclePosts.value = before // 回滚
+                            snack(productErrorMessage(it.message, "点赞失败"), true)
+                        }
             }
 
     fun addAiCircleComment(postId: Int, body: String, onSuccess: () -> Unit = {}) =
