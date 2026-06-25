@@ -87,15 +87,33 @@ jobs:
       - name: Configure App Store signing
         if: ${{ github.event.inputs.export_ipa == 'true' }}
         env:
+          IOS_SCHEME: ${{ github.event.inputs.scheme }}
           IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          IOS_PROVISION_PROFILE_ENTERPRISE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_ENTERPRISE_BASE64 }}
+          IOS_PROVISION_PROFILE_PERSONAL_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_PERSONAL_BASE64 }}
+          IOS_PROVISION_PROFILE_BASE64_LEGACY: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
           IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
+          case "${IOS_SCHEME}" in
+            XCAGIMobile)
+              IOS_PROVISION_PROFILE_BASE64="${IOS_PROVISION_PROFILE_ENTERPRISE_BASE64:-${IOS_PROVISION_PROFILE_BASE64_LEGACY:-}}"
+              profile_secret_name="IOS_PROVISION_PROFILE_ENTERPRISE_BASE64"
+              ;;
+            XCAGIMobilePersonal)
+              IOS_PROVISION_PROFILE_BASE64="${IOS_PROVISION_PROFILE_PERSONAL_BASE64:-}"
+              profile_secret_name="IOS_PROVISION_PROFILE_PERSONAL_BASE64"
+              ;;
+            *)
+              echo "Unknown iOS scheme: ${IOS_SCHEME}" >&2
+              exit 2
+              ;;
+          esac
+
           : "${IOS_CERTIFICATE_P12_BASE64:?IOS_CERTIFICATE_P12_BASE64 secret is required}"
           : "${IOS_CERTIFICATE_PASSWORD:?IOS_CERTIFICATE_PASSWORD secret is required}"
-          : "${IOS_PROVISION_PROFILE_BASE64:?IOS_PROVISION_PROFILE_BASE64 secret is required}"
+          : "${IOS_PROVISION_PROFILE_BASE64:?${profile_secret_name} secret is required for scheme ${IOS_SCHEME}}"
           : "${IOS_KEYCHAIN_PASSWORD:?IOS_KEYCHAIN_PASSWORD secret is required}"
 
           mkdir -p build/signing "${HOME}/Library/MobileDevice/Provisioning Profiles"
