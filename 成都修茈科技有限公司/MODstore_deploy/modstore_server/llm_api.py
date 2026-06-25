@@ -26,6 +26,7 @@ from modstore_server.llm_billing import (
     enforce_risk_limits,
     estimate_image_preauthorization,
     estimate_preauthorization,
+    estimate_unit_preauthorization,
     get_or_create_billing_settings,
     merge_catalog_pricing,
     new_request_id,
@@ -1259,6 +1260,8 @@ async def llm_image(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
+    """文生图：经统一钱包预授权/结算（image 模态按张计费）。
+    与 run_billed_llm_chat 同构：BYOK 跳过计费；上游失败释放冻结。"""
     if body.provider not in KNOWN_PROVIDERS:
         raise HTTPException(400, "unknown provider")
     provider = body.provider

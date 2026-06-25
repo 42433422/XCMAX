@@ -1,0 +1,853 @@
+{
+  "version": 1,
+  "modalities": [
+    "llm",
+    "vlm",
+    "image",
+    "video",
+    "ocr",
+    "tts",
+    "embedding",
+    "other"
+  ],
+  "modality_labels": {
+    "llm": "语言大模型 (LLM)",
+    "vlm": "视觉 / 多模态 (VLM)",
+    "image": "图像生成",
+    "video": "视频生成",
+    "ocr": "文字识别 (OCR)",
+    "tts": "语音合成 (TTS)",
+    "embedding": "向量嵌入 (Embedding)",
+    "other": "其他"
+  },
+  "chat_capable_modalities": [
+    "llm",
+    "vlm"
+  ],
+  "known_provider_order": [
+    "openai",
+    "deepseek",
+    "anthropic",
+    "google",
+    "siliconflow",
+    "dashscope",
+    "moonshot",
+    "xiaomi",
+    "minimax",
+    "doubao",
+    "wenxin",
+    "hunyuan",
+    "zhipu",
+    "xunfei",
+    "yi",
+    "stepfun",
+    "baichuan",
+    "sensetime",
+    "groq",
+    "together",
+    "openrouter"
+  ],
+  "gateway": {
+    "default_order": [
+      "modstore",
+      "openai_compatible",
+      "deepseek_legacy",
+      "openai_sdk"
+    ],
+    "registry_aliases": {
+      "xcauto": "openai_compatible",
+      "xcauto-account": "openai_compatible",
+      "xcauto-default": "openai_compatible",
+      "xiuci": "openai_compatible",
+      "xiuci-account": "openai_compatible",
+      "openai": "openai_compatible",
+      "deepseek": "openai_compatible"
+    }
+  },
+  "pricing": {
+    "service_fee_multiplier": "1.5",
+    "preauth_floor": "0.05",
+    "defaults_by_modality": {
+      "llm": {
+        "mode": "token",
+        "input_per_1k": "0.006",
+        "output_per_1k": "0.018",
+        "min_charge": "0.02"
+      },
+      "vlm": {
+        "mode": "token",
+        "input_per_1k": "0.006",
+        "output_per_1k": "0.018",
+        "min_charge": "0.02"
+      },
+      "embedding": {
+        "mode": "token",
+        "input_per_1k": "0.0005",
+        "output_per_1k": "0",
+        "min_charge": "0.001"
+      },
+      "image": {
+        "mode": "per_image",
+        "per_unit": "0.30",
+        "unit": "image",
+        "min_charge": "0.30"
+      },
+      "video": {
+        "mode": "per_second",
+        "per_unit": "0.50",
+        "unit": "second",
+        "min_charge": "1.00"
+      },
+      "ocr": {
+        "mode": "per_page",
+        "per_unit": "0.01",
+        "unit": "page",
+        "min_charge": "0.01"
+      },
+      "tts": {
+        "mode": "per_unit",
+        "per_unit": "0.002",
+        "unit": "kchar",
+        "min_charge": "0.01"
+      }
+    },
+    "model_overrides": []
+  },
+  "classification": {
+    "default": "llm",
+    "exclude_other_keywords": [
+      "embedding",
+      "text-embedding",
+      "moderation",
+      "davinci",
+      "babbage",
+      "text-search",
+      "ada-002",
+      "ada-001",
+      "whisper",
+      "tts",
+      "transcribe",
+      "speech-",
+      "rerank",
+      "rank_"
+    ],
+    "openai_ada_prefix_other": true,
+    "video_keywords": [
+      "sora",
+      "veo-",
+      "veo_",
+      "veo2",
+      "veo3",
+      "video-generation",
+      "videogen",
+      "text-to-video",
+      "text2video",
+      "image-to-video",
+      "cogvideo",
+      "cogvideox",
+      "kling",
+      "seedance",
+      "hailuo",
+      "runway",
+      "luma",
+      "minimax-video",
+      "video-01",
+      "-i2v",
+      "-t2v",
+      "i2v-",
+      "t2v-",
+      "wan-i2v",
+      "hunyuan-video"
+    ],
+    "image_keywords": [
+      "dall-e",
+      "dall_e",
+      "dalle",
+      "gpt-image",
+      "gpt_image",
+      "imagen",
+      "image-generation",
+      "text-to-image",
+      "text2image",
+      "image-to-image",
+      "image-preview",
+      "stable-diffusion",
+      "sdxl",
+      "sd3",
+      "flux.",
+      "flux-",
+      "flux/",
+      "flux.1",
+      "seedream",
+      "jimeng",
+      "cogview",
+      "kolors",
+      "wanx",
+      "wan2",
+      "playground-v2",
+      "recraft",
+      "ideogram",
+      "midjourney"
+    ],
+    "vlm_keywords": [
+      "vision",
+      "vl-",
+      "vlm",
+      "deepseek-vl",
+      "qwen-vl",
+      "llava",
+      "omni",
+      "gpt-4o",
+      "gpt-4.1",
+      "gpt-4-turbo"
+    ],
+    "provider_rules": {
+      "google": {
+        "image_keywords": [
+          "imagen"
+        ],
+        "video_keywords": [
+          "veo"
+        ],
+        "vlm_prefixes": [
+          "gemini-1.5",
+          "gemini-2"
+        ]
+      },
+      "anthropic": {
+        "vlm_keywords": [
+          "claude-3",
+          "claude-sonnet",
+          "claude-opus"
+        ]
+      }
+    },
+    "aggregator_providers": [
+      "siliconflow",
+      "together",
+      "groq",
+      "openrouter",
+      "dashscope",
+      "moonshot",
+      "xiaomi",
+      "minimax",
+      "doubao",
+      "wenxin",
+      "hunyuan",
+      "zhipu",
+      "xunfei",
+      "yi",
+      "stepfun",
+      "baichuan",
+      "sensetime"
+    ],
+    "aggregator_image_keywords": [
+      "stable-diffusion",
+      "sdxl",
+      "flux.",
+      "flux/",
+      "flux-1",
+      "flux.1",
+      "text-to-image",
+      "image-to-image",
+      "kolors",
+      "playground-v2",
+      "dall-e",
+      "wanx",
+      "text2image",
+      "wan2",
+      "seedream"
+    ],
+    "aggregator_video_keywords": [
+      "text-to-video",
+      "image-to-video",
+      "video-generation",
+      "cogvideox",
+      "wan-i2v",
+      "kling",
+      "i2v",
+      "t2v",
+      "video-01",
+      "hailuo",
+      "seedance"
+    ],
+    "aggregator_other_keywords": [
+      "embed",
+      "bge-",
+      "/rerank",
+      "reranker"
+    ],
+    "aggregator_vlm_keywords": [
+      "vl",
+      "vision",
+      "qwen-vl",
+      "llava",
+      "glm-4.5v",
+      "glm-4.6",
+      "omni"
+    ],
+    "minimax_media_other_keywords": [
+      "speech",
+      "voice",
+      "music"
+    ]
+  },
+  "providers": [
+    {
+      "id": "xcauto",
+      "label": "修茈 XCauto（自有网关）",
+      "base_url": "https://xiu-ci.com/v1",
+      "dispatch": "openai_compatible",
+      "models_api": "none",
+      "openai_compatible": true,
+      "gateway_provider": "openai_compatible",
+      "env_keys": [
+        "XCAUTO_API_KEY",
+        "XCAUTO_PAT",
+        "XIUCI_API_KEY",
+        "OPENAI_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "XCAUTO_BASE_URL",
+        "OPENAI_BASE_URL"
+      ],
+      "aliases": [
+        "xcauto-account",
+        "xcauto-default",
+        "xiuci",
+        "xiuci-account"
+      ],
+      "default_model": "xcauto-account",
+      "byok_custom_base_url": false,
+      "catalog_listed": false,
+      "icon_slug": "openai",
+      "doc": "https://xiu-ci.com",
+      "enabled": true
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "base_url": "https://api.openai.com",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "openai_compatible",
+      "env_keys": [
+        "OPENAI_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "OPENAI_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "gpt-4o-mini",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "openai",
+      "doc": "https://platform.openai.com/docs/api-reference",
+      "enabled": true
+    },
+    {
+      "id": "anthropic",
+      "label": "Anthropic",
+      "base_url": "https://api.anthropic.com",
+      "dispatch": "anthropic",
+      "models_api": "anthropic",
+      "openai_compatible": false,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "ANTHROPIC_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "ANTHROPIC_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "claude-3-5-haiku-20241022",
+      "byok_custom_base_url": false,
+      "catalog_listed": true,
+      "icon_slug": "anthropic",
+      "doc": "https://docs.anthropic.com/en/api",
+      "enabled": true
+    },
+    {
+      "id": "google",
+      "label": "Google Gemini",
+      "base_url": "https://generativelanguage.googleapis.com",
+      "dispatch": "google",
+      "models_api": "google",
+      "openai_compatible": false,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "GOOGLE_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "gemini-2.0-flash",
+      "byok_custom_base_url": false,
+      "catalog_listed": true,
+      "icon_slug": "googlegemini",
+      "doc": "https://ai.google.dev/gemini-api/docs",
+      "enabled": true
+    },
+    {
+      "id": "deepseek",
+      "label": "DeepSeek",
+      "base_url": "https://api.deepseek.com",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "openai_compatible",
+      "env_keys": [
+        "DEEPSEEK_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "DEEPSEEK_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "deepseek-chat",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "deepseek",
+      "doc": "https://api-docs.deepseek.com",
+      "enabled": true
+    },
+    {
+      "id": "siliconflow",
+      "label": "SiliconFlow",
+      "base_url": "https://api.siliconflow.cn",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "SILICONFLOW_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "SILICONFLOW_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "Qwen/Qwen2.5-7B-Instruct",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "huggingface",
+      "doc": "https://docs.siliconflow.cn",
+      "enabled": true
+    },
+    {
+      "id": "xiaomi",
+      "label": "小米 MiMo",
+      "base_url": "https://token-plan-cn.xiaomimimo.com",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "XIAOMI_API_KEY",
+        "MIMO_API_KEY",
+        "XIAOMI_MIMO_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "XIAOMI_BASE_URL",
+        "MIMO_BASE_URL",
+        "XIAOMI_MIMO_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "mimo-v2.5-pro",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "xiaomi",
+      "doc": "https://platform.xiaomimimo.com/",
+      "enabled": true
+    },
+    {
+      "id": "groq",
+      "label": "Groq",
+      "base_url": "https://api.groq.com/openai",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "GROQ_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "GROQ_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "llama-3.3-70b-versatile",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "groq",
+      "doc": "https://console.groq.com/docs",
+      "enabled": true
+    },
+    {
+      "id": "together",
+      "label": "Together AI",
+      "base_url": "https://api.together.xyz",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "TOGETHER_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "TOGETHER_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "meta-llama/Llama-3-70b-chat-hf",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "togethercomputer",
+      "doc": "https://docs.together.ai",
+      "enabled": true
+    },
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "base_url": "https://openrouter.ai/api",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "OPENROUTER_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "OPENROUTER_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "openai/gpt-3.5-turbo",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "openrouter",
+      "doc": "https://openrouter.ai/docs",
+      "enabled": true
+    },
+    {
+      "id": "dashscope",
+      "label": "阿里云百炼",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "DASHSCOPE_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "DASHSCOPE_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "qwen-plus",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "alibabacloud",
+      "doc": "https://help.aliyun.com/zh/model-studio/developer-reference/use-qwen-by-calling-api",
+      "enabled": true
+    },
+    {
+      "id": "moonshot",
+      "label": "月之暗面 Kimi",
+      "base_url": "https://api.moonshot.cn",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "MOONSHOT_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "MOONSHOT_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "moonshot-v1-8k",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "openai",
+      "doc": "https://platform.moonshot.cn/docs",
+      "enabled": true
+    },
+    {
+      "id": "minimax",
+      "label": "MiniMax",
+      "base_url": "https://api.minimaxi.com",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "MINIMAX_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "MINIMAX_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "MiniMax-Text-01",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "minimax",
+      "doc": "https://platform.minimaxi.com/document/guides/chat-model/V2",
+      "enabled": true
+    },
+    {
+      "id": "doubao",
+      "label": "豆包",
+      "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "DOUBAO_API_KEY",
+        "ARK_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "DOUBAO_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "ep-20250515143000-l6zqx",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "bytedance",
+      "doc": "https://www.volcengine.com/docs/82379/1330626",
+      "enabled": true
+    },
+    {
+      "id": "wenxin",
+      "label": "百度文心 / 千帆",
+      "base_url": "https://qianfan.baidubce.com/v2",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "WENXIN_API_KEY",
+        "QIANFAN_API_KEY",
+        "BAIDU_QIANFAN_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "WENXIN_BASE_URL",
+        "QIANFAN_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "ernie-speed-128k",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "baidu",
+      "doc": "https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html",
+      "enabled": true
+    },
+    {
+      "id": "hunyuan",
+      "label": "腾讯混元",
+      "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "HUNYUAN_API_KEY",
+        "TENCENT_HUNYUAN_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "HUNYUAN_BASE_URL",
+        "TENCENT_HUNYUAN_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "hunyuan-lite",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "tencentqq",
+      "doc": "https://cloud.tencent.com/document/product/1729",
+      "enabled": true
+    },
+    {
+      "id": "zhipu",
+      "label": "智谱 GLM",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "ZHIPU_API_KEY",
+        "BIGMODEL_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "ZHIPU_BASE_URL",
+        "BIGMODEL_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "glm-4-flash",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "openai",
+      "doc": "https://open.bigmodel.cn/dev/api",
+      "enabled": true
+    },
+    {
+      "id": "xunfei",
+      "label": "讯飞星火",
+      "base_url": "https://spark-api-open.xf-yun.com/v1",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "XUNFEI_API_KEY",
+        "SPARK_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "XUNFEI_BASE_URL",
+        "SPARK_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "spark-lite",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "ifttt",
+      "doc": "https://www.xfyun.cn/doc/spark/Web.html",
+      "enabled": true
+    },
+    {
+      "id": "yi",
+      "label": "零一万物",
+      "base_url": "https://api.lingyiwanwu.com/v1",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "YI_API_KEY",
+        "LINGYIWANWU_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "YI_BASE_URL",
+        "LINGYIWANWU_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "yi-lightning",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "openai",
+      "doc": "https://platform.lingyiwanwu.com/docs",
+      "enabled": true
+    },
+    {
+      "id": "stepfun",
+      "label": "阶跃星辰",
+      "base_url": "https://api.stepfun.com/v1",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "STEPFUN_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "STEPFUN_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "step-1-8k",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "openai",
+      "doc": "https://platform.stepfun.com/docs",
+      "enabled": true
+    },
+    {
+      "id": "baichuan",
+      "label": "百川智能",
+      "base_url": "https://api.baichuan-ai.com/v1",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "BAICHUAN_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "BAICHUAN_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "Baichuan2-Turbo",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "openai",
+      "doc": "https://platform.baichuan-ai.com/docs",
+      "enabled": true
+    },
+    {
+      "id": "sensetime",
+      "label": "商汤日日新",
+      "base_url": "https://api.sensenova.cn/compatible-mode/v1",
+      "dispatch": "openai_compatible",
+      "models_api": "openai",
+      "openai_compatible": true,
+      "gateway_provider": "modstore",
+      "env_keys": [
+        "SENSETIME_API_KEY",
+        "SENSENOVA_API_KEY"
+      ],
+      "base_url_env_keys": [
+        "SENSETIME_BASE_URL",
+        "SENSENOVA_BASE_URL"
+      ],
+      "aliases": [],
+      "default_model": "SenseChat-5",
+      "byok_custom_base_url": true,
+      "catalog_listed": true,
+      "icon_slug": "openai",
+      "doc": "https://platform.sensenova.cn",
+      "enabled": true
+    }
+  ],
+  "curated_models": [
+    {
+      "provider": "openai",
+      "id": "dall-e-3",
+      "modality": "image",
+      "implemented": false
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-image-1",
+      "modality": "image",
+      "implemented": false
+    },
+    {
+      "provider": "doubao",
+      "id": "seedream-3.0",
+      "modality": "image",
+      "implemented": false
+    },
+    {
+      "provider": "dashscope",
+      "id": "wanx-v1",
+      "modality": "image",
+      "implemented": false
+    },
+    {
+      "provider": "openai",
+      "id": "sora",
+      "modality": "video",
+      "implemented": false
+    },
+    {
+      "provider": "dashscope",
+      "id": "wan2-t2v",
+      "modality": "video",
+      "implemented": false
+    },
+    {
+      "provider": "minimax",
+      "id": "video-01",
+      "modality": "video",
+      "implemented": false
+    }
+  ]
+}

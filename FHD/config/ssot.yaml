@@ -59,6 +59,19 @@ domains:
     # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本
     sync: python scripts/dev/version_sync.py --apply
 
+  - name: models
+    owner: ai-platform
+    enabled: true
+    ssot: FHD/config/models.yaml
+    derived:
+      - FHD/config/models.generated.json
+      - 成都修茈科技有限公司/MODstore_deploy/modstore_server/config/models.generated.json
+      - 成都修茈科技有限公司/MODstore_deploy/market/src/config/modelsGenerated.ts
+    mode: sync+verify
+    check: python scripts/dev/ssot_plugins/models.py check
+    # sync 命令自带 --apply（ssot sync models 默认 dry-run 只打印，不透传）
+    sync: python scripts/dev/ssot_plugins/models.py sync --apply
+
   - name: docs-ssot
     owner: docs
     enabled: true
