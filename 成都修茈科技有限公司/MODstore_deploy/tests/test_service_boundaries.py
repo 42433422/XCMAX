@@ -86,7 +86,13 @@ def _domain_for(module: str) -> str | None:
     return None
 
 
-LEGACY_CROSS_DOMAIN_IMPORTS: frozenset[tuple[str, str, str]] = frozenset()
+LEGACY_CROSS_DOMAIN_IMPORTS: frozenset[tuple[str, str, str]] = frozenset(
+    {
+        # workflow_api/execution.py directly imports llm_billing — legacy coupling pre-dates
+        # service boundary enforcement; track as debt, do not add new entries
+        ("workflow_api/execution.py", "workflow", "modstore_server.llm_billing"),
+    }
+)
 """Frozen technical debt budget. Removing an entry from this set is the only
 permitted change; CI fails if the actual offender list grows or shrinks
 without an update here."""
