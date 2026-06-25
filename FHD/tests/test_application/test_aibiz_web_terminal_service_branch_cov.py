@@ -963,6 +963,18 @@ class TestLoadLocalLaneSurfaceBranchCov:
 class TestResolveMarketAuthorizationBranchCov:
     """Cover additional _resolve_market_authorization branches."""
 
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        """清理可能影响 _resolve_market_authorization 的环境变量。"""
+        for key in (
+            "XCAGI_AIBIZ_MARKET_USER",
+            "XCAGI_AIBIZ_MARKET_PASSWORD",
+            "MODSTORE_DIGEST_ADMIN_USER",
+            "MODSTORE_DIGEST_ADMIN_PASSWORD",
+        ):
+            monkeypatch.delenv(key, raising=False)
+        yield
+
     @pytest.mark.asyncio
     async def test_sid_but_no_auth_header(self):
         from app.application.aibiz_web_terminal_service import _resolve_market_authorization
