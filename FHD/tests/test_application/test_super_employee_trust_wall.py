@@ -69,7 +69,36 @@ def test_factory_cmd_is_unrestricted():
     svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "xcmax")
     cmd = svc._conversation_cmd("/bin/claude", "hi", None)
     assert "--disallowedTools" not in cmd
-    assert "acceptEdits" in cmd
+    # 工厂/管理域升档到「工作区内全权限」：claude 用 bypassPermissions（无提示、全工具，
+    # 真正能改文件/跑命令/git），不再是受限的 acceptEdits。
+    assert "bypassPermissions" in cmd
+    assert "acceptEdits" not in cmd
+
+
+def _codex_cmd(svc) -> list[str]:
+    base = svc._p.cli_command_builder("/bin/codex", "do", Path("/tmp/o.txt"), "/tmp")
+    return svc._apply_scope_to_cmd(list(base))
+
+
+def test_factory_codex_sandbox_is_workspace_write():
+    from app.application.codex_super_employee_service import CodexSuperEmployeeService
+
+    svc = CodexSuperEmployeeService()
+    svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "xcmax")
+    cmd = _codex_cmd(svc)
+    # 工厂域：codex 可在工作区内写/执行（不放整机），不再 read-only。
+    assert "workspace-write" in cmd
+    assert "read-only" not in cmd
+
+
+def test_product_codex_sandbox_stays_read_only():
+    from app.application.codex_super_employee_service import CodexSuperEmployeeService
+
+    svc = CodexSuperEmployeeService()
+    svc._grant = CapabilityGrant.product()
+    cmd = _codex_cmd(svc)
+    assert "read-only" in cmd
+    assert "workspace-write" not in cmd
 
 
 # ── 凭证层：产品域剥掉平台令牌与 git 凭证 ──
