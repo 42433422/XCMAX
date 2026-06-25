@@ -14,6 +14,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMessageBody
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessagesData
 import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
 import com.xiuci.xcagi.mobile.core.model.AiGroupWrap
+import com.xiuci.xcagi.mobile.core.model.GitBranchListData
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
@@ -389,6 +390,9 @@ interface FhdApi {
     ): MobileEnvelope<Map<String, Any?>>
 
     // ── AI 群聊 ──
+    @GET(ApiEndpoints.GIT_BRANCHES)
+    suspend fun getGitBranches(): MobileEnvelope<GitBranchListData>
+
     @GET(ApiEndpoints.AI_GROUPS)
     suspend fun getAiGroups(): MobileEnvelope<AiGroupListData>
 

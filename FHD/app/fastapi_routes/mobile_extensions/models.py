@@ -104,6 +104,9 @@ class AiGroupMessageBody(BaseModel):
     sender_name: str = Field(default="我", max_length=60)
     mentions: list[str] = Field(default_factory=list)
     dispatch: bool = Field(default=False)
+    branch_context: str = Field(default="", max_length=180)
+    branch: str = Field(default="", max_length=180)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class MobileServiceBridgeRespondBody(BaseModel):

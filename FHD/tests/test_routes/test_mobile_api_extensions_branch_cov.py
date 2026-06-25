@@ -2608,6 +2608,34 @@ class TestMobileAiGroupPostSuccess:
         assert result is not None
 
     @pytest.mark.asyncio
+    async def test_success_passes_branch_context(self, m):
+        body = SimpleNamespace(
+            message="fix it",
+            sender_name="me",
+            mentions=[],
+            dispatch=True,
+            branch_context="origin/feature/mobile-branch",
+            branch="",
+            context={},
+        )
+        with (
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                return_value=({}, None),
+            ),
+            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=5),
+            patch("app.fastapi_routes.mobile_api_extensions.AiGroupChatService") as svc_cls,
+        ):
+            svc_cls.return_value.post_message = AsyncMock(return_value={"ok": True})
+            result = await m.mobile_ai_group_post(
+                request=MagicMock(), group_id="g1", body=body, user=_user()
+            )
+        assert result is not None
+        assert svc_cls.return_value.post_message.await_args.kwargs["branch_context"] == (
+            "feature/mobile-branch"
+        )
+
+    @pytest.mark.asyncio
     async def test_value_error(self, m):
         body = SimpleNamespace(message="hi", sender_name=None, mentions=[], dispatch=True, branch_context=None)
         with (

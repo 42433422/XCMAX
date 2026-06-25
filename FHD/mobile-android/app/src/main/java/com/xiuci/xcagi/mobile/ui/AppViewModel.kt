@@ -16,6 +16,7 @@ import com.xiuci.xcagi.mobile.core.model.ApkDeltaConfig
 import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
 import com.xiuci.xcagi.mobile.core.model.AiCirclePost
 import com.xiuci.xcagi.mobile.core.model.ApprovalDetail
+import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.ModMenuItem
@@ -83,6 +84,35 @@ private fun ApkDeltaConfig.toPackageDeltaSpec(): PackageDeltaSpec? {
             baseApkSha256 = base_apk_sha256,
             targetApkSha256 = target_apk_sha256,
     )
+}
+
+private fun shouldDispatchAiGroupTask(text: String): Boolean {
+    val normalized = text.trim().lowercase().replace("\\s+".toRegex(), "")
+    if (normalized.isBlank()) return false
+    val markers = listOf(
+            "任务",
+            "修复",
+            "实现",
+            "开发",
+            "构建",
+            "打包",
+            "测试",
+            "验证",
+            "回归",
+            "闪退",
+            "bug",
+            "分支",
+            "合并",
+            "新增",
+            "添加",
+            "优化",
+            "解决",
+            "完成",
+            "派发",
+            "上线",
+            "部署",
+    )
+    return markers.any { normalized.contains(it) }
 }
 
 internal fun cachedConversationTimestamp(
@@ -298,6 +328,8 @@ constructor(
     val currentGroup: StateFlow<com.xiuci.xcagi.mobile.core.model.AiGroupDto?> = _currentGroup.asStateFlow()
     private val _groupSending = MutableStateFlow(false)
     val groupSending: StateFlow<Boolean> = _groupSending.asStateFlow()
+    private val _gitBranches = MutableStateFlow<List<GitBranchDto>>(emptyList())
+    val gitBranches: StateFlow<List<GitBranchDto>> = _gitBranches.asStateFlow()
 
     private val _walletBalance = MutableStateFlow<WalletBalanceDto?>(null)
     val walletBalance: StateFlow<WalletBalanceDto?> = _walletBalance.asStateFlow()
@@ -828,9 +860,23 @@ constructor(
                     .onFailure { snack("群消息加载失败", true) }
             }
 
-    fun sendGroupMessage(groupId: String, text: String, mentions: List<String> = emptyList()) {
+    fun loadGitBranches() =
+            viewModelScope.launch {
+                repo.loadGitBranches()
+                    .onSuccess { _gitBranches.value = it }
+                    .onFailure { snack("工作分支加载失败", true) }
+            }
+
+    fun sendGroupMessage(
+        groupId: String,
+        text: String,
+        mentions: List<String> = emptyList(),
+        branchContext: String = "",
+    ) {
         val body = text.trim()
         if (body.isBlank() || _groupSending.value) return
+        val branch = branchContext.trim()
+        val dispatch = branch.isNotBlank() || shouldDispatchAiGroupTask(body)
         // 本地先回显用户消息
         _groupMessages.value = _groupMessages.value + com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto(
             id = "local-${System.currentTimeMillis()}",
@@ -842,7 +888,13 @@ constructor(
         )
         _groupSending.value = true
         viewModelScope.launch {
-            repo.postAiGroupMessage(groupId, body, mentions)
+            repo.postAiGroupMessage(
+                groupId = groupId,
+                message = body,
+                mentions = mentions,
+                dispatch = dispatch,
+                branchContext = branch,
+            )
                 .onSuccess { data ->
                     // 用服务端权威消息替换尾部（去掉本地回显，拼接服务端返回的 user+ai）
                     val withoutLocalTail = _groupMessages.value.dropLastWhile { it.id.startsWith("local-") }
