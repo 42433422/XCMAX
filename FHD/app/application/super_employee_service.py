@@ -98,13 +98,20 @@ def _safe_json_line(payload: dict[str, Any]) -> str:
 
 
 def _codex_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    sandbox = (
+        os.environ.get("XCMAX_CODEX_SANDBOX_MODE")
+        or os.environ.get("DEVFLEET_CODEX_SANDBOX_MODE")
+        or "workspace-write"
+    ).strip()
+    if sandbox not in {"read-only", "workspace-write", "danger-full-access"}:
+        sandbox = "workspace-write"
     return [
         cli_path,
         "--ask-for-approval",
         "never",
         "exec",
         "--sandbox",
-        "read-only",
+        sandbox,
         "--skip-git-repo-check",
         "--ephemeral",
         "--output-last-message",
