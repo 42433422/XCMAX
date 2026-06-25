@@ -142,7 +142,7 @@ final class IMWebSocketClient: NSObject, @unchecked Sendable {
         } else if !url.isEmpty {
             url = "ws://" + url
         } else {
-            url = "ws://127.0.0.1:5000/"
+            return nil   // 无有效基址则不连接(不回退到内网/本地开发地址)
         }
         if !url.hasSuffix("/") { url += "/" }
         let encoded = sessionId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sessionId
