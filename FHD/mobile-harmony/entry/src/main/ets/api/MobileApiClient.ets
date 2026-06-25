@@ -60,6 +60,10 @@ interface ChatRequestBody {
   session_id: string;
 }
 
+interface SyncPullRequestBody {
+  since_cursor: number;
+}
+
 interface ApprovalActionBody {
   opinion: string;
 }
