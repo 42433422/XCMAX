@@ -415,10 +415,32 @@ def normalize_employee_pack_id(pkg_id: Optional[str]) -> str:
     return str(pkg_id or "").strip().lower()
 
 
-def employee_partition_meta() -> Dict[str, object]:
-    """员工分区元数据（供 employee_runtime / market_shared 使用）。"""
+def employee_partition_meta(pkg_id: Optional[str], artifact: Optional[str]) -> Dict[str, object]:
+    """统一员工隔离元数据。
+
+    - ``employee_scope=duty``：管理端上岗员工，只用于编制、调度、自维护。
+    - ``employee_scope=store``：商店员工，可购买、下载、普通用户执行。
+    - 非 ``employee_pack`` 不归入员工口径。
+    """
+    art = str(artifact or "").strip()
+    pid = normalize_employee_pack_id(pkg_id)
+    is_employee = art == "employee_pack"
+    is_duty = is_employee and is_planned_duty_employee_id(pid)
+    is_store = is_employee and bool(pid) and not is_duty
+    if is_duty:
+        scope = "duty"
+        source = "duty_roster"
+    elif is_store:
+        scope = "store"
+        source = "market_catalog"
+    else:
+        scope = ""
+        source = "non_employee_artifact"
     return {
-        "planned_ids": all_planned_employee_ids(),
-        "areas": dict(YUANGON_AREAS),
-        "departments": dict(SIX_LINE_DEPARTMENTS),
+        "employee_scope": scope,
+        "employee_source": source,
+        "is_duty_employee": is_duty,
+        "is_store_employee": is_store,
+        "yuangon_area": yuangon_area_for_pkg(pid) if is_duty else None,
+        "market_visible": is_store,
     }

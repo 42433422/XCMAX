@@ -838,30 +838,21 @@ def _file_url_to_path(repo_url: str) -> Optional[Path]:
     return Path(unquote(parsed.path))
 
 
-def _first_user_id() -> int:
+def _self_maintenance_actor_user_id() -> int:
+    """自维护 loop 的执行身份。
+
+    默认 0 = 平台身份：认知走平台密钥旁路（chat_dispatch_via_platform_only），
+    成本记平台、不计任何真实用户的 llm_calls 配额。避免把平台自治工作错误闸控到
+    owner 个人钱包（曾导致 ``403 配额不足: llm_calls`` 死亡螺旋）。
+    运维可用 ``MODSTORE_SELF_MAINTENANCE_USER_ID`` 覆盖为某个真实用户。
+    """
     env_uid = os.environ.get("MODSTORE_SELF_MAINTENANCE_USER_ID", "").strip()
     if env_uid:
         try:
             return int(env_uid)
         except ValueError:
             logger.warning("MODSTORE_SELF_MAINTENANCE_USER_ID not an int: %s", env_uid)
-    db = get_session_factory()()
-    try:
-        query = db.query(User)
-        if hasattr(User, "is_active"):
-            query = query.filter(User.is_active == True)  # noqa: E712
-        user = query.order_by(User.id.asc()).first()
-        if user is None:
-            return 0
-        try:
-            return int(user.id)
-        except (TypeError, ValueError):
-            return 0
-    except Exception:
-        logger.exception("failed to resolve first self-maintenance user id")
-        return 0
-    finally:
-        db.close()
+    return 0
 
 
 def _recent_employee_failure_count(lookback_hours: int) -> int:
@@ -3258,7 +3249,7 @@ def run_self_maintenance_loop(
         _append_ledger(record)
         return record
 
-    user_id = _first_user_id()
+    user_id = _self_maintenance_actor_user_id()
     loop_memory = _load_loop_memory()
     resume_candidate = _resume_review_qa_candidate(loop_memory)
     start_record = {
