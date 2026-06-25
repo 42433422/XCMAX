@@ -75,9 +75,11 @@ class TestTraceSafeValueBranches:
 
     def test_non_dict_non_list_falls_through_to_str(self):
         """Unknown type (not str/int/float/bool/None/list/dict) is stringified (branch 53->61)."""
+
         class Custom:
             def __str__(self):
                 return "custom-string"
+
         result = ct._trace_safe_value(Custom())
         assert result == "custom-string"
 
@@ -249,7 +251,9 @@ class TestExtractLowRiskToolCallBranches:
         """Non-dict params replaced with empty dict (branch 179->180)."""
         payload = {"toolCall": {"tool_id": "t1", "action": "query", "params": "not-a-dict"}}
         # This will go through validate_tool_call which may reject, but params coercion is tested
-        with patch("app.application.agent_orchestrator.tool_spec.validate_tool_call") as mock_validate:
+        with patch(
+            "app.application.agent_orchestrator.tool_spec.validate_tool_call"
+        ) as mock_validate:
             mock_validate.return_value = MagicMock(ok=False, spec=None)
             ct._extract_low_risk_tool_call(payload)
             # Verify params was coerced to {}
@@ -259,7 +263,9 @@ class TestExtractLowRiskToolCallBranches:
     def test_name_key_used_as_tool_id(self):
         """name key is used as fallback for tool_id."""
         payload = {"toolCall": {"name": "products", "action": "query"}}
-        with patch("app.application.agent_orchestrator.tool_spec.validate_tool_call") as mock_validate:
+        with patch(
+            "app.application.agent_orchestrator.tool_spec.validate_tool_call"
+        ) as mock_validate:
             mock_validate.return_value = MagicMock(ok=False, spec=None)
             ct._extract_low_risk_tool_call(payload)
             call_args = mock_validate.call_args
@@ -577,9 +583,7 @@ class TestRetrievalCallFromPayloadBranches:
 
     def test_with_error_returns_failed_call(self):
         """With error, returns failed call."""
-        result = ct._retrieval_call_from_payload(
-            {"rag_error": "retriever down"}, default_query="q"
-        )
+        result = ct._retrieval_call_from_payload({"rag_error": "retriever down"}, default_query="q")
         assert result is not None
         assert result.status == "failed"
         assert result.error == "retriever down"
@@ -779,16 +783,12 @@ class TestFirstListValueBranches:
 
     def test_first_list_returned(self):
         """First list value is returned (branch 714->712)."""
-        result = ct._first_list_value(
-            {"key1": [1, 2], "key2": [3, 4]}, ("key1", "key2")
-        )
+        result = ct._first_list_value({"key1": [1, 2], "key2": [3, 4]}, ("key1", "key2"))
         assert result == [1, 2]
 
     def test_second_key_list_returned_when_first_not_list(self):
         """Second key's list returned when first key is not a list."""
-        result = ct._first_list_value(
-            {"key1": "str", "key2": [3, 4]}, ("key1", "key2")
-        )
+        result = ct._first_list_value({"key1": "str", "key2": [3, 4]}, ("key1", "key2"))
         assert result == [3, 4]
 
     def test_empty_list_returned(self):
@@ -805,16 +805,12 @@ class TestFirstListValueBranches:
 class TestMemoryReferenceFromPayloadBranches:
     def test_no_marker_no_hits_no_summary_returns_none(self):
         """No marker, no hits, no UserMemoryRAG in summary returns None (branch 757->758)."""
-        result = ct._memory_reference_from_payload(
-            {"summary": "just text"}, default_query="q"
-        )
+        result = ct._memory_reference_from_payload({"summary": "just text"}, default_query="q")
         assert result is None
 
     def test_marker_but_no_content_returns_none(self):
         """Has marker but no hits/summary/error returns None (branch 759->760)."""
-        result = ct._memory_reference_from_payload(
-            {"user_memory_rag": True}, default_query="q"
-        )
+        result = ct._memory_reference_from_payload({"user_memory_rag": True}, default_query="q")
         assert result is None
 
     def test_with_hits_returns_reference(self):
@@ -880,7 +876,9 @@ class TestAppendMemoryReferencesToRunBranches:
     def test_duplicate_reference_skipped(self):
         """Duplicate memory reference is skipped (branch 843->844)."""
         run = _make_run()
-        ref = MemoryReference(query="q", memory_type="user_memory", source="s", hits=[], summary="sum")
+        ref = MemoryReference(
+            query="q", memory_type="user_memory", source="s", hits=[], summary="sum"
+        )
         run.memory_references.append(ref)
         ct._append_memory_references_to_run(run, [ref])
         assert len(run.memory_references) == 1
@@ -888,7 +886,9 @@ class TestAppendMemoryReferencesToRunBranches:
     def test_new_reference_appended(self):
         """New memory reference is appended."""
         run = _make_run()
-        ref = MemoryReference(query="q", memory_type="user_memory", source="s", hits=[], summary="sum")
+        ref = MemoryReference(
+            query="q", memory_type="user_memory", source="s", hits=[], summary="sum"
+        )
         ct._append_memory_references_to_run(run, [ref])
         assert len(run.memory_references) == 1
 
