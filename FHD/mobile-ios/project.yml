@@ -54,6 +54,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiuci.xcagi.mobile.enterprise
         PRODUCT_NAME: XCAGIMobile
         APP_DISPLAY_NAME: 修茈企业
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+        Release:
+          CODE_SIGN_IDENTITY: Apple Distribution
 
   # ── 个人版(MODstore 基址;定义 PERSONAL 编译条件切换 AppConfig.sku)──
   XCAGIMobilePersonal:
@@ -67,3 +72,8 @@ targets:
         PRODUCT_NAME: XCAGIMobilePersonal
         APP_DISPLAY_NAME: 修茈个人
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: PERSONAL
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+        Release:
+          CODE_SIGN_IDENTITY: Apple Distribution
