@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_runtime.tool_scope 能力→工具作用域派生单元测试。
 
 策略：_base_tool_specs 读全局 workflow 工具注册表（I/O 边界），用 monkeypatch 注入

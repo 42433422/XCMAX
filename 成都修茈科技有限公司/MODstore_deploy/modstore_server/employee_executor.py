@@ -26,6 +26,7 @@ from modstore_server.employee_runtime import (
     load_employee_pack_resolved,
     parse_employee_config_v2,
 )
+from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, classify_failure_kind
 from modstore_server.models import EmployeeExecutionMetric, User, get_session_factory
 from modstore_server.runtime_async import run_coro_sync as _run_coro_sync
 from modstore_server.services.llm import chat_dispatch_via_session
@@ -723,6 +724,8 @@ async def _cognition_real(
         return {
             "reasoning": "",
             "error": err,
+            # 透传上游 HTTP 状态码，供失败分类区分配额/计费(402/403)与瞬时(429/5xx)。
+            "status": result.get("status"),
             "input": perceived.get("normalized_input", {}),
             "memory": memory,
             "knowledge": rag_meta,
@@ -1897,6 +1900,21 @@ def execute_employee_task(
                 llm_tokens = 0 if direct_only else _extract_token_count(reasoning)
                 handler_ok = _handlers_execution_ok(result if isinstance(result, dict) else {})
                 exec_status = "success" if handler_ok else "handler_failed"
+                metric_error = "" if handler_ok else "one or more handlers returned ok=False"
+                metric_failure_kind = ""
+                if not handler_ok:
+                    # 上游 LLM(认知层)失败常是 handler 失败的根因（如返回空正文）；据其
+                    # 错误文本+状态码分类，让配额/计费(403)失败也带上 failure_kind，
+                    # 避免自进化引擎据 handler_failed 误把额度耗尽当 prompt 问题去重写。
+                    cog_err = (
+                        str(reasoning.get("error") or "").strip()
+                        if isinstance(reasoning, dict)
+                        else ""
+                    )
+                    cog_status = reasoning.get("status") if isinstance(reasoning, dict) else None
+                    metric_failure_kind = classify_failure_kind(cog_err or metric_error, cog_status)
+                    if cog_err:
+                        metric_error = f"{metric_error}; cognition_error={cog_err[:500]}"
                 session.add(
                     EmployeeExecutionMetric(
                         user_id=_resolve_metric_user_id(session, user_id),
@@ -1905,7 +1923,8 @@ def execute_employee_task(
                         status=exec_status,
                         duration_ms=duration_ms,
                         llm_tokens=llm_tokens,
-                        error="" if handler_ok else "one or more handlers returned ok=False",
+                        error=metric_error,
+                        failure_kind=metric_failure_kind,
                     )
                 )
                 session.commit()
@@ -2072,6 +2091,11 @@ def execute_employee_task(
                 }
             except Exception as e:
                 duration_ms = round((time.perf_counter() - t0) * 1000, 3)
+                err_text = str(e)
+                # 配额闸门 quota_middleware.require_llm_credit 在额度耗尽时抛
+                # HTTPException(403, "配额不足: llm_calls")，会在此被捕获。分类保留
+                # 「配额/计费 vs prompt」区分，否则压扁成通用 failed 会喂给自进化引擎重写。
+                failure_kind = classify_failure_kind(err_text)
                 session.add(
                     EmployeeExecutionMetric(
                         user_id=_resolve_metric_user_id(session, user_id),
@@ -2080,17 +2104,31 @@ def execute_employee_task(
                         status="failed",
                         duration_ms=duration_ms,
                         llm_tokens=0,
-                        error=str(e),
+                        error=err_text,
+                        failure_kind=failure_kind,
                     )
                 )
                 session.commit()
-                logger.info(
-                    "employee_execute_finish employee_id=%s user_id=%s status=failed duration_ms=%s error=%s",
-                    employee_id,
-                    user_id,
-                    duration_ms,
-                    str(e)[:400],
-                )
+                if failure_kind == FAILURE_KIND_QUOTA:
+                    logger.warning(
+                        "employee_execute_finish employee_id=%s user_id=%s status=failed "
+                        "failure_kind=quota duration_ms=%s error=%s "
+                        "(配额/计费失败，非 prompt 问题，不应触发自进化 prompt 重写)",
+                        employee_id,
+                        user_id,
+                        duration_ms,
+                        err_text[:400],
+                    )
+                else:
+                    logger.info(
+                        "employee_execute_finish employee_id=%s user_id=%s status=failed "
+                        "failure_kind=%s duration_ms=%s error=%s",
+                        employee_id,
+                        user_id,
+                        failure_kind or "unknown",
+                        duration_ms,
+                        err_text[:400],
+                    )
                 try:
                     from modstore_server.notification_service import notify_employee_execution_done
 

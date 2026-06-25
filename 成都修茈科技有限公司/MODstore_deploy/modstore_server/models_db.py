@@ -372,7 +372,7 @@ def init_default_plan_templates() -> None:
             "description": "入门会员，解锁基础 AI 调用与平台能力",
             "price": 9.90,
             "features_json": '["基础 AI 对话","基础模型额度","可购买更多余额","会员身份标识"]',
-            "quotas_json": '{"employee_count":1,"llm_calls":5000,"storage_mb":512}',
+            "quotas_json": '{"employee_count":1,"storage_mb":512}',
         },
         {
             "id": "plan_pro",
@@ -380,7 +380,7 @@ def init_default_plan_templates() -> None:
             "description": "进阶会员，更高额度 + BYOK + 用量明细",
             "price": 29.90,
             "features_json": '["更高 AI 调用额度","BYOK 自有密钥","优先模型接入","用量明细","高级功能优先体验"]',
-            "quotas_json": '{"employee_count":3,"llm_calls":30000,"storage_mb":2048}',
+            "quotas_json": '{"employee_count":3,"storage_mb":2048}',
         },
         {
             "id": "plan_enterprise",
@@ -388,7 +388,7 @@ def init_default_plan_templates() -> None:
             "description": "企业级会员（svip），含大额度企业 AI 调用、团队/部署 与优先支持",
             "price": 99.90,
             "features_json": '["企业级 AI 调用额度","团队/企业支持","专属部署支持","优先技术支持"]',
-            "quotas_json": '{"employee_count":999999,"llm_calls":300000,"storage_mb":10240}',
+            "quotas_json": '{"employee_count":999999,"storage_mb":10240}',
         },
         {
             "id": "plan_svip2",
@@ -396,7 +396,7 @@ def init_default_plan_templates() -> None:
             "description": "SVIP 进阶档（需已是 SVIP 用户）",
             "price": 199.00,
             "features_json": '["svip 全部权益","双倍 AI 调用额度","专属客服群组","新功能内测资格"]',
-            "quotas_json": '{"employee_count":999999,"llm_calls":600000,"storage_mb":20480}',
+            "quotas_json": '{"employee_count":999999,"storage_mb":20480}',
         },
         {
             "id": "plan_svip3",
@@ -404,7 +404,7 @@ def init_default_plan_templates() -> None:
             "description": "SVIP 进阶档（需已是 SVIP 用户）",
             "price": 299.00,
             "features_json": '["SVIP2 全部权益","三倍 AI 调用额度","定制工作流模板"]',
-            "quotas_json": '{"employee_count":999999,"llm_calls":900000,"storage_mb":30720}',
+            "quotas_json": '{"employee_count":999999,"storage_mb":30720}',
         },
         {
             "id": "plan_svip4",
@@ -412,7 +412,7 @@ def init_default_plan_templates() -> None:
             "description": "SVIP 进阶档（需已是 SVIP 用户）",
             "price": 499.00,
             "features_json": '["SVIP3 全部权益","五倍 AI 调用额度","专家咨询时长 2h/月"]',
-            "quotas_json": '{"employee_count":999999,"llm_calls":1500000,"storage_mb":51200}',
+            "quotas_json": '{"employee_count":999999,"storage_mb":51200}',
         },
         {
             "id": "plan_svip5",
@@ -420,7 +420,7 @@ def init_default_plan_templates() -> None:
             "description": "SVIP 进阶档（需已是 SVIP 用户）",
             "price": 999.00,
             "features_json": '["SVIP4 全部权益","十倍 AI 调用额度","专家咨询时长 5h/月"]',
-            "quotas_json": '{"employee_count":999999,"llm_calls":3000000,"storage_mb":102400}',
+            "quotas_json": '{"employee_count":999999,"storage_mb":102400}',
         },
         {
             "id": "plan_svip6",
@@ -428,7 +428,7 @@ def init_default_plan_templates() -> None:
             "description": "SVIP 进阶档（需已是 SVIP 用户）",
             "price": 1999.00,
             "features_json": '["SVIP5 全部权益","二十倍 AI 调用额度","驻场技术对接 1d/月"]',
-            "quotas_json": '{"employee_count":999999,"llm_calls":6000000,"storage_mb":204800}',
+            "quotas_json": '{"employee_count":999999,"storage_mb":204800}',
         },
         {
             "id": "plan_svip7",
@@ -436,7 +436,7 @@ def init_default_plan_templates() -> None:
             "description": "SVIP 进阶档（需已是 SVIP 用户）",
             "price": 2999.00,
             "features_json": '["SVIP6 全部权益","三十倍 AI 调用额度","驻场技术对接 2d/月","品牌联合露出"]',
-            "quotas_json": '{"employee_count":999999,"llm_calls":9000000,"storage_mb":307200}',
+            "quotas_json": '{"employee_count":999999,"storage_mb":307200}',
         },
         {
             "id": "plan_svip8",
@@ -444,7 +444,7 @@ def init_default_plan_templates() -> None:
             "description": "SVIP 顶级档（需已是 SVIP 用户）",
             "price": 4999.00,
             "features_json": '["SVIP7 全部权益","无限 AI 调用额度","驻场技术对接 5d/月","战略合作通道"]',
-            "quotas_json": '{"employee_count":999999,"llm_calls":99999999,"storage_mb":1048576}',
+            "quotas_json": '{"employee_count":999999,"storage_mb":1048576}',
         },
     ]
     sf = get_session_factory()

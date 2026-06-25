@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 G+：产品 CRUD 统一经 ``ProductsService``（Mod handler 与宿主 compat 共用）。"""
 
 from __future__ import annotations

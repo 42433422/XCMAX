@@ -24,23 +24,90 @@
 ```bash
 brew install xcodegen          # 一次性
 cd FHD/mobile-ios
+bash scripts/generate-app-icon.sh
 xcodegen generate              # 生成 XCAGIMobile.xcodeproj
 open XCAGIMobile.xcodeproj
 # 两个 scheme(对标 Android flavor):
 #   XCAGIMobile         → 企业版(com.xiuci.xcagi.mobile.enterprise)
 #   XCAGIMobilePersonal → 个人版(com.xiuci.xcagi.mobile.personal,PERSONAL 编译条件 → MODstore 基址)
-# 选 scheme → Cmd+R 跑模拟器;真机需在 project.yml 填 DEVELOPMENT_TEAM
+# 选 scheme → Cmd+R 跑模拟器;真机/归档需传入 Apple Team ID
 ```
 
+**App Icon**:`scripts/generate-app-icon.sh` 从 `Brand/xiu-ci-logo.png` 生成 App Store 需要的 1024x1024、无透明 `AppIcon-1024.png`。
+
 **推送**:工程已预置 Push 能力(`Resources/XCAGIMobile.entitlements` 的 `aps-environment` + Info.plist `remote-notification` 后台模式)。
+`aps-environment` 由 Xcode build setting 注入:Debug 为 `development`,Release 为 `production`。
 端到端取 token 仍需在 Apple Developer 配置 APNs 密钥并用真实 Team 签名;只跑模拟器或暂不接推送时,可移除 `project.yml` 的 `CODE_SIGN_ENTITLEMENTS` 行以免签名要求。
 
 命令行构建(可选):
 
 ```bash
-xcodegen generate
-xcodebuild -project XCAGIMobile.xcodeproj -scheme XCAGIMobile \
-  -destination 'platform=iOS Simulator,name=iPhone 15' build
+bash scripts/ci-build-ios.sh
+```
+
+## TestFlight / App Store 归档
+
+本地归档需要 Apple Developer 账号、有效 Team ID、App Store Distribution 证书和 provisioning profile。账号密钥不入库,通过环境变量注入:
+
+```bash
+cd FHD/mobile-ios
+IOS_TEAM_ID=ABCDE12345 \
+IOS_SCHEME=XCAGIMobile \
+IOS_MARKETING_VERSION=10.0.0 \
+IOS_BUILD_NUMBER=1 \
+bash scripts/archive-ios.sh --export
+```
+
+上传 App Store Connect 需要 API Key:
+
+```bash
+IOS_UPLOAD_APP_STORE_CONNECT=1 \
+APP_STORE_CONNECT_API_KEY_ID=... \
+APP_STORE_CONNECT_API_ISSUER_ID=... \
+APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64=... \
+IOS_TEAM_ID=ABCDE12345 \
+bash scripts/archive-ios.sh --export
+```
+
+GitHub Actions 入口: `FHD/.github/workflows/release-ios.yml`。默认只跑模拟器编译;手动勾选 `export_ipa` 时才读取 signing secrets 并导出 IPA。
+
+需要配置的 GitHub Secrets:
+
+- `IOS_TEAM_ID`
+- `IOS_CERTIFICATE_P12_BASE64`
+- `IOS_CERTIFICATE_PASSWORD`
+- `IOS_PROVISION_PROFILE_ENTERPRISE_BASE64`
+- `IOS_PROVISION_PROFILE_PERSONAL_BASE64`
+- `IOS_KEYCHAIN_PASSWORD`
+- `APP_STORE_CONNECT_API_KEY_ID`
+- `APP_STORE_CONNECT_API_ISSUER_ID`
+- `APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64`
+
+`XCAGIMobile` 与 `XCAGIMobilePersonal` 是两个 Bundle ID。workflow 会按 scheme 自动选取 profile secret:
+
+- `XCAGIMobile` → `IOS_PROVISION_PROFILE_ENTERPRISE_BASE64`
+- `XCAGIMobilePersonal` → `IOS_PROVISION_PROFILE_PERSONAL_BASE64`
+
+兼容旧分支时,可以额外保留 `IOS_PROVISION_PROFILE_BASE64` 指向企业版 profile,但当前分支已不再依赖该单 profile 配置。
+
+如果需要自动化 Apple Developer 门户与 GitHub Secrets,优先使用:
+
+```bash
+bash scripts/create-app-store-profile.sh \
+  --scheme XCAGIMobile \
+  --profile-name XCAGIMobile-AppStore-Enterprise-20260625B
+
+bash scripts/sync-ios-signing-secrets.sh \
+  --repo 42433422/XCMAX \
+  --team-id G26WSH472M \
+  --p12 /path/to/ios_distribution.p12 \
+  --p12-password '***' \
+  --profile-enterprise /path/to/enterprise.mobileprovision \
+  --profile-personal /path/to/personal.mobileprovision \
+  --api-key-p8 /path/to/AuthKey_XXXXXX.p8 \
+  --api-key-id XXXXXX \
+  --api-issuer-id XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX \
+  --keychain-password '***'
 ```
 
 ## 后端基址
@@ -65,12 +132,8 @@ XCAGIMobile/
   Resources/      Info.plist + Assets.xcassets
 ```
 
-## 本地已验证
+## 本地验证口径
 
-本机无 Xcode,无法整体编译,但已用 `swiftc` 对照 **macOS SDK** 做了:
-
-- **逻辑层全量类型检查通过**(Networking / Persistence / State 等不依赖 SwiftUI 的文件,`swiftc -typecheck` exit 0)——这些用的是 Foundation/Network/Security/Combine/LocalAuthentication,与 iOS 同源。
-- **全部 Swift 文件零语法错误**(`swiftc -parse`)。
-- 视图层仅余「iOS 专有 API 在 macOS 不存在」一类预期噪声(如 `navigationBarTitleDisplayMode`、`UIColor.systemGroupedBackground`),在 iOS SDK 下均为合法用法。
-
-真机/模拟器编译与交互验证请在 Xcode 侧完成。
+- `scripts/ci-build-ios.sh`:生成 AppIcon、生成 `.xcodeproj`,并对企业版/个人版两个 scheme 跑 iOS Simulator build。
+- `scripts/archive-ios.sh`:生成 AppIcon、生成 `.xcodeproj`,执行 device archive,可选导出 IPA 和上传 App Store Connect。
+- 真机交互仍需人工验证:扫码、OCR、APNs 推送、WebSocket/SSE、WebView 登录态。

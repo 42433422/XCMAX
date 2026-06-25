@@ -482,6 +482,45 @@ def new_request_id() -> str:
     return "llm_" + uuid.uuid4().hex
 
 
+async def bill_internal_llm_floor(
+    authorization: str,
+    *,
+    user_id: int,
+    label: str = "internal",
+    amount: Optional[Decimal] = None,
+) -> Decimal:
+    """统一「内部/服务端 LLM 工作单元」计费下限，**防免费洞**。
+
+    计次配额 ``llm_calls`` 退役后，用户面后台/工作流这类「一次执行收一笔」的调用需要一个
+    跨双后端的统一计费点，否则在 ``PAYMENT_BACKEND=java`` 下 ``consume_llm_credit`` 直接
+    ``return "java_wallet"`` 不扣 → 免费。
+
+    - **Java 后端**：经 ``JavaWalletClient`` 预授权+结算（带 HTTP 登录态 ``authorization``）。
+    - **python 后端**：经 ``consume_llm_credit`` 扣钱包 ¥（独立 session，不干扰调用方事务）。
+
+    金额 = ``max(amount, COSER_DEFAULT_MIN_CHARGE)``——能给真实 token ¥ 就按真实收，给不出
+    就保底最低，永不免费。返回实际计费金额。
+    """
+    min_charge = money(os.environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
+    charge = amount if (amount is not None and money(amount) > min_charge) else min_charge
+    charge = money(charge)
+
+    wallet = JavaWalletClient()
+    if wallet.enabled:
+        request_id = new_request_id()
+        hold = await wallet.preauthorize(authorization, charge, label, label, request_id)
+        await wallet.settle(authorization, hold, charge, request_id)
+        return charge
+
+    # python 后端：独立 session 扣钱包，避免提交调用方事务
+    from modstore_server.models import get_session_factory
+    from modstore_server.quota_middleware import consume_llm_credit
+
+    with get_session_factory()() as s:
+        consume_llm_credit(s, user_id, charge=charge)
+    return charge
+
+
 def save_success_log(
     session: Session,
     *,

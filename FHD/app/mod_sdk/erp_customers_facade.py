@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 G+c：客户 CRUD 统一经 ``CustomerApplicationService``。"""
 
 from __future__ import annotations

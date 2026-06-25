@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Neuro 迁移栈：路由 + Domain 注册 + Application 桥接冒烟（不依赖真实 LLM）。"""
 
 import os

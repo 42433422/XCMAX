@@ -16,6 +16,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
 import com.xiuci.xcagi.mobile.core.model.AiGroupWrap
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.MeData
@@ -344,6 +345,16 @@ interface FhdApi {
     @POST(ApiEndpoints.ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES)
     suspend fun postClaudeSuperEmployeeMessage(
         @Body body: ClaudeSuperEmployeeMobileMessageBody,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.ADMIN_CURSOR_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun getCursorSuperEmployeeMessages(
+        @Query("limit") limit: Int = 80,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ADMIN_CURSOR_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun postCursorSuperEmployeeMessage(
+        @Body body: CursorSuperEmployeeMobileMessageBody,
     ): MobileEnvelope<Map<String, Any?>>
 
     // ── AI 群聊 ──

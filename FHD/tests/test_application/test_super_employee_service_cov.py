@@ -452,6 +452,170 @@ class TestSelectParaDevices:
         assert result == []
 
 
+# ─────────────── Para 分级派工(一级/二级) ────────────────────────
+
+
+class TestParaTier:
+    """一级=本机单设备, 二级=多设备协同; 默认一级优先, 按需升二级。"""
+
+    def _svc(self, tmp_path):
+        return _make_svc(tmp_path)
+
+    # ── _resolve_para_tier ──
+
+    def test_default_is_tier_one(self, tmp_path):
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"task": "修复登录"}) == 1
+
+    def test_max_devices_gt_one_escalates(self, tmp_path):
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"raw_context": {"max_devices": 3}}) == 2
+
+    def test_explicit_tier_hint_two(self, tmp_path):
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"raw_context": {"para_tier": "2"}}) == 2
+
+    def test_explicit_tier_hint_one_overrides_marker(self, tmp_path):
+        svc = self._svc(tmp_path)
+        # 文本含"多设备"但显式指定一级 → 仍一级
+        assert svc._resolve_para_tier({"task": "多设备", "raw_context": {"tier": "1"}}) == 1
+
+    def test_multi_device_text_marker_escalates(self, tmp_path):
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"task": "调用所有设备跑测试"}) == 2
+
+    def test_escalate_flag(self, tmp_path):
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"raw_context": {"escalate": True}}) == 2
+
+    def test_multiple_specific_target_devices_escalates(self, tmp_path):
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"target_devices": ["d1", "d2"]}) == 2
+
+    def test_single_target_device_stays_tier_one(self, tmp_path):
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"target_devices": ["d1"]}) == 1
+
+    def test_all_target_devices_stays_tier_one(self, tmp_path):
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"target_devices": ["all"]}) == 1
+
+    def test_force_tier_env_one(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MODSTORE_PARA_FORCE_TIER", "1")
+        svc = self._svc(tmp_path)
+        # 即便要求多设备, env 强制一级
+        assert svc._resolve_para_tier({"raw_context": {"max_devices": 5}}) == 1
+
+    def test_force_tier_env_two(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MODSTORE_PARA_FORCE_TIER", "2")
+        svc = self._svc(tmp_path)
+        assert svc._resolve_para_tier({"task": "闲聊"}) == 2
+
+    # ── _select_local_device ──
+
+    def test_local_prefers_primary(self, tmp_path):
+        svc = self._svc(tmp_path)
+        devices = [
+            {"id": "w1", "status": "online", "capabilities": {"codex_cli": True}},
+            {
+                "id": "p1",
+                "status": "online",
+                "isPrimary": True,
+                "capabilities": {"codex_cli": True},
+            },
+        ]
+        result = svc._select_local_device(devices, {})
+        assert [d["id"] for d in result] == ["p1"]
+
+    def test_local_prefers_configured_device_id(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "w1")
+        svc = self._svc(tmp_path)
+        devices = [
+            {"id": "w1", "status": "online", "capabilities": {"codex_cli": True}},
+            {
+                "id": "p1",
+                "status": "online",
+                "isPrimary": True,
+                "capabilities": {"codex_cli": True},
+            },
+        ]
+        result = svc._select_local_device(devices, {})
+        # 配置的本机 id 优先于 is_primary
+        assert [d["id"] for d in result] == ["w1"]
+
+    def test_local_falls_back_to_first_eligible(self, tmp_path):
+        svc = self._svc(tmp_path)
+        devices = [{"id": "a", "status": "online", "capabilities": {"codex_cli": True}}]
+        result = svc._select_local_device(devices, {})
+        assert [d["id"] for d in result] == ["a"]
+
+    def test_local_empty_when_none_eligible(self, tmp_path):
+        svc = self._svc(tmp_path)
+        devices = [{"id": "a", "status": "offline", "capabilities": {"codex_cli": True}}]
+        assert svc._select_local_device(devices, {}) == []
+
+    # ── _select_devices_by_tier ──
+
+    def test_tier_one_returns_single_local(self, tmp_path):
+        svc = self._svc(tmp_path)
+        devices = [
+            {
+                "id": "p1",
+                "status": "online",
+                "isPrimary": True,
+                "capabilities": {"codex_cli": True},
+            },
+            {"id": "w1", "status": "online", "capabilities": {"codex_cli": True}},
+        ]
+        tier, selected = svc._select_devices_by_tier(devices, {"task": "修复"})
+        assert tier == 1
+        assert [d["id"] for d in selected] == ["p1"]
+
+    def test_tier_one_escalates_when_primary_lacks_tool(self, tmp_path):
+        # 本机主设备装了 codex 但没装 claude；claude 任务在一级选不到本机 → 升二级到 worker。
+        # (正是本机 Mac 主设备 claude_code not_installed、Win32 有 claude 的真实形态)
+        svc_claude = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
+        devices = [
+            {
+                "id": "p1",
+                "status": "online",
+                "isPrimary": True,
+                "tools": [{"toolName": "claude_code", "status": "not_installed"}],
+            },
+            {
+                "id": "w1",
+                "status": "online",
+                "tools": [{"toolName": "claude_code", "status": "idle"}],
+            },
+        ]
+        tier, selected = svc_claude._select_devices_by_tier(devices, {"task": "修复"})
+        assert tier == 2
+        assert [d["id"] for d in selected] == ["w1"]
+
+    def test_tier_one_no_devices_at_all_outboxes_via_empty(self, tmp_path):
+        svc = self._svc(tmp_path)
+        devices = [{"id": "p1", "status": "offline", "isPrimary": True}]
+        tier, selected = svc._select_devices_by_tier(devices, {"task": "修复"})
+        assert selected == []
+
+    def test_tier_two_explicit_uses_workers(self, tmp_path):
+        svc = self._svc(tmp_path)
+        devices = [
+            {
+                "id": "p1",
+                "status": "online",
+                "isPrimary": True,
+                "capabilities": {"codex_cli": True},
+            },
+            {"id": "w1", "status": "online", "capabilities": {"codex_cli": True}},
+            {"id": "w2", "status": "online", "capabilities": {"codex_cli": True}},
+        ]
+        tier, selected = svc._select_devices_by_tier(devices, {"raw_context": {"max_devices": 3}})
+        assert tier == 2
+        # 二级偏好非主 worker
+        assert {d["id"] for d in selected} == {"w1", "w2"}
+
+
 # ─────────────── _ensure_para_device ────────────────────────────
 
 
@@ -1137,9 +1301,11 @@ class TestBuildDispatchRequest:
 
 class TestCliWorkspaceAndTimeout:
     def test_valid_workspace_in_context(self, tmp_path):
+        # 信任墙：产品域（默认）忽略客户提供的 workspace_root，一律用隔离临时区（防 path-injection）。
         svc = _make_svc(tmp_path)
         result = svc._cli_workspace({"workspace_root": str(tmp_path)})
-        assert result == str(tmp_path)
+        assert result != str(tmp_path)
+        assert result == svc._product_ephemeral_workspace()
 
     def test_invalid_workspace_falls_back(self, tmp_path):
         svc = _make_svc(tmp_path)

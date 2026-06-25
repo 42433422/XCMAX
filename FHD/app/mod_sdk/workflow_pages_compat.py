@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 R：核心工作流 Mod 业务页（流程可视化）。"""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工协作编排：``collaboration.depends_on`` 本地依赖图执行。
 
 把 manifest 声明的上游依赖建模为 WorkflowEngine DAG，复用 ``_run_batch`` 做

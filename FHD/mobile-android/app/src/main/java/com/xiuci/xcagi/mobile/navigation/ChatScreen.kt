@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Difference
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -153,6 +155,9 @@ private fun parseEmployeeConversationRef(conversationId: String?): EmployeeConve
 internal fun isCodexConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CODEX
 
+internal fun isCursorConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.CURSOR
+
 internal fun isClaudeConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CLAUDE
 
@@ -162,6 +167,7 @@ internal fun chatAvatarFallback(
 ): AppAvatarFallback =
     when {
         isCodexConversation(conversationId) -> AppAvatarFallback.CODEX
+        isCursorConversation(conversationId) -> AppAvatarFallback.CURSOR
         isClaudeConversation(conversationId) -> AppAvatarFallback.CLAUDE
         hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
         else -> AppAvatarFallback.ASSISTANT
@@ -220,6 +226,16 @@ fun ChatScreen(
             }
 
     fun startVoiceInput() {
+        // 优先用应用内语音面板（统一的脉冲环 UI、视觉一致、可控）；
+        // 仅在设备无 SpeechRecognizer 时才兜底系统语音识别界面。
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            val hasPermission =
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                            PackageManager.PERMISSION_GRANTED
+            if (hasPermission) showVoiceSheet = true
+            else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
         val intent =
                 Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(
@@ -232,22 +248,14 @@ fun ChatScreen(
         try {
             speechIntentLauncher.launch(intent)
         } catch (_: ActivityNotFoundException) {
-            // 无系统语音 UI → 回退到 app 内识别器(需录音权限)。
-            if (SpeechRecognizer.isRecognitionAvailable(context)) {
-                val hasPermission =
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                                PackageManager.PERMISSION_GRANTED
-                if (hasPermission) showVoiceSheet = true
-                else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            } else {
-                vm.snack("当前设备未提供语音输入")
-            }
+            vm.snack("当前设备未提供语音输入")
         }
     }
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
     val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
     val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
+    val cursorConversation = remember(conversationId) { isCursorConversation(conversationId) }
     val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
     val employeeProfile =
         remember(employeeRef, employees) {
@@ -257,6 +265,7 @@ fun ChatScreen(
         when {
             employeeProfile != null -> employeeProfile.name
             codexConversation -> "超级员工-Codex"
+            cursorConversation -> "超级员工-Cursor"
             claudeConversation -> "超级员工-Claude"
             else -> conversationTitle
         }
@@ -378,7 +387,7 @@ fun ChatScreen(
                 onVoice = { startVoiceInput() },
                 onMore = { showMoreSheet = true },
                 gitBranch = gitBranch,
-                showDevTools = claudeConversation || codexConversation,
+                showDevTools = claudeConversation || codexConversation || cursorConversation,
                 onGitMerge = { gitBranch?.let { vm.gitMerge(it, conversationId) } },
                 onGitDiff = { gitBranch?.let { vm.gitDiff(it, conversationId) } },
                 onGitDiscard = { gitBranch?.let { vm.gitDiscard(it, conversationId) } },
@@ -658,9 +667,9 @@ private fun ImInputBar(
         Column {
             // 顶部分隔线
             HorizontalDivider(thickness = 0.5.dp, color = imDivider())
-            // 开发工具条：超级员工聊天里常驻（钉钉式输入框上方一排）。
-            // 有分支时点亮可合并/查看/丢弃；无分支置灰，点了提示先发开发任务。
-            if (showDevTools) {
+            // 开发工具条：仅在确有可操作分支时出现（会话模型下 claude 直接在工程根干活、
+            // 不产生每条消息一分支，故此条自然隐藏，不再灰着占位。工作区改动审阅键后续单独做）。
+            if (showDevTools && gitBranch != null) {
                 GitActionBar(
                     branch = gitBranch,
                     onMerge = onGitMerge,
@@ -690,7 +699,7 @@ private fun ImInputBar(
 
                 // 输入框（微信风格：圆角矩形+浅灰背景）
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.weight(1f).height(38.dp),
                 ) {
@@ -703,7 +712,7 @@ private fun ImInputBar(
                             color = imTextPrimary(),
                             fontSize = 15.sp,
                         ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(XcagiTheme.extra.weChatOnline),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(XcagiTheme.extra.brandBlue),
                         decorationBox = { inner ->
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                                 if (value.isEmpty()) {
@@ -719,39 +728,57 @@ private fun ImInputBar(
                     )
                 }
 
-                // 发送/停止（常驻显示，微信风格圆角按钮+按压动画）
+                // 右侧动作（微信式）：流式→"停止" pill；有输入→"发送" pill；空白→收成"＋"功能入口。
                 var pressed by remember { mutableStateOf(false) }
                 val scale by animateFloatAsState(
                     targetValue = if (pressed) 0.92f else 1f,
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
                     label = "sendScale",
                 )
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = if (streaming) MaterialTheme.colorScheme.errorContainer else XcagiTheme.extra.weChatOnline,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .scale(scale)
-                        .pointerInput(streaming) {
-                            detectTapGestures(
-                                onPress = {
-                                    pressed = true
-                                    awaitRelease()
-                                    pressed = false
-                                },
-                                onTap = {
-                                    if (streaming) { haptics.tap(); onStop() }
-                                    else { haptics.confirm(); onSend() }
-                                },
+                val hasInput = value.isNotBlank()
+                if (streaming || hasInput) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (streaming) MaterialTheme.colorScheme.errorContainer
+                                else XcagiTheme.extra.brandBlue,
+                        modifier = Modifier
+                            .height(38.dp)
+                            .scale(scale)
+                            .pointerInput(streaming) {
+                                detectTapGestures(
+                                    onPress = {
+                                        pressed = true
+                                        awaitRelease()
+                                        pressed = false
+                                    },
+                                    onTap = {
+                                        if (streaming) { haptics.tap(); onStop() }
+                                        else { haptics.confirm(); onSend() }
+                                    },
+                                )
+                            },
+                    ) {
+                        Box(
+                            Modifier.fillMaxHeight().padding(horizontal = 17.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                if (streaming) "停止" else "发送",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 15.sp,
+                                ),
+                                color = if (streaming) MaterialTheme.colorScheme.error else Color.White,
                             )
-                        },
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
+                        }
+                    }
+                } else if (onMore != null) {
+                    IconButton(onClick = onMore, modifier = Modifier.size(38.dp)) {
                         Icon(
-                            if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
-                            contentDescription = if (streaming) "停止" else "发送",
-                            tint = if (streaming) MaterialTheme.colorScheme.error else Color.White,
-                            modifier = Modifier.size(20.dp),
+                            Icons.Default.Add,
+                            contentDescription = "更多",
+                            tint = imTextPrimary(),
+                            modifier = Modifier.size(26.dp),
                         )
                     }
                 }
@@ -803,7 +830,7 @@ private fun GitActionBar(
             GitChip(
                 "合并到主干",
                 Icons.Default.CallMerge,
-                XcagiTheme.extra.weChatOnline,
+                XcagiTheme.extra.brandBlue,
                 filled = active,
                 dimmed = !active,
             ) {

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """认证相关 API 专用速率限制（防暴力破解）。"""
 
 from __future__ import annotations

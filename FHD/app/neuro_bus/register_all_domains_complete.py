@@ -1,7 +1,7 @@
 """
 注册所有 Neuro 领域事件处理器（完整版）
 
-一次性注册所有 12 个领域的事件处理器：
+一次性注册以下 10 个领域的 handler 模块 + 核心 app service 消费者：
 1. product - 产品领域
 2. shipment - 发货单领域
 3. order - 订单领域
@@ -12,8 +12,11 @@
 8. wechat - 微信领域
 9. print - 打印领域
 10. ai - AI领域
-11. auth - 认证领域
-12. material - 物料领域
++ application_consumers - 核心 app service 真实落地消费者
+
+注：auth / material / conversation 仅有事件定义（``app.neuro_bus.events.*``），
+尚无 ``*_domain_handlers`` 实现，因此不在此注册（避免悬空声明）。其事件类目前仅被
+覆盖率测试导入，无生产端的发布者/消费者。
 """
 
 import asyncio
@@ -144,43 +147,11 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except RECOVERABLE_ERRORS as e:
         logger.error("[NeuroDomainRegistration] AI 领域注册失败: %s", e)
 
-    # 12. Auth 领域
-    try:
-        from app.neuro_bus.domains.auth_domain_handlers import register_auth_domain_handlers
-
-        register_auth_domain_handlers(bus)
-        logger.info("[NeuroDomainRegistration] Auth 领域处理器注册完成")
-    except ImportError:
-        logger.info("[NeuroDomainRegistration] Auth 领域处理器不存在，跳过")
-    except RECOVERABLE_ERRORS as e:
-        logger.error("[NeuroDomainRegistration] Auth 领域注册失败: %s", e)
-
-    # 13. Material 领域
-    try:
-        from app.neuro_bus.domains.material_domain_handlers import register_material_domain_handlers
-
-        register_material_domain_handlers(bus)
-        logger.info("[NeuroDomainRegistration] Material 领域处理器注册完成")
-    except ImportError:
-        logger.info("[NeuroDomainRegistration] Material 领域处理器不存在，跳过")
-    except RECOVERABLE_ERRORS as e:
-        logger.error("[NeuroDomainRegistration] Material 领域注册失败: %s", e)
-
-    # 14. Conversation 领域
-    try:
-        from app.neuro_bus.domains.conversation_domain_handlers import (
-            register_conversation_domain_handlers,
-        )
-
-        register_conversation_domain_handlers(bus)
-        logger.info("[NeuroDomainRegistration] Conversation 领域处理器注册完成")
-    except ImportError:
-        logger.info("[NeuroDomainRegistration] Conversation 领域处理器不存在，跳过")
-    except RECOVERABLE_ERRORS as e:
-        logger.error("[NeuroDomainRegistration] Conversation 领域注册失败: %s", e)
-
-    # 15. 核心 app service 真实落地消费者（products.imported / conversation.message_saved /
+    # 11. 核心 app service 真实落地消费者（products.imported / conversation.message_saved /
     #     customer.changed）—— 为「只发布、无消费」的服务补齐持久副作用消费者。
+    #
+    # 注：auth / material / conversation 暂无 *_domain_handlers 实现，故不在此注册。
+    #     若日后补齐实现，再在此处加回对应注册块并同步 neuro_handler_catalog.json。
     try:
         from app.neuro_bus.domains.application_event_consumers import (
             register_application_event_consumers,
