@@ -242,7 +242,7 @@ class TestAppendTrCloneFromLast:
         trs = [c for c in tbl if c.tag == qn("w:tr")]
         assert trs == []
 
-    def test_clones_last_row(self):
+    def test_clones_last_row_with_text_cleared(self):
         from app.infrastructure.documents.price_list_export import (
             _append_tr_clone_from_last,
         )
@@ -260,6 +260,12 @@ class TestAppendTrCloneFromLast:
 
         trs = [c for c in tbl if c.tag == qn("w:tr")]
         assert len(trs) == 2
+        # The original row keeps its text; the appended clone is structurally a
+        # copy (has a <w:t>) but with the text content cleared.
+        original_texts = [el.text for el in trs[0].iter() if el.tag == qn("w:t")]
+        clone_texts = [el.text for el in trs[1].iter() if el.tag == qn("w:t")]
+        assert original_texts == ["data"]
+        assert clone_texts == [""]
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +279,19 @@ class TestTcEnsureTcPr:
 
         cell = MagicMock()
         tc = OxmlElement("w:tc")
+        # A pre-existing child so we can assert tcPr is inserted *before* it
+        # (OOXML requires tcPr to be the first child of tc).
+        existing_child = OxmlElement("w:p")
+        tc.append(existing_child)
         cell._tc = tc
+
         result = _tc_ensure_tc_pr(cell)
-        assert result is not None
+
         assert result.tag == qn("w:tcPr")
+        # Exactly one tcPr now exists and it is the first child.
+        assert len(tc.findall(qn("w:tcPr"))) == 1
+        assert list(tc)[0] is result
+        assert tc.find(qn("w:tcPr")) is result
 
     def test_returns_existing_tc_pr(self):
         from app.infrastructure.documents.price_list_export import _tc_ensure_tc_pr
@@ -318,7 +333,7 @@ class TestTcGetTcBordersSnapshot:
         cell._tc = tc
         assert _tc_get_tc_borders_snapshot(cell) is None
 
-    def test_returns_deep_copy(self):
+    def test_returns_independent_deep_copy_preserving_children(self):
         from app.infrastructure.documents.price_list_export import (
             _tc_get_tc_borders_snapshot,
         )
@@ -327,12 +342,25 @@ class TestTcGetTcBordersSnapshot:
         tc = OxmlElement("w:tc")
         tc_pr = OxmlElement("w:tcPr")
         tcb = OxmlElement("w:tcBorders")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        tcb.append(bottom)
         tc_pr.append(tcb)
         tc.append(tc_pr)
         cell._tc = tc
+
         result = _tc_get_tc_borders_snapshot(cell)
-        assert result is not None
-        assert result is not tcb  # Should be a deep copy
+
+        # Snapshot is a detached deep copy (not the live element).
+        assert result is not tcb
+        assert result.tag == qn("w:tcBorders")
+        # Children/attributes are copied faithfully.
+        snap_bottom = result.find(qn("w:bottom"))
+        assert snap_bottom is not None
+        assert snap_bottom.get(qn("w:val")) == "single"
+        # Mutating the original afterwards does not bleed into the snapshot.
+        bottom.set(qn("w:val"), "double")
+        assert result.find(qn("w:bottom")).get(qn("w:val")) == "single"
 
 
 # ---------------------------------------------------------------------------
@@ -374,9 +402,15 @@ class TestTcApplyTcBordersSnapshot:
         new_snapshot.append(new_bottom)
 
         _tc_apply_tc_borders_snapshot(cell, new_snapshot)
-        # Verify old was removed and new added
+
+        # Old (empty) tcBorders is replaced, not appended: exactly one remains
+        # and it carries the new bottom edge value.
         tcbs = [c for c in tc_pr if c.tag == qn("w:tcBorders")]
         assert len(tcbs) == 1
+        assert tcbs[0] is not new_snapshot  # stored as a deep copy
+        assert tcbs[0].find(qn("w:bottom")).get(qn("w:val")) == "single"
+        # The original old_tcb element is no longer attached.
+        assert old_tcb not in list(tc_pr)
 
 
 # ---------------------------------------------------------------------------
@@ -390,45 +424,33 @@ class TestSnapshotBodyRowTcBorders:
             _snapshot_body_row_tc_borders,
         )
 
-        table = MagicMock()
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=2,
-        ):
-            result = _snapshot_body_row_tc_borders(table, -1)
-        assert result == []
+        # Real 2-row table; out-of-range indices yield [] without touching cells.
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        assert _snapshot_body_row_tc_borders(table, -1) == []
+        assert _snapshot_body_row_tc_borders(table, 2) == []
 
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=2,
-        ):
-            result = _snapshot_body_row_tc_borders(table, 5)
-        assert result == []
-
-    def test_returns_snapshots(self):
+    def test_returns_per_cell_snapshots_for_real_row(self):
         from app.infrastructure.documents.price_list_export import (
             _snapshot_body_row_tc_borders,
+            _tc_set_side_border,
         )
 
-        table = MagicMock()
-        cell = MagicMock()
-        cell._tc = OxmlElement("w:tc")
-        row = MagicMock()
-        row.cells = [cell]
-        table.rows = [row]
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        # Cell 0 of the data row has a bottom border; cell 1 has none.
+        b = OxmlElement("w:bottom")
+        b.set(qn("w:val"), "single")
+        _tc_set_side_border(table.rows[1].cells[0], "bottom", b)
 
-        with (
-            patch(
-                "app.infrastructure.documents.price_list_export._tbl_row_count",
-                return_value=1,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
-                return_value=None,
-            ),
-        ):
-            result = _snapshot_body_row_tc_borders(table, 0)
-        assert result == [None]
+        result = _snapshot_body_row_tc_borders(table, 1)
+
+        # One entry per cell: a real tcBorders snapshot for cell 0, None for cell 1.
+        assert len(result) == 2
+        assert result[0] is not None
+        assert result[0].tag == qn("w:tcBorders")
+        assert result[0].find(qn("w:bottom")).get(qn("w:val")) == "single"
+        assert result[1] is None
 
 
 # ---------------------------------------------------------------------------
@@ -437,55 +459,34 @@ class TestSnapshotBodyRowTcBorders:
 
 
 class TestPickBorderTemplateRowIndex:
-    def test_returns_header_rows_when_no_borders(self):
+    def test_falls_back_to_header_rows_when_no_body_borders(self):
         from app.infrastructure.documents.price_list_export import (
             _pick_border_template_row_index,
         )
 
-        table = MagicMock()
-        cell = MagicMock()
-        cell._tc = OxmlElement("w:tc")
-        row = MagicMock()
-        row.cells = [cell]
-        table.rows = [row, row, row]
+        # Real 3-row table, none of the body rows carry tcBorders.
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
 
-        with (
-            patch(
-                "app.infrastructure.documents.price_list_export._tbl_row_count",
-                return_value=3,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
-                return_value=None,
-            ),
-        ):
-            result = _pick_border_template_row_index(table, 1)
-        assert result == 1
+        # No bordered data row found -> falls back to the first body row index.
+        assert _pick_border_template_row_index(table, header_rows=1) == 1
 
-    def test_returns_row_with_borders(self):
+    def test_skips_to_first_bordered_body_row(self):
         from app.infrastructure.documents.price_list_export import (
             _pick_border_template_row_index,
+            _tc_set_side_border,
         )
 
-        table = MagicMock()
-        cell = MagicMock()
-        cell._tc = OxmlElement("w:tc")
-        row = MagicMock()
-        row.cells = [cell]
-        table.rows = [row, row, row]
+        doc = Document()
+        table = doc.add_table(rows=4, cols=2)
+        # header_rows=1 -> body rows are indices 1,2,3.
+        # Give only row index 2 a real border; rows 1 and 3 stay borderless.
+        b = OxmlElement("w:bottom")
+        b.set(qn("w:val"), "single")
+        _tc_set_side_border(table.rows[2].cells[0], "bottom", b)
 
-        with (
-            patch(
-                "app.infrastructure.documents.price_list_export._tbl_row_count",
-                return_value=3,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export._tc_get_tc_borders_snapshot",
-                return_value=OxmlElement("w:tcBorders"),
-            ),
-        ):
-            result = _pick_border_template_row_index(table, 1)
-        assert result == 1
+        # The first body row that actually has tcBorders is index 2.
+        assert _pick_border_template_row_index(table, header_rows=1) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -494,43 +495,50 @@ class TestPickBorderTemplateRowIndex:
 
 
 class TestApplyTcBordersToAllBodyRows:
-    def test_empty_snaps_returns(self):
+    def test_empty_snaps_leaves_cells_borderless(self):
         from app.infrastructure.documents.price_list_export import (
             _apply_tc_borders_to_all_body_rows,
+            _cell_bottom_effective,
         )
 
-        table = MagicMock()
-        with patch(
-            "app.infrastructure.documents.price_list_export._tc_apply_tc_borders_snapshot"
-        ) as mock_apply:
-            _apply_tc_borders_to_all_body_rows(table, 1, [])
-        # Empty snapshot list -> early return, no per-cell application
-        mock_apply.assert_not_called()
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
 
-    def test_applies_snaps(self):
+        _apply_tc_borders_to_all_body_rows(table, 1, [])
+
+        # Empty snapshot list -> early return: no borders fabricated anywhere.
+        assert _cell_bottom_effective(table.rows[1].cells[0]) is False
+        assert _cell_bottom_effective(table.rows[1].cells[1]) is False
+
+    def test_applies_snapshot_to_every_body_row(self):
         from app.infrastructure.documents.price_list_export import (
             _apply_tc_borders_to_all_body_rows,
+            _cell_bottom_effective,
         )
 
-        table = MagicMock()
-        cell = MagicMock()
-        cell._tc = OxmlElement("w:tc")
-        row = MagicMock()
-        row.cells = [cell]
-        table.rows = [row, row]
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
+        # Build a per-cell snapshot list (one tcBorders with a bottom edge per col).
+        snaps = []
+        for _ in range(2):
+            tcb = OxmlElement("w:tcBorders")
+            bottom = OxmlElement("w:bottom")
+            bottom.set(qn("w:val"), "single")
+            tcb.append(bottom)
+            snaps.append(tcb)
 
-        snap = OxmlElement("w:tcBorders")
-        with (
-            patch(
-                "app.infrastructure.documents.price_list_export._tbl_row_count",
-                return_value=2,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export._tc_apply_tc_borders_snapshot"
-            ) as mock_apply,
-        ):
-            _apply_tc_borders_to_all_body_rows(table, 1, [snap])
-        assert mock_apply.call_count == 1
+        # Body rows are indices 1 and 2 (header_rows=1).
+        assert _cell_bottom_effective(table.rows[1].cells[0]) is False
+        assert _cell_bottom_effective(table.rows[2].cells[1]) is False
+
+        _apply_tc_borders_to_all_body_rows(table, 1, snaps)
+
+        # Both body rows, all columns, now carry the bottom edge from the snapshot.
+        for r in (1, 2):
+            for c in (0, 1):
+                assert _cell_bottom_effective(table.rows[r].cells[c]) is True
+        # The header row (index 0) is untouched.
+        assert _cell_bottom_effective(table.rows[0].cells[0]) is False
 
 
 # ---------------------------------------------------------------------------
@@ -539,37 +547,34 @@ class TestApplyTcBordersToAllBodyRows:
 
 
 class TestEnsureTableRowCountAtLeast:
-    def test_already_has_enough_rows(self):
+    def test_already_has_enough_rows_is_noop(self):
         from app.infrastructure.documents.price_list_export import (
             _ensure_table_row_count_at_least,
+            _tbl_row_count,
         )
 
-        table = MagicMock()
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            return_value=5,
-        ):
-            _ensure_table_row_count_at_least(table, 3)
-        table.add_row.assert_not_called()
+        doc = Document()
+        table = doc.add_table(rows=5, cols=2)
+        _ensure_table_row_count_at_least(table, 3)
+        # Already >= target -> no rows added.
+        assert _tbl_row_count(table) == 5
 
-    def test_adds_rows(self):
+    def test_grows_table_to_exact_minimum(self):
         from app.infrastructure.documents.price_list_export import (
             _ensure_table_row_count_at_least,
+            _tbl_row_count,
         )
 
-        table = MagicMock()
-        call_count = [0]
+        doc = Document()
+        table = doc.add_table(rows=2, cols=3)
+        assert _tbl_row_count(table) == 2
 
-        def mock_count(*args, **kwargs):
-            call_count[0] += 1
-            return min(call_count[0], 5)
+        _ensure_table_row_count_at_least(table, 6)
 
-        with patch(
-            "app.infrastructure.documents.price_list_export._tbl_row_count",
-            side_effect=mock_count,
-        ):
-            _ensure_table_row_count_at_least(table, 5)
-        assert table.add_row.call_count >= 1
+        # Real <w:tr> count reaches the requested minimum, and new rows keep the
+        # column count of the template.
+        assert _tbl_row_count(table) == 6
+        assert len(table.rows[5].cells) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -773,24 +778,24 @@ class TestWriteProductRowAdditional:
 
 
 class TestRemoveTableRow:
-    def test_removes_row(self):
-        from app.infrastructure.documents.price_list_export import _remove_table_row
+    def test_removes_specified_row_keeping_others(self):
+        from app.infrastructure.documents.price_list_export import (
+            _remove_table_row,
+            _tbl_row_count,
+        )
 
-        tbl = OxmlElement("w:tbl")
-        tr1 = OxmlElement("w:tr")
-        tr2 = OxmlElement("w:tr")
-        tbl.append(tr1)
-        tbl.append(tr2)
-
-        table = MagicMock()
-        table._tbl = tbl
-        row = MagicMock()
-        row._tr = tr2
-        table.rows = [MagicMock(_tr=tr1), row]
+        # Real 3-row table with identifiable content per row.
+        doc = Document()
+        table = doc.add_table(rows=3, cols=1)
+        table.rows[0].cells[0].text = "ROW0"
+        table.rows[1].cells[0].text = "ROW1"
+        table.rows[2].cells[0].text = "ROW2"
 
         _remove_table_row(table, 1)
-        trs = [c for c in tbl if c.tag == qn("w:tr")]
-        assert len(trs) == 1
+
+        # The middle row is gone; the other two survive in order.
+        assert _tbl_row_count(table) == 2
+        assert [r.cells[0].text for r in table.rows] == ["ROW0", "ROW2"]
 
 
 # ---------------------------------------------------------------------------
@@ -808,12 +813,23 @@ class TestTblPr:
         result = _tbl_pr(tbl)
         assert result is existing_pr
 
-    def test_creates_new(self):
+    def test_creates_new_as_first_child(self):
         from app.infrastructure.documents.price_list_export import _tbl_pr
 
         tbl = OxmlElement("w:tbl")
+        # Existing row child so we can confirm tblPr is inserted before it
+        # (OOXML requires tblPr to precede the rows).
+        tr = OxmlElement("w:tr")
+        tbl.append(tr)
+
         result = _tbl_pr(tbl)
+
         assert result.tag == qn("w:tblPr")
+        assert list(tbl)[0] is result
+        assert len(tbl.findall(qn("w:tblPr"))) == 1
+        # Idempotent: a second call returns the same element, not a duplicate.
+        assert _tbl_pr(tbl) is result
+        assert len(tbl.findall(qn("w:tblPr"))) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -860,28 +876,75 @@ class TestSnapshotRestoreTblBorders:
         table._tbl = tbl
         assert _snapshot_tbl_borders(table) is None
 
-    def test_snapshot_returns_deep_copy(self):
+    def test_snapshot_returns_independent_deep_copy(self):
         from app.infrastructure.documents.price_list_export import _snapshot_tbl_borders
 
         table = MagicMock()
         tbl = OxmlElement("w:tbl")
         tbl_pr = OxmlElement("w:tblPr")
         borders = OxmlElement("w:tblBorders")
+        top = OxmlElement("w:top")
+        top.set(qn("w:val"), "single")
+        top.set(qn("w:sz"), "8")
+        borders.append(top)
         tbl_pr.append(borders)
         tbl.append(tbl_pr)
         table._tbl = tbl
-        result = _snapshot_tbl_borders(table)
-        assert result is not None
-        assert result is not borders
 
-    def test_restore_none_does_nothing(self):
+        result = _snapshot_tbl_borders(table)
+
+        assert result is not borders
+        assert result.tag == qn("w:tblBorders")
+        snap_top = result.find(qn("w:top"))
+        assert snap_top.get(qn("w:val")) == "single"
+        assert snap_top.get(qn("w:sz")) == "8"
+        # Detached copy: editing the original leaves the snapshot untouched.
+        top.set(qn("w:sz"), "16")
+        assert result.find(qn("w:top")).get(qn("w:sz")) == "8"
+
+    def test_restore_writes_snapshot_back_into_tbl_pr(self):
+        from app.infrastructure.documents.price_list_export import (
+            _restore_tbl_borders,
+            _snapshot_tbl_borders,
+        )
+
+        table = MagicMock()
+        tbl = OxmlElement("w:tbl")
+        tbl_pr = OxmlElement("w:tblPr")
+        borders = OxmlElement("w:tblBorders")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        borders.append(bottom)
+        tbl_pr.append(borders)
+        tbl.append(tbl_pr)
+        table._tbl = tbl
+
+        snap = _snapshot_tbl_borders(table)
+        # Remove the live borders, then restore from snapshot.
+        tbl_pr.remove(borders)
+        assert tbl_pr.find(qn("w:tblBorders")) is None
+
+        _restore_tbl_borders(table, snap)
+
+        restored = tbl_pr.find(qn("w:tblBorders"))
+        assert restored is not None
+        # Exactly one tblBorders is present (no duplication) with the val intact.
+        assert len(tbl_pr.findall(qn("w:tblBorders"))) == 1
+        assert restored.find(qn("w:bottom")).get(qn("w:val")) == "single"
+
+    def test_restore_none_leaves_table_untouched(self):
         from app.infrastructure.documents.price_list_export import _restore_tbl_borders
 
         table = MagicMock()
-        with patch("app.infrastructure.documents.price_list_export._tbl_pr") as mock_tbl_pr:
-            _restore_tbl_borders(table, None)
-        # None borders -> early return before touching/creating tblPr
-        mock_tbl_pr.assert_not_called()
+        tbl = OxmlElement("w:tbl")
+        # A bare <w:tbl> with no tblPr at all.
+        table._tbl = tbl
+
+        _restore_tbl_borders(table, None)
+
+        # None snapshot -> early return: no tblPr fabricated, tree unchanged.
+        assert tbl.find(qn("w:tblPr")) is None
+        assert list(tbl) == []
 
 
 # ---------------------------------------------------------------------------
@@ -1008,7 +1071,7 @@ class TestTcGetSideBorderCopy:
         cell._tc = tc
         assert _tc_get_side_border_copy(cell, "bottom") is None
 
-    def test_returns_deep_copy(self):
+    def test_returns_independent_copy_of_effective_side(self):
         from app.infrastructure.documents.price_list_export import _tc_get_side_border_copy
 
         cell = MagicMock()
@@ -1017,13 +1080,22 @@ class TestTcGetSideBorderCopy:
         tcb = OxmlElement("w:tcBorders")
         bottom = OxmlElement("w:bottom")
         bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:color"), "FF0000")
         tcb.append(bottom)
         tc_pr.append(tcb)
         tc.append(tc_pr)
         cell._tc = tc
+
         result = _tc_get_side_border_copy(cell, "bottom")
-        assert result is not None
+
         assert result is not bottom
+        assert result.tag == qn("w:bottom")
+        # Style attributes are carried over on the copy.
+        assert result.get(qn("w:val")) == "single"
+        assert result.get(qn("w:color")) == "FF0000"
+        # Detached: editing the live border does not change the returned copy.
+        bottom.set(qn("w:color"), "00FF00")
+        assert result.get(qn("w:color")) == "FF0000"
 
 
 # ---------------------------------------------------------------------------
@@ -1045,6 +1117,12 @@ class TestTcSetSideBorder:
         assert tc_pr is not None
         tcb = tc_pr.find(qn("w:tcBorders"))
         assert tcb is not None
+        # The requested side border is written with the supplied value, stored
+        # as a deep copy (not the same element instance).
+        stored = tcb.find(qn("w:bottom"))
+        assert stored is not None
+        assert stored is not border
+        assert stored.get(qn("w:val")) == "single"
 
     def test_replaces_existing(self):
         from app.infrastructure.documents.price_list_export import _tc_set_side_border
@@ -1064,7 +1142,9 @@ class TestTcSetSideBorder:
         new_border.set(qn("w:val"), "single")
         _tc_set_side_border(cell, "bottom", new_border)
         bottoms = tcb.findall(qn("w:bottom"))
+        # The pre-existing 'nil' bottom is replaced in place by the new 'single'.
         assert len(bottoms) == 1
+        assert bottoms[0].get(qn("w:val")) == "single"
 
 
 # ---------------------------------------------------------------------------
@@ -1080,17 +1160,23 @@ class TestBorderElementAsWBottom:
 
         assert _border_element_as_w_bottom(None) is None
 
-    def test_already_bottom_returns_copy(self):
+    def test_already_bottom_returns_independent_copy(self):
         from app.infrastructure.documents.price_list_export import (
             _border_element_as_w_bottom,
         )
 
         src = OxmlElement("w:bottom")
         src.set(qn("w:val"), "single")
+        src.set(qn("w:sz"), "12")
         result = _border_element_as_w_bottom(src)
-        assert result is not None
+
         assert result is not src
         assert result.tag == qn("w:bottom")
+        assert result.get(qn("w:val")) == "single"
+        assert result.get(qn("w:sz")) == "12"
+        # Editing the source must not mutate the returned copy.
+        src.set(qn("w:sz"), "24")
+        assert result.get(qn("w:sz")) == "12"
 
     def test_converts_other_tag(self):
         from app.infrastructure.documents.price_list_export import (
@@ -1166,7 +1252,9 @@ class TestSampleHorizontalBorderForRowSeparation:
         table._tbl = tbl
         result = _sample_horizontal_border_for_row_separation(table)
         assert result is not None
+        # insideH is converted into a w:bottom carrying the same style value.
         assert result.tag == qn("w:bottom")
+        assert result.get(qn("w:val")) == "single"
 
 
 # ---------------------------------------------------------------------------
@@ -1214,25 +1302,58 @@ class TestCellBottomEffective:
 
 
 class TestEnsureRowTcBottomFromTemplate:
-    def test_invalid_index_returns(self):
+    def test_invalid_index_writes_no_borders(self):
         from app.infrastructure.documents.price_list_export import (
+            _cell_bottom_effective,
             _ensure_row_tc_bottom_from_template,
         )
 
-        table = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.documents.price_list_export._tbl_row_count",
-                return_value=2,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export._sample_horizontal_border_for_row_separation"
-            ) as mock_sample,
-        ):
-            _ensure_row_tc_bottom_from_template(table, -1, force=False)
-            _ensure_row_tc_bottom_from_template(table, 5, force=False)
-        # Out-of-range indices -> early return before any border work
-        mock_sample.assert_not_called()
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        # Give the table a usable insideH sample so that, if the guard were
+        # missing, a border *could* be written somewhere observable.
+        tbl_pr = table._tbl.find(qn("w:tblPr"))
+        tb = OxmlElement("w:tblBorders")
+        ih = OxmlElement("w:insideH")
+        ih.set(qn("w:val"), "single")
+        tb.append(ih)
+        tbl_pr.append(tb)
+
+        _ensure_row_tc_bottom_from_template(table, -1, force=True)
+        _ensure_row_tc_bottom_from_template(table, 5, force=True)
+
+        # Out-of-range indices -> early return: no cell gained a bottom border.
+        for r in range(2):
+            for c in range(2):
+                assert _cell_bottom_effective(table.rows[r].cells[c]) is False
+
+    def test_force_copies_table_insideH_to_row_cells(self):
+        from app.infrastructure.documents.price_list_export import (
+            _cell_bottom_effective,
+            _ensure_row_tc_bottom_from_template,
+            _tc_get_side_border_copy,
+        )
+
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
+        tbl_pr = table._tbl.find(qn("w:tblPr"))
+        tb = OxmlElement("w:tblBorders")
+        ih = OxmlElement("w:insideH")
+        ih.set(qn("w:val"), "single")
+        ih.set(qn("w:sz"), "6")
+        tb.append(ih)
+        tbl_pr.append(tb)
+
+        assert _cell_bottom_effective(table.rows[1].cells[0]) is False
+        _ensure_row_tc_bottom_from_template(table, 1, force=True)
+
+        # Each cell of row 1 now has a bottom border derived from insideH,
+        # preserving its style attributes.
+        for c in range(2):
+            assert _cell_bottom_effective(table.rows[1].cells[c]) is True
+            copied = _tc_get_side_border_copy(table.rows[1].cells[c], "bottom")
+            assert copied.get(qn("w:val")) == "single"
+            assert copied.get(qn("w:sz")) == "6"
 
 
 # ---------------------------------------------------------------------------
@@ -1241,22 +1362,45 @@ class TestEnsureRowTcBottomFromTemplate:
 
 
 class TestEnsureLastRowCellBottomsMatchAbove:
-    def test_less_than_2_rows_returns(self):
+    def test_single_row_table_is_left_untouched(self):
         from app.infrastructure.documents.price_list_export import (
+            _cell_bottom_effective,
             _ensure_last_row_cell_bottoms_match_above,
         )
 
-        table = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.documents.price_list_export._tbl_row_count",
-                return_value=1,
-            ),
-            patch("app.infrastructure.documents.price_list_export._tc_set_side_border") as mock_set,
-        ):
-            _ensure_last_row_cell_bottoms_match_above(table)
-        # Fewer than 2 rows -> early return, no border written
-        mock_set.assert_not_called()
+        doc = Document()
+        table = doc.add_table(rows=1, cols=2)
+        _ensure_last_row_cell_bottoms_match_above(table)
+        # Fewer than 2 rows -> early return, no bottom fabricated.
+        assert _cell_bottom_effective(table.rows[0].cells[0]) is False
+        assert _cell_bottom_effective(table.rows[0].cells[1]) is False
+
+    def test_last_row_inherits_bottom_from_row_above(self):
+        from app.infrastructure.documents.price_list_export import (
+            _cell_bottom_effective,
+            _ensure_last_row_cell_bottoms_match_above,
+            _tc_get_side_border_copy,
+            _tc_set_side_border,
+        )
+
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
+        # The middle row (index 1, the one above the last) carries bottom borders.
+        for c in range(2):
+            b = OxmlElement("w:bottom")
+            b.set(qn("w:val"), "single")
+            b.set(qn("w:color"), "123456")
+            _tc_set_side_border(table.rows[1].cells[c], "bottom", b)
+
+        assert _cell_bottom_effective(table.rows[2].cells[0]) is False
+        _ensure_last_row_cell_bottoms_match_above(table)
+
+        # Last row now mirrors the bottom style of the row above it.
+        for c in range(2):
+            assert _cell_bottom_effective(table.rows[2].cells[c]) is True
+            copied = _tc_get_side_border_copy(table.rows[2].cells[c], "bottom")
+            assert copied.get(qn("w:val")) == "single"
+            assert copied.get(qn("w:color")) == "123456"
 
 
 # ---------------------------------------------------------------------------
@@ -1265,19 +1409,48 @@ class TestEnsureLastRowCellBottomsMatchAbove:
 
 
 class TestFillFirstTableWithProductsAdditional:
-    def test_empty_rows_returns(self):
+    def test_empty_table_is_left_unchanged(self):
         from app.infrastructure.documents.price_list_export import (
             _fill_first_table_with_products,
+            _tbl_row_count,
         )
 
-        table = MagicMock()
-        table.rows = []
-        with patch(
-            "app.infrastructure.documents.price_list_export._snapshot_tbl_borders"
-        ) as mock_snap:
-            _fill_first_table_with_products(table, [])
-        # No rows -> early return before any table processing begins
-        mock_snap.assert_not_called()
+        # A real <w:tbl> with zero <w:tr> -> table.rows is empty.
+        doc = Document()
+        table = doc.add_table(rows=0, cols=0)
+        assert _tbl_row_count(table) == 0
+
+        _fill_first_table_with_products(table, [])
+
+        # No rows -> early return: still an empty table, nothing fabricated.
+        assert _tbl_row_count(table) == 0
+
+    def test_products_fill_rows_and_keep_trailing_blank(self):
+        from app.infrastructure.documents.price_list_export import (
+            _fill_first_table_with_products,
+            _tbl_row_count,
+        )
+
+        doc = Document()
+        tbl = doc.add_table(rows=2, cols=4)
+        tbl.rows[0].cells[0].text = "型号"
+        tbl.rows[0].cells[1].text = "名称"
+        tbl.rows[0].cells[2].text = "规格"
+        tbl.rows[0].cells[3].text = "单价"
+        tbl.rows[1].cells[0].text = "STALE"
+
+        products = [
+            {"model_number": "M1", "name": "P1", "specification": "S1", "price": 100},
+            {"model_number": "M2", "name": "P2", "specification": "S2", "price": 12.5},
+        ]
+        _fill_first_table_with_products(tbl, products)
+
+        # header(1) + 2 products + 1 trailing blank row.
+        assert _tbl_row_count(tbl) == 4
+        assert [c.text for c in tbl.rows[0].cells] == ["型号", "名称", "规格", "单价"]
+        assert [c.text for c in tbl.rows[1].cells] == ["M1", "P1", "S1", "100"]
+        assert [c.text for c in tbl.rows[2].cells] == ["M2", "P2", "S2", "12.50"]
+        assert [c.text for c in tbl.rows[3].cells] == ["", "", "", ""]
 
     def test_no_products(self):
         from app.infrastructure.documents.price_list_export import (
@@ -1322,50 +1495,85 @@ class TestBuildPriceListDocxBytesAdditional:
         with pytest.raises(FileNotFoundError, match="Word 模板不存在"):
             build_price_list_docx_bytes(str(tmp_path / "nonexistent.docx"))
 
-    def test_template_path_kwarg(self, tmp_path):
+    def test_template_path_kwarg_round_trips_to_valid_docx(self, tmp_path):
         from app.infrastructure.documents.price_list_export import (
             build_price_list_docx_bytes,
         )
 
-        # Create a minimal docx file
+        # Create a minimal docx file with a known paragraph.
         doc = Document()
-        doc.add_paragraph("test")
+        doc.add_paragraph("hello-template")
         path = tmp_path / "template.docx"
         doc.save(str(path))
 
         result = build_price_list_docx_bytes(template_path=str(path))
-        assert isinstance(result, bytes)
-        assert len(result) > 0
 
-    def test_with_products_and_no_tables(self, tmp_path):
+        # Output is a real .docx (ZIP magic) that re-opens and preserves content.
+        assert result[:2] == b"PK"
+        reopened = Document(BytesIO(result))
+        assert reopened.paragraphs[0].text == "hello-template"
+        # No products + no tables -> no table is fabricated.
+        assert reopened.tables == []
+
+    def test_with_products_and_no_tables_creates_filled_table(self, tmp_path):
         from app.infrastructure.documents.price_list_export import (
             build_price_list_docx_bytes,
         )
 
-        # Create a docx with no tables
+        # Template has a placeholder paragraph but no tables.
         doc = Document()
-        doc.add_paragraph("test")
+        doc.add_paragraph("客户：{{客户}} 日期：{{报价日期}}")
         path = tmp_path / "template.docx"
         doc.save(str(path))
 
-        products = [{"model_number": "M1", "name": "P1", "specification": "S1", "price": 100}]
-        result = build_price_list_docx_bytes(str(path), products=products)
-        assert isinstance(result, bytes)
-        assert len(result) > 0
+        products = [
+            {"model_number": "M1", "name": "P1", "specification": "S1", "price": 100},
+            {"model_number": "M2", "name": "P2", "specification": "S2", "price": 99.5},
+        ]
+        result = build_price_list_docx_bytes(
+            str(path),
+            products=products,
+            customer_name="ACME",
+            quote_date="2026-01-01",
+        )
 
-    def test_with_rows_kwarg(self, tmp_path):
+        reopened = Document(BytesIO(result))
+        # Placeholders are substituted in the paragraph.
+        assert reopened.paragraphs[0].text == "客户：ACME 日期：2026-01-01"
+        # A 4-column product table is created and filled with the standard header.
+        assert len(reopened.tables) == 1
+        tbl = reopened.tables[0]
+        assert [c.text for c in tbl.rows[0].cells] == ["型号", "名称", "规格", "单价"]
+        assert [c.text for c in tbl.rows[1].cells] == ["M1", "P1", "S1", "100"]
+        assert [c.text for c in tbl.rows[2].cells] == ["M2", "P2", "S2", "99.50"]
+        # n>0 -> one trailing blank data row is preserved for the bottom edge.
+        assert [c.text for c in tbl.rows[3].cells] == ["", "", "", ""]
+
+    def test_with_rows_kwarg_fills_existing_template_table(self, tmp_path):
         from app.infrastructure.documents.price_list_export import (
             build_price_list_docx_bytes,
         )
 
+        # Template already has a 4-col table with a recognizable header.
         doc = Document()
-        doc.add_table(rows=2, cols=4)
+        tbl = doc.add_table(rows=2, cols=4)
+        tbl.rows[0].cells[0].text = "型号"
+        tbl.rows[0].cells[1].text = "名称"
+        tbl.rows[0].cells[2].text = "规格"
+        tbl.rows[0].cells[3].text = "单价"
+        tbl.rows[1].cells[0].text = "STALE"
         path = tmp_path / "template.docx"
         doc.save(str(path))
 
-        rows = [{"model_number": "M1", "name": "P1", "specification": "S1", "price": 100}]
+        # `rows` is honored as the data source (alias for `products`).
+        rows = [{"model_number": "M9", "name": "P9", "specification": "S9", "price": 7}]
         result = build_price_list_docx_bytes(str(path), rows=rows)
-        assert isinstance(result, bytes)
+
+        reopened = Document(BytesIO(result))
+        out_tbl = reopened.tables[0]
+        # Header is preserved, stale data is overwritten with the supplied row.
+        assert [c.text for c in out_tbl.rows[0].cells] == ["型号", "名称", "规格", "单价"]
+        assert [c.text for c in out_tbl.rows[1].cells] == ["M9", "P9", "S9", "7"]
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,8 @@ Assertions verify real round-trip behaviour, not mere line execution.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import threading
 from datetime import datetime, timedelta
 from typing import Any
@@ -171,10 +173,15 @@ class TestUpcasterRegistry:
 
     def test_validate_chains_passes_for_complete_chain(self):
         reg = UpcasterRegistry()
-        reg.register(_AddFieldUpcaster())
-        reg.register(_RenameFieldUpcaster())
-        # Should not raise.
-        reg.validate_chains()
+        u1, u2 = _AddFieldUpcaster(), _RenameFieldUpcaster()
+        reg.register(u1)
+        reg.register(u2)
+        # A complete v1->v2->v3 chain validates without error and returns None.
+        assert reg.validate_chains() is None
+        # And the validated state is internally consistent: current version is 3
+        # and the full chain is reconstructable from it.
+        assert reg.get_current_version("demo.event") == 3
+        assert reg.get_chain("demo.event", 1, 3) == [u1, u2]
 
     def test_validate_chains_detects_gap(self):
         reg = UpcasterRegistry()
@@ -406,20 +413,35 @@ class TestAppendCallbacks:
         store = EventStore()
         seen: list[StoredEvent] = []
         store.on_append(seen.append)
-        store.append(_make_event())
+        sid = store.append(_make_event(event_type="cb.event", payload={"k": 9}))
         assert len(seen) == 1
-        assert isinstance(seen[0], StoredEvent)
+        # The callback receives the exact StoredEvent that was persisted.
+        delivered = seen[0]
+        assert delivered.store_id == sid
+        assert delivered.event.event_type == "cb.event"
+        assert delivered.event.payload == {"k": 9}
+        assert delivered is store.get(sid)
 
     def test_callback_exception_is_swallowed(self):
         store = EventStore()
+        after: list[str] = []
 
         def boom(_stored: StoredEvent) -> None:
             raise ValueError("callback failed")  # in RECOVERABLE_ERRORS
 
+        def record_ok(stored: StoredEvent) -> None:
+            after.append(stored.store_id)
+
+        # A raising callback must not abort the loop: a later callback still runs.
         store.on_append(boom)
-        # Append must still succeed despite callback error.
-        sid = store.append(_make_event())
-        assert store.get(sid) is not None
+        store.on_append(record_ok)
+        sid = store.append(_make_event(payload={"safe": True}))
+        # Append itself succeeded and round-trips with the original payload.
+        stored = store.get(sid)
+        assert stored is not None
+        assert stored.event.payload == {"safe": True}
+        # The non-raising callback registered after `boom` still fired.
+        assert after == [sid]
 
 
 # --------------------------------------------------------------------------- #
@@ -467,7 +489,14 @@ class TestSqliteRoundTrip:
         assert stored.store_id == sid
 
     def test_get_missing_returns_none(self, sqlite_store):
+        # A real, stored id resolves; an unknown id returns None (not an error).
+        sid = sqlite_store.append(_make_event(payload={"present": 1}))
+        assert sqlite_store.get(sid).event.payload == {"present": 1}
         assert sqlite_store.get("evt-nonexistent") is None
+        # A logically deleted id also reads back as missing.
+        sqlite_store.append(_make_event(), stream_id="gone")
+        sqlite_store.delete_stream("gone")
+        assert sqlite_store.get_stream_events("gone") == []
 
     def test_get_stream_events_ordered(self, sqlite_store):
         for i in range(3):
@@ -532,10 +561,18 @@ class TestSqliteSnapshots:
         assert snap is not None
         assert snap.state == {"balance": 100}
         assert snap.sequence_number == 5
-        assert "state_hash" in snap.metadata
+        # state_hash is the sha256 of the canonical (sorted-keys) JSON of state.
+        expected_hash = hashlib.sha256(
+            json.dumps({"balance": 100}, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
+        assert snap.metadata["state_hash"] == expected_hash
 
     def test_get_snapshot_missing(self, sqlite_store):
+        # No snapshot saved for this stream -> None; a saved one for a sibling
+        # stream does not leak across stream boundaries.
+        sqlite_store.save_snapshot("other", {"v": 1}, sequence_number=1)
         assert sqlite_store.get_snapshot("nope") is None
+        assert sqlite_store.get_snapshot("other").state == {"v": 1}
 
     def test_snapshot_history_and_pruning(self, sqlite_store):
         # max_snapshots_per_stream defaults to 3.
@@ -595,8 +632,11 @@ class TestSqliteManagement:
         assert stats["by_event_type"] == {"a": 2, "b": 1}
         assert stats["by_stream"] == {"s1": 2, "s2": 1}
         assert stats["streams"] == 2
-        assert stats["oldest_event"] is not None
-        assert stats["newest_event"] is not None
+        # Timestamps are ISO strings; chronological ordering is preserved and
+        # both parse back to real datetimes (oldest never after newest).
+        oldest = datetime.fromisoformat(stats["oldest_event"])
+        newest = datetime.fromisoformat(stats["newest_event"])
+        assert oldest <= newest
 
     def test_stats_empty(self, sqlite_store):
         stats = sqlite_store.get_stats()
@@ -700,14 +740,18 @@ class TestReplay:
         for i in range(4):
             store.append(_make_event(payload={"i": i}), stream_id="agg")
         store.save_snapshot("agg", {"folded": 2}, sequence_number=2)
-        applied: list[Any] = []
+        applied: list[NeuroEvent] = []
         result = store.replay_stream("agg", callback=lambda e: applied.append(e))
         assert result["snapshot_used"] is True
         assert result["snapshot_hash_verified"] is True
         assert result["snapshot_sequence"] == 2
-        assert "snapshot_age_seconds" in result
-        # Only events after snapshot replayed (seq 3 and 4).
+        # Age is a real, non-negative elapsed-seconds float for a just-saved snapshot.
+        assert isinstance(result["snapshot_age_seconds"], float)
+        assert result["snapshot_age_seconds"] >= 0.0
+        # Only events strictly after the snapshot (seq 3 and 4) are replayed, and
+        # the callback receives exactly those two payloads in stream order.
         assert result["applied_events"] == 2
+        assert [e.payload["i"] for e in applied] == [2, 3]
 
     def test_replay_stream_no_snapshot_full_replay(self):
         store = EventStore()
@@ -795,24 +839,54 @@ class TestConcurrency:
 class TestDataclasses:
     def test_stored_event_to_dict(self):
         store = EventStore()
-        sid = store.append(_make_event(payload={"a": 1}), stream_id="s")
+        ev = _make_event(event_type="dc.event", payload={"a": 1}, event_id="evt-dc")
+        sid = store.append(ev, stream_id="s")
         stored = store.get(sid)
         d = stored.to_dict()
         assert d["store_id"] == sid
-        assert d["event"]["payload"] == {"a": 1}
         assert d["stream_id"] == "s"
-        assert "stored_at" in d
+        assert d["sequence_number"] == stored.sequence_number
+        # The nested event projection flattens metadata onto event fields.
+        assert d["event"]["event_id"] == "evt-dc"
+        assert d["event"]["event_type"] == "dc.event"
+        assert d["event"]["payload"] == {"a": 1}
+        # to_dict surfaces metadata.correlation_id (distinct from trace_id, which
+        # the fixture sets); the fixture leaves correlation_id unset -> None.
+        assert d["event"]["correlation_id"] is None
+        assert d["event"]["source"] == "unit-test"
+        assert d["event"]["priority"] == EventPriority.NORMAL.value
+        # stored_at is serialised to the ISO string of the StoredEvent timestamp.
+        assert d["stored_at"] == stored.stored_at.isoformat()
+        assert datetime.fromisoformat(d["stored_at"]) == stored.stored_at
 
     def test_snapshot_defaults(self):
+        created = datetime.now()
         snap = Snapshot(
             snapshot_id="snap-1",
             stream_id="s",
             sequence_number=1,
             state={"x": 1},
-            created_at=datetime.now(),
+            created_at=created,
         )
+        # Required fields are stored verbatim.
+        assert snap.snapshot_id == "snap-1"
+        assert snap.stream_id == "s"
+        assert snap.sequence_number == 1
+        assert snap.state == {"x": 1}
+        assert snap.created_at is created
+        # Optional fields fall back to their declared defaults.
         assert snap.version == 1
         assert snap.metadata == {}
+        # default_factory gives each instance its own dict (no shared mutable state).
+        other = Snapshot(
+            snapshot_id="snap-2",
+            stream_id="s",
+            sequence_number=2,
+            state={},
+            created_at=created,
+        )
+        snap.metadata["touched"] = True
+        assert other.metadata == {}
 
 
 # --------------------------------------------------------------------------- #
@@ -852,8 +926,11 @@ class TestMemoryManagement:
         assert stats["by_event_type"] == {"a": 2, "b": 1}
         assert stats["by_stream"] == {"s1": 2}
         assert stats["streams"] == 1
-        assert stats["oldest_event"] is not None
-        assert stats["newest_event"] is not None
+        # Streamless events still count in totals but never inflate by_stream.
+        assert sum(stats["by_event_type"].values()) == stats["total_events"]
+        oldest = datetime.fromisoformat(stats["oldest_event"])
+        newest = datetime.fromisoformat(stats["newest_event"])
+        assert oldest <= newest
 
     def test_stats_empty_memory(self):
         store = EventStore()
