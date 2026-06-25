@@ -36,7 +36,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,6 +64,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBadge
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeRedActionCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSpacer
@@ -285,11 +285,12 @@ fun ProfileScreen(
             text = {
                 Column {
                     Text("注销后无法恢复，请确认密码。")
-                    OutlinedTextField(
-                        deletePassword,
-                        { deletePassword = it },
-                        label = { Text("密码") },
-                        shape = MaterialTheme.shapes.small,
+                    Spacer(Modifier.height(Spacing.md))
+                    WeField(
+                        value = deletePassword,
+                        onValueChange = { deletePassword = it },
+                        placeholder = "密码",
+                        singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     )
@@ -357,12 +358,11 @@ private fun ProfileEditorDialog(
                     ) { Text("移除") }
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                WeField(
                     value = draftName,
                     onValueChange = onDraftNameChange,
-                    label = { Text("昵称") },
+                    placeholder = "昵称",
                     singleLine = true,
-                    shape = MaterialTheme.shapes.small,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(

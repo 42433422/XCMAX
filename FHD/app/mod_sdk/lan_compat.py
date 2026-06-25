@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 J：LAN 授权 API 经 ``xcagi-lan-license-bridge`` 门面。"""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全站 API 速率限制（按 IP + 路径前缀）。"""
 
 from __future__ import annotations

@@ -50,6 +50,32 @@ def _resolve_user_id() -> int:
     return int(raw) if raw.isdigit() else 0
 
 
+def _platform_bench_override() -> Optional[tuple]:
+    """后台 loop 默认走平台派发：LLM 成本记到平台密钥、不查/扣用户 ``llm_calls`` 配额。
+
+    这条 loop 是后台自治行为（和 bench/裁判同性质），不该被按「用户调用」计量——
+    否则把它挂到某个真实用户的月度配额上，24/7 跑几小时就 ``403 配额不足: llm_calls``
+    （生产实测 99.6% 失败的根因）。返回平台 bench (provider, model) 作为
+    ``bench_llm_override`` → cognition ``use_platform_dispatch=True`` →
+    ``chat_dispatch_via_platform_only``（不经 require_llm_credit）。``user_id`` 仍透传
+    给 RAG 集合可见性与执行指标，作用域不变。
+
+    关闭（回退按用户配额计费）：``MODSTORE_DAILY_VIBE_EXECUTE_PLATFORM_LLM=0``。
+    未配置任何平台密钥时返回 ``None``（无法路由平台，退回原行为）。
+    """
+    if not _env_bool("MODSTORE_DAILY_VIBE_EXECUTE_PLATFORM_LLM", "1"):
+        return None
+    try:
+        from modstore_server.services.llm import resolve_platform_bench_llm
+
+        rp, rm = resolve_platform_bench_llm()
+        if rp and rm:
+            return (rp, rm)
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
 def _read_execute_meta(record_id: int) -> Dict[str, Any]:
     try:
         from modstore_server.models import DailyDigestRecord, get_session_factory
@@ -429,6 +455,7 @@ def execute_digest_line_work_units(
             created_by_user_id=_resolve_user_id(),
             max_concurrency=conc,
             allow_high_risk_real_run=allow_high_risk,
+            bench_llm_override=_platform_bench_override(),
         )
 
         completed_at = datetime.now(timezone.utc).isoformat()

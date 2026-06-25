@@ -9,19 +9,19 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 
-def test_ssot_list_shows_11_enabled(capsys):
-    """list 输出 11 域，全部 enabled。"""
+def test_ssot_list_shows_13_enabled(capsys):
+    """list 输出 13 域，全部 enabled。"""
     from scripts.dev.ssot_cli import main
 
     main(["list"])
     out = capsys.readouterr().out
-    # 11 行域（不含表头与分隔线）
+    # 13 行域（不含表头与分隔线）
     domain_lines = [
         l for l in out.splitlines() if l and not l.startswith("name") and not l.startswith("-")
     ]
-    assert len(domain_lines) == 11
+    assert len(domain_lines) == 13
     yes_count = sum(1 for l in domain_lines if l.split()[1] == "yes")
-    assert yes_count == 11  # 全部启用
+    assert yes_count == 13  # 全部启用
 
 
 def test_ssot_gate_returns_0_or_1(capsys):

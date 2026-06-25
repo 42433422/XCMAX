@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工 agent handler：多轮工具调用循环（委托 agent_loop）。
 
 历史上这里是单轮 ``_chat_completion``；现在 ``run_agent_handler`` 委托

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 R：办公 employee_pack 业务页经 Mod 路由提供。"""
 
 from __future__ import annotations

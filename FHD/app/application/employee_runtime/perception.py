@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工感知管线（PerceptionPipeline）。
 
 此前感知层 ``_perception_real`` 原样透传输入；本管线按 ``perception.type`` 真正处理多模态：

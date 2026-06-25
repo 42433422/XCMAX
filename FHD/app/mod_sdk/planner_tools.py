@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 B：Planner 工具经 ``xcagi-planner-bridge`` 门面执行与注册。
 
 安装 Planner Mod 且 ``planner_tools_execution`` 为真时，对话链与 ``/tools/execute`` 走本模块，

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """RbacAppService 桩实现与单例测试。"""
 
 from __future__ import annotations

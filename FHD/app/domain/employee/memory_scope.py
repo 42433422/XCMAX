@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工记忆作用域值对象。
 
 把 ``employee_config_v2.memory`` 声明翻译为「短期/长期开关 + 向量命名空间」。

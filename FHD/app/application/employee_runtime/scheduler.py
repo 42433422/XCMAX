@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Lightweight local scheduler for AI employee packs.
 
 This is intentionally process-local: it gives the desktop/admin runtime a real
