@@ -26,6 +26,7 @@ import com.xiuci.xcagi.mobile.core.model.MarketRegisterBody
 import com.xiuci.xcagi.mobile.core.model.MarketSendCodeBody
 import com.xiuci.xcagi.mobile.core.model.ModIndustry
 import com.xiuci.xcagi.mobile.core.model.ModInfo
+import com.xiuci.xcagi.mobile.core.model.PendingNotification
 import com.xiuci.xcagi.mobile.core.model.ModMenuItem
 import com.xiuci.xcagi.mobile.core.model.ModMenuOverride
 import com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo
@@ -558,6 +559,14 @@ class XcagiRepository @Inject constructor(
         } catch (_: Exception) {
         }
     }
+
+    /** 自建推送后台通道：拉取未送达的离线通知（服务端已标记 delivered）。失败返回空。 */
+    suspend fun fetchPendingNotifications(): List<PendingNotification> =
+        try {
+            fhd().pendingNotifications().data?.notifications ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
 
     suspend fun pairingExchange(
         nonce: String = "",
