@@ -446,9 +446,11 @@ def cursor_super_employee_messages(
             return denied
         messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return {"success": True, "messages": messages}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("cursor_super_employee_messages")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "服务暂时不可用，请稍后重试"}, status_code=500
+        )
     finally:
         db.close()
 
@@ -473,11 +475,13 @@ def cursor_super_employee_invoke(
         context = factory_context(workspace_id=workspace_id, base=context)
         result = CursorSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
         return {"success": True, **result}
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
+    except ValueError:
+        return JSONResponse({"success": False, "message": "请求参数有误"}, status_code=400)
+    except RECOVERABLE_ERRORS:
         logger.exception("cursor_super_employee_invoke")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "服务暂时不可用，请稍后重试"}, status_code=500
+        )
     finally:
         db.close()
 

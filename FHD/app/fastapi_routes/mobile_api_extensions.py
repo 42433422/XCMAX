@@ -1290,10 +1290,10 @@ async def mobile_admin_cursor_super_employee_messages(
     try:
         messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_cursor_super_employee_messages")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂时不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -1333,15 +1333,15 @@ async def mobile_admin_cursor_super_employee_invoke(
             context=context,
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
+            format_mobile_response(None, "请求参数有误", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_cursor_super_employee_invoke")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂时不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
