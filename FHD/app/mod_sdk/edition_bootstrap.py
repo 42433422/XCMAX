@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """从 MOD 商店或内置种子目录，装齐某 edition 所需的 Mod 包。"""
 
 from __future__ import annotations

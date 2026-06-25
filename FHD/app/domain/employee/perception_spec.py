@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工感知规格值对象。
 
 把 ``employee_config_v2.perception`` 翻译为「主类型 + 启用模态集合」。

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 K：模型付费业务 Vue 页经 ``xcagi-model-payment-bridge`` Mod 路由提供。"""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 3b：办公 employee_pack 目录与宿主 ``mods/_employees`` 安装态。"""
 
 from __future__ import annotations

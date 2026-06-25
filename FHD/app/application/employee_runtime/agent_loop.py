@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工多轮工具调用循环（OpenAI function-calling ReAct）。
 
 替换旧的单轮 ``agent_runner._chat_completion``：员工 ``agent`` handler 现在可以

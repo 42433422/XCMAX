@@ -31,6 +31,7 @@ WORKFLOW_RENAMES = {
     "release-desktop.yml": "fhd-release-desktop.yml",
     "release-web.yml": "fhd-release-web.yml",
     "release-android.yml": "fhd-release-android.yml",
+    "release-ios.yml": "fhd-release-ios.yml",
     "release-orchestrator.yml": "fhd-release-orchestrator.yml",
     "performance-smoke.yml": "fhd-performance-smoke.yml",
     "neuro_migration_check.yml": "fhd-neuro-migration-check.yml",
@@ -114,8 +115,13 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: mobile-android",
         "working-directory: FHD/mobile-android",
     )
+    content = content.replace(
+        "working-directory: mobile-ios",
+        "working-directory: FHD/mobile-ios",
+    )
     # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory
-    content = content.replace("dist/deploy/", "FHD/dist/deploy/")
+    content = content.replace("path: mobile-ios/build/", "path: FHD/mobile-ios/build/")
+    content = re.sub(r"(?m)^([ \t]+)(dist/deploy/)", r"\1FHD/\2", content)
     content = content.replace("path: dist/deploy\n", "path: FHD/dist/deploy\n")
     content = content.replace(
         "path: build/ci-sunbird-artifact/**",

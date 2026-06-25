@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """EmployeeAgent：真正员工运行时编排对象。
 
 把此前散落在 ``executor.execute_employee_task_local`` 的流程收敛为一个对象，并补齐：

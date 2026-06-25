@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """通用化宿主壳：阶段 4 能力清单（业务在 Mod / 宿主 API 底座）。"""
 
 from __future__ import annotations

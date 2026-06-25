@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工动作风险中间件（对齐 MODstore employee_risk_middleware）。"""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Legacy shim：委托 employee_tool_registry + employee_runtime.executor。"""
 
 from __future__ import annotations

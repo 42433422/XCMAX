@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """import_mod_backend_py 按物理路径隔离 sys.modules 缓存。"""
 
 from __future__ import annotations

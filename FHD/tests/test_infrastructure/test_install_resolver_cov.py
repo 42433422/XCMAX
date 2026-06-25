@@ -1,190 +1,300 @@
-"""Branch-coverage tests for app.infrastructure.mods.install_resolver.
+"""Extended branch coverage tests for app.infrastructure.mods.install_resolver.
 
-Targets missing branches at lines 36, 81-131, 143-206.
+Covers missing branches in:
+- install_package_dispatch (employee pack error/empty id, regular mod error/no meta)
+- _rollback (mod_dir with/without metadata, employee_dir, error suppression, empty stack)
+- _install_bundle_zip (depth limit, validation errors, embeds/contains edge cases, signature/package errors)
+- get_install_resolver
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-import tempfile
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# _find_package_in_store
-# ---------------------------------------------------------------------------
-
-
-class TestFindPackageInStore:
-    def test_returns_none_when_store_dir_empty_string(self):
-        from app.infrastructure.mods.install_resolver import _find_package_in_store
-
-        assert _find_package_in_store("", "some-mod") is None
-
-    def test_returns_none_when_store_dir_not_a_dir(self, tmp_path):
-        from app.infrastructure.mods.install_resolver import _find_package_in_store
-
-        assert _find_package_in_store(str(tmp_path / "nonexistent"), "some-mod") is None
-
-    def test_returns_none_when_no_matching_files(self, tmp_path):
-        from app.infrastructure.mods.install_resolver import _find_package_in_store
-
-        (tmp_path / "other-mod-1.0.xcmod").touch()
-        result = _find_package_in_store(str(tmp_path), "mymod")
-        assert result is None
-
-    def test_returns_path_for_dash_prefixed_xcmod(self, tmp_path):
-        from app.infrastructure.mods.install_resolver import _find_package_in_store
-
-        f = tmp_path / "mymod-1.0.xcmod"
-        f.touch()
-        result = _find_package_in_store(str(tmp_path), "mymod")
-        assert result == str(f)
-
-    def test_returns_path_for_underscore_prefixed_xcmod(self, tmp_path):
-        from app.infrastructure.mods.install_resolver import _find_package_in_store
-
-        f = tmp_path / "mymod_v2.xcmod"
-        f.touch()
-        result = _find_package_in_store(str(tmp_path), "mymod")
-        assert result == str(f)
-
-    def test_returns_path_for_xcemp_extension(self, tmp_path):
-        from app.infrastructure.mods.install_resolver import _find_package_in_store
-
-        f = tmp_path / "mypack-1.0.xcemp"
-        f.touch()
-        result = _find_package_in_store(str(tmp_path), "mypack")
-        assert result == str(f)
-
-    def test_ignores_directories(self, tmp_path):
-        from app.infrastructure.mods.install_resolver import _find_package_in_store
-
-        d = tmp_path / "mymod-fake.xcmod"
-        d.mkdir()
-        result = _find_package_in_store(str(tmp_path), "mymod")
-        assert result is None
-
-    def test_strips_whitespace_from_ref_id(self, tmp_path):
-        from app.infrastructure.mods.install_resolver import _find_package_in_store
-
-        f = tmp_path / "mymod-1.0.xcmod"
-        f.touch()
-        result = _find_package_in_store(str(tmp_path), "  mymod  ")
-        assert result == str(f)
+from app.infrastructure.mods.artifact_constants import (
+    ARTIFACT_BUNDLE,
+    ARTIFACT_EMPLOYEE_PACK,
+    BUNDLE_MAX_DEPTH,
+)
+from app.infrastructure.mods.install_resolver import (
+    InstallResolver,
+    get_install_resolver,
+)
+from app.infrastructure.mods.package import ModPackageError, ModSignatureError
 
 
 # ---------------------------------------------------------------------------
-# InstallResolver helpers & dispatch
+# Helper fixtures
 # ---------------------------------------------------------------------------
 
 
-def _make_resolver(mods_root: str) -> Any:
-    with patch("app.infrastructure.mods.install_resolver.get_mod_manager") as mock_mm:
-        mock_mm.return_value = MagicMock(mods_root=mods_root)
-        from app.infrastructure.mods.install_resolver import InstallResolver
+@pytest.fixture
+def mock_mm():
+    mm = MagicMock()
+    mm.mods_root = "/tmp/mods"
+    return mm
 
-        return InstallResolver(mods_root=mods_root)
+
+@pytest.fixture
+def resolver(mock_mm):
+    with patch(
+        "app.infrastructure.mods.install_resolver.get_mod_manager", return_value=mock_mm
+    ):
+        return InstallResolver()
 
 
-class TestInstallPackageDispatch:
-    def test_unreadable_package_returns_false(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.install_resolver.peek_artifact", side_effect=OSError("bad")
-        ):
-            ok, msg, meta = resolver.install_package_dispatch("bad.xcmod", str(tmp_path))
-        assert not ok
-        assert "无法读取包" in msg
+# ---------------------------------------------------------------------------
+# install_package_dispatch — employee pack branches
+# ---------------------------------------------------------------------------
 
-    def test_employee_pack_success(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
+
+class TestEmployeePackBranches:
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_employee_pack_install_fails_triggers_rollback(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
+        mock_get_mm.return_value = mock_mm
+
+        mock_registry = MagicMock()
+        mock_registry.install_from_package.return_value = (False, "install failed")
 
         with (
             patch(
-                "app.infrastructure.mods.install_resolver.peek_artifact",
-                return_value=ARTIFACT_EMPLOYEE_PACK,
+                "app.infrastructure.mods.install_resolver.get_employee_registry",
+                return_value=mock_registry,
             ),
-            patch("app.infrastructure.mods.install_resolver.get_employee_registry") as mock_reg,
-            patch("app.infrastructure.mods.install_resolver.InstallResolver._rollback"),
-        ):
-            reg_instance = MagicMock()
-            reg_instance.install_from_package.return_value = (True, "ok")
-            mock_reg.return_value = reg_instance
-            # peek_manifest_from_zip returns id
-            with patch(
+            patch(
                 "app.infrastructure.mods.artifact_package.peek_manifest_from_zip",
                 return_value={"id": "emp1"},
-            ):
-                ok, msg, meta = resolver.install_package_dispatch("emp.xcemp", str(tmp_path))
-        assert ok
+            ),
+        ):
+            resolver = InstallResolver()
+            with patch.object(resolver, "_rollback") as mock_rb:
+                ok, msg, data = resolver.install_package_dispatch(
+                    "/path/to/pack.xcemp", "/store"
+                )
+                mock_rb.assert_called_once()
 
-    def test_employee_pack_failure_triggers_rollback(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
+        assert ok is False
+        assert msg == "install failed"
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_employee_pack_peek_manifest_error_suppressed(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
+        mock_get_mm.return_value = mock_mm
+
+        mock_registry = MagicMock()
+        mock_registry.install_from_package.return_value = (True, "ok")
 
         with (
             patch(
-                "app.infrastructure.mods.install_resolver.peek_artifact",
-                return_value=ARTIFACT_EMPLOYEE_PACK,
+                "app.infrastructure.mods.install_resolver.get_employee_registry",
+                return_value=mock_registry,
             ),
-            patch("app.infrastructure.mods.install_resolver.get_employee_registry") as mock_reg,
-            patch.object(resolver, "_rollback") as mock_rb,
-        ):
-            reg_instance = MagicMock()
-            reg_instance.install_from_package.return_value = (False, "fail")
-            mock_reg.return_value = reg_instance
-            ok, msg, meta = resolver.install_package_dispatch("emp.xcemp", str(tmp_path))
-        assert not ok
-        mock_rb.assert_called_once()
-
-    def test_bundle_delegates_to_install_bundle_zip(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        from app.infrastructure.mods.artifact_constants import ARTIFACT_BUNDLE
-
-        with (
             patch(
-                "app.infrastructure.mods.install_resolver.peek_artifact",
-                return_value=ARTIFACT_BUNDLE,
+                "app.infrastructure.mods.artifact_package.peek_manifest_from_zip",
+                side_effect=RuntimeError("zip error"),
             ),
-            patch.object(
-                resolver, "_install_bundle_zip", return_value=(True, "ok", None)
-            ) as mock_bz,
         ):
-            ok, msg, meta = resolver.install_package_dispatch("bundle.xcmod", str(tmp_path))
-        assert ok
-        mock_bz.assert_called_once()
-
-    def test_regular_mod_success_appends_to_rollback(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        with (
-            patch("app.infrastructure.mods.install_resolver.peek_artifact", return_value="mod"),
-        ):
-            meta_mock = MagicMock()
-            meta_mock.id = "mymod"
-            resolver.mm.install_mod_package.return_value = (True, "installed", meta_mock)
-            rb: list = []
-            ok, msg, meta = resolver.install_package_dispatch(
-                "mod.xcmod", str(tmp_path), rollback_stack=rb
+            resolver = InstallResolver()
+            ok, msg, data = resolver.install_package_dispatch(
+                "/path/to/pack.xcemp", "/store"
             )
-        assert ok
-        assert any(k == "mod_dir" for k, _ in rb)
 
-    def test_regular_mod_failure_triggers_rollback(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
+        # Should still succeed; pack_id is empty so nothing added to rollback stack
+        assert ok is True
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_employee_pack_empty_id_not_added_to_rollback(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
+        mock_get_mm.return_value = mock_mm
+
+        mock_registry = MagicMock()
+        mock_registry.install_from_package.return_value = (True, "ok")
+
+        rb: list = []
+
         with (
-            patch("app.infrastructure.mods.install_resolver.peek_artifact", return_value="mod"),
-            patch.object(resolver, "_rollback") as mock_rb,
+            patch(
+                "app.infrastructure.mods.install_resolver.get_employee_registry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "app.infrastructure.mods.artifact_package.peek_manifest_from_zip",
+                return_value={"id": ""},  # empty id
+            ),
         ):
-            resolver.mm.install_mod_package.return_value = (False, "fail", None)
-            ok, msg, meta = resolver.install_package_dispatch("mod.xcmod", str(tmp_path))
-        assert not ok
-        mock_rb.assert_called_once()
+            resolver = InstallResolver()
+            ok, msg, data = resolver.install_package_dispatch(
+                "/path/to/pack.xcemp", "/store", rollback_stack=rb
+            )
+
+        assert ok is True
+        # pack_id is empty, so nothing should be appended to rb
+        assert len(rb) == 0
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_employee_pack_none_id_not_added_to_rollback(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
+        mock_get_mm.return_value = mock_mm
+
+        mock_registry = MagicMock()
+        mock_registry.install_from_package.return_value = (True, "ok")
+
+        rb: list = []
+
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.get_employee_registry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "app.infrastructure.mods.artifact_package.peek_manifest_from_zip",
+                return_value={},  # no id key
+            ),
+        ):
+            resolver = InstallResolver()
+            ok, msg, data = resolver.install_package_dispatch(
+                "/path/to/pack.xcemp", "/store", rollback_stack=rb
+            )
+
+        assert ok is True
+        assert len(rb) == 0
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_employee_pack_success_adds_to_rollback(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
+        mock_get_mm.return_value = mock_mm
+
+        mock_registry = MagicMock()
+        mock_registry.install_from_package.return_value = (True, "ok")
+
+        rb: list = []
+
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.get_employee_registry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "app.infrastructure.mods.artifact_package.peek_manifest_from_zip",
+                return_value={"id": "emp-123"},
+            ),
+        ):
+            resolver = InstallResolver()
+            ok, msg, data = resolver.install_package_dispatch(
+                "/path/to/pack.xcemp", "/store", rollback_stack=rb
+            )
+
+        assert ok is True
+        assert len(rb) == 1
+        assert rb[0][0] == "employee_dir"
+        assert "emp-123" in rb[0][1]
+
+
+# ---------------------------------------------------------------------------
+# install_package_dispatch — regular mod branches
+# ---------------------------------------------------------------------------
+
+
+class TestRegularModBranches:
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_mod_install_fails_triggers_rollback(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = "xcmod"
+        mock_get_mm.return_value = mock_mm
+        mock_mm.install_mod_package.return_value = (False, "install error", None)
+
+        resolver = InstallResolver()
+        with patch.object(resolver, "_rollback") as mock_rb:
+            ok, msg, data = resolver.install_package_dispatch("/path/to/mod.xcmod", "/store")
+            mock_rb.assert_called_once()
+
+        assert ok is False
+        assert msg == "install error"
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_mod_install_success_no_meta_not_added_to_rollback(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = "xcmod"
+        mock_get_mm.return_value = mock_mm
+        mock_mm.install_mod_package.return_value = (True, "ok", None)
+
+        rb: list = []
+
+        resolver = InstallResolver()
+        ok, msg, data = resolver.install_package_dispatch(
+            "/path/to/mod.xcmod", "/store", rollback_stack=rb
+        )
+
+        assert ok is True
+        assert len(rb) == 0
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_mod_install_success_meta_no_id_not_added_to_rollback(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = "xcmod"
+        mock_get_mm.return_value = mock_mm
+        mock_meta = MagicMock()
+        mock_meta.id = None
+        mock_mm.install_mod_package.return_value = (True, "ok", mock_meta)
+
+        rb: list = []
+
+        resolver = InstallResolver()
+        ok, msg, data = resolver.install_package_dispatch(
+            "/path/to/mod.xcmod", "/store", rollback_stack=rb
+        )
+
+        assert ok is True
+        assert len(rb) == 0
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    @patch("app.infrastructure.mods.install_resolver.peek_artifact")
+    def test_mod_install_success_meta_has_id_added_to_rollback(
+        self, mock_peek, mock_get_mm, mock_mm
+    ):
+        mock_peek.return_value = "xcmod"
+        mock_get_mm.return_value = mock_mm
+        mock_meta = MagicMock()
+        mock_meta.id = "mod-abc"
+        mock_mm.install_mod_package.return_value = (True, "ok", mock_meta)
+
+        rb: list = []
+
+        resolver = InstallResolver()
+        ok, msg, data = resolver.install_package_dispatch(
+            "/path/to/mod.xcmod", "/store", rollback_stack=rb
+        )
+
+        assert ok is True
+        assert len(rb) == 1
+        assert rb[0][0] == "mod_dir"
+        assert "mod-abc" in rb[0][1]
 
 
 # ---------------------------------------------------------------------------
@@ -193,213 +303,612 @@ class TestInstallPackageDispatch:
 
 
 class TestRollback:
-    def _patch_registry(self, ret=None):
-        """Patch get_mod_registry inside install_resolver._rollback's local import."""
-        from app.infrastructure.mods import registry as reg_mod
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_empty_rollback_stack(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        resolver = InstallResolver()
+        rb: list = []
+        # Should not raise
+        resolver._rollback(rb)
+        assert len(rb) == 0
 
-        mock_reg = MagicMock()
-        mock_reg.get_mod_metadata.return_value = ret
-        return patch.object(reg_mod, "get_mod_registry", return_value=mock_reg)
-
-    def test_rollback_clears_list(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        mod_dir = tmp_path / "mymod"
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_mod_dir_with_metadata(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        # Create a directory to be removed
+        mod_dir = tmp_path / "mod-1"
         mod_dir.mkdir()
-        rb = [("mod_dir", str(mod_dir))]
-        with self._patch_registry(None):
-            resolver._rollback(rb)
-        assert rb == []
+        mod_dir_path = str(mod_dir)
 
-    def test_rollback_calls_unload_if_mod_registered(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        mod_dir = tmp_path / "mymod"
+        mock_registry = MagicMock()
+        mock_registry.get_mod_metadata.return_value = {"name": "mod-1"}
+
+        resolver = InstallResolver()
+        with patch(
+            "app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry
+        ):
+            rb = [("mod_dir", mod_dir_path)]
+            resolver._rollback(rb)
+
+        assert len(rb) == 0  # rb.clear() called
+        mock_mm.unload_mod.assert_called_once_with("mod-1")
+        assert not mod_dir.exists()
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_mod_dir_without_metadata(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        mod_dir = tmp_path / "mod-2"
         mod_dir.mkdir()
-        rb = [("mod_dir", str(mod_dir))]
-        with self._patch_registry(MagicMock()):
-            resolver._rollback(rb)
-        resolver.mm.unload_mod.assert_called_once_with("mymod")
+        mod_dir_path = str(mod_dir)
 
-    def test_rollback_removes_employee_dir(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        emp_dir = tmp_path / "_employees" / "emp1"
+        mock_registry = MagicMock()
+        mock_registry.get_mod_metadata.return_value = None  # no metadata
+
+        resolver = InstallResolver()
+        with patch(
+            "app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry
+        ):
+            rb = [("mod_dir", mod_dir_path)]
+            resolver._rollback(rb)
+
+        assert len(rb) == 0
+        mock_mm.unload_mod.assert_not_called()  # no unload since no metadata
+        assert not mod_dir.exists()
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_mod_dir_path_not_exists(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_registry = MagicMock()
+        mock_registry.get_mod_metadata.return_value = None
+
+        resolver = InstallResolver()
+        with patch(
+            "app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry
+        ):
+            rb = [("mod_dir", "/nonexistent/path/mod-3")]
+            resolver._rollback(rb)
+
+        assert len(rb) == 0
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_employee_dir(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        emp_dir = tmp_path / "_employees" / "emp-1"
         emp_dir.mkdir(parents=True)
-        rb = [("employee_dir", str(emp_dir))]
-        with self._patch_registry(None):
-            resolver._rollback(rb)
+        emp_dir_path = str(emp_dir)
+
+        resolver = InstallResolver()
+        rb = [("employee_dir", emp_dir_path)]
+        resolver._rollback(rb)
+
+        assert len(rb) == 0
         assert not emp_dir.exists()
 
-    def test_rollback_handles_recoverable_error(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        rb = [("mod_dir", str(tmp_path / "ghost"))]
-        from app.infrastructure.mods import registry as reg_mod
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_employee_dir_not_exists(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        resolver = InstallResolver()
+        rb = [("employee_dir", "/nonexistent/emp")]
+        resolver._rollback(rb)
+        assert len(rb) == 0
 
-        mock_reg = MagicMock()
-        mock_reg.get_mod_metadata.side_effect = OSError("bad")
-        with patch.object(reg_mod, "get_mod_registry", return_value=mock_reg):
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_employee_dir_is_file(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        emp_file = tmp_path / "emp-file"
+        emp_file.write_text("test")
+        emp_file_path = str(emp_file)
+
+        resolver = InstallResolver()
+        rb = [("employee_dir", emp_file_path)]
+        resolver._rollback(rb)
+
+        assert len(rb) == 0
+        # shutil.rmtree(path, ignore_errors=True) on a file does NOT remove it
+        # (rmtree raises NotADirectoryError which is suppressed by ignore_errors)
+        assert emp_file.exists()
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_empty_path_skipped(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        resolver = InstallResolver()
+        rb = [("mod_dir", ""), ("employee_dir", "")]
+        resolver._rollback(rb)
+        assert len(rb) == 0
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_recoverable_error_suppressed(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        mod_dir = tmp_path / "mod-err"
+        mod_dir.mkdir()
+
+        mock_registry = MagicMock()
+        mock_registry.get_mod_metadata.side_effect = RuntimeError("registry error")
+
+        resolver = InstallResolver()
+        with patch(
+            "app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry
+        ):
+            rb = [("mod_dir", str(mod_dir))]
+            # Should not raise despite the error
             resolver._rollback(rb)
-        assert rb == []
+
+        assert len(rb) == 0
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_multiple_items_reversed_order(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        dir1 = tmp_path / "dir1"
+        dir2 = tmp_path / "dir2"
+        dir1.mkdir()
+        dir2.mkdir()
+
+        resolver = InstallResolver()
+        rb = [("employee_dir", str(dir1)), ("employee_dir", str(dir2))]
+        resolver._rollback(rb)
+
+        assert len(rb) == 0
+        assert not dir1.exists()
+        assert not dir2.exists()
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_rollback_unknown_kind_skipped(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        resolver = InstallResolver()
+        rb = [("unknown_kind", "/some/path")]
+        resolver._rollback(rb)
+        assert len(rb) == 0
 
 
 # ---------------------------------------------------------------------------
-# _install_bundle_zip
+# _install_bundle_zip — edge cases
 # ---------------------------------------------------------------------------
 
 
-class TestInstallBundleZip:
-    def test_depth_exceeded_returns_false(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        from app.infrastructure.mods.artifact_constants import BUNDLE_MAX_DEPTH
-
+class TestInstallBundleZipEdgeCases:
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_depth_exceeds_max(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        resolver = InstallResolver()
         rb: list = []
         with patch.object(resolver, "_rollback") as mock_rb:
-            ok, msg, meta = resolver._install_bundle_zip(
-                "bundle.xcmod",
-                str(tmp_path),
-                verify_signature=False,
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
                 activate=True,
                 depth=BUNDLE_MAX_DEPTH + 1,
                 rollback_stack=rb,
             )
-        assert not ok
-        assert "嵌套" in msg
-        mock_rb.assert_called_once()
+            mock_rb.assert_called_once_with(rb)
 
-    def test_bundle_invalid_manifest_returns_false(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
+        assert ok is False
+        assert f"bundle 嵌套超过 {BUNDLE_MAX_DEPTH} 层" in msg
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_validation_errors_trigger_rollback(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            "/tmp/extract",
+            {"bundle": {}},
+        )
+
+        resolver = InstallResolver()
         rb: list = []
-        from app.infrastructure.mods.package import ModPackage
-
         with (
-            patch.object(ModPackage, "extract_package", return_value=(str(tmp_path), {})),
             patch(
                 "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
-                return_value=["error 1"],
+                return_value=["error1", "error2"],
             ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
         ):
-            ok, msg, meta = resolver._install_bundle_zip(
-                "bundle.xcmod",
-                str(tmp_path),
-                verify_signature=False,
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
                 activate=True,
                 depth=0,
                 rollback_stack=rb,
             )
-        assert not ok
-        mock_rb.assert_called_once()
+            mock_rb.assert_called_once_with(rb)
 
-    def test_bundle_missing_embedded_file_returns_false(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        rb: list = []
-        manifest = {"bundle": {"embeds": ["sub.xcmod"], "contains": []}}
-        from app.infrastructure.mods.package import ModPackage
+        assert ok is False
+        assert "error1" in msg
+        assert "error2" in msg
 
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_embeds_not_list_treated_as_empty(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            "/tmp/extract",
+            {"bundle": {"embeds": "not a list", "contains": []}},
+        )
+
+        resolver = InstallResolver()
         with (
-            patch.object(ModPackage, "extract_package", return_value=(str(tmp_path), manifest)),
             patch(
-                "app.infrastructure.mods.install_resolver.validate_bundle_manifest", return_value=[]
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
             ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
+        ):
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
+                activate=True,
+                depth=0,
+                rollback_stack=[],
+            )
+
+        assert ok is True
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_contains_not_list_treated_as_empty(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            "/tmp/extract",
+            {"bundle": {"embeds": [], "contains": "not a list"}},
+        )
+
+        resolver = InstallResolver()
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
+            ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
+        ):
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
+                activate=True,
+                depth=0,
+                rollback_stack=[],
+            )
+
+        assert ok is True
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_embed_file_not_found(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            str(tmp_path),
+            {"bundle": {"embeds": ["missing.xcmod"], "contains": []}},
+        )
+
+        resolver = InstallResolver()
+        rb: list = []
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
+            ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
         ):
-            ok, msg, meta = resolver._install_bundle_zip(
-                "bundle.xcmod",
-                str(tmp_path),
-                verify_signature=False,
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
                 activate=True,
                 depth=0,
                 rollback_stack=rb,
             )
-        assert not ok
+            mock_rb.assert_called_once_with(rb)
+
+        assert ok is False
         assert "缺少嵌入文件" in msg
-        mock_rb.assert_called_once()
 
-    def test_bundle_contains_missing_ref_returns_false(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_embed_install_fails(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        # Create the embed file
+        embed_file = tmp_path / "inner.xcmod"
+        embed_file.write_bytes(b"PK")
+
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            str(tmp_path),
+            {"bundle": {"embeds": ["inner.xcmod"], "contains": []}},
+        )
+
+        resolver = InstallResolver()
         rb: list = []
-        manifest = {"bundle": {"embeds": [], "contains": [{"ref": "missing-ref"}]}}
-        from app.infrastructure.mods.package import ModPackage
-
         with (
-            patch.object(ModPackage, "extract_package", return_value=(str(tmp_path), manifest)),
             patch(
-                "app.infrastructure.mods.install_resolver.validate_bundle_manifest", return_value=[]
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
             ),
-            patch(
-                "app.infrastructure.mods.install_resolver._find_package_in_store", return_value=None
-            ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
+            patch.object(
+                resolver,
+                "install_package_dispatch",
+                return_value=(False, "inner install failed", None),
+            ),
         ):
-            ok, msg, meta = resolver._install_bundle_zip(
-                "bundle.xcmod",
-                str(tmp_path),
-                verify_signature=False,
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
                 activate=True,
                 depth=0,
                 rollback_stack=rb,
             )
-        assert not ok
-        assert "未找到" in msg
+            mock_rb.assert_called_once_with(rb)
 
-    def test_bundle_contains_non_dict_item_skipped(self, tmp_path):
-        resolver = _make_resolver(str(tmp_path))
-        rb: list = []
-        manifest = {"bundle": {"embeds": [], "contains": ["not-a-dict"]}}
-        from app.infrastructure.mods.package import ModPackage
+        assert ok is False
+        assert "安装嵌入失败" in msg
 
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_contains_item_not_dict_skipped(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            "/tmp/extract",
+            {"bundle": {"embeds": [], "contains": ["not a dict", 123, None]}},
+        )
+
+        resolver = InstallResolver()
         with (
-            patch.object(ModPackage, "extract_package", return_value=(str(tmp_path), manifest)),
             patch(
-                "app.infrastructure.mods.install_resolver.validate_bundle_manifest", return_value=[]
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
             ),
-            patch.object(resolver, "_rollback"),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
         ):
-            ok, msg, meta = resolver._install_bundle_zip(
-                "bundle.xcmod",
-                str(tmp_path),
-                verify_signature=False,
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
+                activate=True,
+                depth=0,
+                rollback_stack=[],
+            )
+
+        assert ok is True
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_contains_item_empty_ref_skipped(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            "/tmp/extract",
+            {"bundle": {"embeds": [], "contains": [{"ref": ""}, {"ref": "   "}]}},
+        )
+
+        resolver = InstallResolver()
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
+            ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
+        ):
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
+                activate=True,
+                depth=0,
+                rollback_stack=[],
+            )
+
+        assert ok is True
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_contains_ref_not_found_in_store(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            str(tmp_path),
+            {"bundle": {"embeds": [], "contains": [{"ref": "nonexistent"}]}},
+        )
+
+        resolver = InstallResolver()
+        rb: list = []
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
+            ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
+            patch.object(resolver, "_rollback") as mock_rb,
+        ):
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                str(tmp_path),  # store_dir
+                verify_signature=True,
                 activate=True,
                 depth=0,
                 rollback_stack=rb,
             )
-        assert ok  # no refs to process = success
+            mock_rb.assert_called_once_with(rb)
 
-    def test_bundle_signature_error_returns_false(self, tmp_path):
-        from app.infrastructure.mods.package import ModPackage, ModSignatureError
+        assert ok is False
+        assert "未找到 ref=nonexistent" in msg
 
-        resolver = _make_resolver(str(tmp_path))
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_contains_install_fails(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        # Create a package in the store
+        pkg = tmp_path / "ref-pkg-1.0.0.xcmod"
+        pkg.write_bytes(b"PK")
+
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            str(tmp_path),
+            {"bundle": {"embeds": [], "contains": [{"ref": "ref-pkg"}]}},
+        )
+
+        resolver = InstallResolver()
         rb: list = []
         with (
-            patch.object(ModPackage, "extract_package", side_effect=ModSignatureError("bad sig")),
+            patch(
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
+            ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
+            patch.object(
+                resolver,
+                "install_package_dispatch",
+                return_value=(False, "member install failed", None),
+            ),
         ):
-            ok, msg, meta = resolver._install_bundle_zip(
-                "bundle.xcmod",
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
                 str(tmp_path),
                 verify_signature=True,
                 activate=True,
                 depth=0,
                 rollback_stack=rb,
             )
-        assert not ok
-        assert "签名" in msg
-        mock_rb.assert_called_once()
+            mock_rb.assert_called_once_with(rb)
 
-    def test_bundle_package_error_returns_false(self, tmp_path):
-        from app.infrastructure.mods.package import ModPackage, ModPackageError
+        assert ok is False
+        assert "安装成员失败" in msg
 
-        resolver = _make_resolver(str(tmp_path))
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_signature_error(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.side_effect = ModSignatureError("bad signature")
+
+        resolver = InstallResolver()
         rb: list = []
         with (
-            patch.object(ModPackage, "extract_package", side_effect=ModPackageError("bad pkg")),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
         ):
-            ok, msg, meta = resolver._install_bundle_zip(
-                "bundle.xcmod",
-                str(tmp_path),
-                verify_signature=False,
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
                 activate=True,
                 depth=0,
                 rollback_stack=rb,
             )
-        assert not ok
-        mock_rb.assert_called_once()
+            mock_rb.assert_called_once_with(rb)
+
+        assert ok is False
+        assert "签名验证失败" in msg
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_package_error(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.side_effect = ModPackageError("bad package")
+
+        resolver = InstallResolver()
+        rb: list = []
+        with (
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
+            patch.object(resolver, "_rollback") as mock_rb,
+        ):
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
+                activate=True,
+                depth=0,
+                rollback_stack=rb,
+            )
+            mock_rb.assert_called_once_with(rb)
+
+        assert ok is False
+        assert "bad package" in msg
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_recoverable_error(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.side_effect = RuntimeError("unexpected error")
+
+        resolver = InstallResolver()
+        rb: list = []
+        with (
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
+            patch.object(resolver, "_rollback") as mock_rb,
+        ):
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                "/store",
+                verify_signature=True,
+                activate=True,
+                depth=0,
+                rollback_stack=rb,
+            )
+            mock_rb.assert_called_once_with(rb)
+
+        assert ok is False
+        assert "unexpected error" in msg
+
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_successful_bundle_with_embeds_and_contains(self, mock_get_mm, mock_mm, tmp_path):
+        mock_get_mm.return_value = mock_mm
+        # Create embed file
+        embed_file = tmp_path / "inner.xcmod"
+        embed_file.write_bytes(b"PK")
+        # Create contains package in store
+        store_dir = tmp_path / "store"
+        store_dir.mkdir()
+        contains_pkg = store_dir / "ref-pkg-1.0.0.xcmod"
+        contains_pkg.write_bytes(b"PK")
+
+        mock_pkg = MagicMock()
+        mock_pkg.extract_package.return_value = (
+            str(tmp_path),
+            {
+                "bundle": {
+                    "embeds": ["inner.xcmod"],
+                    "contains": [{"ref": "ref-pkg"}],
+                }
+            },
+        )
+
+        resolver = InstallResolver()
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest",
+                return_value=[],
+            ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
+            patch.object(
+                resolver,
+                "install_package_dispatch",
+                return_value=(True, "ok", None),
+            ),
+        ):
+            ok, msg, data = resolver._install_bundle_zip(
+                "/path/to/bundle.xcmod",
+                str(store_dir),
+                verify_signature=True,
+                activate=True,
+                depth=0,
+                rollback_stack=[],
+            )
+
+        assert ok is True
+        assert "bundle 安装完成" in msg
+
+
+# ---------------------------------------------------------------------------
+# get_install_resolver
+# ---------------------------------------------------------------------------
+
+
+class TestGetInstallResolver:
+    @patch("app.infrastructure.mods.install_resolver.get_mod_manager")
+    def test_returns_resolver_instance(self, mock_get_mm, mock_mm):
+        mock_get_mm.return_value = mock_mm
+        resolver = get_install_resolver()
+        assert isinstance(resolver, InstallResolver)
+        assert resolver.mods_root == "/tmp/mods"

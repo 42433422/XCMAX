@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """真实行为测试：app/mod_sdk/employee_specialized_tools.py。
 
 覆盖 52 个员工专属工具的业务逻辑——参数构造、分支选择、错误处理、返回结构。

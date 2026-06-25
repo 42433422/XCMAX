@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_pack 安装后热加载：HTTP 路由 + Planner/workflow 工具注册表。"""
 
 from __future__ import annotations

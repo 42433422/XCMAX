@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """AI 员工领域值对象单元测试（capability / collaboration_graph / events /
 memory_scope / perception_spec / trigger_binding）。
 

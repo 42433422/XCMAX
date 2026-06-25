@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """AI 员工执行器（FHD 本地）：对齐 MODstore execute_employee_task 语义。"""
 
 from __future__ import annotations

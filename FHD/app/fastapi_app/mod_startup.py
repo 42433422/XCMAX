@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Mod 分阶段启动：先挂载主客户 Mod，其余在后台 load，缩短 HTTP 可监听时间。"""
 
 from __future__ import annotations

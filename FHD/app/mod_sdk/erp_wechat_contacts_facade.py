@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 H：遗留 ``/api/wechat_contacts/*`` 经 ERP 领域 Mod 门面代理。"""
 
 from __future__ import annotations

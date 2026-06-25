@@ -3,11 +3,11 @@
         **area**：`platform-core`  
         **yuangon 路径**：`成都修茈科技有限公司/yuangon/platform-core/mobile-ios-release-officer/`
 
-> **注意**：`FHD/mobile-ios/` 目录规划中，`release-ios.yml` 待建。当前岗位处于待命状态。
+> **发版入口**：`FHD/mobile-ios/` 已落地，`FHD/.github/workflows/release-ios.yml` 负责 XcodeGen、模拟器构建、双 SKU profile 选取、IPA 导出与 App Store Connect 上传。
 
         ## 职责
 
-        P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。
+        P-S iOS 渠道发布：双 SKU Bundle ID、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
 
         ## 上游依赖 (`depends_on`)
 
@@ -22,7 +22,7 @@
         ## Scope（核心文件范围）
 
         - `FHD/mobile-ios/**`
-- `FHD/.github/workflows/release-desktop.yml`
+- `FHD/.github/workflows/release-ios.yml`
 - `FHD/XCAGI/resources/**`
 - `yuangon/platform-core/mobile-ios-release-officer/**`
 
@@ -30,6 +30,8 @@
 
         - manifest：`FHD/mods/_employees/mobile-ios-release-officer/manifest.json`
         - runbook：[runbook.md](./runbook.md)
+        - Apple profile 自动化：`FHD/mobile-ios/scripts/create-app-store-profile.sh`
+        - GitHub Secrets 同步：`FHD/mobile-ios/scripts/sync-ios-signing-secrets.sh`
 
         ---
         *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*

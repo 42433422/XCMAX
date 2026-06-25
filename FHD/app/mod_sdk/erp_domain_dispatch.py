@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 G：ERP 领域 handler 由 ``xcagi-erp-domain-bridge`` Mod backend 分派。"""
 
 from __future__ import annotations

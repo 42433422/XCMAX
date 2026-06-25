@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_runtime.perception PerceptionPipeline 多模态单元测试。
 
 覆盖 text 透传 / document 抽取 / vision 降级 / audio transcript 各分支；

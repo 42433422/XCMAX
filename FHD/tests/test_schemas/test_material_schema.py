@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Material Schema 测试
 
