@@ -272,24 +272,20 @@ fun ChatScreen(
         }
     val aiAvatarFallback = chatAvatarFallback(conversationId, employeeProfile != null)
 
-    // 解析"当前未处置的开发任务分支"，用于底部功能键（合并/diff/丢弃）。
-    // 单遍扫描所有助手消息：push/diff 都带 super-employee/ 分支名→记为候选；
-    // 遇到"✅已合并/已丢弃分支"→该分支已处置，清空（看完 diff 不会误清，因为 diff 仍带分支名）。
-    val gitBranch =
+    // 解析会话内所有未处置分支；用户可在底部工具条切换目标分支（多任务并行时不再锁死最后一条）。
+    val gitBranches =
         remember(messages, streaming) {
-            if (streaming) {
-                null
-            } else {
-                var candidate: String? = null
-                val re = Regex("(super-employee/[\\w./-]+)")
-                for ((role, text) in messages) {
-                    if (role != "assistant") continue
-                    re.find(text)?.let { candidate = it.groupValues[1] }
-                    if (text.contains("✅ 已合并") || text.contains("已丢弃分支")) candidate = null
-                }
-                candidate
-            }
+            if (streaming) emptyList() else resolveActiveGitBranches(messages)
         }
+    var selectedGitBranch by remember(conversationId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(gitBranches) {
+        when {
+            gitBranches.isEmpty() -> selectedGitBranch = null
+            selectedGitBranch == null || selectedGitBranch !in gitBranches ->
+                selectedGitBranch = gitBranches.last()
+        }
+    }
+    val gitBranch = selectedGitBranch
 
     LaunchedEffect(conversationId) {
         vm.loadChatCache(conversationId)
@@ -388,6 +384,8 @@ fun ChatScreen(
                 onVoice = { startVoiceInput() },
                 onMore = { showMoreSheet = true },
                 gitBranch = gitBranch,
+                gitBranches = gitBranches,
+                onSelectGitBranch = { selectedGitBranch = it },
                 showDevTools = claudeConversation || codexConversation || cursorConversation,
                 onGitMerge = { gitBranch?.let { vm.gitMerge(it, conversationId) } },
                 onGitDiff = { gitBranch?.let { vm.gitDiff(it, conversationId) } },
@@ -658,6 +656,8 @@ private fun ImInputBar(
     onVoice: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
     gitBranch: String? = null,
+    gitBranches: List<String> = emptyList(),
+    onSelectGitBranch: (String) -> Unit = {},
     showDevTools: Boolean = false,
     onGitMerge: () -> Unit = {},
     onGitDiff: () -> Unit = {},
@@ -677,6 +677,8 @@ private fun ImInputBar(
             if (showDevTools && gitBranch != null) {
                 GitActionBar(
                     branch = gitBranch,
+                    branches = gitBranches,
+                    onSelectBranch = onSelectGitBranch,
                     onMerge = onGitMerge,
                     onDiff = onGitDiff,
                     onDiscard = onGitDiscard,
@@ -796,9 +798,12 @@ private fun ImInputBar(
 //  情境功能键条（开发任务分支：合并/diff/丢弃）
 //  仿钉钉/微信：输入框上方一排快捷键，跟着场景出现、用完即走
 // ══════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GitActionBar(
     branch: String?,
+    branches: List<String> = emptyList(),
+    onSelectBranch: (String) -> Unit = {},
     onMerge: () -> Unit,
     onDiff: () -> Unit,
     onDiscard: () -> Unit,
@@ -806,12 +811,22 @@ private fun GitActionBar(
 ) {
     val haptics = rememberHaptics()
     val active = branch != null
+    var showBranchPicker by remember { mutableStateOf(false) }
+    val branchPickerState =
+        androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val selectable = branches.size > 1
     Column(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier =
+                Modifier.clickable(enabled = selectable) {
+                    if (selectable) showBranchPicker = true
+                },
+        ) {
             Icon(
                 Icons.Default.CallMerge,
                 contentDescription = null,
@@ -820,12 +835,56 @@ private fun GitActionBar(
             )
             Spacer(Modifier.width(4.dp))
             Text(
-                if (active) "开发任务分支 · ${branch?.substringAfterLast('/').orEmpty()}"
-                else "开发工具 · 发任务后可合并 / 查看 / 丢弃分支",
+                if (active) {
+                    val suffix = shortGitBranchLabel(branch.orEmpty())
+                    if (selectable) "开发任务分支 · $suffix（点此切换）" else "开发任务分支 · $suffix"
+                } else {
+                    "开发工具 · 发任务后可合并 / 查看 / 丢弃分支"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = imTextSecondary(),
                 maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false),
             )
+            if (selectable) {
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = "选择分支",
+                    tint = imTextSecondary(),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+        if (showBranchPicker) {
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { showBranchPicker = false },
+                sheetState = branchPickerState,
+                containerColor = MaterialTheme.colorScheme.surface,
+            ) {
+                Column(Modifier.padding(bottom = Spacing.xxl)) {
+                    Text(
+                        "选择开发任务分支",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                        modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                    )
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                    WeCellGroup {
+                        branches.forEachIndexed { index, candidate ->
+                            WeCell(
+                                title = shortGitBranchLabel(candidate),
+                                subtitle = candidate,
+                                showArrow = candidate == branch,
+                                showDivider = index < branches.lastIndex,
+                                onClick = {
+                                    haptics.tap()
+                                    onSelectBranch(candidate)
+                                    showBranchPicker = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
