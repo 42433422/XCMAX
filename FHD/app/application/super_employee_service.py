@@ -189,6 +189,8 @@ class SuperEmployeeToolProfile:
     cli_reads_output_file: bool = True  # 是否从 --output-last-message 文件读结果
     cli_stream_json: bool = False  # stdout 是否为 stream-json(逐事件)，需解析出最终回复
     cli_command_builder: Callable[[str, str, Path, str], list[str]] = _codex_cli_command
+    avatar_key: str = ""  # 前端/App 识别：codex | claude | cursor
+    avatar_path: str = ""  # 静态资源路径（相对站点根，如 /brand/cursor-app-icon.svg）
 
 
 CODEX_PROFILE = SuperEmployeeToolProfile(
@@ -206,6 +208,8 @@ CODEX_PROFILE = SuperEmployeeToolProfile(
     cli_extra_candidates=("/Applications/Codex.app/Contents/Resources/codex",),
     cli_reads_output_file=True,
     cli_command_builder=_codex_cli_command,
+    avatar_key="codex",
+    avatar_path="/brand/codex-app-icon.png",
 )
 
 CLAUDE_PROFILE = SuperEmployeeToolProfile(
@@ -229,6 +233,8 @@ CLAUDE_PROFILE = SuperEmployeeToolProfile(
     cli_reads_output_file=False,
     cli_stream_json=True,
     cli_command_builder=_claude_cli_command,
+    avatar_key="claude",
+    avatar_path="/brand/claude-app-icon.svg",
 )
 
 CURSOR_PROFILE = SuperEmployeeToolProfile(
@@ -252,6 +258,8 @@ CURSOR_PROFILE = SuperEmployeeToolProfile(
     cli_reads_output_file=False,
     cli_stream_json=True,
     cli_command_builder=_cursor_cli_command,
+    avatar_key="cursor",
+    avatar_path="/brand/cursor-app-icon.svg",
 )
 
 

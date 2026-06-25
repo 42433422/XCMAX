@@ -19,8 +19,14 @@ android {
         applicationId = "com.xiuci.xcagi.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "10.0.0"
+        versionCode =
+            System.getenv("XCMAX_VC")?.trim()?.toIntOrNull()
+                ?: System.getenv("XCAGI_ANDROID_VERSION_CODE")?.trim()?.toIntOrNull()
+                ?: 1782175350
+        versionName =
+            System.getenv("XCMAX_VN")?.trim()?.takeIf { it.isNotBlank() }
+                ?: System.getenv("XCAGI_ANDROID_VERSION_NAME")?.trim()?.takeIf { it.isNotBlank() }
+                ?: "11.0.0-beta.1782175350"
         manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"

@@ -547,6 +547,7 @@ async def admin_ai_group_post(
             text=str(body.get("message") or ""),
             sender_name=str(body.get("sender_name") or "我"),
             mentions=mentions if isinstance(mentions, list) else None,
+            dispatch=bool(body.get("dispatch")),
         )
         return {"success": True, **result}
     except ValueError as exc:

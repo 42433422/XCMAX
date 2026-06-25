@@ -24,9 +24,15 @@ import { SettingsPage } from './SettingsPage';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:5000/';
 const TAB_MESSAGES = 0;
+const DEFAULT_APP_NAME = 'XCAGI 企业版';
 
 function emptyDutyRoster(): DutyRosterData {
   return { areas: [], totalPlanned: 0, totalOnDuty: 0 };
+}
+
+function normalizedCompanyBrand(value: string | undefined): string {
+  const brand = cleanText(value, DEFAULT_APP_NAME);
+  return brand.indexOf('修辞') >= 0 ? DEFAULT_APP_NAME : brand;
 }
 
 @Entry
@@ -42,7 +48,7 @@ struct Index {
   @Provide accessToken: string = '';
   @Provide sessionId: string = '';
   @Provide displayName: string = '企业用户';
-  @Provide companyBrand: string = '修辞企业版';
+  @Provide companyBrand: string = DEFAULT_APP_NAME;
   @Provide accountKind: string = 'enterprise';
   @Provide loginAccountKind: string = 'admin';
   @Provide statusText: string = '连接企业端移动服务';
@@ -126,14 +132,14 @@ struct Index {
       this.api.setAccessToken(token);
       this.sessionId = cleanText(data.session_id, `harmony-${new Date().getTime()}`);
       this.displayName = cleanText(user.display_name, cleanText(user.username, this.username));
-      this.companyBrand = cleanText(data.company_brand, '修辞企业版');
+      this.companyBrand = normalizedCompanyBrand(data.company_brand);
       this.accountKind = cleanText(data.account_kind, this.loginAccountKind);
       this.loggedIn = true;
       this.statusText = '登录成功，正在同步账号信息...';
       const me = await this.api.me();
       if (me.user) {
         this.displayName = cleanText(me.user.display_name, this.displayName);
-        this.companyBrand = cleanText(me.company_brand, this.companyBrand);
+        this.companyBrand = normalizedCompanyBrand(cleanText(me.company_brand, this.companyBrand));
         this.accountKind = cleanText(me.account_kind, this.accountKind);
       }
       this.statusText = '正在同步企业数据...';

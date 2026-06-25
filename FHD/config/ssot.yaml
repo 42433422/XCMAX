@@ -66,6 +66,24 @@ domains:
     check: python scripts/dev/docs_ssot_lint.py
     sync: null
 
+  - name: account-system
+    owner: product-platform
+    enabled: true
+    ssot: FHD/docs/account_system_ssot.md
+    derived:
+      - FHD/config/saas_plans.json
+      - FHD/config/industry_presets.json
+      - FHD/config/industry_baseline.json
+      - FHD/config/industry_mod_aliases.json
+      - FHD/app/application/account_tier_derivation.py
+      - FHD/frontend/src/api/auth.ts
+      - FHD/frontend/src/api/modelPayment.ts
+      - FHD/frontend/src/views/RegisterView.vue
+      - FHD/frontend/src/views/AdminEntitlementsView.vue
+    mode: lint
+    check: python scripts/dev/ssot_plugins/account_system.py check
+    sync: null
+
   # ===== 已启用域（lint/verify，advisory gate 不阻断）=====
   - name: test-files
     owner: qa

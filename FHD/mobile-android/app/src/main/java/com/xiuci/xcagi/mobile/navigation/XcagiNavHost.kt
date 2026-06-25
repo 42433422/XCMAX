@@ -1,6 +1,5 @@
 package com.xiuci.xcagi.mobile.navigation
 
-import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -122,6 +121,7 @@ import com.xiuci.xcagi.mobile.feature.finance.LongTailScreen
 import com.xiuci.xcagi.mobile.feature.list.ListScreen
 import com.xiuci.xcagi.mobile.feature.market.MarketListScreen
 import com.xiuci.xcagi.mobile.feature.ocr.OcrScreen
+import com.xiuci.xcagi.mobile.feature.onboarding.MobileOnboardingScreen
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -145,6 +145,7 @@ fun XcagiNavHost(
     val navReady by vm.navReady.collectAsState()
     val startRoute by vm.startRoute.collectAsState()
     val updatePrompt by vm.updatePrompt.collectAsState()
+    val updateInstallState by vm.updateInstallState.collectAsState()
     val ctx = LocalContext.current
     val networkMonitor =
             androidx.compose.runtime.remember(ctx) {
@@ -166,15 +167,25 @@ fun XcagiNavHost(
     }
 
     updatePrompt?.let { prompt ->
+        val updateMessage =
+                buildString {
+                    append("最新版本 ${prompt.versionName}，将下载完整安装包并交给系统安装器安装。")
+                    val status = updateInstallState.message.trim()
+                    if (status.isNotBlank()) {
+                        append("\n")
+                        append(status)
+                    }
+                }
         WeDialog(
                 onDismiss = { if (!prompt.force) vm.dismissUpdatePrompt() },
                 title = if (prompt.force) "需要更新" else "发现新版本",
-                message = "最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。",
-                confirmText = "去更新",
+                message = updateMessage,
+                confirmText = if (updateInstallState.downloading) "下载中" else "去更新",
                 dismissText = if (prompt.force) null else "稍后",
                 onConfirm = {
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(prompt.downloadUrl)))
-                    if (!prompt.force) vm.dismissUpdatePrompt()
+                    if (!updateInstallState.downloading) {
+                        vm.startPackageUpdate(prompt)
+                    }
                 },
         )
     }
@@ -210,8 +221,8 @@ fun XcagiNavHost(
     LaunchedEffect(loggedIn) {
         if (loggedIn) {
             val r = nav.currentDestination?.route
-            if (r == Routes.AUTH || r == Routes.REGISTER) {
-                nav.navigate(Routes.CHAT) {
+            if (r == Routes.AUTH || r == Routes.AUTH_AUTO_LOGIN || r == Routes.REGISTER) {
+                nav.navigate(Routes.ONBOARDING) {
                     popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
                 }
             }
@@ -337,7 +348,7 @@ fun XcagiNavHost(
                     AuthScreen(
                             vm,
                             { nav.navigate(Routes.REGISTER) },
-                            { nav.navigate(Routes.CHAT) },
+                            { nav.navigate(Routes.ONBOARDING) },
                             { nav.navigate(Routes.SCAN_QR) },
                     )
                 }
@@ -346,12 +357,37 @@ fun XcagiNavHost(
                     AuthScreen(
                             vm,
                             { nav.navigate(Routes.REGISTER) },
-                            { nav.navigate(Routes.CHAT) },
+                            { nav.navigate(Routes.ONBOARDING) },
                             { nav.navigate(Routes.SCAN_QR) },
                     )
                     LaunchedEffect(Unit) { vm.tryAutoLogin() }
                 }
-                composable(Routes.REGISTER) { RegisterScreen(vm) { nav.popBackStack() } }
+                composable(Routes.REGISTER) {
+                    RegisterScreen(
+                            onOpenWebForm = {
+                                val url =
+                                        vm.desktopPageUrl(
+                                                "/login/register?redirect=%2Fapp%2Fmobile-register-complete"
+                                        )
+                                nav.navigate(Routes.webView(url, "注册"))
+                            },
+                            onLogin = { nav.popBackStack() },
+                    )
+                }
+                composable(Routes.ONBOARDING) {
+                    val finishOnboarding = {
+                        vm.completeSetup()
+                        nav.navigate(Routes.CHAT) {
+                            popUpTo(Routes.ONBOARDING) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                    MobileOnboardingScreen(
+                            vm,
+                            onFinish = finishOnboarding,
+                            onBack = finishOnboarding,
+                    )
+                }
                 composable(Routes.HOME_HUB) {
                     LaunchedEffect(Unit) {
                         nav.navigate(Routes.CHAT) {
@@ -748,7 +784,28 @@ fun XcagiNavHost(
                         bearer = vm.bearerToken()
                     }
                     if (url.isNotBlank()) {
-                        DesktopToolWebView(url, title, bearer, access, refresh, fhdAccess) {
+                        val isRegisterFlow = url.contains("/login/register")
+                        DesktopToolWebView(
+                                url,
+                                title,
+                                bearer,
+                                access,
+                                refresh,
+                                fhdAccess,
+                                onUrlOverride = { nextUrl ->
+                                    val path = runCatching { Uri.parse(nextUrl).path.orEmpty() }.getOrDefault("")
+                                    if (isRegisterFlow && path == "/app/mobile-register-complete") {
+                                        vm.snack("注册完成，请使用新账号登录")
+                                        nav.navigate(Routes.AUTH) {
+                                            popUpTo(Routes.AUTH) { inclusive = false }
+                                            launchSingleTop = true
+                                        }
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                        ) {
                             nav.popBackStack()
                         }
                     }

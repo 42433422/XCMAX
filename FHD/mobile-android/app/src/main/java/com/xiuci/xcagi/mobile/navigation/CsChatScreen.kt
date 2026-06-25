@@ -60,6 +60,7 @@ import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -263,7 +264,7 @@ private fun CsMessageBubble(
         if (!isUser) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(MessageAvatarLayout.customerServiceBubbleAvatarSize)
                     .clip(CircleShape)
                     .background(XcagiTheme.extra.brandBlue),
                 contentAlignment = Alignment.Center,
@@ -271,11 +272,11 @@ private fun CsMessageBubble(
                 Icon(
                     painter = painterResource(R.mipmap.ic_launcher_foreground),
                     contentDescription = null,
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(MessageAvatarLayout.customerServiceBubbleIconSize),
                     tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
-            Spacer(Modifier.size(Spacing.sm))
+            Spacer(Modifier.size(MessageAvatarLayout.customerServiceBubbleAvatarGap))
         }
         Box(
             modifier = Modifier
@@ -316,10 +317,10 @@ private fun CsMessageBubble(
             }
         }
         if (isUser) {
-            Spacer(Modifier.size(Spacing.sm))
+            Spacer(Modifier.size(MessageAvatarLayout.customerServiceBubbleAvatarGap))
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(MessageAvatarLayout.customerServiceBubbleAvatarSize)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.outlineVariant),
                 contentAlignment = Alignment.Center,

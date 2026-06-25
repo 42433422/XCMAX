@@ -18,6 +18,7 @@ from app.application.super_employee_service import (
     _PARA_TOKEN_CACHE,
     CLAUDE_PROFILE,
     CODEX_PROFILE,
+    CURSOR_PROFILE,
     DISPATCHER_MESSAGE_KIND,
     PARA_TERMINAL_TASK_STATUSES,
     SuperEmployeeService,
@@ -32,6 +33,7 @@ from app.application.super_employee_service import (
 
 def _make_svc(tmp_path: Path, profile=CODEX_PROFILE, **kwargs) -> SuperEmployeeService:
     """Build a service with isolated storage and outbox disabled by default."""
+    kwargs.setdefault("cli_runner", _null_runner)
     return SuperEmployeeService(profile=profile, storage_root=tmp_path, **kwargs)
 
 
@@ -51,6 +53,37 @@ def _error_runner(exc):
         raise exc
 
     return _run
+
+
+def test_super_employee_profiles_bind_to_distinct_cli_tools() -> None:
+    assert CODEX_PROFILE.tool_name == "codex"
+    assert CODEX_PROFILE.capability_key == "codex_cli"
+    assert CODEX_PROFILE.cli_binary == "codex"
+    assert CODEX_PROFILE.storage_subdir == "codex_super_employee"
+    assert CODEX_PROFILE.result_kind == "codex_result"
+
+    assert CURSOR_PROFILE.tool_name == "cursor_agent"
+    assert CURSOR_PROFILE.capability_key == "cursor_cli"
+    assert CURSOR_PROFILE.cli_binary == "cursor"
+    assert CURSOR_PROFILE.storage_subdir == "cursor_super_employee"
+    assert CURSOR_PROFILE.result_kind == "cursor_result"
+    assert CURSOR_PROFILE.cli_command_builder("cursor", "hello", Path("out"), "/tmp")[:3] == [
+        "cursor",
+        "agent",
+        "--print",
+    ]
+
+    assert CLAUDE_PROFILE.tool_name == "claude_code"
+    assert CLAUDE_PROFILE.capability_key == "claude_cli"
+    assert CLAUDE_PROFILE.cli_binary == "claude"
+    assert CLAUDE_PROFILE.storage_subdir == "claude_super_employee"
+    assert CLAUDE_PROFILE.result_kind == "claude_result"
+    assert CLAUDE_PROFILE.cli_command_builder("claude", "hello", Path("out"), "/tmp")[:4] == [
+        "claude",
+        "--print",
+        "--output-format",
+        "stream-json",
+    ]
 
 
 def _fake_http_factory(status: int = 200, body: dict | None = None, exc=None):

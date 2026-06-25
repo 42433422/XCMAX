@@ -1,4 +1,4 @@
-import { ConversationSummary } from '../models/MobileModels';
+import { ConversationSummary, MESSAGE_AVATAR_LAYOUT } from '../models/MobileModels';
 import { ChatPage } from './ChatPage';
 
 @Component
@@ -47,7 +47,7 @@ export struct MessagesPage {
 
   @Builder
   ConversationRow(item: ConversationSummary) {
-    Row({ space: 12 }) {
+    Row({ space: MESSAGE_AVATAR_LAYOUT.conversationAvatarTextGap }) {
       this.Avatar(item.avatar, item.id === 'assistant' ? '#18A85F' : '#1D4ED8');
 
       Column({ space: 5 }) {
@@ -83,10 +83,13 @@ export struct MessagesPage {
       .layoutWeight(1);
     }
     .width('100%')
-    .padding(14)
-    .margin({ left: 14, right: 14 })
+    .padding(MESSAGE_AVATAR_LAYOUT.conversationRowPadding)
+    .margin({
+      left: MESSAGE_AVATAR_LAYOUT.conversationRowMarginHorizontal,
+      right: MESSAGE_AVATAR_LAYOUT.conversationRowMarginHorizontal
+    })
     .backgroundColor('#FFFFFF')
-    .borderRadius(14)
+    .borderRadius(MESSAGE_AVATAR_LAYOUT.conversationCardRadius)
     .border({ width: 1, color: '#E5E7EB' })
     .onClick(() => {
       this.onOpenConversation(item);
@@ -96,10 +99,10 @@ export struct MessagesPage {
   @Builder
   Avatar(text: string, color: string) {
     Text(text)
-      .width(48)
-      .height(48)
-      .borderRadius(14)
-      .fontSize(18)
+      .width(MESSAGE_AVATAR_LAYOUT.conversationAvatarSize)
+      .height(MESSAGE_AVATAR_LAYOUT.conversationAvatarSize)
+      .borderRadius(MESSAGE_AVATAR_LAYOUT.conversationAvatarRadius)
+      .fontSize(MESSAGE_AVATAR_LAYOUT.conversationAvatarFontSize)
       .fontWeight(FontWeight.Bold)
       .fontColor('#FFFFFF')
       .textAlign(TextAlign.Center)

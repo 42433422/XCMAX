@@ -183,6 +183,45 @@ class TestPairingIssue:
         assert payload["qr_json"]["api_base_url"] == "http://192.168.0.38:17500/"
         assert "xcagi://pairing?" in payload["deep_link"]
 
+    @pytest.mark.asyncio
+    async def test_issue_keeps_qr_lan_when_relay_exists(self, ext_mod):
+        body = ext_mod.PairingIssueBody()
+        request = _mock_pairing_request("127.0.0.1:42422", "127.0.0.1")
+        with (
+            patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.0.38"),
+            patch.object(
+                ext_mod,
+                "issue_pairing_nonce",
+                return_value={
+                    "nonce": "lan-nonce",
+                    "host": "192.168.0.38",
+                    "port": 42422,
+                    "shortCode": "123456",
+                    "exp": 123,
+                },
+            ),
+            patch.object(
+                ext_mod,
+                "_register_desktop_relay_for_pairing",
+                return_value={
+                    "relay_id": "relay-account-1",
+                    "pairing_code": "654321",
+                    "relay_base_url": "https://relay.example.test/fhd-api/",
+                    "qr_json": {"v": 3, "relay_id": "relay-account-1", "code": "654321"},
+                },
+            ),
+        ):
+            result = await ext_mod.mobile_pairing_issue(body, request)
+        data = result if isinstance(result, dict) else __import__("json").loads(result.body)
+        payload = data["data"]
+        assert payload["code"] == "123456"
+        assert payload["relay_id"] == "relay-account-1"
+        assert payload["relay_binding_mode"] == "account_auth"
+        assert payload["qr_json"]["kind"] == "xcagi_pairing"
+        assert payload["qr_json"]["code"] == "123456"
+        assert "xcagi://pairing?" in payload["deep_link"]
+        assert "relay-pairing" not in payload["deep_link"]
+
 
 class TestPairingLookup:
     @pytest.mark.asyncio
@@ -627,10 +666,19 @@ class TestAiEmployeeMarketProfiles:
                 market_connected=True,
             )
 
-        assert items[0]["profile_source"] == "ai_market"
-        assert items[0]["market_connected"] is True
-        assert items[0]["market_pkg_id"] == "deploy-release-officer"
-        assert items[0]["market_description"] == "市场资料"
+        item = next(i for i in items if i["id"] == "deploy-release-officer")
+        assert item["profile_source"] == "ai_market"
+        assert item["market_connected"] is True
+        assert item["market_pkg_id"] == "deploy-release-officer"
+        assert item["market_description"] == "市场资料"
+
+    def test_admin_employee_items_uses_duty_roster_as_ssot(self, ext_mod):
+        items = ext_mod._admin_employee_items()
+        ids = {str(item.get("id") or "") for item in items}
+        assert len(items) == 54
+        assert len(ids) == 54
+        assert "llm-ops-engineer" in ids
+        assert "mobile-harmony-release-officer" in ids
 
 
 # ---------------------------------------------------------------------------

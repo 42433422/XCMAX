@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从 SSOT 生成编制派生文件，消除 7 处硬编码手动同步。
+"""从 SSOT 生成编制派生文件，消除硬编码手动同步。
 
 SSOT（单一真相源）:
   - FHD/config/duty_roster.json        编制结构（areas + departments）
@@ -10,6 +10,8 @@ SSOT（单一真相源）:
   2. FHD/frontend/src/domain/yuangonDutyRoster.ts       (整体生成)
   3. FHD/app/infrastructure/mods/catalog_visibility.py  (改为运行时派生)
   4. FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets (marker 区块)
+  5. FHD/mobile-android/app/src/main/java/.../DutyRosterSsot.kt (整体生成)
+  6. FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts (marker 区块)
 
 用法:
   python scripts/dev/sync_duty_roster.py --generate   # 生成所有派生文件
@@ -39,6 +41,7 @@ TARGETS = {
     "frontend": FHD / "frontend" / "src" / "domain" / "yuangonDutyRoster.ts",
     "catalog": FHD / "app" / "infrastructure" / "mods" / "catalog_visibility.py",
     "mobile": FHD / "mobile-harmony" / "entry" / "src" / "main" / "ets" / "models" / "MobileModels.ets",
+    "android": FHD / "mobile-android" / "app" / "src" / "main" / "java" / "com" / "xiuci" / "xcagi" / "mobile" / "core" / "model" / "DutyRosterSsot.kt",
     # 企业端四层 + 员工层归属/上架状态（marker 区块；前端解析器优先查此表）
     "enterprise": FHD / "frontend" / "src" / "constants" / "enterpriseWorkflowEstablishment.ts",
 }
@@ -107,6 +110,11 @@ def _py_quote(s: str) -> str:
 def _ts_quote(s: str) -> str:
     """TS 字符串引号（单引号，转义内部单引号和换行符）。"""
     return "'" + s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r") + "'"
+
+
+def _kt_quote(s: str) -> str:
+    """Kotlin 字符串引号（双引号，转义内部双引号和换行符）。"""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r") + '"'
 
 
 def _py_ids_list(ids: list[str], indent: int = 12) -> str:
@@ -455,6 +463,99 @@ def gen_mobile_areas_block(doc: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# ── 生成 Android DutyRosterSsot.kt（整体生成）────────────────────────────
+def _kt_ids_list(ids: list[str], indent: int = 8) -> str:
+    if not ids:
+        return "emptyList()"
+    pad = " " * indent
+    inner = ",\n".join(pad + _kt_quote(x) for x in ids)
+    return "listOf(\n" + inner + ",\n" + " " * (indent - 4) + ")"
+
+
+def gen_android_duty_roster_kt(doc: dict[str, Any], manifests: dict[str, dict[str, str]]) -> str:
+    areas = doc.get("areas") or {}
+    planned_ids: list[str] = []
+    area_by_id: dict[str, str] = {}
+    for area_key, block in areas.items():
+        area_key = str(area_key)
+        for eid in block.get("ids") or []:
+            sid = str(eid).strip()
+            if sid and sid not in planned_ids:
+                planned_ids.append(sid)
+            if sid and sid not in area_by_id:
+                area_by_id[sid] = area_key
+
+    lines = [
+        SSOT_HEADER_TS,
+        "package com.xiuci.xcagi.mobile.core.model",
+        "",
+        "/**",
+        " * Android App 编制名册常量。",
+        " *",
+        " * 员工数量、ID 与区域来自 FHD/config/duty_roster.json；App 运行时仍以",
+        " * /api/mobile/v1/admin/home 返回的服务端数据为主，本文件用于离线补齐、测试和漂移守卫。",
+        " */",
+        "object DutyRosterSsot {",
+        f"    const val PLANNED_EMPLOYEE_COUNT: Int = {len(planned_ids)}",
+        "",
+        "    val PLANNED_EMPLOYEE_IDS: Set<String> = setOf(",
+    ]
+    for eid in planned_ids:
+        lines.append(f"        {_kt_quote(eid)},")
+    lines.extend(
+        [
+            "    )",
+            "",
+            "    val AREA_LABELS: Map<String, String> = mapOf(",
+        ]
+    )
+    for area_key, block in areas.items():
+        label = block.get("label") or area_key
+        lines.append(f"        {_kt_quote(area_key)} to {_kt_quote(str(label))},")
+    lines.extend(
+        [
+            "    )",
+            "",
+            "    val AREA_EMPLOYEE_IDS: Map<String, List<String>> = mapOf(",
+        ]
+    )
+    for area_key, block in areas.items():
+        ids = [str(x).strip() for x in block.get("ids") or [] if str(x).strip()]
+        lines.append(f"        {_kt_quote(area_key)} to {_kt_ids_list(ids, indent=12)},")
+    lines.extend(
+        [
+            "    )",
+            "",
+            "    val EMPLOYEE_AREA_IDS: Map<String, String> = mapOf(",
+        ]
+    )
+    for eid in planned_ids:
+        area = area_by_id.get(eid, "")
+        lines.append(f"        {_kt_quote(eid)} to {_kt_quote(area)},")
+    lines.extend(
+        [
+            "    )",
+            "",
+            "    val EMPLOYEE_LABELS: Map<String, String> = mapOf(",
+        ]
+    )
+    for eid in planned_ids:
+        label = manifests.get(eid, {}).get("name") or eid
+        lines.append(f"        {_kt_quote(eid)} to {_kt_quote(label)},")
+    lines.extend(
+        [
+            "    )",
+            "",
+            "    val EMPLOYEE_DESCRIPTIONS: Map<String, String> = mapOf(",
+        ]
+    )
+    for eid in planned_ids:
+        desc = manifests.get(eid, {}).get("description") or ""
+        lines.append(f"        {_kt_quote(eid)} to {_kt_quote(desc)},")
+    lines.extend(["    )", "}"])
+    return "\n".join(lines) + "\n"
+
+
 # ── 生成 enterpriseWorkflowEstablishment.ts 企业端块（marker 区块）─────────
 def gen_enterprise_block(doc: dict[str, Any]) -> str:
     """生成企业端四层 ENTERPRISE_ORG_LAYERS + 员工 ENTERPRISE_EMPLOYEES 的 TS marker 块。"""
@@ -512,6 +613,8 @@ def generate_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[
         content = path.read_text(encoding="utf-8")
         new_block = gen_mobile_areas_block(doc)
         return replace_marker_block(content, MARKER_BEGIN_TS, MARKER_END_TS, new_block)
+    if target == "android":
+        return gen_android_duty_roster_kt(doc, manifests)
     if target == "enterprise":
         # enterprise 用 marker 区块替换（保留手写解析器逻辑）
         path = TARGETS["enterprise"]

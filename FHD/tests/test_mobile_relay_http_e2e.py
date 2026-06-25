@@ -61,8 +61,8 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     registered = registered_response.json()["data"]
 
     confirm_response = client.post(
-        "/api/mobile/v1/relay/mobile/confirm",
-        json={"relay_id": registered["relay_id"], "code": registered["pairing_code"]},
+        "/api/mobile/v1/relay/mobile/bind-account",
+        json={"relay_id": registered["relay_id"]},
     )
     assert confirm_response.status_code == 200
     binding = confirm_response.json()["data"]

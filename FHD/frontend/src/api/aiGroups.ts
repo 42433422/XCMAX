@@ -21,12 +21,16 @@ export type AiGroup = {
 export type AiGroupMessage = {
   id: string;
   group_id: string;
-  role: 'user' | 'ai';
+  role: 'user' | 'ai' | 'system';
   sender_id: string;
   sender_name: string;
   sender_avatar: string;
   body: string;
   created_at: string;
+  kind?: 'chat' | 'work_order' | 'work_report' | string;
+  status?: string;
+  work_order_id?: string;
+  payload?: Record<string, unknown>;
 };
 
 export type AiGroupApiScope = 'admin' | 'mobile';
@@ -76,11 +80,14 @@ export async function postAiGroupMessage(
   message: string,
   mentions: string[] = [],
   scope: AiGroupApiScope = 'admin',
+  options: { dispatch?: boolean } = {},
 ): Promise<{ group?: AiGroup; messages: AiGroupMessage[] }> {
+  const body: Record<string, unknown> = { message, mentions, sender_name: '我' };
+  if (options.dispatch) body.dispatch = true;
   const res = await apiFetch(`${base(scope)}/${encodeURIComponent(groupId)}/messages`, {
     method: 'POST',
     headers: jsonHeaders,
-    body: JSON.stringify({ message, mentions, sender_name: '我' }),
+    body: JSON.stringify(body),
   });
   const data = await readJson<{ group?: AiGroup; messages?: AiGroupMessage[]; data?: { group?: AiGroup; messages?: AiGroupMessage[] } }>(res);
   const payload = unwrap(data, '发送失败');

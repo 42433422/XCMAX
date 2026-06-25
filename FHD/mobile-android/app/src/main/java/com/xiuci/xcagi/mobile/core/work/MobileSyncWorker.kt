@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
+import com.xiuci.xcagi.mobile.core.sync.MobileSyncPolicy
 import com.xiuci.xcagi.mobile.core.sync.MobileSyncRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -21,7 +22,8 @@ class MobileSyncWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         if (!sessionStore.autoSyncFlow.first()) return Result.success()
         val host = sessionStore.fhdHostFlow.first()
-        if (host.isBlank()) return Result.success()
+        val mode = sessionStore.serverModeFlow.first()
+        if (MobileSyncPolicy.shouldSkipAutoSync(host, mode)) return Result.success()
         return syncRepo.pullAndCache().fold(
             onSuccess = { Result.success() },
             onFailure = { Result.retry() },

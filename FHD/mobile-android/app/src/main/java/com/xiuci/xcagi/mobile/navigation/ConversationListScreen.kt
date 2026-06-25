@@ -81,6 +81,7 @@ import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -242,7 +243,7 @@ fun ConversationListScreen(
                             HorizontalDivider(
                                     color = MaterialTheme.colorScheme.outlineVariant,
                                     thickness = 0.5.dp,
-                                    modifier = Modifier.padding(start = 84.dp),
+                                    modifier = Modifier.padding(start = MessageAvatarLayout.conversationDividerStart),
                             )
                         }
                     }
@@ -265,7 +266,7 @@ fun ConversationListScreen(
                             HorizontalDivider(
                                     color = MaterialTheme.colorScheme.outlineVariant,
                                     thickness = 0.5.dp,
-                                    modifier = Modifier.padding(start = 84.dp),
+                                    modifier = Modifier.padding(start = MessageAvatarLayout.conversationDividerStart),
                             )
                         }
                     }
@@ -510,8 +511,8 @@ private fun PlusMenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
 private fun BrandIdentityAvatar(avatarUri: String) {
     LocalProfileAvatar(
             imageSource = avatarUri,
-            size = 44.dp,
-            shape = RoundedCornerShape(10.dp),
+            size = MessageAvatarLayout.headerAvatarSize,
+            shape = MessageAvatarLayout.headerAvatarShape(),
     )
 }
 
@@ -852,7 +853,12 @@ private fun ConversationCell(
             ),
     ) {
         Row(
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 11.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = MessageAvatarLayout.conversationRowHorizontalPadding,
+                        vertical = MessageAvatarLayout.conversationRowVerticalPadding,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
         ) {
             // ── 头像 ──
@@ -866,8 +872,8 @@ private fun ConversationCell(
                     else -> AppAvatar(
                         imageSource = item.avatarUrl,
                         fallback = AppAvatarFallback.AI_EMPLOYEE,
-                        size = 52.dp,
-                        shape = MaterialTheme.shapes.small,
+                        size = MessageAvatarLayout.conversationAvatarSize,
+                        shape = MessageAvatarLayout.conversationAvatarShape(),
                         contentDescription = item.title,
                     )
                 }
@@ -879,9 +885,18 @@ private fun ConversationCell(
                             color = XcagiTheme.extra.danger,
                             modifier =
                                     Modifier.align(Alignment.TopEnd)
-                                            .offset(x = 5.dp, y = (-5).dp)
+                                            .offset(
+                                                x = MessageAvatarLayout.unreadBadgeOffsetX,
+                                                y = MessageAvatarLayout.unreadBadgeOffsetY,
+                                            )
                                             .zIndex(10f)
-                                            .size(if (item.unreadCount > 99) 25.dp else 21.dp),
+                                            .size(
+                                                if (item.unreadCount > 99) {
+                                                    MessageAvatarLayout.unreadBadgeLargeSize
+                                                } else {
+                                                    MessageAvatarLayout.unreadBadgeSize
+                                                },
+                                            ),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
@@ -900,18 +915,18 @@ private fun ConversationCell(
                 if (item.isOnline && item.type == ConversationType.PINNED_CS) {
                     Box(
                             Modifier.align(Alignment.BottomEnd)
-                                    .offset(x = 0.dp, y = 2.dp)
+                                    .offset(x = 0.dp, y = MessageAvatarLayout.onlineIndicatorOffsetY)
                                     .zIndex(10f)
-                                    .size(14.dp)
+                                    .size(MessageAvatarLayout.onlineIndicatorSize)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.surface)
-                                    .padding(2.5.dp)
+                                    .padding(MessageAvatarLayout.onlineIndicatorPadding)
                                     .background(XcagiTheme.extra.weChatOnline, CircleShape),
                     )
                 }
             }
 
-            Spacer(Modifier.width(Spacing.md))
+            Spacer(Modifier.width(MessageAvatarLayout.conversationAvatarTextGap))
 
             // ── 文字区域 ──
             Column(Modifier.weight(1f).height(IntrinsicSize.Min)) {
@@ -1005,8 +1020,8 @@ private fun PinnedAvatar(type: ConversationType) {
 private fun AssistantAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.ASSISTANT,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "小C助理",
     )
 }
@@ -1016,8 +1031,8 @@ private fun AssistantAvatar() {
 private fun CsAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.CUSTOMER_SERVICE,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "专属客服",
     )
 }
@@ -1027,8 +1042,8 @@ private fun CsAvatar() {
 private fun CodexAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.CODEX,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "超级员工-Codex",
     )
 }
@@ -1038,8 +1053,8 @@ private fun CodexAvatar() {
 private fun CursorAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.CURSOR,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "超级员工-Cursor",
     )
 }
@@ -1049,8 +1064,8 @@ private fun CursorAvatar() {
 private fun ClaudeAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.CLAUDE,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "超级员工-Claude",
     )
 }
