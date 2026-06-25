@@ -142,19 +142,20 @@ domains:
 
   # ===== 此前游离于注册表外的真相源（2026-06-23 补登记）=====
   - name: employee-roster
-    owner: hr-platform
+    owner: FHD/mod_sdk
     enabled: true
-    # 员工/部门花名册 SSOT；生成器在仓库根 scripts/dev/（非 FHD/scripts/）。
-    # check 脚本以 Path(__file__) 自解析路径，cwd=FHD 时用 ../ 引用即可。
+    # 编制结构（areas/departments + 企业端四层/员工）+ 员工元数据（manifest name/description）
     ssot: FHD/config/duty_roster.json
     derived:
-      - FHD/MODstore/modstore_server/duty_roster.py
       - FHD/frontend/src/domain/yuangonDutyRoster.ts
+      - FHD/MODstore/modstore_server/duty_roster.py
       - FHD/app/infrastructure/mods/catalog_visibility.py
       - FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets
-    mode: sync
-    check: python ../scripts/dev/sync_duty_roster.py --check
-    sync: python ../scripts/dev/sync_duty_roster.py --generate
+      - FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts
+    mode: generate
+    # 唯一生成器 sync_duty_roster.py（5 目标）；--check 守卫漂移，对应 test_employee_ssot.py
+    check: python scripts/dev/sync_duty_roster.py --check
+    sync: python scripts/dev/sync_duty_roster.py --generate
 
   - name: db-schema
     owner: backend
