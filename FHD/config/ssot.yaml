@@ -153,7 +153,7 @@ domains:
     ssot: FHD/config/duty_roster.json
     derived:
       - FHD/frontend/src/domain/yuangonDutyRoster.ts
-      - FHD/MODstore/modstore_server/duty_roster.py
+      - 成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_roster.py
       - FHD/app/infrastructure/mods/catalog_visibility.py
       - FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets
       - FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts
