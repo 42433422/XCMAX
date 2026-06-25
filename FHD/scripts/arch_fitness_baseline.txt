@@ -1,26 +1,25 @@
-# arch_fitness baseline — 176 accepted violation(s). Auto-managed by `python scripts/arch_fitness.py --bump`; do not hand-edit counts.
-[domain->infrastructure] app/domain/neuro/cognition/llm_port.py:100
-[domain->infrastructure] app/domain/neuro/cognition/llm_port.py:54
-[domain->infrastructure] app/domain/value_objects_industry.py:23
+# arch_fitness baseline — 119 accepted violation(s). Auto-managed by `python scripts/arch_fitness.py --bump`; do not hand-edit counts.
+[domain->infrastructure] app/domain/neuro/cognition/llm_port.py
+[domain->infrastructure] app/domain/value_objects_industry.py
 [giant-file] app/application/agent_orchestrator/chat_trace.py — 1717 lines (max 500 in app/)
 [giant-file] app/application/agent_orchestrator/multimodal_planner.py — 577 lines (max 500 in app/)
 [giant-file] app/application/agent_orchestrator/orchestrator.py — 1258 lines (max 500 in app/)
 [giant-file] app/application/agent_orchestrator/run_models.py — 536 lines (max 500 in app/)
 [giant-file] app/application/agent_orchestrator/tool_spec_data/input_schemas.py — 980 lines (max 500 in app/)
 [giant-file] app/application/agent_orchestrator/tool_spec_data/output_schemas.py — 1141 lines (max 500 in app/)
-[giant-file] app/application/ai_chat_app_service.py — 3657 lines (max 500 in app/)
-[giant-file] app/application/ai_group_chat_service.py — 903 lines (max 500 in app/)
+[giant-file] app/application/ai_chat_app_service.py — 3840 lines (max 500 in app/)
+[giant-file] app/application/ai_group_chat_service.py — 948 lines (max 500 in app/)
 [giant-file] app/application/aibiz_web_terminal_service.py — 695 lines (max 500 in app/)
 [giant-file] app/application/aiopen/service.py — 809 lines (max 500 in app/)
 [giant-file] app/application/approval_workspace_app_service.py — 1323 lines (max 500 in app/)
 [giant-file] app/application/customer_app_service.py — 862 lines (max 500 in app/)
 [giant-file] app/application/dataset_rag_app_service.py — 1973 lines (max 500 in app/)
-[giant-file] app/application/employee_runtime/scheduler.py — 685 lines (max 500 in app/)
+[giant-file] app/application/employee_runtime/scheduler.py — 710 lines (max 500 in app/)
 [giant-file] app/application/enterprise_login_flow.py — 572 lines (max 500 in app/)
 [giant-file] app/application/excel_template_http_app_service.py — 583 lines (max 500 in app/)
-[giant-file] app/application/planner_compat_service.py — 620 lines (max 500 in app/)
+[giant-file] app/application/planner_compat_service.py — 619 lines (max 500 in app/)
 [giant-file] app/application/shipment_app_service.py — 582 lines (max 500 in app/)
-[giant-file] app/application/super_employee_service.py — 1914 lines (max 500 in app/)
+[giant-file] app/application/super_employee_service.py — 2299 lines (max 500 in app/)
 [giant-file] app/application/tools/workflow.py — 1635 lines (max 500 in app/)
 [giant-file] app/application/wechat_task_app_service.py — 521 lines (max 500 in app/)
 [giant-file] app/application/workflow/engine.py — 699 lines (max 500 in app/)
@@ -40,29 +39,29 @@
 [giant-file] app/fastapi_routes/domains/system/routes.py — 830 lines (max 500 in app/)
 [giant-file] app/fastapi_routes/domains/wechat/compat_routes.py — 526 lines (max 500 in app/)
 [giant-file] app/fastapi_routes/domains/wechat/routes.py — 532 lines (max 500 in app/)
-[giant-file] app/fastapi_routes/im_routes.py — 585 lines (max 500 in app/)
+[giant-file] app/fastapi_routes/im_routes.py — 762 lines (max 500 in app/)
 [giant-file] app/fastapi_routes/knowledge_v1.py — 558 lines (max 500 in app/)
 [giant-file] app/fastapi_routes/market_account.py — 1787 lines (max 500 in app/)
-[giant-file] app/fastapi_routes/mobile_api_extensions.py — 2688 lines (max 500 in app/)
-[giant-file] app/fastapi_routes/mod_store_routes.py — 906 lines (max 500 in app/)
-[giant-file] app/fastapi_routes/model_payment.py — 504 lines (max 500 in app/)
+[giant-file] app/fastapi_routes/mobile_api_extensions.py — 2855 lines (max 500 in app/)
+[giant-file] app/fastapi_routes/mod_store_routes.py — 970 lines (max 500 in app/)
+[giant-file] app/fastapi_routes/model_payment.py — 552 lines (max 500 in app/)
 [giant-file] app/fastapi_routes/print_routes.py — 520 lines (max 500 in app/)
 [giant-file] app/fastapi_routes/shipment_orders.py — 673 lines (max 500 in app/)
 [giant-file] app/fastapi_routes/xcagi_compat_chat_helpers.py — 835 lines (max 500 in app/)
 [giant-file] app/fastapi_routes/xcagi_compat_product.py — 613 lines (max 500 in app/)
-[giant-file] app/fastapi_routes/xcmax_admin.py — 2226 lines (max 500 in app/)
+[giant-file] app/fastapi_routes/xcmax_admin.py — 2236 lines (max 500 in app/)
 [giant-file] app/infrastructure/billing/model_usage.py — 750 lines (max 500 in app/)
 [giant-file] app/infrastructure/documents/price_list_export.py — 591 lines (max 500 in app/)
-[giant-file] app/infrastructure/mods/mod_manager.py — 1358 lines (max 500 in app/)
-[giant-file] app/infrastructure/mods/package.py — 520 lines (max 500 in app/)
+[giant-file] app/infrastructure/mods/mod_manager.py — 1363 lines (max 500 in app/)
+[giant-file] app/infrastructure/mods/package.py — 535 lines (max 500 in app/)
 [giant-file] app/infrastructure/payment/alipay.py — 652 lines (max 500 in app/)
 [giant-file] app/infrastructure/persistence/compat_db/writes.py — 603 lines (max 500 in app/)
 [giant-file] app/infrastructure/persistence/product_repository_impl.py — 671 lines (max 500 in app/)
 [giant-file] app/infrastructure/rag/dataset_vector_index.py — 818 lines (max 500 in app/)
 [giant-file] app/legacy/chat/legacy_chat_adapter.py — 742 lines (max 500 in app/)
 [giant-file] app/mod_sdk/employee_specialized_tools.py — 2674 lines (max 500 in app/)
-[giant-file] app/mod_sdk/host_profile.py — 524 lines (max 500 in app/)
-[giant-file] app/mod_sdk/industry_baseline.py — 650 lines (max 500 in app/)
+[giant-file] app/mod_sdk/host_profile.py — 523 lines (max 500 in app/)
+[giant-file] app/mod_sdk/industry_baseline.py — 649 lines (max 500 in app/)
 [giant-file] app/neuro_bus/bus.py — 802 lines (max 500 in app/)
 [giant-file] app/neuro_bus/circuit_breaker.py — 830 lines (max 500 in app/)
 [giant-file] app/neuro_bus/dead_letter_queue.py — 1362 lines (max 500 in app/)
@@ -76,7 +75,7 @@
 [giant-file] app/services/distillation_data_collector.py — 507 lines (max 500 in app/)
 [giant-file] app/services/intent_service.py — 718 lines (max 500 in app/)
 [giant-file] app/services/inventory_service.py — 592 lines (max 500 in app/)
-[giant-file] app/services/mobile_relay_service.py — 581 lines (max 500 in app/)
+[giant-file] app/services/mobile_relay_service.py — 582 lines (max 500 in app/)
 [giant-file] app/services/purchase_service.py — 582 lines (max 500 in app/)
 [giant-file] app/services/skills/label_template_generator/label_template_generator.py — 1444 lines (max 500 in app/)
 [giant-file] app/services/tools_execution/registry.py — 1225 lines (max 500 in app/)
@@ -91,109 +90,31 @@
 [giant-file] app/utils/excel_template_analyzer.py — 554 lines (max 500 in app/)
 [giant-file] app/utils/print_utils.py — 509 lines (max 500 in app/)
 [giant-file] app/utils/user_memory.py — 619 lines (max 500 in app/)
-[routes->services] app/fastapi_routes/business_api.py:137
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:112
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:113
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:151
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:152
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:153
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:197
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:215
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:216
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:217
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:41
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:48
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:49
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:77
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:78
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:91
-[routes->services] app/fastapi_routes/contract_lifecycle_api.py:92
-[routes->services] app/fastapi_routes/domains/customer/routes.py:82
-[routes->services] app/fastapi_routes/domains/excel/routes.py:105
-[routes->services] app/fastapi_routes/domains/misc/routes.py:180
-[routes->services] app/fastapi_routes/domains/misc/routes.py:230
-[routes->services] app/fastapi_routes/domains/product/compat_routes.py:279
-[routes->services] app/fastapi_routes/domains/product/routes.py:64
-[routes->services] app/fastapi_routes/domains/system/routes.py:516
-[routes->services] app/fastapi_routes/domains/system/routes.py:649
-[routes->services] app/fastapi_routes/domains/system/routes.py:719
-[routes->services] app/fastapi_routes/domains/wechat/routes.py:119
-[routes->services] app/fastapi_routes/domains/wechat/routes.py:126
-[routes->services] app/fastapi_routes/domains/wechat/routes.py:153
-[routes->services] app/fastapi_routes/domains/wechat/routes.py:191
-[routes->services] app/fastapi_routes/domains/wechat/routes.py:22
-[routes->services] app/fastapi_routes/domains/wechat/routes.py:225
-[routes->services] app/fastapi_routes/domains/wechat/routes.py:308
-[routes->services] app/fastapi_routes/finance.py:77
-[routes->services] app/fastapi_routes/finance_invoices_api.py:100
-[routes->services] app/fastapi_routes/finance_invoices_api.py:117
-[routes->services] app/fastapi_routes/finance_invoices_api.py:118
-[routes->services] app/fastapi_routes/finance_invoices_api.py:119
-[routes->services] app/fastapi_routes/finance_invoices_api.py:129
-[routes->services] app/fastapi_routes/finance_invoices_api.py:171
-[routes->services] app/fastapi_routes/finance_invoices_api.py:172
-[routes->services] app/fastapi_routes/finance_invoices_api.py:80
-[routes->services] app/fastapi_routes/finance_unified_ledger.py:37
-[routes->services] app/fastapi_routes/finance_unified_ledger.py:64
-[routes->services] app/fastapi_routes/finance_unified_ledger.py:84
-[routes->services] app/fastapi_routes/gdpr.py:46
-[routes->services] app/fastapi_routes/im_routes.py:113
-[routes->services] app/fastapi_routes/im_routes.py:87
-[routes->services] app/fastapi_routes/inventory.py:63
-[routes->services] app/fastapi_routes/knowledge_v1.py:255
-[routes->services] app/fastapi_routes/materials.py:65
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:103
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:230
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:2450
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:2476
-[routes->services] app/fastapi_routes/operations_line_api.py:15
-[routes->services] app/fastapi_routes/operations_line_api.py:22
-[routes->services] app/fastapi_routes/operations_line_api.py:34
-[routes->services] app/fastapi_routes/operations_line_api.py:41
-[routes->services] app/fastapi_routes/operations_line_api.py:48
-[routes->services] app/fastapi_routes/payment_reconcile_internal_api.py:35
-[routes->services] app/fastapi_routes/print_routes.py:106
-[routes->services] app/fastapi_routes/private_db_read_assistant_compat.py:101
-[routes->services] app/fastapi_routes/private_db_read_assistant_compat.py:125
-[routes->services] app/fastapi_routes/private_db_read_assistant_compat.py:56
-[routes->services] app/fastapi_routes/purchase.py:74
-[routes->services] app/fastapi_routes/shipment_orders.py:145
-[routes->services] app/fastapi_routes/shipment_orders.py:79
-[routes->services] app/fastapi_routes/user_cs_wechat_passive_compat.py:103
-[routes->services] app/fastapi_routes/user_cs_wechat_passive_compat.py:115
-[routes->services] app/fastapi_routes/user_cs_wechat_passive_compat.py:43
-[routes->services] app/fastapi_routes/user_cs_wechat_passive_compat.py:56
-[routes->services] app/fastapi_routes/user_cs_wechat_passive_compat.py:76
-[routes->services] app/fastapi_routes/user_cs_wechat_passive_compat.py:88
-[routes->services] app/fastapi_routes/wechat_decrypt_routes.py:16
-[routes->services] app/fastapi_routes/wechat_decrypt_routes.py:23
-[routes->services] app/fastapi_routes/xcagi_compat_chat_helpers.py:38
-[routes->services] app/fastapi_routes/xcagi_compat_product.py:279
-[routes->services] app/fastapi_routes/xcmax_admin.py:1781
-[routes->services] app/fastapi_routes/xcmax_admin.py:1799
-[routes->services] app/fastapi_routes/xcmax_admin.py:1808
-[routes->services] app/fastapi_routes/im_routes.py:90
-[routes->services] app/fastapi_routes/im_routes.py:116
-[routes->services] app/fastapi_routes/domains/misc/routes.py:475
-[giant-file] app/neuro_bus/rate_limiter.py
-[giant-file] app/neuro_bus/dead_letter_queue.py
-[giant-file] app/neuro_bus/circuit_breaker.py
-[giant-file] app/fastapi_routes/im_routes.py
-[giant-file] app/fastapi_routes/domains/misc/routes.py
-[giant-file] app/application/ai_group_chat_service.py
-[giant-file] app/application/enterprise_login_flow.py
-[giant-file] app/application/super_employee_service.py
-[giant-file] app/application/agent_orchestrator/tool_spec_data/input_schemas.py
-[giant-file] app/application/agent_orchestrator/tool_spec_data/output_schemas.py
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:103
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:230
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:2450
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:2476
-[skip] modstore_server not found at e:\成都修茈科技有限公司\MODstore_deploy\modstore_server
-[skip] modstore_server not found at e:/成都修茈科技有限公司/MODstore_deploy/modstore_server
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:106
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:2542
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:2568
-[routes->services] app/fastapi_routes/mobile_api_extensions.py:233
-[routes->services] app/fastapi_routes/im_routes.py:91
-[routes->services] app/fastapi_routes/im_routes.py:117
+[routes->services] app/fastapi_routes/business_api.py
+[routes->services] app/fastapi_routes/contract_lifecycle_api.py
+[routes->services] app/fastapi_routes/domains/customer/routes.py
+[routes->services] app/fastapi_routes/domains/excel/routes.py
+[routes->services] app/fastapi_routes/domains/misc/routes.py
+[routes->services] app/fastapi_routes/domains/product/compat_routes.py
+[routes->services] app/fastapi_routes/domains/product/routes.py
+[routes->services] app/fastapi_routes/domains/system/routes.py
+[routes->services] app/fastapi_routes/domains/wechat/routes.py
+[routes->services] app/fastapi_routes/finance.py
+[routes->services] app/fastapi_routes/finance_invoices_api.py
+[routes->services] app/fastapi_routes/finance_unified_ledger.py
+[routes->services] app/fastapi_routes/gdpr.py
+[routes->services] app/fastapi_routes/inventory.py
+[routes->services] app/fastapi_routes/knowledge_v1.py
+[routes->services] app/fastapi_routes/materials.py
+[routes->services] app/fastapi_routes/meeting_routes.py
+[routes->services] app/fastapi_routes/operations_line_api.py
+[routes->services] app/fastapi_routes/payment_reconcile_internal_api.py
+[routes->services] app/fastapi_routes/print_routes.py
+[routes->services] app/fastapi_routes/private_db_read_assistant_compat.py
+[routes->services] app/fastapi_routes/purchase.py
+[routes->services] app/fastapi_routes/shipment_orders.py
+[routes->services] app/fastapi_routes/user_cs_wechat_passive_compat.py
+[routes->services] app/fastapi_routes/wechat_decrypt_routes.py
+[routes->services] app/fastapi_routes/xcagi_compat_chat_helpers.py
+[routes->services] app/fastapi_routes/xcagi_compat_product.py
+[routes->services] app/fastapi_routes/xcmax_admin.py

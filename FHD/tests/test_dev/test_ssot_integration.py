@@ -10,18 +10,18 @@ sys.path.insert(0, str(ROOT))
 
 
 def test_ssot_list_shows_all_enabled(capsys):
-    """list 输出 15 域，全部 enabled。"""
+    """list 输出 16 域，全部 enabled。"""
     from scripts.dev.ssot_cli import main
 
     main(["list"])
     out = capsys.readouterr().out
-    # 15 行域（不含表头与分隔线）
+    # 16 行域（不含表头与分隔线）
     domain_lines = [
         l for l in out.splitlines() if l and not l.startswith("name") and not l.startswith("-")
     ]
-    assert len(domain_lines) == 15
+    assert len(domain_lines) == 16
     yes_count = sum(1 for l in domain_lines if l.split()[1] == "yes")
-    assert yes_count == 15  # 全部启用
+    assert yes_count == 16  # 全部启用
 
 
 def test_ssot_gate_returns_0_or_1(capsys):
