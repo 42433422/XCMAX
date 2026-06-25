@@ -14,7 +14,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
 NODES_KEY = "xcmax:cluster:nodes"
 CLAIM_PREFIX = "xcmax:cluster:incident_claim:"
 DEFAULT_STALE_SECONDS = 300
@@ -98,7 +97,9 @@ def write_node_heartbeat(*, job_count: Optional[int] = None) -> Dict[str, Any]:
     directory = _runtime_dir() / "cluster_nodes"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{payload['node_id']}.json"
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return {**payload, "backend": "file", "leader": elect_leader().get("node_id")}
 
 
@@ -207,7 +208,8 @@ def claim_incident_for_node(event_id: int, *, ttl_seconds: int = 900) -> Dict[st
             "owner": owner,
         }
     claim_path.write_text(
-        json.dumps({"claimed_at": time.time(), "event_id": int(event_id), "node_id": node_id}) + "\n",
+        json.dumps({"claimed_at": time.time(), "event_id": int(event_id), "node_id": node_id})
+        + "\n",
         encoding="utf-8",
     )
     return {

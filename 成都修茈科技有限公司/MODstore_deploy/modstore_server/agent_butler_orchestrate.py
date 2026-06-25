@@ -157,7 +157,7 @@ async def _pipeline_mod(
             snap_info = capture_manifest_snapshot(
                 mod_dir, f"butler 改写前自动备份 {time.strftime('%H:%M:%S')}"
             )
-            await _set_step(sid, "snapshot", "done", f"快照 {snap_info.get('snap_id','?')}")
+            await _set_step(sid, "snapshot", "done", f"快照 {snap_info.get('snap_id', '?')}")
         except Exception as exc:
             await _set_step(sid, "snapshot", "done", f"快照失败（继续）：{exc}")
     else:
@@ -292,7 +292,7 @@ async def _pipeline_workflow(
         sid,
         "vibe",
         "done",
-        f"节点 {nl_result.get('nodes_created',0)} 条，边 {nl_result.get('edges_created',0)} 条",
+        f"节点 {nl_result.get('nodes_created', 0)} 条，边 {nl_result.get('edges_created', 0)} 条",
     )
 
     # validate

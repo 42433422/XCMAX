@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
-
 WINDOW_DAYS = 30
 
 
@@ -44,8 +43,7 @@ def _parse_time(value: Any, fallback_path: Path) -> datetime:
 
 def _incident_class(payload: Dict[str, Any]) -> str:
     text = " ".join(
-        str(payload.get(k) or "")
-        for k in ("symptom", "root_cause", "fix_diff")
+        str(payload.get(k) or "") for k in ("symptom", "root_cause", "fix_diff")
     ).lower()
     buckets = {
         "auth": ("auth", "jwt", "csrf", "token", "credential", "permission"),
@@ -103,7 +101,9 @@ def forecast_next_24h(*, window_days: int = WINDOW_DAYS) -> Dict[str, Any]:
             continue
         gaps_hours: List[float] = []
         for prev, cur in zip(rows, rows[1:]):
-            gaps_hours.append(max(0.0, (cur["created_at"] - prev["created_at"]).total_seconds() / 3600.0))
+            gaps_hours.append(
+                max(0.0, (cur["created_at"] - prev["created_at"]).total_seconds() / 3600.0)
+            )
         avg_gap = sum(gaps_hours) / len(gaps_hours) if gaps_hours else float(window_days * 24)
         last_age = max(0.0, (now - rows[-1]["created_at"]).total_seconds() / 3600.0)
         frequency_score = min(1.0, count / max(1.0, window_days / 3.0))
@@ -120,7 +120,9 @@ def forecast_next_24h(*, window_days: int = WINDOW_DAYS) -> Dict[str, Any]:
                 "sample_symptom": rows[-1].get("symptom"),
             }
         )
-    forecasts.sort(key=lambda item: (float(item["confidence"]), -float(item["eta_hours"])), reverse=True)
+    forecasts.sort(
+        key=lambda item: (float(item["confidence"]), -float(item["eta_hours"])), reverse=True
+    )
     return {
         "forecast_horizon_hours": 24,
         "generated_at": now.isoformat(),
@@ -135,7 +137,9 @@ def run_predictive_maintenance_once() -> Dict[str, Any]:
     forecast = forecast_next_24h()
     path = _runtime_dir() / "predictive_maintenance_forecast.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(forecast, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(forecast, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     threshold = float(os.environ.get("MODSTORE_PREDICTIVE_MAINTENANCE_CONFIDENCE", "0.7"))
     emitted = False
     top = forecast.get("predictions", [{}])[0] if forecast.get("predictions") else {}

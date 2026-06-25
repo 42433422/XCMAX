@@ -122,8 +122,7 @@ def test_load_modstore_env_reads_synced_then_local(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     (tmp_path / ".env.local").write_text(
-        "MODSTORE_DAILY_DIGEST_ENABLED=1\n"
-        "MODSTORE_RUN_BACKGROUND_JOBS=0\n",
+        "MODSTORE_DAILY_DIGEST_ENABLED=1\n" "MODSTORE_RUN_BACKGROUND_JOBS=0\n",
         encoding="utf-8",
     )
     for key in (
