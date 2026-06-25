@@ -4,15 +4,25 @@
       <aside :class="['im-sidebar', { 'im-sidebar--employees': isAdminCustomerServiceConsole }]">
         <div class="im-sidebar-head">
           <h2 class="im-title">信息</h2>
-          <button
-            type="button"
-            class="im-icon-btn"
-            title="发起会话"
-            :disabled="busy"
-            @click="openContactPicker"
-          >
-            <i class="fa fa-pencil-square-o" aria-hidden="true"></i>
-          </button>
+          <div class="im-sidebar-actions">
+            <router-link
+              v-if="isAdminCustomerServiceConsole"
+              to="/ai-groups"
+              class="im-icon-btn"
+              title="我的群聊"
+            >
+              <i class="fa fa-users" aria-hidden="true"></i>
+            </router-link>
+            <button
+              type="button"
+              class="im-icon-btn"
+              title="发起会话"
+              :disabled="busy"
+              @click="openContactPicker"
+            >
+              <i class="fa fa-pencil-square-o" aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
 
         <div class="im-conn" :class="imConnectionClass">
@@ -169,6 +179,29 @@
                 <dd>{{ systemEntryLastStatus(activeSystemEntry) }}</dd>
               </div>
             </dl>
+            <section
+              v-if="isSuperEmployeeEntry(activeSystemEntry)"
+              class="im-cli-model-switch"
+              aria-label="超级开发组 CLI 切换"
+            >
+              <div class="im-cli-model-switch__label">超级开发组 · CLI</div>
+              <div class="im-cli-model-switch__options" role="tablist">
+                <button
+                  v-for="tool in superCliTools"
+                  :key="tool.id"
+                  type="button"
+                  role="tab"
+                  :class="[
+                    'im-cli-model-switch__btn',
+                    { active: activeSystemEntry?.id === tool.id },
+                  ]"
+                  :aria-selected="activeSystemEntry?.id === tool.id"
+                  @click="activatePinnedEntry(tool)"
+                >
+                  {{ superCliToolLabel(tool) }}
+                </button>
+              </div>
+            </section>
           </div>
           <div
             v-if="isSuperEmployeeEntry(activeSystemEntry)"
@@ -515,6 +548,12 @@ const CURSOR_SUPER_EMPLOYEE_ENTRY: CursorSuperEmployeeEntry = {
   is_cursor_super_employee: true,
 };
 
+const SUPER_CLI_TOOLS: SystemEmployeeEntry[] = [
+  CODEX_SUPER_EMPLOYEE_ENTRY,
+  CURSOR_SUPER_EMPLOYEE_ENTRY,
+  CLAUDE_SUPER_EMPLOYEE_ENTRY,
+];
+
 const localUserId = ref<number | null>(null);
 const conversations = ref<ImConversationSummary[]>([]);
 const activeConversationId = ref<number | null>(null);
@@ -690,6 +729,17 @@ const pinnedContacts = computed<PinnedImEntry[]>(() => {
   }
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
 });
+
+const superCliTools = computed(() =>
+  isAdminCustomerServiceConsole.value ? SUPER_CLI_TOOLS : [],
+);
+
+function superCliToolLabel(entry: SystemEmployeeEntry): string {
+  if (isCodexSuperEmployeeEntry(entry)) return 'Codex';
+  if (isCursorSuperEmployeeEntry(entry)) return 'Cursor';
+  if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
+  return entry.display_name;
+}
 
 const activeDutyEmployeeMessages = computed<DutyEmployeeChatMessage[]>(() => {
   const entry = activeSystemEntry.value;
@@ -1758,6 +1808,14 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 14px 16px 10px;
 }
+.im-sidebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.im-sidebar-actions .im-icon-btn {
+  text-decoration: none;
+}
 .im-title {
   margin: 0;
   font-size: 16px;
@@ -2122,6 +2180,42 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 600;
   word-break: break-word;
+}
+.im-cli-model-switch {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--xc-color-border, #e6e9ef);
+  border-radius: 10px;
+  background: #fff;
+}
+.im-cli-model-switch__label {
+  margin-bottom: 8px;
+  color: var(--xc-color-muted, #86909c);
+  font-size: 12px;
+  font-weight: 600;
+}
+.im-cli-model-switch__options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.im-cli-model-switch__btn {
+  flex: 1 1 0;
+  min-width: 72px;
+  border: 1px solid var(--xc-color-border, #e6e9ef);
+  border-radius: 999px;
+  background: #f7f8fa;
+  color: var(--xc-color-text, #1f2329);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.im-cli-model-switch__btn.active {
+  border-color: var(--xc-color-primary, #0052d9);
+  background: rgba(0, 82, 217, 0.08);
+  color: var(--xc-color-primary, #0052d9);
 }
 .im-system-call-log {
   flex: 1;
