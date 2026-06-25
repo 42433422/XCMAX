@@ -992,10 +992,12 @@ def run_employee_evolution_scan(
 
     from modstore_server.employee_ai_pipeline import refine_system_prompt
     from modstore_server.employee_runtime import load_employee_pack, parse_employee_config_v2
+    from modstore_server.llm_quota import is_quota_exhausted
     from modstore_server.runtime_async import run_coro_sync
 
     created = 0
     processed = 0
+    quota_aborted = False
     for employee_id, fail_count in candidates:
         processed += 1
         try:
@@ -1045,6 +1047,19 @@ def run_employee_evolution_scan(
         except Exception as exc:
             result = None
             err = str(exc)
+
+        # 配额失败 != prompt 失败：平台 LLM 额度耗尽时 refine 必然 403，继续变异 prompt
+        # 只会空烧已耗尽的预算（生产曾因此恶性空转）。一旦识别到配额耗尽就熔断整轮扫描——
+        # 同一台 bench LLM 客户端对后续所有候选人也会撞同一堵墙。
+        if err and is_quota_exhausted(err):
+            quota_aborted = True
+            logger.warning(
+                "员工自进化已熔断：平台 LLM 配额耗尽（employee=%s, err=%s）；"
+                "配额失败不是 prompt 问题，跳过本轮所有 prompt 变异",
+                employee_id,
+                str(err)[:200],
+            )
+            break
 
         improved = ""
         diff_expl = ""
@@ -1155,6 +1170,8 @@ def run_employee_evolution_scan(
         "lookback_hours": lookback_hours,
         "min_failures": min_failures,
         "quota_failures": quota_fail_total,
+        "quota_aborted": quota_aborted,
+        **({"aborted_reason": "llm_quota_exhausted"} if quota_aborted else {}),
     }
 
 
