@@ -30,7 +30,7 @@ from apscheduler.triggers.cron import CronTrigger
 from .duty_employee_registry import duty_employee_records
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
 from .employee_executor import execute_employee_task
-from .models import EmployeeExecutionMetric, IncidentEvent, User, get_session_factory
+from .models import EmployeeExecutionMetric, IncidentEvent, get_session_factory
 from .platform_llm_scope import platform_llm_scoped
 from .self_evolution_knowledge import (
     build_self_evolution_context,
@@ -822,30 +822,28 @@ def _file_url_to_path(repo_url: str) -> Optional[Path]:
     return Path(unquote(parsed.path))
 
 
-def _first_user_id() -> int:
+def _self_maintenance_actor_user_id() -> int:
+    """自维护 loop 的 LLM 执行身份（默认平台身份 ``user_id=0``）。
+
+    ``services.llm.chat_dispatch_via_session`` 仅在 ``uid > 0`` 时调
+    ``quota_middleware.require_llm_credit`` 走某真实用户的个人 ``llm_calls`` 月配额闸；
+    传 ``0`` 即跳过该配额、改用 ``llm_key_resolver.resolve_api_key`` 的平台密钥
+    （``user_id=0`` 无 BYOK 凭证行，自然回落 ``platform_api_key``）。指标表 ``user_id``
+    仍由 ``employee_executor._resolve_metric_user_id`` 回落到真实 ``users.id``，监控不丢。
+
+    历史 bug：本函数旧实现（``_first_user_id``）取「库里第一个真实用户」作执行身份，
+    使平台自治工作全部记到 owner 个人配额上；其额度耗尽后整条 loop 持续报
+    ``403: 配额不足: llm_calls``（生产实测 99.6% 失败的根因）。
+
+    运维如需按某真实用户 BYOK/配额计费，可设 ``MODSTORE_SELF_MAINTENANCE_USER_ID=<uid>``。
+    """
     env_uid = os.environ.get("MODSTORE_SELF_MAINTENANCE_USER_ID", "").strip()
     if env_uid:
         try:
             return int(env_uid)
         except ValueError:
             logger.warning("MODSTORE_SELF_MAINTENANCE_USER_ID not an int: %s", env_uid)
-    db = get_session_factory()()
-    try:
-        query = db.query(User)
-        if hasattr(User, "is_active"):
-            query = query.filter(User.is_active == True)  # noqa: E712
-        user = query.order_by(User.id.asc()).first()
-        if user is None:
-            return 0
-        try:
-            return int(user.id)
-        except (TypeError, ValueError):
-            return 0
-    except Exception:
-        logger.exception("failed to resolve first self-maintenance user id")
-        return 0
-    finally:
-        db.close()
+    return 0
 
 
 def _recent_employee_failure_count(lookback_hours: int) -> int:
@@ -3242,7 +3240,7 @@ def run_self_maintenance_loop(
         _append_ledger(record)
         return record
 
-    user_id = _first_user_id()
+    user_id = _self_maintenance_actor_user_id()
     loop_memory = _load_loop_memory()
     resume_candidate = _resume_review_qa_candidate(loop_memory)
     start_record = {
