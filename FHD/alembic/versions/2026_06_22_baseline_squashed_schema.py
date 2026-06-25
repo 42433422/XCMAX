@@ -34,9 +34,13 @@ Re-baseline them once (schema is unchanged — this only rewrites alembic_versio
 
     python -m alembic stamp 2026_06_22_baseline --purge
 
-Production sets ``FHD_SKIP_ALEMBIC=1`` and builds via ``create_all`` + ensure, so
-no production DB was stamped through the broken chain; this is a no-risk rewrite
-there. Dev/desktop DBs just need the stamp above.
+Production on a real database runs ``alembic upgrade head`` from this baseline
+(``FHD_SKIP_ALEMBIC=0`` — see helm ``values-prod.yaml`` and
+``docker-compose.fhd-prod.yml``; the entrypoint gates on a non-empty
+``DATABASE_URL``). SQLite single-host deployments leave ``DATABASE_URL`` empty and
+build via ``create_all`` + ensure, so the entrypoint skips Alembic for them. Real
+DBs predating this squash need the one-time stamp above; dev/desktop SQLite DBs
+build fresh.
 """
 
 from __future__ import annotations
