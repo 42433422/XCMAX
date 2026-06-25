@@ -27,5 +27,4 @@ class XcagiMessagingService : FirebaseMessagingService() {
 
 object PushTokenHolder {
     @Volatile var fcmToken: String = ""
-    @Volatile var jpushRegistrationId: String = ""
 }

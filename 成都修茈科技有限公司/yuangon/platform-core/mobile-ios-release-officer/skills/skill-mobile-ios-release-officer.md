@@ -1,13 +1,13 @@
 # iOS 发版员技能
 
-职责：P-S iOS 渠道发布：双 SKU Bundle ID、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
+职责：XCAGI iOS 渠道发布：主线上架、冻结兼容 SKU、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
 
 ## 标准流程
 
 1. 检查 `FHD/mobile-ios/project.yml`、scheme、Bundle ID、版本号、entitlements、AppIcon 与 `FHD/.github/workflows/release-ios.yml`。
-2. 先区分双 SKU:
-   - `XCAGIMobile` → `com.xiuci.xcagi.mobile.enterprise`
-   - `XCAGIMobilePersonal` → `com.xiuci.xcagi.mobile.personal`
+2. 先确认当前发版口径:
+   - `XCAGIMobile` → `com.xiuci.xcagi.mobile.enterprise`，当前主线上架 / App Store 线
+   - `XCAGIMobilePersonal` → `com.xiuci.xcagi.mobile.personal`，冻结兼容线，仅在明确需要时维护
 3. 需要新建 App Store profile 时，优先使用:
 
 ```bash
@@ -16,7 +16,7 @@ bash FHD/mobile-ios/scripts/create-app-store-profile.sh \
   --profile-name XCAGIMobile-AppStore-Enterprise-YYYYMMDDA
 ```
 
-4. 拿到 `.p12`、enterprise/personal `.mobileprovision`、`AuthKey_*.p8` 后，优先使用:
+4. 拿到 `.p12`、enterprise `.mobileprovision`、`AuthKey_*.p8` 后，优先使用:
 
 ```bash
 bash FHD/mobile-ios/scripts/sync-ios-signing-secrets.sh \
@@ -25,17 +25,19 @@ bash FHD/mobile-ios/scripts/sync-ios-signing-secrets.sh \
   --p12 /path/to/certificate.p12 \
   --p12-password '***' \
   --profile-enterprise /path/to/enterprise.mobileprovision \
-  --profile-personal /path/to/personal.mobileprovision \
   --api-key-p8 /path/to/AuthKey_XXXXXX.p8 \
   --api-key-id KEY_ID \
   --api-issuer-id ISSUER_ID \
   --keychain-password '***'
 ```
 
+如需继续维护冻结兼容线，再额外传 `--profile-personal /path/to/personal.mobileprovision`。
+
 5. 必须核对:
-   - 两个 profile 的 `Entitlements:application-identifier`
-   - 两个 profile 嵌入证书 serial 是否与 `.p12` 一致
-   - workflow 是否按 scheme 选择对应 secret
+   - 企业版 profile 的 `Entitlements:application-identifier`
+   - 企业版 profile 嵌入证书 serial 是否与 `.p12` 一致
+   - 如传入个人版 profile，再额外核对其 Bundle ID 和证书 serial
+   - workflow 是否按 scheme 选择对应 secret，默认应跟随 `XCAGIMobile`
 6. 然后运行允许范围内的 XcodeGen / Simulator build / archive-export 门禁。
 7. 上传 App Store Connect 前，必须给出真实 IPA / archive / 上传日志证据。
 

@@ -91,7 +91,7 @@ struct LoginView: View {
         VStack(spacing: Theme.Space.sm) {
             Image(systemName: "building.2.crop.circle.fill")
                 .font(.system(size: 56)).foregroundColor(Theme.brand)
-            Text("修茈企业").font(.title).bold()
+            Text("XCAGI").font(.title).bold()
             Text(AppConfig.companyName).font(.caption).foregroundColor(.secondary)
         }
         .padding(.top, Theme.Space.xl)
