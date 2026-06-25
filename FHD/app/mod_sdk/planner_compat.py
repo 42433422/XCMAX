@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Mod SDK：Planner 对话门面（3d）。Mod ``xcagi-planner-bridge`` 经此调用宿主 Planner。"""
 
 from __future__ import annotations

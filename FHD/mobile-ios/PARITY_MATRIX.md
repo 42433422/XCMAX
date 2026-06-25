@@ -42,7 +42,7 @@
 
 1. **真机验证(📱)**:所有设备相关能力已写完并通过类型/语法检查,但交互需在 iOS 真机/模拟器验证:SSE 逐字、群聊/IM 收发、扫码取景、OCR 识别、生物识别、WebView 登录态注入。
 2. **推送 APNs 密钥(⚙️)**:`aps-environment` 权限 + `remote-notification` 后台模式 + Push capability 已在工程内预置(`XCAGIMobile.entitlements`);**端到端仍需在 Apple Developer 配置 APNs 密钥/证书**并用真实 Team 签名。未配置时 `didFailToRegister` 静默忽略、不阻断 App。
-3. **签名 / 上架**:`project.yml` 的 `DEVELOPMENT_TEAM` 需真机/分发时填写;App 图标当前为占位(`AppIcon` 无图)。
+3. **签名 / 上架**:`project.yml` 的 `DEVELOPMENT_TEAM` 通过 `IOS_TEAM_ID` 在归档脚本/CI 注入;App 图标由 `scripts/generate-app-icon.sh` 生成 1024 PNG;App Store Connect 上传仍需真实证书、provisioning profile 与 API Key。
 
 ### 已闭合(累计)
 - ✅ **WebView 登录态注入对齐 Android**:`ModWebView` 精确镜像 `WebViewTokenScript.kt` —— 市场页(`xiu-ci.com`)注入 `localStorage.modstore_token` 不加 Authorization;局域网 FHD(http+内网)注入 `session_id` cookie + Bearer 头;并发 `window.__XCAGI_CLIENT__='ios'` / `xcagi-client-ready` 事件。

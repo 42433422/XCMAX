@@ -41,9 +41,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockButton
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeSwitch
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -73,7 +75,7 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                         showArrow = false,
                         showDivider = false,
                         trailing = {
-                            Switch(
+                            WeSwitch(
                                 checked = biometric,
                                 onCheckedChange = { vm.setBiometricEnabled(it) },
                             )
@@ -125,14 +127,12 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                         showArrow = false,
                         showDivider = false,
                     )
-                    OutlinedTextField(
+                    WeField(
                         value = feedback,
                         onValueChange = { feedback = it.take(500) },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg),
-                        placeholder = { Text("描述问题或建议") },
-                        minLines = 3,
-                        maxLines = 5,
-                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.padding(horizontal = Spacing.lg),
+                        placeholder = "描述问题或建议",
+                        singleLine = false,
                     )
                     Spacer(Modifier.height(Spacing.sm))
                     WeBlockButton(

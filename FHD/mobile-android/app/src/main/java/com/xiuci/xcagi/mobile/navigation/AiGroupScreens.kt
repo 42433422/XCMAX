@@ -63,7 +63,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,6 +81,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -108,11 +111,11 @@ fun AiGroupListScreen(
             onDismissRequest = { showCreate = false },
             title = { Text("创建群聊") },
             text = {
-                OutlinedTextField(
+                WeField(
                     value = newName,
                     onValueChange = { newName = it },
+                    placeholder = "群名称",
                     singleLine = true,
-                    placeholder = { Text("群名称") },
                 )
             },
             confirmButton = {
@@ -125,64 +128,16 @@ fun AiGroupListScreen(
     }
 
     longPressGroup?.let { g ->
-        AlertDialog(
-            onDismissRequest = { longPressGroup = null },
-            title = { Text(g.name.ifBlank { "群聊操作" }) },
-            text = {
-                Column {
-                    TextButton(
-                        onClick = {
-                            vm.markGroupUnread(g.id)
-                            longPressGroup = null
-                            haptics.tap()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("标为未读") }
-                    TextButton(
-                        onClick = {
-                            vm.toggleGroupPin(g.id)
-                            longPressGroup = null
-                            haptics.tap()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(if (g.is_pinned) "取消置顶" else "置顶聊天")
-                    }
-                    TextButton(
-                        onClick = {
-                            vm.toggleGroupFollowed(g.id)
-                            longPressGroup = null
-                            haptics.tap()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(if (g.is_followed) "不再关注" else "恢复关注")
-                    }
-                    TextButton(
-                        onClick = {
-                            vm.toggleGroupHidden(g.id)
-                            longPressGroup = null
-                            haptics.tap()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(if (g.is_hidden) "显示该聊天" else "不显示该聊天")
-                    }
-                    TextButton(
-                        onClick = {
-                            vm.deleteGroup(g.id)
-                            longPressGroup = null
-                            haptics.tap()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("删除该聊天", color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { longPressGroup = null }) { Text("关闭") }
-            },
+        AiGroupActionSheet(
+            title = g.name.ifBlank { "群聊操作" },
+            onDismiss = { longPressGroup = null },
+            actions = listOf(
+                AiGroupAction("标为未读") { vm.markGroupUnread(g.id); longPressGroup = null; haptics.tap() },
+                AiGroupAction(if (g.is_pinned) "取消置顶" else "置顶聊天") { vm.toggleGroupPin(g.id); longPressGroup = null; haptics.tap() },
+                AiGroupAction(if (g.is_followed) "不再关注" else "恢复关注") { vm.toggleGroupFollowed(g.id); longPressGroup = null; haptics.tap() },
+                AiGroupAction(if (g.is_hidden) "显示该聊天" else "不显示该聊天") { vm.toggleGroupHidden(g.id); longPressGroup = null; haptics.tap() },
+                AiGroupAction("删除该聊天", danger = true) { vm.deleteGroup(g.id); longPressGroup = null; haptics.tap() },
+            ),
         )
     }
 
@@ -218,6 +173,70 @@ fun AiGroupListScreen(
                 )
                 if (idx < groups.lastIndex) {
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 80.dp))
+                }
+            }
+        }
+    }
+}
+
+// ══════════════════════════════════════════
+//  长按群聊操作面板（微信/钉钉式底部 ModalBottomSheet）
+// ══════════════════════════════════════════
+private data class AiGroupAction(
+    val label: String,
+    val danger: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AiGroupActionSheet(
+    title: String,
+    onDismiss: () -> Unit,
+    actions: List<AiGroupAction>,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    // 点动作时先播放收起动画再执行，质感更顺滑；动画完成后兜底执行。
+    fun runThenClose(action: () -> Unit) {
+        scope.launch { sheetState.hide() }.invokeOnCompletion { action() }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(bottom = Spacing.lg)) {
+            if (title.isNotBlank()) {
+                Box(
+                    Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            actions.forEachIndexed { index, action ->
+                Box(
+                    Modifier.fillMaxWidth()
+                        .height(52.dp)
+                        .clickable { runThenClose(action.onClick) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        action.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (action.danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                if (index < actions.lastIndex) {
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
         }
@@ -349,7 +368,12 @@ internal fun GroupConversationRow(
                     )
                 } else {
                     Text(
-                        group.last_message_at.ifBlank { "" },
+                        // 原来直接显示原始 ISO 串（2026-06-21T20:38:06.646771+00:00）——一眼"劣质"。
+                        // 解析为毫秒后走友好格式：刚刚/X分钟前/X小时前/昨天/M-d。
+                        formatTimestamp(
+                            com.xiuci.xcagi.mobile.core.im.ImRepository
+                                .parseTimestampMs(group.last_message_at) ?: 0L
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )

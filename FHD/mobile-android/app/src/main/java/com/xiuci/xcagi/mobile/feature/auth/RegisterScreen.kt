@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthInputField
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 
 @Composable
@@ -69,37 +69,31 @@ fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
         Spacer(Modifier.height(32.dp))
 
         // 用户名
-        OutlinedTextField(
+        WeAuthInputField(
+                label = "用户名",
                 value = u,
                 onValueChange = { u = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("用户名") },
                 singleLine = true,
-                shape = RoundedCornerShape(8.dp),
         )
         Spacer(Modifier.height(12.dp))
 
         // 密码
-        OutlinedTextField(
+        WeAuthInputField(
+                label = "密码",
                 value = p,
                 onValueChange = { p = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("密码") },
                 singleLine = true,
-                shape = RoundedCornerShape(8.dp),
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         )
         Spacer(Modifier.height(12.dp))
 
         // 邮箱
-        OutlinedTextField(
+        WeAuthInputField(
+                label = "邮箱",
                 value = e,
                 onValueChange = { e = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("邮箱") },
                 singleLine = true,
-                shape = RoundedCornerShape(8.dp),
         )
         Spacer(Modifier.height(24.dp))
 

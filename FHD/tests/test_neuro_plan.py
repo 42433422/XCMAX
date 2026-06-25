@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """神经域落地计划：注册表、NeuroUnitOfWork、协调器异常路径意图事件。"""
 
 from __future__ import annotations

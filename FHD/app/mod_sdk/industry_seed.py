@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """L2 行业中性 Mod：安装包 industry-seeds 只读池 → 选行业后单拷到 userData/mods。"""
 
 from __future__ import annotations

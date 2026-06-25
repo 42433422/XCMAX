@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """employee_runtime 本地 loader / executor / registry 集成。"""
 
 from __future__ import annotations

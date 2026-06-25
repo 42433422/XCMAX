@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """员工 & 部门 SSOT 派生 + 自动派生守卫（合并后：唯一生成器 = sync_duty_roster.py）。
 
 源：config/duty_roster.json（departments/areas 六线 + enterprise_layers/enterprise_employees 企业端）。

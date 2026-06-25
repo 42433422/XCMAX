@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """XCMAX admin sync inbox 辅助（冲突列表 / 跳过 / 读取）。
 
 历史实现曾独立成服务模块后被收敛；本模块保留稳定 import 路径供

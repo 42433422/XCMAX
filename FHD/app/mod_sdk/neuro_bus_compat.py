@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 M：NeuroBus 诊断 API 经 ``xcagi-neuro-bus-bridge`` 门面。"""
 
 from __future__ import annotations
