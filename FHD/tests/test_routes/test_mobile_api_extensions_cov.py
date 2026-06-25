@@ -296,7 +296,7 @@ class TestRegisterDesktopRelayForPairing:
         with (
             patch.object(m, "_host_is_private_or_loopback", return_value=True),
             patch(
-                "app.services.mobile_relay_desktop_client.register_desktop_relay",
+                "app.application.facades.mobile_relay_facade.register_desktop_relay",
                 side_effect=err_class("fail"),
             ),
         ):
@@ -310,7 +310,7 @@ class TestRegisterDesktopRelayForPairing:
         with (
             patch.object(m, "_host_is_private_or_loopback", return_value=True),
             patch(
-                "app.services.mobile_relay_desktop_client.register_desktop_relay",
+                "app.application.facades.mobile_relay_facade.register_desktop_relay",
                 return_value=None,
             ),
         ):
@@ -324,7 +324,7 @@ class TestRegisterDesktopRelayForPairing:
         with (
             patch.object(m, "_host_is_private_or_loopback", return_value=True),
             patch(
-                "app.services.mobile_relay_desktop_client.register_desktop_relay",
+                "app.application.facades.mobile_relay_facade.register_desktop_relay",
                 return_value={"relay_id": "r1", "desktop_token": "secret", "pairing_code": "1234"},
             ),
         ):

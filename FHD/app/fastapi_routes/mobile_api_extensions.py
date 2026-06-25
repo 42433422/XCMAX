@@ -23,6 +23,7 @@ from app.application.claude_super_employee_service import ClaudeSuperEmployeeSer
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.application.execution_scope import factory_context
+from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _admin_employee_match_keys,
@@ -103,7 +104,6 @@ from app.security.mobile_pairing import (
     issue_pairing_nonce,
     lookup_by_shortcode,
 )
-from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
