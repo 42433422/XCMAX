@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, NamedTuple, Optional
@@ -30,6 +31,8 @@ from modstore_server.script_agent.brief import Brief, BriefInputFile
 from modstore_server.script_agent.context_collector import tabular_upload_preview
 from modstore_server.script_agent.llm_client import RealLlmClient, extract_code_block
 from modstore_server.script_agent.static_checker import validate_script as _validate
+
+logger = logging.getLogger(__name__)
 
 SCRIPT_ROOT = _sandbox.SCRIPT_ROOT
 MAX_AGENT_ITERATIONS = 6

@@ -886,6 +886,42 @@ class AiGroupChatService:
         if changed:
             self._rewrite_groups(all_groups)
 
+    def list_member_candidates(self) -> list[dict[str, Any]]:
+        """返回可拉入群聊的全部 AI 员工候选（普通员工 + 超级员工）。
+
+        数据源为本服务 mode 对应的 ``employee_loader``（admin/enterprise），
+        其中已通过 :func:`_append_super_employees` 追加 Codex / Claude 超级员工，
+        因此手机端选人列表据此即可覆盖全部 AI 员工，无需在前端硬编码超级员工 ID。
+
+        返回 ``[{employee_id, mod_id, name, avatar, summary, department_key, is_super}]``，
+        按 ``employee_id`` 去重。``is_super`` 供前端打"超级员工"徽标用。
+        """
+        try:
+            raw = self._employee_loader() or []
+        except Exception:  # noqa: BLE001 - 加载失败返回空列表，前端优雅降级
+            raw = []
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for emp in raw:
+            if not isinstance(emp, dict):
+                continue
+            eid = str(emp.get("employee_id") or "").strip()
+            if not eid or eid in seen:
+                continue
+            seen.add(eid)
+            out.append(
+                {
+                    "employee_id": eid,
+                    "mod_id": str(emp.get("mod_id") or ""),
+                    "name": str(emp.get("name") or eid)[:60],
+                    "avatar": str(emp.get("avatar") or ""),
+                    "summary": str(emp.get("summary") or "")[:280],
+                    "department_key": str(emp.get("department_key") or ""),
+                    "is_super": eid in _SUPER_EMPLOYEE_IDS,
+                }
+            )
+        return out
+
     def create_group(self, *, user_id: int, name: str) -> dict[str, Any]:
         title = (name or "").strip()
         if not title:
