@@ -171,6 +171,30 @@ class XcagiRepository @Inject constructor(
         return host.isNotBlank() && checkHealth(host)
     }
 
+    private suspend fun preferLanForSuperEmployee(): Boolean {
+        syncRouterFromStore()
+        val currentHost = sessionStore.fhdHostFlow.first()
+        if (sessionStore.serverModeFlow.first() != "cloud" && currentHost.isNotBlank()) {
+            return checkHealth(currentHost)
+        }
+
+        val localBase = sessionStore.localBaseUrl().trim()
+        val (host, port) = hostPortFromApiBase(localBase)
+        if (host.isBlank()) return false
+
+        val hostWithPort = compactHostPort(
+            host,
+            port.takeIf { it > 0 } ?: BuildConfig.FHD_DEFAULT_PORT,
+        )
+        if (!checkHealth(hostWithPort)) return false
+
+        sessionStore.setFhdHost(hostWithPort)
+        sessionStore.setServerMode("lan")
+        serverRouter.fhdHost = hostWithPort
+        serverRouter.mode = ServerMode.LAN
+        return true
+    }
+
     private suspend fun authHeader(): String {
         val fhd = sessionStore.fhdAccessFlow.first()
         if (fhd.isNotBlank()) return "Bearer $fhd"
@@ -1213,7 +1237,7 @@ class XcagiRepository @Inject constructor(
             var finalReply = ""
             val doneSink: (String) -> Unit = { full -> finalReply = full; onDone(full) }
             // 连不到本地 PC 但已配对中继电脑 → 经服务器中继到本地电脑执行（超级员工必须本地设备）。
-            val relayId = if (!isPcReachable()) relayIdForSuperEmployeeDispatch() else ""
+            val relayId = if (!preferLanForSuperEmployee()) relayIdForSuperEmployeeDispatch() else ""
             if (relayId.isNotBlank()) {
                 streamRelayCodexTask(
                     relayId = relayId,
@@ -1292,7 +1316,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
+                        "conversation_id" to PinnedIds.CODEX,
                     ),
                 ),
             )
@@ -1366,7 +1390,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
+                        "conversation_id" to PinnedIds.CLAUDE,
                     ),
                 ),
             )
@@ -1440,7 +1464,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
+                        "conversation_id" to PinnedIds.CURSOR,
                     ),
                 ),
             )
@@ -1514,7 +1538,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
+                        "conversation_id" to PinnedIds.TRAE,
                     ),
                 ),
             )
@@ -2090,7 +2114,7 @@ class XcagiRepository @Inject constructor(
                         "context" to mapOf(
                             "source" to "mobile_chat",
                             "client_surface" to "mobile",
-                            "mode" to "code",
+                            "conversation_id" to conversationId,
                         ),
                     ),
                 ),
