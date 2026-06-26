@@ -18,8 +18,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from app.domain.neuro.cognition.token_estimator import estimate_tokens
 from app.domain.neuro.cognition.working_memory import MemoryItem, WorkingMemorySnapshot
-from app.infrastructure.llm.token_estimator import estimate_tokens
 
 logger = logging.getLogger(__name__)
 
