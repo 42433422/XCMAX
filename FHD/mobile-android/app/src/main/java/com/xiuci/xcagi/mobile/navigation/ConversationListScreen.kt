@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.SmartToy
@@ -479,6 +480,7 @@ private fun HeaderPlusMenu(
             modifier = Modifier.width(188.dp),
         ) {
             PlusMenuRow(Icons.Default.Groups, "发起群聊") { expanded = false; onStartGroupChat() }
+            PlusMenuRow(Icons.Default.Group, "我的群聊") { expanded = false; onOpenGroups() }
             PlusMenuRow(Icons.Default.QrCodeScanner, "扫一扫") { expanded = false; onOpenScan() }
             PlusMenuRow(Icons.Default.SmartToy, "AI 员工") { expanded = false; onOpenEmployees() }
             PlusMenuRow(Icons.Default.Contacts, "通讯录") { expanded = false; onOpenContacts() }

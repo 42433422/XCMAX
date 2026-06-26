@@ -54,6 +54,14 @@ vi.mock('@/api/codexSuperEmployee', () => ({
     ],
   }),
 }))
+vi.mock('@/api/claudeSuperEmployee', () => ({
+  fetchClaudeSuperEmployeeMessages: vi.fn().mockResolvedValue([]),
+  sendClaudeSuperEmployeeMessage: vi.fn().mockResolvedValue({ messages: [] }),
+}))
+vi.mock('@/api/cursorSuperEmployee', () => ({
+  fetchCursorSuperEmployeeMessages: vi.fn().mockResolvedValue([]),
+  sendCursorSuperEmployeeMessage: vi.fn().mockResolvedValue({ messages: [] }),
+}))
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }))
@@ -242,5 +250,37 @@ describe('ImMessengerView.vue', () => {
       },
       { scope: 'mobile' },
     )
+  })
+
+  it('shows super development CLI switch card and My Groups entry in admin console', async () => {
+    const { authApi } = await import('@/api/auth')
+    const { fetchCursorSuperEmployeeMessages } = await import('@/api/cursorSuperEmployee')
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
+    vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
+      data: {
+        user: { id: 1 },
+        account_kind: 'admin',
+        market_is_admin: true,
+      },
+    } as Awaited<ReturnType<typeof authApi.getCurrentUser>>)
+
+    const wrapper = mount(ImMessengerView, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('a[title="我的群聊"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('超级开发组 · CLI')
+    expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Codex')
+
+    const cursorBtn = wrapper
+      .findAll('.im-cli-model-switch__btn')
+      .find((btn) => btn.text().includes('Cursor'))
+    expect(cursorBtn).toBeTruthy()
+    await cursorBtn!.trigger('click')
+    await flushPromises()
+
+    expect(fetchCursorSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
+    expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Cursor')
   })
 })
