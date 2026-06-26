@@ -33,4 +33,4 @@ jobs:
           BASE='${{ github.event.pull_request.base.sha }}'
           HEAD='${{ github.event.pull_request.head.sha }}'
           echo "Scanning commit range ${BASE}..${HEAD}"
-          /tmp/gitleaks detect --source . --log-opts "${BASE}..${HEAD}" --redact --no-banner --exit-code 1
+          /tmp/gitleaks detect --source . --config .github/gitleaks-config.toml --log-opts "${BASE}..${HEAD}" --redact --no-banner --exit-code 1
