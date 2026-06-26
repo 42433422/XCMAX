@@ -75,8 +75,8 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.ChatComposerBar
 import com.xiuci.xcagi.mobile.ui.components.mobile.ChatToolCardAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -174,6 +174,7 @@ fun ChatScreen(
     onOpenOcr: () -> Unit = {},
     onOpenProfile: (() -> Unit)? = null,
     onOpenEmployeeProfile: (String, String) -> Unit = { _, _ -> },
+    onSwitchCliModel: ((String) -> Unit)? = null,
 ) {
     val messages by vm.chatMessages.collectAsState()
     val streaming by vm.streaming.collectAsState()
@@ -247,6 +248,7 @@ fun ChatScreen(
     val cursorConversation = remember(conversationId) { isCursorConversation(conversationId) }
     val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
     val traeConversation = remember(conversationId) { isTraeConversation(conversationId) }
+    val superEmployeeConversation = codexConversation || cursorConversation || claudeConversation || traeConversation
     val employeeProfile =
         remember(employeeRef, employees) {
             employeeRef?.let { ref -> employees.findEmployee(ref.modId, ref.employeeId) }
@@ -307,7 +309,7 @@ fun ChatScreen(
         showToolPanel = false
     }
 
-    val isSuperEmployeeConversation = claudeConversation || codexConversation || cursorConversation || traeConversation
+    val isSuperEmployeeConversation = superEmployeeConversation
     val activeGitBranch = gitBranch
     val chatToolActions =
         buildList {
@@ -438,6 +440,17 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            // 超级开发组：Codex / Cursor / Claude / Trae CLI 切换卡片
+            if (superEmployeeConversation && onSwitchCliModel != null && conversationId != null) {
+                SuperDevCliModelSwitchCard(
+                    selectedConversationId = conversationId,
+                    onSelect = onSwitchCliModel,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                )
+            }
+
             // 同步提示条
             if (syncStale) {
                 Surface(
@@ -499,6 +512,50 @@ fun ChatScreen(
                 // 空状态保持纯空白，仿微信（不放建议气泡等功能按键）。
                 Spacer(Modifier.weight(1f).fillMaxWidth())
             }
+        }
+    }
+}
+
+// ══════════════════════════════════════════
+//  超级开发组 CLI 模型切换卡片
+// ══════════════════════════════════════════
+private val SUPER_DEV_CLI_OPTIONS = listOf(
+    WeModeOption(PinnedIds.CODEX, "Codex"),
+    WeModeOption(PinnedIds.CURSOR, "Cursor"),
+    WeModeOption(PinnedIds.CLAUDE, "Claude"),
+    WeModeOption(PinnedIds.TRAE, "Trae"),
+)
+
+@Composable
+internal fun SuperDevCliModelSwitchCard(
+    selectedConversationId: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = androidx.compose.foundation.BorderStroke(
+            0.5.dp,
+            MaterialTheme.colorScheme.outlineVariant,
+        ),
+        tonalElevation = Elevation.none,
+        shadowElevation = Elevation.none,
+    ) {
+        Column(Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)) {
+            Text(
+                "超级开发组 · CLI",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(Spacing.xs))
+            WeModeCapsule(
+                options = SUPER_DEV_CLI_OPTIONS,
+                selectedId = selectedConversationId,
+                onSelect = onSelect,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

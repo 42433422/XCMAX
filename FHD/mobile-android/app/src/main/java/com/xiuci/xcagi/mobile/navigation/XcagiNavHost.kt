@@ -549,6 +549,18 @@ fun XcagiNavHost(
                             onOpenEmployeeProfile = { modId, employeeId ->
                                 nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
                             },
+                            onSwitchCliModel = pinnedPartnerKind?.let {
+                                { targetId ->
+                                    if (targetId != conversationId) {
+                                        nav.navigate(Routes.conversationChat(targetId)) {
+                                            popUpTo(Routes.conversationChat(conversationId)) {
+                                                inclusive = true
+                                            }
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                }
+                            },
                     )
                 }
                 // 专属客服对话
