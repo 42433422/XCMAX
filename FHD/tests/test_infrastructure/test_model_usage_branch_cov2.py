@@ -23,7 +23,6 @@ import pytest
 
 from app.infrastructure.billing import model_usage as mu
 
-
 # ---------------------------------------------------------------------------
 # Autouse fixture — isolate ledger path and env vars
 # ---------------------------------------------------------------------------
@@ -135,7 +134,9 @@ class TestEstimateLlmCostUnits:
         assert mu.estimate_llm_cost_units() == 0
 
     def test_negative_total_uses_prompt_completion(self):
-        result = mu.estimate_llm_cost_units(total_tokens=-1, prompt_tokens=100, completion_tokens=200)
+        result = mu.estimate_llm_cost_units(
+            total_tokens=-1, prompt_tokens=100, completion_tokens=200
+        )
         # 300 / 1000 = 0.3 → ceil = 1, max(1, 1) = 1
         assert result == 1
 
@@ -192,9 +193,7 @@ class TestLoadUsageState:
     def test_entries_not_list(self, tmp_path):
         ledger = mu.model_usage_ledger_path()
         ledger.parent.mkdir(parents=True, exist_ok=True)
-        ledger.write_text(
-            json.dumps({"entries": "not-a-list", "wallets": {}}), encoding="utf-8"
-        )
+        ledger.write_text(json.dumps({"entries": "not-a-list", "wallets": {}}), encoding="utf-8")
         state = mu._load_usage_state()
         assert state["entries"] == []
 
@@ -211,9 +210,7 @@ class TestLoadUsageState:
     def test_wallets_not_dict(self, tmp_path):
         ledger = mu.model_usage_ledger_path()
         ledger.parent.mkdir(parents=True, exist_ok=True)
-        ledger.write_text(
-            json.dumps({"entries": [], "wallets": "bad"}), encoding="utf-8"
-        )
+        ledger.write_text(json.dumps({"entries": [], "wallets": "bad"}), encoding="utf-8")
         state = mu._load_usage_state()
         assert state["wallets"] == {}
 
@@ -650,6 +647,7 @@ class TestMarketPostJson:
     def test_http_error(self):
         with patch("httpx.Client") as MockClient:
             import httpx
+
             client = MockClient.return_value.__enter__.return_value
             client.post.side_effect = httpx.HTTPError("conn fail")
             data, err = mu._market_post_json("/path", token="tok", payload={})

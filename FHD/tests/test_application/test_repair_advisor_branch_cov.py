@@ -43,7 +43,6 @@ from app.application.agent_orchestrator.repair_advisor import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 
-
 # ---------------------------------------------------------------------------
 # helpers for building test fixtures
 # ---------------------------------------------------------------------------
@@ -82,9 +81,7 @@ class TestIsLlmRepairEnabled:
         assert is_llm_repair_enabled(run, {}) is True
 
     def test_plan_metadata_llm_repair_enabled_true(self) -> None:
-        run = _make_run(
-            {"plan": {"metadata": {"repair_policy": {"llm_repair_enabled": True}}}}
-        )
+        run = _make_run({"plan": {"metadata": {"repair_policy": {"llm_repair_enabled": True}}}})
         assert is_llm_repair_enabled(run, {}) is True
 
     def test_plan_metadata_mode_llm(self) -> None:
@@ -261,11 +258,7 @@ class TestRequestLlmRepair:
         step = _make_step()
         with patch(
             "app.application.agent_orchestrator.repair_advisor._run_async",
-            return_value={
-                "choices": [
-                    {"message": {"content": '{"reason": "no patch here"}'}}
-                ]
-            },
+            return_value={"choices": [{"message": {"content": '{"reason": "no patch here"}'}}]},
         ):
             result = request_llm_repair(run, step, {})
         assert result["success"] is False
@@ -299,11 +292,7 @@ class TestRequestLlmRepair:
             "app.application.agent_orchestrator.repair_advisor._run_async",
             return_value={
                 "choices": [
-                    {
-                        "message": {
-                            "content": '{"params_patch": {"q": "x"}, "message": "because"}'
-                        }
-                    }
+                    {"message": {"content": '{"params_patch": {"q": "x"}, "message": "because"}'}}
                 ]
             },
         ):
@@ -331,11 +320,7 @@ class TestRequestLlmRepair:
         step = _make_step()
         with patch(
             "app.application.agent_orchestrator.repair_advisor._run_async",
-            return_value={
-                "choices": [
-                    {"message": {"content": '{"patch_params": {"alt": 1}}'}}
-                ]
-            },
+            return_value={"choices": [{"message": {"content": '{"patch_params": {"alt": 1}}'}}]},
         ):
             result = request_llm_repair(run, step, {})
         assert result["success"] is True
@@ -346,11 +331,7 @@ class TestRequestLlmRepair:
         step = _make_step()
         with patch(
             "app.application.agent_orchestrator.repair_advisor._run_async",
-            return_value={
-                "choices": [
-                    {"message": {"content": '{"set_params": {"alt": 2}}'}}
-                ]
-            },
+            return_value={"choices": [{"message": {"content": '{"set_params": {"alt": 2}}'}}]},
         ):
             result = request_llm_repair(run, step, {})
         assert result["success"] is True
@@ -361,9 +342,7 @@ class TestRequestLlmRepair:
         step = _make_step()
         with patch(
             "app.application.agent_orchestrator.repair_advisor._run_async",
-            return_value={
-                "choices": [{"message": {"content": '{"params": {"alt": 3}}'}}]
-            },
+            return_value={"choices": [{"message": {"content": '{"params": {"alt": 3}}'}}]},
         ):
             result = request_llm_repair(run, step, {})
         assert result["success"] is True
@@ -376,11 +355,7 @@ class TestRequestLlmRepair:
             "app.application.agent_orchestrator.repair_advisor._run_async",
             return_value={
                 "choices": [
-                    {
-                        "message": {
-                            "content": "```json\n{\"params_patch\": {\"q\": \"fenced\"}}\n```"
-                        }
-                    }
+                    {"message": {"content": '```json\n{"params_patch": {"q": "fenced"}}\n```'}}
                 ]
             },
         ):
@@ -394,13 +369,7 @@ class TestRequestLlmRepair:
         with patch(
             "app.application.agent_orchestrator.repair_advisor._run_async",
             return_value={
-                "choices": [
-                    {
-                        "message": {
-                            "content": "```\n{\"params_patch\": {\"q\": \"plain\"}}\n```"
-                        }
-                    }
-                ]
+                "choices": [{"message": {"content": '```\n{"params_patch": {"q": "plain"}}\n```'}}]
             },
         ):
             result = request_llm_repair(run, step, {})
@@ -539,13 +508,13 @@ class TestExtractJsonObject:
         assert _extract_json_object('```\n{"a": 1}\n```') == {"a": 1}
 
     def test_code_fence_with_invalid_json(self) -> None:
-        assert _extract_json_object('```json\nnot json\n```') is None
+        assert _extract_json_object("```json\nnot json\n```") is None
 
     def test_substring_extraction(self) -> None:
         assert _extract_json_object('prefix {"a": 1} suffix') == {"a": 1}
 
     def test_substring_invalid_json_returns_none(self) -> None:
-        assert _extract_json_object('prefix {not json} suffix') is None
+        assert _extract_json_object("prefix {not json} suffix") is None
 
     def test_no_braces_in_text(self) -> None:
         assert _extract_json_object("just text") is None
@@ -584,9 +553,7 @@ class TestExtractParamsPatch:
         assert _extract_params_patch({"params_patch": "not-a-dict"}) == {}
 
     def test_priority_params_patch_first(self) -> None:
-        result = _extract_params_patch(
-            {"params_patch": {"first": 1}, "params": {"second": 2}}
-        )
+        result = _extract_params_patch({"params_patch": {"first": 1}, "params": {"second": 2}})
         assert result == {"first": 1}
 
     def test_returns_copy(self) -> None:

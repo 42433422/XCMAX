@@ -38,7 +38,6 @@ from app.application.ai_chat_app_service import (
     _skip_pro_excel_deterministic_import,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -168,9 +167,7 @@ class TestInjectExcelVectorContextEdge:
     def test_excel_vector_index_id_alias_used(self):
         svc = _make_svc()
         ctx = {"excel_vector_index_id": "idx-123"}
-        with patch(
-            "app.application.get_excel_vector_search_app_service"
-        ) as mock_get:
+        with patch("app.application.get_excel_vector_search_app_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.query.return_value = {
                 "success": True,
@@ -185,9 +182,7 @@ class TestInjectExcelVectorContextEdge:
     def test_top_k_invalid_falls_back_to_5(self):
         svc = _make_svc()
         ctx = {"excel_index_id": "idx-1", "excel_top_k": "not-a-number"}
-        with patch(
-            "app.application.get_excel_vector_search_app_service"
-        ) as mock_get:
+        with patch("app.application.get_excel_vector_search_app_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.query.return_value = {"success": True, "hits": []}
             mock_get.return_value = mock_svc
@@ -198,9 +193,7 @@ class TestInjectExcelVectorContextEdge:
     def test_query_returns_success_false_returns_context(self):
         svc = _make_svc()
         ctx = {"excel_index_id": "idx-1"}
-        with patch(
-            "app.application.get_excel_vector_search_app_service"
-        ) as mock_get:
+        with patch("app.application.get_excel_vector_search_app_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.query.return_value = {"success": False, "hits": []}
             mock_get.return_value = mock_svc
@@ -211,9 +204,7 @@ class TestInjectExcelVectorContextEdge:
     def test_query_raises_exception_returns_context(self):
         svc = _make_svc()
         ctx = {"excel_index_id": "idx-1"}
-        with patch(
-            "app.application.get_excel_vector_search_app_service"
-        ) as mock_get:
+        with patch("app.application.get_excel_vector_search_app_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.query.side_effect = RuntimeError("search failed")
             mock_get.return_value = mock_svc
@@ -254,10 +245,16 @@ class TestExcelAnalysisPayloadPresentEdge:
         assert AIChatApplicationService._excel_analysis_payload_present("not dict") is False  # type: ignore[arg-type]
 
     def test_excel_analysis_not_dict_returns_false(self):
-        assert AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": "x"}) is False
+        assert (
+            AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": "x"})
+            is False
+        )
 
     def test_excel_analysis_empty_returns_false(self):
-        assert AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": {}}) is False
+        assert (
+            AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": {}})
+            is False
+        )
 
     def test_summary_present_returns_true(self):
         assert (
@@ -594,7 +591,9 @@ class TestTryHandleDynamicWorkflowEdge:
                 "file_name": "test.xlsx",
             }
         }
-        records = [{"unit_name": "ACME", "product_name": "P1", "model_number": "M1", "unit_price": 10.0}]
+        records = [
+            {"unit_name": "ACME", "product_name": "P1", "model_number": "M1", "unit_price": 10.0}
+        ]
         with (
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._extract_excel_import_records",
@@ -839,7 +838,9 @@ class TestExecuteCustomersIntentEdge:
     def test_query_intent_calls_customers_query(self):
         svc = _make_svc()
         response_data = {"data": {}}
-        with patch.object(svc, "_execute_customers_query", return_value={"response": "queried"}) as mock_q:
+        with patch.object(
+            svc, "_execute_customers_query", return_value={"response": "queried"}
+        ) as mock_q:
             result = svc._execute_customers_intent(
                 response_data=response_data,
                 slots={},
@@ -1227,7 +1228,9 @@ class TestFormatWorkflowToolSuccessLineEdge:
             action="create",
             output={"message": "created"},
         )
-        result = svc._format_workflow_tool_success_line(item, {"entity": "order", "operation": "create"})
+        result = svc._format_workflow_tool_success_line(
+            item, {"entity": "order", "operation": "create"}
+        )
         assert "order" in result[0]
         assert "create" in result[0]
         assert "created" in result[0]
@@ -1434,9 +1437,7 @@ class TestExecuteProductsQueryEdge:
                 {"model_number": "M1", "unit_name": "ACME"},
                 {},
             )
-        mock_svc.get_products.assert_called_once_with(
-            model_number="M1", unit_name="ACME"
-        )
+        mock_svc.get_products.assert_called_once_with(model_number="M1", unit_name="ACME")
         assert "查询到 1" in result["response"]
 
     def test_model_number_only(self):
@@ -1743,7 +1744,15 @@ class TestExtractExcelImportRecordsEdge:
             ),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=({"unit_name": "", "product_name": "产品", "model_number": "型号", "unit_price": "单价"}, 0.9),
+                return_value=(
+                    {
+                        "unit_name": "",
+                        "product_name": "产品",
+                        "model_number": "型号",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
             ),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
@@ -1754,7 +1763,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="默认单位",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
         assert len(records) >= 1
 
@@ -1777,7 +1788,15 @@ class TestExtractExcelImportRecordsEdge:
             ),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=({"unit_name": "", "product_name": "产品", "model_number": "型号", "unit_price": ""}, 0.9),
+                return_value=(
+                    {
+                        "unit_name": "",
+                        "product_name": "产品",
+                        "model_number": "型号",
+                        "unit_price": "",
+                    },
+                    0.9,
+                ),
             ),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
@@ -1788,7 +1807,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="默认单位",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
         assert len(records) >= 1
 
@@ -1810,7 +1831,15 @@ class TestExtractExcelImportRecordsEdge:
             ),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=({"unit_name": "", "product_name": "产品", "model_number": "型号", "unit_price": "单价"}, 0.9),
+                return_value=(
+                    {
+                        "unit_name": "",
+                        "product_name": "产品",
+                        "model_number": "型号",
+                        "unit_price": "单价",
+                    },
+                    0.9,
+                ),
             ),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
@@ -1821,7 +1850,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="默认单位",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
         assert len(records) >= 1
         # After promotion, keys should be the header values
@@ -1843,7 +1874,10 @@ class TestExtractExcelImportRecordsEdge:
             ),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=({"unit_name": "", "product_name": "", "model_number": "", "unit_price": ""}, 0.3),
+                return_value=(
+                    {"unit_name": "", "product_name": "", "model_number": "", "unit_price": ""},
+                    0.3,
+                ),
             ),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
@@ -1854,7 +1888,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
 
     def test_ambiguous_price_columns_returns_error(self):
@@ -1911,7 +1947,12 @@ class TestExtractExcelImportRecordsEdge:
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
                 return_value=(
-                    {"unit_name": "col1", "product_name": "col1", "model_number": "", "unit_price": "col2"},
+                    {
+                        "unit_name": "col1",
+                        "product_name": "col1",
+                        "model_number": "",
+                        "unit_price": "col2",
+                    },
                     0.9,
                 ),
             ),
@@ -1924,7 +1965,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="ACME",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
         # unit_key cleared due to conflict, default_unit applied
         if records:
@@ -1949,7 +1992,12 @@ class TestExtractExcelImportRecordsEdge:
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
                 return_value=(
-                    {"unit_name": "unit", "product_name": "product", "model_number": "", "unit_price": "price"},
+                    {
+                        "unit_name": "unit",
+                        "product_name": "product",
+                        "model_number": "",
+                        "unit_price": "price",
+                    },
                     0.9,
                 ),
             ),
@@ -1962,7 +2010,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="ACME",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
         if records:
             assert records[0]["unit_name"] == "ACME"
@@ -1986,7 +2036,12 @@ class TestExtractExcelImportRecordsEdge:
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
                 return_value=(
-                    {"unit_name": "unit", "product_name": "product", "model_number": "", "unit_price": "price"},
+                    {
+                        "unit_name": "unit",
+                        "product_name": "product",
+                        "model_number": "",
+                        "unit_price": "price",
+                    },
                     0.9,
                 ),
             ),
@@ -1999,7 +2054,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
         # Duplicates removed
         assert len(records) == 2
@@ -2021,7 +2078,12 @@ class TestExtractExcelImportRecordsEdge:
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
                 return_value=(
-                    {"unit_name": "unit", "product_name": "product", "model_number": "", "unit_price": "price"},
+                    {
+                        "unit_name": "unit",
+                        "product_name": "product",
+                        "model_number": "",
+                        "unit_price": "price",
+                    },
                     0.9,
                 ),
             ),
@@ -2034,7 +2096,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
         if records:
             assert records[0]["unit_price"] == 0.0
@@ -2054,7 +2118,12 @@ class TestExtractExcelImportRecordsEdge:
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
                 return_value=(
-                    {"unit_name": "unit", "product_name": "product", "model_number": "", "unit_price": "price"},
+                    {
+                        "unit_name": "unit",
+                        "product_name": "product",
+                        "model_number": "",
+                        "unit_price": "price",
+                    },
                     0.9,
                 ),
             ),
@@ -2067,7 +2136,9 @@ class TestExtractExcelImportRecordsEdge:
                 return_value="",
             ),
         ):
-            records, err = svc._extract_excel_import_records(excel_analysis, None, user_message="导入")
+            records, err = svc._extract_excel_import_records(
+                excel_analysis, None, user_message="导入"
+            )
         assert err is None
         assert len(records) == 2
 
@@ -2123,6 +2194,8 @@ class TestBuildResponseEdge:
         response_data = {"data": {}}
         ai_result = {"text": "resp"}
         result_data = {"tool_key": "shipment_generate", "params": {}}
-        with patch.object(svc, "_execute_normal_mode_tools", return_value={"normal": True}) as mock_normal:
+        with patch.object(
+            svc, "_execute_normal_mode_tools", return_value={"normal": True}
+        ) as mock_normal:
             result = svc._handle_tool_call(response_data, ai_result, result_data, None, "msg")
         mock_normal.assert_called_once()

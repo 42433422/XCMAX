@@ -34,7 +34,6 @@ from app.infrastructure.lookups.purchase_unit_resolver import (
     resolve_purchase_unit,
 )
 
-
 # ---------------------------------------------------------------------------
 # _to_pinyin — branch coverage
 # ---------------------------------------------------------------------------
@@ -423,8 +422,7 @@ class TestResolvePurchaseUnitBranches:
         customer = _make_customer(id=42, unit_name="北京公司")
         fake_pinyin = MagicMock(
             side_effect=lambda name, style=None: (
-                [["bei"], ["jing"], ["gong"], ["si"]] if name == "北京公司"
-                else [["bei"], ["jing"]]
+                [["bei"], ["jing"], ["gong"], ["si"]] if name == "北京公司" else [["bei"], ["jing"]]
             )
         )
         fake_style = MagicMock()
@@ -452,14 +450,13 @@ class TestResolvePurchaseUnitBranches:
         customer = _make_customer(id=33, unit_name="北京")
         fake_pinyin = MagicMock(
             side_effect=lambda name, style=None: (
-                [["b"], ["j"]] if style is not None and hasattr(style, "_first_letter_flag")
+                [["b"], ["j"]]
+                if style is not None and hasattr(style, "_first_letter_flag")
                 else [["bei"], ["jing"]]
             )
         )
         # Simpler: just make pinyin return same parts for both
-        fake_pinyin_simple = MagicMock(
-            return_value=[["bei"], ["jing"]]
-        )
+        fake_pinyin_simple = MagicMock(return_value=[["bei"], ["jing"]])
         fake_style = MagicMock()
         with (
             patch.object(pur_mod, "_HAS_PYPINYIN", True),

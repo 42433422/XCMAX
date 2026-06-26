@@ -106,9 +106,7 @@ class TestGetState:
         assert state["is_followed"] is False
         assert state["unread_count"] == 3
 
-    def test_new_row_created_when_missing(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_new_row_created_when_missing(self, service: ConversationStateService) -> None:
         state = service.get_state(user_id=7, conversation_id="conv-new")
         assert state["user_id"] == 7
         assert state["conversation_id"] == "conv-new"
@@ -130,9 +128,7 @@ class TestGetState:
         state = service.get_state(user_id=9, conversation_id="c")
         assert state["user_id"] == 9
 
-    def test_conversation_id_coerced_to_str(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_conversation_id_coerced_to_str(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
             _safe_json_line({"user_id": 1, "conversation_id": 123}),
             encoding="utf-8",
@@ -163,9 +159,7 @@ class TestGetAllStates:
         states = service.get_all_states(user_id=1)
         assert {s["conversation_id"] for s in states} == {"a", "c"}
 
-    def test_returns_empty_for_unknown_user(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_returns_empty_for_unknown_user(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
             _safe_json_line({"user_id": 1, "conversation_id": "a"}),
             encoding="utf-8",
@@ -174,9 +168,7 @@ class TestGetAllStates:
 
 
 class TestTogglePinned:
-    def test_toggle_from_false_to_true(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_toggle_from_false_to_true(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
             _safe_json_line(
                 {
@@ -193,9 +185,7 @@ class TestTogglePinned:
         out = service.toggle_pinned(user_id=1, conversation_id="c")
         assert out["is_pinned"] is True
 
-    def test_toggle_from_true_to_false(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_toggle_from_true_to_false(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
             _safe_json_line(
                 {
@@ -209,9 +199,7 @@ class TestTogglePinned:
         out = service.toggle_pinned(user_id=1, conversation_id="c")
         assert out["is_pinned"] is False
 
-    def test_toggle_creates_row_when_missing(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_toggle_creates_row_when_missing(self, service: ConversationStateService) -> None:
         out = service.toggle_pinned(user_id=2, conversation_id="new")
         assert out["is_pinned"] is True  # default False → toggled to True
 
@@ -233,9 +221,7 @@ class TestMarkUnread:
         out = service.mark_unread(user_id=1, conversation_id="c")
         assert out["unread_count"] == 6
 
-    def test_missing_unread_count_treated_as_zero(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_missing_unread_count_treated_as_zero(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
             _safe_json_line({"user_id": 1, "conversation_id": "c"}),
             encoding="utf-8",
@@ -243,9 +229,7 @@ class TestMarkUnread:
         out = service.mark_unread(user_id=1, conversation_id="c")
         assert out["unread_count"] == 1
 
-    def test_creates_row_when_missing(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_creates_row_when_missing(self, service: ConversationStateService) -> None:
         out = service.mark_unread(user_id=3, conversation_id="new")
         assert out["unread_count"] == 1
 
@@ -259,33 +243,23 @@ class TestMarkRead:
         out = service.mark_read(user_id=1, conversation_id="c")
         assert out["unread_count"] == 0
 
-    def test_creates_row_when_missing(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_creates_row_when_missing(self, service: ConversationStateService) -> None:
         out = service.mark_read(user_id=4, conversation_id="new")
         assert out["unread_count"] == 0
 
 
 class TestToggleFollowed:
-    def test_toggle_from_true_to_false(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_toggle_from_true_to_false(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
-            _safe_json_line(
-                {"user_id": 1, "conversation_id": "c", "is_followed": True}
-            ),
+            _safe_json_line({"user_id": 1, "conversation_id": "c", "is_followed": True}),
             encoding="utf-8",
         )
         out = service.toggle_followed(user_id=1, conversation_id="c")
         assert out["is_followed"] is False
 
-    def test_toggle_from_false_to_true(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_toggle_from_false_to_true(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
-            _safe_json_line(
-                {"user_id": 1, "conversation_id": "c", "is_followed": False}
-            ),
+            _safe_json_line({"user_id": 1, "conversation_id": "c", "is_followed": False}),
             encoding="utf-8",
         )
         out = service.toggle_followed(user_id=1, conversation_id="c")
@@ -304,33 +278,23 @@ class TestToggleFollowed:
 
 
 class TestToggleHidden:
-    def test_toggle_from_false_to_true(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_toggle_from_false_to_true(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
-            _safe_json_line(
-                {"user_id": 1, "conversation_id": "c", "is_hidden": False}
-            ),
+            _safe_json_line({"user_id": 1, "conversation_id": "c", "is_hidden": False}),
             encoding="utf-8",
         )
         out = service.toggle_hidden(user_id=1, conversation_id="c")
         assert out["is_hidden"] is True
 
-    def test_toggle_from_true_to_false(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_toggle_from_true_to_false(self, service: ConversationStateService) -> None:
         service._state_path.write_text(
-            _safe_json_line(
-                {"user_id": 1, "conversation_id": "c", "is_hidden": True}
-            ),
+            _safe_json_line({"user_id": 1, "conversation_id": "c", "is_hidden": True}),
             encoding="utf-8",
         )
         out = service.toggle_hidden(user_id=1, conversation_id="c")
         assert out["is_hidden"] is False
 
-    def test_creates_row_when_missing(
-        self, service: ConversationStateService
-    ) -> None:
+    def test_creates_row_when_missing(self, service: ConversationStateService) -> None:
         out = service.toggle_hidden(user_id=5, conversation_id="new")
         assert out["is_hidden"] is True  # default False → toggled True
 

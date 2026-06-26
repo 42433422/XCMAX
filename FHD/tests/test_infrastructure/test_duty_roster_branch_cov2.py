@@ -78,31 +78,35 @@ class TestLoadDutyRosterDocument:
             assert doc == {"schema_version": 1, "areas": {}}
 
     def test_returns_default_when_doc_empty(self) -> None:
-        with patch("app.mod_sdk.duty_roster.resolve_fhd_config_dir", return_value=Path("/x")), patch(
-            "app.mod_sdk.duty_roster._read_json", return_value=None
+        with (
+            patch("app.mod_sdk.duty_roster.resolve_fhd_config_dir", return_value=Path("/x")),
+            patch("app.mod_sdk.duty_roster._read_json", return_value=None),
         ):
             doc = duty_roster.load_duty_roster_document()
             assert doc == {"schema_version": 1, "areas": {}}
 
     def test_returns_default_when_doc_no_areas_no_departments(self) -> None:
-        with patch("app.mod_sdk.duty_roster.resolve_fhd_config_dir", return_value=Path("/x")), patch(
-            "app.mod_sdk.duty_roster._read_json", return_value={"schema_version": 2}
+        with (
+            patch("app.mod_sdk.duty_roster.resolve_fhd_config_dir", return_value=Path("/x")),
+            patch("app.mod_sdk.duty_roster._read_json", return_value={"schema_version": 2}),
         ):
             doc = duty_roster.load_duty_roster_document()
             assert doc == {"schema_version": 1, "areas": {}}
 
     def test_returns_doc_when_areas_present(self) -> None:
         fake_doc = {"areas": {"a": {"ids": ["1"]}}, "departments": {}}
-        with patch("app.mod_sdk.duty_roster.resolve_fhd_config_dir", return_value=Path("/x")), patch(
-            "app.mod_sdk.duty_roster._read_json", return_value=fake_doc
+        with (
+            patch("app.mod_sdk.duty_roster.resolve_fhd_config_dir", return_value=Path("/x")),
+            patch("app.mod_sdk.duty_roster._read_json", return_value=fake_doc),
         ):
             doc = duty_roster.load_duty_roster_document()
             assert doc == fake_doc
 
     def test_returns_doc_when_departments_present(self) -> None:
         fake_doc = {"departments": {"d": {"ids": ["1"]}}}
-        with patch("app.mod_sdk.duty_roster.resolve_fhd_config_dir", return_value=Path("/x")), patch(
-            "app.mod_sdk.duty_roster._read_json", return_value=fake_doc
+        with (
+            patch("app.mod_sdk.duty_roster.resolve_fhd_config_dir", return_value=Path("/x")),
+            patch("app.mod_sdk.duty_roster._read_json", return_value=fake_doc),
         ):
             doc = duty_roster.load_duty_roster_document()
             assert doc == fake_doc
@@ -247,33 +251,25 @@ class TestLoadDutyEmployeeRecords:
     def test_returns_empty_when_json_invalid(self, tmp_path: Path) -> None:
         bad = tmp_path / "registry.json"
         bad.write_text("not json {")
-        with patch(
-            "app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[bad]
-        ):
+        with patch("app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[bad]):
             assert duty_roster.load_duty_employee_records() == []
 
     def test_returns_empty_when_raw_not_dict(self, tmp_path: Path) -> None:
         f = tmp_path / "registry.json"
         f.write_text(json.dumps(["not a dict"]))
-        with patch(
-            "app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f]
-        ):
+        with patch("app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f]):
             assert duty_roster.load_duty_employee_records() == []
 
     def test_returns_empty_when_packages_not_list(self, tmp_path: Path) -> None:
         f = tmp_path / "registry.json"
         f.write_text(json.dumps({"packages": "not a list"}))
-        with patch(
-            "app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f]
-        ):
+        with patch("app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f]):
             assert duty_roster.load_duty_employee_records() == []
 
     def test_filters_non_dict_packages(self, tmp_path: Path) -> None:
         f = tmp_path / "registry.json"
         f.write_text(json.dumps({"packages": [{"id": 1}, "skip me", {"id": 2}]}))
-        with patch(
-            "app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f]
-        ):
+        with patch("app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f]):
             records = duty_roster.load_duty_employee_records()
             assert len(records) == 2
             assert records[0] == {"id": 1}
@@ -283,18 +279,17 @@ class TestLoadDutyEmployeeRecords:
         f2 = tmp_path / "r2.json"
         f1.write_text("invalid json")
         f2.write_text(json.dumps({"packages": [{"id": 99}]}))
-        with patch(
-            "app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f1, f2]
-        ):
+        with patch("app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f1, f2]):
             records = duty_roster.load_duty_employee_records()
             assert records == [{"id": 99}]
 
     def test_handles_os_error(self, tmp_path: Path) -> None:
         f = tmp_path / "registry.json"
         f.write_text(json.dumps({"packages": []}))
-        with patch(
-            "app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f]
-        ), patch("pathlib.Path.is_file", side_effect=OSError("boom")):
+        with (
+            patch("app.mod_sdk.duty_roster._candidate_duty_registry_paths", return_value=[f]),
+            patch("pathlib.Path.is_file", side_effect=OSError("boom")),
+        ):
             assert duty_roster.load_duty_employee_records() == []
 
 

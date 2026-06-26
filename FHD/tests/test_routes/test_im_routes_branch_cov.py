@@ -35,7 +35,6 @@ from app.fastapi_routes.im_routes import (
     router,
 )
 
-
 # ---------------------------------------------------------------------------
 # autouse fixture: reset schema state
 # ---------------------------------------------------------------------------
@@ -680,7 +679,9 @@ class TestSendMessage:
             patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
             patch("app.fastapi_routes.im_routes.ImApplicationService") as mock_svc_cls,
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
-            patch("app.fastapi_routes.im_routes._notify_offline_im_members", new_callable=AsyncMock),
+            patch(
+                "app.fastapi_routes.im_routes._notify_offline_im_members", new_callable=AsyncMock
+            ),
         ):
             mock_db = MagicMock()
             mock_db_cls.return_value = mock_db
@@ -1627,9 +1628,7 @@ class TestAiGroupsRoutes:
 class TestImWebSocket:
     def test_unauthorized_ws_closes(self, client: TestClient) -> None:
         with (
-            patch(
-                "app.fastapi_routes.im_routes._resolve_ws_user_id", return_value=None
-            ),
+            patch("app.fastapi_routes.im_routes._resolve_ws_user_id", return_value=None),
             patch("app.fastapi_routes.im_routes._ensure_schema"),
         ):
             try:
@@ -1641,9 +1640,7 @@ class TestImWebSocket:
 
     def test_ping_pong(self, client: TestClient) -> None:
         with (
-            patch(
-                "app.fastapi_routes.im_routes._resolve_ws_user_id", return_value=1
-            ),
+            patch("app.fastapi_routes.im_routes._resolve_ws_user_id", return_value=1),
             patch("app.fastapi_routes.im_routes._ensure_schema"),
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
         ):
@@ -1659,9 +1656,7 @@ class TestImWebSocket:
 
     def test_ping_json_pong(self, client: TestClient) -> None:
         with (
-            patch(
-                "app.fastapi_routes.im_routes._resolve_ws_user_id", return_value=1
-            ),
+            patch("app.fastapi_routes.im_routes._resolve_ws_user_id", return_value=1),
             patch("app.fastapi_routes.im_routes._ensure_schema"),
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
         ):

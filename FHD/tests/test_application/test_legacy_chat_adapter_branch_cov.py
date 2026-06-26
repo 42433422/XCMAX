@@ -45,7 +45,6 @@ from app.legacy.chat.legacy_chat_adapter import (
     reset_planner_tool_dedup_state,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -563,7 +562,9 @@ class TestAppendToolMessagesExtraEdge:
         execute_tool = MagicMock(return_value='{"success": true}')
         tcs = [_Tc("tc1", "custom_tool", "[1,2,3]")]
         messages: list = []
-        result = append_tool_messages(messages, tcs, workspace_root="/tmp", execute_tool=execute_tool)
+        result = append_tool_messages(
+            messages, tcs, workspace_root="/tmp", execute_tool=execute_tool
+        )
         assert result is None
         assert len(messages) == 1
 
@@ -624,7 +625,9 @@ class TestChatExtraEdge:
             "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
             return_value=[],
         ):
-            result = chat("hi", system_prompt="You are helpful", client=mock_client, model="test-model")
+            result = chat(
+                "hi", system_prompt="You are helpful", client=mock_client, model="test-model"
+            )
         assert isinstance(result, dict)
         assert result["text"] == "Hello!"
 
@@ -974,9 +977,7 @@ class TestChatStreamTextExtraEdge:
             ),
         ):
             parts = list(
-                chat_stream_text(
-                    "import", client=mock_client, model="test-model", max_iterations=1
-                )
+                chat_stream_text("import", client=mock_client, model="test-model", max_iterations=1)
             )
         text_parts = [p for p in parts if isinstance(p, str)]
         # 应该包含 slow tool wait message

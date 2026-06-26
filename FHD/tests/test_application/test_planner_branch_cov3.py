@@ -48,7 +48,6 @@ from app.application.workflow.planner import (
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -188,9 +187,7 @@ class TestExecutePriceListTool:
             "app.application.workflow.planner.ensure_fhd_repo_on_syspath",
             return_value=None,
         ):
-            with patch.dict(
-                "sys.modules", {"app.application.tools": None}
-            ):
+            with patch.dict("sys.modules", {"app.application.tools": None}):
                 result = _execute_price_list_tool({"customer_name": "ABC"})
                 assert result["success"] is False
                 assert result["error_code"] == "service_unavailable"
@@ -290,9 +287,7 @@ class TestExecuteProductsTool:
         mock_svc = MagicMock()
         mock_svc.get_products.return_value = {"success": True, "data": []}
         with patch("app.bootstrap.get_products_service", return_value=mock_svc):
-            result = _execute_products_tool(
-                {"model_number": "M8", "unit_name": "ABC公司"}
-            )
+            result = _execute_products_tool({"model_number": "M8", "unit_name": "ABC公司"})
             assert result["success"] is True
             call_kwargs = mock_svc.get_products.call_args.kwargs
             assert call_kwargs["unit_name"] == "ABC公司"
@@ -415,33 +410,25 @@ class TestExecuteCustomersTool:
             assert call_kwargs["keyword"] is None
 
     def test_import_error_returns_service_unavailable(self) -> None:
-        with patch(
-            "app.bootstrap.get_customer_app_service", side_effect=ImportError("no module")
-        ):
+        with patch("app.bootstrap.get_customer_app_service", side_effect=ImportError("no module")):
             result = _execute_customers_tool({"keyword": "x"})
             assert result["success"] is False
             assert result["error_code"] == "service_unavailable"
 
     def test_value_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_customer_app_service", side_effect=ValueError("bad")
-        ):
+        with patch("app.bootstrap.get_customer_app_service", side_effect=ValueError("bad")):
             result = _execute_customers_tool({"keyword": "x"})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_type_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_customer_app_service", side_effect=TypeError("bad")
-        ):
+        with patch("app.bootstrap.get_customer_app_service", side_effect=TypeError("bad")):
             result = _execute_customers_tool({"keyword": "x"})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_runtime_error_returns_query_failed(self) -> None:
-        with patch(
-            "app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")
-        ):
+        with patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")):
             result = _execute_customers_tool({"keyword": "x"})
             assert result["success"] is False
             assert result["error_code"] == "query_failed"
@@ -541,36 +528,28 @@ class TestExecuteCustomersEnsureExistsTool:
             assert result["created"] is False
 
     def test_import_error_returns_service_unavailable(self) -> None:
-        with patch(
-            "app.bootstrap.get_customer_app_service", side_effect=ImportError("no module")
-        ):
+        with patch("app.bootstrap.get_customer_app_service", side_effect=ImportError("no module")):
             result = _execute_customers_ensure_exists_tool({"unit_name": "ABC"})
             assert result["success"] is False
             assert result["error_code"] == "service_unavailable"
             assert result["created"] is False
 
     def test_value_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_customer_app_service", side_effect=ValueError("bad")
-        ):
+        with patch("app.bootstrap.get_customer_app_service", side_effect=ValueError("bad")):
             result = _execute_customers_ensure_exists_tool({"unit_name": "ABC"})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
             assert result["created"] is False
 
     def test_type_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_customer_app_service", side_effect=TypeError("bad")
-        ):
+        with patch("app.bootstrap.get_customer_app_service", side_effect=TypeError("bad")):
             result = _execute_customers_ensure_exists_tool({"unit_name": "ABC"})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
             assert result["created"] is False
 
     def test_runtime_error_returns_create_failed(self) -> None:
-        with patch(
-            "app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")
-        ):
+        with patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")):
             result = _execute_customers_ensure_exists_tool({"unit_name": "ABC"})
             assert result["success"] is False
             assert result["error_code"] == "create_failed"
@@ -615,9 +594,7 @@ class TestExecuteShipmentGenerateTool:
             "app.application.facades.tools_facade._parse_order_text",
             return_value={"success": True, "unit_name": "U", "products": []},
         ):
-            with patch(
-                "app.bootstrap.get_shipment_app_service"
-            ) as mock_get_svc:
+            with patch("app.bootstrap.get_shipment_app_service") as mock_get_svc:
                 mock_svc = MagicMock()
                 mock_svc.generate_shipment_document.return_value = {"success": True}
                 mock_get_svc.return_value = mock_svc
@@ -628,9 +605,7 @@ class TestExecuteShipmentGenerateTool:
 
     def test_unit_name_with_products_no_order_text(self) -> None:
         """unit_name + products（非空 list）且无 order_text 时走直接构造。"""
-        with patch(
-            "app.bootstrap.get_shipment_app_service"
-        ) as mock_get_svc:
+        with patch("app.bootstrap.get_shipment_app_service") as mock_get_svc:
             mock_svc = MagicMock()
             mock_svc.generate_shipment_document.return_value = {"success": True}
             mock_get_svc.return_value = mock_svc
@@ -665,9 +640,7 @@ class TestExecuteShipmentGenerateTool:
             "app.application.facades.tools_facade._parse_order_text",
             return_value={"success": True, "unit_name": "U", "products": [{"name": "P1"}]},
         ):
-            with patch(
-                "app.bootstrap.get_shipment_app_service"
-            ) as mock_get_svc:
+            with patch("app.bootstrap.get_shipment_app_service") as mock_get_svc:
                 mock_svc = MagicMock()
                 mock_svc.generate_shipment_document.return_value = {"success": True, "doc_id": 1}
                 mock_get_svc.return_value = mock_svc
@@ -688,9 +661,7 @@ class TestExecuteShipmentGenerateTool:
 
     def test_raw_text_fallback_when_no_order_text(self) -> None:
         """无 order_text 时 raw_text 从 params.raw_text 取。"""
-        with patch(
-            "app.bootstrap.get_shipment_app_service"
-        ) as mock_get_svc:
+        with patch("app.bootstrap.get_shipment_app_service") as mock_get_svc:
             mock_svc = MagicMock()
             mock_svc.generate_shipment_document.return_value = {"success": True}
             mock_get_svc.return_value = mock_svc
@@ -792,33 +763,25 @@ class TestExecuteShipmentRecordsTool:
             mock_svc.get_shipment_records.assert_called_once_with(unit_name=None, limit=10)
 
     def test_import_error_returns_service_unavailable(self) -> None:
-        with patch(
-            "app.bootstrap.get_shipment_app_service", side_effect=ImportError("no module")
-        ):
+        with patch("app.bootstrap.get_shipment_app_service", side_effect=ImportError("no module")):
             result = _execute_shipment_records_tool({})
             assert result["success"] is False
             assert result["error_code"] == "service_unavailable"
 
     def test_value_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_shipment_app_service", side_effect=ValueError("bad")
-        ):
+        with patch("app.bootstrap.get_shipment_app_service", side_effect=ValueError("bad")):
             result = _execute_shipment_records_tool({})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_type_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_shipment_app_service", side_effect=TypeError("bad")
-        ):
+        with patch("app.bootstrap.get_shipment_app_service", side_effect=TypeError("bad")):
             result = _execute_shipment_records_tool({})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_runtime_error_returns_query_failed(self) -> None:
-        with patch(
-            "app.bootstrap.get_shipment_app_service", side_effect=RuntimeError("fail")
-        ):
+        with patch("app.bootstrap.get_shipment_app_service", side_effect=RuntimeError("fail")):
             result = _execute_shipment_records_tool({})
             assert result["success"] is False
             assert result["error_code"] == "query_failed"
@@ -866,33 +829,25 @@ class TestExecuteMaterialsTool:
             assert call_kwargs["search"] is None
 
     def test_import_error_returns_service_unavailable(self) -> None:
-        with patch(
-            "app.bootstrap.get_materials_service", side_effect=ImportError("no module")
-        ):
+        with patch("app.bootstrap.get_materials_service", side_effect=ImportError("no module")):
             result = _execute_materials_tool({})
             assert result["success"] is False
             assert result["error_code"] == "service_unavailable"
 
     def test_value_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_materials_service", side_effect=ValueError("bad")
-        ):
+        with patch("app.bootstrap.get_materials_service", side_effect=ValueError("bad")):
             result = _execute_materials_tool({})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_type_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_materials_service", side_effect=TypeError("bad")
-        ):
+        with patch("app.bootstrap.get_materials_service", side_effect=TypeError("bad")):
             result = _execute_materials_tool({})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_runtime_error_returns_query_failed(self) -> None:
-        with patch(
-            "app.bootstrap.get_materials_service", side_effect=RuntimeError("fail")
-        ):
+        with patch("app.bootstrap.get_materials_service", side_effect=RuntimeError("fail")):
             result = _execute_materials_tool({})
             assert result["success"] is False
             assert result["error_code"] == "query_failed"
@@ -952,9 +907,7 @@ class TestExecutePrintLabelTool:
                 return_value="/tmp/labels",
             ):
                 with patch("os.makedirs"):
-                    _execute_print_label_tool(
-                        {"products": [{"name": "P1"}], "doc_name": "DOC001"}
-                    )
+                    _execute_print_label_tool({"products": [{"name": "P1"}], "doc_name": "DOC001"})
                     mock_gen.generate_labels_for_order.assert_called_once_with(
                         order_number="DOC001", products=[{"name": "P1"}]
                     )
@@ -1056,9 +1009,7 @@ class TestExecuteExcelDecomposeTool:
         mock_svc = MagicMock()
         mock_svc.decompose_template.return_value = {"success": True}
         with patch("app.bootstrap.get_template_app_service", return_value=mock_svc):
-            _execute_excel_decompose_tool(
-                {"file_path": "/tmp/t.xlsx", "scope": "shipment"}
-            )
+            _execute_excel_decompose_tool({"file_path": "/tmp/t.xlsx", "scope": "shipment"})
             mock_svc.decompose_template.assert_called_once_with("/tmp/t.xlsx", "shipment")
 
     def test_no_template_type_passes_none(self) -> None:
@@ -1069,41 +1020,31 @@ class TestExecuteExcelDecomposeTool:
             mock_svc.decompose_template.assert_called_once_with("/tmp/t.xlsx", None)
 
     def test_import_error_returns_service_unavailable(self) -> None:
-        with patch(
-            "app.bootstrap.get_template_app_service", side_effect=ImportError("no module")
-        ):
+        with patch("app.bootstrap.get_template_app_service", side_effect=ImportError("no module")):
             result = _execute_excel_decompose_tool({"file_path": "/tmp/t.xlsx"})
             assert result["success"] is False
             assert result["error_code"] == "service_unavailable"
 
     def test_value_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_template_app_service", side_effect=ValueError("bad")
-        ):
+        with patch("app.bootstrap.get_template_app_service", side_effect=ValueError("bad")):
             result = _execute_excel_decompose_tool({"file_path": "/tmp/t.xlsx"})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_type_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_template_app_service", side_effect=TypeError("bad")
-        ):
+        with patch("app.bootstrap.get_template_app_service", side_effect=TypeError("bad")):
             result = _execute_excel_decompose_tool({"file_path": "/tmp/t.xlsx"})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_oserror_returns_file_not_found(self) -> None:
-        with patch(
-            "app.bootstrap.get_template_app_service", side_effect=OSError("not found")
-        ):
+        with patch("app.bootstrap.get_template_app_service", side_effect=OSError("not found")):
             result = _execute_excel_decompose_tool({"file_path": "/tmp/t.xlsx"})
             assert result["success"] is False
             assert result["error_code"] == "file_not_found"
 
     def test_runtime_error_returns_decomposition_failed(self) -> None:
-        with patch(
-            "app.bootstrap.get_template_app_service", side_effect=RuntimeError("fail")
-        ):
+        with patch("app.bootstrap.get_template_app_service", side_effect=RuntimeError("fail")):
             result = _execute_excel_decompose_tool({"file_path": "/tmp/t.xlsx"})
             assert result["success"] is False
             assert result["error_code"] == "decomposition_failed"
@@ -1132,9 +1073,7 @@ class TestExecuteTemplateExtractTool:
             "app.application.workflow.planner._execute_excel_decompose_tool",
             return_value={"success": True},
         ) as mock_decompose:
-            _execute_template_extract_tool(
-                {"file_path": "/tmp/t.xlsx", "template_type": "order"}
-            )
+            _execute_template_extract_tool({"file_path": "/tmp/t.xlsx", "template_type": "order"})
             mock_decompose.assert_called_once_with(
                 {"file_path": "/tmp/t.xlsx", "template_type": "order"}
             )
@@ -1151,9 +1090,7 @@ class TestExecuteWechatPreviewTool:
     def test_successful_query_with_contacts(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_contacts.return_value = [{"name": "张三"}]
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc
-        ):
+        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
             result = _execute_wechat_preview_tool({"keyword": "张"})
             assert result["success"] is True
             assert len(result["data"]) == 1
@@ -1162,9 +1099,7 @@ class TestExecuteWechatPreviewTool:
     def test_successful_query_no_contacts(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_contacts.return_value = []
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc
-        ):
+        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
             result = _execute_wechat_preview_tool({"keyword": "不存在"})
             assert result["success"] is True
             assert "未找到" in result["message"]
@@ -1172,9 +1107,7 @@ class TestExecuteWechatPreviewTool:
     def test_keyword_from_unit_name_alias(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_contacts.return_value = []
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc
-        ):
+        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
             _execute_wechat_preview_tool({"unit_name": "ABC公司"})
             call_kwargs = mock_svc.get_contacts.call_args.kwargs
             assert call_kwargs["keyword"] == "ABC公司"
@@ -1182,9 +1115,7 @@ class TestExecuteWechatPreviewTool:
     def test_empty_keyword_passes_none(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_contacts.return_value = []
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc
-        ):
+        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
             _execute_wechat_preview_tool({"keyword": "  "})
             call_kwargs = mock_svc.get_contacts.call_args.kwargs
             assert call_kwargs["keyword"] is None
@@ -1192,9 +1123,7 @@ class TestExecuteWechatPreviewTool:
     def test_custom_limit(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_contacts.return_value = []
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc
-        ):
+        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
             _execute_wechat_preview_tool({"limit": 10})
             call_kwargs = mock_svc.get_contacts.call_args.kwargs
             assert call_kwargs["limit"] == 10
@@ -1202,9 +1131,7 @@ class TestExecuteWechatPreviewTool:
     def test_default_limit_30(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_contacts.return_value = []
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc
-        ):
+        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
             _execute_wechat_preview_tool({})
             call_kwargs = mock_svc.get_contacts.call_args.kwargs
             assert call_kwargs["limit"] == 30
@@ -1267,7 +1194,9 @@ class TestExecuteExcelSchemaTool:
     def test_successful_via_app_service(self) -> None:
         mock_svc = MagicMock()
         mock_svc.analyze_schema.return_value = {"success": True, "fields": []}
-        with patch("app.bootstrap.get_excel_analysis_app_service", return_value=mock_svc, create=True):
+        with patch(
+            "app.bootstrap.get_excel_analysis_app_service", return_value=mock_svc, create=True
+        ):
             result = _execute_excel_schema_tool(
                 {"file_path": "/tmp/t.xlsx", "sheet_name": "Sheet1"}
             )
@@ -1290,7 +1219,9 @@ class TestExecuteExcelSchemaTool:
         mock_wb.__getitem__.return_value = mock_ws
 
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", return_value=mock_wb):
                 result = _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx"})
@@ -1322,7 +1253,9 @@ class TestExecuteExcelSchemaTool:
 
     def test_openpyxl_import_error_returns_library_unavailable(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=ImportError("no openpyxl")):
                 result = _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx"})
@@ -1331,7 +1264,9 @@ class TestExecuteExcelSchemaTool:
 
     def test_openpyxl_value_error_returns_invalid_parameters(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=ValueError("bad")):
                 result = _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx"})
@@ -1340,7 +1275,9 @@ class TestExecuteExcelSchemaTool:
 
     def test_openpyxl_type_error_returns_invalid_parameters(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=TypeError("bad")):
                 result = _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx"})
@@ -1349,7 +1286,9 @@ class TestExecuteExcelSchemaTool:
 
     def test_openpyxl_oserror_returns_file_not_found(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=OSError("not found")):
                 result = _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx"})
@@ -1358,7 +1297,9 @@ class TestExecuteExcelSchemaTool:
 
     def test_openpyxl_runtime_error_returns_analysis_failed(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=RuntimeError("fail")):
                 result = _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx"})
@@ -1378,12 +1319,12 @@ class TestExecuteExcelSchemaTool:
         mock_wb.__getitem__.return_value = mock_ws
 
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", return_value=mock_wb):
-                _execute_excel_schema_tool(
-                    {"file_path": "/tmp/t.xlsx", "sheet_name": "Sheet2"}
-                )
+                _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx", "sheet_name": "Sheet2"})
                 mock_wb.__getitem__.assert_called_with("Sheet2")
 
     def test_openpyxl_default_sheet_name(self) -> None:
@@ -1399,7 +1340,9 @@ class TestExecuteExcelSchemaTool:
         mock_wb.__getitem__.return_value = mock_ws
 
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", return_value=mock_wb):
                 _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx"})
@@ -1421,7 +1364,9 @@ class TestExecuteExcelSchemaTool:
         mock_wb.__getitem__.return_value = mock_ws
 
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", return_value=mock_wb):
                 result = _execute_excel_schema_tool({"file_path": "/tmp/t.xlsx"})
@@ -1450,7 +1395,9 @@ class TestExecuteExcelAnalysisTool:
     def test_successful_via_app_service(self) -> None:
         mock_svc = MagicMock()
         mock_svc.analyze_data.return_value = {"success": True, "rows": []}
-        with patch("app.bootstrap.get_excel_analysis_app_service", return_value=mock_svc, create=True):
+        with patch(
+            "app.bootstrap.get_excel_analysis_app_service", return_value=mock_svc, create=True
+        ):
             result = _execute_excel_analysis_tool(
                 {
                     "file_path": "/tmp/t.xlsx",
@@ -1478,7 +1425,9 @@ class TestExecuteExcelAnalysisTool:
         mock_wb.__getitem__.return_value = mock_ws
 
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", return_value=mock_wb):
                 result = _execute_excel_analysis_tool({"file_path": "/tmp/t.xlsx"})
@@ -1524,7 +1473,9 @@ class TestExecuteExcelAnalysisTool:
         mock_wb.__getitem__.return_value = mock_ws
 
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", return_value=mock_wb):
                 result = _execute_excel_analysis_tool(
@@ -1551,7 +1502,9 @@ class TestExecuteExcelAnalysisTool:
         mock_wb.__getitem__.return_value = mock_ws
 
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", return_value=mock_wb):
                 result = _execute_excel_analysis_tool({"file_path": "/tmp/t.xlsx"})
@@ -1560,7 +1513,9 @@ class TestExecuteExcelAnalysisTool:
 
     def test_openpyxl_import_error_returns_library_unavailable(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=ImportError("no openpyxl")):
                 result = _execute_excel_analysis_tool({"file_path": "/tmp/t.xlsx"})
@@ -1569,7 +1524,9 @@ class TestExecuteExcelAnalysisTool:
 
     def test_openpyxl_value_error_returns_invalid_parameters(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=ValueError("bad")):
                 result = _execute_excel_analysis_tool({"file_path": "/tmp/t.xlsx"})
@@ -1578,7 +1535,9 @@ class TestExecuteExcelAnalysisTool:
 
     def test_openpyxl_type_error_returns_invalid_parameters(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=TypeError("bad")):
                 result = _execute_excel_analysis_tool({"file_path": "/tmp/t.xlsx"})
@@ -1587,7 +1546,9 @@ class TestExecuteExcelAnalysisTool:
 
     def test_openpyxl_oserror_returns_file_not_found(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=OSError("not found")):
                 result = _execute_excel_analysis_tool({"file_path": "/tmp/t.xlsx"})
@@ -1596,7 +1557,9 @@ class TestExecuteExcelAnalysisTool:
 
     def test_openpyxl_runtime_error_returns_analysis_failed(self) -> None:
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", side_effect=RuntimeError("fail")):
                 result = _execute_excel_analysis_tool({"file_path": "/tmp/t.xlsx"})
@@ -1616,12 +1579,12 @@ class TestExecuteExcelAnalysisTool:
         mock_wb.__getitem__.return_value = mock_ws
 
         with patch(
-            "app.bootstrap.get_excel_analysis_app_service", side_effect=ImportError("no module"), create=True
+            "app.bootstrap.get_excel_analysis_app_service",
+            side_effect=ImportError("no module"),
+            create=True,
         ):
             with patch("openpyxl.load_workbook", return_value=mock_wb):
-                _execute_excel_analysis_tool(
-                    {"file_path": "/tmp/t.xlsx", "sheet_name": "Sheet2"}
-                )
+                _execute_excel_analysis_tool({"file_path": "/tmp/t.xlsx", "sheet_name": "Sheet2"})
                 mock_wb.__getitem__.assert_called_with("Sheet2")
 
 
@@ -1767,9 +1730,7 @@ class TestExecuteToolHandlerDispatch:
     def test_customers_ensure_exists_action(self) -> None:
         patch_ctx, mock_handler = self._patch_handler("customers", "ensure_exists")
         with patch_ctx:
-            result = execute_tool(
-                "customers", {"_action": "ensure_exists", "unit_name": "ABC"}
-            )
+            result = execute_tool("customers", {"_action": "ensure_exists", "unit_name": "ABC"})
             assert result["success"] is True
             mock_handler.assert_called_once()
 
@@ -2059,9 +2020,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.return_value = {"keyword": "ABC"}
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch(
-                "app.services.task_agent.TaskAgent", return_value=mock_task_agent
-            ):
+            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2187,9 +2146,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         mock_task_agent = MagicMock()
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch(
-                "app.services.task_agent.TaskAgent", return_value=mock_task_agent
-            ):
+            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2229,9 +2186,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         mock_task_agent = MagicMock()
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch(
-                "app.services.task_agent.TaskAgent", return_value=mock_task_agent
-            ):
+            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2443,9 +2398,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.side_effect = ImportError("no module")
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch(
-                "app.services.task_agent.TaskAgent", return_value=mock_task_agent
-            ):
+            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2486,9 +2439,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.side_effect = RuntimeError("fail")
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch(
-                "app.services.task_agent.TaskAgent", return_value=mock_task_agent
-            ):
+            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2529,9 +2480,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.return_value = "not a dict"
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch(
-                "app.services.task_agent.TaskAgent", return_value=mock_task_agent
-            ):
+            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2597,9 +2546,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
             ],
         }
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, invalid_final]):
-            with patch(
-                "app.application.workflow.planner._get_planner_http_client"
-            ) as mock_client:
+            with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
                 resp = MagicMock()
                 resp.status_code = 200
                 resp.json.return_value = {
@@ -2652,9 +2599,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
             ],
         }
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, invalid_final]):
-            with patch(
-                "app.application.workflow.planner._get_planner_http_client"
-            ) as mock_client:
+            with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
                 resp = MagicMock()
                 resp.status_code = 200
                 resp.json.return_value = {
@@ -2688,9 +2633,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
             ],
         )
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, invalid_final]):
-            with patch.object(
-                planner, "_critic_repair_with_llm", return_value=None
-            ):
+            with patch.object(planner, "_critic_repair_with_llm", return_value=None):
                 result = planner._plan_with_react_multiagent(
                     plan_id="pid",
                     user_id="u1",
@@ -2722,9 +2665,7 @@ class TestCriticRepairWithLLMAdditional:
                 },
             },
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
@@ -2747,9 +2688,7 @@ class TestCriticRepairWithLLMAdditional:
         reg = {
             "tool": {"description": "d", "actions": None},
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
@@ -2775,14 +2714,10 @@ class TestCriticRepairWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -2808,14 +2743,10 @@ class TestCriticRepairWithLLMAdditional:
                 }
             ],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -2840,14 +2771,10 @@ class TestCriticRepairWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -2864,22 +2791,16 @@ class TestCriticRepairWithLLMAdditional:
     def test_response_risk_level_missing_uses_invalid_plan_risk(self) -> None:
         """响应缺 risk_level 时使用 invalid_plan.risk_level。"""
         planner = _make_planner_with_fence()
-        invalid_plan = PlanGraph(
-            plan_id="pid", intent="i", risk_level="medium", nodes=[]
-        )
+        invalid_plan = PlanGraph(plan_id="pid", intent="i", risk_level="medium", nodes=[])
         payload = {
             "intent": "fixed",
             "todo_steps": [],
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -2896,22 +2817,16 @@ class TestCriticRepairWithLLMAdditional:
     def test_response_todo_steps_missing_uses_invalid_plan_todo(self) -> None:
         """响应缺 todo_steps 时使用 invalid_plan.todo_steps。"""
         planner = _make_planner_with_fence()
-        invalid_plan = PlanGraph(
-            plan_id="pid", intent="i", todo_steps=["original_step"], nodes=[]
-        )
+        invalid_plan = PlanGraph(plan_id="pid", intent="i", todo_steps=["original_step"], nodes=[])
         payload = {
             "intent": "fixed",
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -2936,14 +2851,10 @@ class TestCriticRepairWithLLMAdditional:
             "nodes": [],
         }
         content = f"```\n{json.dumps(payload)}\n```"
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": content}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": content}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -2961,9 +2872,7 @@ class TestCriticRepairWithLLMAdditional:
         """空 choices 列表返回 None。"""
         planner = _make_planner_with_fence()
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": []}
@@ -3007,9 +2916,7 @@ class TestPlanWithLLMAdditional:
     def test_http_error_returns_none(self) -> None:
         """HTTP 错误时返回 None。"""
         planner = _make_planner()
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 500
             mock_client.return_value.post.return_value = resp
@@ -3026,9 +2933,7 @@ class TestPlanWithLLMAdditional:
         """有 conversation_history 时取最近 6 条。"""
         planner = _make_planner()
         mock_ctx = MagicMock()
-        mock_ctx.conversation_history = [
-            {"role": "user", "content": f"msg{i}"} for i in range(10)
-        ]
+        mock_ctx.conversation_history = [{"role": "user", "content": f"msg{i}"} for i in range(10)]
         planner._ai_service.get_context.return_value = mock_ctx
         payload = {
             "intent": "test",
@@ -3036,14 +2941,10 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3066,14 +2967,10 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3101,14 +2998,10 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3129,14 +3022,10 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3156,14 +3045,10 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3184,14 +3069,10 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3223,14 +3104,10 @@ class TestPlanWithLLMAdditional:
                 }
             ],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3253,19 +3130,33 @@ class TestPlanWithLLMAdditional:
         }
         context = {
             "tool_probe_outputs": [
-                {"tool_id": "t1", "action": "a", "success": True, "message": "m1", "data_preview": "d1"},
-                {"tool_id": "t2", "action": "a", "success": True, "message": "m2", "data_preview": "d2"},
-                {"tool_id": "t3", "action": "a", "success": True, "message": "m3", "data_preview": "d3"},
+                {
+                    "tool_id": "t1",
+                    "action": "a",
+                    "success": True,
+                    "message": "m1",
+                    "data_preview": "d1",
+                },
+                {
+                    "tool_id": "t2",
+                    "action": "a",
+                    "success": True,
+                    "message": "m2",
+                    "data_preview": "d2",
+                },
+                {
+                    "tool_id": "t3",
+                    "action": "a",
+                    "success": True,
+                    "message": "m3",
+                    "data_preview": "d3",
+                },
             ],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3289,17 +3180,19 @@ class TestPlanWithLLMAdditional:
         long_message = "x" * 200
         context = {
             "tool_probe_outputs": [
-                {"tool_id": "t1", "action": "a", "success": True, "message": long_message, "data_preview": "d"},
+                {
+                    "tool_id": "t1",
+                    "action": "a",
+                    "success": True,
+                    "message": long_message,
+                    "data_preview": "d",
+                },
             ],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3323,17 +3216,19 @@ class TestPlanWithLLMAdditional:
         long_preview = "x" * 300
         context = {
             "tool_probe_outputs": [
-                {"tool_id": "t1", "action": "a", "success": True, "message": "m", "data_preview": long_preview},
+                {
+                    "tool_id": "t1",
+                    "action": "a",
+                    "success": True,
+                    "message": "m",
+                    "data_preview": long_preview,
+                },
             ],
         }
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3355,14 +3250,10 @@ class TestPlanWithLLMAdditional:
             "nodes": [],
         }
         # 传入非 dict context（如 None），isinstance 检查跳过提取
-        with patch(
-            "app.application.workflow.planner._get_planner_http_client"
-        ) as mock_client:
+        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -3385,51 +3276,35 @@ class TestFallbackPlanAdditional:
     def test_employee_dispatch_with_non_dict_item_in_status(self) -> None:
         """status 中非 dict 项被跳过。"""
         planner = _make_planner()
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_status:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_status:
             mock_status.return_value = {
                 "employee_pack_tools": ["not_a_dict", {"pack_id": "real-pack"}]
             }
-            result = planner._fallback_plan(
-                "pid", "请员工 real-pack 处理", _sample_registry()
-            )
+            result = planner._fallback_plan("pid", "请员工 real-pack 处理", _sample_registry())
             assert any(n.action == "execute" for n in result.nodes)
 
     def test_employee_dispatch_with_empty_pack_id_skipped(self) -> None:
         """空 pack_id 项被跳过。"""
         planner = _make_planner()
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_status:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_status:
             mock_status.return_value = {
                 "employee_pack_tools": [{"pack_id": ""}, {"pack_id": "real-pack"}]
             }
-            result = planner._fallback_plan(
-                "pid", "请员工 real-pack 处理", _sample_registry()
-            )
+            result = planner._fallback_plan("pid", "请员工 real-pack 处理", _sample_registry())
             assert any(n.action == "execute" for n in result.nodes)
 
     def test_employee_dispatch_no_matching_id_falls_to_list(self) -> None:
         """无匹配 employee_id 时降级为 list。"""
         planner = _make_planner()
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_status:
-            mock_status.return_value = {
-                "employee_pack_tools": [{"pack_id": "other-pack"}]
-            }
-            result = planner._fallback_plan(
-                "pid", "请员工 unknown-pack 处理", _sample_registry()
-            )
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_status:
+            mock_status.return_value = {"employee_pack_tools": [{"pack_id": "other-pack"}]}
+            result = planner._fallback_plan("pid", "请员工 unknown-pack 处理", _sample_registry())
             assert any(n.action == "list" for n in result.nodes)
 
     def test_business_db_write_with_extracted_node(self) -> None:
         """业务库写入意图且能抽取节点时生成 write 节点。"""
         planner = _make_planner()
-        result = planner._fallback_plan(
-            "pid", "新增客户ABC公司到数据库写入", _sample_registry()
-        )
+        result = planner._fallback_plan("pid", "新增客户ABC公司到数据库写入", _sample_registry())
         assert result.intent == "business_db_write"
         assert any(n.action == "write" for n in result.nodes)
 
@@ -3444,9 +3319,7 @@ class TestFallbackPlanAdditional:
                 "app.application.workflow.planner._looks_like_business_db_write",
                 return_value=True,
             ):
-                result = planner._fallback_plan(
-                    "pid", "写入数据库", _sample_registry()
-                )
+                result = planner._fallback_plan("pid", "写入数据库", _sample_registry())
                 assert result is not None
 
     def test_business_db_read_english_keyword(self) -> None:
@@ -3598,9 +3471,7 @@ class TestPlanIntegrationAdditional:
                 "app.application.workflow.planner._filter_tool_registry_for_profile",
                 return_value=_sample_registry(),
             ):
-                with patch.object(
-                    planner, "_plan_with_react_multiagent", return_value=valid_plan
-                ):
+                with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
                         "app.application.get_user_memory_rag_app_service",
                         return_value=mock_rag,
@@ -3633,9 +3504,7 @@ class TestPlanIntegrationAdditional:
                 "app.application.workflow.planner._filter_tool_registry_for_profile",
                 return_value=_sample_registry(),
             ):
-                with patch.object(
-                    planner, "_plan_with_react_multiagent", return_value=valid_plan
-                ):
+                with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
                         "app.application.get_user_memory_rag_app_service",
                         return_value=mock_rag,
@@ -3669,9 +3538,7 @@ class TestPlanIntegrationAdditional:
                 "app.application.workflow.planner._filter_tool_registry_for_profile",
                 return_value=_sample_registry(),
             ):
-                with patch.object(
-                    planner, "_plan_with_react_multiagent", return_value=valid_plan
-                ):
+                with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
                         "app.application.get_user_memory_rag_app_service",
                         return_value=mock_rag,
@@ -3705,9 +3572,7 @@ class TestPlanIntegrationAdditional:
                 "app.application.workflow.planner._filter_tool_registry_for_profile",
                 return_value=_sample_registry(),
             ):
-                with patch.object(
-                    planner, "_plan_with_react_multiagent", return_value=valid_plan
-                ):
+                with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
                         "app.application.get_user_memory_rag_app_service",
                         return_value=mock_rag,
@@ -3740,9 +3605,7 @@ class TestPlanIntegrationAdditional:
                 "app.application.workflow.planner._filter_tool_registry_for_profile",
                 return_value=_sample_registry(),
             ):
-                with patch.object(
-                    planner, "_plan_with_react_multiagent", return_value=valid_plan
-                ):
+                with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
                         "app.services.user_memory_service.get_user_memory_service",
                         return_value=mock_memory,
@@ -3775,9 +3638,7 @@ class TestPlanIntegrationAdditional:
                 "app.application.workflow.planner._filter_tool_registry_for_profile",
                 return_value=_sample_registry(),
             ):
-                with patch.object(
-                    planner, "_plan_with_react_multiagent", return_value=valid_plan
-                ):
+                with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
                         "app.services.user_memory_service.get_user_memory_service",
                         return_value=mock_memory,
@@ -3810,9 +3671,7 @@ class TestPlanIntegrationAdditional:
             ],
             risk_level="low",
         )
-        with patch.object(
-            planner, "_plan_with_react_multiagent", return_value=invalid_plan
-        ):
+        with patch.object(planner, "_plan_with_react_multiagent", return_value=invalid_plan):
             with patch.object(
                 planner, "_fallback_plan", return_value=fallback_plan
             ) as mock_fallback:
@@ -3843,9 +3702,7 @@ class TestPlanIntegrationAdditional:
             ],
             risk_level="low",
         )
-        with patch.object(
-            planner, "_plan_with_react_multiagent", return_value=None
-        ):
+        with patch.object(planner, "_plan_with_react_multiagent", return_value=None):
             with patch.object(
                 planner, "_fallback_plan", return_value=fallback_plan
             ) as mock_fallback:
@@ -3876,12 +3733,8 @@ class TestPlanIntegrationAdditional:
             ],
             risk_level="low",
         )
-        with patch.object(
-            planner, "_plan_with_react_multiagent", return_value=valid_plan
-        ):
-            with patch.object(
-                planner, "_fallback_plan"
-            ) as mock_fallback:
+        with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
+            with patch.object(planner, "_fallback_plan") as mock_fallback:
                 result = planner.plan(
                     user_id="u1",
                     message="test",
@@ -3909,9 +3762,7 @@ class TestPlanIntegrationAdditional:
             ],
             risk_level="low",
         )
-        with patch.object(
-            planner, "_plan_with_react_multiagent", return_value=valid_plan
-        ):
+        with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
             with patch(
                 "app.application.workflow.planner._filter_tool_registry_for_profile"
             ) as mock_filter:

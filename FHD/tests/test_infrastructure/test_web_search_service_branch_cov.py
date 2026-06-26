@@ -30,7 +30,6 @@ from app.infrastructure.web_search.service import (
     kitten_web_search,
 )
 
-
 # ---------------------------------------------------------------------------
 # _rate_allow — additional branches
 # ---------------------------------------------------------------------------
@@ -189,10 +188,7 @@ class TestTavilySearch:
     async def test_max_results_truncation(self) -> None:
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "results": [
-                {"title": f"T{i}", "url": f"https://x{i}.com"}
-                for i in range(10)
-            ]
+            "results": [{"title": f"T{i}", "url": f"https://x{i}.com"} for i in range(10)]
         }
         mock_response.raise_for_status = MagicMock()
 
@@ -322,10 +318,7 @@ class TestSerpapiSearch:
     async def test_max_results_truncation(self) -> None:
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "organic_results": [
-                {"title": f"T{i}", "link": f"https://x{i}.com"}
-                for i in range(10)
-            ]
+            "organic_results": [{"title": f"T{i}", "link": f"https://x{i}.com"} for i in range(10)]
         }
         mock_response.raise_for_status = MagicMock()
 
@@ -373,9 +366,7 @@ class TestSerpapiSearch:
         long_snippet = "x" * 1000
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "organic_results": [
-                {"title": "T", "link": "https://x.com", "snippet": long_snippet}
-            ]
+            "organic_results": [{"title": "T", "link": "https://x.com", "snippet": long_snippet}]
         }
         mock_response.raise_for_status = MagicMock()
 
@@ -400,6 +391,7 @@ class TestKittenWebSearchExtra:
     def _reset_rate_buckets(self) -> Any:
         """每个测试前清空全局 rate buckets，避免状态污染。"""
         import app.infrastructure.web_search.service as web_search_mod
+
         old = web_search_mod._rate_buckets.copy()
         web_search_mod._rate_buckets.clear()
         yield
@@ -620,9 +612,7 @@ class TestKittenWebSearchExtra:
 
     @pytest.mark.asyncio
     async def test_query_none_treated_as_empty(self) -> None:
-        with patch.dict(
-            os.environ, {"WEB_SEARCH_PROVIDER": "tavily"}, clear=False
-        ):
+        with patch.dict(os.environ, {"WEB_SEARCH_PROVIDER": "tavily"}, clear=False):
             result = await kitten_web_search(None)  # type: ignore[arg-type]
         assert result["success"] is False
         assert "查询为空" in result["message"]

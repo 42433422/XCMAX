@@ -37,7 +37,10 @@ class TestIsAuxEmployeePackModId:
         assert aux_employee_store.is_aux_employee_pack_mod_id(None) is False
 
     def test_strips_whitespace(self) -> None:
-        assert aux_employee_store.is_aux_employee_pack_mod_id("  wechat-contacts-ai-employee  ") is True
+        assert (
+            aux_employee_store.is_aux_employee_pack_mod_id("  wechat-contacts-ai-employee  ")
+            is True
+        )
 
 
 class TestRepoModSeedDirs:
@@ -88,7 +91,8 @@ class TestReadAuxEmployeePackManifest:
 
     def test_returns_none_when_no_manifest_found(self) -> None:
         with patch(
-            "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[Path("/nonexistent")]
+            "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
+            return_value=[Path("/nonexistent")],
         ):
             assert (
                 aux_employee_store.read_aux_employee_pack_manifest("wechat-contacts-ai-employee")
@@ -100,19 +104,17 @@ class TestReadAuxEmployeePackManifest:
         mod_dir.mkdir()
         manifest = {"id": "wechat-contacts-ai-employee", "version": "1.0.0"}
         (mod_dir / "manifest.json").write_text(json.dumps(manifest))
-        with patch(
-            "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]
-        ):
-            result = aux_employee_store.read_aux_employee_pack_manifest("wechat-contacts-ai-employee")
+        with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
+            result = aux_employee_store.read_aux_employee_pack_manifest(
+                "wechat-contacts-ai-employee"
+            )
             assert result == manifest
 
     def test_returns_none_when_manifest_not_dict(self, tmp_path: Path) -> None:
         mod_dir = tmp_path / "wechat-contacts-ai-employee"
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text(json.dumps(["not a dict"]))
-        with patch(
-            "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]
-        ):
+        with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
             assert (
                 aux_employee_store.read_aux_employee_pack_manifest("wechat-contacts-ai-employee")
                 is None
@@ -122,9 +124,7 @@ class TestReadAuxEmployeePackManifest:
         mod_dir = tmp_path / "wechat-contacts-ai-employee"
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text("invalid json {")
-        with patch(
-            "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]
-        ):
+        with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
             assert (
                 aux_employee_store.read_aux_employee_pack_manifest("wechat-contacts-ai-employee")
                 is None
@@ -139,7 +139,9 @@ class TestReadAuxEmployeePackManifest:
             "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
             return_value=[tmp_path / "first", tmp_path / "second"],
         ):
-            result = aux_employee_store.read_aux_employee_pack_manifest("wechat-contacts-ai-employee")
+            result = aux_employee_store.read_aux_employee_pack_manifest(
+                "wechat-contacts-ai-employee"
+            )
             assert result == manifest
 
 
@@ -315,11 +317,12 @@ class TestInstallAuxEmployeePackFromRepoSeed:
         mock_mm = MagicMock()
         mock_mm.mods_root = str(tmp_path / "dest")
 
-        with patch(
-            "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
-            return_value=[tmp_path / "mods"],
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm
+        with (
+            patch(
+                "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
+                return_value=[tmp_path / "mods"],
+            ),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
         ):
             ok, msg = aux_employee_store.install_aux_employee_pack_from_repo_seed(
                 "wechat-contacts-ai-employee"
@@ -341,11 +344,12 @@ class TestInstallAuxEmployeePackFromRepoSeed:
         mock_mm = MagicMock()
         mock_mm.mods_root = str(tmp_path / "dest")
 
-        with patch(
-            "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
-            return_value=[tmp_path / "mods"],
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm
+        with (
+            patch(
+                "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
+                return_value=[tmp_path / "mods"],
+            ),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
         ):
             ok, msg = aux_employee_store.install_aux_employee_pack_from_repo_seed(
                 "wechat-contacts-ai-employee"
@@ -361,12 +365,16 @@ class TestInstallAuxEmployeePackFromRepoSeed:
         mock_mm = MagicMock()
         mock_mm.mods_root = str(tmp_path / "dest")
 
-        with patch(
-            "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
-            return_value=[tmp_path / "mods"],
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm
-        ), patch("app.mod_sdk.aux_employee_store.shutil.copytree", side_effect=OSError("copy failed")):
+        with (
+            patch(
+                "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
+                return_value=[tmp_path / "mods"],
+            ),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
+            patch(
+                "app.mod_sdk.aux_employee_store.shutil.copytree", side_effect=OSError("copy failed")
+            ),
+        ):
             ok, msg = aux_employee_store.install_aux_employee_pack_from_repo_seed(
                 "wechat-contacts-ai-employee"
             )

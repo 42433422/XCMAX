@@ -50,7 +50,6 @@ from app.application.ai_chat_app_service import (
     _skip_pro_excel_deterministic_import,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -235,7 +234,9 @@ class TestLooksLikeExplicitWorkflowToolIntent:
     def test_employee_call_in_english_returns_true(self):
         """employee + call → True。"""
         assert (
-            AIChatApplicationService._looks_like_explicit_workflow_tool_intent("call employee to run")
+            AIChatApplicationService._looks_like_explicit_workflow_tool_intent(
+                "call employee to run"
+            )
             is True
         )
 
@@ -255,7 +256,8 @@ class TestLooksLikeExplicitWorkflowToolIntent:
     def test_db_mentioned_no_object_returns_false(self):
         """数据库但无对象 → False。"""
         assert (
-            AIChatApplicationService._looks_like_explicit_workflow_tool_intent("读取数据库") is False
+            AIChatApplicationService._looks_like_explicit_workflow_tool_intent("读取数据库")
+            is False
         )
 
     def test_db_mentioned_no_action_returns_false(self):
@@ -293,7 +295,9 @@ class TestLooksLikeExplicitWorkflowToolIntent:
     def test_db_word_boundary_no_chinese_object_returns_false(self):
         """\bdb\b 边界匹配但无中文对象 → False。"""
         assert (
-            AIChatApplicationService._looks_like_explicit_workflow_tool_intent("read products from db")
+            AIChatApplicationService._looks_like_explicit_workflow_tool_intent(
+                "read products from db"
+            )
             is False
         )
 
@@ -321,7 +325,8 @@ class TestLooksLikeExplicitWorkflowToolIntent:
     def test_employee_let_keyword_returns_true(self):
         """让 + 员工 → True。"""
         assert (
-            AIChatApplicationService._looks_like_explicit_workflow_tool_intent("让员工去处理") is True
+            AIChatApplicationService._looks_like_explicit_workflow_tool_intent("让员工去处理")
+            is True
         )
 
 
@@ -348,9 +353,7 @@ class TestWorkflowOutputPreview:
         assert "true" in result.lower()
 
     def test_dict_with_data_list(self):
-        result = AIChatApplicationService._workflow_output_preview(
-            {"data": [{"id": 1}, {"id": 2}]}
-        )
+        result = AIChatApplicationService._workflow_output_preview({"data": [{"id": 1}, {"id": 2}]})
         assert "row_count" in result
         assert "2" in result
 
@@ -426,9 +429,7 @@ class TestWorkflowOutputMessage:
 
     def test_dict_message_takes_priority_over_error(self):
         assert (
-            AIChatApplicationService._workflow_output_message(
-                {"message": "ok", "error": "boom"}
-            )
+            AIChatApplicationService._workflow_output_message({"message": "ok", "error": "boom"})
             == "ok"
         )
 
@@ -437,8 +438,7 @@ class TestWorkflowOutputMessage:
 
     def test_dict_with_whitespace_message(self):
         assert (
-            AIChatApplicationService._workflow_output_message({"message": "  spaced  "})
-            == "spaced"
+            AIChatApplicationService._workflow_output_message({"message": "  spaced  "}) == "spaced"
         )
 
 
@@ -869,7 +869,9 @@ class TestFormatAgentRunResponse:
             steps=[_make_step(status="completed", output={"message": "ok"})],
             metadata={"cost_units_total": 10, "tool_call_count": 2},
         )
-        result = svc._format_agent_run_response(plan, agent_run, thinking_steps="thinking", user_message="hello")
+        result = svc._format_agent_run_response(
+            plan, agent_run, thinking_steps="thinking", user_message="hello"
+        )
         assert result["success"] is True
         assert "thinking" in result["response"]
         assert "TODO" in result["response"]
@@ -988,9 +990,7 @@ class TestStartDeterministicImportAgentRun:
         svc = _make_svc()
         plan = _make_plan()
         agent_run = _make_agent_run(status="completed")
-        with patch(
-            "app.application.agent_orchestrator.AgentOrchestrator"
-        ) as mock_cls:
+        with patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_cls:
             mock_inst = mock_cls.return_value
             mock_inst.start_run_from_plan.return_value = agent_run
             svc._format_agent_run_response = Mock(return_value={"success": True})
@@ -1011,9 +1011,7 @@ class TestStartDeterministicImportAgentRun:
         plan = _make_plan(todo_steps=["step1"])
         step = SimpleNamespace(node_id="n1", status="waiting_user")
         agent_run = _make_agent_run(status="waiting_user", steps=[step], run_id="run_x")
-        with patch(
-            "app.application.agent_orchestrator.AgentOrchestrator"
-        ) as mock_cls:
+        with patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_cls:
             mock_inst = mock_cls.return_value
             mock_inst.start_run_from_plan.return_value = agent_run
             result = svc._start_deterministic_import_agent_run(
@@ -1034,9 +1032,7 @@ class TestStartDeterministicImportAgentRun:
         svc = _make_svc()
         plan = _make_plan()
         agent_run = _make_agent_run(status="completed")
-        with patch(
-            "app.application.agent_orchestrator.AgentOrchestrator"
-        ) as mock_cls:
+        with patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_cls:
             mock_inst = mock_cls.return_value
             mock_inst.start_run_from_plan.return_value = agent_run
             svc._format_agent_run_response = Mock(return_value={"success": True})
@@ -1066,9 +1062,7 @@ class TestStartDeterministicImportAgentRun:
             artifacts=[artifact],
             run_id="r1",
         )
-        with patch(
-            "app.application.agent_orchestrator.AgentOrchestrator"
-        ) as mock_cls:
+        with patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_cls:
             mock_inst = mock_cls.return_value
             mock_inst.start_run_from_plan.return_value = agent_run
             result = svc._start_deterministic_import_agent_run(
@@ -1123,9 +1117,7 @@ class TestStartAgenticWorkflowAgentRun:
 
     def test_empty_plan_attrs_handled(self):
         svc = _make_svc()
-        plan = SimpleNamespace(
-            plan_id="", intent="", todo_steps=None, risk_level="", metadata=None
-        )
+        plan = SimpleNamespace(plan_id="", intent="", todo_steps=None, risk_level="", metadata=None)
         saved_run = Mock()
         saved_run.run_id = "run_2"
         with patch(
@@ -1332,11 +1324,7 @@ class TestBridgeAgenticWorkflowResultToAgentRun:
         plan = _make_plan()
         run_result = _make_run_result(
             success=True,
-            node_results=[
-                _make_node_result(
-                    output={"artifacts": [{"name": "no_type"}]}
-                )
-            ],
+            node_results=[_make_node_result(output={"artifacts": [{"name": "no_type"}]})],
         )
         run = Mock()
         run.metadata = {}
@@ -1391,27 +1379,21 @@ class TestWorkflowProductsFloatQuery:
 
     def test_node_params_keyword(self):
         svc = _make_svc()
-        plan = _make_plan(
-            nodes=[_make_node(params={"keyword": "paint"})]
-        )
+        plan = _make_plan(nodes=[_make_node(params={"keyword": "paint"})])
         run_result = _make_run_result()
         result = svc._workflow_products_float_query(plan, run_result, "msg")
         assert result == "paint"
 
     def test_node_params_model_number(self):
         svc = _make_svc()
-        plan = _make_plan(
-            nodes=[_make_node(params={"model_number": "M123"})]
-        )
+        plan = _make_plan(nodes=[_make_node(params={"model_number": "M123"})])
         run_result = _make_run_result()
         result = svc._workflow_products_float_query(plan, run_result, "msg")
         assert result == "M123"
 
     def test_node_params_product_name(self):
         svc = _make_svc()
-        plan = _make_plan(
-            nodes=[_make_node(params={"name": "widget"})]
-        )
+        plan = _make_plan(nodes=[_make_node(params={"name": "widget"})])
         run_result = _make_run_result()
         result = svc._workflow_products_float_query(plan, run_result, "msg")
         assert result == "widget"
@@ -1421,9 +1403,7 @@ class TestWorkflowProductsFloatQuery:
         plan = _make_plan(nodes=[])
         run_result = _make_run_result(
             node_results=[
-                _make_node_result(
-                    output={"data": [{"model_number": "M456", "name": "widget"}]}
-                )
+                _make_node_result(output={"data": [{"model_number": "M456", "name": "widget"}]})
             ]
         )
         result = svc._workflow_products_float_query(plan, run_result, "fallback")
@@ -1433,11 +1413,7 @@ class TestWorkflowProductsFloatQuery:
         svc = _make_svc()
         plan = _make_plan(nodes=[])
         run_result = _make_run_result(
-            node_results=[
-                _make_node_result(
-                    output={"data": [{"name": "widget"}]}
-                )
-            ]
+            node_results=[_make_node_result(output={"data": [{"name": "widget"}]})]
         )
         result = svc._workflow_products_float_query(plan, run_result, "fallback")
         assert result == "widget"
@@ -1467,11 +1443,7 @@ class TestWorkflowProductsFloatQuery:
     def test_empty_data_rows(self):
         svc = _make_svc()
         plan = _make_plan(nodes=[])
-        run_result = _make_run_result(
-            node_results=[
-                _make_node_result(output={"data": []})
-            ]
-        )
+        run_result = _make_run_result(node_results=[_make_node_result(output={"data": []})])
         result = svc._workflow_products_float_query(plan, run_result, "msg")
         assert result == "msg"
 
@@ -1479,9 +1451,7 @@ class TestWorkflowProductsFloatQuery:
         svc = _make_svc()
         plan = _make_plan(nodes=[])
         run_result = _make_run_result(
-            node_results=[
-                _make_node_result(output={"data": ["not-a-dict"]})
-            ]
+            node_results=[_make_node_result(output={"data": ["not-a-dict"]})]
         )
         result = svc._workflow_products_float_query(plan, run_result, "msg")
         assert result == "msg"
@@ -1938,9 +1908,7 @@ class TestExecuteCustomersIntent:
 
     def test_add_intent_no_unit_name_asks_for_name(self):
         svc = _make_svc()
-        result = svc._execute_customers_intent(
-            {"data": {}}, {}, {}, "添加单位"
-        )
+        result = svc._execute_customers_intent({"data": {}}, {}, {}, "添加单位")
         assert "单位名称" in result["response"]
         assert result["data"]["data"]["missing_fields"] == ["unit_name"]
 
@@ -1991,31 +1959,23 @@ class TestExecuteCustomersIntent:
     def test_query_intent_calls_query(self):
         svc = _make_svc()
         svc._execute_customers_query = Mock(return_value={"success": True})
-        result = svc._execute_customers_intent(
-            {"data": {}}, {}, {}, "查询客户列表"
-        )
+        result = svc._execute_customers_intent({"data": {}}, {}, {}, "查询客户列表")
         assert result["success"] is True
 
     def test_english_add_intent(self):
         svc = _make_svc()
-        result = svc._execute_customers_intent(
-            {"data": {}}, {}, {}, "add customer"
-        )
+        result = svc._execute_customers_intent({"data": {}}, {}, {}, "add customer")
         assert "单位名称" in result["response"]
 
     def test_english_query_intent(self):
         svc = _make_svc()
         svc._execute_customers_query = Mock(return_value={"success": True})
-        result = svc._execute_customers_intent(
-            {"data": {}}, {}, {}, "search customers"
-        )
+        result = svc._execute_customers_intent({"data": {}}, {}, {}, "search customers")
         assert result["success"] is True
 
     def test_no_clear_intent_returns_followup(self):
         svc = _make_svc()
-        result = svc._execute_customers_intent(
-            {"data": {}}, {}, {}, "hello"
-        )
+        result = svc._execute_customers_intent({"data": {}}, {}, {}, "hello")
         assert "customers_followup" in result["data"]["data"]["intent"]
 
     def test_unit_name_from_parsed_params(self):
@@ -2119,10 +2079,11 @@ class TestExecuteShipmentGenerate:
         ) as mock_parse:
             with patch("app.bootstrap.get_shipment_app_service") as mock_get:
                 mock_svc = mock_get.return_value
-                mock_svc.generate_shipment_document.return_value = {"success": True, "doc_name": "d"}
-                svc._execute_shipment_generate(
-                    {"data": {}}, {}, {"text": "ai text"}
-                )
+                mock_svc.generate_shipment_document.return_value = {
+                    "success": True,
+                    "doc_name": "d",
+                }
+                svc._execute_shipment_generate({"data": {}}, {}, {"text": "ai text"})
         parse_arg = mock_parse.call_args[0][0]
         assert parse_arg == "ai text"
 
@@ -2180,9 +2141,7 @@ class TestExecuteShipmentsQuery:
         svc = _make_svc()
         with patch("app.bootstrap.get_shipment_app_service") as mock_get:
             mock_svc = mock_get.return_value
-            mock_svc.get_orders.return_value = [
-                {"id": 999, "purchase_unit": "Gamma", "amount": 50}
-            ]
+            mock_svc.get_orders.return_value = [{"id": 999, "purchase_unit": "Gamma", "amount": 50}]
             result = svc._execute_shipments_query({"data": {}})
         assert "999" in result["response"]
 
@@ -2404,9 +2363,7 @@ class TestInjectExcelVectorContext:
         with patch("app.application.get_excel_vector_search_app_service") as mock_get:
             mock_svc = mock_get.return_value
             mock_svc.query.return_value = {"success": True, "hits": [{"id": 1}]}
-            result = svc._inject_excel_vector_context(
-                "find data", {"excel_index_id": "idx1"}
-            )
+            result = svc._inject_excel_vector_context("find data", {"excel_index_id": "idx1"})
         assert "excel_vector_context" in result
         assert result["excel_vector_context"]["hits"] == [{"id": 1}]
 
@@ -2423,7 +2380,7 @@ class TestInjectExcelVectorContext:
         svc = _make_svc()
         with patch("app.application.get_excel_vector_search_app_service") as mock_get:
             mock_svc = mock_get.return_value
-            mock_svc.query.side_effect =RuntimeError("search failed")
+            mock_svc.query.side_effect = RuntimeError("search failed")
             ctx = {"excel_index_id": "idx1"}
             result = svc._inject_excel_vector_context("msg", ctx)
         assert result is ctx
@@ -2433,9 +2390,7 @@ class TestInjectExcelVectorContext:
         with patch("app.application.get_excel_vector_search_app_service") as mock_get:
             mock_svc = mock_get.return_value
             mock_svc.query.return_value = {"success": True, "hits": []}
-            result = svc._inject_excel_vector_context(
-                "msg", {"excel_vector_index_id": "idx2"}
-            )
+            result = svc._inject_excel_vector_context("msg", {"excel_vector_index_id": "idx2"})
         assert "excel_vector_context" in result
 
     def test_invalid_top_k_falls_back_to_5(self):
@@ -2453,6 +2408,7 @@ class TestInjectExcelVectorContext:
         svc = _make_svc()
         ctx = {"excel_index_id": "idx1"}
         import sys
+
         saved = sys.modules.pop("app.application", None)
         try:
             result = svc._inject_excel_vector_context("msg", ctx)
@@ -2489,9 +2445,7 @@ class TestResolveUnitPriceColumn:
         assert result[0] == "单价"
 
     def test_empty_keys_returns_empty(self):
-        result = AIChatApplicationService._resolve_unit_price_column(
-            [], "", "msg", None
-        )
+        result = AIChatApplicationService._resolve_unit_price_column([], "", "msg", None)
         assert result == ("", None)
 
     def test_tension_prefer_before_only(self):
@@ -2552,9 +2506,7 @@ class TestResolveUnitPriceColumn:
         assert result == ("调价后单价", None)
 
     def test_generic_single_returns_it(self):
-        result = AIChatApplicationService._resolve_unit_price_column(
-            ["单价"], "", "msg", None
-        )
+        result = AIChatApplicationService._resolve_unit_price_column(["单价"], "", "msg", None)
         assert result == ("单价", None)
 
     def test_generic_multiple_with_current(self):
@@ -2595,10 +2547,12 @@ class TestMergeUserIntentForPriceResolution:
     def test_with_recent_messages(self):
         result = AIChatApplicationService._merge_user_intent_for_price_resolution(
             "current",
-            {"recent_messages": [
-                {"role": "user", "content": "past user"},
-                {"role": "assistant", "content": "past ai"},
-            ]},
+            {
+                "recent_messages": [
+                    {"role": "user", "content": "past user"},
+                    {"role": "assistant", "content": "past ai"},
+                ]
+            },
         )
         assert "past user" in result
         assert "past ai" in result
@@ -2631,10 +2585,12 @@ class TestMergeUserIntentForPriceResolution:
         """recent_messages 内部重复内容会被去重。"""
         result = AIChatApplicationService._merge_user_intent_for_price_resolution(
             "cur",
-            {"recent_messages": [
-                {"role": "user", "content": "dup"},
-                {"role": "assistant", "content": "dup"},
-            ]},
+            {
+                "recent_messages": [
+                    {"role": "user", "content": "dup"},
+                    {"role": "assistant", "content": "dup"},
+                ]
+            },
         )
         # "dup" 在 recent_messages 中只出现一次（去重），"cur" 在末尾
         assert result.count("dup") == 1
@@ -2680,6 +2636,7 @@ class TestPriceColumnBuckets:
     def _disable_schema_index(self):
         """让 from app.services.ai_db_schema_index import ... 抛 ImportError。"""
         import sys
+
         key = "app.services.ai_db_schema_index"
         saved = sys.modules.get(key, "missing")
         sys.modules[key] = None
@@ -2687,6 +2644,7 @@ class TestPriceColumnBuckets:
 
     def _restore_schema_index(self, saved):
         import sys
+
         key = "app.services.ai_db_schema_index"
         if saved == "missing":
             sys.modules.pop(key, None)
@@ -2721,9 +2679,7 @@ class TestPriceColumnBuckets:
     def test_heuristic_skips_qty_columns(self):
         saved = self._disable_schema_index()
         try:
-            _, _, generic = AIChatApplicationService._price_column_buckets(
-                ["数量单价", "计量价格"]
-            )
+            _, _, generic = AIChatApplicationService._price_column_buckets(["数量单价", "计量价格"])
         finally:
             self._restore_schema_index(saved)
         assert generic == []
@@ -2754,9 +2710,7 @@ class TestPriceColumnBuckets:
         """启发式分桶：既非 before 也非 after 的价格列归入 generic。"""
         saved = self._disable_schema_index()
         try:
-            _, _, generic = AIChatApplicationService._price_column_buckets(
-                ["含税单价", "销售价格"]
-            )
+            _, _, generic = AIChatApplicationService._price_column_buckets(["含税单价", "销售价格"])
         finally:
             self._restore_schema_index(saved)
         assert len(generic) == 2
@@ -2772,6 +2726,7 @@ class TestHeaderHintColumnRoles:
 
     def _disable_schema_index(self):
         import sys
+
         key = "app.services.ai_db_schema_index"
         saved = sys.modules.get(key, "missing")
         sys.modules[key] = None
@@ -2779,6 +2734,7 @@ class TestHeaderHintColumnRoles:
 
     def _restore_schema_index(self, saved):
         import sys
+
         key = "app.services.ai_db_schema_index"
         if saved == "missing":
             sys.modules.pop(key, None)
@@ -2971,7 +2927,17 @@ class TestExtractExcelImportRecords:
     def test_with_sample_rows(self):
         svc = _make_svc()
         svc._try_structured_reload_records = Mock(return_value=None)
-        svc._infer_excel_column_roles = Mock(return_value=({"unit_name": "客户", "product_name": "产品", "model_number": "型号", "unit_price": "单价"}, 0.9))
+        svc._infer_excel_column_roles = Mock(
+            return_value=(
+                {
+                    "unit_name": "客户",
+                    "product_name": "产品",
+                    "model_number": "型号",
+                    "unit_price": "单价",
+                },
+                0.9,
+            )
+        )
         svc._infer_excel_column_roles_with_llm = Mock(return_value={})
         svc._default_purchase_unit_for_import = Mock(return_value="ACME")
         excel_analysis = {
@@ -2988,7 +2954,12 @@ class TestExtractExcelImportRecords:
     def test_with_grid_preview(self):
         svc = _make_svc()
         svc._try_structured_reload_records = Mock(return_value=None)
-        svc._infer_excel_column_roles = Mock(return_value=({"unit_name": "客户", "product_name": "产品", "model_number": "", "unit_price": ""}, 0.9))
+        svc._infer_excel_column_roles = Mock(
+            return_value=(
+                {"unit_name": "客户", "product_name": "产品", "model_number": "", "unit_price": ""},
+                0.9,
+            )
+        )
         svc._infer_excel_column_roles_with_llm = Mock(return_value={})
         svc._default_purchase_unit_for_import = Mock(return_value="ACME")
         excel_analysis = {
@@ -3011,7 +2982,12 @@ class TestExtractExcelImportRecords:
     def test_ambiguous_price_returns_error(self):
         svc = _make_svc()
         svc._try_structured_reload_records = Mock(return_value=None)
-        svc._infer_excel_column_roles = Mock(return_value=({"unit_name": "客户", "product_name": "产品", "model_number": "", "unit_price": ""}, 0.9))
+        svc._infer_excel_column_roles = Mock(
+            return_value=(
+                {"unit_name": "客户", "product_name": "产品", "model_number": "", "unit_price": ""},
+                0.9,
+            )
+        )
         svc._infer_excel_column_roles_with_llm = Mock(return_value={})
         svc._default_purchase_unit_for_import = Mock(return_value="ACME")
         with patch.object(
@@ -3046,7 +3022,12 @@ class TestExtractExcelImportRecords:
     def test_unnamed_columns_promoted(self):
         svc = _make_svc()
         svc._try_structured_reload_records = Mock(return_value=None)
-        svc._infer_excel_column_roles = Mock(return_value=({"unit_name": "客户", "product_name": "产品", "model_number": "", "unit_price": ""}, 0.9))
+        svc._infer_excel_column_roles = Mock(
+            return_value=(
+                {"unit_name": "客户", "product_name": "产品", "model_number": "", "unit_price": ""},
+                0.9,
+            )
+        )
         svc._infer_excel_column_roles_with_llm = Mock(return_value={})
         svc._default_purchase_unit_for_import = Mock(return_value="ACME")
         excel_analysis = {
@@ -3066,7 +3047,12 @@ class TestExtractExcelImportRecords:
     def test_unit_key_is_measure_unit_cleared(self):
         svc = _make_svc()
         svc._try_structured_reload_records = Mock(return_value=None)
-        svc._infer_excel_column_roles = Mock(return_value=({"unit_name": "单位", "product_name": "产品", "model_number": "", "unit_price": ""}, 0.9))
+        svc._infer_excel_column_roles = Mock(
+            return_value=(
+                {"unit_name": "单位", "product_name": "产品", "model_number": "", "unit_price": ""},
+                0.9,
+            )
+        )
         svc._infer_excel_column_roles_with_llm = Mock(return_value={})
         svc._default_purchase_unit_for_import = Mock(return_value="ACME")
         excel_analysis = {
@@ -3119,9 +3105,7 @@ class TestTryHandleDynamicWorkflow:
                     "_attach_deterministic_workflow_trace",
                     side_effect=lambda p, **kw: p,
                 ):
-                    result = svc._try_handle_dynamic_workflow(
-                        "u1", "入库", "pro", {}, {}
-                    )
+                    result = svc._try_handle_dynamic_workflow("u1", "入库", "pro", {}, {})
         assert result is not None
         assert "Excel" in result["response"] or "excel" in result["response"].lower()
 
@@ -3208,12 +3192,8 @@ class TestTryHandleDynamicWorkflow:
             "thinking_steps": "thinking",
         }
         with patch.object(svc.workflow_engine, "run", return_value=_make_run_result()):
-            with patch.object(
-                svc, "_format_workflow_run_response", return_value={"success": True}
-            ):
-                result = svc._try_handle_dynamic_workflow(
-                    "u1", "确认", "pro", {}, {}
-                )
+            with patch.object(svc, "_format_workflow_run_response", return_value={"success": True}):
+                result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result == {"success": True}
         assert "u1" not in svc._pending_workflows
 
@@ -3243,9 +3223,7 @@ class TestTryHandleDynamicWorkflow:
             "thinking_steps": "thinking",
         }
         mock_agent_run = _make_agent_run(status="completed")
-        with patch(
-            "app.application.agent_orchestrator.AgentOrchestrator"
-        ) as mock_cls:
+        with patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_cls:
             mock_inst = mock_cls.return_value
             mock_inst.continue_run.return_value = mock_agent_run
             with patch.object(
@@ -3253,9 +3231,7 @@ class TestTryHandleDynamicWorkflow:
                 "_format_agent_run_response",
                 return_value={"success": True, "from_agent": True},
             ):
-                result = svc._try_handle_dynamic_workflow(
-                    "u1", "确认", "pro", {}, {}
-                )
+                result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result["from_agent"] is True
 
     def test_pending_workflow_confirm_with_approval(self):
@@ -3308,9 +3284,7 @@ class TestTryHandleDynamicWorkflow:
 
     def test_unit_products_db_import_full(self):
         svc = _make_svc()
-        with patch.object(
-            svc, "_build_workflow_thinking_steps", return_value="thinking"
-        ):
+        with patch.object(svc, "_build_workflow_thinking_steps", return_value="thinking"):
             with patch.object(
                 svc,
                 "_start_deterministic_import_agent_run",
@@ -3343,9 +3317,7 @@ class TestExecuteProductsQuery:
     def test_with_model_and_unit(self):
         svc = _make_svc()
         with patch("app.bootstrap.get_products_service") as mock_get:
-            with patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"
-            ):
+            with patch("app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"):
                 mock_svc = mock_get.return_value
                 mock_svc.get_products.return_value = {"data": [{"id": 1}]}
                 result = svc._execute_products_query(
@@ -3356,48 +3328,34 @@ class TestExecuteProductsQuery:
     def test_with_model_only(self):
         svc = _make_svc()
         with patch("app.bootstrap.get_products_service") as mock_get:
-            with patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"
-            ):
+            with patch("app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"):
                 mock_svc = mock_get.return_value
                 mock_svc.get_products.return_value = {"data": []}
-                result = svc._execute_products_query(
-                    {"data": {}}, {"model_number": "M1"}, {}
-                )
+                result = svc._execute_products_query({"data": {}}, {"model_number": "M1"}, {})
         assert "未找到" in result["response"]
 
     def test_with_unit_only(self):
         svc = _make_svc()
         with patch("app.bootstrap.get_products_service") as mock_get:
-            with patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"
-            ):
+            with patch("app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"):
                 mock_svc = mock_get.return_value
                 mock_svc.get_products.return_value = {"data": [{"id": 1}]}
-                result = svc._execute_products_query(
-                    {"data": {}}, {"unit_name": "ACME"}, {}
-                )
+                result = svc._execute_products_query({"data": {}}, {"unit_name": "ACME"}, {})
         assert "1" in result["response"]
 
     def test_with_keyword_only(self):
         svc = _make_svc()
         with patch("app.bootstrap.get_products_service") as mock_get:
-            with patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"
-            ):
+            with patch("app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"):
                 mock_svc = mock_get.return_value
                 mock_svc.get_products.return_value = {"data": [{"id": 1}]}
-                result = svc._execute_products_query(
-                    {"data": {}}, {"keyword": "paint"}, {}
-                )
+                result = svc._execute_products_query({"data": {}}, {"keyword": "paint"}, {})
         assert "1" in result["response"]
 
     def test_no_params_get_all(self):
         svc = _make_svc()
         with patch("app.bootstrap.get_products_service") as mock_get:
-            with patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"
-            ):
+            with patch("app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"):
                 mock_svc = mock_get.return_value
                 mock_svc.get_products.return_value = {"data": [{"id": 1}, {"id": 2}]}
                 result = svc._execute_products_query({"data": {}}, {}, {})
@@ -3412,9 +3370,7 @@ class TestExecuteProductsQuery:
                 mock_resolve.return_value = SimpleNamespace(unit_name="ACME公司")
                 mock_svc = mock_get.return_value
                 mock_svc.get_products.return_value = {"data": []}
-                result = svc._execute_products_query(
-                    {"data": {}}, {"keyword": "ACME的3A"}, {}
-                )
+                result = svc._execute_products_query({"data": {}}, {"keyword": "ACME的3A"}, {})
         assert "未找到" in result["response"]
 
     def test_keyword_with_de_pattern_no_resolve(self):
@@ -3426,26 +3382,20 @@ class TestExecuteProductsQuery:
                 mock_resolve.return_value = None
                 mock_svc = mock_get.return_value
                 mock_svc.get_products.return_value = {"data": []}
-                result = svc._execute_products_query(
-                    {"data": {}}, {"keyword": "测试的3A"}, {}
-                )
+                result = svc._execute_products_query({"data": {}}, {"keyword": "测试的3A"}, {})
         assert "未找到" in result["response"]
 
     def test_exception_returns_error(self):
         svc = _make_svc()
         with patch("app.bootstrap.get_products_service", side_effect=RuntimeError("db error")):
-            with patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"
-            ):
+            with patch("app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"):
                 result = svc._execute_products_query({"data": {}}, {}, {})
         assert "查询产品失败" in result["response"]
 
     def test_products_result_none(self):
         svc = _make_svc()
         with patch("app.bootstrap.get_products_service") as mock_get:
-            with patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"
-            ):
+            with patch("app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit"):
                 mock_svc = mock_get.return_value
                 mock_svc.get_products.return_value = None
                 result = svc._execute_products_query({"data": {}}, {}, {})

@@ -270,7 +270,9 @@ class NeuroBus:
         self._rel_circuit = None
         self._rel_lifeline = None
         self._rel_tracer = None
-        self._rel_sla_log = _neuro_reliability_wanted("XCAGI_NEURO_BUS_SLA_LOG", staging_default=False)
+        self._rel_sla_log = _neuro_reliability_wanted(
+            "XCAGI_NEURO_BUS_SLA_LOG", staging_default=False
+        )
         self._rel_sla_controller = None
         if self._rel_sla_log:
             from app.neuro_bus.sla_controller import SLAController

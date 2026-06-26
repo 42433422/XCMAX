@@ -439,7 +439,9 @@ async def mobile_auth_session_validate(request: Request, user=Depends(get_mobile
         )
     auth_hdr = request.headers.get("Authorization") or ""
     payload = verify_mobile_jwt(auth_hdr[7:].strip()) if auth_hdr.startswith("Bearer ") else None
-    session_id = str((payload or {}).get("session_id") or request.headers.get("X-Session-ID") or "").strip()
+    session_id = str(
+        (payload or {}).get("session_id") or request.headers.get("X-Session-ID") or ""
+    ).strip()
     if not session_id:
         return JSONResponse(
             format_mobile_response(
@@ -492,7 +494,9 @@ async def mobile_auth_session_validate(request: Request, user=Depends(get_mobile
         "session_id": session_id,
         "user": _user_public_dict(user),
         "session": session_info,
-        "account_kind": meta.get("account_kind") or (payload or {}).get("account_kind") or "enterprise",
+        "account_kind": meta.get("account_kind")
+        or (payload or {}).get("account_kind")
+        or "enterprise",
         "company_brand": meta.get("company_brand"),
         "entitled_mod_ids": entitled_mod_ids,
     }

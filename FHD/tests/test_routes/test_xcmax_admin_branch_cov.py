@@ -332,9 +332,7 @@ class TestSelfMaintenanceLocalOrProxyBranches:
     async def test_non_self_maintenance_path_returns_none(self):
         """Line 234: path doesn't start with /api/ops/self-maintenance/ → return None."""
         req = _mock_request()
-        result = await admin_routes._self_maintenance_local_or_proxy(
-            req, "GET", "/api/other/path"
-        )
+        result = await admin_routes._self_maintenance_local_or_proxy(req, "GET", "/api/other/path")
         assert result is None
 
     @pytest.mark.asyncio
@@ -357,7 +355,9 @@ class TestSelfMaintenanceLocalOrProxyBranches:
             ),
         ):
             result = await admin_routes._self_maintenance_local_or_proxy(
-                req, "POST", "/api/ops/self-maintenance/governance-review",
+                req,
+                "POST",
+                "/api/ops/self-maintenance/governance-review",
                 json_body={"note": "test"},
             )
         assert result == gov_result
@@ -409,9 +409,11 @@ class TestAdminListWallets:
                 new=AsyncMock(return_value=proxy_result),
             ) as mock_proxy,
         ):
-            result = await admin_routes.admin_list_market_users.__wrapped__(req) if hasattr(
-                admin_routes.admin_list_market_users, "__wrapped__"
-            ) else await admin_routes.admin_list_wallets(req)  # type: ignore[attr-defined]
+            result = (
+                await admin_routes.admin_list_market_users.__wrapped__(req)
+                if hasattr(admin_routes.admin_list_market_users, "__wrapped__")
+                else await admin_routes.admin_list_wallets(req)
+            )  # type: ignore[attr-defined]
         # The route handler is admin_list_wallets
         assert result == proxy_result
 
@@ -442,7 +444,7 @@ class TestAdminSetUserProfileDeep:
         user.username = kwargs.get("username", "existing")
         user.tier = kwargs.get("tier", "")
         user.industry_id = kwargs.get("industry_id", "")
-        user.account_tier = kwargs.get("account_tier", None)
+        user.account_tier = kwargs.get("account_tier")
         user.budget_range = kwargs.get("budget_range", "")
         user.entitled_industries = kwargs.get("entitled_industries", [])
         return user
@@ -707,9 +709,7 @@ class TestAdminActivateEnterpriseImpersonation:
 
     def test_missing_bridge_token_returns_400(self, client: TestClient):
         """Line 945: no bridge_token → 400."""
-        resp = client.post(
-            "/api/xcmax/admin/impersonate/activate-enterprise", json={}
-        )
+        resp = client.post("/api/xcmax/admin/impersonate/activate-enterprise", json={})
         assert resp.status_code == 400
 
     def test_empty_bridge_token_returns_400(self, client: TestClient):
@@ -868,9 +868,7 @@ class TestLocalEmployeeExecuteBranches:
     def test_empty_task_returns_400(self, client: TestClient):
         """Line 1201: empty task → 400."""
         with _session_id("sid"):
-            resp = client.post(
-                "/api/xcmax/local/employees/emp1/execute", json={"task": "  "}
-            )
+            resp = client.post("/api/xcmax/local/employees/emp1/execute", json={"task": "  "})
         assert resp.status_code == 400
 
     def test_input_data_not_dict_returns_400(self, client: TestClient):
@@ -1006,9 +1004,7 @@ class TestOpsStaffingInstallLocalDataConversion:
             "app.fastapi_routes.xcmax_admin._require_market_admin_session",
             return_value=JSONResponse({"success": False}, status_code=403),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"})
         assert resp.status_code == 403
 
     def test_missing_employee_id_returns_400(self, client: TestClient):
@@ -1028,9 +1024,7 @@ class TestOpsStaffingInstallLocalDataConversion:
                 new=AsyncMock(return_value=result_obj),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"})
         assert resp.status_code == 200
         assert resp.json()["data"]["data"] == "ok"
 
@@ -1043,9 +1037,7 @@ class TestOpsStaffingInstallLocalDataConversion:
                 new=AsyncMock(return_value={"success": True, "data": "dict-result"}),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"})
         assert resp.status_code == 200
         assert resp.json()["data"]["data"] == "dict-result"
 
@@ -1058,9 +1050,7 @@ class TestOpsStaffingInstallLocalDataConversion:
                 new=AsyncMock(return_value="string-result"),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"})
         assert resp.status_code == 200
         assert "string-result" in resp.json()["data"]["result"]
 
@@ -1073,9 +1063,7 @@ class TestOpsStaffingInstallLocalDataConversion:
                 new=AsyncMock(side_effect=RuntimeError("fail")),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/install-local", json={"employee_id": "e1"})
         assert resp.status_code == 500
 
 
@@ -1137,9 +1125,7 @@ class TestOpsStaffingCloseGap:
                 new=AsyncMock(return_value=err_resp),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/close-gap", json={}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/close-gap", json={})
         assert resp.status_code == 502
 
     def test_install_with_model_dump(self, client: TestClient):
@@ -1168,9 +1154,7 @@ class TestOpsStaffingCloseGap:
                 new=AsyncMock(return_value=result_obj),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True})
         assert resp.status_code == 200
         assert resp.json()["data"]["install_results"][0]["success"] is True
 
@@ -1196,9 +1180,7 @@ class TestOpsStaffingCloseGap:
                 new=AsyncMock(return_value={"success": False, "message": "fail"}),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True})
         assert resp.status_code == 200
         assert resp.json()["data"]["install_results"][0]["success"] is False
 
@@ -1227,9 +1209,7 @@ class TestOpsStaffingCloseGap:
                 new=AsyncMock(return_value="string-result"),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True})
         assert resp.status_code == 200
         install_results = resp.json()["data"]["install_results"]
         assert install_results[0]["success"] is True
@@ -1257,9 +1237,7 @@ class TestOpsStaffingCloseGap:
                 new=AsyncMock(side_effect=RuntimeError("install fail")),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True})
         assert resp.status_code == 200
         assert resp.json()["data"]["install_results"][0]["success"] is False
         assert "install fail" in resp.json()["data"]["install_results"][0]["message"]
@@ -1286,9 +1264,7 @@ class TestOpsStaffingCloseGap:
                 new=AsyncMock(return_value={"success": False, "msg": "fail"}),
             ),
         ):
-            resp = client.post(
-                "/api/xcmax/ops/staffing/close-gap", json={"skip_install": True}
-            )
+            resp = client.post("/api/xcmax/ops/staffing/close-gap", json={"skip_install": True})
         assert resp.status_code == 200
         assert resp.json()["data"]["onboard_ok"] is False
 
@@ -1344,9 +1320,7 @@ class TestXcmaxMarketProxyImplSelfMaintenance:
                 new=AsyncMock(return_value=sm_result),
             ),
         ):
-            result = await admin_routes._xcmax_market_proxy_impl(
-                req, "ops/self-maintenance/status"
-            )
+            result = await admin_routes._xcmax_market_proxy_impl(req, "ops/self-maintenance/status")
         assert result == sm_result
 
     @pytest.mark.asyncio
@@ -1448,9 +1422,7 @@ class TestCollectCodexUsageFileError:
 
     def test_directory_not_exists(self, monkeypatch):
         """Lines 1991-1992: directory doesn't exist → available=False."""
-        with patch(
-            "os.path.expanduser", return_value="/nonexistent/path/archived_sessions"
-        ):
+        with patch("os.path.expanduser", return_value="/nonexistent/path/archived_sessions"):
             result = admin_routes._collect_codex_usage()
         assert result["available"] is False
         assert "目录不存在" in result["reason"]
@@ -1699,29 +1671,52 @@ class TestBuildTokenUsageSummary:
         with (
             patch(
                 "app.fastapi_routes.xcmax_admin._collect_local_ledger",
-                return_value={"available": True, "total_tokens": 1000, "prompt_tokens": 500,
-                              "completion_tokens": 500, "cost_units": 200},
+                return_value={
+                    "available": True,
+                    "total_tokens": 1000,
+                    "prompt_tokens": 500,
+                    "completion_tokens": 500,
+                    "cost_units": 200,
+                },
             ),
             patch(
                 "app.fastapi_routes.xcmax_admin._collect_cursor_usage",
-                return_value={"available": True, "total_tokens": 2000, "prompt_tokens": 1000,
-                              "completion_tokens": 1000, "cost_cents": 500},
+                return_value={
+                    "available": True,
+                    "total_tokens": 2000,
+                    "prompt_tokens": 1000,
+                    "completion_tokens": 1000,
+                    "cost_cents": 500,
+                },
             ),
             patch(
                 "app.fastapi_routes.xcmax_admin._collect_codex_usage",
-                return_value={"available": True, "total_tokens": 3000, "prompt_tokens": 1500,
-                              "completion_tokens": 1500, "cache_read_tokens": 0,
-                              "reasoning_tokens": 0},
+                return_value={
+                    "available": True,
+                    "total_tokens": 3000,
+                    "prompt_tokens": 1500,
+                    "completion_tokens": 1500,
+                    "cache_read_tokens": 0,
+                    "reasoning_tokens": 0,
+                },
             ),
             patch(
                 "app.fastapi_routes.xcmax_admin._collect_trae_usage",
-                return_value={"available": True, "total_tokens": 4000, "prompt_tokens": 2000,
-                              "completion_tokens": 2000},
+                return_value={
+                    "available": True,
+                    "total_tokens": 4000,
+                    "prompt_tokens": 2000,
+                    "completion_tokens": 2000,
+                },
             ),
             patch(
                 "app.fastapi_routes.xcmax_admin._collect_mimo_usage",
-                return_value={"available": True, "total_tokens": 5000, "prompt_tokens": 0,
-                              "completion_tokens": 0},
+                return_value={
+                    "available": True,
+                    "total_tokens": 5000,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                },
             ),
         ):
             result = admin_routes._build_token_usage_summary()
@@ -1757,8 +1752,12 @@ class TestBuildTokenUsageSummary:
             ),
             patch(
                 "app.fastapi_routes.xcmax_admin._collect_mimo_usage",
-                return_value={"available": True, "total_tokens": 100, "prompt_tokens": 0,
-                              "completion_tokens": 0},
+                return_value={
+                    "available": True,
+                    "total_tokens": 100,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                },
             ),
         ):
             result = admin_routes._build_token_usage_summary()
@@ -1840,10 +1839,22 @@ class TestCollectLocalLedgerAdditional:
     def test_success_with_entries(self):
         """Cover success path with model entries."""
         entries = [
-            {"provider": "openai", "model": "gpt-4", "prompt_tokens": 100,
-             "completion_tokens": 50, "total_tokens": 150, "cost_units": 0.5},
-            {"provider": "anthropic", "model": "claude-3", "prompt_tokens": 200,
-             "completion_tokens": 100, "total_tokens": 300, "cost_units": 1.0},
+            {
+                "provider": "openai",
+                "model": "gpt-4",
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+                "cost_units": 0.5,
+            },
+            {
+                "provider": "anthropic",
+                "model": "claude-3",
+                "prompt_tokens": 200,
+                "completion_tokens": 100,
+                "total_tokens": 300,
+                "cost_units": 1.0,
+            },
         ]
         with patch(
             "app.infrastructure.billing.model_usage.list_model_usage_entries",
@@ -1920,14 +1931,28 @@ class TestCollectCursorUsageAdditional:
         """Cover success path with aggregations."""
         mock_proc = MagicMock()
         mock_proc.returncode = 0
-        mock_proc.stdout = json.dumps({
-            "aggregations": [
-                {"modelIntent": "gpt-4", "inputTokens": 100, "outputTokens": 50,
-                 "cacheReadTokens": 10, "cacheWriteTokens": 5, "totalCents": 25},
-                {"modelIntent": "claude-3", "inputTokens": 200, "outputTokens": 100,
-                 "cacheReadTokens": 20, "cacheWriteTokens": 10, "totalCents": 50},
-            ]
-        })
+        mock_proc.stdout = json.dumps(
+            {
+                "aggregations": [
+                    {
+                        "modelIntent": "gpt-4",
+                        "inputTokens": 100,
+                        "outputTokens": 50,
+                        "cacheReadTokens": 10,
+                        "cacheWriteTokens": 5,
+                        "totalCents": 25,
+                    },
+                    {
+                        "modelIntent": "claude-3",
+                        "inputTokens": 200,
+                        "outputTokens": 100,
+                        "cacheReadTokens": 20,
+                        "cacheWriteTokens": 10,
+                        "totalCents": 50,
+                    },
+                ]
+            }
+        )
         with (
             patch("shutil.which", return_value="/fake/cursor-usage"),
             patch("os.path.exists", return_value=True),

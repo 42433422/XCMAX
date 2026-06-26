@@ -21,12 +21,7 @@ import pytest
 
 
 def _load_ai_circle_module():
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "app"
-        / "application"
-        / "ai_circle_service.py"
-    )
+    path = Path(__file__).resolve().parents[2] / "app" / "application" / "ai_circle_service.py"
     spec = importlib.util.spec_from_file_location("ai_circle_under_test", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -64,7 +59,7 @@ class TestIso:
     def test_aware_datetime_preserved(self) -> None:
         dt = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         result = ai_circle._iso(dt)
-        assert "2025-01-01T12:00:00+00:00" == result
+        assert result == "2025-01-01T12:00:00+00:00"
 
 
 class TestCreateUserPost:
@@ -73,23 +68,17 @@ class TestCreateUserPost:
     def test_empty_content_raises(self) -> None:
         with patch.object(ai_circle, "ensure_ai_circle_tables"):
             with pytest.raises(ValueError, match="不能为空"):
-                ai_circle.create_user_post(
-                    user_id=1, author_name="x", avatar=None, body=""
-                )
+                ai_circle.create_user_post(user_id=1, author_name="x", avatar=None, body="")
 
     def test_whitespace_content_raises(self) -> None:
         with patch.object(ai_circle, "ensure_ai_circle_tables"):
             with pytest.raises(ValueError, match="不能为空"):
-                ai_circle.create_user_post(
-                    user_id=1, author_name="x", avatar=None, body="   "
-                )
+                ai_circle.create_user_post(user_id=1, author_name="x", avatar=None, body="   ")
 
     def test_too_long_content_raises(self) -> None:
         with patch.object(ai_circle, "ensure_ai_circle_tables"):
             with pytest.raises(ValueError, match="2000"):
-                ai_circle.create_user_post(
-                    user_id=1, author_name="x", avatar=None, body="x" * 2001
-                )
+                ai_circle.create_user_post(user_id=1, author_name="x", avatar=None, body="x" * 2001)
 
     def test_valid_post_with_author_name(self) -> None:
         db_mock = MagicMock()
@@ -146,7 +135,11 @@ class TestRecordEmployeeActivity:
         db_mock.add = MagicMock(side_effect=_add)
         with patch.object(ai_circle, "ensure_ai_circle_tables"), _fake_db_ctx(db_mock):
             ai_circle.record_employee_activity(
-                "emp1", success=False, blocked=True, task="do something", summary="blocked by policy"
+                "emp1",
+                success=False,
+                blocked=True,
+                task="do something",
+                summary="blocked by policy",
             )
             assert len(added) == 1
             assert "拦截" in added[0].body
@@ -218,13 +211,17 @@ class TestRecordEmployeeActivity:
             assert len(summary_line) <= 380  # "结果：" prefix + 360 chars
 
     def test_recoverable_exception_swallowed(self) -> None:
-        with patch.object(ai_circle, "ensure_ai_circle_tables", side_effect=RuntimeError("db down")):
+        with patch.object(
+            ai_circle, "ensure_ai_circle_tables", side_effect=RuntimeError("db down")
+        ):
             # Should not raise - RECOVERABLE_ERRORS includes RuntimeError
             ai_circle.record_employee_activity("emp1", success=True)
 
     def test_unrecoverable_exception_propagates(self) -> None:
         # KeyError is in RECOVERABLE_ERRORS, but KeyboardInterrupt is not
-        with patch.object(ai_circle, "ensure_ai_circle_tables", side_effect=KeyboardInterrupt("halt")):
+        with patch.object(
+            ai_circle, "ensure_ai_circle_tables", side_effect=KeyboardInterrupt("halt")
+        ):
             with pytest.raises(KeyboardInterrupt):
                 ai_circle.record_employee_activity("emp1", success=True)
 
