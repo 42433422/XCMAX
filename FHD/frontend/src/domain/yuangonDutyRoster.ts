@@ -206,7 +206,7 @@ export const YUANGON_PKG_DESCRIPTIONS: Record<string, string> = {
   'marketing-site-builder': '维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。',
   'miniapp-builder': '为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑',
   'mobile-android-release-officer': 'P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。',
-  'mobile-harmony-release-officer': 'P-S 鸿蒙 HarmonyOS 渠道构建与发布：build-hap.sh、publish-release-harmony.sh、HAP/HSP 产出与签名、企业版发版。',
+  'mobile-harmony-release-officer': '鸿蒙 HarmonyOS 渠道全自动发版:assembleApp 编译 → hap-sign-tool 真证书签名(AGC 发布证书)→ AGC Publishing API 上传 + 自动提交审核。本机(Mac mini)执行,密钥在 ~/XCMAX-runtime/harmony/signing(仓库外);一条龙 scripts/release-harmony.sh,详见 RUNBOOK.md。',
   'mobile-ios-release-officer': 'XCAGI iOS 渠道发布：主线上架、冻结兼容 SKU、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。',
   'mods-and-eskill-curator': '管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。',
   'modstore-backend-api': '维护 MODstore 平台的 Flask 蓝图 API：工作台、市场目录、工作流、LLM 代理与 WebSocket 实时通道；不触碰前端 Vue 文件。',

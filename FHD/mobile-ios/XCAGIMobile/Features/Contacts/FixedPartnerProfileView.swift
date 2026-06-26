@@ -65,7 +65,7 @@ struct FixedPartnerProfileView: View {
 
     private var header: some View {
         VStack(spacing: Theme.Space.sm) {
-            AvatarView(text: contact.name, size: 72)
+            AvatarView(text: contact.name, url: contact.avatar, size: 72)
             Text(contact.name).font(.title3).bold()
             Text(spec.alias).font(.footnote).foregroundColor(.secondary)
             Text(spec.accountId).font(.caption2.monospaced()).foregroundColor(.secondary)
