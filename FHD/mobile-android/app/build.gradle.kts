@@ -12,9 +12,13 @@ plugins {
 }
 
 // 版本注入: CI 发版用 -PandroidVersionCode / -PandroidVersionName(或 env)stamp 真实递增版本。
-// 本地/dev 无注入时仍保持 v10 展示锚点，但 versionCode 使用当前时间戳，避免调试包退回 10 被系统视为旧包。
-fun devVersionCode(): Int =
+// ssotVersionCodeAnchor 必须跟 VERSION.md 的 XCAGI 总版本主版本一致；本地/dev 无注入时
+// versionCode 使用当前时间戳，避免调试包退回 10 被系统视为旧包，versionName 仍展示 v10。
+val ssotVersionCodeAnchor = 10
+
+fun devVersionCode(ssotMajor: Int = ssotVersionCodeAnchor): Int =
     (System.currentTimeMillis() / 1000L)
+        .coerceAtLeast(ssotMajor.toLong())
         .coerceAtMost(Int.MAX_VALUE.toLong())
         .toInt()
 
