@@ -53,6 +53,7 @@ from app.application.ai_group_chat_service import (
     _with_required_group_members,
     _xiaoc_assistant_member,
 )
+from app.mod_sdk import assistant_ssot
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -508,27 +509,27 @@ class TestEmployeeManifest:
 class TestAppendSuperEmployees:
     """_append_super_employees 的分支覆盖。"""
 
-    def test_append_super_employees_adds_three_when_none_exist(self):
+    def test_append_super_employees_adds_all_when_none_exist(self):
         employees: list[dict] = []
         _append_super_employees(employees)
-        assert len(employees) == 3
+        assert len(employees) == len(assistant_ssot.super_employee_ids())
         ids = {e["employee_id"] for e in employees}
-        assert "codex-super-employee" in ids
-        assert "cursor-super-employee" in ids
-        assert "claude-super-employee" in ids
+        assert ids == set(assistant_ssot.super_employee_ids())
 
     def test_append_super_employees_skips_existing(self):
         employees = [{"employee_id": "codex-super-employee", "name": "existing"}]
         _append_super_employees(employees)
         ids = [e["employee_id"] for e in employees]
         assert ids.count("codex-super-employee") == 1
-        assert len(employees) == 3
+        assert len(employees) == len(assistant_ssot.super_employee_ids())
 
     def test_append_super_employees_skips_non_dict_entries(self):
         employees = ["not-a-dict", 42, None]
         _append_super_employees(employees)
         # non-dict entries are skipped when checking existing
-        assert len([e for e in employees if isinstance(e, dict)]) == 3
+        assert len([e for e in employees if isinstance(e, dict)]) == len(
+            assistant_ssot.super_employee_ids()
+        )
 
     def test_append_super_employees_silently_returns_on_import_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -649,10 +650,7 @@ class TestDefaultEnterpriseEmployeeLoader:
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             lambda: mock_mod_manager,
         )
-        monkeypatch.setattr(
-            "app.application.ai_group_chat_service._append_super_employees",
-            lambda x: None,
-        )
+        monkeypatch.setattr(group_chat_module, "_append_super_employees", lambda x: None)
         result = _default_enterprise_employee_loader()
         assert result == []
 
@@ -668,10 +666,7 @@ class TestDefaultEnterpriseEmployeeLoader:
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             lambda: mock_mod_manager,
         )
-        monkeypatch.setattr(
-            "app.application.ai_group_chat_service._append_super_employees",
-            lambda x: None,
-        )
+        monkeypatch.setattr(group_chat_module, "_append_super_employees", lambda x: None)
         result = _default_enterprise_employee_loader()
         assert result == []
 
@@ -686,10 +681,7 @@ class TestDefaultEnterpriseEmployeeLoader:
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             lambda: mock_mod_manager,
         )
-        monkeypatch.setattr(
-            "app.application.ai_group_chat_service._append_super_employees",
-            lambda x: None,
-        )
+        monkeypatch.setattr(group_chat_module, "_append_super_employees", lambda x: None)
         result = _default_enterprise_employee_loader()
         assert result == []
 
@@ -704,10 +696,7 @@ class TestDefaultEnterpriseEmployeeLoader:
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             lambda: mock_mod_manager,
         )
-        monkeypatch.setattr(
-            "app.application.ai_group_chat_service._append_super_employees",
-            lambda x: None,
-        )
+        monkeypatch.setattr(group_chat_module, "_append_super_employees", lambda x: None)
         result = _default_enterprise_employee_loader()
         assert result == []
 
