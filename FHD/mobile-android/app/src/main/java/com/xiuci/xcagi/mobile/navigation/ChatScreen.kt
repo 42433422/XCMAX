@@ -145,6 +145,9 @@ internal fun isCursorConversation(conversationId: String?): Boolean =
 internal fun isClaudeConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CLAUDE
 
+internal fun isTraeConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.TRAE
+
 internal fun chatAvatarFallback(
     conversationId: String?,
     hasEmployeeProfile: Boolean,
@@ -153,6 +156,7 @@ internal fun chatAvatarFallback(
         isCodexConversation(conversationId) -> AppAvatarFallback.CODEX
         isCursorConversation(conversationId) -> AppAvatarFallback.CURSOR
         isClaudeConversation(conversationId) -> AppAvatarFallback.CLAUDE
+        isTraeConversation(conversationId) -> AppAvatarFallback.TRAE
         hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
         else -> AppAvatarFallback.ASSISTANT
     }
