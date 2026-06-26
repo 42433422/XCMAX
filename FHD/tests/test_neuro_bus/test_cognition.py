@@ -17,7 +17,6 @@ import pytest
 from app.domain.neuro.cognition.attention_selector import (
     AttentionResult,
     AttentionSelector,
-    _estimate_tokens,
     _jaccard,
     _tokenize,
 )
@@ -30,6 +29,7 @@ from app.domain.neuro.cognition.working_memory import (
     get_working_memory,
     reset_working_memory,
 )
+from app.infrastructure.llm.token_estimator import estimate_tokens
 
 # ============================================================================
 # LLMPort 测试
@@ -438,21 +438,21 @@ class TestEstimateTokens:
     """Token 估算测试。"""
 
     def test_empty(self):
-        assert _estimate_tokens("") == 0
+        assert estimate_tokens("") == 0
 
     def test_chinese(self):
         # 4 个汉字 ≈ 6 token
-        result = _estimate_tokens("你好世界")
+        result = estimate_tokens("你好世界")
         assert result == 6
 
     def test_english(self):
         # 2 个英文词 ≈ 2 token (2 * 1.3 = 2.6 → 2)
-        result = _estimate_tokens("hello world")
+        result = estimate_tokens("hello world")
         assert result == 2
 
     def test_mixed(self):
         # 2 汉字 + 1 英文词 = 3 + 1 = 4
-        result = _estimate_tokens("你好 hello")
+        result = estimate_tokens("你好 hello")
         assert result == 4
 
 
