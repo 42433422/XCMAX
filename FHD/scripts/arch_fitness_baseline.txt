@@ -47,6 +47,7 @@
 [giant-file] app/fastapi_routes/excel_templates.py
 [giant-file] app/fastapi_routes/knowledge_v1.py
 [giant-file] app/fastapi_routes/market_account.py
+[giant-file] app/fastapi_routes/mobile_api.py
 [giant-file] app/fastapi_routes/mobile_api_extensions.py
 [giant-file] app/fastapi_routes/mod_store_routes.py
 [giant-file] app/fastapi_routes/print_routes.py
@@ -78,6 +79,7 @@
 [giant-file] app/services/deepseek_intent_service.py
 [giant-file] app/services/distillation_data_collector.py
 [giant-file] app/services/intent_service.py
+[giant-file] app/services/mobile_relay_desktop_client.py
 [giant-file] app/services/inventory_service.py
 [giant-file] app/services/mobile_relay_service.py
 [giant-file] app/services/purchase_service.py

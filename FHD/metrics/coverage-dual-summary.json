@@ -1,17 +1,17 @@
 {
   "_ssot": "FHD 覆盖率唯一对外口径。全量 source=[app] + branch，.venv = CI 等价依赖（不含 ml extra）。棘轮见 pyproject.toml fail_under + coverage_ratchet_baseline.json；趋势见 coverage-history.jsonl。红灯 WIP 不可对外宣称达标。",
-  "_updated": "2026-06-20",
+  "_updated": "2026-06-26",
   "committed_head": {
     "captured_at": "2026-06-19T16:57:59Z",
     "commit": "bb5e15a7",
-    "status": "stale_below_current_floor",
+    "status": "stale_snapshot_below_current_floor",
     "backend_line_pct": 85.07,
     "backend_branch_pct": 74.22,
     "backend_statements": 85261,
     "frontend_line_pct": 90.03,
     "frontend_branch_pct": 80.02,
     "frontend_function_pct": 77.2,
-    "note": "2026-06-19快照（floor=84时全绿）；floor已升至89，需重新测量"
+    "note": "2026-06-20 全绿 bump；当前 floor 已升至 backend line 89 / branch 84，需重新测量后才能恢复 green 口径"
   },
   "wip_local": {
     "captured_at": "2026-06-17T03:09:31Z",
@@ -31,7 +31,7 @@
   },
   "quality_gate": {
     "status": "failed",
-    "reason": "WIP快照（2026-06-17）过期且低于floor（89），需重新测量当前工作区pytest状态",
+    "reason": "HEAD 覆盖率快照低于当前 floor；WIP 快照（2026-06-17）已过期，需重新测量当前工作区 pytest 状态",
     "backend_line_floor": 89,
     "backend_branch_floor": 84,
     "head_backend_line_delta": -3.93,

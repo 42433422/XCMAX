@@ -400,6 +400,221 @@ class TestCallLlmApi:
 
 
 # ---------------------------------------------------------------------------
+# ContextWindowManager 集成测试（验证 call_llm_api 与 CWM 的衔接）
+# ---------------------------------------------------------------------------
+class TestContextWindowManagerIntegration:
+    """验证 ``call_llm_api`` 正确接入 ContextWindowManager。"""
+
+    @pytest.mark.asyncio
+    async def test_call_llm_api_invokes_context_window_manager(self):
+        """``call_llm_api`` 调用了 ContextWindowManager.compress。"""
+        from app.application.agent_orchestrator.context_window_manager import (
+            reset_context_window_manager,
+        )
+
+        reset_context_window_manager()
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "openai_compatible"
+        mock_provider._adapter = SimpleNamespace(
+            provider_name="xcauto", model_name="xcauto-account"
+        )
+        mock_provider.chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"content": "hi"}}],
+                "model": "xcauto-account",
+                "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+            }
+        )
+        with (
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=mock_provider,
+            ),
+            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
+            patch(
+                "app.application.agent_orchestrator.context_window_manager.get_context_window_manager"
+            ) as mock_get_cwm,
+        ):
+            mock_cwm = MagicMock()
+            mock_cwm.compress = AsyncMock(
+                return_value=MagicMock(
+                    messages=[{"role": "user", "content": "hi"}],
+                    strategy="noop",
+                    pre_message_count=1,
+                    post_message_count=1,
+                    pre_estimated_tokens=1,
+                    post_estimated_tokens=1,
+                    tokens_saved=0,
+                    summary_llm_call=None,
+                    compression_latency_ms=0.1,
+                )
+            )
+            mock_get_cwm.return_value = mock_cwm
+            await svc.call_llm_api([{"role": "user", "content": "hi"}])
+
+        mock_cwm.compress.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_call_llm_api_trace_contains_compression_fields(self):
+        """``_xcagi_trace`` 含压缩元数据字段。"""
+        from app.application.agent_orchestrator.context_window_manager import (
+            ContextCompressionResult,
+            reset_context_window_manager,
+        )
+
+        reset_context_window_manager()
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "openai_compatible"
+        mock_provider._adapter = SimpleNamespace(
+            provider_name="xcauto", model_name="xcauto-account"
+        )
+        mock_provider.chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"content": "hi"}}],
+                "model": "xcauto-account",
+                "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+            }
+        )
+        # 构造一个真实的 compression result（noop）
+        compression = ContextCompressionResult(
+            messages=[{"role": "user", "content": "hi"}],
+            strategy="noop",
+            pre_message_count=1,
+            post_message_count=1,
+            pre_estimated_tokens=1,
+            post_estimated_tokens=1,
+            tokens_saved=0,
+            summary_llm_call=None,
+            compression_latency_ms=0.5,
+        )
+        with (
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=mock_provider,
+            ),
+            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
+            patch(
+                "app.application.agent_orchestrator.context_window_manager.get_context_window_manager"
+            ) as mock_get_cwm,
+        ):
+            mock_cwm = MagicMock()
+            mock_cwm.compress = AsyncMock(return_value=compression)
+            mock_get_cwm.return_value = mock_cwm
+            result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
+
+        assert result is not None
+        trace = result["_xcagi_trace"]
+        assert trace["compression_strategy"] == "noop"
+        assert trace["pre_compression_message_count"] == 1
+        assert trace["post_compression_message_count"] == 1
+        assert trace["tokens_saved"] == 0
+        assert trace["context_window_manager_version"] == "1.0.0"
+        assert trace["compression_latency_ms"] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_call_llm_api_no_compression_when_under_budget(self):
+        """预算内（noop）时 trace 正确反映无压缩。"""
+        from app.application.agent_orchestrator.context_window_manager import (
+            reset_context_window_manager,
+        )
+
+        reset_context_window_manager()
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "openai_compatible"
+        mock_provider._adapter = SimpleNamespace(
+            provider_name="xcauto", model_name="xcauto-account"
+        )
+        mock_provider.chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"content": "hi"}}],
+                "model": "xcauto-account",
+                "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+            }
+        )
+        with (
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=mock_provider,
+            ),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
+            ) as mock_notify,
+        ):
+            result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
+
+        assert result is not None
+        trace = result["_xcagi_trace"]
+        assert trace["compression_strategy"] == "noop"
+        assert trace["tokens_saved"] == 0
+        # noop 时不触发额外的压缩通知
+        assert mock_notify.call_count == 1  # 只有主调用 roundtrip 通知
+
+    @pytest.mark.asyncio
+    async def test_call_llm_api_compression_saves_tokens_notifies_neuro(self):
+        """压缩节省 token 时额外通知 NeuroBus。"""
+        from app.application.agent_orchestrator.context_window_manager import (
+            ContextCompressionResult,
+            reset_context_window_manager,
+        )
+
+        reset_context_window_manager()
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "openai_compatible"
+        mock_provider._adapter = SimpleNamespace(
+            provider_name="xcauto", model_name="xcauto-account"
+        )
+        mock_provider.chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"content": "hi"}}],
+                "model": "xcauto-account",
+                "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+            }
+        )
+        compression = ContextCompressionResult(
+            messages=[{"role": "user", "content": "hi"}],
+            strategy="summarize",
+            pre_message_count=20,
+            post_message_count=5,
+            pre_estimated_tokens=600,
+            post_estimated_tokens=100,
+            tokens_saved=500,
+            summary_llm_call=None,
+            compression_latency_ms=15.0,
+        )
+        with (
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=mock_provider,
+            ),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
+            ) as mock_notify,
+            patch(
+                "app.application.agent_orchestrator.context_window_manager.get_context_window_manager"
+            ) as mock_get_cwm,
+        ):
+            mock_cwm = MagicMock()
+            mock_cwm.compress = AsyncMock(return_value=compression)
+            mock_get_cwm.return_value = mock_cwm
+            result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
+
+        assert result is not None
+        trace = result["_xcagi_trace"]
+        assert trace["compression_strategy"] == "summarize"
+        assert trace["tokens_saved"] == 500
+        # 主调用 + 压缩通知 = 2 次
+        assert mock_notify.call_count == 2
+        # 第二次通知是压缩通知
+        second_call = mock_notify.call_args_list[1]
+        assert second_call.kwargs["model"] == "context-window-manager"
+        assert second_call.kwargs["token_count"] == 500
+
+
+# ---------------------------------------------------------------------------
 # _call_deepseek_legacy
 # ---------------------------------------------------------------------------
 class TestCallDeepseekLegacy:

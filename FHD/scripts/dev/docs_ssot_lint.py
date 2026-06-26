@@ -22,6 +22,7 @@ SCAN_DIRS = [FHD_ROOT / "docs", REPO_ROOT / "docs"]
 # 设计/规划文档（brainstorming spec、implementation plan）含 YAML 示例中的 "ssot:" 字段，
 # 非权威 SSOT 声明，跳过扫描避免假阳性。
 IGNORE_DIRS = {REPO_ROOT / "docs" / "superpowers"}
+IGNORE_FILES = {FHD_ROOT / "docs" / "PROJECT_STATE.md"}
 
 CLAIM_PATTERN = re.compile(r"(唯一真相源|SSOT|单一事实来源)", re.IGNORECASE)
 # Markdown link in table cell: [text](path)
@@ -215,6 +216,10 @@ def scan_claims(scan_dirs: list[Path], retired_files: Optional[set] = None) -> l
 
             # Skip files under ignored dirs (design/plan artifacts)
             if any(resolved.is_relative_to(d) for d in IGNORE_DIRS if d.exists()):
+                continue
+
+            # Skip status dashboards that discuss SSOT health but do not define a source.
+            if resolved in {p.resolve() for p in IGNORE_FILES}:
                 continue
 
             # Skip SSOT_INDEX.md itself (it's the registry, not a claim)

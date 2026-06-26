@@ -3,6 +3,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from app.infrastructure.llm.token_estimator import estimate_messages_tokens
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,24 @@ class ConversationContext:
     intent_hints: list[str] = field(default_factory=list)
     pending_confirmation: dict[str, Any] | None = None
     last_intent_result: dict[str, Any] | None = None
+    # 上下文压缩 / Token 预算（由 ContextWindowManager 维护）
+    summary: str | None = None  # 历史摘要（覆盖 summary_covered_until 之前的轮次）
+    summary_covered_until: int = -1  # 摘要覆盖到 conversation_history 的哪个 index（-1 表示无摘要）
+    estimated_tokens: int = 0  # 当前 conversation_history 估算 token 数（缓存值）
+    token_budget: int = 8000  # 单次 LLM 调用 token 预算（可由环境变量覆盖）
+    compression_strategy: str = "truncate"  # "truncate" / "summarize" / "rolling" — 当前生效策略
+
+    def estimate_history_tokens(self) -> int:
+        """估算 ``conversation_history`` 的总 token 数并刷新缓存。
+
+        使用 :func:`app.infrastructure.llm.token_estimator.estimate_messages_tokens`
+        对 ``conversation_history`` 累加估算，结果写入 ``estimated_tokens`` 字段并返回。
+
+        Returns:
+            估算的 token 数（``int``，``conversation_history`` 为空时返回 0）。
+        """
+        self.estimated_tokens = estimate_messages_tokens(self.conversation_history)
+        return self.estimated_tokens
 
 
 class ContextMixin:

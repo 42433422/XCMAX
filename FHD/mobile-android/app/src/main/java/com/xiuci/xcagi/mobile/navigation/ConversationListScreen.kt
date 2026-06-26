@@ -127,11 +127,12 @@ fun ConversationListScreen(
     val employeeCount = conversations.count { it.type == ConversationType.AI_TASK }
     val unreadTotal = conversations.sumOf { it.unreadCount }
 
-    // 首次进入：拉取一次（受 TTL 控制，5 分钟内不重复请求）
-    LaunchedEffect(isEnterprise, accountKindLabel) { vm.loadConversations(isEnterprise) }
-
-    // AI 群聊（学微信：6 个部门群直接出现在消息页）。仅企业/管理端有群。
-    LaunchedEffect(isEnterprise) { if (isEnterprise) vm.loadAiGroups() }
+    // 首次进入：拉取一次（受 TTL 控制，5 分钟内不重复请求）。
+    // 群聊不能依赖本地企业态缓存；账号态或远端 SKU 刚刷新时，先尝试拉取，失败静默保留旧值。
+    LaunchedEffect(isEnterprise, accountKindLabel) {
+        vm.loadConversations(isEnterprise)
+        vm.loadAiGroups()
+    }
     val filteredGroups =
             remember(searchQuery, aiGroups) {
                 if (searchQuery.isBlank()) aiGroups
@@ -173,7 +174,7 @@ fun ConversationListScreen(
     LifecycleResumeEffect(Unit) {
         vm.loadConversations(isEnterprise, force = false)
         // 群也在恢复时重拉：抓住 token 新鲜的时机（admin 接口令牌过期时会 401 静默失败）。
-        if (isEnterprise) vm.loadAiGroups()
+        vm.loadAiGroups()
         onPauseOrDispose { }
     }
 
@@ -224,7 +225,10 @@ fun ConversationListScreen(
             // 下拉刷新：用户主动下拉时强制刷新（force=true），保留旧数据不闪烁
             PullToRefreshBox(
                     isRefreshing = refreshing,
-                    onRefresh = { vm.loadConversations(isEnterprise, force = true) },
+                    onRefresh = {
+                        vm.loadConversations(isEnterprise, force = true)
+                        vm.loadAiGroups()
+                    },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
             ) {
                 LazyColumn(
@@ -275,7 +279,7 @@ fun ConversationListScreen(
                         item { EcosystemSyncHint(onRefresh = { vm.loadConversations(isEnterprise, force = true) }) }
                     }
 
-                    if (filtered.isEmpty()) {
+                    if (filteredGroups.isEmpty() && filtered.isEmpty()) {
                         item {
                             Box(
                                     Modifier.fillParentMaxSize().padding(vertical = 80.dp),

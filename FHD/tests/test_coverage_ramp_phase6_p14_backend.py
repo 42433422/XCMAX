@@ -996,7 +996,10 @@ class TestAddToHistory:
         assert ctx.conversation_history[0]["content"] == "first"
         assert ctx.conversation_history[1]["content"] == "second"
 
-    def test_add_to_history_truncates_at_20(self, conversation_service: _ConversationHost) -> None:
+    def test_add_to_history_truncates_at_20(
+        self, conversation_service: _ConversationHost, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FHD_CONVERSATION_HISTORY_MAX", "20")
         for i in range(25):
             conversation_service.add_to_history("u1", "user", f"msg{i}")
         ctx = conversation_service.contexts["u1"]
@@ -1025,21 +1028,77 @@ class TestAddToHistory:
         assert len(ctx.conversation_history) == 19
 
     def test_add_to_history_boundary_20_keeps_all(
-        self, conversation_service: _ConversationHost
+        self, conversation_service: _ConversationHost, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.setenv("FHD_CONVERSATION_HISTORY_MAX", "20")
         for i in range(20):
             conversation_service.add_to_history("u1", "user", f"msg{i}")
         ctx = conversation_service.contexts["u1"]
         assert len(ctx.conversation_history) == 20
 
     def test_add_to_history_boundary_21_truncates(
-        self, conversation_service: _ConversationHost
+        self, conversation_service: _ConversationHost, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.setenv("FHD_CONVERSATION_HISTORY_MAX", "20")
         for i in range(21):
             conversation_service.add_to_history("u1", "user", f"msg{i}")
         ctx = conversation_service.contexts["u1"]
         assert len(ctx.conversation_history) == 20
         assert ctx.conversation_history[0]["content"] == "msg1"
+
+    def test_add_to_history_default_limit_is_50(
+        self, conversation_service: _ConversationHost, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """默认内存历史上限为 50（原硬编码 20 已升级为可配置）。"""
+        monkeypatch.delenv("FHD_CONVERSATION_HISTORY_MAX", raising=False)
+        for i in range(55):
+            conversation_service.add_to_history("u1", "user", f"msg{i}")
+        ctx = conversation_service.contexts["u1"]
+        assert len(ctx.conversation_history) == 50
+        assert ctx.conversation_history[0]["content"] == "msg5"
+        assert ctx.conversation_history[-1]["content"] == "msg54"
+
+    def test_add_to_history_custom_limit_via_env(
+        self, conversation_service: _ConversationHost, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``FHD_CONVERSATION_HISTORY_MAX`` 可自定义上限。"""
+        monkeypatch.setenv("FHD_CONVERSATION_HISTORY_MAX", "15")
+        for i in range(20):
+            conversation_service.add_to_history("u1", "user", f"msg{i}")
+        ctx = conversation_service.contexts["u1"]
+        assert len(ctx.conversation_history) == 15
+        assert ctx.conversation_history[0]["content"] == "msg5"
+
+    def test_add_to_history_invalid_env_falls_back_to_default(
+        self, conversation_service: _ConversationHost, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """无效 env 值回退到默认 50。"""
+        monkeypatch.setenv("FHD_CONVERSATION_HISTORY_MAX", "not-a-number")
+        for i in range(12):
+            conversation_service.add_to_history("u1", "user", f"msg{i}")
+        ctx = conversation_service.contexts["u1"]
+        assert len(ctx.conversation_history) == 12  # 未触发滚动
+
+    def test_add_to_history_floor_enforced(
+        self, conversation_service: _ConversationHost, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``FHD_CONVERSATION_HISTORY_MAX`` < 10 时强制为 10。"""
+        monkeypatch.setenv("FHD_CONVERSATION_HISTORY_MAX", "3")
+        for i in range(15):
+            conversation_service.add_to_history("u1", "user", f"msg{i}")
+        ctx = conversation_service.contexts["u1"]
+        assert len(ctx.conversation_history) == 10  # floor=10
+
+    def test_add_to_history_refreshes_token_estimate(
+        self, conversation_service: _ConversationHost
+    ) -> None:
+        """``add_to_history`` 后 ``estimated_tokens`` 缓存被刷新。"""
+        ctx = conversation_service.contexts.get("u1")
+        assert ctx is None or ctx.estimated_tokens == 0
+        conversation_service.add_to_history("u1", "user", "你好世界")
+        ctx = conversation_service.contexts["u1"]
+        # "你好世界" → 4 中文字 × 1.5 = 6 token
+        assert ctx.estimated_tokens == 6
 
 
 class TestAddIntentFeedback:
