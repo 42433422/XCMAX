@@ -148,6 +148,7 @@ def esign_sign_task_public(task_id: str, token: str = ""):
 @router.post("/esign/sign/{task_id}/complete")
 def esign_sign_complete_public(task_id: str, body: EsignSignCompleteBody):
     """客户在自建签署页确认签署，自动推进合同状态。"""
+    from app.application.contract_lifecycle_app_service import handle_esign_webhook
     from app.infrastructure.esign.esign_adapter import esign_provider_name
     from app.infrastructure.esign.stub_esign_store import (
         complete_task,
@@ -155,7 +156,6 @@ def esign_sign_complete_public(task_id: str, body: EsignSignCompleteBody):
         task_ttl_exceeded,
         verify_sign_token,
     )
-    from app.services.contract_lifecycle import handle_esign_webhook
 
     if esign_provider_name() != "stub":
         return JSONResponse(
@@ -194,7 +194,7 @@ def esign_sign_complete_public(task_id: str, body: EsignSignCompleteBody):
 @router.post("/esign/webhook")
 async def esign_webhook(request: Request):
     """Stub：JSON body；法大大：application/x-www-form-urlencoded + X-FASC-* 头。"""
-    from app.services.contract_lifecycle import handle_esign_webhook
+    from app.application.contract_lifecycle_app_service import handle_esign_webhook
 
     fasc_app_id = (request.headers.get("X-FASC-App-Id") or "").strip()
     content_type = (request.headers.get("content-type") or "").lower()
@@ -212,12 +212,12 @@ async def esign_webhook(request: Request):
 
 
 async def _fadada_esign_webhook(request: Request) -> PlainTextResponse | JSONResponse:
+    from app.application.contract_lifecycle_app_service import handle_esign_webhook
     from app.infrastructure.esign.esign_adapter import get_esign_adapter
     from app.infrastructure.esign.fadada_fasc_client import (
         parse_fadada_callback_biz,
         verify_fadada_callback_signature,
     )
-    from app.services.contract_lifecycle import handle_esign_webhook
 
     form = await request.form()
     biz_content = str(form.get("bizContent") or "")
