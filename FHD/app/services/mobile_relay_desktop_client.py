@@ -11,7 +11,9 @@ import logging
 import os
 import platform
 import re
+import shutil
 import socket
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -343,6 +345,38 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
     return data
 
 
+def _gc_orphan_workspaces() -> int:
+    """回收崩溃残留的隔离工作区，避免磁盘缓慢膨胀（满足『无垃圾残留』）。
+
+    只清 age-based 超期（默认 6h）的**已知临时目录**：dev-loop 的 ``xcagi-wt-*``
+    与产品域 scratch 子目录；活跃任务都是近期的，绝不会误删。另对底座仓库跑
+    ``git worktree prune`` 清理目录已不存在的 worktree 元数据。返回清理的目录数。
+    """
+    try:
+        max_age = float(os.environ.get("XCAGI_RELAY_WORKSPACE_GC_MAX_AGE_SEC") or str(6 * 3600))
+    except (TypeError, ValueError):
+        max_age = 6 * 3600.0
+    now = time.time()
+    tmp = Path(tempfile.gettempdir())
+    targets: list[Path] = list(tmp.glob("xcagi-wt-*"))
+    scratch = tmp / "xcmax_product_scratch"
+    if scratch.is_dir():
+        targets += [p for p in scratch.iterdir() if p.is_dir()]
+    removed = 0
+    for path in targets:
+        try:
+            if now - path.stat().st_mtime < max_age:
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            removed += 1
+    if removed:
+        logger.info("relay 工作区 GC：清理 %d 个超期残留目录", removed)
+    return removed
+
+
 def start_desktop_relay_poller() -> bool:
     """Start the daemon poller if a relay config exists."""
     config = _read_config()
@@ -352,6 +386,10 @@ def start_desktop_relay_poller() -> bool:
     # poll 日志刷成噪音（~2 万行/天），白白撑大桌面端日志文件占满磁盘。降到 WARNING，
     # 真正的失败仍由 _poll_loop 自己的 logger.warning 记录。
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    try:
+        _gc_orphan_workspaces()
+    except Exception:  # noqa: BLE001 - GC 永远不能阻断 relay 启动
+        logger.warning("relay 工作区 GC 失败", exc_info=True)
     global _WORKER_THREAD
     with _STATE_LOCK:
         if _WORKER_THREAD and _WORKER_THREAD.is_alive():
@@ -388,11 +426,17 @@ def _complete_relay_task(
 ) -> None:
     """在独立线程里执行单个任务并回写结果；不阻塞 poll 循环。"""
     task_id = str(task.get("task_id") or "")
+    started = time.monotonic()
     try:
         result = _execute_task(task)
         relay_status = str(result.pop("_relay_status", "") or "").strip()
         if not relay_status:
             relay_status = "failed" if result.get("error") else "completed"
+        # 结构化执行结果契约：体验层卡片/时长/精准报错的数据底座。
+        result["elapsed_seconds"] = round(max(0.0, time.monotonic() - started), 1)
+        if relay_status in _FAILED_STATUSES or relay_status in _BLOCKED_STATUSES:
+            result.setdefault("error_code", relay_status)
+            result.setdefault("error_message", str(result.get("error") or "").strip())
         timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
         with httpx.Client(timeout=timeout) as client:
             client.post(

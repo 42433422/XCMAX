@@ -2009,7 +2009,15 @@ class SuperEmployeeService:
         try:
             body = self._run_cli_once(cli_path, self._cli_work_prompt(text, wt_path), wt_path)
             ok, vmsg = self._verify_workspace(wt_path)
-            if not ok:
+            # 迭代修复：验证未过则让 CLI 再修，最多 N 轮（env 可调），而非『只修一次』即放弃，
+            # 显著提升 dev-loop 通过率，少落 blocked。
+            try:
+                max_fix = max(1, int(os.environ.get("XCMAX_DEV_LOOP_MAX_FIX") or "3"))
+            except (TypeError, ValueError):
+                max_fix = 3
+            attempt = 0
+            while not ok and attempt < max_fix:
+                attempt += 1
                 self._run_cli_once(cli_path, self._cli_fix_prompt(vmsg, wt_path), wt_path)
                 ok, vmsg = self._verify_workspace(wt_path)
             pushed, pmsg = self._commit_and_push(wt_path, branch, text)
