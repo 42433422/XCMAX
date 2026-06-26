@@ -4,6 +4,58 @@ import json
 import time
 
 
+def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
+    from app.services import mobile_relay_desktop_client as relay
+    from app.utils import device_identity
+
+    posted: list[dict] = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": {
+                    "relay_id": "relay-1",
+                    "desktop_token": "secret",
+                    "pairing_code": "123456",
+                    "relay_base_url": "https://xiu-ci.com/fhd-api/",
+                }
+            }
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, *args, **kwargs):
+            posted.append(kwargs["json"])
+            return FakeResponse()
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("XCAGI_DEVICE_ID", raising=False)
+    monkeypatch.setattr(relay, "_CONFIG_FILE", tmp_path / "mobile_relay_desktop.json")
+    monkeypatch.setattr(relay.httpx, "Client", FakeClient)
+    monkeypatch.setattr(relay, "start_desktop_relay_poller", lambda: True)
+    device_identity._cached = None
+
+    relay.register_desktop_relay(host="192.168.0.38", port=17500)
+    device_identity._cached = None
+    relay.register_desktop_relay(host="192.168.0.38", port=17501)
+
+    assert len(posted) == 2
+    assert posted[0]["device_id"] == posted[1]["device_id"]
+    assert posted[0]["device_id"] != "192.168.0.38:17500"
+    assert posted[0]["capabilities"]["port"] == 17500
+    assert posted[1]["capabilities"]["port"] == 17501
+
+
 def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tmp_path):
     from app.services import mobile_relay_desktop_client as relay
 

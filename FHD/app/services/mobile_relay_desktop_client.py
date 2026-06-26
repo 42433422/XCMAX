@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
+from app.utils.device_identity import get_stable_device_id
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
@@ -266,7 +267,7 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
     device_label = label.strip() or f"XCAGI 桌面执行端 - {socket.gethostname()}"
     body = {
         "label": device_label,
-        "device_id": f"{socket.gethostname()}:{port}",
+        "device_id": get_stable_device_id(),
         "relay_base_url": base_url,
         "capabilities": {
             "codex": True,
