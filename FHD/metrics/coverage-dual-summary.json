@@ -4,14 +4,14 @@
   "committed_head": {
     "captured_at": "2026-06-19T16:57:59Z",
     "commit": "bb5e15a7",
-    "status": "committed_green_bump",
+    "status": "stale_below_current_floor",
     "backend_line_pct": 85.07,
     "backend_branch_pct": 74.22,
     "backend_statements": 85261,
     "frontend_line_pct": 90.03,
     "frontend_branch_pct": 80.02,
     "frontend_function_pct": 77.2,
-    "note": "全绿 bump；后续 mobile 相关提交未重新测量"
+    "note": "2026-06-19快照（floor=84时全绿）；floor已升至89，需重新测量"
   },
   "wip_local": {
     "captured_at": "2026-06-17T03:09:31Z",
@@ -27,26 +27,26 @@
     "pytest_failed": 196,
     "pytest_errors": 7,
     "pytest_skipped": 39,
-    "note": "2026-06-17 快照；HEAD 已于 2026-06-20 bump 至 85.07%，此 WIP 快照需重新测量以反映当前工作区状态"
+    "note": "2026-06-17 快照；floor已升至89，WIP快照需重新测量"
   },
   "quality_gate": {
     "status": "failed",
-    "reason": "HEAD (bb5e15a7) 全绿 bump 至 85.07%；WIP 快照（2026-06-17）已过期且低于 floor，需重新测量当前工作区 pytest 状态",
-    "backend_line_floor": 84,
-    "backend_branch_floor": 73,
-    "head_backend_line_delta": 1.07,
-    "head_backend_branch_delta": 1.22,
-    "wip_backend_line_delta": -9.44,
-    "wip_backend_branch_delta": -11.2
+    "reason": "WIP快照（2026-06-17）过期且低于floor（89），需重新测量当前工作区pytest状态",
+    "backend_line_floor": 89,
+    "backend_branch_floor": 84,
+    "head_backend_line_delta": -3.93,
+    "head_backend_branch_delta": -9.78,
+    "wip_backend_line_delta": -14.44,
+    "wip_backend_branch_delta": -22.2
   },
   "ratchet_floors": {
-    "backend_line": 84,
+    "backend_line": 89,
     "backend_branch": 84,
     "branch_floor": 84,
-    "frontend_lines": 89,
-    "frontend_branches": 79,
-    "frontend_functions": 77,
-    "frontend_statements": 89,
+    "frontend_lines": 92,
+    "frontend_branches": 81,
+    "frontend_functions": 90,
+    "frontend_statements": 92,
     "source": "pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json"
   },
   "targets": {
