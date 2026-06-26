@@ -97,6 +97,7 @@ object ApiEndpoints {
     // AI 群聊
     const val GIT_BRANCHES = "$BASE/git/branches"
     const val AI_GROUPS = "$BASE/ai-groups"
+    const val AI_GROUP_CANDIDATES = "$BASE/ai-groups/candidates"
     const val AI_GROUP_MESSAGES = "$BASE/ai-groups/{groupId}/messages"
     const val AI_GROUP_MEMBERS = "$BASE/ai-groups/{groupId}/members"
     const val AI_GROUP_MEMBER = "$BASE/ai-groups/{groupId}/members/{employeeId}"

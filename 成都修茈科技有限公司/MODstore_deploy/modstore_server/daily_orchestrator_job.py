@@ -281,6 +281,19 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
     except Exception:
         logger.exception("daily orchestrator: branch cleanup skipped")
 
+    if staged_id:
+        try:
+            from modstore_server.employee_collab_reporter import report_staged_change
+
+            report_staged_change(
+                staged_id=int(staged_id),
+                branch=branch,
+                files=files_n,
+                pr_url=str((result.get("pr") or {}).get("pr_url") or ""),
+            )
+        except Exception:
+            logger.exception("collab report (staged change) failed staged_id=%s", staged_id)
+
     return result
 
 

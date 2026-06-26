@@ -621,6 +621,25 @@ def admin_ai_groups_list(request: Request, user: CurrentUser = Depends(require_i
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
+@router.get("/api/admin/ai-groups/candidates")
+def admin_ai_group_candidates(
+    request: Request, user: CurrentUser = Depends(require_identified_user)
+):
+    """可拉入群聊的 AI 员工候选（普通员工 + 超级员工）。
+
+    供手机端建群/加成员的选人列表使用，覆盖全部 AI 员工。
+    """
+    denied = _ai_group_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        candidates = AiGroupChatService().list_member_candidates()
+        return {"success": True, "candidates": candidates}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_ai_group_candidates")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
 @router.post("/api/admin/ai-groups")
 def admin_ai_groups_create(
     request: Request,
