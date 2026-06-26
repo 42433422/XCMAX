@@ -19,6 +19,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,7 @@ def _incident_employee_input(
     return inp
 
 
+@platform_llm_scoped
 def _dispatch_incident(event_id: int) -> None:
     try:
         from modstore_server.node_coordinator import claim_incident_for_node
@@ -272,7 +274,9 @@ def _dispatch_incident(event_id: int) -> None:
                 )
                 return
         except Exception:
-            logger.exception("unified incident orchestrator failed event_id=%s; fallback dispatch", event_id)
+            logger.exception(
+                "unified incident orchestrator failed event_id=%s; fallback dispatch", event_id
+            )
 
     if (os.environ.get("MODSTORE_INCIDENT_TEAM_ENABLED", "1") or "").strip().lower() in {
         "1",
@@ -289,9 +293,11 @@ def _dispatch_incident(event_id: int) -> None:
                     "incident_bus: team claimed event_id=%s ok=%s team=%s",
                     event_id,
                     team.get("ok"),
-                    (team.get("team") or {}).get("team")
-                    if isinstance(team.get("team"), dict)
-                    else None,
+                    (
+                        (team.get("team") or {}).get("team")
+                        if isinstance(team.get("team"), dict)
+                        else None
+                    ),
                 )
                 return
             logger.info(
@@ -317,9 +323,11 @@ def _dispatch_incident(event_id: int) -> None:
                     "incident_bus: market claimed event_id=%s employee=%s score=%s",
                     event_id,
                     market.get("employee_id"),
-                    (market.get("winner") or {}).get("score")
-                    if isinstance(market.get("winner"), dict)
-                    else None,
+                    (
+                        (market.get("winner") or {}).get("score")
+                        if isinstance(market.get("winner"), dict)
+                        else None
+                    ),
                 )
                 return
             logger.info(
@@ -328,7 +336,9 @@ def _dispatch_incident(event_id: int) -> None:
                 market.get("reason"),
             )
         except Exception:
-            logger.exception("incident task market failed event_id=%s; fallback binding dispatch", event_id)
+            logger.exception(
+                "incident task market failed event_id=%s; fallback binding dispatch", event_id
+            )
 
     sf = get_session_factory()
     admin_id = _admin_user_id()
