@@ -77,7 +77,9 @@ def get_json(client: httpx.Client, path: str) -> Any:
     return r.json()
 
 
-def post_json(client: httpx.Client, path: str, body: Optional[Dict[str, Any]] = None) -> httpx.Response:
+def post_json(
+    client: httpx.Client, path: str, body: Optional[Dict[str, Any]] = None
+) -> httpx.Response:
     return client.post(path, json=body or {}, timeout=180.0)
 
 
@@ -93,9 +95,7 @@ def pick_employee_id(client: httpx.Client, explicit: str) -> str:
     return eid
 
 
-def pick_workflow_id(
-    client: httpx.Client, employee_id: str, explicit: str
-) -> int:
+def pick_workflow_id(client: httpx.Client, employee_id: str, explicit: str) -> int:
     if explicit.strip():
         return int(explicit.strip())
     from urllib.parse import quote
@@ -116,7 +116,9 @@ def pick_workflow_id(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="P0 API smoke: employee + workflow sandbox + execute")
-    ap.add_argument("--base-url", default=os.environ.get("MODSTORE_BASE_URL", "http://127.0.0.1:8765"))
+    ap.add_argument(
+        "--base-url", default=os.environ.get("MODSTORE_BASE_URL", "http://127.0.0.1:8765")
+    )
     ap.add_argument("--token", default=_env_token(), help="Bearer access token")
     ap.add_argument(
         "--mint-user-id",
@@ -191,9 +193,9 @@ def main() -> int:
             "body": _safe_json(r2),
         }
         if r2.status_code >= 400:
-            out["paths"]["workflow_sandbox_run"]["note"] = (
-                "沙盒失败常见于图校验错误、或员工节点配置缺失；仍继续尝试正式执行。"
-            )
+            out["paths"]["workflow_sandbox_run"][
+                "note"
+            ] = "沙盒失败常见于图校验错误、或员工节点配置缺失；仍继续尝试正式执行。"
 
         # 3) 正式执行（需 is_active）
         r3 = post_json(
@@ -211,9 +213,10 @@ def main() -> int:
     # 若员工成功而后两条失败，仍返回 1 便于 CI
     if out["paths"]["employee_execute"]["status_code"] >= 400:
         return 1
-    if out["paths"]["workflow_sandbox_run"]["status_code"] >= 400 and out["paths"]["workflow_execute"][
-        "status_code"
-    ] >= 400:
+    if (
+        out["paths"]["workflow_sandbox_run"]["status_code"] >= 400
+        and out["paths"]["workflow_execute"]["status_code"] >= 400
+    ):
         return 1
     return 0
 

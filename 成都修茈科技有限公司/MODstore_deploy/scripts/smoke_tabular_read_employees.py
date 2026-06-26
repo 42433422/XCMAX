@@ -39,7 +39,9 @@ def _fixture_bytes(kind: str) -> bytes:
     raise ValueError(kind)
 
 
-def _simulate_execute_file(employee_id: str, payload: bytes, filename: str, user_id: int = 1) -> dict:
+def _simulate_execute_file(
+    employee_id: str, payload: bytes, filename: str, user_id: int = 1
+) -> dict:
     from modstore_server.employee_api import (
         _collect_llm_context_text,
         _persist_employee_outputs_for_download,
@@ -83,7 +85,11 @@ def _simulate_execute_file(employee_id: str, payload: bytes, filename: str, user
         out["direct_python_ok"] = dp_ok
         if not out["ok"]:
             err = next(
-                (str(o.get("error") or "") for o in outputs if isinstance(o, dict) and o.get("error")),
+                (
+                    str(o.get("error") or "")
+                    for o in outputs
+                    if isinstance(o, dict) and o.get("error")
+                ),
                 "",
             )
             out["error"] = err or "direct_python 未成功或未写出 outputs 文件"

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """网页爬虫 CLI：Bing 浏览器填框搜索；可选 Tavily 兜底。"""
+
 from __future__ import annotations
 
 import argparse

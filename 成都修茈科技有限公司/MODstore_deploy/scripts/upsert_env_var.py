@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Upsert KEY=value in a dotenv-style file (one line per key). Replaces first matching KEY= or # KEY= line, else appends."""
+
 from __future__ import annotations
 
 import re

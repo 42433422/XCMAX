@@ -78,9 +78,8 @@ def _schema_keys(data: dict) -> dict:
         "top": sorted(data.keys()),
         "slide_keys": sorted(first.keys()) if first else [],
         "slide_count": data.get("slide_count"),
-        "has_notes_generated": "notes_generated" in first or any(
-            isinstance(s, dict) and s.get("notes_generated") for s in slides
-        ),
+        "has_notes_generated": "notes_generated" in first
+        or any(isinstance(s, dict) and s.get("notes_generated") for s in slides),
     }
 
 
@@ -99,7 +98,11 @@ def main() -> int:
 
     ppt_bytes = minimal_pptx_fixture_bytes()
     if not ppt_bytes:
-        print(json.dumps({"ok": False, "error": "python-pptx 未安装，无法生成测试 pptx"}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"ok": False, "error": "python-pptx 未安装，无法生成测试 pptx"}, ensure_ascii=False
+            )
+        )
         return 2
 
     read_res = _simulate_execute("ppt-full-read-employee", ppt_bytes, "smoke.pptx")
@@ -155,7 +158,11 @@ def main() -> int:
     # 生成员：用读取产出的 JSON 写回 pptx
     json_bytes = json.dumps(pres, ensure_ascii=False, indent=2).encode("utf-8")
     gen_res = _simulate_execute("ppt-generate-employee", json_bytes, "presentation_full.json")
-    report["generate"] = {"ok": gen_res.get("ok"), "error": gen_res.get("error"), "downloads": gen_res.get("downloads")}
+    report["generate"] = {
+        "ok": gen_res.get("ok"),
+        "error": gen_res.get("error"),
+        "downloads": gen_res.get("downloads"),
+    }
 
     out_pptx: Path | None = None
     for dl in gen_res.get("downloads") or []:

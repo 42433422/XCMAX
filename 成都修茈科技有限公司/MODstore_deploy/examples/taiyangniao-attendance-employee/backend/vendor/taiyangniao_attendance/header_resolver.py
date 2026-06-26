@@ -66,14 +66,14 @@ def _norm(text: object) -> str:
 class ResolvedHeader:
     """某个 sheet 的表头解析结果。"""
 
-    header_row: int               # 1-based
-    data_start_row: int           # 1-based，首个有效数据行
-    columns: dict[str, int]       # semantic_key -> 0-based col index
-    clock_time_columns: list[int] # 上班N/下班N 打卡时间列，按表头顺序
-    leave_columns: list[int]      # 请假 合并表头下的子列（不含 请假 自身）
-    raw_header: list[str]         # 原始表头文字
-    source: str                   # "local" | "llm"
-    a1_text: str = ""             # 表格左上角 A1 原文（供抽取月份）
+    header_row: int  # 1-based
+    data_start_row: int  # 1-based，首个有效数据行
+    columns: dict[str, int]  # semantic_key -> 0-based col index
+    clock_time_columns: list[int]  # 上班N/下班N 打卡时间列，按表头顺序
+    leave_columns: list[int]  # 请假 合并表头下的子列（不含 请假 自身）
+    raw_header: list[str]  # 原始表头文字
+    source: str  # "local" | "llm"
+    a1_text: str = ""  # 表格左上角 A1 原文（供抽取月份）
 
     def col(self, key: str) -> int | None:
         return self.columns.get(key)
@@ -166,9 +166,7 @@ def _peek_data_start(
         fully_empty = all(_norm(v) == "" for v in peek)
         # 二级子表头：行首姓名列为空，但在中后段有若干文字（如 ‘事假(小时)’）
         name_idx = 0 if name_col is None else name_col
-        leading_empty = (
-            name_idx < len(peek) and _norm(peek[name_idx]) == ""
-        )
+        leading_empty = name_idx < len(peek) and _norm(peek[name_idx]) == ""
         if fully_empty or leading_empty:
             data_start += 1
     return data_start
@@ -206,9 +204,7 @@ def resolve_daily_stats_header(
             source = "llm"
 
     if missing:
-        raise ValueError(
-            f"每日统计 表头未识别必需列 {missing}；表头原文: {header}"
-        )
+        raise ValueError(f"每日统计 表头未识别必需列 {missing}；表头原文: {header}")
 
     a1_text = _norm(top_rows[0][0]) if top_rows and top_rows[0] else ""
 
@@ -252,9 +248,7 @@ def resolve_raw_records_header(
             source = "llm"
 
     if missing:
-        raise ValueError(
-            f"原始记录 表头未识别必需列 {missing}；表头原文: {header}"
-        )
+        raise ValueError(f"原始记录 表头未识别必需列 {missing}；表头原文: {header}")
 
     a1_text = _norm(top_rows[0][0]) if top_rows and top_rows[0] else ""
 
@@ -320,7 +314,7 @@ def _llm_resolve_columns(header: list[str], *, missing: list[str]) -> dict[str, 
     system_msg = (
         "你是考勤表表头识别助手。输入是 Excel 某一行的表头列表，格式为 ‘col_index: header_text’。"
         "请把每个请求的语义键映射到对应的列索引（整数，从 0 开始）。"
-        "未能确认的键请直接省略。只输出严格合法的 JSON 对象，例如 {\"employee_name\": 0, \"work_date\": 7}。"
+        '未能确认的键请直接省略。只输出严格合法的 JSON 对象，例如 {"employee_name": 0, "work_date": 7}。'
         "不要输出任何额外文字或解释。"
     )
     user_msg = (
@@ -328,9 +322,7 @@ def _llm_resolve_columns(header: list[str], *, missing: list[str]) -> dict[str, 
         f"需要定位的语义键:\n{json.dumps(wanted, ensure_ascii=False, indent=2)}"
     )
     if len(user_msg) > 4000:
-        raise ValueError(
-            f"LLM 请求体过大（{len(user_msg)} 字符），请减少列数或拆分处理。"
-        )
+        raise ValueError(f"LLM 请求体过大（{len(user_msg)} 字符），请减少列数或拆分处理。")
 
     try:
         resp = client.chat.completions.create(

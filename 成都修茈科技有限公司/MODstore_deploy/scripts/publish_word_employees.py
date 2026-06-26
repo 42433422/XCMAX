@@ -1,4 +1,5 @@
 """将 Word 员工包发布到 catalog 并设为 AI 市场公开展示。"""
+
 from __future__ import annotations
 
 import json
@@ -50,7 +51,12 @@ def main() -> int:
             pack_dir = lib / pkg_id
             mf_path = pack_dir / "manifest.json"
             if not mf_path.is_file():
-                print(json.dumps({"ok": False, "pkg_id": pkg_id, "error": "missing manifest"}, ensure_ascii=False))
+                print(
+                    json.dumps(
+                        {"ok": False, "pkg_id": pkg_id, "error": "missing manifest"},
+                        ensure_ascii=False,
+                    )
+                )
                 return 1
             raw_mf = json.loads(mf_path.read_text(encoding="utf-8"))
             meta = META[pkg_id]
@@ -94,12 +100,21 @@ def main() -> int:
             row.compliance_status = "approved"
             db.commit()
             try:
-                from modstore_server.employee_asset_pipeline import mirror_catalog_file_to_market_files
+                from modstore_server.employee_asset_pipeline import (
+                    mirror_catalog_file_to_market_files,
+                )
 
                 mirror_catalog_file_to_market_files(row.stored_filename)
             except Exception:
                 pass
-            published.append({"pkg_id": pkg_id, "catalog_item_id": row.id, "is_public": True, "stored_filename": row.stored_filename})
+            published.append(
+                {
+                    "pkg_id": pkg_id,
+                    "catalog_item_id": row.id,
+                    "is_public": True,
+                    "stored_filename": row.stored_filename,
+                }
+            )
 
     try:
         from modstore_server.market_catalog_api import _invalidate_market_catalog_caches

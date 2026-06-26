@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Apply 20260601_llm_official_prices columns when alembic CLI is unavailable on the host."""
+
 from __future__ import annotations
 
 import os

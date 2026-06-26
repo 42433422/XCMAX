@@ -17,6 +17,7 @@
   ASR_TOKEN    JWT；留空则在 MODstore 目录内自动 create_access_token
   TTS_URL      默认 http://127.0.0.1:9999/api/workbench/tts/edge
 """
+
 from __future__ import annotations
 
 import argparse
@@ -142,7 +143,19 @@ async def synthesize_pcm(text: str, workdir: Path) -> bytes:
 
     ffmpeg = shutil.which("ffmpeg") or os.getenv("FFMPEG", "ffmpeg")
     subprocess.run(
-        [ffmpeg, "-y", "-i", str(mp3), "-ar", str(SAMPLE_RATE), "-ac", "1", "-f", "s16le", str(pcm)],
+        [
+            ffmpeg,
+            "-y",
+            "-i",
+            str(mp3),
+            "-ar",
+            str(SAMPLE_RATE),
+            "-ac",
+            "1",
+            "-f",
+            "s16le",
+            str(pcm),
+        ],
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -197,8 +210,12 @@ async def smoke_tts() -> dict:
     import urllib.request
 
     url = os.getenv("TTS_URL", "http://127.0.0.1:9999/api/workbench/tts/edge")
-    payload = json.dumps({"text": "语音服务测试", "voice": "zh-CN-XiaoxiaoNeural", "rate": 1.0}).encode()
-    req = urllib.request.Request(url, data=payload, method="POST", headers={"Content-Type": "application/json"})
+    payload = json.dumps(
+        {"text": "语音服务测试", "voice": "zh-CN-XiaoxiaoNeural", "rate": 1.0}
+    ).encode()
+    req = urllib.request.Request(
+        url, data=payload, method="POST", headers={"Content-Type": "application/json"}
+    )
     t0 = time.time()
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -293,7 +310,9 @@ async def main() -> int:
     results.append(r1)
     print_result(r1)
     if not r1.get("ok"):
-        print("\n断点：API 代理无法连 FunASR。检查 FUNASR_HOST / FUNASR_USE_SSL（--certfile 0 时必须为 0）")
+        print(
+            "\n断点：API 代理无法连 FunASR。检查 FUNASR_HOST / FUNASR_USE_SSL（--certfile 0 时必须为 0）"
+        )
         return 1
 
     if not args.asr_only:

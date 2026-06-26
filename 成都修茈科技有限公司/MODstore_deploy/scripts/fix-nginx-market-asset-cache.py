@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """chunk 勿 immutable：避免部署间隙 404 被浏览器长期缓存。"""
+
 from __future__ import annotations
 
 from pathlib import Path

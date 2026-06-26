@@ -5,7 +5,6 @@ from datetime import date, datetime, time, timedelta
 import re
 from typing import Any
 
-
 TIME_RANGE_RE = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})")
 
 # 由 ``convert`` 在每次转换前注入 ``resources/config/approval_config.yaml`` 中的 ``attendance_policy``。
@@ -40,9 +39,7 @@ DEFAULT_WEEKDAY_SEGMENTS = (
     TimeRange(time(8, 0), time(12, 0)),
     TimeRange(time(13, 30), time(17, 30)),
 )
-DEFAULT_ALT_SATURDAY_SEGMENTS = (
-    TimeRange(time(13, 30), time(16, 0)),
-)
+DEFAULT_ALT_SATURDAY_SEGMENTS = (TimeRange(time(13, 30), time(16, 0)),)
 
 
 def parse_hhmm(value: str) -> time:

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """本地验证 MiMo（xiaomi）平台密钥与网关。用法：.venv_local/bin/python scripts/verify_mimo_local.py"""
+
 from __future__ import annotations
 
 import asyncio

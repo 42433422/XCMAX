@@ -1,11 +1,11 @@
 """Build taiyangniao-attendance-employee.xcemp for local testing."""
+
 from __future__ import annotations
 
 import io
 import json
 import zipfile
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parent
 PACK_ID = "taiyangniao-attendance-employee"
@@ -16,7 +16,9 @@ def main() -> None:
     out = ROOT / f"{PACK_ID}.xcemp"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(f"{PACK_ID}/manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+        zf.writestr(
+            f"{PACK_ID}/manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+        )
         for path in sorted((ROOT / "backend").rglob("*")):
             if not path.is_file():
                 continue

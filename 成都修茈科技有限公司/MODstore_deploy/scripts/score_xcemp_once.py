@@ -1,4 +1,5 @@
 """One-off: score a .xcemp with six-dimension report."""
+
 from __future__ import annotations
 
 import json
@@ -88,7 +89,9 @@ def main() -> int:
             f"综合 {report['overall_score']} 分 · {report['overall_grade']}级 "
             f"({report['overall_grade_label']})"
         )
-        print(f"通过: {report['passed']} · 关键门禁: {'未过' if report['critical_failed'] else '通过'}")
+        print(
+            f"通过: {report['passed']} · 关键门禁: {'未过' if report['critical_failed'] else '通过'}"
+        )
         print()
         for key, d in report["dimensions"].items():
             reasons = "；".join(d.get("reasons") or []) or "—"

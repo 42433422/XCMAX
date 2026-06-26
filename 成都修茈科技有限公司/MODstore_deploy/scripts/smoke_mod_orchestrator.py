@@ -7,6 +7,7 @@
 
 依赖：数据库可连、该用户已配置可用 LLM Key（resolve_llm_provider_model_auto）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -186,7 +187,9 @@ async def _main(user_id: Optional[int]) -> int:
         )
         print(f"catalog employee_pack rows for prefix {mod_id}-*: {len(rows)}")
         for r in rows[:6]:
-            print(f"  pkg_id={r.pkg_id} version={r.version} stored={getattr(r, 'stored_filename', '')}")
+            print(
+                f"  pkg_id={r.pkg_id} version={r.version} stored={getattr(r, 'stored_filename', '')}"
+            )
 
     with sf() as db3:
         user3 = db3.query(User).filter(User.id == uid).first()

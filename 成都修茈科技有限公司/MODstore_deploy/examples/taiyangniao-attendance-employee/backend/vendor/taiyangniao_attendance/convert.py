@@ -200,7 +200,9 @@ def _saturday_factory_outside_regular_hours(
     return max(0.0, total - inside)
 
 
-def _build_full_day_entries(profile: TemplateEmployeeProfile, symbol: str) -> tuple[list[DayBandEntry], list[DayBandEntry]]:
+def _build_full_day_entries(
+    profile: TemplateEmployeeProfile, symbol: str
+) -> tuple[list[DayBandEntry], list[DayBandEntry]]:
     morning: list[DayBandEntry] = []
     afternoon: list[DayBandEntry] = []
     blocks = _profile_blocks(profile)
@@ -276,11 +278,14 @@ def _regular_symbol(record: AttendanceDayRecord) -> str:
     if is_rest_shift(shift_text):
         return "★"
     is_factory_person = (
-        "惠州工厂" in record.department
-        or "工厂" in record.attendance_group
-        or "工厂" in shift_text
+        "惠州工厂" in record.department or "工厂" in record.attendance_group or "工厂" in shift_text
     )
-    if "公司" in shift_text and is_factory_person and "远程" not in record.attendance_group and "公司-考勤" not in record.attendance_group:
+    if (
+        "公司" in shift_text
+        and is_factory_person
+        and "远程" not in record.attendance_group
+        and "公司-考勤" not in record.attendance_group
+    ):
         return "☆"
     return "√"
 
@@ -423,11 +428,19 @@ def _build_day_template_data(
             2,
         ),
         "weekday_overtime_hours": round(
-            sum(e.value for e in day_payload.morning + day_payload.afternoon + day_payload.night if e.symbol == "☆"),
+            sum(
+                e.value
+                for e in day_payload.morning + day_payload.afternoon + day_payload.night
+                if e.symbol == "☆"
+            ),
             2,
         ),
         "sunday_overtime_hours": round(
-            sum(e.value for e in day_payload.morning + day_payload.afternoon + day_payload.night if e.symbol == "★"),
+            sum(
+                e.value
+                for e in day_payload.morning + day_payload.afternoon + day_payload.night
+                if e.symbol == "★"
+            ),
             2,
         ),
         "leave_hours": round(
@@ -571,7 +584,10 @@ def convert_attendance_records(
             rebuild_detail_sheet_person_blocks(detail_ws, personnel_roster)
         template_profiles = build_template_profiles(detail_ws)
         if not template_profiles:
-            return {"success": False, "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单"}
+            return {
+                "success": False,
+                "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单",
+            }
         filtered = _filter_records_to_template_roster(records, template_profiles)
         if not filtered and not personnel_roster:
             return {
@@ -659,7 +675,10 @@ def convert_attendance_file(
             rebuild_detail_sheet_person_blocks(detail_ws, personnel_roster)
         template_profiles = build_template_profiles(detail_ws)
         if not template_profiles:
-            return {"success": False, "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单"}
+            return {
+                "success": False,
+                "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单",
+            }
         filtered = _filter_records_to_template_roster(parsed.records, template_profiles)
         if not filtered and not personnel_roster:
             return {

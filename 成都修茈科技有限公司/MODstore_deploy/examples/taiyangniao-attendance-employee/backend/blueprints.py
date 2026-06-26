@@ -1,4 +1,5 @@
 """太阳鸟考勤员 employee_pack HTTP 面。"""
+
 from __future__ import annotations
 
 import asyncio

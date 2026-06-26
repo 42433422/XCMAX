@@ -2,6 +2,7 @@
 
 仅用于"员工vibecoding功能测试"会话。可随时删。
 """
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,6 @@ import time
 from typing import Any, Dict, Optional
 
 import requests
-
 
 BASE_URL = os.environ.get("MODSTORE_BASE_URL", "http://127.0.0.1:8765")
 
@@ -23,7 +23,9 @@ def headers(token: str) -> Dict[str, str]:
     }
 
 
-def start_employee_session(token: str, brief: str, *, model: str = "mimo-v2.5-pro") -> Dict[str, Any]:
+def start_employee_session(
+    token: str, brief: str, *, model: str = "mimo-v2.5-pro"
+) -> Dict[str, Any]:
     body = {
         "intent": "employee",
         "brief": brief,
@@ -32,21 +34,30 @@ def start_employee_session(token: str, brief: str, *, model: str = "mimo-v2.5-pr
         "model": model,
         "replace": True,
     }
-    r = requests.post(f"{BASE_URL}/api/workbench/sessions", headers=headers(token), json=body, timeout=30)
+    r = requests.post(
+        f"{BASE_URL}/api/workbench/sessions", headers=headers(token), json=body, timeout=30
+    )
     r.raise_for_status()
     return r.json()
 
 
-def poll_session(token: str, sid: str, *, interval: float = 1.0, max_seconds: int = 600) -> Dict[str, Any]:
+def poll_session(
+    token: str, sid: str, *, interval: float = 1.0, max_seconds: int = 600
+) -> Dict[str, Any]:
     start = time.time()
     last_status: Optional[str] = None
     while time.time() - start < max_seconds:
-        r = requests.get(f"{BASE_URL}/api/workbench/sessions/{sid}", headers=headers(token), timeout=30)
+        r = requests.get(
+            f"{BASE_URL}/api/workbench/sessions/{sid}", headers=headers(token), timeout=30
+        )
         r.raise_for_status()
         s = r.json()
         st = str(s.get("status") or "")
         if st != last_status:
-            print(f"[poll t+{int(time.time()-start)}s] status={st} steps={len(s.get('steps') or [])}", flush=True)
+            print(
+                f"[poll t+{int(time.time()-start)}s] status={st} steps={len(s.get('steps') or [])}",
+                flush=True,
+            )
             last_status = st
         if st in {"done", "error"}:
             return s
@@ -54,7 +65,9 @@ def poll_session(token: str, sid: str, *, interval: float = 1.0, max_seconds: in
     raise TimeoutError(f"workbench session {sid} did not finish in {max_seconds}s")
 
 
-def execute_employee(token: str, employee_id: str, task: str, input_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def execute_employee(
+    token: str, employee_id: str, task: str, input_data: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     # employee_api 用 query string 取 task
     params = {"task": task}
     body = input_data or {}
@@ -67,7 +80,9 @@ def execute_employee(token: str, employee_id: str, task: str, input_data: Option
     )
     if r.status_code >= 400:
         try:
-            print("[execute] HTTP", r.status_code, json.dumps(r.json(), ensure_ascii=False, indent=2))
+            print(
+                "[execute] HTTP", r.status_code, json.dumps(r.json(), ensure_ascii=False, indent=2)
+            )
         except Exception:
             print("[execute] HTTP", r.status_code, r.text[:500])
         r.raise_for_status()
@@ -133,5 +148,7 @@ if __name__ == "__main__":
         out = execute_employee(token, emp_id, task)
         print("execute:", json.dumps(out, ensure_ascii=False, indent=2)[:12000])
     else:
-        print("usage: create_employee <brief> | execute <emp_id> <task> | execute_doc <emp_id> <intent> <repo_root> <files...>")
+        print(
+            "usage: create_employee <brief> | execute <emp_id> <task> | execute_doc <emp_id> <intent> <repo_root> <files...>"
+        )
         sys.exit(2)

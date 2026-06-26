@@ -50,7 +50,9 @@ class ProbeResult:
     message: str = ""
 
 
-def _http_get(url: str, *, headers: dict[str, str] | None = None, timeout: float = 10.0) -> tuple[int | None, dict[str, Any] | str | None, str]:
+def _http_get(
+    url: str, *, headers: dict[str, str] | None = None, timeout: float = 10.0
+) -> tuple[int | None, dict[str, Any] | str | None, str]:
     try:
         with httpx.Client(timeout=timeout, trust_env=False) as client:
             response = client.get(url, headers=headers or {})
@@ -64,7 +66,9 @@ def _http_get(url: str, *, headers: dict[str, str] | None = None, timeout: float
     return response.status_code, body, ""
 
 
-def probe_contract_alignment(*, payment_backend: str | None = None, java_url: str | None = None) -> ProbeResult:
+def probe_contract_alignment(
+    *, payment_backend: str | None = None, java_url: str | None = None
+) -> ProbeResult:
     """Verify that the FastAPI gateway will actually proxy to Java.
 
     This is a pure-Python check; it does not contact the network and is safe
@@ -77,9 +81,7 @@ def probe_contract_alignment(*, payment_backend: str | None = None, java_url: st
         ok = False
         message = "Gateway is in java mode but not all contract prefixes are proxied"
     elif not ok:
-        message = (
-            f"PAYMENT_BACKEND={gateway.backend!r}; gray release requires PAYMENT_BACKEND=java"
-        )
+        message = f"PAYMENT_BACKEND={gateway.backend!r}; gray release requires PAYMENT_BACKEND=java"
     else:
         message = "PaymentGatewayService will proxy contract prefixes to Java"
     return ProbeResult(
@@ -131,7 +133,12 @@ def probe_payment_diagnostics(base_url: str, admin_token: str) -> ProbeResult:
     status, body, error = _http_get(url, headers={"Authorization": f"Bearer {admin_token}"})
     if error:
         return ProbeResult(name="payment_diagnostics", ok=False, detail={"url": url}, message=error)
-    if status == 200 and isinstance(body, dict) and bool(body.get("ok", False)) and body.get("alipay_configured") is True:
+    if (
+        status == 200
+        and isinstance(body, dict)
+        and bool(body.get("ok", False))
+        and body.get("alipay_configured") is True
+    ):
         return ProbeResult(
             name="payment_diagnostics",
             ok=True,
@@ -145,7 +152,13 @@ def probe_payment_diagnostics(base_url: str, admin_token: str) -> ProbeResult:
     )
 
 
-def run_probes(*, base_url: str, admin_token: str = "", payment_backend: str | None = None, java_url: str | None = None) -> list[ProbeResult]:
+def run_probes(
+    *,
+    base_url: str,
+    admin_token: str = "",
+    payment_backend: str | None = None,
+    java_url: str | None = None,
+) -> list[ProbeResult]:
     if java_url is None:
         java_url = base_url
     results: list[ProbeResult] = [

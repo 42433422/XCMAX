@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Verify all assets referenced by index-*.js exist under dist/."""
+
 from __future__ import annotations
 
 import os

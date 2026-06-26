@@ -55,7 +55,9 @@ def _write_state(ok: bool) -> Path:
             {
                 "ok": ok,
                 "skipped": False,
-                "probes": [{"name": "health", "url": "drill", "status": 200 if ok else 503, "ok": ok}],
+                "probes": [
+                    {"name": "health", "url": "drill", "status": 200 if ok else 503, "ok": ok}
+                ],
                 "ran_at": datetime.now(timezone.utc).isoformat(),
                 "drill": True,
             },

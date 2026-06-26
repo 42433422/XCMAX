@@ -19,8 +19,7 @@ depends_on = None
 def _col_exists(bind, table: str, column: str) -> bool:
     result = bind.execute(
         sa.text(
-            "SELECT 1 FROM information_schema.columns "
-            "WHERE table_name = :t AND column_name = :c"
+            "SELECT 1 FROM information_schema.columns " "WHERE table_name = :t AND column_name = :c"
         ),
         {"t": table, "c": column},
     ).first()
@@ -44,36 +43,36 @@ def upgrade() -> None:
 
     # catalog_items 表
     for col, ddl in (
-        ("industry",              "TEXT DEFAULT '通用'"),
-        ("industry_code",         "TEXT DEFAULT ''"),
-        ("industry_secondary",    "TEXT DEFAULT ''"),
-        ("security_level",        "TEXT DEFAULT 'personal'"),
+        ("industry", "TEXT DEFAULT '通用'"),
+        ("industry_code", "TEXT DEFAULT ''"),
+        ("industry_secondary", "TEXT DEFAULT ''"),
+        ("security_level", "TEXT DEFAULT 'personal'"),
         ("description_embedding", "TEXT DEFAULT ''"),
-        ("template_category",     "TEXT DEFAULT ''"),
-        ("template_difficulty",   "TEXT DEFAULT ''"),
-        ("install_count",         "INTEGER NOT NULL DEFAULT 0"),
-        ("graph_snapshot",        "TEXT DEFAULT ''"),
-        ("material_category",     "VARCHAR(64) DEFAULT ''"),
-        ("license_scope",         "VARCHAR(32) DEFAULT 'personal'"),
-        ("origin_type",           "VARCHAR(32) DEFAULT 'original'"),
-        ("ip_risk_level",         "VARCHAR(16) DEFAULT 'low'"),
-        ("compliance_status",     "VARCHAR(32) DEFAULT 'approved'"),
-        ("rank_score",            "FLOAT DEFAULT 100.0"),
-        ("delist_reason",         "TEXT DEFAULT ''"),
+        ("template_category", "TEXT DEFAULT ''"),
+        ("template_difficulty", "TEXT DEFAULT ''"),
+        ("install_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("graph_snapshot", "TEXT DEFAULT ''"),
+        ("material_category", "VARCHAR(64) DEFAULT ''"),
+        ("license_scope", "VARCHAR(32) DEFAULT 'personal'"),
+        ("origin_type", "VARCHAR(32) DEFAULT 'original'"),
+        ("ip_risk_level", "VARCHAR(16) DEFAULT 'low'"),
+        ("compliance_status", "VARCHAR(32) DEFAULT 'approved'"),
+        ("rank_score", "FLOAT DEFAULT 100.0"),
+        ("delist_reason", "TEXT DEFAULT ''"),
     ):
         _add_if_missing(bind, "catalog_items", col, ddl)
 
     # workflows 表
     for col, ddl in (
         ("migration_status", "TEXT DEFAULT ''"),
-        ("migrated_to_id",   "INTEGER"),
-        ("kind",             "TEXT DEFAULT ''"),
+        ("migrated_to_id", "INTEGER"),
+        ("kind", "TEXT DEFAULT ''"),
     ):
         _add_if_missing(bind, "workflows", col, ddl)
 
     # user_plans 表
     for col, ddl in (
-        ("auto_renew",          "BOOLEAN NOT NULL DEFAULT TRUE"),
+        ("auto_renew", "BOOLEAN NOT NULL DEFAULT TRUE"),
         ("renewal_fail_reason", "TEXT DEFAULT ''"),
     ):
         _add_if_missing(bind, "user_plans", col, ddl)
@@ -81,7 +80,7 @@ def upgrade() -> None:
     # knowledge_collections 表（在 new_tables migration 创建，此处补列以防并发/顺序问题）
     for col, ddl in (
         ("embedding_provider", "VARCHAR(64) DEFAULT ''"),
-        ("embedding_source",   "VARCHAR(64) DEFAULT ''"),
+        ("embedding_source", "VARCHAR(64) DEFAULT ''"),
     ):
         _add_if_missing(bind, "knowledge_collections", col, ddl)
 
@@ -99,11 +98,22 @@ def downgrade() -> None:
             op.execute(sa.text(f"ALTER TABLE users DROP COLUMN IF EXISTS {col}"))
 
     for col in (
-        "industry", "industry_code", "industry_secondary", "security_level",
-        "description_embedding", "template_category", "template_difficulty",
-        "install_count", "graph_snapshot",
-        "material_category", "license_scope", "origin_type", "ip_risk_level",
-        "compliance_status", "rank_score", "delist_reason",
+        "industry",
+        "industry_code",
+        "industry_secondary",
+        "security_level",
+        "description_embedding",
+        "template_category",
+        "template_difficulty",
+        "install_count",
+        "graph_snapshot",
+        "material_category",
+        "license_scope",
+        "origin_type",
+        "ip_risk_level",
+        "compliance_status",
+        "rank_score",
+        "delist_reason",
     ):
         op.execute(sa.text(f"ALTER TABLE catalog_items DROP COLUMN IF EXISTS {col}"))
 

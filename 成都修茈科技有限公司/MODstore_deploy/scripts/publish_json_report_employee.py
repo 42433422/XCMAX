@@ -1,4 +1,5 @@
 """将 json-report-employee 发布到 catalog 并设为 AI 市场公开展示。"""
+
 from __future__ import annotations
 
 import json

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Lab run: 做员工流程复刻 Word 全量读取（训练 LLM 写码），不覆盖正式包。"""
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,9 @@ PASSWORD = os.environ.get("SMOKE_PASSWORD") or "admin123"
 PROVIDER = os.environ.get("SMOKE_LLM_PROVIDER") or "xiaomi"
 MODEL = os.environ.get("SMOKE_LLM_MODEL") or "mimo-v2.5-pro"
 PACK_ID = os.environ.get("LAB_PACK_ID") or "word-full-read-employee-llm-lab"
-OUT_JSON = Path(os.environ.get("LAB_RESULT_JSON") or ROOT / "artifacts" / "word_read_employee_lab_result.json")
+OUT_JSON = Path(
+    os.environ.get("LAB_RESULT_JSON") or ROOT / "artifacts" / "word_read_employee_lab_result.json"
+)
 
 BRIEF = f"""员工包 ID：{PACK_ID}
 员工名称：Word全量读取员工（LLM 实验包）
@@ -106,16 +109,25 @@ def main() -> int:
     token = str(login_body["access_token"])
 
     started = time.time()
-    code, start_body = _http_json("POST", f"{BASE_URL}/api/workbench/sessions", token=token, body=metadata, timeout=120)
+    code, start_body = _http_json(
+        "POST", f"{BASE_URL}/api/workbench/sessions", token=token, body=metadata, timeout=120
+    )
     if code >= 400 or not isinstance(start_body, dict):
-        print(json.dumps({"ok": False, "stage": "start", "status": code, "text": str(start_body)[:2000]}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"ok": False, "stage": "start", "status": code, "text": str(start_body)[:2000]},
+                ensure_ascii=False,
+            )
+        )
         return 1
     sid = start_body.get("session_id")
     final = None
     deadline = time.time() + 45 * 60
     last_log = 0.0
     while time.time() < deadline:
-        code, poll_body = _http_json("GET", f"{BASE_URL}/api/workbench/sessions/{sid}", token=token, timeout=60)
+        code, poll_body = _http_json(
+            "GET", f"{BASE_URL}/api/workbench/sessions/{sid}", token=token, timeout=60
+        )
         if code >= 400 or not isinstance(poll_body, dict):
             print(json.dumps({"ok": False, "stage": "poll", "status": code}, ensure_ascii=False))
             return 1
@@ -126,7 +138,12 @@ def main() -> int:
             active = [s for s in steps if s["status"] not in ("done", "skipped", "error")]
             print(
                 json.dumps(
-                    {"t": int(time.time() - started), "status": st, "active": active[:3], "done_steps": len([s for s in steps if s["status"] == "done"])},
+                    {
+                        "t": int(time.time() - started),
+                        "status": st,
+                        "active": active[:3],
+                        "done_steps": len([s for s in steps if s["status"] == "done"]),
+                    },
                     ensure_ascii=False,
                 ),
                 flush=True,
@@ -140,7 +157,11 @@ def main() -> int:
     qr = art.get("quality_report") if isinstance(art.get("quality_report"), dict) else {}
     pack_dir = ROOT / "library" / PACK_ID
     convert_py = pack_dir / "backend" / "vendor" / "word_full_read" / "convert.py"
-    employee_py = list((pack_dir / "backend" / "employees").glob("*.py")) if (pack_dir / "backend" / "employees").is_dir() else []
+    employee_py = (
+        list((pack_dir / "backend" / "employees").glob("*.py"))
+        if (pack_dir / "backend" / "employees").is_dir()
+        else []
+    )
 
     cleanup_result = None
     try:
@@ -164,10 +185,10 @@ def main() -> int:
         "golden_comparison": art.get("golden_comparison"),
         "cleanup": cleanup_result,
         "rule_spec_runtime_kind": (
-            ((final or {}).get("artifact") or {}).get("rule_spec") or {}
-        ).get("runtime_kind")
-        if isinstance((final or {}).get("artifact"), dict)
-        else None,
+            (((final or {}).get("artifact") or {}).get("rule_spec") or {}).get("runtime_kind")
+            if isinstance((final or {}).get("artifact"), dict)
+            else None
+        ),
         "quality_report": qr,
         "six_dimension": art.get("six_dimension_report"),
         "pack_exists": pack_dir.is_dir(),
@@ -176,7 +197,10 @@ def main() -> int:
         "steps": _step_summary(final or {}),
         "error": (final or {}).get("error"),
     }
-    OUT_JSON.write_text(json.dumps({"report": report, "final": final}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    OUT_JSON.write_text(
+        json.dumps({"report": report, "final": final}, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["ok"] else 1
 

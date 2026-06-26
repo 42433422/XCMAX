@@ -22,7 +22,10 @@ def main() -> int:
     with sf() as db:
         if args.cmd == "list":
             rows = (
-                db.query(OutboxDeadLetter).order_by(OutboxDeadLetter.id.desc()).limit(max(1, args.limit)).all()
+                db.query(OutboxDeadLetter)
+                .order_by(OutboxDeadLetter.id.desc())
+                .limit(max(1, args.limit))
+                .all()
             )
             for r in rows:
                 print(r.id, r.event_id, r.event_name, (r.last_error or "")[:120])
