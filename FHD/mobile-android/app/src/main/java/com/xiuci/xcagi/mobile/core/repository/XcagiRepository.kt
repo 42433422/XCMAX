@@ -1564,6 +1564,7 @@ class XcagiRepository @Inject constructor(
         senderName: String = "我",
         dispatch: Boolean = false,
         branchContext: String = "",
+        context: Map<String, String> = emptyMap(),
     ): Result<AiGroupPostData> = aiGroupCall {
         fhd().postAiGroupMessage(
             groupId,
@@ -1574,6 +1575,7 @@ class XcagiRepository @Inject constructor(
                 dispatch = dispatch,
                 branch_context = branchContext,
                 branch = branchContext,
+                context = context,
             ),
         ).let { if (it.success) Result.success(it.data ?: AiGroupPostData()) else fail(it) }
     }

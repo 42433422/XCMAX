@@ -158,6 +158,7 @@ data class AiGroupMessageBody(
     val dispatch: Boolean = false,
     val branch_context: String = "",
     val branch: String = "",
+    val context: Map<String, String> = emptyMap(),
 )
 
 data class GitBranchDto(

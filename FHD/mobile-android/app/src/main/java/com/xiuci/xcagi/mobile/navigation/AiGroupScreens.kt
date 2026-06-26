@@ -549,8 +549,53 @@ fun AiGroupChatScreen(
                     showTools = false
                     showMembers = true
                 },
-                onInsertText = { template ->
-                    input = if (input.isBlank()) template else "$input\n$template"
+                onDispatchTask = {
+                    val task = input.trim()
+                    if (g == null) return@GroupInputBar
+                    if (task.isBlank()) {
+                        vm.snack("先输入要派发的任务")
+                        showTools = false
+                        return@GroupInputBar
+                    }
+                    haptics.confirm()
+                    vm.sendGroupMessage(
+                        groupId = g.id,
+                        text = task,
+                        branchContext = selectedBranch.orEmpty(),
+                        forceDispatch = true,
+                        context = mapOf("tool_action" to "dispatch_task"),
+                    )
+                    input = ""
+                    showTools = false
+                },
+                onAcceptanceFollowup = {
+                    if (g == null) return@GroupInputBar
+                    haptics.confirm()
+                    vm.sendGroupMessage(
+                        groupId = g.id,
+                        text = "【验收回访】回访最近一次派工",
+                        forceDispatch = false,
+                        context = mapOf("tool_action" to "acceptance_followup"),
+                    )
+                    showTools = false
+                },
+                onBugfixTask = {
+                    val task = input.trim()
+                    if (g == null) return@GroupInputBar
+                    if (task.isBlank()) {
+                        vm.snack("先输入要修复的问题")
+                        showTools = false
+                        return@GroupInputBar
+                    }
+                    haptics.confirm()
+                    vm.sendGroupMessage(
+                        groupId = g.id,
+                        text = if (task.startsWith("【问题修复】") || task.startsWith("修复")) task else "【问题修复】$task",
+                        branchContext = selectedBranch.orEmpty(),
+                        forceDispatch = true,
+                        context = mapOf("tool_action" to "bugfix_task"),
+                    )
+                    input = ""
                     showTools = false
                 },
                 onSend = {
@@ -711,7 +756,9 @@ private fun GroupInputBar(
     onVoice: () -> Unit,
     onToggleTools: () -> Unit,
     onMembersClick: () -> Unit,
-    onInsertText: (String) -> Unit,
+    onDispatchTask: () -> Unit,
+    onAcceptanceFollowup: () -> Unit,
+    onBugfixTask: () -> Unit,
     onSend: () -> Unit,
 ) {
     val branchLabel = selectedBranch?.takeIf { it.isNotBlank() }?.substringAfterLast('/') ?: "自动新建"
@@ -728,15 +775,9 @@ private fun GroupInputBar(
             ChatToolCardAction(Icons.AutoMirrored.Filled.CallMerge, "工作分支", "选择已有分支或自动新建", onBranchClick),
             ChatToolCardAction(Icons.Default.GroupAdd, "群成员", "拉人进群或移除成员", onMembersClick),
             ChatToolCardAction(Icons.Default.Mic, "语音输入", "用系统语音录入消息", onVoice),
-            ChatToolCardAction(Icons.Default.Group, "任务派工", "先讨论，再选负责人") {
-                onInsertText("任务：请先讨论难度和负责人，只派一个合适的 CLI 执行；完成后汇报改动、验证结果和风险。")
-            },
-            ChatToolCardAction(Icons.Default.Check, "验收回访", "要进度、证据和风险") {
-                onInsertText("验收：请回访这个任务现在做到哪一步，给出验收结论、证据和下一步。")
-            },
-            ChatToolCardAction(Icons.Default.Refresh, "问题修复", "定位根因并验证") {
-                onInsertText("修复：请定位问题根因，给出最小改动方案，完成后跑验证并说明是否影响现有流程。")
-            },
+            ChatToolCardAction(Icons.Default.Group, "任务派工", "先讨论，再选负责人", onDispatchTask),
+            ChatToolCardAction(Icons.Default.Check, "验收回访", "查看进度和结论", onAcceptanceFollowup),
+            ChatToolCardAction(Icons.Default.Refresh, "问题修复", "按问题直接派工", onBugfixTask),
         ),
         topContent = {
             Row(
