@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+
 DEFAULT_FIX_LIMIT = 5
 DEFAULT_PATTERN_LIMIT = 8
 MAX_DOC_TEXT = 20000
@@ -147,9 +148,7 @@ def validate_fix_knowledge_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     for field in ("applicability_check", "patch_strategy", "rollback_plan"):
         _require_non_empty_string(template, field)
     required_tests = template.get("required_tests")
-    if not isinstance(required_tests, list) or not all(
-        isinstance(item, str) for item in required_tests
-    ):
+    if not isinstance(required_tests, list) or not all(isinstance(item, str) for item in required_tests):
         raise _validation_error("fix executable_template.required_tests must be a string list")
     return payload
 
@@ -271,9 +270,7 @@ def _rank_docs(
         if rag_text and any(str(doc.get(field) or "")[:80] in rag_text for field in fields):
             score += 0.75
         if score > 0:
-            ranked.append(
-                (score, {**doc, "score": round(score, 4), "rag_chunks": rag_chunks[:limit]})
-            )
+            ranked.append((score, {**doc, "score": round(score, 4), "rag_chunks": rag_chunks[:limit]}))
     ranked.sort(key=lambda item: item[0], reverse=True)
     return [item[1] for item in ranked[:limit]]
 
@@ -658,19 +655,13 @@ def _knowledge_query(evaluation: Dict[str, Any], memory: Dict[str, Any]) -> str:
         "gaps": evaluation.get("gaps"),
         "incident_count": evaluation.get("incident_count"),
         "incident_signals": evaluation.get("incident_signals"),
-        "last_policy_decision": (
-            memory.get("last_policy_decision") if isinstance(memory, dict) else None
-        ),
-        "open_items": (
-            (memory.get("open_items") if isinstance(memory, dict) else [])[-8:]
-            if isinstance(memory.get("open_items") if isinstance(memory, dict) else [], list)
-            else []
-        ),
-        "recent_runs": (
-            (memory.get("recent_runs") if isinstance(memory, dict) else [])[-5:]
-            if isinstance(memory.get("recent_runs") if isinstance(memory, dict) else [], list)
-            else []
-        ),
+        "last_policy_decision": memory.get("last_policy_decision") if isinstance(memory, dict) else None,
+        "open_items": (memory.get("open_items") if isinstance(memory, dict) else [])[-8:]
+        if isinstance(memory.get("open_items") if isinstance(memory, dict) else [], list)
+        else [],
+        "recent_runs": (memory.get("recent_runs") if isinstance(memory, dict) else [])[-5:]
+        if isinstance(memory.get("recent_runs") if isinstance(memory, dict) else [], list)
+        else [],
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
@@ -755,9 +746,7 @@ def infer_pattern_from_diff(diff_text: str) -> Dict[str, str]:
     }
 
 
-def record_loop_evolution_knowledge(
-    final: Dict[str, Any], gate: Dict[str, Any]
-) -> Optional[Dict[str, Any]]:
+def record_loop_evolution_knowledge(final: Dict[str, Any], gate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     decision = final.get("policy_decision")
     if not isinstance(decision, dict) or decision.get("action") != "auto_merged_low_risk":
         return None
@@ -773,9 +762,7 @@ def record_loop_evolution_knowledge(
     symptom = "; ".join(str(item) for item in gaps) if isinstance(gaps, list) and gaps else ""
     if not symptom:
         symptom = str(decision.get("reason") or final.get("status") or "self-maintenance gap")
-    root_cause = reports or json.dumps(
-        decision, ensure_ascii=False, sort_keys=True, default=_json_default
-    )
+    root_cause = reports or json.dumps(decision, ensure_ascii=False, sort_keys=True, default=_json_default)
     metadata = {
         "branch": final.get("branch"),
         "changed_files": merge_result.get("changed_files"),
@@ -816,6 +803,127 @@ def record_loop_evolution_knowledge(
     }
 
 
+def _salvage_kb_files(
+    *,
+    src_dir: Path,
+    kind: str,
+    run_id: str,
+    existing_docs: Sequence[Dict[str, Any]],
+) -> Tuple[int, int]:
+    """Scan src_dir for KB JSON of given kind; validate, dedup, and re-record.
+
+    Returns (salvaged_count, skipped_count). Never raises.
+    """
+    if not src_dir.exists() or not src_dir.is_dir():
+        return 0, 0
+    salvaged = 0
+    skipped = 0
+    for path in sorted(src_dir.glob("*.json")):
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            skipped += 1
+            continue
+        if not isinstance(payload, dict):
+            skipped += 1
+            continue
+        try:
+            validate_kb_payload(kind, payload)
+        except ValueError:
+            skipped += 1
+            continue
+        if kind == "fixes":
+            symptom = str(payload.get("symptom") or "")
+            root_cause = str(payload.get("root_cause") or "")
+            if any(
+                str(doc.get("symptom") or "") == symptom
+                and str(doc.get("root_cause") or "") == root_cause
+                for doc in existing_docs
+            ):
+                skipped += 1
+                continue
+            template = payload.get("executable_template") if isinstance(
+                payload.get("executable_template"), dict
+            ) else {}
+            metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+            record_fix_knowledge(
+                symptom=symptom,
+                root_cause=root_cause,
+                fix_diff=str(payload.get("fix_diff") or ""),
+                applicability_check=str(template.get("applicability_check") or "") or None,
+                patch_strategy=str(template.get("patch_strategy") or "") or None,
+                required_tests=template.get("required_tests"),
+                rollback_plan=str(template.get("rollback_plan") or "") or None,
+                metadata={**metadata, "salvaged_from": str(path), "salvaged_run_id": run_id},
+            )
+            salvaged += 1
+        else:  # patterns
+            pattern = str(payload.get("pattern") or "")
+            summary = str(payload.get("summary") or "")
+            if any(
+                str(doc.get("pattern") or "") == pattern
+                and str(doc.get("summary") or "") == summary
+                for doc in existing_docs
+            ):
+                skipped += 1
+                continue
+            metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+            record_code_pattern(
+                pattern=pattern,
+                before=str(payload.get("before") or ""),
+                after=str(payload.get("after") or ""),
+                summary=summary,
+                metadata={**metadata, "salvaged_from": str(path), "salvaged_run_id": run_id},
+            )
+            salvaged += 1
+    return salvaged, skipped
+
+
+def salvage_kb_from_workspace(para_workspace: Path, run_id: str) -> Dict[str, Any]:
+    """Salvage KB JSON files from a para workspace into kb_root.
+
+    Defensive: para_workspace missing / KB dir missing / JSON parse failures
+    never raise; they are counted as skipped. Returns a summary dict.
+    """
+    summary: Dict[str, Any] = {
+        "salvaged_fixes": 0,
+        "salvaged_patterns": 0,
+        "skipped": 0,
+        "run_id": run_id,
+        "workspace": str(para_workspace),
+    }
+    try:
+        workspace = Path(para_workspace)
+    except TypeError:
+        return summary
+    if not workspace.exists() or not workspace.is_dir():
+        return summary
+
+    kb_base = workspace / "FHD" / "XCAGI" / "kb"
+    if not kb_base.exists():
+        return summary
+
+    existing_fixes = _load_kb_docs("fixes")
+    salvaged_fixes, skipped_fixes = _salvage_kb_files(
+        src_dir=kb_base / "fixes",
+        kind="fixes",
+        run_id=run_id,
+        existing_docs=existing_fixes,
+    )
+    existing_patterns = _load_kb_docs("patterns")
+    salvaged_patterns, skipped_patterns = _salvage_kb_files(
+        src_dir=kb_base / "patterns",
+        kind="patterns",
+        run_id=run_id,
+        existing_docs=existing_patterns,
+    )
+    summary["salvaged_fixes"] = salvaged_fixes
+    summary["salvaged_patterns"] = salvaged_patterns
+    summary["skipped"] = skipped_fixes + skipped_patterns
+    return summary
+
+
 __all__ = [
     "build_self_evolution_context",
     "collect_proactive_signals",
@@ -828,6 +936,7 @@ __all__ = [
     "record_fix_knowledge",
     "record_loop_evolution_knowledge",
     "render_self_evolution_context",
+    "salvage_kb_from_workspace",
     "search_code_patterns",
     "search_fix_knowledge",
     "validate_code_pattern_payload",
