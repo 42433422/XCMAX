@@ -23,7 +23,6 @@ import pytest
 
 from app.infrastructure.billing import model_usage as mu
 
-
 # ---------------------------------------------------------------------------
 # Autouse fixture — isolate ledger path and env vars
 # ---------------------------------------------------------------------------

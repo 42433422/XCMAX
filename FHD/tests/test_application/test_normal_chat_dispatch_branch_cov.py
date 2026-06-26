@@ -31,7 +31,6 @@ from app.application.normal_chat_dispatch import (
     run_workflow_products_query_normal_profile,
 )
 
-
 # ---------------------------------------------------------------------------
 # route_normal_mode_message — shipment 分支
 # ---------------------------------------------------------------------------

@@ -51,7 +51,6 @@ from app.infrastructure.mods.mod_manager import (
 )
 from app.infrastructure.mods.package import ModPackageError, ModSignatureError
 
-
 # ---------------------------------------------------------------------------
 # _default_mods_root
 # ---------------------------------------------------------------------------

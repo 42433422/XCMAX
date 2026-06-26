@@ -25,7 +25,6 @@ from app.application.six_line_event_app_service import (
 )
 from app.infrastructure.six_line import event_route_loader as loader
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

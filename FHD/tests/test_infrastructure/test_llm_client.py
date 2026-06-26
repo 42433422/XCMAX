@@ -16,7 +16,6 @@ import pytest
 
 from app.infrastructure.llm import client as llm_client
 
-
 # ---------------------------------------------------------------------------
 # _env_mode / _initial_mode
 # ---------------------------------------------------------------------------

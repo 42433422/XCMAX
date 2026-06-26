@@ -215,13 +215,26 @@ SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC = max(
 )
 # 超级员工 employee_id 集合：命中时走专用 invoke 通道而非 mod_employee_complete。
 _SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset(
-    {"codex-super-employee", "claude-super-employee", "cursor-super-employee"}
+    {
+        "codex-super-employee",
+        "claude-super-employee",
+        "cursor-super-employee",
+        "trae-super-employee",
+    }
+)
+_LEGACY_SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset(
+    {
+        "codex-super-employee",
+        "claude-super-employee",
+        "cursor-super-employee",
+    }
 )
 _DEFAULT_SINGLE_CLI_EMPLOYEE_ID = "codex-super-employee"
 _SUPER_EMPLOYEE_RELAY_KINDS: dict[str, str] = {
     "codex-super-employee": "codex.invoke",
     "cursor-super-employee": "cursor.invoke",
     "claude-super-employee": "claude.invoke",
+    "trae-super-employee": "trae.invoke",
 }
 _XIAOC_ASSISTANT_ID = "xcagi-assistant"
 _REQUIRED_GROUP_MEMBER_IDS: frozenset[str] = frozenset({_XIAOC_ASSISTANT_ID})
@@ -290,6 +303,8 @@ def _member_public_shape(member: dict[str, Any]) -> dict[str, Any]:
             avatar_key = "cursor"
         elif "claude" in identity:
             avatar_key = "claude"
+        elif "trae" in identity:
+            avatar_key = "trae"
     return {
         "employee_id": employee_id,
         "mod_id": str(member.get("mod_id") or ""),
@@ -491,11 +506,12 @@ def _append_super_employees(employees: list[dict[str, Any]]) -> None:
             CLAUDE_PROFILE,
             CODEX_PROFILE,
             CURSOR_PROFILE,
+            TRAE_PROFILE,
         )
     except Exception:  # noqa: BLE001 - 超级员工模块不可用时静默跳过
         return
     existing = {str(e.get("employee_id") or "") for e in employees if isinstance(e, dict)}
-    for profile in (CODEX_PROFILE, CURSOR_PROFILE, CLAUDE_PROFILE):
+    for profile in (CODEX_PROFILE, CURSOR_PROFILE, CLAUDE_PROFILE, TRAE_PROFILE):
         if profile.employee_id in existing:
             continue
         employees.append(
@@ -792,11 +808,16 @@ class AiGroupChatService:
         members = [m for m in group.get("members", []) if isinstance(m, dict)]
         ids = {str(m.get("employee_id") or "").strip() for m in members}
         name = str(group.get("name") or "").strip()
-        if _SUPER_EMPLOYEE_IDS.issubset(ids) and _XIAOC_ASSISTANT_ID in ids:
+        has_super_roster = _SUPER_EMPLOYEE_IDS.issubset(ids) or _LEGACY_SUPER_EMPLOYEE_IDS.issubset(ids)
+        if has_super_roster and _XIAOC_ASSISTANT_ID in ids:
             roster_like = (
                 not name
                 or name in {"新建群聊", "群聊"}
-                or ("超级员工-Codex" in name and "超级员工-Cursor" in name and "超级员工-Claude" in name)
+                or (
+                    "超级员工-Codex" in name
+                    and "超级员工-Cursor" in name
+                    and "超级员工-Claude" in name
+                )
             )
             if roster_like:
                 return "超级开发部"
@@ -1969,6 +1990,7 @@ class AiGroupChatService:
             "codex-super-employee": "我适合补服务端链路、接口状态和自动化测试证据。",
             "cursor-super-employee": "我适合看移动端页面、交互细节和可见 UI 结果。",
             "claude-super-employee": "我适合做验收口径、风险收口和是否需要拆分的判断。",
+            "trae-super-employee": "我适合承接 Trae 执行端、IDE 自动化和备用额度执行。",
         }.get(employee_id, f"我适合负责{focus}。")
         reason_line = f"（{reason}，走确定性讨论兜底）" if reason else ""
         return (
@@ -2104,6 +2126,8 @@ class AiGroupChatService:
             wanted.append("codex-super-employee")
         if any(k in text for k in ("架构", "方案", "评审", "验收", "acceptance", "summary", "汇总", "规划", "路由", "分流", "链路")):
             wanted.append("claude-super-employee")
+        if any(k in text for k in ("trae", "ide", "备用", "额度", "模型", "执行端")):
+            wanted.append("trae-super-employee")
         selected = [by_id[eid] for eid in wanted if eid in by_id]
         if selected:
             return selected[:MAX_RESPONDERS]
@@ -2181,7 +2205,12 @@ class AiGroupChatService:
         elif any(k in text for k in ui_markers) and not has_dev_work:
             priority = ["cursor-super-employee", _DEFAULT_SINGLE_CLI_EMPLOYEE_ID, "claude-super-employee"]
         else:
-            priority = [_DEFAULT_SINGLE_CLI_EMPLOYEE_ID, "cursor-super-employee", "claude-super-employee"]
+            priority = [
+                _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
+                "cursor-super-employee",
+                "claude-super-employee",
+                "trae-super-employee",
+            ]
         for employee_id in priority:
             if employee_id in by_id:
                 return by_id[employee_id]
@@ -2241,6 +2270,8 @@ class AiGroupChatService:
             return "服务端链路、数据状态、接口和自动化测试证据"
         if employee_id == "claude-super-employee":
             return "方案拆解、风险评审、验收标准和最终收口"
+        if employee_id == "trae-super-employee":
+            return "Trae 执行端、IDE 自动化、备用模型额度和补位执行"
         if "测试" in text or "验收" in text:
             return "按岗位职责完成验收相关部分"
         return "按岗位职责处理"
@@ -2251,6 +2282,7 @@ class AiGroupChatService:
             "cursor-super-employee": "只负责移动端/前端体验相关判断，不重复做后端日志核查。",
             "codex-super-employee": "只负责服务端/接口/测试证据，不重复做 UI 体验评价。",
             "claude-super-employee": "只负责验收口径、风险和团队收口，不重复实现或跑同一套检查。",
+            "trae-super-employee": "只负责 Trae 执行端、IDE 自动化和备用执行，不重复做其它成员已负责的部分。",
         }.get(employee_id, "只处理自己职责范围内的部分。")
         return (
             f"子任务：{focus}。\n"
@@ -2755,11 +2787,14 @@ class AiGroupChatService:
         from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
         from app.application.codex_super_employee_service import CodexSuperEmployeeService
         from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+        from app.application.trae_super_employee_service import TraeSuperEmployeeService
 
         if employee_id == "codex-super-employee":
             return CodexSuperEmployeeService()
         if employee_id == "cursor-super-employee":
             return CursorSuperEmployeeService()
+        if employee_id == "trae-super-employee":
+            return TraeSuperEmployeeService()
         return ClaudeSuperEmployeeService()
 
     @staticmethod
@@ -3373,6 +3408,7 @@ class AiGroupChatService:
         from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
         from app.application.codex_super_employee_service import CodexSuperEmployeeService
         from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+        from app.application.trae_super_employee_service import TraeSuperEmployeeService
 
         employee_id = str(member.get("employee_id") or "")
         me = str(member.get("name") or employee_id)
@@ -3394,6 +3430,8 @@ class AiGroupChatService:
                 service = CodexSuperEmployeeService()
             elif employee_id == "cursor-super-employee":
                 service = CursorSuperEmployeeService()
+            elif employee_id == "trae-super-employee":
+                service = TraeSuperEmployeeService()
             else:
                 service = ClaudeSuperEmployeeService()
             # 群聊场景强制走 CLI 直答（mode=chat），避免 transcript 里包含

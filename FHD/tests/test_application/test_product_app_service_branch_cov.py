@@ -25,7 +25,6 @@ from app.application.product_app_service import (
     _normalize_optional_str,
 )
 
-
 # ---------------------------------------------------------------------------
 # _normalize_optional_str
 # ---------------------------------------------------------------------------

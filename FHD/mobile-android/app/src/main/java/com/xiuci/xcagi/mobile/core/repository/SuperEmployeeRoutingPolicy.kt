@@ -11,6 +11,7 @@ internal object SuperEmployeeRoutingPolicy {
             PinnedIds.CODEX -> "codex.invoke"
             PinnedIds.CURSOR -> "cursor.invoke"
             PinnedIds.CLAUDE -> "claude.invoke"
+            PinnedIds.TRAE -> "trae.invoke"
             else -> null
         }
 
@@ -18,6 +19,7 @@ internal object SuperEmployeeRoutingPolicy {
         when {
             kind.startsWith("claude") -> "Claude"
             kind.startsWith("cursor") -> "Cursor"
+            kind.startsWith("trae") -> "Trae"
             else -> "Codex"
         }
 }

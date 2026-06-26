@@ -275,6 +275,32 @@ CURSOR_PROFILE = SuperEmployeeToolProfile(
     avatar_path="/brand/cursor-app-icon.png",
 )
 
+TRAE_PROFILE = SuperEmployeeToolProfile(
+    employee_id="trae-super-employee",
+    employee_name="超级员工-Trae",
+    display_tool="Trae",
+    tool_name="trae",
+    capability_key="trae_cli",
+    storage_subdir="trae_super_employee",
+    result_kind="trae_result",
+    direct_kind="trae_direct",
+    env_super_prefix="XCMAX_TRAE_SUPER_EMPLOYEE",
+    env_tool_prefix="XCMAX_TRAE",
+    cli_binary="trae-cn",
+    cli_extra_candidates=(
+        "/Applications/Trae CN.app/Contents/Resources/app/bin/trae-cn",
+        "/Applications/Trae.app/Contents/Resources/app/bin/trae",
+        os.path.expanduser("~/.local/bin/trae-cn"),
+        "/opt/homebrew/bin/trae-cn",
+        "/usr/local/bin/trae-cn",
+    ),
+    cli_reads_output_file=False,
+    cli_stream_json=False,
+    cli_command_builder=_cursor_cli_command,
+    avatar_key="trae",
+    avatar_path="/brand/trae-app-icon.png",
+)
+
 
 class SuperEmployeeService:
     """Persist software-internal tool calls and optionally dispatch them out."""
@@ -2290,6 +2316,7 @@ __all__ = [
     "CODEX_PROFILE",
     "CLAUDE_PROFILE",
     "CURSOR_PROFILE",
+    "TRAE_PROFILE",
     "SuperEmployeeService",
     "SuperEmployeeToolProfile",
 ]

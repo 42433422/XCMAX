@@ -26,7 +26,6 @@ from app.infrastructure.mods.install_resolver import (
 )
 from app.infrastructure.mods.package import ModPackageError, ModSignatureError
 
-
 # ---------------------------------------------------------------------------
 # Helper fixtures
 # ---------------------------------------------------------------------------

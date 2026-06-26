@@ -30,7 +30,6 @@ from app.infrastructure.web_search.service import (
     kitten_web_search,
 )
 
-
 # ---------------------------------------------------------------------------
 # _rate_allow — additional branches
 # ---------------------------------------------------------------------------

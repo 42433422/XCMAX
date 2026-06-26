@@ -43,7 +43,6 @@ from app.application.agent_orchestrator.repair_advisor import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 
-
 # ---------------------------------------------------------------------------
 # helpers for building test fixtures
 # ---------------------------------------------------------------------------

@@ -64,7 +64,7 @@ class TestIso:
     def test_aware_datetime_preserved(self) -> None:
         dt = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         result = ai_circle._iso(dt)
-        assert "2025-01-01T12:00:00+00:00" == result
+        assert result == "2025-01-01T12:00:00+00:00"
 
 
 class TestCreateUserPost:

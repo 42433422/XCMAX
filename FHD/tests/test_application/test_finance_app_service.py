@@ -22,7 +22,6 @@ import pytest
 
 from app.application.finance_app_service import FinanceAppService, _parse_dt
 
-
 # ---------------------------------------------------------------------------
 # Helper to build a mock db context manager
 # ---------------------------------------------------------------------------

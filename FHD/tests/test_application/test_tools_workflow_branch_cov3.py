@@ -40,7 +40,6 @@ from app.application.tools.workflow import (
     run_natural_language_pandas,
 )
 
-
 # ---------------------------------------------------------------------------
 # run_natural_language_pandas
 # ---------------------------------------------------------------------------

@@ -23,7 +23,6 @@ from app.application.local_duty_graph_health import (
     read_local_employee_manifest,
 )
 
-
 # ---------------------------------------------------------------------------
 # _staffing_areas_from_doc
 # ---------------------------------------------------------------------------
