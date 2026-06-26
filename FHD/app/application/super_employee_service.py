@@ -1227,6 +1227,11 @@ class SuperEmployeeService:
         )
         if force_direct in {"1", "true", "yes", "on"}:
             return True
+        # 桌面云中继本身就是执行端：它派来的任务必须在本地 CLI 真跑，绝不能再转发 Para
+        # 多设备（Para 在执行端不可用 → 任务一律 blocked）。中继在 context 打这个标记，
+        # 与 mode 解耦——这样既能本地 CLI 执行，又能让 _is_task_intent 按 mode=code 判为开发任务。
+        if context.get("force_cli_direct") is True:
+            return True
         raw_mode = str(context.get("mode") or "").strip().lower()
         if raw_mode in {"chat", "qa", "direct", f"{self._p.tool_name}_cli"}:
             return True

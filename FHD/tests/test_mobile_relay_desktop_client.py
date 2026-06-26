@@ -324,3 +324,66 @@ def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_pa
     relay._migrate_legacy_config_once()
     cfg = relay._read_config()
     assert cfg.get("relay_id") == "paired-877"
+
+
+class _CaptureCodexService:
+    """记录 invoke 收到的 context，用于断言中继的路由意图。"""
+
+    captured: dict = {}
+
+    def invoke(self, **kwargs):
+        type(self).captured = dict(kwargs.get("context") or {})
+        return {
+            "dispatch": {"request_id": "r", "status": "completed", "accepted": True},
+            "assistant_message": {
+                "role": "assistant",
+                "body": "已新增 RELAY_OK.md。改动文件：RELAY_OK.md",
+            },
+        }
+
+    def list_messages(self, **kwargs):
+        return []
+
+
+def test_execute_task_workorder_forces_local_cli_and_keeps_code_mode(monkeypatch):
+    """群工单：必须本地 CLI 真执行(force_cli_direct)且保持 mode=code(判为开发任务)，不再被当聊天回避执行。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", _CaptureCodexService)
+    relay._execute_task(
+        {
+            "task_id": "wo-1",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {
+                "message": "新增 RELAY_OK.md",
+                "context": {
+                    "client_surface": "ai_group",
+                    "mode": "code",
+                    "work_order_id": "wo-1",
+                },
+            },
+        }
+    )
+    ctx = _CaptureCodexService.captured
+    assert ctx.get("force_cli_direct") is True
+    assert ctx.get("mode") == "code"
+    assert ctx.get("client_surface") == "ai_group"
+
+
+def test_execute_task_freechat_strips_mode_but_still_forces_cli(monkeypatch):
+    """自由聊天面下发 mode=code 仍剥离(交回分类器,避免'你好'被当任务)，但仍强制本地 CLI(不派 Para)。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", _CaptureCodexService)
+    relay._execute_task(
+        {
+            "task_id": "chat-1",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {"message": "你好", "context": {"mode": "code"}},
+        }
+    )
+    ctx = _CaptureCodexService.captured
+    assert ctx.get("force_cli_direct") is True
+    assert "mode" not in ctx

@@ -490,26 +490,38 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     user_id = int(task.get("created_by_user_id") or payload.get("user_id") or 1)
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
     branch = str(payload.get("branch") or "").strip()
+    # 群派工(AI 交流圈/超级开发部群)是**明确工单**，带 work_order_id / assigned_task /
+    # client_surface=ai_group；自由聊天面没有这些信号。两者都经中继下发，但只有工单需要真执行。
+    orig_surface = str(context.get("client_surface") or "").strip().lower()
+    is_work_order = (
+        orig_surface == "ai_group"
+        or bool(str(context.get("work_order_id") or "").strip())
+        or bool(str(context.get("assigned_task") or "").strip())
+    )
     context = {
         **context,
         "source": "mobile_relay",
         "relay_task_id": str(task.get("task_id") or ""),
-        "client_surface": "mobile",
+        # 保留原始来源(工单是 ai_group)，自由聊天回落 mobile。
+        "client_surface": orig_surface or "mobile",
         "target_devices": ["all"],
+        # 中继即执行端：永远本地 CLI 执行，绝不把任务再转发给(不可用的)Para 多设备。
+        "force_cli_direct": True,
     }
     if branch and not str(context.get("branch") or "").strip():
         context["branch"] = branch
-    # 移动端聊天面固定下发 mode="code"，会把每条闲聊都强制派到 Para 多设备
-    # （"你好"/"在干嘛" 这类问候也被当成开发任务派工，回不到结果）。
-    # 这里清掉强制派工的 mode，交回内容分类器 _should_reply_with_cli：
-    # 闲聊 → 本地 CLI 直答；含"修复/测试/部署"等开发关键词 → Para 派工。
-    if str(context.get("mode") or "").strip().lower() in {
+    if is_work_order:
+        # 工单：保持 mode=code，让 _is_task_intent 判为开发任务 → 走 _cli_work_prompt 真改文件，
+        # 而不是当成"普通对话通道"回避执行(那正是任务以 blocked 收场的根因)。
+        context["mode"] = "code"
+    elif str(context.get("mode") or "").strip().lower() in {
         "code",
         "task",
         "dispatch",
         "dev",
         "develop",
     }:
+        # 自由聊天面固定下发 mode="code"，剥离交回内容分类器(避免"你好"被当开发任务)。
         context.pop("mode", None)
     try:
         result = service.invoke(
