@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import sys
@@ -11,11 +12,23 @@ from typing import Any
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
-from app.application.account_tier_derivation import (  # noqa: E402
-    BUDGET_RANGES,
-    derive_account_tier,
-)
 from scripts.dev.ssot_plugins.base import ROOT, load_registry  # noqa: E402
+
+
+def _load_account_tier_module():
+    """Load the leaf module without importing app.application.__init__."""
+    path = _FHD_ROOT / "app" / "application" / "account_tier_derivation.py"
+    spec = importlib.util.spec_from_file_location("_account_tier_derivation_ssot", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_ACCOUNT_TIER = _load_account_tier_module()
+BUDGET_RANGES = _ACCOUNT_TIER.BUDGET_RANGES
+derive_account_tier = _ACCOUNT_TIER.derive_account_tier
 
 ACCOUNT_DOC = ROOT / "docs" / "account_system_ssot.md"
 SSOT_INDEX = ROOT / "docs" / "SSOT_INDEX.md"
