@@ -1566,7 +1566,35 @@ class SuperEmployeeService:
                 return str(reg.checkout(ws, task_id=str(context.get("request_id") or "task")))
             except WorkspaceError:
                 return str(get_workspace_registry().get(None).root)
+        # 中继工单（操作者自己桌面派给超级员工的开发任务）允许在**真实仓库**里跑 dev-loop，
+        # 真改文件→提交→推分支，产出可合并的真东西（而非临时区里建完即被 GC 的占位文件）。
+        # 仅在操作者**显式**配置 XCMAX_RELAY_WORKSPACE_ROOT 指向真 git 仓库、且来源是中继时生效；
+        # 路径取自操作者 env 而非请求体，不破坏产品域「不采信客户提供宿主路径」的安全约束。
+        relay_repo = self._relay_real_workspace(context)
+        if relay_repo:
+            return relay_repo
         return self._product_ephemeral_workspace()
+
+    def _relay_real_workspace(self, context: dict[str, Any]) -> str:
+        ctx = context if isinstance(context, dict) else {}
+        source = str(ctx.get("source") or "").strip().lower()
+        is_relay = ctx.get("force_cli_direct") is True or source == "mobile_relay"
+        if not is_relay:
+            return ""
+        root = str(
+            os.environ.get("XCMAX_RELAY_WORKSPACE_ROOT")
+            or os.environ.get("DEVFLEET_WORKSPACE_ROOT")
+            or ""
+        ).strip()
+        if not root:
+            return ""
+        path = Path(root).expanduser()
+        try:
+            if (path / ".git").exists():
+                return str(path)
+        except OSError:
+            return ""
+        return ""
 
     def _factory_workspace_root(self) -> str:
         """工厂派工请求里写给远端设备的工作区根路径（不含 worktree 隔离，远端自理）。"""

@@ -50,6 +50,33 @@ def test_factory_cwd_resolves_to_workspace_root(repo_root):
     assert cwd.resolve() == repo_root.resolve()
 
 
+def test_relay_workorder_uses_real_repo_when_env_set(repo_root, monkeypatch):
+    """中继工单(操作者自己派工)+ 显式配真仓库 → 在真仓库跑 dev-loop，产出可推送的真东西。"""
+    svc = _svc()
+    svc._grant = CapabilityGrant.product()
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(repo_root))
+    cwd = Path(svc._cli_workspace({"source": "mobile_relay", "force_cli_direct": True}))
+    assert cwd.resolve() == repo_root.resolve()
+
+
+def test_real_repo_ignored_for_nonrelay_product_request(repo_root, monkeypatch):
+    """安全：非中继的产品请求即便配了 env 也不给真仓库，仍走隔离临时区。"""
+    svc = _svc()
+    svc._grant = CapabilityGrant.product()
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(repo_root))
+    cwd = svc._cli_workspace({"workspace_root": str(repo_root)})
+    assert cwd == svc._product_ephemeral_workspace()
+
+
+def test_relay_real_repo_requires_git_dir(tmp_path, monkeypatch):
+    """env 指向非 git 目录 → 不采信，回隔离临时区。"""
+    svc = _svc()
+    svc._grant = CapabilityGrant.product()
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(tmp_path))
+    cwd = svc._cli_workspace({"source": "mobile_relay", "force_cli_direct": True})
+    assert cwd == svc._product_ephemeral_workspace()
+
+
 # ── 工具面层：产品域禁写/执行类工具，工厂域不限 ──
 
 
