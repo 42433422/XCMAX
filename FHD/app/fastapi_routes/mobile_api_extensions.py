@@ -1962,6 +1962,7 @@ async def mobile_ai_group_post(
             mentions=body.mentions,
             dispatch=bool(body.dispatch),
             branch_context=branch_context,
+            context=body.context if isinstance(body.context, dict) else {},
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
