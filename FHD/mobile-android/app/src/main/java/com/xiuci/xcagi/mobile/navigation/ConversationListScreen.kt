@@ -869,13 +869,10 @@ private fun ConversationCell(
         ) {
             // ── 头像 ──
             Box {
-                when (item.type) {
-                    ConversationType.PINNED_ASSISTANT,
-                    ConversationType.PINNED_CS,
-                    ConversationType.PINNED_CODEX,
-                    ConversationType.PINNED_CURSOR,
-                    ConversationType.PINNED_CLAUDE -> PinnedAvatar(type = item.type)
-                    else -> AppAvatar(
+                if (usesPinnedConversationAvatar(item.type)) {
+                    PinnedAvatar(type = item.type)
+                } else {
+                    AppAvatar(
                         imageSource = item.avatarUrl,
                         fallback = AppAvatarFallback.AI_EMPLOYEE,
                         size = MessageAvatarLayout.conversationAvatarSize,
@@ -1009,6 +1006,17 @@ private fun StatusBadge(text: String, color: Color) {
 // ═══════════════════════════════════════════
 // 固定联系人头像 — 品牌设计
 // ═══════════════════════════════════════════
+internal fun usesPinnedConversationAvatar(type: ConversationType): Boolean =
+    when (type) {
+        ConversationType.PINNED_ASSISTANT,
+        ConversationType.PINNED_CS,
+        ConversationType.PINNED_CODEX,
+        ConversationType.PINNED_CURSOR,
+        ConversationType.PINNED_CLAUDE,
+        ConversationType.PINNED_TRAE -> true
+        else -> false
+    }
+
 @Composable
 private fun PinnedAvatar(type: ConversationType) {
     when (type) {
@@ -1017,6 +1025,7 @@ private fun PinnedAvatar(type: ConversationType) {
         ConversationType.PINNED_CODEX -> CodexAvatar()
         ConversationType.PINNED_CURSOR -> CursorAvatar()
         ConversationType.PINNED_CLAUDE -> ClaudeAvatar()
+        ConversationType.PINNED_TRAE -> TraeAvatar()
         else -> AssistantAvatar()
     }
 }
@@ -1073,6 +1082,17 @@ private fun ClaudeAvatar() {
         size = MessageAvatarLayout.conversationAvatarSize,
         shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "超级员工-Claude",
+    )
+}
+
+/** 超级员工-Trae 头像 */
+@Composable
+private fun TraeAvatar() {
+    AppAvatar(
+        fallback = AppAvatarFallback.TRAE,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
+        contentDescription = "超级员工-Trae",
     )
 }
 
