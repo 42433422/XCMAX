@@ -41,8 +41,8 @@
   },
   "ratchet_floors": {
     "backend_line": 84,
-    "backend_branch": 73,
-    "branch_floor": 73,
+    "backend_branch": 84,
+    "branch_floor": 84,
     "frontend_lines": 89,
     "frontend_branches": 79,
     "frontend_functions": 77,

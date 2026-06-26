@@ -49,14 +49,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.R
+import com.xiuci.xcagi.mobile.core.model.ProfilePageConfig
 import com.xiuci.xcagi.mobile.core.network.WalletBalanceDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
@@ -91,9 +95,11 @@ fun ProfileScreen(
     val hub by vm.homeHub.collectAsState()
     val appConfig by vm.appConfig.collectAsState()
     val walletBalance by vm.walletBalance.collectAsState()
+    val profilePage = appConfig?.profile_page?.takeIf { it.enabled }
 
     // ON_RESUME 静默刷新余额：进入"我"页面时自动拉取最新值（缓存已秒出）
     LifecycleResumeEffect(Unit) {
+        vm.refreshAppConfig()
         vm.loadWalletBalance()
         onPauseOrDispose { }
     }
@@ -121,79 +127,19 @@ fun ProfileScreen(
         LazyColumn(state = rememberLazyListState()) {
             // ── 用户信息区（白底+头像+微信号+同步按钮+右侧箭头） ──
             item {
-                WeCellGroup {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                profileNameDraft = displayName
-                                showProfileEditor = true
-                            }
-                            .padding(Spacing.lg),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.BottomEnd,
-                        ) {
-                            LocalProfileAvatar(
-                                imageSource = avatarSource,
-                                size = 56.dp,
-                            )
-                            Box(
-                                Modifier
-                                    .size(18.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .padding(2.dp)
-                                    .clip(CircleShape)
-                                    .background(XcagiTheme.extra.brandBlue),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    Icons.Default.Photo,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(11.dp),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                displayName.ifBlank { "未登录" },
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Spacer(Modifier.height(Spacing.xs))
-                            Text(
-                                accountKindLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                serverModeLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(Spacing.sm))
-                            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                                StatusPill(
-                                    icon = Icons.Outlined.Refresh,
-                                    label = if (hub.syncing) "同步中…" else "同步",
-                                    selected = hub.syncing,
-                                    onClick = { if (!hub.syncing) vm.runSyncNow() },
-                                )
-                            }
-                        }
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        )
-                    }
-                }
+                ProfileHeroCard(
+                    displayName = displayName.ifBlank { "未登录" },
+                    accountKindLabel = accountKindLabel,
+                    serverModeLabel = serverModeLabel,
+                    avatarSource = avatarSource,
+                    profilePage = profilePage,
+                    syncing = hub.syncing,
+                    onEdit = {
+                        profileNameDraft = displayName
+                        showProfileEditor = true
+                    },
+                    onSync = { if (!hub.syncing) vm.runSyncNow() },
+                )
             }
 
             // ── 状态/服务 ──
@@ -327,6 +273,212 @@ fun ProfileScreen(
         )
     }
 }
+
+@Composable
+private fun ProfileHeroCard(
+    displayName: String,
+    accountKindLabel: String,
+    serverModeLabel: String,
+    avatarSource: String,
+    profilePage: ProfilePageConfig?,
+    syncing: Boolean,
+    onEdit: () -> Unit,
+    onSync: () -> Unit,
+) {
+    val accent = profileAccentColor(profilePage?.accent)
+    val solidHero = profilePage?.hero_variant.equals("solid", ignoreCase = true)
+    val headline = profilePage?.headline?.takeIf { it.isNotBlank() }
+    val subtitle = profilePage?.subtitle?.takeIf { it.isNotBlank() } ?: "个人资料与工作身份"
+    val readyStatus = profilePage?.status_ready?.takeIf { it.isNotBlank() } ?: "资料、头像和工作台状态已就绪"
+    val syncingStatus = profilePage?.status_syncing?.takeIf { it.isNotBlank() } ?: "正在同步你的资料与工作台状态"
+    val primaryChip = profilePage?.primary_chip?.takeIf { it.isNotBlank() } ?: accountKindLabel
+    val secondaryChip = profilePage?.secondary_chip?.takeIf { it.isNotBlank() } ?: serverModeLabel
+    val cardShape = RoundedCornerShape(22.dp)
+    val titleColor = if (solidHero) Color.White else MaterialTheme.colorScheme.onSurface
+    val bodyColor = if (solidHero) Color.White.copy(alpha = 0.78f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val cardBorder =
+        if (solidHero) Color.White.copy(alpha = 0.24f)
+        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm)
+            .clip(cardShape)
+            .background(
+                Brush.linearGradient(
+                    if (solidHero) {
+                        listOf(accent, accent.copy(alpha = 0.82f), MaterialTheme.colorScheme.tertiary)
+                    } else {
+                        listOf(
+                            MaterialTheme.colorScheme.surface,
+                            accent.copy(alpha = 0.12f),
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f),
+                        )
+                    },
+                ),
+            )
+            .border(
+                0.5.dp,
+                cardBorder,
+                cardShape,
+            )
+            .clickable(onClick = onEdit)
+            .padding(Spacing.lg),
+    ) {
+        Column {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    Box(
+                        Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(if (solidHero) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.surface)
+                            .padding(3.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        LocalProfileAvatar(
+                            imageSource = avatarSource,
+                            size = 66.dp,
+                        )
+                    }
+                    Box(
+                        Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(if (solidHero) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.surface)
+                            .padding(2.dp)
+                            .clip(CircleShape)
+                            .background(accent),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.Photo,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(Spacing.lg))
+                Column(Modifier.weight(1f)) {
+                    headline?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = bodyColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            displayName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = titleColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = bodyColor,
+                        )
+                    }
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = bodyColor,
+                    )
+                    Spacer(Modifier.height(Spacing.md))
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        ProfileInfoChip(Icons.Default.Verified, primaryChip, accent, solidHero)
+                        ProfileInfoChip(Icons.Default.Tag, secondaryChip, accent, solidHero)
+                    }
+                }
+            }
+            Spacer(Modifier.height(Spacing.lg))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (syncing) syncingStatus else readyStatus,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = bodyColor,
+                )
+                StatusPill(
+                    icon = Icons.Outlined.Refresh,
+                    label = if (syncing) "同步中…" else "同步",
+                    selected = syncing,
+                    onClick = onSync,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileInfoChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    accent: Color,
+    solidHero: Boolean,
+) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(
+                if (solidHero) Color.White.copy(alpha = 0.18f)
+                else MaterialTheme.colorScheme.surface.copy(alpha = 0.74f)
+            )
+            .border(
+                0.5.dp,
+                if (solidHero) Color.White.copy(alpha = 0.26f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f),
+                RoundedCornerShape(999.dp),
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = if (solidHero) Color.White else accent,
+        )
+        Spacer(Modifier.width(Spacing.xs))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (solidHero) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun profileAccentColor(accent: String?): Color =
+    when (accent?.trim()?.lowercase()) {
+        "emerald", "green", "success" -> XcagiTheme.extra.success
+        "amber", "yellow", "warning" -> XcagiTheme.extra.warning
+        "red", "danger" -> XcagiTheme.extra.danger
+        "violet", "purple" -> XcagiTheme.extra.brandBlueGradientEnd
+        else -> XcagiTheme.extra.brandBlue
+    }
 
 @Composable
 private fun ProfileEditorDialog(

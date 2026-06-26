@@ -401,14 +401,12 @@ class TestLoadDataTSVDeep:
         assert labels == [LABEL_TO_ID["greet"], LABEL_TO_ID["shipment_generate"]]
 
     def test_load_tsv_skips_unknown_label(self, tmp_path):
-        # Source appends text unconditionally, label only when valid.
-        # So texts and labels can be out of sync for TSV.
+        # Unknown labels are skipped as complete samples so texts and labels stay aligned.
         path = tmp_path / "d.tsv"
         _make_tsv(path, "text\tlabel", [("hi", "greet"), ("x", "unknown_label")])
         t = DistillationTrainer.__new__(DistillationTrainer)
         texts, labels = t.load_data(str(path))
-        # Both texts appended; only the valid label recorded
-        assert texts == ["hi", "x"]
+        assert texts == ["hi"]
         assert labels == [LABEL_TO_ID["greet"]]
 
     def test_load_tsv_skips_single_column_lines(self, tmp_path):

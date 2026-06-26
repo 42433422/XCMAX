@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 OpenAPI 文档与实际路由的一致性验证
 ====================================
@@ -81,6 +80,8 @@ _DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
     r"^/\{fallback:path\}$",
     r"^/\{fallback\}$",
 )
+
+_DEFAULT_WARNING_BASELINE = Path("docs/evidence/arch/openapi_warning_baseline.json")
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +454,71 @@ def _group_by_code(findings: list[Finding]) -> dict[str, list[Finding]]:
     return out
 
 
+def _warning_key(finding: Finding) -> str:
+    return "|".join(
+        [
+            finding.code,
+            finding.method or "",
+            finding.path or "",
+        ]
+    )
+
+
+def _warning_baseline_payload(findings: list[Finding]) -> dict[str, Any]:
+    warnings = sorted(
+        (
+            {
+                "key": _warning_key(f),
+                "code": f.code,
+                "method": f.method,
+                "path": f.path,
+            }
+            for f in findings
+            if f.level == "warn"
+        ),
+        key=lambda item: item["key"],
+    )
+    by_code: dict[str, int] = {}
+    for item in warnings:
+        code = str(item["code"])
+        by_code[code] = by_code.get(code, 0) + 1
+    return {
+        "schema_version": 1,
+        "description": "Known OpenAPI warning baseline. Strict mode fails on new warning keys.",
+        "summary": {"warn_total": len(warnings), "by_code": by_code},
+        "warnings": warnings,
+    }
+
+
+def _load_warning_baseline(path: Path) -> set[str]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    keys: set[str] = set()
+    for item in payload.get("warnings") or []:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "").strip()
+        if key:
+            keys.add(key)
+            continue
+        code = str(item.get("code") or "")
+        method = str(item.get("method") or "")
+        route_path = str(item.get("path") or "")
+        keys.add("|".join([code, method, route_path]))
+    return keys
+
+
+def _new_warnings_against_baseline(
+    findings: list[Finding],
+    baseline_path: Path,
+) -> list[Finding]:
+    known = _load_warning_baseline(baseline_path)
+    return [
+        f
+        for f in findings
+        if f.level == "warn" and _warning_key(f) not in known
+    ]
+
+
 def render_markdown_report(
     findings: list[Finding],
     counts_routes: int,
@@ -466,7 +532,10 @@ def render_markdown_report(
     lines.append(f"- 运行时路由（含隐藏）: **{counts_routes}**")
     lines.append(f"- OpenAPI 操作: **{counts_ops}**")
     lines.append(
-        f"- 发现: error **{counts['error']}** / warn **{counts['warn']}** / info **{counts['info']}**"
+        "- 发现: "
+        f"error **{counts['error']}** / "
+        f"warn **{counts['warn']}** / "
+        f"info **{counts['info']}**"
     )
     lines.append("")
 
@@ -541,7 +610,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Treat warnings as errors for exit-code purposes.",
+        help=(
+            "Fail on errors and on warnings not present in the warning baseline. "
+            "Without a baseline, warnings fail."
+        ),
+    )
+    parser.add_argument(
+        "--warning-baseline",
+        type=Path,
+        default=None,
+        help=(
+            "Known warning baseline JSON. Defaults to "
+            "docs/evidence/arch/openapi_warning_baseline.json in strict mode."
+        ),
+    )
+    parser.add_argument(
+        "--update-warning-baseline",
+        action="store_true",
+        help="Write the current warning set to the warning baseline path and exit normally.",
     )
     parser.add_argument(
         "--quiet",
@@ -562,6 +648,19 @@ def main(argv: list[str] | None = None) -> int:
     findings.extend(check_operation_quality(ops))
 
     counts = _summary_counts(findings)
+    baseline_path = args.warning_baseline
+    if baseline_path is None and (args.strict or args.update_warning_baseline):
+        baseline_path = _repo_root() / _DEFAULT_WARNING_BASELINE
+    elif baseline_path is not None and not baseline_path.is_absolute():
+        baseline_path = (_repo_root() / baseline_path).resolve()
+
+    new_warning_findings: list[Finding] = []
+    baseline_missing = False
+    if args.strict and counts.get("warn", 0) > 0:
+        if baseline_path is not None and baseline_path.is_file():
+            new_warning_findings = _new_warnings_against_baseline(findings, baseline_path)
+        else:
+            baseline_missing = True
 
     # 控制台输出
     if not args.quiet:
@@ -586,6 +685,17 @@ def main(argv: list[str] | None = None) -> int:
                 if remaining > 0:
                     print(f"  … +{remaining} more (see --md-out / --json-out)")
                 break
+        if args.strict and baseline_path is not None:
+            print(f"  warning_baseline={baseline_path}")
+            if baseline_missing:
+                print("  [error] WARNING_BASELINE_MISSING  strict mode needs a baseline")
+            elif new_warning_findings:
+                print(f"  [error] NEW_OPENAPI_WARNINGS  new={len(new_warning_findings)}")
+                for f in new_warning_findings[:20]:
+                    where = f" {f.method} {f.path}" if f.path else ""
+                    print(f"    [new warn] {f.code}{where}  {f.message}")
+                if len(new_warning_findings) > 20:
+                    print(f"    … +{len(new_warning_findings) - 20} more")
 
     # JSON 报告
     if args.json_out:
@@ -617,8 +727,21 @@ def main(argv: list[str] | None = None) -> int:
         args.md_out.write_text(md, encoding="utf-8")
         print(f"Wrote Markdown report to {args.md_out}", file=sys.stderr)
 
+    if args.update_warning_baseline:
+        assert baseline_path is not None
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        baseline_payload = _warning_baseline_payload(findings)
+        baseline_path.write_text(
+            json.dumps(baseline_payload, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote warning baseline to {baseline_path}", file=sys.stderr)
+
     # 退出码
-    failed = counts.get("error", 0) > 0 or (args.strict and counts.get("warn", 0) > 0)
+    failed = counts.get("error", 0) > 0
+    if args.strict:
+        if counts.get("warn", 0) > 0:
+            failed = failed or baseline_missing or bool(new_warning_findings)
     return 1 if failed else 0
 
 

@@ -10,6 +10,7 @@ object Routes {
     const val AUTH = "auth"
     const val AUTH_AUTO_LOGIN = "auth_auto_login"
     const val REGISTER = "register"
+    const val ONBOARDING = "onboarding"
     const val HOME_HUB = "home_hub"
     /** 4 Tab：AI 员工通讯录。路由名沿用 work 以兼容旧跳转和巡检。 */
     const val WORK = "work"

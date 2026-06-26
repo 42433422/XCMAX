@@ -10,10 +10,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import subprocess
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -23,6 +25,7 @@ from app.application.claude_super_employee_service import ClaudeSuperEmployeeSer
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.application.execution_scope import factory_context
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _admin_employee_match_keys,
@@ -74,6 +77,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     RelayDesktopCompleteBody,
     RelayDesktopPollBody,
     RelayDesktopRegisterBody,
+    RelayMobileBindAccountBody,
     RelayMobileConfirmBody,
     RelayMobileConfirmCodeBody,
     RelayTaskCreateBody,
@@ -103,7 +107,6 @@ from app.security.mobile_pairing import (
     issue_pairing_nonce,
     lookup_by_shortcode,
 )
-from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -112,6 +115,42 @@ OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 extension_router = APIRouter(tags=["mobile-api-ext"])
+
+
+def _mobile_session_id_from_request(request: Request) -> str:
+    auth_hdr = request.headers.get("Authorization") or ""
+    if auth_hdr.startswith("Bearer "):
+        try:
+            from app.security.mobile_jwt import verify_mobile_jwt
+
+            payload = verify_mobile_jwt(auth_hdr[7:].strip()) or {}
+            sid = str(payload.get("session_id") or "").strip()
+            if sid:
+                return sid
+        except OPERATIONAL_ERRORS:
+            logger.exception("mobile session id parse failed")
+    return str(request.headers.get("X-Session-ID") or "").strip()
+
+
+def _mobile_market_authorization(request: Request, user: Any | None = None) -> str:
+    from app.fastapi_routes.market_account import (
+        _auth_header,
+        latest_session_market_token,
+        session_market_token,
+    )
+
+    sid = _mobile_session_id_from_request(request)
+    token = session_market_token(sid) if sid else ""
+    if not token:
+        token = latest_session_market_token(user_id=getattr(user, "id", None))
+    return _auth_header(token)
+
+
+def _mobile_unauthorized_response() -> JSONResponse:
+    return JSONResponse(
+        format_mobile_response(None, "未授权", success=False, code=401),
+        status_code=401,
+    )
 
 
 def _ai_circle_user(user: Any) -> tuple[int, str, str | None]:
@@ -257,6 +296,29 @@ def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] 
     public_relay = dict(relay)
     public_relay.pop("desktop_token", None)
     return public_relay
+
+
+def _cached_desktop_relay_for_account_binding() -> dict[str, Any] | None:
+    """Return the local desktop's cloud relay id for account-auth binding."""
+    try:
+        from app.services.mobile_relay_desktop_client import cached_desktop_relay_payload
+
+        relay = cached_desktop_relay_payload()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("cached desktop relay unavailable: %s", exc)
+        return None
+    if not relay:
+        return None
+    relay_id = str(relay.get("relay_id") or "").strip()
+    if not relay_id:
+        return None
+    return {
+        "relay_id": relay_id,
+        "relay_base_url": str(relay.get("relay_base_url") or "").strip(),
+        "expires_at": str(relay.get("expires_at") or "").strip(),
+        "exp": int(relay.get("exp") or 0),
+        "binding_mode": "account_auth",
+    }
 
 
 # ── 配对主机解析（调用被测试 patch 的 _guess_lan_ipv4，须留在主模块） ──
@@ -449,13 +511,111 @@ def _mobile_mod_items(
 # ── 管理端编制员工（调用被测试 patch 的 _load_admin_duty_records，须留在主模块） ──
 
 
+def _admin_roster_ids_by_department_order() -> list[str]:
+    try:
+        from app.mod_sdk.employee_ssot import derive_admin_duty_roster
+
+        admin = derive_admin_duty_roster()
+    except RECOVERABLE_ERRORS:
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for dept in admin.get("departments") or []:
+        if not isinstance(dept, dict):
+            continue
+        for employee in dept.get("employees") or []:
+            if not isinstance(employee, dict):
+                continue
+            eid = str(employee.get("id") or "").strip()
+            if eid and eid not in seen:
+                seen.add(eid)
+                out.append(eid)
+    for eid in admin.get("planned_employee_ids") or []:
+        eid = str(eid or "").strip()
+        if eid and eid not in seen:
+            seen.add(eid)
+            out.append(eid)
+    return out
+
+
+def _admin_roster_area_labels() -> dict[str, str]:
+    try:
+        from app.mod_sdk.duty_roster import load_duty_roster_document
+
+        doc = load_duty_roster_document()
+    except RECOVERABLE_ERRORS:
+        return {}
+    out: dict[str, str] = {}
+    areas = doc.get("areas") if isinstance(doc, dict) else {}
+    if not isinstance(areas, dict):
+        return out
+    for _area_key, area in areas.items():
+        if not isinstance(area, dict):
+            continue
+        label = _compact_text(area.get("label"))
+        for eid in area.get("ids") or []:
+            sid = str(eid or "").strip()
+            if sid and label and sid not in out:
+                out[sid] = label
+    return out
+
+
+def _admin_employee_manifest(employee_id: str) -> dict[str, Any]:
+    eid = str(employee_id or "").strip()
+    if not eid:
+        return {}
+    manifest = Path(__file__).resolve().parents[2] / "mods" / "_employees" / eid / "manifest.json"
+    try:
+        raw = json.loads(manifest.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _admin_duty_records_from_roster() -> list[dict[str, Any]]:
+    registry = _load_admin_duty_records()
+    roster_ids = _admin_roster_ids_by_department_order()
+    if not roster_ids:
+        return registry
+    registry_by_id: dict[str, dict[str, Any]] = {}
+    for raw in registry:
+        eid = str(raw.get("id") or raw.get("pkg_id") or "").strip()
+        if eid and eid not in registry_by_id:
+            registry_by_id[eid] = raw
+
+    registry_ids = set(registry_by_id)
+    roster_id_set = set(roster_ids)
+    if registry_ids and not (registry_ids & roster_id_set):
+        # Compatibility for direct unit tests that patch only the registry seam.
+        return registry
+
+    area_labels = _admin_roster_area_labels()
+    records: list[dict[str, Any]] = []
+    for eid in roster_ids:
+        raw = dict(registry_by_id.get(eid) or {})
+        manifest = _admin_employee_manifest(eid)
+        employee_meta = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+        raw.setdefault("id", eid)
+        raw.setdefault("pkg_id", eid)
+        raw.setdefault("name", manifest.get("name") or employee_meta.get("label") or eid)
+        raw.setdefault("description", manifest.get("description") or "")
+        raw.setdefault("version", manifest.get("version") or "")
+        raw.setdefault("yuangon_area", area_labels.get(eid, ""))
+        raw.setdefault("employee_scope", "duty")
+        raw.setdefault("employee_source", "duty_roster")
+        raw.setdefault("is_duty_employee", True)
+        raw.setdefault("is_store_employee", False)
+        records.append(raw)
+    return records
+
+
 def _admin_employee_items(
     market_profiles: dict[str, dict[str, Any]] | None = None,
     *,
     market_connected: bool = False,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    for raw in _load_admin_duty_records():
+    for raw in _admin_duty_records_from_roster():
         employee_id = str(raw.get("id") or raw.get("pkg_id") or "").strip()
         if not employee_id:
             continue
@@ -491,7 +651,7 @@ def _admin_employee_items(
                     break
         _apply_market_profile(item, profile, market_connected=market_connected)
         items.append(item)
-    return sorted(items, key=lambda item: str(item.get("id") or ""))
+    return items
 
 
 def _admin_duty_mod_item(
@@ -507,7 +667,7 @@ def _admin_duty_mod_item(
         "name": "管理端编制员工",
         "version": "local",
         "author": "XCAGI 管理端",
-        "description": f"{len(employees)} 位管理端编制 AI 员工，来自本机 duty registry。",
+        "description": f"{len(employees)} 位管理端编制 AI 员工，来自 duty_roster.json。",
         "primary": True,
         "industry": {"id": "管理端", "name": "管理端"},
         "frontend_menu": [],
@@ -845,23 +1005,10 @@ async def mobile_pairing_issue(body: PairingIssueBody, request: Request):
     data = _enrich_pairing_payload(payload)
     relay = _register_desktop_relay_for_pairing(host, port)
     if relay:
-        relay_code = str(relay.get("pairing_code") or "").strip()
         data["relay"] = relay
         data["relay_id"] = relay.get("relay_id")
         data["relay_base_url"] = relay.get("relay_base_url")
-        if relay_code:
-            data["shortCode"] = relay_code
-            data["code"] = relay_code
-        relay_qr = dict(relay.get("qr_json") or {})
-        relay_qr["lan_fallback"] = dict(data.get("qr_json") or {})
-        data["qr_json"] = relay_qr
-        data["deep_link"] = "xcagi://relay-pairing?" + urlencode(
-            {
-                "relay_id": str(relay.get("relay_id") or ""),
-                "code": str(relay.get("pairing_code") or ""),
-                "relay_base_url": str(relay.get("relay_base_url") or ""),
-            }
-        )
+        data["relay_binding_mode"] = "account_auth"
     return format_mobile_response(data=data)
 
 
@@ -905,13 +1052,18 @@ async def mobile_pairing_exchange(body: PairingExchangeBody, user=Depends(get_mo
             status_code=400,
         )
     user_public = _resolve_mobile_relay_user(user, prefer_admin=True)
-    return format_mobile_response(
-        data={
-            **_enrich_pairing_payload(rec),
-            **_relay_mobile_auth_payload(user_public),
-            "hint": "已返回可保存的 api_base_url，手机端可直接绑定该设备。",
-        }
-    )
+    data = {
+        **_enrich_pairing_payload(rec),
+        **_relay_mobile_auth_payload(user_public),
+        "hint": "已返回可保存的 api_base_url，手机端可直接绑定该设备。",
+    }
+    relay = _cached_desktop_relay_for_account_binding()
+    if relay:
+        data["relay"] = relay
+        data["relay_id"] = relay.get("relay_id")
+        data["relay_base_url"] = relay.get("relay_base_url")
+        data["relay_binding_mode"] = "account_auth"
+    return format_mobile_response(data=data)
 
 
 # ── 服务桥接 ──
@@ -1091,6 +1243,44 @@ async def mobile_relay_confirm_code(
         )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_relay_confirm_code")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/relay/mobile/bind-account")
+async def mobile_relay_bind_account(
+    body: RelayMobileBindAccountBody,
+    user=Depends(get_mobile_user),
+):
+    uid, username = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        desktop = MobileRelayService().bind_mobile_by_account(
+            user_id=uid,
+            username=username,
+            relay_id=body.relay_id,
+        )
+        if not desktop:
+            return JSONResponse(
+                format_mobile_response(None, "未找到可绑定的电脑执行端", success=False, code=404),
+                status_code=404,
+            )
+        user_public = _mobile_user_public_dict(user)
+        return format_mobile_response(
+            data={
+                "desktop": desktop,
+                "relay_id": desktop.get("relay_id"),
+                **_relay_mobile_auth_payload(user_public, desktop),
+            }
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_relay_bind_account")
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
             status_code=500,
@@ -1495,6 +1685,182 @@ def _mobile_group_mode(request: Request) -> str:
     )
 
 
+def _clean_mobile_git_branch(raw: Any) -> str:
+    branch = str(raw or "").strip()
+    if branch.startswith("refs/heads/"):
+        branch = branch.removeprefix("refs/heads/")
+    if branch.startswith("refs/remotes/"):
+        branch = branch.removeprefix("refs/remotes/")
+    if branch.startswith("origin/"):
+        branch = branch.removeprefix("origin/")
+    branch = re.sub(r"[^A-Za-z0-9._/-]+", "-", branch)[:180].strip("/.")
+    if not branch or branch in {"HEAD", "origin/HEAD", ".", ".."}:
+        return ""
+    if ".." in branch or "//" in branch or "@{" in branch or branch.endswith(".lock"):
+        return ""
+    return branch
+
+
+def _mobile_branch_context_from_body(body: AiGroupMessageBody) -> str:
+    context_raw = getattr(body, "context", {})
+    context = context_raw if isinstance(context_raw, dict) else {}
+    return _clean_mobile_git_branch(
+        getattr(body, "branch_context", "")
+        or getattr(body, "branch", "")
+        or context.get("branch_context")
+        or context.get("branch")
+    )
+
+
+def _mobile_git_repo_root() -> Path | None:
+    candidates: list[Path] = []
+    for key in (
+        "XCMAX_REPO_ROOT",
+        "FHD_REPO_ROOT",
+        "DEVFLEET_REPO_ROOT",
+        "CODEX_WORKSPACE",
+        "WORKSPACE_ROOT",
+    ):
+        value = str(os.environ.get(key) or "").strip()
+        if value:
+            candidates.append(Path(value).expanduser())
+    candidates.append(Path.cwd())
+    candidates.extend(Path(__file__).resolve().parents)
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            roots = [candidate, *candidate.parents] if candidate.exists() else [candidate]
+        except RuntimeError:
+            roots = [candidate]
+        for root in roots:
+            if root in seen:
+                continue
+            seen.add(root)
+            if (root / ".git").exists():
+                return root
+    return None
+
+
+def _git_no_prompt_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
+    env.setdefault("GIT_ASKPASS", "true")
+    return env
+
+
+def _mobile_git_branches_from_repo(repo: Path) -> list[dict[str, Any]]:
+    current = ""
+    try:
+        cur = subprocess.run(
+            ["git", "-C", str(repo), "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=_git_no_prompt_env(),
+            check=False,
+        )
+        if cur.returncode == 0:
+            current = _clean_mobile_git_branch(cur.stdout)
+    except Exception:  # noqa: BLE001
+        current = ""
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/heads",
+                "refs/remotes/origin",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=_git_no_prompt_env(),
+            check=False,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    if result.returncode != 0:
+        return []
+    branches: dict[str, dict[str, Any]] = {}
+    for line in result.stdout.splitlines():
+        raw = line.strip()
+        if not raw or raw == "origin/HEAD":
+            continue
+        remote = raw.startswith("origin/")
+        name = _clean_mobile_git_branch(raw)
+        if not name:
+            continue
+        row = branches.setdefault(name, {"name": name, "current": False, "remote": False})
+        row["current"] = bool(row["current"] or name == current)
+        row["remote"] = bool(row["remote"] or remote)
+    return _sort_mobile_git_branches(branches.values())
+
+
+def _mobile_git_branches_from_remote() -> list[dict[str, Any]]:
+    remote_url = str(
+        os.environ.get("XCMAX_GIT_REMOTE_URL")
+        or os.environ.get("FHD_GIT_REMOTE_URL")
+        or "https://github.com/42433422/XCMAX.git"
+    ).strip()
+    if not remote_url:
+        return []
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--heads", remote_url],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=_git_no_prompt_env(),
+            check=False,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    if result.returncode != 0:
+        return []
+    branches: dict[str, dict[str, Any]] = {}
+    for line in result.stdout.splitlines():
+        if "refs/heads/" not in line:
+            continue
+        name = _clean_mobile_git_branch(line.rsplit("refs/heads/", 1)[-1])
+        if name:
+            branches[name] = {"name": name, "current": False, "remote": True}
+    return _sort_mobile_git_branches(branches.values())
+
+
+def _sort_mobile_git_branches(rows) -> list[dict[str, Any]]:
+    branches = list(rows)
+    branches.sort(
+        key=lambda item: (
+            not bool(item.get("current")),
+            0 if item.get("name") in {"main", "master"} else 1,
+            str(item.get("name") or "").lower(),
+        )
+    )
+    return branches[:200]
+
+
+@extension_router.get("/git/branches")
+async def mobile_git_branches(request: Request, user=Depends(get_mobile_user)):
+    """列出手机端可选工作分支：优先本地 repo，部署包无 .git 时退到远端 heads。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    try:
+        repo = _mobile_git_repo_root()
+        branches = _mobile_git_branches_from_repo(repo) if repo else []
+        if not branches:
+            branches = _mobile_git_branches_from_remote()
+        return format_mobile_response(data={"branches": branches})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_git_branches")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
 @extension_router.get("/ai-groups")
 async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user)):
     """列出当前用户的 AI 群聊（首次自动按 6 个部门种出 6 个群）。"""
@@ -1587,12 +1953,16 @@ async def mobile_ai_group_post(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
+        branch_context = _mobile_branch_context_from_body(body)
         result = await AiGroupChatService(mode=_mobile_group_mode(request)).post_message(
             user_id=uid,
             group_id=group_id,
             text=body.message,
             sender_name=body.sender_name or "我",
             mentions=body.mentions,
+            dispatch=bool(body.dispatch),
+            branch_context=branch_context,
+            context=body.context if isinstance(body.context, dict) else {},
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
@@ -2097,6 +2467,169 @@ async def mobile_platform_shell(user=Depends(get_mobile_user)):
     return format_mobile_response(data=build_platform_shell_payload(installed))
 
 
+@extension_router.get("/onboarding/industries", response_model=dict[str, Any])
+async def mobile_onboarding_industries(request: Request, user=Depends(get_mobile_user)):
+    """返回移动端首次开通可选行业目录。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    try:
+        from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog_for_request
+
+        data = await build_onboarding_industry_catalog_for_request(request)
+        return format_mobile_response(data=data)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile onboarding industries failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.get("/onboarding/industry-baseline", response_model=dict[str, Any])
+async def mobile_industry_baseline(
+    request: Request,
+    industry_id: str = Query(default="通用"),
+    user=Depends(get_mobile_user),
+):
+    """返回指定行业的移动端初始化方案。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    try:
+        from app.mod_sdk.industry_baseline import build_industry_baseline_plan_for_request
+
+        data = await build_industry_baseline_plan_for_request(request, industry_id)
+        return format_mobile_response(data=data)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile industry baseline failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/mod-store/install-host-foundation", response_model=dict[str, Any])
+async def mobile_install_host_foundation(
+    edition: str | None = Query(default=None),
+    user=Depends(get_mobile_user),
+):
+    """为移动端账号安装宿主基础能力包。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    try:
+        from app.fastapi_routes.mod_store_routes import _install_host_foundation_internal
+
+        result = await _install_host_foundation_internal(edition)
+        return format_mobile_response(
+            data=result.data,
+            message=result.message,
+            success=bool(result.success),
+            code=200 if result.success else 409,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile install host foundation failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/mod-store/install-industry-seed", response_model=dict[str, Any])
+async def mobile_install_industry_seed(body: dict[str, Any], user=Depends(get_mobile_user)):
+    """按行业安装移动端初始化种子包。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    raw = str(body.get("industry_id") or body.get("industryId") or body.get("mod_id") or "").strip()
+    if not raw:
+        return JSONResponse(
+            format_mobile_response(None, "缺少 industry_id", success=False, code=400),
+            status_code=400,
+        )
+    try:
+        from app.mod_sdk.industry_seed import install_industry_seed_with_fallback
+
+        data = await install_industry_seed_with_fallback(raw)
+        return format_mobile_response(
+            data=data,
+            message=str(data.get("message") or ""),
+            success=bool(data.get("success")),
+            code=200 if data.get("success") else 409,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile install industry seed failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/mod-store/install", response_model=dict[str, Any])
+async def mobile_install_mod(body: dict[str, Any], user=Depends(get_mobile_user)):
+    """从移动端安装指定市场 Mod。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    mod_id = str(body.get("mod_id") or body.get("pkg_id") or body.get("package_file") or "").strip()
+    if not mod_id:
+        return JSONResponse(
+            format_mobile_response(None, "缺少 mod_id", success=False, code=400),
+            status_code=400,
+        )
+    try:
+        from app.fastapi_routes.mod_store_routes import _install_from_catalog
+
+        result = await _install_from_catalog(mod_id, "", activate=True)
+        return format_mobile_response(
+            data=result.data,
+            message=result.message,
+            success=bool(result.success),
+            code=200 if result.success else 409,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile install mod failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post(
+    "/mod-store/install-customer-delivery-seed",
+    response_model=dict[str, Any],
+)
+async def mobile_install_customer_delivery_seed(
+    body: dict[str, Any],
+    user=Depends(get_mobile_user),
+):
+    """安装客户交付场景的移动端种子包。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    mod_id = str(body.get("mod_id") or body.get("pkg_id") or "").strip()
+    industry_id = str(body.get("industry_id") or body.get("industryId") or "").strip()
+    if not mod_id:
+        return JSONResponse(
+            format_mobile_response(None, "缺少 mod_id", success=False, code=400),
+            status_code=400,
+        )
+    try:
+        from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
+
+        data = await install_customer_delivery_seed_package(
+            mod_id=mod_id,
+            industry_id=industry_id,
+        )
+        return format_mobile_response(
+            data=data,
+            message=str(data.get("message") or ""),
+            success=bool(data.get("success")),
+            code=200 if data.get("success") else 409,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile install customer delivery seed failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
 @extension_router.get("/home")
 async def mobile_home(user=Depends(get_mobile_user)):
     if user is None:
@@ -2255,6 +2788,23 @@ async def mobile_nav_menu(user=Depends(get_mobile_user)):
 # ── 同步 ──
 
 
+def _mobile_sync_runtime_contract() -> dict[str, Any]:
+    return {
+        "source": "cloud",
+        "sync_mode": "cloud",
+        "standalone_supported": True,
+        "desktop_required": False,
+        "executor_required": False,
+        "mobile_flow_parity": True,
+        "offline_cache_supported": True,
+        "desktop_executor": {
+            "required": False,
+            "role": "optional_local_executor",
+            "required_for": ["local_files", "local_cli", "local_printing", "lan_devices"],
+        },
+    }
+
+
 @extension_router.get("/sync/status")
 async def mobile_sync_status(user=Depends(get_mobile_user)):
     if user is None:
@@ -2273,6 +2823,7 @@ async def mobile_sync_status(user=Depends(get_mobile_user)):
             ).fetchone()[0]
     except OPERATIONAL_ERRORS as exc:
         st = {"error": str(exc), "healthy": False}
+    st.update(_mobile_sync_runtime_contract())
     return format_mobile_response(data=st)
 
 
@@ -2295,6 +2846,7 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
         ai_changes = _ai_conversation_changes(user, limit=100)
         return format_mobile_response(
             data={
+                **_mobile_sync_runtime_contract(),
                 "cursor": cursor,
                 "changes": changes,
                 "im_changes": im_changes,
@@ -2624,7 +3176,10 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
             format_mobile_response(None, "消息不能为空", success=False, code=400),
             status_code=400,
         )
-    from app.application.facades.user_cs_employee_facade import EMPLOYEE_MOD_ID, run_user_cs_employee
+    from app.application.facades.user_cs_employee_facade import (
+        EMPLOYEE_MOD_ID,
+        run_user_cs_employee,
+    )
 
     message_id = f"cs_{uuid.uuid4().hex[:12]}"
     username = _safe_user_text(user, "username")
@@ -2708,6 +3263,194 @@ async def get_cs_messages(
 
 
 # ── 钱包 / 余额 ──
+
+_MOBILE_PAYMENT_CHANNELS: tuple[dict[str, str], ...] = (
+    {
+        "id": "mobile_h5",
+        "title": "手机网页",
+        "description": "统一收银台，适合 App 内或手机浏览器打开",
+    },
+    {
+        "id": "alipay",
+        "title": "支付宝",
+        "description": "支付宝 H5 / 跳转支付，取决于市场侧配置",
+    },
+    {
+        "id": "wechat_h5",
+        "title": "微信支付",
+        "description": "微信 H5 支付，取决于市场侧配置",
+    },
+)
+
+
+def _normalize_mobile_payment_channel(raw: Any) -> str:
+    value = str(raw or "").strip().lower().replace("-", "_")
+    aliases = {
+        "": "mobile_h5",
+        "mobile": "mobile_h5",
+        "h5": "mobile_h5",
+        "wap": "mobile_h5",
+        "alipay_h5": "alipay",
+        "zhifubao": "alipay",
+        "wechat": "wechat_h5",
+        "weixin": "wechat_h5",
+        "weixin_h5": "wechat_h5",
+    }
+    value = aliases.get(value, value)
+    allowed = {item["id"] for item in _MOBILE_PAYMENT_CHANNELS}
+    return value if value in allowed else "mobile_h5"
+
+
+def _mobile_checkout_sign_body(body: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if body.get("plan_id"):
+        out["plan_id"] = str(body.get("plan_id"))
+    wallet_recharge = body.get("wallet_recharge")
+    if wallet_recharge is True or str(wallet_recharge).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        out["wallet_recharge"] = True
+        try:
+            out["total_amount"] = float(body.get("total_amount") or 0)
+        except (TypeError, ValueError):
+            out["total_amount"] = 0.0
+        out["subject"] = str(body.get("subject") or "钱包充值")
+    for key in ("out_trade_no", "metadata"):
+        if key in body:
+            out[key] = body[key]
+    return out
+
+
+@extension_router.get("/payment/plans", response_model=dict[str, Any])
+async def mobile_payment_plans(request: Request, user=Depends(get_mobile_user)):
+    """返回移动端可购买套餐与支付渠道。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    try:
+        from app.fastapi_routes.market_account import _market_base_url, _proxy_json
+
+        payload = await _proxy_json(
+            "GET",
+            "/api/payment/plans",
+            authorization=_mobile_market_authorization(request, user),
+            return_error_payload=True,
+        )
+        if isinstance(payload, dict) and payload.get("__proxy_error__"):
+            status = int(payload.get("status_code") or 502)
+            return JSONResponse(
+                format_mobile_response(payload.get("payload"), "套餐加载失败", success=False, code=status),
+                status_code=status,
+        )
+        if isinstance(payload, dict):
+            payload = {
+                **payload,
+                "market_base_url": _market_base_url(),
+                "payment_channels": list(_MOBILE_PAYMENT_CHANNELS),
+            }
+        return format_mobile_response(data=payload)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile payment plans failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/payment/checkout", response_model=dict[str, Any])
+async def mobile_payment_checkout(
+    request: Request,
+    body: dict[str, Any],
+    user=Depends(get_mobile_user),
+):
+    """创建移动端支付订单并返回渠道下单参数。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    authorization = _mobile_market_authorization(request, user)
+    if not authorization:
+        return JSONResponse(
+            format_mobile_response(None, "尚未绑定市场账号；请重新登录", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        from app.fastapi_routes.market_account import _proxy_json
+
+        checkout_body = dict(body or {})
+        checkout_body["channel"] = _normalize_mobile_payment_channel(
+            checkout_body.get("channel")
+        )
+        checkout_body["client"] = str(checkout_body.get("client") or "android").strip()
+        checkout_body.setdefault("return_url", "xcagi://payment/complete")
+        signed = await _proxy_json(
+            "POST",
+            "/api/payment/sign-checkout",
+            json_body=_mobile_checkout_sign_body(checkout_body),
+            authorization=authorization,
+            return_error_payload=True,
+        )
+        if isinstance(signed, dict) and signed.get("__proxy_error__"):
+            status = int(signed.get("status_code") or 502)
+            return JSONResponse(
+                format_mobile_response(signed.get("payload"), "支付签名失败", success=False, code=status),
+                status_code=status,
+            )
+        if isinstance(signed, dict):
+            checkout_body.update(signed)
+        payload = await _proxy_json(
+            "POST",
+            "/api/payment/checkout",
+            json_body=checkout_body,
+            authorization=authorization,
+            return_error_payload=True,
+        )
+        if isinstance(payload, dict) and payload.get("__proxy_error__"):
+            status = int(payload.get("status_code") or 502)
+            return JSONResponse(
+                format_mobile_response(payload.get("payload"), "支付下单失败", success=False, code=status),
+                status_code=status,
+            )
+        return format_mobile_response(data=payload, message="下单成功")
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile payment checkout failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.get("/payment/query/{out_trade_no}", response_model=dict[str, Any])
+async def mobile_payment_query(
+    request: Request,
+    out_trade_no: str,
+    user=Depends(get_mobile_user),
+):
+    """查询移动端支付订单状态。"""
+    if user is None:
+        return _mobile_unauthorized_response()
+    try:
+        from app.fastapi_routes.market_account import _proxy_json
+
+        payload = await _proxy_json(
+            "GET",
+            f"/api/payment/query/{out_trade_no}",
+            authorization=_mobile_market_authorization(request, user),
+            return_error_payload=True,
+        )
+        if isinstance(payload, dict) and payload.get("__proxy_error__"):
+            status = int(payload.get("status_code") or 502)
+            return JSONResponse(
+                format_mobile_response(payload.get("payload"), "订单查询失败", success=False, code=status),
+                status_code=status,
+            )
+        return format_mobile_response(data=payload)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile payment query failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
 
 
 @extension_router.get("/wallet/balance")

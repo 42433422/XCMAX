@@ -3,7 +3,6 @@ package com.xiuci.xcagi.mobile.navigation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -18,45 +17,37 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CallMerge
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CallMerge
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Difference
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,28 +61,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.ChatSuggestion
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.ChatComposerBar
+import com.xiuci.xcagi.mobile.ui.components.mobile.ChatToolCardAction
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -193,8 +177,7 @@ fun ChatScreen(
     val userAvatarSource by vm.userAvatarSource.collectAsState()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var showMoreSheet by remember { mutableStateOf(false) }
+    var showToolPanel by remember { mutableStateOf(false) }
     var showVoiceSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -309,7 +292,89 @@ fun ChatScreen(
         if (streaming) { vm.stopChat(); return }
         vm.sendChat(text, conversationId)
         input = ""
+        showToolPanel = false
     }
+
+    fun sendToolCommand(text: String) {
+        val body = text.trim()
+        if (body.isBlank() || streaming) return
+        vm.sendChat(body, conversationId)
+        input = ""
+        showToolPanel = false
+    }
+
+    val isSuperEmployeeConversation = claudeConversation || codexConversation || cursorConversation
+    val activeGitBranch = gitBranch
+    val chatToolActions =
+        buildList {
+            if (isSuperEmployeeConversation && activeGitBranch != null) {
+                add(
+                    ChatToolCardAction(Icons.Default.Difference, "查看 diff", "检查分支改动") {
+                        showToolPanel = false
+                        vm.gitDiff(activeGitBranch, conversationId)
+                    },
+                )
+                add(
+                    ChatToolCardAction(Icons.AutoMirrored.Filled.CallMerge, "合并分支", "合并当前任务") {
+                        showToolPanel = false
+                        vm.gitMerge(activeGitBranch, conversationId)
+                    },
+                )
+                add(
+                    ChatToolCardAction(Icons.Default.DeleteOutline, "丢弃分支", "放弃本次改动") {
+                        showToolPanel = false
+                        vm.gitDiscard(activeGitBranch, conversationId)
+                    },
+                )
+            } else {
+                add(
+                    ChatToolCardAction(Icons.Default.Refresh, "新建对话", "清空当前上下文") {
+                        vm.clearChat()
+                        input = ""
+                        showToolPanel = false
+                    },
+                )
+                add(
+                    ChatToolCardAction(Icons.Default.QrCodeScanner, "OCR 识别", "拍照提取文字") {
+                        showToolPanel = false
+                        onOpenOcr()
+                    },
+                )
+                add(
+                    ChatToolCardAction(Icons.Default.Mic, "语音输入", "手机语音转文字") {
+                        showToolPanel = false
+                        startVoiceInput()
+                    },
+                )
+            }
+            add(
+                ChatToolCardAction(Icons.Default.Group, "任务派工", "先讨论再执行") {
+                    val task = input.trim()
+                    if (task.isBlank()) {
+                        vm.snack("先输入要派发的任务")
+                        showToolPanel = false
+                    } else {
+                        sendToolCommand("帮我安排并完成这个任务：$task")
+                    }
+                },
+            )
+            add(
+                ChatToolCardAction(Icons.Default.Check, "验收回访", "要结论和证据") {
+                    sendToolCommand("回访一下最近一次任务的进度和验收结论。")
+                },
+            )
+            add(
+                ChatToolCardAction(Icons.Default.AutoAwesome, "问题修复", "定位根因并验证") {
+                    val task = input.trim()
+                    if (task.isBlank()) {
+                        vm.snack("先输入要修复的问题")
+                        showToolPanel = false
+                    } else {
+                        sendToolCommand(if (task.startsWith("修复")) task else "修复：$task")
+                    }
+                },
+            )
+        }
 
     // 语音输入 BottomSheet
     if (showVoiceSheet) {
@@ -319,43 +384,6 @@ fun ChatScreen(
                 },
                 onDismiss = { showVoiceSheet = false },
         )
-    }
-
-    // 更多 BottomSheet
-    if (showMoreSheet) {
-        androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { showMoreSheet = false },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(Modifier.padding(bottom = Spacing.xxl)) {
-                Text(
-                    "更多",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                    modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
-                )
-                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                WeCellGroup {
-                    WeCell(
-                        title = "新建对话",
-                        subtitle = "清空当前对话，开始新的一轮",
-                        iconTint = XcagiTheme.extra.brandBlue,
-                        iconBg = MaterialTheme.colorScheme.primaryContainer,
-                        showArrow = true,
-                        showDivider = true,
-                        onClick = { showMoreSheet = false; vm.clearChat(); input = "" },
-                    )
-                    WeCell(
-                        title = "OCR 拍照识别",
-                        iconTint = MaterialTheme.colorScheme.secondary,
-                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                        showArrow = true,
-                        showDivider = false,
-                        onClick = { showMoreSheet = false; onOpenOcr() },
-                    )
-                }
-            }
-        }
     }
 
     Scaffold(
@@ -372,7 +400,7 @@ fun ChatScreen(
                     } else if (onOpenProfile != null) {
                         onOpenProfile.invoke()
                     } else {
-                        showMoreSheet = true
+                        showToolPanel = !showToolPanel
                     }
                 },
             )
@@ -385,9 +413,11 @@ fun ChatScreen(
                 onStop = { vm.stopChat() },
                 streaming = streaming,
                 onVoice = { startVoiceInput() },
-                onMore = { showMoreSheet = true },
+                onMore = { showToolPanel = !showToolPanel },
+                showTools = showToolPanel,
+                toolActions = chatToolActions,
                 gitBranch = gitBranch,
-                showDevTools = claudeConversation || codexConversation || cursorConversation,
+                showDevTools = isSuperEmployeeConversation,
                 onGitMerge = { gitBranch?.let { vm.gitMerge(it, conversationId) } },
                 onGitDiff = { gitBranch?.let { vm.gitDiff(it, conversationId) } },
                 onGitDiscard = { gitBranch?.let { vm.gitDiscard(it, conversationId) } },
@@ -577,7 +607,11 @@ private fun ImBubble(
                 ),
             )
             .padding(
-                top = if (showAvatar) 12.dp else 4.dp,
+                top = if (showAvatar) {
+                    MessageAvatarLayout.bubbleTopPaddingWithAvatar
+                } else {
+                    MessageAvatarLayout.bubbleTopPaddingWithoutAvatar
+                },
                 bottom = 4.dp,
             ),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -589,12 +623,12 @@ private fun ImBubble(
                 AppAvatar(
                     imageSource = aiAvatarUrl,
                     fallback = aiAvatarFallback,
-                    size = 40.dp,
-                    shape = RoundedCornerShape(8.dp),
+                    size = MessageAvatarLayout.bubbleAvatarSize,
+                    shape = MessageAvatarLayout.bubbleAvatarShape(),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(MessageAvatarLayout.bubbleAvatarGap))
             } else {
-                Spacer(Modifier.width(48.dp))
+                Spacer(Modifier.width(MessageAvatarLayout.bubbleAvatarReservedWidth))
             }
         }
 
@@ -625,15 +659,15 @@ private fun ImBubble(
         // 用户头像
         if (isUser) {
             if (showAvatar) {
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(MessageAvatarLayout.bubbleAvatarGap))
                 AppAvatar(
                     imageSource = userAvatarUrl,
                     fallback = AppAvatarFallback.USER,
-                    size = 40.dp,
-                    shape = RoundedCornerShape(8.dp),
+                    size = MessageAvatarLayout.bubbleAvatarSize,
+                    shape = MessageAvatarLayout.bubbleAvatarShape(),
                 )
             } else {
-                Spacer(Modifier.width(48.dp))
+                Spacer(Modifier.width(MessageAvatarLayout.bubbleAvatarReservedWidth))
             }
         }
     }
@@ -652,6 +686,8 @@ private fun ImInputBar(
     modifier: Modifier = Modifier,
     onVoice: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
+    showTools: Boolean = false,
+    toolActions: List<ChatToolCardAction> = emptyList(),
     gitBranch: String? = null,
     showDevTools: Boolean = false,
     onGitMerge: () -> Unit = {},
@@ -659,16 +695,19 @@ private fun ImInputBar(
     onGitDiscard: () -> Unit = {},
     onGitHint: () -> Unit = {},
 ) {
-    val haptics = rememberHaptics()
-    Surface(
-        color = imBarBg(),
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Column {
-            // 顶部分隔线
-            HorizontalDivider(thickness = 0.5.dp, color = imDivider())
-            // 开发工具条：仅在确有可操作分支时出现（会话模型下 claude 直接在工程根干活、
-            // 不产生每条消息一分支，故此条自然隐藏，不再灰着占位。工作区改动审阅键后续单独做）。
+    ChatComposerBar(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = "发消息",
+        busy = streaming,
+        onSend = onSend,
+        onStop = onStop,
+        onVoice = onVoice,
+        showTools = showTools,
+        onToggleTools = { onMore?.invoke() },
+        toolActions = toolActions,
+        modifier = modifier,
+        topContent = {
             if (showDevTools && gitBranch != null) {
                 GitActionBar(
                     branch = gitBranch,
@@ -678,113 +717,8 @@ private fun ImInputBar(
                     onEmptyHint = onGitHint,
                 )
             }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                // 语音按钮（精致图标）
-                if (onVoice != null) {
-                    IconButton(onClick = onVoice, modifier = Modifier.size(38.dp)) {
-                        Icon(
-                            Icons.Default.Mic,
-                            contentDescription = "语音",
-                            tint = imTextPrimary(),
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                }
-
-                // 输入框（微信风格：圆角矩形+浅灰背景）
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.weight(1f).height(38.dp),
-                ) {
-                    androidx.compose.foundation.text.BasicTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        modifier = Modifier.padding(horizontal = 12.dp).fillMaxSize(),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = imTextPrimary(),
-                            fontSize = 15.sp,
-                        ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(XcagiTheme.extra.brandBlue),
-                        decorationBox = { inner ->
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                                if (value.isEmpty()) {
-                                    Text(
-                                        "发消息",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                                        color = imTextSecondary(),
-                                    )
-                                }
-                                inner()
-                            }
-                        },
-                    )
-                }
-
-                // 右侧动作（微信式）：流式→"停止" pill；有输入→"发送" pill；空白→收成"＋"功能入口。
-                var pressed by remember { mutableStateOf(false) }
-                val scale by animateFloatAsState(
-                    targetValue = if (pressed) 0.92f else 1f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                    label = "sendScale",
-                )
-                val hasInput = value.isNotBlank()
-                if (streaming || hasInput) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (streaming) MaterialTheme.colorScheme.errorContainer
-                                else XcagiTheme.extra.brandBlue,
-                        modifier = Modifier
-                            .height(38.dp)
-                            .scale(scale)
-                            .pointerInput(streaming) {
-                                detectTapGestures(
-                                    onPress = {
-                                        pressed = true
-                                        awaitRelease()
-                                        pressed = false
-                                    },
-                                    onTap = {
-                                        if (streaming) { haptics.tap(); onStop() }
-                                        else { haptics.confirm(); onSend() }
-                                    },
-                                )
-                            },
-                    ) {
-                        Box(
-                            Modifier.fillMaxHeight().padding(horizontal = 17.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                if (streaming) "停止" else "发送",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 15.sp,
-                                ),
-                                color = if (streaming) MaterialTheme.colorScheme.error else Color.White,
-                            )
-                        }
-                    }
-                } else if (onMore != null) {
-                    IconButton(onClick = onMore, modifier = Modifier.size(38.dp)) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = "更多",
-                            tint = imTextPrimary(),
-                            modifier = Modifier.size(26.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
+        },
+    )
 }
 
 // ══════════════════════════════════════════
@@ -808,7 +742,7 @@ private fun GitActionBar(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                Icons.Default.CallMerge,
+                Icons.AutoMirrored.Filled.CallMerge,
                 contentDescription = null,
                 tint = imTextSecondary(),
                 modifier = Modifier.size(13.dp),
@@ -829,7 +763,7 @@ private fun GitActionBar(
             }
             GitChip(
                 "合并到主干",
-                Icons.Default.CallMerge,
+                Icons.AutoMirrored.Filled.CallMerge,
                 XcagiTheme.extra.brandBlue,
                 filled = active,
                 dimmed = !active,
@@ -902,8 +836,8 @@ private fun ChatEmptyState(
             AppAvatar(
                 imageSource = aiAvatarUrl,
                 fallback = aiAvatarFallback,
-                size = 72.dp,
-                shape = RoundedCornerShape(20.dp),
+                size = MessageAvatarLayout.emptyStateAvatarSize,
+                shape = MessageAvatarLayout.emptyStateAvatarShape(),
             )
             Spacer(Modifier.height(Spacing.md))
             Text(
@@ -1109,17 +1043,20 @@ fun AiEmployeeListScreen(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = Spacing.md, vertical = 10.dp),
+                                .padding(
+                                    horizontal = MessageAvatarLayout.employeePickerRowHorizontalPadding,
+                                    vertical = MessageAvatarLayout.employeePickerRowVerticalPadding,
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             AppAvatar(
                                 imageSource = employee.avatarUrl,
                                 fallback = AppAvatarFallback.AI_EMPLOYEE,
-                                size = 44.dp,
-                                shape = MaterialTheme.shapes.extraSmall,
+                                size = MessageAvatarLayout.employeePickerAvatarSize,
+                                shape = MessageAvatarLayout.employeePickerAvatarShape(),
                                 contentDescription = employee.name,
                             )
-                            Spacer(Modifier.width(Spacing.md))
+                            Spacer(Modifier.width(MessageAvatarLayout.employeePickerAvatarTextGap))
 
                             Column(Modifier.weight(1f)) {
                                 Text(
@@ -1153,7 +1090,11 @@ fun AiEmployeeListScreen(
                             )
                         }
                     }
-                    HorizontalDivider(thickness = 0.5.dp, color = imDivider(), modifier = Modifier.padding(start = 68.dp))
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color = imDivider(),
+                        modifier = Modifier.padding(start = MessageAvatarLayout.employeePickerDividerStart),
+                    )
                 }
             }
         }

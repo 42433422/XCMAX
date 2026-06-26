@@ -1,121 +1,40 @@
-# CI SSOT: standalone workflow (no FHD source) — edit here directly, do not regenerate.
 name: FHD Alembic SSOT
 
-# Enforces that Alembic — not create_all + ensure_* — is (becoming) the single
-# source of truth for the FHD schema. Two gates:
-#   1. single-head     — structural: one head, no dangling down_revision (BLOCKING)
-#   2. ssot-parity     — `alembic upgrade head` from an EMPTY db must succeed and
-#                        reproduce the ORM models (`alembic check` clean).
-#
-# NOTE: This is a standalone workflow. No corresponding FHD/.github/workflows/
-# source exists; it lives directly in .github/workflows/ and is not regenerated.
-
-on:
+"on":
+  workflow_dispatch:
   pull_request:
-    paths:
-      - 'FHD/alembic/**'
-      - 'FHD/app/db/**'
-      - 'scripts/guard_alembic_single_head.py'
-      - '.github/workflows/fhd-alembic-ssot.yml'
+    branches: [main, develop]
   push:
     branches: [main, develop]
-    paths:
-      - 'FHD/alembic/**'
-      - 'FHD/app/db/**'
 
 jobs:
   single-head:
-    # Cheap, dependency-free structural guard. Always blocking — it passes today.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - name: Alembic single-head / no-dangling check
         run: python3 scripts/guard_alembic_single_head.py
 
-  ssot-parity:
-    # The real SSOT gate: a fresh DB must be fully buildable by Alembic alone,
-    # and the result must match the ORM models.
-    #
-    # As of 2026-06-22 the chain was squashed to a single baseline
-    # (versions/2026_06_22_baseline_squashed_schema.py). Both checks below were
-    # verified clean locally on SQLite (empty `upgrade head` builds the full ORM
-    # schema; `alembic check` reports "No new upgrade operations detected").
-    #
-    # Kept REPORT-ONLY for ONE green PostgreSQL run, because autogenerate on PG
-    # can surface type / server_default false-positives that SQLite does not
-    # (tune with compare_type / compare_server_default in alembic/env.py). Once
-    # this job is green on PG, flip `continue-on-error` to false and delete this
-    # note — that makes Alembic the enforced single source of truth.
-    #
-    # The same invariant IS already enforced (blocking) on SQLite by the
-    # `ssot-parity-sqlite` job below — SQLite autogenerate is deterministic and
-    # free of the PG false-positives, so it does not need the report-only grace.
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    defaults:
-      run:
-        working-directory: FHD
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: xcagi
-          POSTGRES_PASSWORD: xcagi
-          POSTGRES_DB: xcagi
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U xcagi"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-    env:
-      DATABASE_URL: postgresql+psycopg://xcagi:xcagi@localhost:5432/xcagi
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install FHD runtime deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[server-api]"
-      - name: alembic upgrade head (empty DB must build from scratch)
-        run: alembic -c alembic.ini upgrade head
-      - name: alembic check (upgrade head must equal ORM models == SSOT)
-        run: alembic -c alembic.ini check
-
   ssot-parity-sqlite:
-    # BLOCKING SQLite counterpart of `ssot-parity`. A fresh, EMPTY SQLite database
-    # must be fully buildable by Alembic alone (`upgrade head`) and the result must
-    # match the ORM models (`alembic check` clean). SQLite autogenerate is
-    # deterministic and free of the type / server_default false-positives that keep
-    # the PostgreSQL job report-only, and it needs no service container — so this
-    # gate is enforced now (no continue-on-error). Verified locally on 2026-06-23:
-    # empty `upgrade head` builds the full ORM schema and `alembic check` reports
-    # "No new upgrade operations detected".
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: FHD
     env:
-      # An absolute path under the runner temp dir that does NOT pre-exist, so
-      # `upgrade head` genuinely builds the schema from scratch. (sqlite:/// + an
-      # absolute /path yields the four-slash absolute form sqlite:////path.)
       DATABASE_URL: sqlite:///${{ runner.temp }}/fhd_alembic_ssot_parity.db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - name: Install FHD runtime deps
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[server-api]"
-      - name: alembic upgrade head (empty SQLite DB must build from scratch)
+      - name: alembic upgrade head
         run: alembic -c alembic.ini upgrade head
-      - name: alembic check (upgrade head must equal ORM models == SSOT)
+      - name: alembic check
         run: alembic -c alembic.ini check

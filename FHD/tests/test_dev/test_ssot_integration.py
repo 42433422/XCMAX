@@ -9,19 +9,21 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 
-def test_ssot_list_shows_10_enabled(capsys):
-    """list 输出 10 域，全部 enabled。"""
+def test_ssot_list_shows_enabled_domains(capsys):
+    """list 输出全部 enabled 域。"""
     from scripts.dev.ssot_cli import main
+    from scripts.dev.ssot_plugins.base import load_registry
 
+    expected_count = len(load_registry(ROOT / "config" / "ssot.yaml", enabled_only=True))
     main(["list"])
     out = capsys.readouterr().out
-    # 10 行域（不含表头与分隔线）
+    # 域行（不含表头与分隔线）
     domain_lines = [
         l for l in out.splitlines() if l and not l.startswith("name") and not l.startswith("-")
     ]
-    assert len(domain_lines) == 10
+    assert len(domain_lines) == expected_count
     yes_count = sum(1 for l in domain_lines if l.split()[1] == "yes")
-    assert yes_count == 10  # 全部启用
+    assert yes_count == expected_count  # 全部启用
 
 
 def test_ssot_gate_returns_0_or_1(capsys):

@@ -100,10 +100,8 @@ class TestDistillationTrainerLoadDataTSV:
 
         trainer = DistillationTrainer.__new__(DistillationTrainer)
         texts, labels = trainer.load_data(str(tsv_file))
-        # Source appends text unconditionally for TSV rows with >=2 columns,
-        # but only appends label when valid. So both texts are present but
-        # only the valid label is recorded.
-        assert len(texts) == 2
+        # Unknown labels are skipped as complete samples so texts and labels stay aligned.
+        assert len(texts) == 1
         assert len(labels) == 1
         assert labels[0] == LABEL_TO_ID["greet"]
 

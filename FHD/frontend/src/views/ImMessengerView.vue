@@ -37,16 +37,17 @@
                 :class="[
                   'im-avatar',
                   {
-                    'im-avatar--codex': isCodexSuperEmployeeEntry(ct),
+                    'im-avatar--super-tool': superEmployeeAvatarKey(ct),
+                    [`im-avatar--${superEmployeeAvatarKey(ct)}`]: superEmployeeAvatarKey(ct),
                     'im-avatar--employee': isDutyEmployeeEntry(ct),
                   },
                 ]"
                 aria-hidden="true"
               >
                 <img
-                  v-if="isCodexSuperEmployeeEntry(ct)"
-                  class="im-codex-icon"
-                  :src="CODEX_ICON_SRC"
+                  v-if="superEmployeeAvatarSrc(ct)"
+                  class="im-super-tool-icon"
+                  :src="superEmployeeAvatarSrc(ct) || undefined"
                   alt=""
                   decoding="async"
                   draggable="false"
@@ -101,16 +102,18 @@
               'im-avatar',
               'im-avatar--sm',
               {
-                'im-avatar--codex': isCodexSuperEmployeeEntry(activeSystemEntry),
+                'im-avatar--super-tool': superEmployeeAvatarKey(activeSystemEntry),
+                [`im-avatar--${superEmployeeAvatarKey(activeSystemEntry)}`]:
+                  superEmployeeAvatarKey(activeSystemEntry),
                 'im-avatar--employee': isDutyEmployeeEntry(activeSystemEntry),
               },
             ]"
             aria-hidden="true"
           >
             <img
-              v-if="isCodexSuperEmployeeEntry(activeSystemEntry)"
-              class="im-codex-icon"
-              :src="CODEX_ICON_SRC"
+              v-if="superEmployeeAvatarSrc(activeSystemEntry)"
+              class="im-super-tool-icon"
+              :src="superEmployeeAvatarSrc(activeSystemEntry) || undefined"
               alt=""
               decoding="async"
               draggable="false"
@@ -127,16 +130,18 @@
                 :class="[
                   'im-system-employee-avatar',
                   {
-                    'im-system-employee-avatar--codex': isCodexSuperEmployeeEntry(activeSystemEntry),
+                    'im-system-employee-avatar--super-tool': superEmployeeAvatarKey(activeSystemEntry),
+                    [`im-system-employee-avatar--${superEmployeeAvatarKey(activeSystemEntry)}`]:
+                      superEmployeeAvatarKey(activeSystemEntry),
                     'im-system-employee-avatar--duty': isDutyEmployeeEntry(activeSystemEntry),
                   },
                 ]"
                 aria-hidden="true"
               >
                 <img
-                  v-if="isCodexSuperEmployeeEntry(activeSystemEntry)"
-                  class="im-codex-icon"
-                  :src="CODEX_ICON_SRC"
+                  v-if="superEmployeeAvatarSrc(activeSystemEntry)"
+                  class="im-super-tool-icon"
+                  :src="superEmployeeAvatarSrc(activeSystemEntry) || undefined"
                   alt=""
                   decoding="async"
                   draggable="false"
@@ -371,6 +376,10 @@ import {
   YUANGON_PKG_ROLE_LABELS,
 } from '@/domain/yuangonDutyRoster';
 import {
+  superEmployeeAvatarSrcForId,
+  type SuperEmployeeAvatarKey,
+} from '@/constants/superEmployeeAvatars';
+import {
   fetchCodexSuperEmployeeMessages,
   sendCodexSuperEmployeeMessage,
   type CodexSuperEmployeeApiScope,
@@ -478,7 +487,6 @@ type EmployeeExecuteResponse = {
   data?: unknown;
 };
 
-const CODEX_ICON_SRC = `${import.meta.env.BASE_URL || '/'}brand/codex-app-icon.png`;
 const CODEX_STREAM_PLACEHOLDER_ID = '__codex_streaming_reply__';
 const CODEX_POLL_INTERVAL_MS = 2400;
 const CODEX_POLL_MAX_ROUNDS = 60;
@@ -723,6 +731,17 @@ function pinnedEntryPreview(entry: PinnedImEntry): string {
   if (isSuperEmployeeEntry(entry)) return entry.subtitle;
   if (isDutyEmployeeEntry(entry)) return entry.subtitle;
   return `@${entry.username}`;
+}
+
+function superEmployeeAvatarKey(entry: PinnedImEntry): SuperEmployeeAvatarKey | null {
+  if (isCodexSuperEmployeeEntry(entry)) return 'codex';
+  if (isClaudeSuperEmployeeEntry(entry)) return 'claude';
+  if (isCursorSuperEmployeeEntry(entry)) return 'cursor';
+  return null;
+}
+
+function superEmployeeAvatarSrc(entry: PinnedImEntry): string | null {
+  return superEmployeeAvatarSrcForId(String(entry.id || '').trim());
 }
 
 function pinnedAvatarText(entry: PinnedImEntry): string {
@@ -1909,22 +1928,14 @@ onUnmounted(() => {
   font-size: 15px;
   font-weight: 600;
 }
-.im-avatar--codex {
+.im-avatar--super-tool {
   border-radius: 10px;
   background: transparent;
   font-size: 0;
   letter-spacing: 0;
   text-transform: none;
 }
-.im-avatar--sm {
-  flex-basis: 30px;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  font-size: 13px;
-}
-.im-avatar--sm.im-avatar--codex {
+.im-avatar--sm.im-avatar--super-tool {
   flex-basis: 30px;
   width: 30px;
   height: 30px;
@@ -1944,6 +1955,23 @@ onUnmounted(() => {
   min-width: 30px;
   min-height: 30px;
   border-radius: 8px;
+}
+.im-avatar--sm {
+  flex-basis: 30px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  font-size: 13px;
+}
+.im-super-tool-icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  border-radius: inherit;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .im-codex-icon {
   width: 100%;
@@ -2048,7 +2076,7 @@ onUnmounted(() => {
   font-size: 22px;
   font-weight: 700;
 }
-.im-system-employee-avatar--codex {
+.im-system-employee-avatar--super-tool {
   border-radius: 14px;
   background: transparent;
   font-size: 0;

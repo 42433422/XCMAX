@@ -271,11 +271,12 @@ class ModstorePlatformAdapter:
                 if not auth_token:
                     # 多用户环境按 user_id 过滤，防止 fallback 串号
                     fallback_user_id = _user_id_from_session(effective_session_id)
-                    latest_token = latest_session_market_token(user_id=fallback_user_id)
-                    if latest_token:
-                        auth_token = latest_token
-                        token_source = "session"
-                        logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
+                    if effective_session_id or fallback_user_id is not None:
+                        latest_token = latest_session_market_token(user_id=fallback_user_id)
+                        if latest_token:
+                            auth_token = latest_token
+                            token_source = "session"
+                            logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
             except ImportError as e:
                 logger.error("无法导入market_account模块: %s", e)
             except RECOVERABLE_ERRORS as e:

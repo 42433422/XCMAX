@@ -2,6 +2,10 @@
   "trial_days": 30,
   "currency": "CNY",
   "budget_permanent_map": {
+    "1–5 万": "saas-permanent-starter",
+    "5–10 万": "saas-permanent-growth",
+    "10–50 万": "saas-permanent-max",
+    "50–100 万": "saas-permanent-ultra",
     "5 万以内": "saas-permanent-starter",
     "5–20 万": "saas-permanent-growth",
     "20–50 万": "saas-permanent-max",
@@ -15,36 +19,49 @@
     {
       "id": "saas-trial-30",
       "title": "30 天试用",
-      "description": "全功能试用 30 天，到期后可购买永久授权继续使用。",
+      "description": "99 元体验账户，含 100 元额度，30 天到期后冻结，可购买永久授权继续使用。",
       "amount_cents": 9900,
+      "quota_cents": 10000,
+      "duration_days": 30,
+      "license_type": "trial",
+      "expires_behavior": "freeze",
+      "account_tier": "normal",
       "badge": "试用"
     },
     {
       "id": "saas-permanent-starter",
-      "title": "永久授权 · 5 万以内",
-      "description": "适用于预算 5 万以内的企业，一次购买永久使用。",
+      "title": "永久授权 · 1–5 万",
+      "description": "适用于预算 1–5 万的企业，一次购买永久使用。",
       "amount_cents": 4999900,
+      "license_type": "permanent",
+      "account_tier": "normal",
       "badge": "永久"
     },
     {
       "id": "saas-permanent-growth",
-      "title": "永久授权 · 5–20 万",
-      "description": "适用于预算 5–20 万的企业，一次购买永久使用。",
-      "amount_cents": 19999900,
+      "title": "永久授权 · 5–10 万",
+      "description": "适用于预算 5–10 万的企业，一次购买永久使用。",
+      "amount_cents": 9999900,
+      "license_type": "permanent",
+      "account_tier": "pro",
       "badge": "永久"
     },
     {
       "id": "saas-permanent-max",
-      "title": "永久授权 · 20–50 万",
-      "description": "适用于预算 20–50 万的企业，一次购买永久使用。",
+      "title": "永久授权 · 10–50 万",
+      "description": "适用于预算 10–50 万的企业，一次购买永久使用。",
       "amount_cents": 49999900,
+      "license_type": "permanent",
+      "account_tier": "max",
       "badge": "永久"
     },
     {
       "id": "saas-permanent-ultra",
-      "title": "永久授权 · 50 万以上",
-      "description": "适用于预算 50 万以上的企业，一次购买永久使用。",
+      "title": "永久授权 · 50–100 万",
+      "description": "适用于预算 50–100 万的企业，一次购买永久使用。",
       "amount_cents": 99999900,
+      "license_type": "permanent",
+      "account_tier": "ultra",
       "badge": "永久"
     }
   ]

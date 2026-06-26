@@ -54,6 +54,7 @@ def test_codex_super_employee_invoke_writes_outbox_when_dispatch_not_configured(
 
 def test_codex_super_employee_list_messages_is_user_scoped(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
+    monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "0")
     monkeypatch.delenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", raising=False)
     svc = CodexSuperEmployeeService(storage_root=tmp_path)
     svc.invoke(user_id=1, message="任务 A")
@@ -279,6 +280,7 @@ def test_codex_super_employee_marks_mobile_im_source_in_dispatch_request(
     monkeypatch,
 ):
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
+    monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "0")
     svc = CodexSuperEmployeeService(storage_root=tmp_path)
 
     result = svc.invoke(user_id=1, message="手机派工", context={"source": "mobile_im"})

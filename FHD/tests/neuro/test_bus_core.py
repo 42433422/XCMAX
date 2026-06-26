@@ -109,10 +109,22 @@ class TestNeuroReliabilityWanted:
         monkeypatch.setenv("_TEST_REL", "0")
         assert _neuro_reliability_wanted("_TEST_REL", staging_default=True) is False
 
-    def test_unset_non_staging(self, monkeypatch):
+    def test_unset_production_default_true(self, monkeypatch):
         monkeypatch.delenv("_TEST_REL", raising=False)
         monkeypatch.setenv("FHD_ENV", "production")
-        assert _neuro_reliability_wanted("_TEST_REL", staging_default=True) is False
+        assert _neuro_reliability_wanted("_TEST_REL", staging_default=True) is True
+
+    def test_unset_production_default_false(self, monkeypatch):
+        monkeypatch.delenv("_TEST_REL", raising=False)
+        monkeypatch.setenv("FHD_ENV", "production")
+        assert (
+            _neuro_reliability_wanted(
+                "_TEST_REL",
+                staging_default=True,
+                production_default=False,
+            )
+            is False
+        )
 
     def test_unset_staging_default_true(self, monkeypatch):
         monkeypatch.delenv("_TEST_REL", raising=False)
@@ -362,7 +374,7 @@ class TestNeuroBusStats:
         monkeypatch.delenv("XCAGI_NEURO_BUS_DLQ_AUTO", raising=False)
         monkeypatch.delenv("XCAGI_NEURO_BUS_SLA_LOG", raising=False)
         monkeypatch.delenv("XCAGI_NEURO_BUS_REDIS_PUBSUB", raising=False)
-        monkeypatch.setenv("FHD_ENV", "production")
+        monkeypatch.delenv("FHD_ENV", raising=False)
         bus = NeuroBus()
         rel = bus.get_reliability_status()
         assert rel["dedup"] is False
