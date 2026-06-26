@@ -61,11 +61,15 @@ def _user_public_dict(user) -> dict[str, Any]:
 
 
 def _mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
-    """JWT-only fallback for physical relay sessions when the user table is stale.
+    """云端签发的移动 JWT 作为身份载体（本地 users 行缺失/过期时的收敛路径）。
 
-    Server relay pairing proves access to the desktop settings QR.  The cloud
-    relay can therefore keep using the signed mobile JWT even if a deployed
-    server has an older or mismatched local ``users`` table.
+    身份真相源契约见 docs/account_system_ssot.md §9.2：移动 JWT 由本端在**市场认证
+    通过后**签发（``aud=xcagi-mobile``），携带的是云端已确认的身份。当本地 ``users``
+    表滞后于云端时，信任已验签的 JWT 是**设计而非漏洞**——本地行只是缓存。
+
+    该重建路径**仅限**两类：管理端（``account_kind ∈ {admin, admin_portal}``）或物理
+    中继会话（``session_id`` 以 ``mobile-relay-`` 开头）。每次走该路径打 WARNING 日志
+    （§零「云端为准」要求的可观测降级）。受控点由 account-identity 守卫冻结，禁止外扩。
     """
     if not payload or payload.get("typ") != "access":
         return None
@@ -78,6 +82,13 @@ def _mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
         return None
     username = str(payload.get("username") or "").strip() or "mobile"
     role = "admin" if account_kind in {"admin", "admin_portal"} else "enterprise"
+    logger.warning(
+        "mobile identity rebuilt from signed JWT (cloud-authority degraded path): "
+        "uid=%s account_kind=%s session=%s",
+        uid,
+        account_kind or "-",
+        session_id or "-",
+    )
     return SimpleNamespace(
         id=uid,
         username=username,

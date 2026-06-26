@@ -142,9 +142,7 @@ class TestGetShipmentRecordsByUnit:
         mock_db.query.return_value = mock_q
         mock_q.order_by.return_value = mock_q
         mock_q.limit.return_value = mock_q
-        mock_q.all.return_value = [
-            _make_record(created_at=None, updated_at=None, printed_at=None)
-        ]
+        mock_q.all.return_value = [_make_record(created_at=None, updated_at=None, printed_at=None)]
         with patch(
             "app.infrastructure.persistence.purchase_unit_query_impl.get_db",
             return_value=_mock_db_ctx(mock_db),

@@ -133,6 +133,17 @@ domains:
     check: python scripts/dev/ssot_plugins/k8s.py check
     sync: null
 
+  - name: account-identity
+    owner: backend
+    enabled: true
+    # 真相源声明：云端（修茈市场）为身份权威，本地 users/sessions 为收敛缓存。
+    ssot: FHD/docs/account_system_ssot.md
+    derived: []
+    mode: lint
+    # 棘轮守卫：冻结已知造身份点，白名单外新增即 DRIFT（见 docs §9.3）。
+    check: python scripts/dev/ssot_plugins/account_identity.py check
+    sync: null
+
   # ===== 此前游离于注册表外的真相源（2026-06-23 补登记）=====
   - name: employee-roster
     owner: hr-platform

@@ -63,9 +63,7 @@ def _make_service(
         patch("app.services.get_products_service", return_value=ps),
         patch("app.services.get_printer_service", return_value=prs),
     ):
-        return ProductApplicationService(
-            products_service=ps, printer_service=prs
-        )
+        return ProductApplicationService(products_service=ps, printer_service=prs)
 
 
 # ---------------------------------------------------------------------------
@@ -77,9 +75,7 @@ class TestCreateProductBranches:
     def test_create_product_negative_price_returns_error(self):
         """price < 0 returns error (branch 118->119)."""
         service = _make_service()
-        result = service.create_product(
-            {"unit_name": "u1", "product_name": "p1", "price": -5}
-        )
+        result = service.create_product({"unit_name": "u1", "product_name": "p1", "price": -5})
         assert result["success"] is False
         assert "价格不能为负数" in result["message"]
 
@@ -88,9 +84,7 @@ class TestCreateProductBranches:
         ps = MagicMock()
         ps.create_product.return_value = {"success": True, "product_id": 1}
         service = _make_service(products_service=ps)
-        result = service.create_product(
-            {"unit_name": "u1", "product_name": "p1", "price": 0}
-        )
+        result = service.create_product({"unit_name": "u1", "product_name": "p1", "price": 0})
         assert result["success"] is True
 
     def test_create_product_no_unit_returns_error(self):
@@ -103,9 +97,7 @@ class TestCreateProductBranches:
     def test_create_product_empty_unit_returns_error(self):
         """Empty unit_name returns error."""
         service = _make_service()
-        result = service.create_product(
-            {"unit_name": "  ", "product_name": "p1"}
-        )
+        result = service.create_product({"unit_name": "  ", "product_name": "p1"})
         assert result["success"] is False
 
     def test_create_product_no_name_returns_error(self):

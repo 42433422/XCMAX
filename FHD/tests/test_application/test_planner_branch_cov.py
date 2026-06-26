@@ -126,60 +126,46 @@ def _make_planner() -> Any:
 class TestExecuteToolDefaultAction:
     def test_explicit_action_used_over_default(self) -> None:
         """传入 _action 时优先使用，不走默认映射。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True, "action": p.get("_action")}
             result = execute_tool("products", {"_action": "create", "keyword": "abc"})
             assert result["success"] is True
 
     def test_default_action_for_products(self) -> None:
         """products 工具默认 action=query。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True, "resolved_action": "query"}
             result = execute_tool("products", {"keyword": "abc"})
             assert result["success"] is True
 
     def test_default_action_for_customers(self) -> None:
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True}
             result = execute_tool("customers", {})
             assert result["success"] is True
 
     def test_default_action_for_employee(self) -> None:
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True}
             result = execute_tool("employee", {})
             assert result["success"] is True
 
     def test_default_action_for_business_db(self) -> None:
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True}
             result = execute_tool("business_db", {"entity": "products"})
             assert result["success"] is True
 
     def test_default_action_for_unknown_tool_falls_to_query(self) -> None:
         """未知工具默认 action=query。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True}
             result = execute_tool("unknown_tool", {})
             assert result["success"] is True
 
     def test_action_stripped_and_lowercased(self) -> None:
         """_action 被去除空白并转小写。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             captured: dict[str, Any] = {}
 
             def capture(p: dict[str, Any]) -> dict[str, Any]:
@@ -192,9 +178,7 @@ class TestExecuteToolDefaultAction:
 
     def test_runtime_context_popped_from_params(self) -> None:
         """_runtime_context 被从 params 中移除。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             captured: dict[str, Any] = {}
 
             def capture(p: dict[str, Any]) -> dict[str, Any]:
@@ -207,36 +191,28 @@ class TestExecuteToolDefaultAction:
 
     def test_no_handler_returns_failure(self) -> None:
         """无匹配 handler 时返回失败。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = None
             result = execute_tool("products", {"keyword": "x"})
             assert result["success"] is False
 
     def test_none_params_handled(self) -> None:
         """params=None 不崩溃。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True}
             result = execute_tool("products", None)  # type: ignore[arg-type]
             assert result["success"] is True
 
     def test_empty_action_string_uses_default(self) -> None:
         """空 _action 字符串走默认映射。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True}
             result = execute_tool("products", {"_action": ""})
             assert result["success"] is True
 
     def test_whitespace_only_action_uses_default(self) -> None:
         """纯空白 _action 走默认映射。"""
-        with patch(
-            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS"
-        ) as handlers:
+        with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = lambda p: {"success": True}
             result = execute_tool("products", {"_action": "   "})
             assert result["success"] is True
@@ -312,7 +288,11 @@ class TestExecuteImportExcelErrors:
                         sys.modules.pop("openpyxl", None)
                 # ImportError 被捕获
                 assert result["success"] is False
-                assert result["error_code"] in ("library_unavailable", "invalid_parameters", "import_failed")
+                assert result["error_code"] in (
+                    "library_unavailable",
+                    "invalid_parameters",
+                    "import_failed",
+                )
 
     def test_file_not_found_oserror(self) -> None:
         mock_products = MagicMock()
@@ -481,8 +461,18 @@ class TestExecuteImportExcelSuccess:
         # 表头 + 1 行数据
         mock_ws.iter_rows.return_value = iter(
             [
-                [MagicMock(value="产品名称"), MagicMock(value="型号"), MagicMock(value="单价"), MagicMock(value="单位")],
-                [MagicMock(value="螺钉"), MagicMock(value="M8"), MagicMock(value=1.5), MagicMock(value="ABC公司")],
+                [
+                    MagicMock(value="产品名称"),
+                    MagicMock(value="型号"),
+                    MagicMock(value="单价"),
+                    MagicMock(value="单位"),
+                ],
+                [
+                    MagicMock(value="螺钉"),
+                    MagicMock(value="M8"),
+                    MagicMock(value=1.5),
+                    MagicMock(value="ABC公司"),
+                ],
             ]
         )
         mock_ws.max_row = 2
@@ -696,9 +686,7 @@ class TestExecuteImportExcelSuccess:
 
         mock_wb = MagicMock()
         mock_ws = MagicMock()
-        mock_ws.iter_rows.return_value = iter(
-            [[MagicMock(value="产品名称")]]
-        )
+        mock_ws.iter_rows.return_value = iter([[MagicMock(value="产品名称")]])
         mock_ws.max_row = 1
         mock_wb.sheetnames = ["Sheet1", "Sheet2"]
         mock_wb.__getitem__.return_value = mock_ws
@@ -912,7 +900,11 @@ class TestFilterToolRegistryEdgeCases:
             "tool": {
                 "availability": "shared",
                 "actions": {
-                    "normal_act": {"availability": "normal_only", "risk": "low", "idempotent": True},
+                    "normal_act": {
+                        "availability": "normal_only",
+                        "risk": "low",
+                        "idempotent": True,
+                    },
                     "shared_act": {"availability": "shared", "risk": "low", "idempotent": True},
                 },
             }
@@ -962,12 +954,8 @@ class TestFallbackPlanBranches:
     def test_employee_dispatch_with_known_id(self) -> None:
         """员工意图且能识别 employee_id 时生成 execute 节点。"""
         planner = _make_planner()
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_status:
-            mock_status.return_value = {
-                "employee_pack_tools": [{"pack_id": "pack-001"}]
-            }
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_status:
+            mock_status.return_value = {"employee_pack_tools": [{"pack_id": "pack-001"}]}
             result = planner._fallback_plan("pid", "请员工 pack-001 处理订单", _sample_registry())
             assert result.intent == "employee_dispatch"
             assert any(n.action == "execute" for n in result.nodes)
@@ -997,9 +985,7 @@ class TestFallbackPlanBranches:
     def test_employee_dispatch_status_non_dict_item_skipped(self) -> None:
         """status 中非 dict 项被跳过。"""
         planner = _make_planner()
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_status:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_status:
             mock_status.return_value = {
                 "employee_pack_tools": ["not_a_dict", {"pack_id": "real-pack"}]
             }
@@ -1009,9 +995,7 @@ class TestFallbackPlanBranches:
     def test_employee_dispatch_empty_pack_id_skipped(self) -> None:
         """空 pack_id 项被跳过。"""
         planner = _make_planner()
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_status:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_status:
             mock_status.return_value = {
                 "employee_pack_tools": [{"pack_id": ""}, {"pack_id": "real-pack"}]
             }
@@ -1021,9 +1005,7 @@ class TestFallbackPlanBranches:
     def test_business_db_write_with_extracted_node(self) -> None:
         """业务库写入意图且能抽取节点时生成 write 节点。"""
         planner = _make_planner()
-        result = planner._fallback_plan(
-            "pid", "新增客户ABC公司到数据库写入", _sample_registry()
-        )
+        result = planner._fallback_plan("pid", "新增客户ABC公司到数据库写入", _sample_registry())
         assert result.intent == "business_db_write"
         assert any(n.action == "write" for n in result.nodes)
 
@@ -1339,9 +1321,7 @@ class TestPlanWithReactMultiagent:
             plan_id="pid",
             intent="test",
             nodes=[
-                WorkflowNode(
-                    "n1", "business_db", "read", risk="low", idempotent=True, params={}
-                ),
+                WorkflowNode("n1", "business_db", "read", risk="low", idempotent=True, params={}),
             ],
         )
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, None]):
@@ -1738,9 +1718,7 @@ class TestCriticRepairWithLLM:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": "not json{"}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": "not json{"}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -1814,9 +1792,7 @@ class TestCriticRepairWithLLM:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -1844,9 +1820,7 @@ class TestCriticRepairWithLLM:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": content}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": content}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
@@ -1931,9 +1905,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": "not json{"}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": "not json{"}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -1998,9 +1970,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2027,9 +1997,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2054,9 +2022,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2080,9 +2046,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2106,9 +2070,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2132,9 +2094,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": content}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": content}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2158,9 +2118,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2194,9 +2152,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2230,9 +2186,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2255,9 +2209,7 @@ class TestPlanWithLLMErrorPaths:
         with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
             resp = MagicMock()
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps(payload)}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
             mock_client.return_value.post.return_value = resp
             result = planner._plan_with_llm(
                 plan_id="pid",
@@ -2334,8 +2286,14 @@ class TestPlanIntegration:
                 WorkflowNode("n1", "products", "query", risk="low", idempotent=True),
             ],
         )
-        with patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal"):
-            with patch("app.application.workflow.planner._filter_tool_registry_for_profile", return_value=_sample_registry()):
+        with patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="normal",
+        ):
+            with patch(
+                "app.application.workflow.planner._filter_tool_registry_for_profile",
+                return_value=_sample_registry(),
+            ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     result = planner.plan(
                         user_id="u1",
@@ -2356,9 +2314,17 @@ class TestPlanIntegration:
                 WorkflowNode("n1", "products", "query", risk="low", idempotent=True),
             ],
         )
-        with patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal"):
-            with patch("app.application.workflow.planner._filter_tool_registry_for_profile", return_value=_sample_registry()):
-                with patch.object(planner, "_plan_with_react_multiagent", return_value=invalid_plan):
+        with patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="normal",
+        ):
+            with patch(
+                "app.application.workflow.planner._filter_tool_registry_for_profile",
+                return_value=_sample_registry(),
+            ):
+                with patch.object(
+                    planner, "_plan_with_react_multiagent", return_value=invalid_plan
+                ):
                     with patch.object(planner, "_fallback_plan", return_value=fallback_plan):
                         result = planner.plan(
                             user_id="u1",
@@ -2378,8 +2344,14 @@ class TestPlanIntegration:
                 WorkflowNode("n1", "products", "query", risk="low", idempotent=True),
             ],
         )
-        with patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal"):
-            with patch("app.application.workflow.planner._filter_tool_registry_for_profile", return_value=_sample_registry()):
+        with patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="normal",
+        ):
+            with patch(
+                "app.application.workflow.planner._filter_tool_registry_for_profile",
+                return_value=_sample_registry(),
+            ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=None):
                     with patch.object(planner, "_fallback_plan", return_value=fallback_plan):
                         result = planner.plan(
@@ -2400,8 +2372,14 @@ class TestPlanIntegration:
                 WorkflowNode("n1", "products", "query", risk="low", idempotent=True),
             ],
         )
-        with patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal"):
-            with patch("app.application.workflow.planner._filter_tool_registry_for_profile", return_value=_sample_registry()):
+        with patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="normal",
+        ):
+            with patch(
+                "app.application.workflow.planner._filter_tool_registry_for_profile",
+                return_value=_sample_registry(),
+            ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     result = planner.plan(
                         user_id="u1",
@@ -2421,15 +2399,23 @@ class TestPlanIntegration:
                 WorkflowNode("n1", "products", "query", risk="low", idempotent=True),
             ],
         )
-        with patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal"):
-            with patch("app.application.workflow.planner._filter_tool_registry_for_profile", return_value=_sample_registry()):
+        with patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="normal",
+        ):
+            with patch(
+                "app.application.workflow.planner._filter_tool_registry_for_profile",
+                return_value=_sample_registry(),
+            ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     # 让 get_user_memory_rag_app_service 导入失败
                     import sys
 
                     original = sys.modules.get("app.application")
                     if original is not None:
-                        original_getattr = getattr(original, "get_user_memory_rag_app_service", None)
+                        original_getattr = getattr(
+                            original, "get_user_memory_rag_app_service", None
+                        )
                         if original_getattr:
                             del original.get_user_memory_rag_app_service  # type: ignore[attr-defined]
                     try:
@@ -2454,8 +2440,14 @@ class TestPlanIntegration:
                 WorkflowNode("n1", "products", "query", risk="low", idempotent=True),
             ],
         )
-        with patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal"):
-            with patch("app.application.workflow.planner._filter_tool_registry_for_profile", return_value=_sample_registry()):
+        with patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="normal",
+        ):
+            with patch(
+                "app.application.workflow.planner._filter_tool_registry_for_profile",
+                return_value=_sample_registry(),
+            ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
                         "app.application.get_user_memory_rag_app_service",
@@ -2479,8 +2471,14 @@ class TestPlanIntegration:
                 WorkflowNode("n1", "products", "query", risk="low", idempotent=True),
             ],
         )
-        with patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal"):
-            with patch("app.application.workflow.planner._filter_tool_registry_for_profile", return_value=_sample_registry()):
+        with patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="normal",
+        ):
+            with patch(
+                "app.application.workflow.planner._filter_tool_registry_for_profile",
+                return_value=_sample_registry(),
+            ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     # 让 user_memory_service 导入失败
                     import sys
@@ -2512,8 +2510,14 @@ class TestPlanIntegration:
                 WorkflowNode("n1", "products", "query", risk="low", idempotent=True),
             ],
         )
-        with patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal"):
-            with patch("app.application.workflow.planner._filter_tool_registry_for_profile", return_value=_sample_registry()):
+        with patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="normal",
+        ):
+            with patch(
+                "app.application.workflow.planner._filter_tool_registry_for_profile",
+                return_value=_sample_registry(),
+            ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
                         "app.services.user_memory_service.get_user_memory_service",

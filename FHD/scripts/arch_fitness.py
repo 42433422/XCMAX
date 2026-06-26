@@ -9,6 +9,7 @@ Exit code: 0 = all checks pass, 1 = violations found
 
 import ast
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -28,6 +29,9 @@ def _violation_key(violation: str) -> str:
     if "] " in key:
         prefix, path_part = key.split("] ", 1)
         path_part = path_part.replace("\\", "/")
+        # 去尾部 `:行号`，使基线键对行位移稳健（匹配本函数 docstring「不含行号」的本意；
+        # 此前漏删导致无关编辑只要移动行号就误报已基线化的违规为「new」）。
+        path_part = re.sub(r":\d+$", "", path_part)
         return f"{prefix}] {path_part}"
     return key.replace("\\", "/")
 
