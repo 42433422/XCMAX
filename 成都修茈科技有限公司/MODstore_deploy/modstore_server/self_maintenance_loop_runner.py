@@ -38,6 +38,7 @@ from .self_evolution_knowledge import (
     evolution_metrics_gate,
     record_loop_evolution_knowledge,
     render_self_evolution_context,
+    salvage_kb_from_workspace,
     validate_kb_payload,
 )
 
@@ -1307,16 +1308,35 @@ def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
 def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, Any]) -> str:
     gaps = ", ".join(evaluation.get("gaps") or []) or "none"
-    evolution_context = render_self_evolution_context(
-        build_self_evolution_context(run_id=run_id, evaluation=evaluation, memory=memory)
+    evolution_context_dict = build_self_evolution_context(
+        run_id=run_id, evaluation=evaluation, memory=memory
     )
+    evolution_context = render_self_evolution_context(evolution_context_dict)
+    # 强制复用历史 fix：把 fix_knowledge_hits 的关键内容以可读格式提取出来，
+    # 让 LLM 不需要解析 JSON 就能直接看到 symptom/root_cause/fix_diff。
+    fix_hits = evolution_context_dict.get("fix_knowledge_hits") or []
+    fix_digest_parts = []
+    for idx, hit in enumerate(fix_hits[:3], 1):
+        symptom = str(hit.get("symptom") or "")[:200]
+        root_cause = str(hit.get("root_cause") or "")[:200]
+        fix_diff = str(hit.get("fix_diff") or "")[:1500]
+        if not symptom and not fix_diff:
+            continue
+        fix_digest_parts.append(
+            f"[HISTORICAL FIX #{idx}]\n"
+            f"  symptom: {symptom}\n"
+            f"  root_cause: {root_cause}\n"
+            f"  fix_diff (first 1500 chars):\n{fix_diff}"
+        )
+    fix_digest = "\n\n".join(fix_digest_parts) if fix_digest_parts else "(no historical fixes matched)"
     return (
         "Run a real MODstore self-maintenance improvement task. "
         "Use the previous loop memory and current evidence gaps to fix the highest-value "
         "executable gap in the self-maintenance loop. "
-        "Before reasoning from scratch, check SELF_EVOLUTION_CONTEXT. "
-        "If a fix_knowledge_hit matches the current symptom and its diff still applies safely, "
-        "reuse that historical fix first instead of inventing a new approach. "
+        "MANDATORY: Before reasoning from scratch, you MUST check the HISTORICAL FIXES below. "
+        "If a historical fix's symptom matches the current gap and its fix_diff still applies safely, "
+        "you MUST reuse that fix first (apply the diff or its approach) instead of inventing a new solution. "
+        "Only when no historical fix applies may you reason from scratch. "
         "If there is no bug gap, choose one proactive task from performance, coverage, or tech_debt signals. "
         "When you fix a bug, write the symptom/root_cause/fix_diff triad under FHD/XCAGI/kb/fixes; "
         "when review/QA approves a reusable change, write the pattern under FHD/XCAGI/kb/patterns. "
@@ -1330,7 +1350,8 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "Do not edit runtime-only, ignored, .devfleet, or .trae files. "
         f"Current evidence gaps: {gaps}. "
         f"Previous loop memory JSON: {_memory_context(memory)}. "
-        f"SELF_EVOLUTION_CONTEXT JSON: {evolution_context}"
+        f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
+        f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
 
 
@@ -1560,8 +1581,51 @@ def _changed_files_for_branch(
 ) -> List[str]:
     workspace.parent.mkdir(parents=True, exist_ok=True)
     _run_cmd(["git", "clone", "--no-tags", repo_url, str(workspace)], timeout=300)
-    _run_cmd(["git", "fetch", "origin", base_branch, branch], cwd=workspace, timeout=180)
+    # Para 创建的分支可能只存在于 Para 本地工作区，尚未 push 到 origin。
+    # 先 fetch base_branch（一定在远程），再 best-effort fetch branch。
+    _run_cmd(["git", "fetch", "origin", base_branch], cwd=workspace, timeout=180)
+    _fetch_branch = subprocess.run(
+        ["git", "fetch", "origin", branch],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    branch_ref = f"origin/{branch}" if _fetch_branch.returncode == 0 else None
+    # Fallback: Para e2e-agent 会把分支 push 到本地 bareRepo
+    # （默认 /Users/a4243342/XCMAX-runtime/devfleet-bare.git，与 e2e-agent.mjs DEVFLEET_BARE_REPO 一致）。
+    # 如果 origin 没有，从 bareRepo fetch，并创建本地 origin 引用让后续 diff 命令统一用 origin/{branch}。
+    if not branch_ref:
+        bare_repo = os.environ.get(
+            "MODSTORE_PARA_BARE_REPO", "/Users/a4243342/XCMAX-runtime/devfleet-bare.git"
+        ).strip()
+        if bare_repo and Path(bare_repo).exists():
+            _sp_run = subprocess.run(
+                ["git", "fetch", bare_repo, branch],
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            if _sp_run.returncode == 0:
+                # 把 FETCH_HEAD 创建为 origin/{branch} 引用，让后续 diff/numstat 统一用 origin/{branch}。
+                _run_cmd(
+                    ["git", "update-ref", f"refs/remotes/origin/{branch}", "FETCH_HEAD"],
+                    cwd=workspace,
+                )
+                branch_ref = f"origin/{branch}"
+                logger.info(
+                    "auto_merge: fetched branch %s from Para bareRepo %s",
+                    branch,
+                    bare_repo,
+                )
     _run_cmd(["git", "checkout", "-B", base_branch, f"origin/{base_branch}"], cwd=workspace)
+    if not branch_ref:
+        logger.warning(
+            "auto_merge: branch %s not on remote or bareRepo — Para may not have pushed it",
+            branch,
+        )
+        return []
     diff = _run_cmd(
         [
             "git",
@@ -1569,7 +1633,7 @@ def _changed_files_for_branch(
             "core.quotePath=false",
             "diff",
             "--name-only",
-            f"origin/{base_branch}...origin/{branch}",
+            f"origin/{base_branch}...{branch_ref}",
         ],
         cwd=workspace,
     )
@@ -2857,7 +2921,13 @@ def _auto_merge_low_risk_branch(
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     api_base = os.environ.get("MODSTORE_PARA_API_BASE", "").strip()
-    if not repo_url.startswith("file://"):
+    # Security guard: by default only local file:// repos allow auto-merge.
+    # Operators can opt-in to remote https:// repos by setting
+    # MODSTORE_AUTO_MERGE_ALLOW_REMOTE=1 (e.g. for trusted GitHub forks).
+    allow_remote = _env_bool("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", False)
+    if not repo_url.startswith("file://") and not (
+        allow_remote and repo_url.startswith(("http://", "https://"))
+    ):
         return {"ok": False, "reason": "repo_url_not_file_url", "repo_url": repo_url}
     if not base_branch:
         return {"ok": False, "reason": "missing_base_branch"}
@@ -2871,6 +2941,14 @@ def _auto_merge_low_risk_branch(
         branch=branch,
         workspace=workspace,
     )
+    if not files:
+        # 分支不在远程或无变更 → 不能 auto_merge，降级为 await_human。
+        return {
+            "ok": False,
+            "reason": "branch_not_on_remote_or_empty",
+            "branch": branch,
+            "changed_files": [],
+        }
     diff_stats = _diff_numstat_for_branch(
         base_branch=base_branch, branch=branch, workspace=workspace
     )
@@ -2912,7 +2990,23 @@ def _auto_merge_low_risk_branch(
 
     _run_cmd(["git", "merge", "--no-ff", "--no-edit", f"origin/{branch}"], cwd=workspace)
     merge_sha = _run_cmd(["git", "rev-parse", "HEAD"], cwd=workspace)
-    _run_cmd(["git", "push", "origin", f"HEAD:{base_branch}"], cwd=workspace, timeout=180)
+    # Push 到 origin 可能因认证/权限失败（如 GitHub https 需 token）。
+    # 失败时降级为 await_human，不让整个 auto_merge 崩溃。
+    _push_proc = subprocess.run(
+        ["git", "push", "origin", f"HEAD:{base_branch}"],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if _push_proc.returncode != 0:
+        return {
+            "ok": False,
+            "reason": "push_to_origin_failed",
+            "merge_sha": merge_sha,
+            "push_stderr": (_push_proc.stderr or "")[:500],
+            "branch": branch,
+        }
     para_update = _mark_para_task_merged(api_base=api_base, task_id=task_id, merge_sha=merge_sha)
     return {
         **policy,
@@ -3136,6 +3230,37 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     resolution_record = _close_items_resolved_by_final(memory, final)
     knowledge_record = record_loop_evolution_knowledge(final, gate)
 
+    # KB salvage: record_loop_evolution_knowledge only writes on
+    # auto_merged_low_risk, so failed / await_human runs would otherwise lose
+    # any KB files the Para employee already produced. Scan the workspace
+    # regardless of policy_decision so later runs can reuse the knowledge.
+    salvage_summary: Optional[Dict[str, Any]] = None
+    try:
+        salvage_summary = salvage_kb_from_workspace(run_id=final.get("run_id"))
+        if salvage_summary and (
+            salvage_summary.get("salvaged", {}).get("fixes")
+            or salvage_summary.get("salvaged", {}).get("patterns")
+        ):
+            logger.info(
+                "kb salvage run_id=%s salvaged=%s",
+                final.get("run_id"),
+                salvage_summary.get("salvaged"),
+            )
+        _append_ledger(
+            {
+                "phase": "kb_salvage",
+                "run_id": final.get("run_id"),
+                "para_task_id": final.get("para_task_id"),
+                "salvaged": salvage_summary.get("salvaged") if salvage_summary else None,
+                "scanned": salvage_summary.get("scanned") if salvage_summary else None,
+                "skipped": salvage_summary.get("skipped") if salvage_summary else None,
+                "errors": salvage_summary.get("errors") if salvage_summary else None,
+                "timestamp": _iso(_utc_now()),
+            }
+        )
+    except Exception:
+        logger.exception("kb salvage failed run_id=%s", final.get("run_id"))
+
     recent_runs.append(
         {
             "action": decision.get("action"),
@@ -3194,6 +3319,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             ),
             "run_id": final.get("run_id"),
             "status": final.get("status"),
+            "kb_salvage": salvage_summary,
         }
     )
 
