@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -35,12 +36,23 @@ from app.application.execution_scope import (
     CapabilityGrant,
 )
 from app.application.workspaces import WorkspaceError, get_workspace_registry
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_utils import get_app_data_dir, get_desktop_state_dir
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PARA_API_URL = "http://127.0.0.1:3001"
 DISPATCHER_MESSAGE_KIND = "dispatcher"
+
+# 持久复用 worktree 的串行锁（按 worktree 路径隔离）。中继真仓库模式下，同一工具复用一个
+# worktree（620M 只建一次），并发任务必须排队使用，避免 git 状态相互踩踏。
+_RELAY_WT_LOCKS: dict[str, threading.Lock] = {}
+_RELAY_WT_LOCKS_GUARD = threading.Lock()
+
+
+def _relay_wt_lock(key: str) -> threading.Lock:
+    with _RELAY_WT_LOCKS_GUARD:
+        return _RELAY_WT_LOCKS.setdefault(key, threading.Lock())
+
 
 # Para guest-token 模块级缓存。devfleet 对 /api/auth/guest 限 15min 30 次
 # (authLimiter)，原来每次 invoke 都新登 → 用户连发几十条消息就触发
@@ -1895,6 +1907,11 @@ class SuperEmployeeService:
         uniq = f"{os.getpid()}-{int.from_bytes(os.urandom(3), 'big'):x}"
         selected_branch = self._safe_branch_name(branch_hint)
         branch = selected_branch or f"super-employee/{self._p.tool_name}/{slug}-{uniq}"
+        # 持久复用：中继真仓库模式下，自动新建分支的工单复用同一个 worktree（620M 只建一次），
+        # 每任务仍开新分支真推送。选定既有分支的写回任务走每任务新建（语义更清晰）。
+        persistent = self._relay_persistent_worktree_path()
+        if persistent and not selected_branch:
+            return self._prepare_persistent_worktree(base_cwd, persistent, branch)
         wt_path = str(Path(tempfile.gettempdir()) / f"xcagi-wt-{self._p.tool_name}-{uniq}")
         try:
             if selected_branch:
@@ -1923,10 +1940,64 @@ class SuperEmployeeService:
             return None
 
     def _remove_worktree(self, base_cwd: str, wt_path: str) -> None:
+        persistent = self._relay_persistent_worktree_path()
+        if persistent and os.path.realpath(wt_path) == os.path.realpath(persistent):
+            return  # 持久复用 worktree：保留以供下个任务复用，不删（下次 prepare 时重置为干净基线）。
         try:
             self._git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=60)
         except Exception:  # noqa: BLE001
             logger.warning("worktree remove 失败 %s", wt_path, exc_info=True)
+
+    def _relay_persistent_worktree_path(self) -> str:
+        """持久复用 worktree 的稳定路径；空串=不启用（走每任务新建+用完即删）。
+
+        仅在操作者配了 XCMAX_RELAY_WORKSPACE_ROOT（真仓库交付）且未显式关闭时启用。落在
+        稳定桌面态目录（非 $TMPDIR，避免被 GC 当瞬态清掉；非源码树，规避 get_app_data_dir 回落陷阱）。
+        """
+        if not (
+            os.environ.get("XCMAX_RELAY_WORKSPACE_ROOT")
+            or os.environ.get("DEVFLEET_WORKSPACE_ROOT")
+        ):
+            return ""
+        if str(os.environ.get("XCMAX_RELAY_PERSISTENT_WORKTREE") or "1").strip().lower() in {
+            "0",
+            "false",
+            "off",
+            "no",
+        }:
+            return ""
+        return str(Path(get_desktop_state_dir()) / "relay_worktrees" / self._p.tool_name)
+
+    def _prepare_persistent_worktree(
+        self, base_cwd: str, wt_path: str, branch: str
+    ) -> tuple[str, str] | None:
+        """复用同一个 worktree：重置为 base 干净基线 + 开新任务分支；不存在则建一次。"""
+        try:
+            head = self._git(base_cwd, "rev-parse", "HEAD", timeout=15)
+            base_ref = (head.stdout or "").strip() or "HEAD"
+            wt = Path(wt_path)
+            if (wt / ".git").exists():
+                # 复用：丢弃上个任务的改动、清干净未跟踪、从 base 重开任务分支。
+                self._git(wt_path, "reset", "--hard", base_ref, timeout=120)
+                self._git(wt_path, "clean", "-fdx", timeout=300)
+                r = self._git(wt_path, "checkout", "-B", branch, base_ref, timeout=120)
+                if r.returncode != 0:
+                    # worktree 损坏 → 拆掉重建。
+                    self._git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=120)
+                    shutil.rmtree(wt_path, ignore_errors=True)
+            if not (wt / ".git").exists():
+                wt.parent.mkdir(parents=True, exist_ok=True)
+                self._git(base_cwd, "worktree", "prune", timeout=30)
+                r = self._git(
+                    base_cwd, "worktree", "add", "-b", branch, wt_path, base_ref, timeout=300
+                )
+                if r.returncode != 0:
+                    logger.warning("持久 worktree 创建失败: %s", (r.stderr or r.stdout)[:300])
+                    return None
+            return wt_path, branch
+        except Exception:  # noqa: BLE001
+            logger.warning("持久 worktree 准备异常", exc_info=True)
+            return None
 
     def _verify_workspace(self, cwd: str) -> tuple[bool, str]:
         """view 阶段：验证改动可编译。优先 XCMAX_CLAUDE_VERIFY_CMD；否则对改动的 .py 做语法编译。"""
@@ -2023,6 +2094,20 @@ class SuperEmployeeService:
         context: dict[str, Any] | None = None,
     ) -> str:
         """开发任务全闭环：隔离 worktree → coding → view(验证,失败修一次) → push → 清理。"""
+        # 持久复用模式下，同一 worktree 必须串行使用（并发任务排队），避免 git 状态相互踩踏。
+        persistent = self._relay_persistent_worktree_path()
+        if persistent:
+            with _relay_wt_lock(persistent):
+                return self._run_dev_task_loop_locked(cli_path, text, base_cwd, context)
+        return self._run_dev_task_loop_locked(cli_path, text, base_cwd, context)
+
+    def _run_dev_task_loop_locked(
+        self,
+        cli_path: str,
+        text: str,
+        base_cwd: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
         branch_hint = self._safe_context_branch(context)
         prepared = self._prepare_worktree(base_cwd, text, branch_hint)
         if not prepared:

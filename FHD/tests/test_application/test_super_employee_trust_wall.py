@@ -191,3 +191,35 @@ def test_rejected_factory_token_warns(tmp_path, caplog, monkeypatch):
         # 带令牌却不匹配 → 降级产品域 + 警告留痕（可疑越权尝试）。
         svc.invoke(user_id=7, message="hi", context={"_factory_token": "wrong-guess"})
     assert any("token rejected" in r.getMessage() for r in caplog.records)
+
+
+def test_persistent_worktree_path_env_gated(repo_root, monkeypatch, tmp_path):
+    """持久 worktree：仅在配了真仓库 + 未显式关闭时启用，路径在稳定桌面态目录下。"""
+    svc = _svc()
+    monkeypatch.delenv("XCMAX_RELAY_WORKSPACE_ROOT", raising=False)
+    monkeypatch.delenv("DEVFLEET_WORKSPACE_ROOT", raising=False)
+    assert svc._relay_persistent_worktree_path() == ""  # 没配真仓库 → 不启用
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(repo_root))
+    monkeypatch.setenv("XCAGI_DESKTOP_DATA_DIR", str(tmp_path))
+    p = svc._relay_persistent_worktree_path()
+    assert p and "relay_worktrees" in p and p.startswith(str(tmp_path))
+    monkeypatch.setenv("XCMAX_RELAY_PERSISTENT_WORKTREE", "0")
+    assert svc._relay_persistent_worktree_path() == ""  # 显式关闭 → 回每任务新建
+
+
+def test_remove_worktree_keeps_persistent(repo_root, monkeypatch, tmp_path):
+    """_remove_worktree 对持久 worktree 不删（保留复用）。"""
+    svc = _svc()
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(repo_root))
+    monkeypatch.setenv("XCAGI_DESKTOP_DATA_DIR", str(tmp_path))
+    persistent = svc._relay_persistent_worktree_path()
+    calls = []
+    monkeypatch.setattr(svc, "_git", lambda *a, **k: calls.append(a) or _Dummy())
+    svc._remove_worktree(str(repo_root), persistent)
+    assert calls == []  # 持久 worktree 不应触发 git worktree remove
+
+
+class _Dummy:
+    returncode = 0
+    stdout = ""
+    stderr = ""
