@@ -23,8 +23,8 @@ from fastapi.responses import JSONResponse
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
-from app.application.execution_scope import factory_context
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+from app.application.execution_scope import factory_context
 from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
@@ -301,7 +301,7 @@ def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] 
 def _cached_desktop_relay_for_account_binding() -> dict[str, Any] | None:
     """Return the local desktop's cloud relay id for account-auth binding."""
     try:
-        from app.services.mobile_relay_desktop_client import cached_desktop_relay_payload
+        from app.application.facades.mobile_relay_facade import cached_desktop_relay_payload
 
         relay = cached_desktop_relay_payload()
     except RECOVERABLE_ERRORS as exc:
@@ -1962,7 +1962,7 @@ async def mobile_ai_group_post(
             mentions=body.mentions,
             dispatch=bool(body.dispatch),
             branch_context=branch_context,
-            context=body.context if isinstance(body.context, dict) else {},
+            context=body.context if isinstance(getattr(body, "context", None), dict) else {},
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
