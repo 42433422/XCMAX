@@ -143,9 +143,15 @@ vi.mock('@/constants/workflowEmployeeMods', () => ({
 vi.mock('@/composables/useIndustryUiText', () => ({
   useIndustryUiText: () => ({
     entityName: { value: '产品' },
+    entityPluralName: { value: '产品' },
     entityListName: { value: '产品列表' },
     nameLabel: { value: '名称' },
     modelLabel: { value: '型号' },
+    categoryLabel: { value: '分类' },
+    priceLabel: { value: '单价' },
+    unitLabel: { value: '单位' },
+    primaryUnit: { value: '次' },
+    primaryQuantityLabel: { value: '数量' },
     queryTitle: { value: '查询' },
     queryDescription: { value: '输入关键词查询' },
     queryPlaceholder: { value: '请输入关键词' },
@@ -157,6 +163,8 @@ vi.mock('@/composables/useIndustryUiText', () => ({
       { label: '预设2', hint: '提示2', text: '文本2' },
     ],
     shipmentOrderName: { value: '发货单' },
+    recordsName: { value: '记录' },
+    assistantSubtitle: { value: '通用系统' },
   }),
 }))
 
