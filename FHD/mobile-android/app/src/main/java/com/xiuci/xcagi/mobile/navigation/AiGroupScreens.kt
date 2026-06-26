@@ -21,13 +21,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CallMerge
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -73,8 +70,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -84,6 +79,8 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDraft
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.ChatComposerBar
+import com.xiuci.xcagi.mobile.ui.components.mobile.ChatToolCardAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
@@ -439,6 +436,7 @@ fun AiGroupChatScreen(
     var input by remember { mutableStateOf("") }
     var showMembers by remember { mutableStateOf(false) }
     var showBranchPicker by remember { mutableStateOf(false) }
+    var showTools by remember { mutableStateOf(false) }
     var selectedBranch by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val haptics = rememberHaptics()
@@ -540,8 +538,21 @@ fun AiGroupChatScreen(
                 onValueChange = { input = it },
                 sending = sending,
                 selectedBranch = selectedBranch,
+                showTools = showTools,
                 onBranchClick = { showBranchPicker = true },
                 onVoice = { startGroupVoice() },
+                onToggleTools = {
+                    haptics.tap()
+                    showTools = !showTools
+                },
+                onMembersClick = {
+                    showTools = false
+                    showMembers = true
+                },
+                onInsertText = { template ->
+                    input = if (input.isBlank()) template else "$input\n$template"
+                    showTools = false
+                },
                 onSend = {
                     if (g != null && input.isNotBlank()) {
                         haptics.confirm()
@@ -695,15 +706,39 @@ private fun GroupInputBar(
     onValueChange: (String) -> Unit,
     sending: Boolean,
     selectedBranch: String?,
+    showTools: Boolean,
     onBranchClick: () -> Unit,
     onVoice: () -> Unit,
+    onToggleTools: () -> Unit,
+    onMembersClick: () -> Unit,
+    onInsertText: (String) -> Unit,
     onSend: () -> Unit,
 ) {
-    val canSend = value.isNotBlank() && !sending
     val branchLabel = selectedBranch?.takeIf { it.isNotBlank() }?.substringAfterLast('/') ?: "自动新建"
-    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-        Column {
-            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+    ChatComposerBar(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = "发群消息（@成员 可单独点名）",
+        busy = sending,
+        onSend = onSend,
+        onVoice = onVoice,
+        showTools = showTools,
+        onToggleTools = onToggleTools,
+        toolActions = listOf(
+            ChatToolCardAction(Icons.AutoMirrored.Filled.CallMerge, "工作分支", "选择已有分支或自动新建", onBranchClick),
+            ChatToolCardAction(Icons.Default.GroupAdd, "群成员", "拉人进群或移除成员", onMembersClick),
+            ChatToolCardAction(Icons.Default.Mic, "语音输入", "用系统语音录入消息", onVoice),
+            ChatToolCardAction(Icons.Default.Group, "任务派工", "先讨论，再选负责人") {
+                onInsertText("任务：请先讨论难度和负责人，只派一个合适的 CLI 执行；完成后汇报改动、验证结果和风险。")
+            },
+            ChatToolCardAction(Icons.Default.Check, "验收回访", "要进度、证据和风险") {
+                onInsertText("验收：请回访这个任务现在做到哪一步，给出验收结论、证据和下一步。")
+            },
+            ChatToolCardAction(Icons.Default.Refresh, "问题修复", "定位根因并验证") {
+                onInsertText("修复：请定位问题根因，给出最小改动方案，完成后跑验证并说明是否影响现有流程。")
+            },
+        ),
+        topContent = {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -734,60 +769,8 @@ private fun GroupInputBar(
                     }
                 }
             }
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp).padding(bottom = Spacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onVoice),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Default.Mic,
-                        contentDescription = "语音",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.background,
-                    modifier = Modifier.weight(1f).height(40.dp),
-                ) {
-                    BasicTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxSize(),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
-                        cursorBrush = SolidColor(XcagiTheme.extra.weChatOnline),
-                        decorationBox = { inner ->
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                                if (value.isEmpty()) {
-                                    Text("发群消息（@成员 可单独点名）", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                inner()
-                            }
-                        },
-                    )
-                }
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape)
-                        .background(if (canSend) XcagiTheme.extra.weChatOnline else MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable(enabled = canSend, onClick = onSend),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "发送",
-                        tint = if (canSend) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(19.dp),
-                    )
-                }
-            }
-        }
-    }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
