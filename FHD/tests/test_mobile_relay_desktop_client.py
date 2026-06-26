@@ -270,3 +270,57 @@ def test_execute_task_marks_dispatch_unavailable_as_blocked(monkeypatch):
 
     assert result["_relay_status"] == "blocked"
     assert result["error"] == "para_no_online_codex_device"
+
+
+def _seed_config(path, relay_id: str) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "relay_id": relay_id,
+                "desktop_token": "tok-" + relay_id,
+                "pairing_code": "654321",
+                "relay_base_url": "https://xiu-ci.com/fhd-api/",
+                "exp": int(time.time()) + 86400,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_read_config_migrates_legacy_when_stable_missing(monkeypatch, tmp_path):
+    """源码升级后：稳定路径没配置而旧路径(仓库根回落)有 → 一次性迁移，保住既有配对。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    stable = tmp_path / "stable" / "mobile_relay_desktop.json"
+    legacy = tmp_path / "legacy" / "mobile_relay_desktop.json"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    _seed_config(legacy, "paired-877")
+
+    monkeypatch.setattr(relay, "_CONFIG_FILE", stable)
+    monkeypatch.setattr(relay, "_LEGACY_CONFIG_FILE", legacy)
+    monkeypatch.setattr(relay, "_LEGACY_MIGRATION_DONE", False)
+
+    relay._migrate_legacy_config_once()
+    cfg = relay._read_config()
+    assert cfg.get("relay_id") == "paired-877"
+    assert stable.is_file()  # 已迁移落盘
+
+
+def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_path):
+    """稳定路径已有权威绑定时，绝不能被旧路径(可能是 pending 的污染身份)覆盖。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    stable = tmp_path / "stable" / "mobile_relay_desktop.json"
+    legacy = tmp_path / "legacy" / "mobile_relay_desktop.json"
+    stable.parent.mkdir(parents=True, exist_ok=True)
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    _seed_config(stable, "paired-877")
+    _seed_config(legacy, "pending-29e")
+
+    monkeypatch.setattr(relay, "_CONFIG_FILE", stable)
+    monkeypatch.setattr(relay, "_LEGACY_CONFIG_FILE", legacy)
+    monkeypatch.setattr(relay, "_LEGACY_MIGRATION_DONE", False)
+
+    relay._migrate_legacy_config_once()
+    cfg = relay._read_config()
+    assert cfg.get("relay_id") == "paired-877"
