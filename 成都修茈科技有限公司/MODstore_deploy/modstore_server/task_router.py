@@ -171,26 +171,54 @@ def decompose_task(
 
 
 def _call_llm(prompt: str, *, llm_provider: str, llm_model: str) -> str:
-    """调用 LLM，返回原始文本（尽力提取 JSON 部分）。"""
+    """调用 LLM，返回原始文本（尽力提取 JSON 部分）。
+
+    ``chat_dispatch_via_session`` 返回 dict，不是异步流；后台任务以平台身份
+    调用，避免拆解任务扣到普通用户钱包或被用户配额挡住。
+    """
     try:
+        from modstore_server.models import get_session_factory
         from modstore_server.runtime_async import run_coro_sync
-        from modstore_server.services.llm import chat_dispatch_via_session
+        from modstore_server.services.llm import (
+            chat_dispatch_via_session,
+            resolve_platform_bench_llm,
+        )
+
+        provider = (llm_provider or "").strip()
+        model = (llm_model or "").strip()
+        if provider in ("", "auto") or model in ("", "auto"):
+            bench_provider, bench_model = resolve_platform_bench_llm()
+            provider = bench_provider or provider
+            model = bench_model or model
+        if not provider or provider == "auto" or not model or model == "auto":
+            logger.warning(
+                "task_router: 未配置平台 LLM（provider=%s model=%s），跳过拆解",
+                provider or "",
+                model or "",
+            )
+            return "[]"
 
         messages = [{"role": "user", "content": prompt}]
 
         async def _inner() -> str:
-            chunks: List[str] = []
-            async for chunk in chat_dispatch_via_session(
-                messages=messages,
-                provider=llm_provider,
-                model=llm_model,
-                stream=False,
-            ):
-                if isinstance(chunk, str):
-                    chunks.append(chunk)
-                elif isinstance(chunk, dict):
-                    chunks.append(chunk.get("content") or "")
-            return "".join(chunks)
+            sf = get_session_factory()
+            with sf() as session:
+                result = await chat_dispatch_via_session(
+                    session,
+                    0,
+                    provider,
+                    model,
+                    messages,
+                )
+            if not isinstance(result, dict):
+                return ""
+            if not result.get("ok"):
+                logger.warning(
+                    "task_router: LLM 调用未成功：%s",
+                    str(result.get("error") or "")[:200],
+                )
+                return ""
+            return str(result.get("content") or "")
 
         raw = run_coro_sync(_inner())
     except Exception as exc:
