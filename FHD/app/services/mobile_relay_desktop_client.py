@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import platform
+import re
 import socket
 import threading
 import time
@@ -18,14 +19,15 @@ from typing import Any
 
 import httpx
 
-from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
-from app.application.codex_super_employee_service import CodexSuperEmployeeService
-from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
 from app.utils.device_identity import get_stable_device_id
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
+
+ClaudeSuperEmployeeService: Any | None = None
+CodexSuperEmployeeService: Any | None = None
+CursorSuperEmployeeService: Any | None = None
 
 _STATE_LOCK = threading.Lock()
 _WORKER_THREAD: threading.Thread | None = None
@@ -36,6 +38,152 @@ _CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
 # 避免单个长任务(开发任务可跑数分钟)堵死整条队列、导致新消息卡住。
 _INFLIGHT: set[str] = set()
 _INFLIGHT_LOCK = threading.Lock()
+
+_BRANCH_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,179}")
+_MERGE_TEXT_MARKERS = ("合并", "merge")
+_DIFF_TEXT_MARKERS = ("diff", "查看改动", "看改动")
+_DISCARD_TEXT_MARKERS = ("discard", "丢弃", "删除分支", "废弃")
+_FAILURE_BODY_MARKERS = (
+    "BLOCKED",
+    "blocked",
+    "未完成",
+    "无法完成",
+    "不能完成",
+    "没有完成",
+    "执行失败",
+    "失败：",
+    "验证未通过",
+    "合并有冲突",
+    "merge conflict",
+    "无改动可提交",
+    "未产生可提交改动",
+    "先不动代码",
+    "只给出执行方案",
+    "仅提供方案",
+    "不能执行命令",
+    "不能执行",
+    "不能读工作区",
+    "不能读取工作区",
+    "不能跑测试",
+    "未跑测试",
+    "没有跑测试",
+    "权限不足",
+    "没有真实执行",
+    "没有实际改动",
+    "未修改文件",
+    "无测试证据",
+    "没有测试证据",
+    "正在搜索",
+    "正在实现",
+    "正在处理",
+    "正在执行",
+    "搜索代码库",
+    "我只出",
+    "只出验收口径",
+    "只出风险",
+    "只出收口",
+    "仅做验收",
+    "仅做风险",
+    "仅做收口",
+    "仅做分析",
+    "待回写",
+    "等待回写",
+    "❌",
+)
+_EXECUTION_MESSAGE_MARKERS = (
+    "修复",
+    "实现",
+    "开发",
+    "添加",
+    "新增",
+    "更新",
+    "删除",
+    "改造",
+    "优化",
+    "测试",
+    "验收",
+    "构建",
+    "编译",
+    "安装",
+    "合并",
+    "bug",
+    "功能",
+    "页面",
+    "接口",
+    "代码",
+    "apk",
+    "branch",
+    "merge",
+)
+_EXECUTION_EVIDENCE_MARKERS = (
+    "已修改",
+    "修改了",
+    "新增",
+    "删除了",
+    "更新了",
+    "改动文件",
+    "文件：",
+    "测试通过",
+    "验证通过",
+    "编译通过",
+    "构建通过",
+    "安装成功",
+    "pytest",
+    "ruff",
+    "gradle",
+    "assemble",
+    "adb",
+    "git diff",
+    "commit",
+    "changed files",
+    "tests passed",
+    "test passed",
+    "command:",
+    "commands:",
+    "命令：",
+    "运行：",
+    "验证：",
+    "测试：",
+    "构建：",
+    "安装：",
+    "手机复测",
+    "真机复测",
+    "群里复测",
+)
+_EVIDENCE_FILE_RE = re.compile(
+    r"(?i)\b[\w./-]+\.(py|kt|java|ts|tsx|js|jsx|json|ya?ml|md|gradle|xml|sql|swift|go|rs)\b"
+)
+_FAILED_STATUSES = {"failed", "error", "merge_conflict", "cancelled"}
+_BLOCKED_STATUSES = {"blocked", "timeout"}
+_COMPLETED_STATUSES = {"completed", "done", "merged"}
+
+
+def _ensure_super_employee_service_classes() -> None:
+    global ClaudeSuperEmployeeService, CodexSuperEmployeeService, CursorSuperEmployeeService
+    if (
+        ClaudeSuperEmployeeService is not None
+        and CodexSuperEmployeeService is not None
+        and CursorSuperEmployeeService is not None
+    ):
+        return
+    if ClaudeSuperEmployeeService is None:
+        from app.application.claude_super_employee_service import (
+            ClaudeSuperEmployeeService as _ClaudeSuperEmployeeService,
+        )
+
+        ClaudeSuperEmployeeService = _ClaudeSuperEmployeeService
+    if CodexSuperEmployeeService is None:
+        from app.application.codex_super_employee_service import (
+            CodexSuperEmployeeService as _CodexSuperEmployeeService,
+        )
+
+        CodexSuperEmployeeService = _CodexSuperEmployeeService
+    if CursorSuperEmployeeService is None:
+        from app.application.cursor_super_employee_service import (
+            CursorSuperEmployeeService as _CursorSuperEmployeeService,
+        )
+
+        CursorSuperEmployeeService = _CursorSuperEmployeeService
 
 
 def _max_concurrent() -> int:
@@ -293,7 +441,12 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     ).strip()
     if not message:
         return {"error": "任务缺少 message"}
+    parsed_git_op = _git_op_from_message(payload, message)
+    if parsed_git_op is not None:
+        git_kind, git_payload = parsed_git_op
+        return handle_git_op(git_kind, git_payload)
     # 中继泛化：按 kind 前缀选择超级员工(codex.* / claude.* / cursor.*)，本地执行后回写。
+    _ensure_super_employee_service_classes()
     if kind.startswith("claude"):
         service: Any = ClaudeSuperEmployeeService()
         tool_label = "Claude"
@@ -307,6 +460,7 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         return {"error": f"暂不支持的任务类型：{kind}"}
     user_id = int(task.get("created_by_user_id") or payload.get("user_id") or 1)
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    branch = str(payload.get("branch") or "").strip()
     context = {
         **context,
         "source": "mobile_relay",
@@ -314,6 +468,8 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         "client_surface": "mobile",
         "target_devices": ["all"],
     }
+    if branch and not str(context.get("branch") or "").strip():
+        context["branch"] = branch
     # 移动端聊天面固定下发 mode="code"，会把每条闲聊都强制派到 Para 多设备
     # （"你好"/"在干嘛" 这类问候也被当成开发任务派工，回不到结果）。
     # 这里清掉强制派工的 mode，交回内容分类器 _should_reply_with_cli：
@@ -335,7 +491,20 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         dispatch = result.get("dispatch") if isinstance(result.get("dispatch"), dict) else {}
         dispatch_status = str(dispatch.get("status") or "").strip().lower()
         if dispatch_status == "completed":
-            return {"ok": True, "codex": result, "_relay_status": "completed"}
+            assistant = (
+                result.get("assistant_message")
+                if isinstance(result.get("assistant_message"), dict)
+                else {}
+            )
+            ok, relay_status, error = _classify_terminal_result(assistant, message=message)
+            if ok:
+                return {"ok": True, "codex": result, "_relay_status": "completed"}
+            return {
+                "ok": False,
+                "error": error or f"{tool_label} 回写显示任务未完成",
+                "codex": result,
+                "_relay_status": relay_status,
+            }
         if dispatch.get("accepted") is not True:
             reason = str(dispatch.get("reason") or f"{tool_label}/MCP 调度器当前不可用").strip()
             return {
@@ -357,7 +526,15 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
             )
             if terminal:
                 result["assistant_message"] = terminal
-                return {"ok": True, "codex": result, "_relay_status": "completed"}
+                ok, relay_status, error = _classify_terminal_result(terminal, message=message)
+                if ok:
+                    return {"ok": True, "codex": result, "_relay_status": "completed"}
+                return {
+                    "ok": False,
+                    "error": error or f"{tool_label} 回写显示任务未完成",
+                    "codex": result,
+                    "_relay_status": relay_status,
+                }
             if time.monotonic() >= deadline:
                 break
             time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
@@ -370,6 +547,174 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("mobile relay Codex task failed")
         return {"error": str(exc)[:1000]}
+
+
+def _git_op_from_message(payload: dict[str, Any], message: str) -> tuple[str, dict[str, Any]] | None:
+    text = str(message or "").strip()
+    lowered = text.lower()
+    explicit = str(payload.get("git_op") or payload.get("op") or "").strip()
+    explicit_git_op = explicit in GIT_OP_KINDS
+    if explicit in GIT_OP_KINDS:
+        git_kind = explicit
+    elif any(marker in lowered for marker in _MERGE_TEXT_MARKERS):
+        git_kind = "git.merge"
+    elif any(marker in lowered for marker in _DIFF_TEXT_MARKERS):
+        git_kind = "git.diff"
+    elif any(marker in lowered for marker in _DISCARD_TEXT_MARKERS):
+        git_kind = "git.discard"
+    else:
+        return None
+
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    text_source = _extract_branch_after(text, "SOURCE_", "_TARGET") or _extract_merge_source(text)
+    allow_selected_branch = explicit_git_op or _text_mentions_branch_op(text, lowered)
+    source = (
+        str(payload.get("source_branch") or "").strip()
+        or text_source
+        or (str(payload.get("branch") or "").strip() if allow_selected_branch else "")
+        or (str(context.get("branch") or "").strip() if allow_selected_branch else "")
+    )
+    target = (
+        str(payload.get("target_branch") or payload.get("target") or payload.get("base") or "").strip()
+        or _extract_target_branch(text)
+    )
+    if git_kind == "git.merge" and not target:
+        target = _extract_merge_target(text)
+    if not source:
+        return None
+    git_payload = {**payload, "branch": source, "message": text}
+    if target:
+        git_payload["target_branch"] = target
+    return git_kind, git_payload
+
+
+def _text_mentions_branch_op(text: str, lowered: str) -> bool:
+    return any(
+        marker in text or marker in lowered
+        for marker in (
+            "合并分支",
+            "这个分支",
+            "当前分支",
+            "待合并分支",
+            "merge branch",
+            "current branch",
+            "source branch",
+            "target branch",
+            "查看分支",
+            "丢弃分支",
+            "删除分支",
+        )
+    )
+
+
+def _extract_branch_after(text: str, prefix: str, suffix: str) -> str:
+    pattern = re.compile(
+        rf"{re.escape(prefix)}(?P<branch>[A-Za-z0-9._/-]+?){re.escape(suffix)}",
+        re.IGNORECASE,
+    )
+    match = pattern.search(text)
+    return _trim_branch_token(match.group("branch")) if match else ""
+
+
+def _extract_target_branch(text: str) -> str:
+    match = re.search(r"TARGET(?:_CURRENT)?_(?P<branch>[A-Za-z0-9._/-]+)", text, re.IGNORECASE)
+    return _trim_branch_token(match.group("branch")) if match else ""
+
+
+def _extract_merge_source(text: str) -> str:
+    match = re.search(
+        r"(?:合并|merge)\s+(?:分支\s*)?(?P<branch>[A-Za-z0-9._/-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    return _trim_branch_token(match.group("branch")) if match else ""
+
+
+def _extract_merge_target(text: str) -> str:
+    match = re.search(
+        r"(?:到|至|into|->)\s*(?:分支\s*)?(?P<branch>[A-Za-z0-9._/-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    return _trim_branch_token(match.group("branch")) if match else ""
+
+
+def _trim_branch_token(value: str) -> str:
+    branch = str(value or "").strip().strip("，,。.;；")
+    for marker in (
+        "_CHECK",
+        "_IF",
+        "_RUN",
+        "_REPORT",
+        "_DO",
+        "_SAFE",
+        "_STATUS",
+        "_FIRST",
+        "_THEN",
+    ):
+        idx = branch.upper().find(marker)
+        if idx > 0:
+            branch = branch[:idx]
+            break
+    match = _BRANCH_TOKEN_RE.search(branch)
+    return match.group(0) if match else ""
+
+
+def _classify_terminal_result(row: dict[str, Any], *, message: str) -> tuple[bool, str, str]:
+    status = str(row.get("status") or row.get("task_status") or "").strip().lower()
+    body = str(row.get("body") or row.get("summary") or row.get("message") or "").strip()
+    if status in _FAILED_STATUSES:
+        return False, "failed", _terminal_error_summary(body, "执行端回写失败")
+    if status in _BLOCKED_STATUSES:
+        return False, "blocked", _terminal_error_summary(body, "执行端回写阻塞")
+    if body and _body_indicates_unfinished(body):
+        relay_status = "failed" if _body_indicates_failed(body) else "blocked"
+        return False, relay_status, _terminal_error_summary(body, "执行端回写显示未完成")
+    if _message_requires_execution_evidence(message) and not _body_has_execution_evidence(body):
+        return False, "blocked", _terminal_error_summary(
+            body,
+            "执行端回写缺少改动文件、命令、测试、构建或手机复测证据",
+        )
+    if status in _COMPLETED_STATUSES or body:
+        return True, "completed", ""
+    return True, "completed", ""
+
+
+def _body_indicates_unfinished(body: str) -> bool:
+    if not body:
+        return False
+    compact = body.replace(" ", "")
+    return any(marker in body or marker.replace(" ", "") in compact for marker in _FAILURE_BODY_MARKERS)
+
+
+def _body_indicates_failed(body: str) -> bool:
+    return any(
+        marker in body
+        for marker in ("失败", "failed", "合并有冲突", "merge conflict", "验证未通过", "❌", "error", "Error")
+    )
+
+
+def _message_requires_execution_evidence(message: str) -> bool:
+    text = str(message or "").lower()
+    return any(marker.lower() in text for marker in _EXECUTION_MESSAGE_MARKERS)
+
+
+def _body_has_execution_evidence(body: str) -> bool:
+    text = str(body or "")
+    if not text or _body_indicates_unfinished(text):
+        return False
+    lower = text.lower()
+    if any(marker.lower() in lower for marker in _EXECUTION_EVIDENCE_MARKERS):
+        return True
+    return _EVIDENCE_FILE_RE.search(text) is not None
+
+
+def _terminal_error_summary(body: str, fallback: str) -> str:
+    for line in body.splitlines():
+        clean = line.strip().strip("-*# ")
+        if clean:
+            return clean[:500]
+    return fallback
 
 
 def _terminal_codex_message(

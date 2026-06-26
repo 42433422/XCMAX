@@ -81,6 +81,7 @@ import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -126,11 +127,12 @@ fun ConversationListScreen(
     val employeeCount = conversations.count { it.type == ConversationType.AI_TASK }
     val unreadTotal = conversations.sumOf { it.unreadCount }
 
-    // 首次进入：拉取一次（受 TTL 控制，5 分钟内不重复请求）
-    LaunchedEffect(isEnterprise, accountKindLabel) { vm.loadConversations(isEnterprise) }
-
-    // AI 群聊（学微信：6 个部门群直接出现在消息页）。仅企业/管理端有群。
-    LaunchedEffect(isEnterprise) { if (isEnterprise) vm.loadAiGroups() }
+    // 首次进入：拉取一次（受 TTL 控制，5 分钟内不重复请求）。
+    // 群聊不能依赖本地企业态缓存；账号态或远端 SKU 刚刷新时，先尝试拉取，失败静默保留旧值。
+    LaunchedEffect(isEnterprise, accountKindLabel) {
+        vm.loadConversations(isEnterprise)
+        vm.loadAiGroups()
+    }
     val filteredGroups =
             remember(searchQuery, aiGroups) {
                 if (searchQuery.isBlank()) aiGroups
@@ -172,7 +174,7 @@ fun ConversationListScreen(
     LifecycleResumeEffect(Unit) {
         vm.loadConversations(isEnterprise, force = false)
         // 群也在恢复时重拉：抓住 token 新鲜的时机（admin 接口令牌过期时会 401 静默失败）。
-        if (isEnterprise) vm.loadAiGroups()
+        vm.loadAiGroups()
         onPauseOrDispose { }
     }
 
@@ -223,7 +225,10 @@ fun ConversationListScreen(
             // 下拉刷新：用户主动下拉时强制刷新（force=true），保留旧数据不闪烁
             PullToRefreshBox(
                     isRefreshing = refreshing,
-                    onRefresh = { vm.loadConversations(isEnterprise, force = true) },
+                    onRefresh = {
+                        vm.loadConversations(isEnterprise, force = true)
+                        vm.loadAiGroups()
+                    },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
             ) {
                 LazyColumn(
@@ -242,7 +247,7 @@ fun ConversationListScreen(
                             HorizontalDivider(
                                     color = MaterialTheme.colorScheme.outlineVariant,
                                     thickness = 0.5.dp,
-                                    modifier = Modifier.padding(start = 84.dp),
+                                    modifier = Modifier.padding(start = MessageAvatarLayout.conversationDividerStart),
                             )
                         }
                     }
@@ -265,7 +270,7 @@ fun ConversationListScreen(
                             HorizontalDivider(
                                     color = MaterialTheme.colorScheme.outlineVariant,
                                     thickness = 0.5.dp,
-                                    modifier = Modifier.padding(start = 84.dp),
+                                    modifier = Modifier.padding(start = MessageAvatarLayout.conversationDividerStart),
                             )
                         }
                     }
@@ -274,7 +279,7 @@ fun ConversationListScreen(
                         item { EcosystemSyncHint(onRefresh = { vm.loadConversations(isEnterprise, force = true) }) }
                     }
 
-                    if (filtered.isEmpty()) {
+                    if (filteredGroups.isEmpty() && filtered.isEmpty()) {
                         item {
                             Box(
                                     Modifier.fillParentMaxSize().padding(vertical = 80.dp),
@@ -510,8 +515,8 @@ private fun PlusMenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
 private fun BrandIdentityAvatar(avatarUri: String) {
     LocalProfileAvatar(
             imageSource = avatarUri,
-            size = 44.dp,
-            shape = RoundedCornerShape(10.dp),
+            size = MessageAvatarLayout.headerAvatarSize,
+            shape = MessageAvatarLayout.headerAvatarShape(),
     )
 }
 
@@ -852,7 +857,12 @@ private fun ConversationCell(
             ),
     ) {
         Row(
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 11.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = MessageAvatarLayout.conversationRowHorizontalPadding,
+                        vertical = MessageAvatarLayout.conversationRowVerticalPadding,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
         ) {
             // ── 头像 ──
@@ -866,8 +876,8 @@ private fun ConversationCell(
                     else -> AppAvatar(
                         imageSource = item.avatarUrl,
                         fallback = AppAvatarFallback.AI_EMPLOYEE,
-                        size = 52.dp,
-                        shape = MaterialTheme.shapes.small,
+                        size = MessageAvatarLayout.conversationAvatarSize,
+                        shape = MessageAvatarLayout.conversationAvatarShape(),
                         contentDescription = item.title,
                     )
                 }
@@ -879,9 +889,18 @@ private fun ConversationCell(
                             color = XcagiTheme.extra.danger,
                             modifier =
                                     Modifier.align(Alignment.TopEnd)
-                                            .offset(x = 5.dp, y = (-5).dp)
+                                            .offset(
+                                                x = MessageAvatarLayout.unreadBadgeOffsetX,
+                                                y = MessageAvatarLayout.unreadBadgeOffsetY,
+                                            )
                                             .zIndex(10f)
-                                            .size(if (item.unreadCount > 99) 25.dp else 21.dp),
+                                            .size(
+                                                if (item.unreadCount > 99) {
+                                                    MessageAvatarLayout.unreadBadgeLargeSize
+                                                } else {
+                                                    MessageAvatarLayout.unreadBadgeSize
+                                                },
+                                            ),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
@@ -900,18 +919,18 @@ private fun ConversationCell(
                 if (item.isOnline && item.type == ConversationType.PINNED_CS) {
                     Box(
                             Modifier.align(Alignment.BottomEnd)
-                                    .offset(x = 0.dp, y = 2.dp)
+                                    .offset(x = 0.dp, y = MessageAvatarLayout.onlineIndicatorOffsetY)
                                     .zIndex(10f)
-                                    .size(14.dp)
+                                    .size(MessageAvatarLayout.onlineIndicatorSize)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.surface)
-                                    .padding(2.5.dp)
+                                    .padding(MessageAvatarLayout.onlineIndicatorPadding)
                                     .background(XcagiTheme.extra.weChatOnline, CircleShape),
                     )
                 }
             }
 
-            Spacer(Modifier.width(Spacing.md))
+            Spacer(Modifier.width(MessageAvatarLayout.conversationAvatarTextGap))
 
             // ── 文字区域 ──
             Column(Modifier.weight(1f).height(IntrinsicSize.Min)) {
@@ -1005,8 +1024,8 @@ private fun PinnedAvatar(type: ConversationType) {
 private fun AssistantAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.ASSISTANT,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "小C助理",
     )
 }
@@ -1016,8 +1035,8 @@ private fun AssistantAvatar() {
 private fun CsAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.CUSTOMER_SERVICE,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "专属客服",
     )
 }
@@ -1027,8 +1046,8 @@ private fun CsAvatar() {
 private fun CodexAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.CODEX,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "超级员工-Codex",
     )
 }
@@ -1038,8 +1057,8 @@ private fun CodexAvatar() {
 private fun CursorAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.CURSOR,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "超级员工-Cursor",
     )
 }
@@ -1049,8 +1068,8 @@ private fun CursorAvatar() {
 private fun ClaudeAvatar() {
     AppAvatar(
         fallback = AppAvatarFallback.CLAUDE,
-        size = 52.dp,
-        shape = MaterialTheme.shapes.small,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "超级员工-Claude",
     )
 }

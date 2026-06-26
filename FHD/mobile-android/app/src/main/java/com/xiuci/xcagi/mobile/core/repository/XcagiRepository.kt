@@ -19,14 +19,17 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.MarketAuthResponse
 import com.xiuci.xcagi.mobile.core.model.MarketLoginBody
 import com.xiuci.xcagi.mobile.core.model.MarketPasswordLoginBody
 import com.xiuci.xcagi.mobile.core.model.MarketRegisterBody
 import com.xiuci.xcagi.mobile.core.model.MarketSendCodeBody
+import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.ModIndustry
 import com.xiuci.xcagi.mobile.core.model.ModInfo
+import com.xiuci.xcagi.mobile.core.model.PendingNotification
 import com.xiuci.xcagi.mobile.core.model.ModMenuItem
 import com.xiuci.xcagi.mobile.core.model.ModMenuOverride
 import com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo
@@ -49,6 +52,7 @@ import com.xiuci.xcagi.mobile.core.network.MobileLoginRequest
 import com.xiuci.xcagi.mobile.core.network.MobilePhoneLoginRequest
 import com.xiuci.xcagi.mobile.core.network.MobileRefreshRequest
 import com.xiuci.xcagi.mobile.core.network.PairingExchangeBody
+import com.xiuci.xcagi.mobile.core.network.RelayBindAccountBody
 import com.xiuci.xcagi.mobile.core.network.RelayConfirmBody
 import com.xiuci.xcagi.mobile.core.network.RelayConfirmCodeBody
 import com.xiuci.xcagi.mobile.core.network.RelayTaskCreateBody
@@ -384,6 +388,36 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    private suspend fun applyMobileLoginData(
+        data: MobileLoginData,
+        fallbackUsername: String,
+        defaultKind: String = ProductSkuConfig.accountKind,
+    ): String {
+        val resolvedKind = resolveAccountKindFromSignals(
+            data.account_kind,
+            data.user?.role,
+            defaultKind,
+        )
+        sessionStore.setAccountKind(resolvedKind)
+        sessionStore.saveFhdAuth(
+            data.access_token.orEmpty(),
+            data.refresh_token.orEmpty(),
+            data.session_id.orEmpty(),
+            data.user?.username ?: fallbackUsername,
+            userId = data.user?.id ?: 0,
+        )
+        if (!data.market_access_token.isNullOrBlank()) {
+            sessionStore.setMarketTokens(
+                data.market_access_token,
+                data.market_refresh_token.orEmpty(),
+            )
+        }
+        refreshMe(resolvedKind)
+        registerDeviceToken()
+        syncMarketSessionHandoff()
+        return data.user?.display_name?.takeIf { it.isNotBlank() } ?: fallbackUsername
+    }
+
     suspend fun loginFhd(
             username: String,
             password: String,
@@ -452,15 +486,47 @@ class XcagiRepository @Inject constructor(
         return access to refresh
     }
 
-    suspend fun register(username: String, password: String, email: String): Result<Unit> {
+    suspend fun register(
+        username: String,
+        password: String,
+        email: String,
+        industryId: String = "通用",
+        budgetRange: String = "",
+    ): Result<String> {
         syncRouterFromStore()
-        return if (isPcReachable()) registerOnPc(username, password, email) else registerOnCloud(username, password, email)
+        preferCloudIfLanUnreachable()
+        val primary = registerOnFhd(username, password, email, industryId, budgetRange)
+        if (primary.isSuccess) return primary
+        if (!ProductSkuConfig.isEnterprise && !isPcReachable()) {
+            val cloud = registerOnCloud(username, password, email)
+            if (cloud.isSuccess) return Result.success(username)
+        }
+        return primary
     }
 
-    private suspend fun registerOnPc(username: String, password: String, email: String): Result<Unit> = try {
-        val r = fhd().register(RegisterRequest(username, password, email.ifBlank { null }))
-        if (r["success"] == false) Result.failure(Exception(r["message"]?.toString() ?: "注册失败"))
-        else Result.success(Unit)
+    private suspend fun registerOnFhd(
+        username: String,
+        password: String,
+        email: String,
+        industryId: String,
+        budgetRange: String,
+    ): Result<String> = try {
+        val res = fhd().mobileRegister(
+            RegisterRequest(
+                username = username,
+                password = password,
+                email = email.ifBlank { null },
+                industry_id = industryId.ifBlank { "通用" },
+                budget_range = budgetRange.ifBlank { null },
+                account_kind = ProductSkuConfig.accountKind,
+            )
+        )
+        if (!res.success || res.data?.access_token.isNullOrBlank()) {
+            Result.failure(Exception(res.message.ifBlank { "注册失败" }))
+        } else {
+            val data = res.data ?: return Result.failure(Exception("注册响应为空"))
+            Result.success(applyMobileLoginData(data, username, ProductSkuConfig.accountKind))
+        }
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -505,7 +571,10 @@ class XcagiRepository @Inject constructor(
     }
 
     suspend fun fetchAppConfig(): Result<AppConfigResponse> = try {
-        val cfg = modstore().appConfig(sku = BuildConfig.PRODUCT_SKU)
+        val cfg = modstore().appConfig(
+            sku = BuildConfig.PRODUCT_SKU,
+            currentVersionCode = BuildConfig.VERSION_CODE,
+        )
         Result.success(cfg)
     } catch (e: Exception) {
         Result.failure(e)
@@ -559,6 +628,14 @@ class XcagiRepository @Inject constructor(
         } catch (_: Exception) {
         }
     }
+
+    /** 自建推送后台通道：拉取未送达的离线通知（服务端已标记 delivered）。失败返回空。 */
+    suspend fun fetchPendingNotifications(): List<PendingNotification> =
+        try {
+            fhd().pendingNotifications().data?.notifications ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
 
     suspend fun pairingExchange(
         nonce: String = "",
@@ -673,6 +750,93 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    private fun nestedMap(data: Map<String, Any?>, key: String): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return data[key] as? Map<String, Any?> ?: emptyMap()
+    }
+
+    private fun relayIdFromBindingData(data: Map<String, Any?>): String =
+        data["relay_id"]?.toString()?.trim().orEmpty()
+            .ifBlank { nestedMap(data, "relay")["relay_id"]?.toString()?.trim().orEmpty() }
+            .ifBlank { nestedMap(data, "desktop")["relay_id"]?.toString()?.trim().orEmpty() }
+
+    private fun relayBaseUrlFromBindingData(data: Map<String, Any?>): String =
+        data["relay_base_url"]?.toString()?.trim().orEmpty()
+            .ifBlank { nestedMap(data, "relay")["relay_base_url"]?.toString()?.trim().orEmpty() }
+            .ifBlank { nestedMap(data, "desktop")["relay_base_url"]?.toString()?.trim().orEmpty() }
+
+    suspend fun bindRelayDesktopByAccount(
+        relayId: String,
+        relayBaseUrl: String = "",
+    ): Result<String> {
+        val cleanRelayId = relayId.trim()
+        if (cleanRelayId.isBlank()) return Result.failure(Exception("缺少 relay_id"))
+        return try {
+            val api = fhdForBase(relayBaseUrl)
+            val r = api.relayBindAccount(RelayBindAccountBody(relay_id = cleanRelayId))
+            if (!r.success) {
+                Result.failure(Exception(r.message.ifBlank { "账号绑定电脑执行端失败" }))
+            } else {
+                val data = r.data ?: emptyMap()
+                persistRelayBindingMeta(cleanRelayId, data)
+                Result.success(cleanRelayId)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun bindRelayDesktopByAccountFromMap(data: Map<String, Any?>): Boolean {
+        val relayId = relayIdFromBindingData(data)
+        if (relayId.isBlank()) return false
+        val relayBaseUrl = relayBaseUrlFromBindingData(data)
+        return bindRelayDesktopByAccount(relayId, relayBaseUrl).isSuccess
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun relayDesktopRows(data: Map<String, Any?>?): List<Map<String, Any?>> {
+        val raw = data?.get("items") ?: data?.get("desktops") ?: data?.get("results")
+        return (raw as? List<*>)?.mapNotNull { it as? Map<String, Any?> } ?: emptyList()
+    }
+
+    private fun relayDesktopSortKey(row: Map<String, Any?>): String =
+        row["last_seen_at"]?.toString()?.trim().orEmpty()
+            .ifBlank { row["updated_at"]?.toString()?.trim().orEmpty() }
+            .ifBlank { row["paired_at"]?.toString()?.trim().orEmpty() }
+
+    private fun relayDesktopIsDispatchable(row: Map<String, Any?>): Boolean {
+        val relayId = row["relay_id"]?.toString()?.trim().orEmpty()
+        val status = row["status"]?.toString()?.trim()?.lowercase().orEmpty()
+        return relayId.isNotBlank() && status == "paired"
+    }
+
+    private suspend fun latestAccountRelayDesktop(): Map<String, Any?>? =
+        try {
+            refreshFhdAccessToken()
+            val response = fhd().relayDesktops()
+            if (!response.success) {
+                null
+            } else {
+                relayDesktopRows(response.data)
+                    .filter { relayDesktopIsDispatchable(it) }
+                    .maxByOrNull { relayDesktopSortKey(it) }
+            }
+        } catch (_: Exception) {
+            null
+        }
+
+    private suspend fun relayIdForSuperEmployeeDispatch(): String {
+        val storedRelayId = sessionStore.relayDesktopId().trim()
+        val latest = latestAccountRelayDesktop() ?: return storedRelayId
+        val latestRelayId = latest["relay_id"]?.toString()?.trim().orEmpty()
+        if (latestRelayId.isBlank()) return storedRelayId
+        if (latestRelayId != storedRelayId) {
+            persistRelayBindingMeta(latestRelayId, latest)
+            sessionStore.clearInflightRelayTasks()
+        }
+        return latestRelayId
+    }
+
     private suspend fun saveRelayAuthFromMap(data: Map<String, Any?>) {
         val access = data["access_token"]?.toString()?.trim().orEmpty()
         if (access.isBlank()) return
@@ -702,8 +866,8 @@ class XcagiRepository @Inject constructor(
         val tenantId = data["tenant_id"]?.toString()?.trim().orEmpty()
         val pairedAt = data["paired_at"]?.toString()?.trim().orEmpty()
         sessionStore.setAccountKind(accountKind)
-        sessionStore.setRelayBaseUrl(relayBaseUrl)
-        sessionStore.setLocalBaseUrl(localBaseUrl)
+        if (relayBaseUrl.isNotBlank()) sessionStore.setRelayBaseUrl(relayBaseUrl)
+        if (localBaseUrl.isNotBlank()) sessionStore.setLocalBaseUrl(localBaseUrl)
         if (relaySessionToken.isNotBlank()) sessionStore.setRelaySessionToken(relaySessionToken)
         if (accountId.isNotBlank()) sessionStore.setRelayAccountId(accountId)
         if (tenantId.isNotBlank()) sessionStore.setRelayTenantId(tenantId)
@@ -771,12 +935,17 @@ class XcagiRepository @Inject constructor(
             ?: fromBase.second.takeIf { it > 0 }
             ?: BuildConfig.FHD_DEFAULT_PORT
         val hostWithPort = compactHostPort(host, port)
+        sessionStore.setRelayDesktopId("")
+        sessionStore.clearInflightRelayTasks()
+        val relayBound = bindRelayDesktopByAccountFromMap(d)
         sessionStore.setFhdHost(hostWithPort)
         sessionStore.setServerMode("lan")
-        sessionStore.setRelayDesktopId("")
         serverRouter.fhdHost = hostWithPort
         serverRouter.mode = ServerMode.LAN
         saveRelayAuthFromMap(d)
+        if (!relayBound) {
+            sessionStore.setRelayDesktopId("")
+        }
         return Result.success(host to port)
     }
 
@@ -1032,7 +1201,8 @@ class XcagiRepository @Inject constructor(
         cacheChatMessage(sessionId = sessionId, role = "user", text = message)
         val acc = StringBuilder()
 
-        if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CURSOR || conversationId == PinnedIds.CLAUDE) {
+        val superEmployeeRelayKind = SuperEmployeeRoutingPolicy.relayKindForConversation(conversationId)
+        if (superEmployeeRelayKind != null) {
             val isClaude = conversationId == PinnedIds.CLAUDE
             val isCursor = conversationId == PinnedIds.CURSOR
             val tokenSink: (String) -> Unit = { t -> acc.append(t); onToken(t) }
@@ -1041,17 +1211,12 @@ class XcagiRepository @Inject constructor(
             var finalReply = ""
             val doneSink: (String) -> Unit = { full -> finalReply = full; onDone(full) }
             // 连不到本地 PC 但已配对中继电脑 → 经服务器中继到本地电脑执行（超级员工必须本地设备）。
-            val relayId = if (!isPcReachable()) sessionStore.relayDesktopId() else ""
-            val relayKind = when {
-                isClaude -> "claude.invoke"
-                isCursor -> "cursor.invoke"
-                else -> "codex.invoke"
-            }
+            val relayId = if (!isPcReachable()) relayIdForSuperEmployeeDispatch() else ""
             if (relayId.isNotBlank()) {
                 streamRelayCodexTask(
                     relayId = relayId,
                     message = message,
-                    kind = relayKind,
+                    kind = superEmployeeRelayKind,
                     conversationId = conversationId ?: "",
                     onToken = tokenSink,
                     onDone = doneSink,
@@ -1071,21 +1236,6 @@ class XcagiRepository @Inject constructor(
 
         val useCloud = !isPcReachable()
         if (useCloud) {
-            val relayId = sessionStore.relayDesktopId()
-            if (relayId.isNotBlank()) {
-                streamRelayCodexTask(
-                    relayId = relayId,
-                    message = message,
-                    conversationId = conversationId ?: "",
-                    onToken = { t ->
-                        acc.append(t)
-                        onToken(t)
-                    },
-                    onDone = onDone,
-                    onError = onError,
-                )
-                return
-            }
             preferCloudIfLanUnreachable()
         }
         // 构造上下文：取最近6条对话（与桌面端 useChatRequest.ts slice(-6) 一致）
@@ -1401,15 +1551,32 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    suspend fun loadGitBranches(): Result<List<GitBranchDto>> = aiGroupCall {
+        fhd().getGitBranches().let {
+            if (it.success) Result.success(it.data?.branches.orEmpty()) else fail(it)
+        }
+    }
+
     suspend fun postAiGroupMessage(
         groupId: String,
         message: String,
         mentions: List<String> = emptyList(),
         senderName: String = "我",
+        dispatch: Boolean = false,
+        branchContext: String = "",
+        context: Map<String, String> = emptyMap(),
     ): Result<AiGroupPostData> = aiGroupCall {
         fhd().postAiGroupMessage(
             groupId,
-            AiGroupMessageBody(message = message, sender_name = senderName, mentions = mentions),
+            AiGroupMessageBody(
+                message = message,
+                sender_name = senderName,
+                mentions = mentions,
+                dispatch = dispatch,
+                branch_context = branchContext,
+                branch = branchContext,
+                context = context,
+            ),
         ).let { if (it.success) Result.success(it.data ?: AiGroupPostData()) else fail(it) }
     }
 
@@ -1785,11 +1952,7 @@ class XcagiRepository @Inject constructor(
         onError: (String) -> Unit,
     ) {
         try {
-            val toolLabel = when {
-                kind.startsWith("claude") -> "Claude"
-                kind.startsWith("cursor") -> "Cursor"
-                else -> "Codex"
-            }
+            val toolLabel = SuperEmployeeRoutingPolicy.toolLabelForRelayKind(kind)
             // 中继任务由 Retrofit 直接发起，不走 SSE 的 401/403 刷新重试。
             // 先用 refresh token 更新 FHD access token，避免保留登录态的手机在 token
             // 过期后只能看到“重新登录”，实际请求根本到不了电脑执行端。
@@ -1882,7 +2045,7 @@ class XcagiRepository @Inject constructor(
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
     ) {
-        val relayId = sessionStore.relayDesktopId()
+        val relayId = relayIdForSuperEmployeeDispatch()
         if (relayId.isBlank()) {
             onError("未绑定电脑执行端，无法执行 $op")
             return
@@ -1936,6 +2099,9 @@ class XcagiRepository @Inject constructor(
         var reply = ""
         try {
             refreshFhdAccessToken()
+            if (clearInflightIfRelayChanged(conversationId, taskId)) {
+                return false
+            }
             onToken("思考中...")
             pollRelayTask(
                 taskId,
@@ -1953,6 +2119,20 @@ class XcagiRepository @Inject constructor(
         if (reply.isNotBlank()) {
             cacheChatMessage(sessionId = conversationId, role = "assistant", text = reply)
         }
+        return true
+    }
+
+    private suspend fun clearInflightIfRelayChanged(
+        conversationId: String,
+        taskId: String,
+    ): Boolean {
+        val currentRelayId = relayIdForSuperEmployeeDispatch()
+        if (currentRelayId.isBlank()) return false
+        val status = fhd().relayTaskStatus(taskId)
+        val current = status.data?.get("task") as? Map<*, *> ?: status.data ?: emptyMap<Any?, Any?>()
+        val taskRelayId = current["relay_id"]?.toString()?.trim().orEmpty()
+        if (taskRelayId.isBlank() || taskRelayId == currentRelayId) return false
+        sessionStore.setInflightRelayTask(conversationId, "")
         return true
     }
 
@@ -2220,12 +2400,15 @@ class XcagiRepository @Inject constructor(
     }
 
     suspend fun loadAdminModInfos(): Result<List<ModInfo>> =
-        loadAdminMobileHome().map { home -> listOf(home.toAdminModInfo()) }
+        loadAdminMobileHome().map { home ->
+            AdminDutyRosterNormalizer.normalize(listOf(home.toAdminModInfo()))
+        }
 
     /** 从 Room 缓存读取员工列表（UI 秒出用）。失败或空缓存返回空列表。 */
     suspend fun loadCachedModInfos(adminMode: Boolean): List<ModInfo> {
         return try {
-            db.modInfoCacheDao().getAll().map { it.toModInfo() }
+            val mods = db.modInfoCacheDao().getAll().map { it.toModInfo() }
+            if (adminMode) AdminDutyRosterNormalizer.normalize(mods) else mods
         } catch (_: Exception) {
             emptyList()
         }
@@ -2234,7 +2417,13 @@ class XcagiRepository @Inject constructor(
     /** 返回最近一次缓存写入时间戳（毫秒）。无缓存返回 0。用于 TTL 判断。 */
     suspend fun cachedModInfosAt(): Long =
         try {
-            db.modInfoCacheDao().getAll().maxOfOrNull { it.cachedAt } ?: 0L
+            val entities = db.modInfoCacheDao().getAll()
+            val mods = entities.map { it.toModInfo() }
+            if (!AdminDutyRosterNormalizer.isCurrent(mods)) {
+                0L
+            } else {
+                entities.maxOfOrNull { it.cachedAt } ?: 0L
+            }
         } catch (_: Exception) {
             0L
         }
@@ -2243,7 +2432,8 @@ class XcagiRepository @Inject constructor(
     suspend fun refreshAndCacheModInfos(adminMode: Boolean): Result<List<ModInfo>> {
         val result = if (adminMode) loadAdminModInfos() else loadModInfos()
         if (result.isSuccess) {
-            val mods = result.getOrThrow()
+            val rawMods = result.getOrThrow()
+            val mods = if (adminMode) AdminDutyRosterNormalizer.normalize(rawMods) else rawMods
             // 仅当网络返回非空列表时才更新缓存；空列表通常是临时错误，不清空旧缓存
             if (mods.isNotEmpty()) {
                 try {
@@ -2303,7 +2493,9 @@ class XcagiRepository @Inject constructor(
 
     /** 观察本地缓存的 Mod 列表（微信风格：DB 为唯一数据源，UI 观察 DB 变化） */
     fun observeCachedModInfos(): Flow<List<ModInfo>> =
-        db.modInfoCacheDao().observeAll().map { entities -> entities.map { it.toModInfo() } }
+        db.modInfoCacheDao().observeAll().map { entities ->
+            AdminDutyRosterNormalizer.normalize(entities.map { it.toModInfo() })
+        }
 
     suspend fun fetchHome(): Result<Map<String, Any?>> = try {
         syncRouterFromStore()
@@ -2398,6 +2590,202 @@ class XcagiRepository @Inject constructor(
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun mapValue(row: Map<*, *>, key: String): Any? = row[key] ?: row[key.replace("_", "-")]
+
+    private fun stringList(value: Any?): List<String> =
+        (value as? List<*>)?.mapNotNull { it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() } }
+            ?: emptyList()
+
+    private fun boolValue(value: Any?): Boolean =
+        when (value) {
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            is String -> value.equals("true", ignoreCase = true) || value == "1"
+            else -> false
+        }
+
+    private fun nestedDataMap(value: Map<String, Any?>): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        val nested = value["data"] as? Map<String, Any?>
+        return nested ?: value
+    }
+
+    suspend fun validateMobileSession(): Result<Unit> = try {
+        syncRouterFromStore()
+        val res = fhd().mobileSessionValidate()
+        if (!res.success) {
+            Result.failure(Exception(res.message.ifBlank { "会话已过期" }))
+        } else {
+            val data = res.data ?: emptyMap()
+            val access = data["market_access_token"]?.toString()?.trim().orEmpty()
+            val refresh = data["market_refresh_token"]?.toString()?.trim().orEmpty()
+            if (access.isNotBlank()) {
+                sessionStore.setMarketTokens(access, refresh)
+            }
+            Result.success(Unit)
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun onboardingIndustries(): Result<List<ListItem>> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().mobileOnboardingIndustries()
+        if (!res.success) {
+            Result.failure(Exception(res.message.ifBlank { "行业目录加载失败" }))
+        } else {
+            val data = nestedDataMap(res.data ?: emptyMap())
+            val packages = (data["open_packages"] as? List<*>) ?: emptyList<Any?>()
+            val items = packages.mapNotNull { row ->
+                val m = row as? Map<*, *> ?: return@mapNotNull null
+                val industryId = mapValue(m, "industry_id")?.toString()?.trim().orEmpty()
+                if (industryId.isBlank()) return@mapNotNull null
+                val title = mapValue(m, "name")?.toString()?.takeIf { it.isNotBlank() }
+                    ?: mapValue(m, "product_name")?.toString()?.takeIf { it.isNotBlank() }
+                    ?: industryId
+                val subtitle = mapValue(m, "scenario")?.toString()?.takeIf { it.isNotBlank() }
+                    ?: mapValue(m, "mod_id")?.toString().orEmpty()
+                ListItem(industryId, title, subtitle)
+            }
+            if (items.isNotEmpty()) Result.success(items)
+            else Result.success(
+                stringList(data["open_industry_ids"]).map { ListItem(it, it, "可选行业") }
+            )
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun industryBaseline(industryId: String): Result<Map<String, Any?>> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().mobileIndustryBaseline(industryId.ifBlank { "通用" })
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "行业基线加载失败" }))
+        else Result.success(nestedDataMap(res.data ?: emptyMap()))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun bootstrapIndustry(industryId: String): Result<String> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val industry = industryId.ifBlank { "通用" }
+        val host = fhd().mobileInstallHostFoundation("generic")
+        if (!host.success) {
+            throw Exception(host.message.ifBlank { "宿主基础包安装失败" })
+        }
+        val baseline = industryBaseline(industry).getOrThrow()
+        if (stringList(baseline["missing_industry_mod_ids"]).isNotEmpty()) {
+            val seed = fhd().mobileInstallIndustrySeed(mapOf("industry_id" to industry))
+            if (!seed.success) {
+                throw Exception(seed.message.ifBlank { "行业包安装失败" })
+            }
+        }
+        for (modId in stringList(baseline["missing_account_custom_mod_ids"])) {
+            val install = fhd().mobileInstallMod(mapOf("mod_id" to modId))
+            if (!install.success) {
+                throw Exception(install.message.ifBlank { "$modId 安装失败" })
+            }
+        }
+        for (modId in stringList(baseline["account_custom_mod_ids"])) {
+            val seed = fhd().mobileInstallCustomerDeliverySeed(
+                mapOf("mod_id" to modId, "industry_id" to industry)
+            )
+            if (!seed.success) {
+                throw Exception(seed.message.ifBlank { "$modId 交付数据安装失败" })
+            }
+        }
+        val after = industryBaseline(industry).getOrThrow()
+        val ready = boolValue(after["full_stack_ready"]) || boolValue(after["baseline_ready"])
+        Result.success(if (ready) "行业能力已装齐" else "基础能力已安装，请刷新查看剩余项")
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun paymentPlans(): Result<List<ListItem>> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().mobilePaymentPlans()
+        if (!res.success) {
+            Result.failure(Exception(res.message.ifBlank { "套餐加载失败" }))
+        } else {
+            val data = nestedDataMap(res.data ?: emptyMap())
+            val raw = (data["plans"] as? List<*>)
+                ?: (data["items"] as? List<*>)
+                ?: emptyList<Any?>()
+            Result.success(raw.mapNotNull { row ->
+                val m = row as? Map<*, *> ?: return@mapNotNull null
+                val id = mapValue(m, "id")?.toString()?.trim().orEmpty()
+                if (id.isBlank()) return@mapNotNull null
+                val title = mapValue(m, "title")?.toString()?.takeIf { it.isNotBlank() }
+                    ?: mapValue(m, "name")?.toString()?.takeIf { it.isNotBlank() }
+                    ?: id
+                val amount = mapValue(m, "amount_cents")?.toString()
+                    ?: mapValue(m, "price_cents")?.toString()
+                    ?: ""
+                val desc = mapValue(m, "description")?.toString()?.takeIf { it.isNotBlank() }
+                    ?: if (amount.isNotBlank()) "¥${amount.toDoubleOrNull()?.div(100.0) ?: amount}" else "模型服务套餐"
+                ListItem(id, title, desc, m.entries.associate { it.key.toString() to it.value })
+            })
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    private fun mobilePaymentCheckoutBody(channel: String): MutableMap<String, Any?> {
+        val normalized = channel.trim().ifBlank { "mobile_h5" }
+        return mutableMapOf(
+            "channel" to normalized,
+            "client" to "android",
+            "return_url" to "xcagi://payment/complete",
+        )
+    }
+
+    suspend fun checkoutPaymentPlan(
+        planId: String,
+        channel: String = "mobile_h5",
+    ): Result<Map<String, Any?>> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val body = mobilePaymentCheckoutBody(channel)
+        body["plan_id"] = planId
+        val res = fhd().mobilePaymentCheckout(body)
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "支付下单失败" }))
+        else Result.success(nestedDataMap(res.data ?: emptyMap()))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun checkoutWalletRecharge(
+        amountYuan: String,
+        channel: String = "mobile_h5",
+    ): Result<Map<String, Any?>> = try {
+        val amount = amountYuan.trim().toDoubleOrNull() ?: 0.0
+        if (amount <= 0.0) throw IllegalArgumentException("请输入有效充值金额")
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val body = mobilePaymentCheckoutBody(channel)
+        body["wallet_recharge"] = true
+        body["total_amount"] = amount
+        body["subject"] = "手机钱包充值"
+        val res = fhd().mobilePaymentCheckout(body)
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "充值下单失败" }))
+        else Result.success(nestedDataMap(res.data ?: emptyMap()))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun queryPayment(outTradeNo: String): Result<Map<String, Any?>> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().mobilePaymentQuery(outTradeNo)
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "订单查询失败" }))
+        else Result.success(nestedDataMap(res.data ?: emptyMap()))
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 
     suspend fun marketCatalog(): Result<List<ListItem>> = try {

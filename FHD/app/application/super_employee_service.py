@@ -104,13 +104,20 @@ def _safe_json_line(payload: dict[str, Any]) -> str:
 
 
 def _codex_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    sandbox = (
+        os.environ.get("XCMAX_CODEX_SANDBOX_MODE")
+        or os.environ.get("DEVFLEET_CODEX_SANDBOX_MODE")
+        or "workspace-write"
+    ).strip()
+    if sandbox not in {"read-only", "workspace-write", "danger-full-access"}:
+        sandbox = "workspace-write"
     return [
         cli_path,
         "--ask-for-approval",
         "never",
         "exec",
         "--sandbox",
-        "read-only",
+        sandbox,
         "--skip-git-repo-check",
         "--ephemeral",
         "--output-last-message",
@@ -195,6 +202,8 @@ class SuperEmployeeToolProfile:
     cli_reads_output_file: bool = True  # 是否从 --output-last-message 文件读结果
     cli_stream_json: bool = False  # stdout 是否为 stream-json(逐事件)，需解析出最终回复
     cli_command_builder: Callable[[str, str, Path, str], list[str]] = _codex_cli_command
+    avatar_key: str = ""  # 前端/App 识别：codex | claude | cursor
+    avatar_path: str = ""  # 静态资源路径（相对站点根，如 /brand/cursor-app-icon.png）
 
 
 CODEX_PROFILE = SuperEmployeeToolProfile(
@@ -212,6 +221,8 @@ CODEX_PROFILE = SuperEmployeeToolProfile(
     cli_extra_candidates=("/Applications/Codex.app/Contents/Resources/codex",),
     cli_reads_output_file=True,
     cli_command_builder=_codex_cli_command,
+    avatar_key="codex",
+    avatar_path="/brand/codex-app-icon.png",
 )
 
 CLAUDE_PROFILE = SuperEmployeeToolProfile(
@@ -235,6 +246,8 @@ CLAUDE_PROFILE = SuperEmployeeToolProfile(
     cli_reads_output_file=False,
     cli_stream_json=True,
     cli_command_builder=_claude_cli_command,
+    avatar_key="claude",
+    avatar_path="/brand/claude-app-icon.svg",
 )
 
 CURSOR_PROFILE = SuperEmployeeToolProfile(
@@ -258,6 +271,8 @@ CURSOR_PROFILE = SuperEmployeeToolProfile(
     cli_reads_output_file=False,
     cli_stream_json=True,
     cli_command_builder=_cursor_cli_command,
+    avatar_key="cursor",
+    avatar_path="/brand/cursor-app-icon.png",
 )
 
 
@@ -1224,7 +1239,7 @@ class SuperEmployeeService:
             return self._run_cli_once(cli_path, self._cli_prompt(text), base_cwd)
         if self._cli_runner is not subprocess.run or not self._dev_loop_enabled():
             return self._run_cli_once(cli_path, self._cli_work_prompt(text, base_cwd), base_cwd)
-        return self._run_dev_task_loop(cli_path, text, base_cwd)
+        return self._run_dev_task_loop(cli_path, text, base_cwd, context)
 
     # ===== 口袋 Claude Code：持久会话续接 + 隔离工作区 =====
 
@@ -1744,8 +1759,15 @@ class SuperEmployeeService:
         return raw not in {"0", "false", "off", "disabled"}
 
     def _git(self, cwd: str, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess:
+        env = os.environ.copy()
+        env.setdefault("GIT_TERMINAL_PROMPT", "0")
+        env.setdefault("GIT_ASKPASS", "true")
         return subprocess.run(
-            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=timeout
+            ["git", "-C", cwd, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
         )
 
     def _is_git_repo(self, cwd: str) -> bool:
@@ -1755,16 +1777,86 @@ class SuperEmployeeService:
         except Exception:  # noqa: BLE001
             return False
 
-    def _prepare_worktree(self, base_cwd: str, text: str) -> tuple[str, str] | None:
-        """从 base_cwd 的 HEAD 建独立 worktree + 新分支；失败返回 None（退回不隔离）。"""
+    @staticmethod
+    def _safe_branch_name(raw: Any) -> str:
+        branch = str(raw or "").strip()
+        if branch.startswith("refs/heads/"):
+            branch = branch.removeprefix("refs/heads/")
+        if branch.startswith("refs/remotes/"):
+            branch = branch.removeprefix("refs/remotes/")
+        if branch.startswith("origin/"):
+            branch = branch.removeprefix("origin/")
+        branch = re.sub(r"[^A-Za-z0-9._/-]+", "-", branch)[:180].strip("/.")
+        if not branch or branch in {"HEAD", "origin/HEAD", ".", ".."}:
+            return ""
+        if ".." in branch or "//" in branch or "@{" in branch or branch.endswith(".lock"):
+            return ""
+        return branch
+
+    @classmethod
+    def _safe_context_branch(cls, context: dict[str, Any] | None) -> str:
+        data = context if isinstance(context, dict) else {}
+        return cls._safe_branch_name(
+            data.get("branch_context")
+            or data.get("branch")
+            or data.get("selected_branch")
+        )
+
+    def _resolve_branch_ref(self, base_cwd: str, branch: str) -> str:
+        branch = self._safe_branch_name(branch)
+        if not branch:
+            return ""
+        try:
+            self._git(
+                base_cwd,
+                "fetch",
+                "origin",
+                f"+refs/heads/{branch}:refs/remotes/origin/{branch}",
+                timeout=120,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        for ref in (f"origin/{branch}", branch):
+            try:
+                r = self._git(base_cwd, "rev-parse", "--verify", "--quiet", ref, timeout=15)
+                if r.returncode == 0:
+                    return ref
+            except Exception:  # noqa: BLE001
+                continue
+        return ""
+
+    def _prepare_worktree(
+        self,
+        base_cwd: str,
+        text: str,
+        branch_hint: str = "",
+    ) -> tuple[str, str] | None:
+        """建独立 worktree；有 branch_hint 时基于现有分支写回，否则自动新建任务分支。"""
         if not self._is_git_repo(base_cwd):
             return None
         slug = re.sub(r"[^a-z0-9]+", "-", text.strip().lower())[:24].strip("-") or "task"
         uniq = f"{os.getpid()}-{int.from_bytes(os.urandom(3), 'big'):x}"
-        branch = f"super-employee/{self._p.tool_name}/{slug}-{uniq}"
+        selected_branch = self._safe_branch_name(branch_hint)
+        branch = selected_branch or f"super-employee/{self._p.tool_name}/{slug}-{uniq}"
         wt_path = str(Path(tempfile.gettempdir()) / f"xcagi-wt-{self._p.tool_name}-{uniq}")
         try:
-            r = self._git(base_cwd, "worktree", "add", "-b", branch, wt_path, "HEAD", timeout=180)
+            if selected_branch:
+                ref = self._resolve_branch_ref(base_cwd, selected_branch)
+                if not ref:
+                    logger.warning("选中的工作分支不存在: %s", selected_branch)
+                    return None
+                r = self._git(base_cwd, "worktree", "add", "--detach", wt_path, ref, timeout=180)
+            else:
+                r = self._git(
+                    base_cwd,
+                    "worktree",
+                    "add",
+                    "-b",
+                    branch,
+                    wt_path,
+                    "HEAD",
+                    timeout=180,
+                )
             if r.returncode != 0:
                 logger.warning("worktree add 失败: %s", (r.stderr or r.stdout)[:300])
                 return None
@@ -1851,7 +1943,7 @@ class SuperEmployeeService:
             c = self._git(cwd, "commit", "-m", msg, timeout=60)
             if c.returncode != 0:
                 return False, "提交失败：" + (c.stderr.strip() or c.stdout.strip())[:300]
-            p = self._git(cwd, "push", "-u", "origin", branch, timeout=240)
+            p = self._git(cwd, "push", "-u", "origin", f"HEAD:{branch}", timeout=240)
             if p.returncode != 0:
                 return False, "已本地提交，但 push 失败：" + (p.stderr.strip() or p.stdout.strip())[
                     :300
@@ -1866,10 +1958,22 @@ class SuperEmployeeService:
             "改到能通过为止，不要只解释。\n\n验证错误：\n" + verify_msg[:1500]
         )
 
-    def _run_dev_task_loop(self, cli_path: str, text: str, base_cwd: str) -> str:
+    def _run_dev_task_loop(
+        self,
+        cli_path: str,
+        text: str,
+        base_cwd: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
         """开发任务全闭环：隔离 worktree → coding → view(验证,失败修一次) → push → 清理。"""
-        prepared = self._prepare_worktree(base_cwd, text)
+        branch_hint = self._safe_context_branch(context)
+        prepared = self._prepare_worktree(base_cwd, text, branch_hint)
         if not prepared:
+            if branch_hint:
+                return (
+                    f"❌ 选中的工作分支不可用：{branch_hint}\n"
+                    "我没有在运行中的工程根直接写入。请刷新分支列表后重新选择，或改为自动新建分支。"
+                )
             # 无法隔离（非 git 仓库 / worktree 冲突）→ 退回只改不推，保证仍可用。
             return self._run_cli_once(cli_path, self._cli_work_prompt(text, base_cwd), base_cwd)
         wt_path, branch = prepared

@@ -76,7 +76,7 @@ def primary_department_for_pkg(pkg_id: str) -> str | None:
 
 
 def _candidate_duty_registry_paths() -> list[Path]:
-    """duty_employee_registry.json 候选路径（上岗员工 SSOT）。"""
+    """duty_employee_registry.json 候选路径（展示元数据补充源）。"""
     import os
 
     roots: list[Path] = []
@@ -96,9 +96,10 @@ def _candidate_duty_registry_paths() -> list[Path]:
 
 
 def load_duty_employee_records() -> list[dict[str, Any]]:
-    """加载上岗员工注册表（duty_employee_registry.json）。
+    """加载编制员工展示元数据注册表（duty_employee_registry.json）。
 
-    返回 packages 数组；文件不存在时返回空列表（调用方可回退到 duty_roster + mods）。
+    返回 packages 数组；文件不存在时返回空列表。员工 ID 与部门归属的 SSOT 是
+    ``config/duty_roster.json``。
     """
     for path in _candidate_duty_registry_paths():
         try:

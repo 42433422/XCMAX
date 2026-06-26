@@ -5,14 +5,14 @@
 `FHD/mobile-ios/` 已具备 SwiftUI 原生工程源码、XcodeGen `project.yml`、AppIcon 生成脚本、模拟器构建脚本与 App Store archive/export 脚本。本岗当前职责：
 
 1. 维护 `FHD/mobile-ios/project.yml`、Bundle ID、entitlements、版本号与 AppIcon。
-2. 维护 `FHD/.github/workflows/release-ios.yml` 的 simulator build、双 SKU profile secret 选取、IPA 导出和 App Store Connect 上传门禁。
+2. 维护 `FHD/.github/workflows/release-ios.yml` 的 simulator build、主线 profile secret 选取、IPA 导出和 App Store Connect 上传门禁；兼容线仅在明确需要时启用。
 3. 使用 `scripts/create-app-store-profile.sh` 与 `scripts/sync-ios-signing-secrets.sh` 管理 Apple Developer profile 和 GitHub Secrets。
-4. 在 Apple 账号密钥缺失时明确报告 `IOS_TEAM_ID`、证书、enterprise/personal profile、App Store Connect API Key 等缺口，不伪造发布成功。
+4. 在 Apple 账号密钥缺失时明确报告 `IOS_TEAM_ID`、证书、enterprise profile、App Store Connect API Key 等缺口；如涉及兼容线，再单独补报 personal profile 缺口。
 
 
         ## 职责摘要
 
-        P-S iOS 渠道发布：双 SKU Bundle ID、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
+        XCAGI iOS 渠道发布：主线上架、冻结兼容 SKU、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
 
         ## 上游 Handoff 契约
 
@@ -44,17 +44,17 @@
 
 ## 固定执行顺序
 
-1. 先检查 `project.yml`、两个 scheme、两个 Bundle ID、entitlements 和 workflow secret 映射。
+1. 先检查 `project.yml`、当前 scheme、Bundle ID、entitlements 和 workflow secret 映射；默认主线是 `XCAGIMobile`。
 2. 如果缺少 profile，用 `bash FHD/mobile-ios/scripts/create-app-store-profile.sh --scheme ... --profile-name ...` 创建并下载。
-3. 用 `bash FHD/mobile-ios/scripts/sync-ios-signing-secrets.sh --dry-run ...` 先校验 `.p12`、enterprise/personal `.mobileprovision`、`.p8` 是否一致。
+3. 用 `bash FHD/mobile-ios/scripts/sync-ios-signing-secrets.sh --dry-run ...` 先校验 `.p12`、enterprise `.mobileprovision`、`.p8` 是否一致；只有兼容线任务才额外带 `--profile-personal`。
 4. 校验通过后再同步 GitHub Secrets，并保留 secret 名称、profile UUID、证书 serial 作为证据。
 5. 最后执行 simulator build / archive-export / App Store Connect 上传。
 
 ## 关键门禁
 
 - `XCAGIMobile` 只能使用企业版 profile secret。
-- `XCAGIMobilePersonal` 只能使用个人版 profile secret。
-- 两张 profile 的证书 serial 必须都等于 `.p12` 内证书 serial。
+- `XCAGIMobilePersonal` 只有在明确兼容任务下才允许使用个人版 profile secret。
+- 企业版 profile 的证书 serial 必须等于 `.p12` 内证书 serial；若传入个人版 profile，也必须一致。
 - 只有读权限的 App Store Connect API key 不能代替 Apple Developer 门户 profile 创建。
 
         ## 故障处置

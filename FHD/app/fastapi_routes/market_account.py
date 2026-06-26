@@ -8,6 +8,7 @@ import os
 import re
 import time
 import uuid
+from collections.abc import Mapping
 from hashlib import sha256
 from typing import Any
 
@@ -39,9 +40,11 @@ def _auth_header(raw: str) -> str:
 
 def session_id_from_request(request: Request) -> str:
     cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-    return str(
-        request.cookies.get(cookie_name) or request.headers.get("X-Session-ID") or ""
-    ).strip()
+    cookies = getattr(request, "cookies", None)
+    headers = getattr(request, "headers", None)
+    cookie_sid = cookies.get(cookie_name) if isinstance(cookies, Mapping) else ""
+    header_sid = headers.get("X-Session-ID") if isinstance(headers, Mapping) else ""
+    return str(cookie_sid or header_sid or "").strip()
 
 
 def bind_market_auth_to_session(
@@ -346,7 +349,8 @@ def _authorization_from_request(request: Request, body: dict[str, Any]) -> str:
     a fresh token bound to the current FHD login session. Strong account state should follow the
     backend session, not stale client storage.
     """
-    session_auth = _auth_header(session_market_token(session_id_from_request(request)))
+    sid = session_id_from_request(request)
+    session_auth = _auth_header(session_market_token(sid))
     if session_auth:
         return session_auth
     # 多用户环境按当前登录 user_id 过滤，防止串号
@@ -357,9 +361,10 @@ def _authorization_from_request(request: Request, body: dict[str, Any]) -> str:
         user_id = getattr(current_user, "id", None) if current_user else None
     except RECOVERABLE_ERRORS:
         user_id = None
-    latest_auth = _auth_header(latest_session_market_token(user_id=user_id))
-    if latest_auth:
-        return latest_auth
+    if sid or user_id is not None:
+        latest_auth = _auth_header(latest_session_market_token(user_id=user_id))
+        if latest_auth:
+            return latest_auth
     auth = _auth_header(str(body.get("authorization") or body.get("token") or ""))
     if auth:
         return auth
@@ -382,9 +387,9 @@ async def _authorization_from_request_resolved(request: Request, body: dict[str,
         user_id = getattr(current_user, "id", None) if current_user else None
     except RECOVERABLE_ERRORS:
         user_id = None
-    session_tok = _normalize_bearer_token(
-        session_market_token(sid) or latest_session_market_token(user_id=user_id)
-    )
+    session_tok = _normalize_bearer_token(session_market_token(sid))
+    if not session_tok and (sid or user_id is not None):
+        session_tok = _normalize_bearer_token(latest_session_market_token(user_id=user_id))
     if session_tok:
         resolved = await resolve_valid_market_access_token(sid)
         if resolved:
@@ -702,7 +707,9 @@ def _market_identity_from_payloads(*payloads: Any) -> tuple[bool, bool, dict[str
 async def refresh_session_market_token(session_id: str) -> str:
     """Use persisted modstore refresh_token to obtain a new access_token."""
     sid = (session_id or "").strip()
-    refresh = session_market_refresh_token(sid) or latest_session_market_refresh_token()
+    if not sid:
+        return ""
+    refresh = session_market_refresh_token(sid)
     if not refresh:
         return ""
     payload = await _proxy_json(
@@ -729,9 +736,9 @@ async def resolve_valid_market_access_token(session_id: str) -> str:
     sid = (session_id or "").strip()
     # 多用户环境：从 session_id 反查 user_id，防止 fallback 串号
     user_id = _user_id_from_session(sid)
-    tok = _normalize_bearer_token(
-        session_market_token(sid) or latest_session_market_token(user_id=user_id)
-    )
+    tok = _normalize_bearer_token(session_market_token(sid))
+    if not tok and user_id is not None:
+        tok = _normalize_bearer_token(latest_session_market_token(user_id=user_id))
     if not tok:
         return ""
     if is_local_demo_market_token(tok):

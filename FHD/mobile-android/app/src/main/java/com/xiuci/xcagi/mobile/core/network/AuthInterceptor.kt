@@ -64,8 +64,10 @@ class AuthInterceptor @Inject constructor(
     private fun isPublicAuthWriteRequest(url: HttpUrl): Boolean {
         val path = url.encodedPath.trimEnd('/')
         return path.endsWith("/api/auth/login") ||
+            path.endsWith("/api/auth/register") ||
             path.endsWith("/api/auth/login-with-phone-code") ||
             path.endsWith("/" + ApiEndpoints.AUTH_LOGIN) ||
+            path.endsWith("/" + ApiEndpoints.AUTH_REGISTER) ||
             path.endsWith("/" + ApiEndpoints.AUTH_LOGIN_WITH_PHONE_CODE) ||
             path.endsWith("/" + ApiEndpoints.AUTH_REFRESH) ||
             path.endsWith("/" + ApiEndpoints.AUTH_OIDC_EXCHANGE) ||
@@ -79,6 +81,7 @@ class AuthInterceptor @Inject constructor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val fhdToken = runBlocking { sessionStore.fhdAccessFlow.first() }
         val marketToken = runBlocking { sessionStore.marketTokenFlow.first() }
+        val sessionId = runBlocking { sessionStore.fhdSessionId() }
         val request = chain.request()
         val url = request.url.toString()
         val bearer =
@@ -93,6 +96,9 @@ class AuthInterceptor @Inject constructor(
         val builder = request.newBuilder()
             .header("X-XCAGI-Client", "android")
             .header("X-XCAGI-SKU", ProductSkuConfig.sku)
+        if (sessionId.isNotBlank() && request.header("X-Session-ID").isNullOrBlank()) {
+            builder.header("X-Session-ID", sessionId)
+        }
         if (request.method.uppercase() in setOf("POST", "PUT", "PATCH", "DELETE")) {
             val csrf = cookieJar.csrfToken(request.url)
             if (csrf.isNotBlank()) {

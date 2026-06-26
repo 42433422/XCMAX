@@ -44,6 +44,16 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.update.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_file_paths" />
+        </provider>
+
         <meta-data
             android:name="JPUSH_APPKEY"
             android:value="${JPUSH_APPKEY}" />
@@ -66,30 +76,6 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-
-        <service
-            android:name=".core.push.JPushService"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="cn.jpush.android.intent.RECEIVE_MESSAGE" />
-            </intent-filter>
-        </service>
-
-        <receiver
-            android:name=".core.push.JPushReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="cn.jpush.android.intent.REGISTRATION" />
-                <action android:name="cn.jpush.android.intent.MESSAGE_RECEIVED" />
-                <action android:name="cn.jpush.android.intent.NOTIFICATION_RECEIVED" />
-                <action android:name="cn.jpush.android.intent.NOTIFICATION_OPENED" />
-                <action android:name="cn.jpush.android.intent.NOTIFICATION_CLICK_ACTION" />
-                <action android:name="cn.jpush.android.intent.CONNECTION" />
-                <category android:name="${applicationId}" />
-            </intent-filter>
-        </receiver>
 
         <activity
             android:name=".MainActivity"

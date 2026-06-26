@@ -11,6 +11,26 @@ plugins {
     id("org.openapi.generator") version "7.8.0"
 }
 
+// 版本注入: CI 发版用 -PandroidVersionCode / -PandroidVersionName(或 env)stamp 真实递增版本。
+// ssotVersionCodeAnchor 必须跟 VERSION.md 的 XCAGI 总版本主版本一致；本地/dev 无注入时
+// versionCode 使用当前时间戳，避免调试包退回 10 被系统视为旧包，versionName 仍展示 v10。
+val ssotVersionCodeAnchor = 10
+
+fun devVersionCode(ssotMajor: Int = ssotVersionCodeAnchor): Int =
+    (System.currentTimeMillis() / 1000L)
+        .coerceAtLeast(ssotMajor.toLong())
+        .coerceAtMost(Int.MAX_VALUE.toLong())
+        .toInt()
+
+val injectedVersionCode: Int =
+    (project.findProperty("androidVersionCode") as String?)?.toIntOrNull()
+        ?: System.getenv("XCAGI_ANDROID_VERSION_CODE")?.toIntOrNull()
+        ?: devVersionCode()
+val injectedVersionName: String =
+    (project.findProperty("androidVersionName") as String?)?.takeIf { it.isNotBlank() }
+        ?: System.getenv("XCAGI_ANDROID_VERSION_NAME")?.takeIf { it.isNotBlank() }
+        ?: "10.0.0"
+
 android {
     namespace = "com.xiuci.xcagi.mobile"
     compileSdk = 35
@@ -19,8 +39,8 @@ android {
         applicationId = "com.xiuci.xcagi.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "10.0.0"
+        versionCode = injectedVersionCode
+        versionName = injectedVersionName
         manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
@@ -37,14 +57,12 @@ android {
             applicationIdSuffix = ".personal"
             resValue("string", "app_name", "XCAGI 个人版")
             buildConfigField("String", "PRODUCT_SKU", "\"personal\"")
-            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.personal"
         }
         create("enterprise") {
             dimension = "sku"
             applicationIdSuffix = ".enterprise"
             resValue("string", "app_name", "XCAGI 企业版")
             buildConfigField("String", "PRODUCT_SKU", "\"enterprise\"")
-            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.enterprise"
         }
     }
 
@@ -220,7 +238,6 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-messaging")
 
-    implementation("cn.jiguang.sdk:jpush:5.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
@@ -233,13 +250,4 @@ dependencies {
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-}
-
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.isFile) f.inputStream().use { load(it) }
-}
-val jpushKey = localProps.getProperty("JPUSH_APPKEY")?.trim().orEmpty()
-if (jpushKey.isNotBlank()) {
-    android.defaultConfig.manifestPlaceholders["JPUSH_APPKEY"] = jpushKey
 }

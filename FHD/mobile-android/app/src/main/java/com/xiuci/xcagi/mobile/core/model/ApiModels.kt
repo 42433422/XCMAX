@@ -9,6 +9,19 @@ data class MobileEnvelope<T>(
     val data: T? = null,
 )
 
+/** 自建推送离线通知（/api/notifications/pending 返回项）。 */
+data class PendingNotification(
+    val id: Long = 0,
+    val title: String = "",
+    val body: String = "",
+    val route: String = "",
+    val channel: String = "",
+)
+
+data class PendingNotificationsData(
+    val notifications: List<PendingNotification> = emptyList(),
+)
+
 data class AiCircleComment(
     val id: Int = 0,
     val author_name: String = "",
@@ -83,6 +96,7 @@ data class AiGroupMemberDto(
     val mod_id: String = "",
     val name: String = "",
     val avatar: String = "",
+    val avatar_key: String = "",
     val summary: String = "",
 )
 
@@ -134,12 +148,27 @@ data class AiGroupMemberBody(
     val mod_id: String = "",
     val name: String = "",
     val avatar: String = "",
+    val avatar_key: String = "",
     val summary: String = "",
 )
 data class AiGroupMessageBody(
     val message: String = "",
     val sender_name: String = "我",
     val mentions: List<String> = emptyList(),
+    val dispatch: Boolean = false,
+    val branch_context: String = "",
+    val branch: String = "",
+    val context: Map<String, String> = emptyMap(),
+)
+
+data class GitBranchDto(
+    val name: String = "",
+    val current: Boolean = false,
+    val remote: Boolean = false,
+)
+
+data class GitBranchListData(
+    val branches: List<GitBranchDto> = emptyList(),
 )
 
 data class MeData(

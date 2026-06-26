@@ -84,7 +84,7 @@ class TestDistillationTrainerTrainEpoch:
         # Create a minimal model and data loader
         mock_model = MagicMock()
         mock_output = MagicMock()
-        mock_output.loss = torch.tensor(0.5)
+        mock_output.loss = torch.tensor(0.5, requires_grad=True)
         mock_output.logits = torch.tensor([[0.9, 0.1], [0.2, 0.8]])
         mock_model.return_value = mock_output
         mock_model.parameters.return_value = []
@@ -179,10 +179,8 @@ class TestDistillationTrainerLoadDataTSV:
             f.write("hello\tinvalid_label\n")
 
         texts, labels = trainer.load_data(data_path)
-        # Source appends text unconditionally for TSV rows with >=2 columns,
-        # but only appends label when valid. So texts and labels can be out
-        # of sync for invalid-label rows.
-        assert len(texts) == 1
+        # Unknown labels are skipped as complete samples so texts and labels stay aligned.
+        assert len(texts) == 0
         assert len(labels) == 0
 
     def test_tsv_with_valid_data(self, tmp_path):

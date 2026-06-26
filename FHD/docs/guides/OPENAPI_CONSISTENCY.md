@@ -13,6 +13,7 @@
 | `tests/test_openapi_consistency.py` | pytest 守门员，error 级发现直接让 CI 失败 |
 | `docs/reports/OPENAPI_CONSISTENCY.md` | 最近一次校验的 Markdown 报告（可提交） |
 | `scripts/output/openapi_consistency.json` | 最近一次校验的完整 JSON 明细 |
+| `docs/evidence/arch/openapi_warning_baseline.json` | strict 模式 warning 基线；新增 warning 失败，已登记 warning 允许逐步下降 |
 
 底层两个数据源：
 
@@ -36,8 +37,11 @@ python scripts/check_openapi_consistency.py \
 python scripts/check_openapi_consistency.py \
   --ignore-regex "^/api/internal/.*"
 
-# 严格模式：warn 也算失败（仅建议在项目"完全补齐文档"后开启）
+# 严格模式：error 失败；warning 必须已登记在基线中，新增 warning 失败
 python scripts/check_openapi_consistency.py --strict
+
+# 当前 warning 收敛后刷新基线（只应在确认 warning 减少或同等可解释后提交）
+python scripts/check_openapi_consistency.py --update-warning-baseline
 
 # 只要摘要，不打印每条 finding
 python scripts/check_openapi_consistency.py --quiet

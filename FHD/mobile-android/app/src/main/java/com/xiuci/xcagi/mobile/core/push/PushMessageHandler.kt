@@ -12,7 +12,7 @@ import com.xiuci.xcagi.mobile.MainActivity
 import com.xiuci.xcagi.mobile.R
 
 /**
- * 推送消息公共处理器：FCM 和 JPush 共用。
+ * 推送消息公共处理器：FCM 与自建推送（PushSocket / PushPollWorker）共用。
  *
  * 职责：
  * - 解析推送 data（title/body/route/channel/message_id/session_id/source）

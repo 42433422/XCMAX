@@ -411,7 +411,7 @@
               href="https://beian.miit.gov.cn/"
               target="_blank"
               rel="noopener noreferrer"
-            >蜀ICP备2026014056号-1</a>
+            >蜀ICP备2026014056号-3A</a>
             <span class="footer-beian-sep" aria-hidden="true">·</span>
             <span class="footer-beian-police">川公网安备13f68c61238ea5b1f4c4887c942a0d55号</span>
           </p>
