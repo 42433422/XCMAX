@@ -163,6 +163,8 @@ def test_super_employees_ssot_ids():
     assert assistant_ssot.super_employee_ids() == {
         "claude-super-employee",
         "codex-super-employee",
+        "cursor-super-employee",
+        "trae-super-employee",
     }
     sup = assistant_ssot.super_employees()
     assert sup["claude-super-employee"]["display_name"] == "超级员工-Claude"
