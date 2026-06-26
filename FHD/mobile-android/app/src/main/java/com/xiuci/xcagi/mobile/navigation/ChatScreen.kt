@@ -354,13 +354,13 @@ fun ChatScreen(
                         vm.snack("先输入要派发的任务")
                         showToolPanel = false
                     } else {
-                        sendToolCommand(if (task.startsWith("【任务派工】")) task else "【任务派工】$task")
+                        sendToolCommand("帮我安排并完成这个任务：$task")
                     }
                 },
             )
             add(
                 ChatToolCardAction(Icons.Default.Check, "验收回访", "要结论和证据") {
-                    sendToolCommand("【验收回访】回访最近一次任务")
+                    sendToolCommand("回访一下最近一次任务的进度和验收结论。")
                 },
             )
             add(
@@ -370,7 +370,7 @@ fun ChatScreen(
                         vm.snack("先输入要修复的问题")
                         showToolPanel = false
                     } else {
-                        sendToolCommand(if (task.startsWith("【问题修复】") || task.startsWith("修复")) task else "【问题修复】$task")
+                        sendToolCommand(if (task.startsWith("修复")) task else "修复：$task")
                     }
                 },
             )

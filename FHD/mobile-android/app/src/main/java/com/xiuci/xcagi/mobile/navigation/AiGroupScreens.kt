@@ -573,7 +573,7 @@ fun AiGroupChatScreen(
                     haptics.confirm()
                     vm.sendGroupMessage(
                         groupId = g.id,
-                        text = "【验收回访】回访最近一次派工",
+                        text = "小C，回访一下最近一次派工的进度和验收结论。",
                         forceDispatch = false,
                         context = mapOf("tool_action" to "acceptance_followup"),
                     )
@@ -590,7 +590,7 @@ fun AiGroupChatScreen(
                     haptics.confirm()
                     vm.sendGroupMessage(
                         groupId = g.id,
-                        text = if (task.startsWith("【问题修复】") || task.startsWith("修复")) task else "【问题修复】$task",
+                        text = task,
                         branchContext = selectedBranch.orEmpty(),
                         forceDispatch = true,
                         context = mapOf("tool_action" to "bugfix_task"),
