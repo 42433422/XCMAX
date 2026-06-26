@@ -32,6 +32,8 @@ from app.utils.path_utils import get_app_data_dir
 MAX_RESPONDERS = 6
 # 喂给单个 AI 的群历史条数。
 CONTEXT_TURNS = 10
+
+
 def _env_float(name: str, default: float) -> float:
     try:
         return float(os.environ.get(name) or default)
@@ -386,7 +388,9 @@ def _dept_key_to_employee_ids(depts: dict[str, Any]) -> dict[str, list[str]]:
 
 
 def _employee_manifest(employee_id: str) -> dict[str, Any]:
-    manifest = Path(__file__).resolve().parents[2] / "mods" / "_employees" / employee_id / "manifest.json"
+    manifest = (
+        Path(__file__).resolve().parents[2] / "mods" / "_employees" / employee_id / "manifest.json"
+    )
     try:
         raw = json.loads(manifest.read_text(encoding="utf-8"))
         return raw if isinstance(raw, dict) else {}
@@ -719,11 +723,11 @@ class AiGroupChatService:
         """Keep one visible Super Development room and preserve old IDs as aliases."""
         all_groups = self._all_groups()
         user_groups = [
-            g for g in all_groups if isinstance(g, dict) and int(g.get("user_id") or 0) == int(user_id)
+            g
+            for g in all_groups
+            if isinstance(g, dict) and int(g.get("user_id") or 0) == int(user_id)
         ]
-        super_groups = [
-            g for g in user_groups if self._canonical_group_name(g) == "超级开发部"
-        ]
+        super_groups = [g for g in user_groups if self._canonical_group_name(g) == "超级开发部"]
         if len(super_groups) <= 1:
             return
         messages = self._read_messages()
@@ -748,12 +752,7 @@ class AiGroupChatService:
         if not keeper_id:
             return
         merged_members = _with_required_group_members(
-            [
-                m
-                for g in super_groups
-                for m in g.get("members", [])
-                if isinstance(m, dict)
-            ]
+            [m for g in super_groups for m in g.get("members", []) if isinstance(m, dict)]
         )
         changed_groups = False
         changed_messages = False
@@ -808,7 +807,9 @@ class AiGroupChatService:
         members = [m for m in group.get("members", []) if isinstance(m, dict)]
         ids = {str(m.get("employee_id") or "").strip() for m in members}
         name = str(group.get("name") or "").strip()
-        has_super_roster = _SUPER_EMPLOYEE_IDS.issubset(ids) or _LEGACY_SUPER_EMPLOYEE_IDS.issubset(ids)
+        has_super_roster = _SUPER_EMPLOYEE_IDS.issubset(ids) or _LEGACY_SUPER_EMPLOYEE_IDS.issubset(
+            ids
+        )
         if has_super_roster and _XIAOC_ASSISTANT_ID in ids:
             roster_like = (
                 not name
@@ -1074,7 +1075,14 @@ class AiGroupChatService:
             if status in {"completed", "done", "failed", "blocked", "cancelled"}:
                 self.append_relay_work_report(task=task)
                 continue
-            if status not in {"queued", "accepted", "assigned", "running", "processing", "in_progress"}:
+            if status not in {
+                "queued",
+                "accepted",
+                "assigned",
+                "running",
+                "processing",
+                "in_progress",
+            }:
                 continue
             last = self._latest_progress_row(progress_rows, task_id)
             if not self._should_append_progress(last=last, status=status):
@@ -1169,7 +1177,14 @@ class AiGroupChatService:
                     )
                 )
                 continue
-            if status not in {"queued", "accepted", "assigned", "running", "processing", "in_progress"}:
+            if status not in {
+                "queued",
+                "accepted",
+                "assigned",
+                "running",
+                "processing",
+                "in_progress",
+            }:
                 continue
             last = self._latest_progress_row(progress_rows, task_id)
             if not self._should_append_progress(last=last, status=status):
@@ -1224,7 +1239,10 @@ class AiGroupChatService:
         messages: list[dict[str, Any]], task_id: str
     ) -> dict[str, Any] | None:
         for item in reversed(messages):
-            if str(item.get("task_id") or "") == str(task_id) and str(item.get("kind") or "") == "dispatcher":
+            if (
+                str(item.get("task_id") or "") == str(task_id)
+                and str(item.get("kind") or "") == "dispatcher"
+            ):
                 return item
         return None
 
@@ -1261,7 +1279,9 @@ class AiGroupChatService:
                 "context": {
                     "source": "mobile_ai_group",
                     "group_id": group_id,
-                    "work_order_id": str(report.get("work_order_id") or payload.get("work_order_id") or ""),
+                    "work_order_id": str(
+                        report.get("work_order_id") or payload.get("work_order_id") or ""
+                    ),
                     "employee_id": str(payload.get("employee_id") or report.get("sender_id") or ""),
                     "assignment_focus": str(payload.get("assignment_focus") or ""),
                     "original_task": str(payload.get("original_task") or payload.get("task") or ""),
@@ -1532,9 +1552,7 @@ class AiGroupChatService:
             result["work_orders"] = work_orders
         return result
 
-    def _append_acceptance_followup(
-        self, *, user_id: int, group_id: str
-    ) -> dict[str, Any] | None:
+    def _append_acceptance_followup(self, *, user_id: int, group_id: str) -> dict[str, Any] | None:
         self._sync_relay_progress_for_group(user_id=user_id, group_id=group_id)
         self._sync_super_employee_progress_for_group(user_id=user_id, group_id=group_id)
         rows = [
@@ -1673,11 +1691,7 @@ class AiGroupChatService:
             targeted = [m for m in members if str(m.get("employee_id")) in explicit]
             return targeted[:MAX_RESPONDERS]
         xiaoc = next(
-            (
-                m
-                for m in members
-                if str(m.get("employee_id") or "") == _XIAOC_ASSISTANT_ID
-            ),
+            (m for m in members if str(m.get("employee_id") or "") == _XIAOC_ASSISTANT_ID),
             None,
         )
         # 真实工作群默认不会全员接话：先由小C接待，点名/广播才拉对应员工响应。
@@ -1690,9 +1704,7 @@ class AiGroupChatService:
         mentions: list[str] | None,
     ) -> list[dict[str, Any]]:
         work_capable = [
-            m
-            for m in members
-            if not _is_required_group_member(str(m.get("employee_id") or ""))
+            m for m in members if not _is_required_group_member(str(m.get("employee_id") or ""))
         ]
         if not work_capable:
             return []
@@ -1723,10 +1735,7 @@ class AiGroupChatService:
     @staticmethod
     def _is_broadcast_mention(text: str) -> bool:
         lower = (text or "").lower()
-        return any(
-            marker in lower
-            for marker in ("@所有人", "@全体", "@全员", "@all", "@everyone")
-        )
+        return any(marker in lower for marker in ("@所有人", "@全体", "@全员", "@all", "@everyone"))
 
     @staticmethod
     def _should_run_super_discussion(members: list[dict[str, Any]]) -> bool:
@@ -1822,7 +1831,9 @@ class AiGroupChatService:
             discussion_turns=discussion_turns,
             mentions=mentions,
         )
-        selected_names = "、".join(str(m.get("name") or m.get("employee_id") or "") for m in selected)
+        selected_names = "、".join(
+            str(m.get("name") or m.get("employee_id") or "") for m in selected
+        )
         row = self._message_row(
             user_id=user_id,
             group_id=group_id,
@@ -1845,9 +1856,7 @@ class AiGroupChatService:
             self._append_messages([row])
         return discussion_rows, selected
 
-    def _xiaoc_dispatch_assessment(
-        self, *, task: str, candidates: list[dict[str, Any]]
-    ) -> str:
+    def _xiaoc_dispatch_assessment(self, *, task: str, candidates: list[dict[str, Any]]) -> str:
         difficulty = self._dispatch_difficulty(task)
         difficulty_label = {
             "simple": "简单",
@@ -1978,7 +1987,9 @@ class AiGroupChatService:
             if isinstance(m, dict) and str(m.get("employee_id") or "") in _SUPER_EMPLOYEE_IDS
         ]
         preferred = self._preferred_single_dispatch_target(group_members or [member], task)
-        preferred_name = str((preferred or {}).get("name") or (preferred or {}).get("employee_id") or me)
+        preferred_name = str(
+            (preferred or {}).get("name") or (preferred or {}).get("employee_id") or me
+        )
         focus = self._super_employee_focus(employee_id, task)
         if difficulty == "simple":
             split_advice = f"不建议拆分，派 {preferred_name} 一个负责人就够，避免重复消耗。"
@@ -2034,11 +2045,12 @@ class AiGroupChatService:
         discussion_turns: list[dict[str, str]],
         mentions: list[str] | None,
     ) -> tuple[list[dict[str, Any]], str]:
-        if self._is_broadcast_mention(task) or self._explicit_member_ids(candidates, task, mentions):
+        if self._is_broadcast_mention(task) or self._explicit_member_ids(
+            candidates, task, mentions
+        ):
             return candidates[:MAX_RESPONDERS], "用户已明确点名或广播，按指定成员执行。"
         candidate_lines = "\n".join(
-            f"- {m.get('employee_id')}: {m.get('name')}，{m.get('summary')}"
-            for m in candidates
+            f"- {m.get('employee_id')}: {m.get('name')}，{m.get('summary')}" for m in candidates
         )
         discussion = "\n".join(
             f"{turn.get('name')}：{turn.get('body')}" for turn in discussion_turns
@@ -2080,7 +2092,9 @@ class AiGroupChatService:
             pass
         selected = self._heuristic_dispatch_targets(candidates, task)
         names = "、".join(str(m.get("name") or m.get("employee_id") or "") for m in selected)
-        difficulty_label = {"simple": "简单任务", "medium": "中等任务", "large": "大任务"}.get(difficulty, "任务")
+        difficulty_label = {"simple": "简单任务", "medium": "中等任务", "large": "大任务"}.get(
+            difficulty, "任务"
+        )
         return selected, f"{difficulty_label}，按工作量和成员职责分工给：{names or '无'}。"
 
     @staticmethod
@@ -2120,11 +2134,57 @@ class AiGroupChatService:
             preferred = AiGroupChatService._preferred_single_dispatch_target(candidates, task)
             return [preferred] if preferred else []
         wanted: list[str] = []
-        if any(k in text for k in ("android", "移动端", "手机", "compose", "kotlin", "页面", "输入框", "样式", "ui", "ux", "体验", "头像", "语音")):
+        if any(
+            k in text
+            for k in (
+                "android",
+                "移动端",
+                "手机",
+                "compose",
+                "kotlin",
+                "页面",
+                "输入框",
+                "样式",
+                "ui",
+                "ux",
+                "体验",
+                "头像",
+                "语音",
+            )
+        ):
             wanted.append("cursor-super-employee")
-        if any(k in text for k in ("后端", "接口", "api", "pytest", "测试", "覆盖", "服务", "python", "修复", "实现")):
+        if any(
+            k in text
+            for k in (
+                "后端",
+                "接口",
+                "api",
+                "pytest",
+                "测试",
+                "覆盖",
+                "服务",
+                "python",
+                "修复",
+                "实现",
+            )
+        ):
             wanted.append("codex-super-employee")
-        if any(k in text for k in ("架构", "方案", "评审", "验收", "acceptance", "summary", "汇总", "规划", "路由", "分流", "链路")):
+        if any(
+            k in text
+            for k in (
+                "架构",
+                "方案",
+                "评审",
+                "验收",
+                "acceptance",
+                "summary",
+                "汇总",
+                "规划",
+                "路由",
+                "分流",
+                "链路",
+            )
+        ):
             wanted.append("claude-super-employee")
         if any(k in text for k in ("trae", "ide", "备用", "额度", "模型", "执行端")):
             wanted.append("trae-super-employee")
@@ -2137,7 +2197,17 @@ class AiGroupChatService:
     @staticmethod
     def _dispatch_difficulty(task: str) -> str:
         text = (task or "").lower()
-        simple_markers = ("简单", "小bug", "小 bug", "复制", "删除", "长按", "样式", "文案", "小问题")
+        simple_markers = (
+            "简单",
+            "小bug",
+            "小 bug",
+            "复制",
+            "删除",
+            "长按",
+            "样式",
+            "文案",
+            "小问题",
+        )
         large_markers = (
             "全链路",
             "整套",
@@ -2201,9 +2271,17 @@ class AiGroupChatService:
         )
         has_dev_work = any(k in text for k in dev_markers)
         if any(k in text for k in review_markers) and not has_dev_work:
-            priority = ["claude-super-employee", _DEFAULT_SINGLE_CLI_EMPLOYEE_ID, "cursor-super-employee"]
+            priority = [
+                "claude-super-employee",
+                _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
+                "cursor-super-employee",
+            ]
         elif any(k in text for k in ui_markers) and not has_dev_work:
-            priority = ["cursor-super-employee", _DEFAULT_SINGLE_CLI_EMPLOYEE_ID, "claude-super-employee"]
+            priority = [
+                "cursor-super-employee",
+                _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
+                "claude-super-employee",
+            ]
         else:
             priority = [
                 _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
@@ -2222,8 +2300,12 @@ class AiGroupChatService:
     @staticmethod
     def _format_routing_decision_message(target_names: str, rationale: str) -> str:
         if not target_names:
-            return f"【小C分工】这单暂时没有找到可执行负责人。\n原因：{rationale or '候选员工为空。'}"
-        is_single = "、" not in target_names and "," not in target_names and "，" not in target_names
+            return (
+                f"【小C分工】这单暂时没有找到可执行负责人。\n原因：{rationale or '候选员工为空。'}"
+            )
+        is_single = (
+            "、" not in target_names and "," not in target_names and "，" not in target_names
+        )
         intro = "这单先不拆，派一个负责人推进。" if is_single else "我先按职责拆给对应负责人。"
         return (
             f"【小C分工】{intro}\n"
@@ -2367,9 +2449,7 @@ class AiGroupChatService:
             payload={
                 "task": task,
                 "branch_context": branch_context,
-                "target_employee_ids": [
-                    str(a.get("employee_id") or "") for a in assignments
-                ],
+                "target_employee_ids": [str(a.get("employee_id") or "") for a in assignments],
                 "assignments": [
                     {
                         "employee_id": str(a.get("employee_id") or ""),
@@ -2546,7 +2626,9 @@ class AiGroupChatService:
                 success
                 and not self._has_custom_employee_executor
                 and result_status in {"completed", "done"}
-                and self._completed_report_lacks_required_evidence(assigned_task or task, summary, result)
+                and self._completed_report_lacks_required_evidence(
+                    assigned_task or task, summary, result
+                )
             )
             if success and self._summary_indicates_unfinished(summary):
                 success = False
@@ -2576,9 +2658,11 @@ class AiGroupChatService:
                     claude_summary,
                     claude_result,
                 )
-                claude_ok = bool(
-                    claude_result.get("success")
-                ) and not self._summary_indicates_unfinished(claude_summary) and not claude_missing_evidence
+                claude_ok = (
+                    bool(claude_result.get("success"))
+                    and not self._summary_indicates_unfinished(claude_summary)
+                    and not claude_missing_evidence
+                )
                 if claude_ok:
                     reassigned_from = employee_id
                     result, success, summary = claude_result, True, claude_summary
@@ -2662,7 +2746,11 @@ class AiGroupChatService:
             },
         )
         dispatch = result.get("dispatch") if isinstance(result.get("dispatch"), dict) else {}
-        assistant = result.get("assistant_message") if isinstance(result.get("assistant_message"), dict) else {}
+        assistant = (
+            result.get("assistant_message")
+            if isinstance(result.get("assistant_message"), dict)
+            else {}
+        )
         status = str(dispatch.get("status") or assistant.get("status") or "queued").strip()
         accepted = dispatch.get("accepted") is True or status in {
             "queued",
@@ -2751,7 +2839,9 @@ class AiGroupChatService:
             "task_id": relay_task_id,
             "dispatcher": "mobile_relay",
             "relay_id": relay_id,
-            "branch_context": str(input_data.get("branch_context") or input_data.get("branch") or ""),
+            "branch_context": str(
+                input_data.get("branch_context") or input_data.get("branch") or ""
+            ),
         }
 
     @staticmethod
@@ -2814,12 +2904,10 @@ class AiGroupChatService:
             focus = str(item.get("assignment_focus") or "").strip()
             if focus and focus != "主负责人":
                 assignment_lines.append(f"- {name}：{focus}")
-        assignment_block = (
-            "\n分工：\n" + "\n".join(assignment_lines)
-            if assignment_lines
-            else ""
+        assignment_block = "\n分工：\n" + "\n".join(assignment_lines) if assignment_lines else ""
+        branch_line = (
+            f"工作分支：{branch_context}\n" if branch_context else "工作分支：自动隔离分支\n"
         )
-        branch_line = f"工作分支：{branch_context}\n" if branch_context else "工作分支：自动隔离分支\n"
         return (
             f"【小C派单】{task}\n"
             f"负责人：{owners}\n"
@@ -2897,22 +2985,21 @@ class AiGroupChatService:
         ]
         if not rows:
             return None
-        existing = next((row for row in rows if str(row.get("kind") or "") == "work_acceptance"), None)
+        existing = next(
+            (row for row in rows if str(row.get("kind") or "") == "work_acceptance"), None
+        )
         if existing is not None:
             return self._public_message(existing)
         work_order = next((row for row in rows if str(row.get("kind") or "") == "work_order"), None)
         initial_reports = [
             row
             for row in rows
-            if str(row.get("kind") or "") == "work_report"
-            and self._report_relay_task_id(row)
+            if str(row.get("kind") or "") == "work_report" and self._report_relay_task_id(row)
         ]
         if not work_order or not initial_reports:
             return None
         expected_task_ids = [self._report_relay_task_id(row) for row in initial_reports]
-        final_reports = [
-            row for row in rows if str(row.get("kind") or "") == "relay_work_report"
-        ]
+        final_reports = [row for row in rows if str(row.get("kind") or "") == "relay_work_report"]
         final_by_task = {self._report_relay_task_id(row): row for row in final_reports}
         if any(task_id not in final_by_task for task_id in expected_task_ids):
             return None
@@ -3038,11 +3125,13 @@ class AiGroupChatService:
             summary,
             result,
         )
-        raw_unfinished = self._summary_indicates_unfinished(
-            self._execution_evidence_text(result)
+        raw_unfinished = self._summary_indicates_unfinished(self._execution_evidence_text(result))
+        unfinished = (
+            self._summary_indicates_unfinished(summary) or raw_unfinished or missing_evidence
         )
-        unfinished = self._summary_indicates_unfinished(summary) or raw_unfinished or missing_evidence
-        success = status in {"completed", "done"} and result.get("ok") is not False and not unfinished
+        success = (
+            status in {"completed", "done"} and result.get("ok") is not False and not unfinished
+        )
         effective_status = status
         if status in {"completed", "done"} and not success:
             effective_status = "failed" if self._summary_indicates_failed(summary) else "blocked"
@@ -3567,10 +3656,7 @@ class AiGroupChatService:
         text = str(body or "").strip()
         if len(text) <= limit:
             return text
-        return (
-            text[:limit].rstrip()
-            + "\n\n（聊天里已折叠长执行输出；完整内容保留在执行端记录。）"
-        )
+        return text[:limit].rstrip() + "\n\n（聊天里已折叠长执行输出；完整内容保留在执行端记录。）"
 
     @classmethod
     def _clean_public_chat_body(cls, body: str) -> str:
@@ -3590,7 +3676,9 @@ class AiGroupChatService:
         lines = [line.strip() for line in str(body or "").splitlines() if line.strip()]
         if not lines:
             return ""
-        title = next((line for line in lines if line.startswith("【小C验收】")), "【小C验收】这单已收口")
+        title = next(
+            (line for line in lines if line.startswith("【小C验收】")), "【小C验收】这单已收口"
+        )
         conclusion = next((line for line in lines if line.startswith("结论：")), "")
         task = next((line for line in lines if line.startswith("任务：")), "")
         risk = next((line for line in lines if line.startswith("风险：")), "")

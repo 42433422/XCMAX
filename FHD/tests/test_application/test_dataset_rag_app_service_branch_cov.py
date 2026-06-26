@@ -384,24 +384,33 @@ class TestResolveTenantForAccessBoundary:
 
     def test_none_context_with_requested(self):
         tenant, denied = _resolve_tenant_for_access(
-            None, "t1", required_permission=DATASET_READ_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            None,
+            "t1",
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == "t1"
 
     def test_none_context_no_requested_uses_default(self):
         tenant, denied = _resolve_tenant_for_access(
-            None, "", required_permission=DATASET_READ_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            None,
+            "",
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == "default"
 
     def test_none_context_no_requested_empty_default(self):
         tenant, denied = _resolve_tenant_for_access(
-            None, "", required_permission=DATASET_READ_PERMISSION,
-            default_without_context="", dataset_id="ds",
+            None,
+            "",
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == ""
@@ -409,8 +418,11 @@ class TestResolveTenantForAccessBoundary:
     def test_admin_with_requested(self):
         ctx = DatasetAccessContext(is_admin=True, tenant_id="t1")
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "t2", required_permission=DATASET_WRITE_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            ctx,
+            "t2",
+            required_permission=DATASET_WRITE_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == "t2"
@@ -418,8 +430,11 @@ class TestResolveTenantForAccessBoundary:
     def test_admin_no_requested_uses_default(self):
         ctx = DatasetAccessContext(is_admin=True)
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "", required_permission=DATASET_WRITE_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            ctx,
+            "",
+            required_permission=DATASET_WRITE_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == "default"
@@ -429,8 +444,11 @@ class TestResolveTenantForAccessBoundary:
             actor_id="u1", tenant_id="", permissions=frozenset([DATASET_READ_PERMISSION])
         )
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "", required_permission=DATASET_READ_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            ctx,
+            "",
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is not None
         assert tenant == ""
@@ -440,8 +458,11 @@ class TestResolveTenantForAccessBoundary:
             actor_id="u1", tenant_id="t1", permissions=frozenset([DATASET_READ_PERMISSION])
         )
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "t2", required_permission=DATASET_READ_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            ctx,
+            "t2",
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is not None
         assert tenant == ""
@@ -451,8 +472,11 @@ class TestResolveTenantForAccessBoundary:
             actor_id="u1", tenant_id="t1", permissions=frozenset([DATASET_READ_PERMISSION])
         )
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "t1", required_permission=DATASET_READ_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            ctx,
+            "t1",
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == "t1"
@@ -462,8 +486,11 @@ class TestResolveTenantForAccessBoundary:
             actor_id="u1", tenant_id="t1", permissions=frozenset([DATASET_READ_PERMISSION])
         )
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "", required_permission=DATASET_READ_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            ctx,
+            "",
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is None
         assert tenant == "t1"
@@ -471,8 +498,11 @@ class TestResolveTenantForAccessBoundary:
     def test_permission_denied_returns_empty_tenant(self):
         ctx = DatasetAccessContext(permissions=frozenset())
         tenant, denied = _resolve_tenant_for_access(
-            ctx, "t1", required_permission=DATASET_WRITE_PERMISSION,
-            default_without_context="default", dataset_id="ds",
+            ctx,
+            "t1",
+            required_permission=DATASET_WRITE_PERMISSION,
+            default_without_context="default",
+            dataset_id="ds",
         )
         assert denied is not None
         assert tenant == ""
@@ -1000,69 +1030,91 @@ class TestBuildVectorIndexBackendBoundary:
         monkeypatch.delenv("DATASET_RAG_VECTOR_BACKEND", raising=False)
         monkeypatch.delenv("XCAGI_DATASET_RAG_VECTOR_BACKEND", raising=False)
         result = _build_dataset_vector_index_backend(
-            backend_name="none", storage_path=tmp_path, vector_index_path=None,
+            backend_name="none",
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is None
 
     def test_disabled_name_returns_none(self, tmp_path):
         result = _build_dataset_vector_index_backend(
-            backend_name="disabled", storage_path=tmp_path, vector_index_path=None,
+            backend_name="disabled",
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is None
 
     def test_off_name_returns_none(self, tmp_path):
         result = _build_dataset_vector_index_backend(
-            backend_name="off", storage_path=tmp_path, vector_index_path=None,
+            backend_name="off",
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is None
 
     def test_memory_name_returns_none(self, tmp_path):
         result = _build_dataset_vector_index_backend(
-            backend_name="memory", storage_path=tmp_path, vector_index_path=None,
+            backend_name="memory",
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is None
 
     def test_json_name_returns_none(self, tmp_path):
         result = _build_dataset_vector_index_backend(
-            backend_name="json", storage_path=tmp_path, vector_index_path=None,
+            backend_name="json",
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is None
 
     def test_empty_name_returns_none(self, tmp_path):
         result = _build_dataset_vector_index_backend(
-            backend_name="", storage_path=tmp_path, vector_index_path=None,
+            backend_name="",
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is None
 
     def test_sqlite_name_returns_backend(self, tmp_path):
         result = _build_dataset_vector_index_backend(
-            backend_name="sqlite", storage_path=tmp_path, vector_index_path=None,
+            backend_name="sqlite",
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is not None
 
     def test_sqlite_vector_name_returns_backend(self, tmp_path):
         result = _build_dataset_vector_index_backend(
-            backend_name="sqlite_vector", storage_path=tmp_path, vector_index_path=None,
+            backend_name="sqlite_vector",
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is not None
 
     def test_sqlite_with_explicit_path(self, tmp_path):
         path = tmp_path / "custom.db"
         result = _build_dataset_vector_index_backend(
-            backend_name="sqlite", storage_path=tmp_path, vector_index_path=str(path),
+            backend_name="sqlite",
+            storage_path=tmp_path,
+            vector_index_path=str(path),
         )
         assert result is not None
 
     def test_unsupported_name_raises(self, tmp_path):
         with pytest.raises(ValueError, match="unsupported dataset vector backend"):
             _build_dataset_vector_index_backend(
-                backend_name="unknown_backend", storage_path=tmp_path, vector_index_path=None,
+                backend_name="unknown_backend",
+                storage_path=tmp_path,
+                vector_index_path=None,
             )
 
     def test_env_fallback(self, tmp_path, monkeypatch):
         monkeypatch.setenv("DATASET_RAG_VECTOR_BACKEND", "none")
         result = _build_dataset_vector_index_backend(
-            backend_name=None, storage_path=tmp_path, vector_index_path=None,
+            backend_name=None,
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is None
 
@@ -1070,7 +1122,9 @@ class TestBuildVectorIndexBackendBoundary:
         monkeypatch.delenv("DATASET_RAG_VECTOR_BACKEND", raising=False)
         monkeypatch.setenv("XCAGI_DATASET_RAG_VECTOR_BACKEND", "none")
         result = _build_dataset_vector_index_backend(
-            backend_name=None, storage_path=tmp_path, vector_index_path=None,
+            backend_name=None,
+            storage_path=tmp_path,
+            vector_index_path=None,
         )
         assert result is None
 
@@ -1177,7 +1231,9 @@ class TestIngestDocumentExceptions:
         file_path.write_text("content")
         result = svc.ingest_document(dataset_id="ds", file_path=str(file_path))
         assert result["success"] is False
-        assert "unsupported" in result["message"].lower() or "dataset_ingest_failed" in result.get("error_code", "")
+        assert "unsupported" in result["message"].lower() or "dataset_ingest_failed" in result.get(
+            "error_code", ""
+        )
 
     def test_nonexistent_file(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -1229,7 +1285,9 @@ class TestIngestDocumentExceptions:
     def test_version_string_v_prefix(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.ingest_document(
-            dataset_id="ds", text="content", version="v5",
+            dataset_id="ds",
+            text="content",
+            version="v5",
         )
         assert result["success"] is True
         assert result["document"]["version"] == 5
@@ -1237,7 +1295,9 @@ class TestIngestDocumentExceptions:
     def test_version_string_digit(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.ingest_document(
-            dataset_id="ds", text="content", version="3",
+            dataset_id="ds",
+            text="content",
+            version="3",
         )
         assert result["success"] is True
         assert result["document"]["version"] == 3
@@ -1245,14 +1305,18 @@ class TestIngestDocumentExceptions:
     def test_version_invalid_string(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.ingest_document(
-            dataset_id="ds", text="content", version="invalid",
+            dataset_id="ds",
+            text="content",
+            version="invalid",
         )
         assert result["success"] is False
 
     def test_version_label_override(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.ingest_document(
-            dataset_id="ds", text="content", version_label="custom-label",
+            dataset_id="ds",
+            text="content",
+            version_label="custom-label",
         )
         assert result["success"] is True
         assert result["document"]["version_label"] == "custom-label"
@@ -1260,7 +1324,9 @@ class TestIngestDocumentExceptions:
     def test_explicit_document_id(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.ingest_document(
-            dataset_id="ds", text="content", document_id="my-doc-id",
+            dataset_id="ds",
+            text="content",
+            document_id="my-doc-id",
         )
         assert result["success"] is True
         assert result["document"]["document_id"] == "my-doc-id"
@@ -1269,7 +1335,9 @@ class TestIngestDocumentExceptions:
         svc = _make_svc(tmp_path)
         ctx = DatasetAccessContext(permissions=frozenset())
         result = svc.ingest_document(
-            dataset_id="ds", text="content", access_context=ctx,
+            dataset_id="ds",
+            text="content",
+            access_context=ctx,
         )
         assert result["success"] is False
         assert result["error_code"] == "dataset_permission_denied"
@@ -1277,7 +1345,9 @@ class TestIngestDocumentExceptions:
     def test_tenant_from_metadata(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.ingest_document(
-            dataset_id="ds", text="content", metadata={"tenant_id": "meta-tenant"},
+            dataset_id="ds",
+            text="content",
+            metadata={"tenant_id": "meta-tenant"},
         )
         assert result["success"] is True
         assert result["document"]["tenant_id"] == "meta-tenant"
@@ -1285,7 +1355,9 @@ class TestIngestDocumentExceptions:
     def test_tenant_from_user_id(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.ingest_document(
-            dataset_id="ds", text="content", metadata={"user_id": "user-123"},
+            dataset_id="ds",
+            text="content",
+            metadata={"user_id": "user-123"},
         )
         assert result["success"] is True
 
@@ -1346,7 +1418,10 @@ class TestDiffVersionsBoundary:
     def test_dataset_not_found(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.diff_versions(
-            dataset_id="nonexistent", source="src", from_version=1, to_version=2,
+            dataset_id="nonexistent",
+            source="src",
+            from_version=1,
+            to_version=2,
         )
         assert result["success"] is False
         assert "not found" in result["message"]
@@ -1355,7 +1430,10 @@ class TestDiffVersionsBoundary:
         svc = _make_svc(tmp_path)
         _ingest(svc)
         result = svc.diff_versions(
-            dataset_id="ds1", source="nonexistent", from_version=1, to_version=2,
+            dataset_id="ds1",
+            source="nonexistent",
+            from_version=1,
+            to_version=2,
         )
         assert result["success"] is False
         assert "not found" in result["message"]
@@ -1365,7 +1443,10 @@ class TestDiffVersionsBoundary:
         _ingest(svc)
         ctx = DatasetAccessContext(permissions=frozenset())
         result = svc.diff_versions(
-            dataset_id="ds1", source="src", from_version=1, access_context=ctx,
+            dataset_id="ds1",
+            source="src",
+            from_version=1,
+            access_context=ctx,
         )
         assert result["success"] is False
 
@@ -1373,7 +1454,10 @@ class TestDiffVersionsBoundary:
         svc = _make_svc(tmp_path)
         _ingest(svc)
         result = svc.diff_versions(
-            dataset_id="ds1", source="inline", from_version=1, to_version=1,
+            dataset_id="ds1",
+            source="inline",
+            from_version=1,
+            to_version=1,
         )
         assert result["success"] is True
         assert result["changed"] is False
@@ -1382,7 +1466,10 @@ class TestDiffVersionsBoundary:
         svc = _make_svc(tmp_path)
         _ingest(svc)
         result = svc.diff_versions(
-            dataset_id="ds1", source="inline", from_version=1, to_version="latest",
+            dataset_id="ds1",
+            source="inline",
+            from_version=1,
+            to_version="latest",
         )
         assert result["success"] is True
 
@@ -1396,7 +1483,9 @@ class TestRollbackDocumentVersionBoundary:
     def test_dataset_not_found(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.rollback_document_version(
-            dataset_id="nonexistent", source="src", target_version=1,
+            dataset_id="nonexistent",
+            source="src",
+            target_version=1,
         )
         assert result["success"] is False
         assert "not found" in result["message"]
@@ -1405,7 +1494,9 @@ class TestRollbackDocumentVersionBoundary:
         svc = _make_svc(tmp_path)
         _ingest(svc)
         result = svc.rollback_document_version(
-            dataset_id="ds1", source="nonexistent", target_version=1,
+            dataset_id="ds1",
+            source="nonexistent",
+            target_version=1,
         )
         assert result["success"] is False
         assert "not found" in result["message"]
@@ -1415,7 +1506,10 @@ class TestRollbackDocumentVersionBoundary:
         _ingest(svc)
         ctx = DatasetAccessContext(permissions=frozenset())
         result = svc.rollback_document_version(
-            dataset_id="ds1", source="inline", target_version=1, access_context=ctx,
+            dataset_id="ds1",
+            source="inline",
+            target_version=1,
+            access_context=ctx,
         )
         assert result["success"] is False
 
@@ -1423,7 +1517,9 @@ class TestRollbackDocumentVersionBoundary:
         svc = _make_svc(tmp_path)
         _ingest(svc)
         result = svc.rollback_document_version(
-            dataset_id="ds1", source="inline", target_version=1,
+            dataset_id="ds1",
+            source="inline",
+            target_version=1,
         )
         assert result["success"] is True
         assert "rolled_back_from" in result
@@ -1770,9 +1866,11 @@ class TestLoadPersistedStateBoundary:
 
     def test_documents_not_dict(self, tmp_path):
         storage = tmp_path / "store.json"
-        storage.write_text(json.dumps({
-            "datasets": {"ds1": {"documents": "not dict", "chunks": [], "rebuild_jobs": {}}}
-        }))
+        storage.write_text(
+            json.dumps(
+                {"datasets": {"ds1": {"documents": "not dict", "chunks": [], "rebuild_jobs": {}}}}
+            )
+        )
         svc = DatasetRagApplicationService(
             embedder=_make_embedder(),
             allowed_roots=[tmp_path],
@@ -1784,9 +1882,11 @@ class TestLoadPersistedStateBoundary:
 
     def test_chunks_not_list(self, tmp_path):
         storage = tmp_path / "store.json"
-        storage.write_text(json.dumps({
-            "datasets": {"ds1": {"documents": {}, "chunks": "not list", "rebuild_jobs": {}}}
-        }))
+        storage.write_text(
+            json.dumps(
+                {"datasets": {"ds1": {"documents": {}, "chunks": "not list", "rebuild_jobs": {}}}}
+            )
+        )
         svc = DatasetRagApplicationService(
             embedder=_make_embedder(),
             allowed_roots=[tmp_path],
@@ -1798,9 +1898,11 @@ class TestLoadPersistedStateBoundary:
 
     def test_rebuild_jobs_not_dict(self, tmp_path):
         storage = tmp_path / "store.json"
-        storage.write_text(json.dumps({
-            "datasets": {"ds1": {"documents": {}, "chunks": [], "rebuild_jobs": "not dict"}}
-        }))
+        storage.write_text(
+            json.dumps(
+                {"datasets": {"ds1": {"documents": {}, "chunks": [], "rebuild_jobs": "not dict"}}}
+            )
+        )
         svc = DatasetRagApplicationService(
             embedder=_make_embedder(),
             allowed_roots=[tmp_path],
@@ -1812,9 +1914,20 @@ class TestLoadPersistedStateBoundary:
 
     def test_index_not_dict(self, tmp_path):
         storage = tmp_path / "store.json"
-        storage.write_text(json.dumps({
-            "datasets": {"ds1": {"documents": {}, "chunks": [], "rebuild_jobs": {}, "index": "not dict"}}
-        }))
+        storage.write_text(
+            json.dumps(
+                {
+                    "datasets": {
+                        "ds1": {
+                            "documents": {},
+                            "chunks": [],
+                            "rebuild_jobs": {},
+                            "index": "not dict",
+                        }
+                    }
+                }
+            )
+        )
         svc = DatasetRagApplicationService(
             embedder=_make_embedder(),
             allowed_roots=[tmp_path],
@@ -1850,6 +1963,7 @@ class TestResolveDocumentVersionBoundary:
     def test_v_prefix_version(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._resolve_document_version(state, source="src", tenant_id="t1", requested="v5")
         assert result == 5
@@ -1857,6 +1971,7 @@ class TestResolveDocumentVersionBoundary:
     def test_digit_version(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._resolve_document_version(state, source="src", tenant_id="t1", requested="3")
         assert result == 3
@@ -1864,6 +1979,7 @@ class TestResolveDocumentVersionBoundary:
     def test_integer_version(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._resolve_document_version(state, source="src", tenant_id="t1", requested=4)
         assert result == 4
@@ -1871,11 +1987,17 @@ class TestResolveDocumentVersionBoundary:
     def test_none_version_increments(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         # 添加一个 version=2 的文档
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=2,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=2,
         )
         result = svc._resolve_document_version(state, source="src", tenant_id="t1", requested=None)
         assert result == 3
@@ -1883,6 +2005,7 @@ class TestResolveDocumentVersionBoundary:
     def test_none_version_no_existing_returns_1(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._resolve_document_version(state, source="src", tenant_id="t1", requested=None)
         assert result == 1
@@ -1890,6 +2013,7 @@ class TestResolveDocumentVersionBoundary:
     def test_empty_string_version(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._resolve_document_version(state, source="src", tenant_id="t1", requested="")
         assert result == 1
@@ -1897,6 +2021,7 @@ class TestResolveDocumentVersionBoundary:
     def test_invalid_version_raises(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         with pytest.raises(ValueError, match="version must be"):
             svc._resolve_document_version(state, source="src", tenant_id="t1", requested="invalid")
@@ -1904,6 +2029,7 @@ class TestResolveDocumentVersionBoundary:
     def test_v_prefix_non_digit_raises(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         with pytest.raises(ValueError):
             svc._resolve_document_version(state, source="src", tenant_id="t1", requested="vabc")
@@ -1911,6 +2037,7 @@ class TestResolveDocumentVersionBoundary:
     def test_version_clamped_to_minimum(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._resolve_document_version(state, source="src", tenant_id="t1", requested="v0")
         assert result == 1
@@ -1919,6 +2046,7 @@ class TestResolveDocumentVersionBoundary:
         """Negative string '-5' is not a digit, so raises ValueError."""
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         with pytest.raises(ValueError):
             svc._resolve_document_version(state, source="src", tenant_id="t1", requested="-5")
@@ -1927,6 +2055,7 @@ class TestResolveDocumentVersionBoundary:
         """'v-5' has non-digit suffix, so raises ValueError."""
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         with pytest.raises(ValueError):
             svc._resolve_document_version(state, source="src", tenant_id="t1", requested="v-5")
@@ -1941,26 +2070,44 @@ class TestResolveDocumentForVersionBoundary:
     def test_no_candidates_returns_none(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._resolve_document_for_version(
-            state, source="src", tenant_id="t1", version="1",
+            state,
+            source="src",
+            tenant_id="t1",
+            version="1",
         )
         assert result is None
 
     def test_latest_version(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=1,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=1,
         )
         state.documents["doc2"] = DatasetDocument(
-            document_id="doc2", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=2,
+            document_id="doc2",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=2,
         )
         result = svc._resolve_document_for_version(
-            state, source="src", tenant_id="t1", version="latest",
+            state,
+            source="src",
+            tenant_id="t1",
+            version="latest",
         )
         assert result is not None
         assert result.version == 2
@@ -1968,30 +2115,53 @@ class TestResolveDocumentForVersionBoundary:
     def test_empty_version_returns_latest(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=1,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=1,
         )
         result = svc._resolve_document_for_version(
-            state, source="src", tenant_id="t1", version="",
+            state,
+            source="src",
+            tenant_id="t1",
+            version="",
         )
         assert result is not None
 
     def test_specific_version_match(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=1,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=1,
         )
         state.documents["doc2"] = DatasetDocument(
-            document_id="doc2", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=2,
+            document_id="doc2",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=2,
         )
         result = svc._resolve_document_for_version(
-            state, source="src", tenant_id="t1", version="1",
+            state,
+            source="src",
+            tenant_id="t1",
+            version="1",
         )
         assert result is not None
         assert result.version == 1
@@ -1999,39 +2169,67 @@ class TestResolveDocumentForVersionBoundary:
     def test_v_prefix_version_match(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=2,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=2,
         )
         result = svc._resolve_document_for_version(
-            state, source="src", tenant_id="t1", version="v2",
+            state,
+            source="src",
+            tenant_id="t1",
+            version="v2",
         )
         assert result is not None
 
     def test_version_label_match(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=1, version_label="custom-label",
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=1,
+            version_label="custom-label",
         )
         result = svc._resolve_document_for_version(
-            state, source="src", tenant_id="t1", version="custom-label",
+            state,
+            source="src",
+            tenant_id="t1",
+            version="custom-label",
         )
         assert result is not None
 
     def test_version_not_found_returns_none(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=1,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=1,
         )
         result = svc._resolve_document_for_version(
-            state, source="src", tenant_id="t1", version="999",
+            state,
+            source="src",
+            tenant_id="t1",
+            version="999",
         )
         assert result is None
 
@@ -2071,7 +2269,9 @@ class TestRunRebuildJobBoundary:
         _ingest(svc, text="content one")
         _ingest(svc, text="content two")
         result = svc.start_rebuild_index(
-            dataset_id="ds1", background=False, metadata_filter={"source": "inline"},
+            dataset_id="ds1",
+            background=False,
+            metadata_filter={"source": "inline"},
         )
         assert result["success"] is True
 
@@ -2114,8 +2314,12 @@ class TestQueryVectorIndexCandidatesBoundary:
     def test_none_backend_returns_none(self, tmp_path):
         svc = _make_svc(tmp_path, backend_name="none")
         result = svc._query_vector_index_candidates(
-            dataset_id="ds", query="text", top_k=5,
-            tenant_id="", version="", metadata_filter={},
+            dataset_id="ds",
+            query="text",
+            top_k=5,
+            tenant_id="",
+            version="",
+            metadata_filter={},
         )
         assert result is None
 
@@ -2128,8 +2332,12 @@ class TestQueryVectorIndexCandidatesBoundary:
             vector_index_backend_name="none",
         )
         result = svc._query_vector_index_candidates(
-            dataset_id="ds", query="text", top_k=5,
-            tenant_id="", version="", metadata_filter={},
+            dataset_id="ds",
+            query="text",
+            top_k=5,
+            tenant_id="",
+            version="",
+            metadata_filter={},
         )
         assert result is None
 
@@ -2143,6 +2351,7 @@ class TestSyncVectorIndexLockedBoundary:
     def test_none_backend_sets_disabled(self, tmp_path):
         svc = _make_svc(tmp_path, backend_name="none")
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         svc._sync_vector_index_locked(state)
         assert state.index["vector_backend_sync_status"] == "disabled"
@@ -2158,6 +2367,7 @@ class TestSyncVectorIndexLockedBoundary:
             vector_index_backend=backend,
         )
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         svc._sync_vector_index_locked(state)
         assert state.index["vector_backend_sync_status"] == "failed"
@@ -2237,6 +2447,7 @@ class TestRecoverRebuildJobsLockedBoundary:
     def test_running_job_requeued(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         job = DatasetRebuildJob(job_id="job1", dataset_id="ds1", status="running")
         state.rebuild_jobs["job1"] = job
@@ -2247,6 +2458,7 @@ class TestRecoverRebuildJobsLockedBoundary:
     def test_queued_job_not_affected(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         job = DatasetRebuildJob(job_id="job1", dataset_id="ds1", status="queued")
         state.rebuild_jobs["job1"] = job
@@ -2257,6 +2469,7 @@ class TestRecoverRebuildJobsLockedBoundary:
     def test_completed_job_not_affected(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         job = DatasetRebuildJob(job_id="job1", dataset_id="ds1", status="completed")
         state.rebuild_jobs["job1"] = job
@@ -2273,6 +2486,7 @@ class TestRebuildJobQueuePositionBoundary:
     def test_non_queued_returns_zero(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         job = DatasetRebuildJob(job_id="job1", dataset_id="ds1", status="completed")
         state.rebuild_jobs["job1"] = job
@@ -2282,6 +2496,7 @@ class TestRebuildJobQueuePositionBoundary:
     def test_queued_returns_position(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         job1 = DatasetRebuildJob(job_id="job1", dataset_id="ds1", status="queued")
         job2 = DatasetRebuildJob(job_id="job2", dataset_id="ds1", status="queued")
@@ -2302,6 +2517,7 @@ class TestRebuildQueueSummaryBoundary:
     def test_empty_queue(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._rebuild_queue_summary_locked(state)
         assert result["queued"] == 0
@@ -2315,15 +2531,22 @@ class TestRebuildQueueSummaryBoundary:
     def test_with_jobs(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.rebuild_jobs["job1"] = DatasetRebuildJob(
-            job_id="job1", dataset_id="ds1", status="queued",
+            job_id="job1",
+            dataset_id="ds1",
+            status="queued",
         )
         state.rebuild_jobs["job2"] = DatasetRebuildJob(
-            job_id="job2", dataset_id="ds1", status="running",
+            job_id="job2",
+            dataset_id="ds1",
+            status="running",
         )
         state.rebuild_jobs["job3"] = DatasetRebuildJob(
-            job_id="job3", dataset_id="ds1", status="completed",
+            job_id="job3",
+            dataset_id="ds1",
+            status="completed",
         )
         result = svc._rebuild_queue_summary_locked(state)
         assert result["queued"] == 1
@@ -2335,12 +2558,19 @@ class TestRebuildQueueSummaryBoundary:
     def test_tenant_filter(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.rebuild_jobs["job1"] = DatasetRebuildJob(
-            job_id="job1", dataset_id="ds1", status="queued", tenant_id="t1",
+            job_id="job1",
+            dataset_id="ds1",
+            status="queued",
+            tenant_id="t1",
         )
         state.rebuild_jobs["job2"] = DatasetRebuildJob(
-            job_id="job2", dataset_id="ds1", status="queued", tenant_id="t2",
+            job_id="job2",
+            dataset_id="ds1",
+            status="queued",
+            tenant_id="t2",
         )
         result = svc._rebuild_queue_summary_locked(state, tenant_id_filter="t1")
         assert result["queued"] == 1
@@ -2363,10 +2593,16 @@ class TestStatusForStateBoundary:
     def test_with_state(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=1,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=1,
         )
         result = svc._status_for_state("ds1", state)
         assert result["success"] is True
@@ -2375,14 +2611,25 @@ class TestStatusForStateBoundary:
     def test_tenant_filter(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.documents["doc1"] = DatasetDocument(
-            document_id="doc1", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t1", version=1,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t1",
+            version=1,
         )
         state.documents["doc2"] = DatasetDocument(
-            document_id="doc2", source="src", parser="p", text_length=10,
-            chunk_count=1, tenant_id="t2", version=1,
+            document_id="doc2",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
+            tenant_id="t2",
+            version=1,
         )
         result = svc._status_for_state("ds1", state, tenant_id_filter="t1")
         assert result["document_count"] == 1
@@ -2397,6 +2644,7 @@ class TestDocumentTextLockedBoundary:
     def test_no_chunks_returns_empty(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         result = svc._document_text_locked(state, "doc1")
         assert result == ""
@@ -2404,6 +2652,7 @@ class TestDocumentTextLockedBoundary:
     def test_with_chunks(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.chunks = [
             _make_chunk(text="first", metadata={"document_id": "doc1"}),
@@ -2418,6 +2667,7 @@ class TestDocumentTextLockedBoundary:
     def test_chunks_sorted_by_char_start(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.chunks = [
             _make_chunk(text="second", metadata={"document_id": "doc1"}),
@@ -2439,6 +2689,7 @@ class TestRenumberChunksBoundary:
     def test_empty_chunks(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         svc._renumber_chunks(state)
         assert state.chunks == []
@@ -2446,6 +2697,7 @@ class TestRenumberChunksBoundary:
     def test_renumber_sequential(self, tmp_path):
         svc = _make_svc(tmp_path)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         state.chunks = [
             _make_chunk(text="a", chunk_index=99),
@@ -2570,12 +2822,16 @@ class TestSplitTextBoundary:
 
     def test_semantic_strategy(self, tmp_path):
         svc = _make_svc(tmp_path)
-        chunks = svc._split_text("hello world. foo bar.", strategy="semantic", chunk_size=100, chunk_overlap=0)
+        chunks = svc._split_text(
+            "hello world. foo bar.", strategy="semantic", chunk_size=100, chunk_overlap=0
+        )
         assert isinstance(chunks, list)
 
     def test_fixed_strategy(self, tmp_path):
         svc = _make_svc(tmp_path)
-        chunks = svc._split_text("hello world. foo bar.", strategy="fixed", chunk_size=100, chunk_overlap=0)
+        chunks = svc._split_text(
+            "hello world. foo bar.", strategy="fixed", chunk_size=100, chunk_overlap=0
+        )
         assert isinstance(chunks, list)
 
     def test_chunk_size_clamped_to_min(self, tmp_path):
@@ -2592,7 +2848,9 @@ class TestSplitTextBoundary:
 
     def test_chunk_overlap_clamped_to_max(self, tmp_path):
         svc = _make_svc(tmp_path)
-        chunks = svc._split_text("hello world", strategy="fixed", chunk_size=100, chunk_overlap=10000)
+        chunks = svc._split_text(
+            "hello world", strategy="fixed", chunk_size=100, chunk_overlap=10000
+        )
         assert isinstance(chunks, list)
 
 
@@ -2713,10 +2971,13 @@ class TestClaimNextRebuildJobsBoundary:
     def test_capacity_zero(self, tmp_path):
         svc = _make_svc(tmp_path, workers=False)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         # 添加一个 running job 占满容量
         state.rebuild_jobs["job0"] = DatasetRebuildJob(
-            job_id="job0", dataset_id="ds1", status="running",
+            job_id="job0",
+            dataset_id="ds1",
+            status="running",
         )
         svc._datasets["ds1"] = state
         # max_concurrent=1, 已有1个 running → capacity=0
@@ -2726,10 +2987,13 @@ class TestClaimNextRebuildJobsBoundary:
     def test_with_limit(self, tmp_path):
         svc = _make_svc(tmp_path, workers=False)
         from app.application.dataset_rag_app_service import _DatasetState
+
         state = _DatasetState("ds1")
         for i in range(5):
             state.rebuild_jobs[f"job{i}"] = DatasetRebuildJob(
-                job_id=f"job{i}", dataset_id="ds1", status="queued",
+                job_id=f"job{i}",
+                dataset_id="ds1",
+                status="queued",
             )
         svc._datasets["ds1"] = state
         result = svc._claim_next_rebuild_jobs_locked(limit=2)
@@ -2744,9 +3008,15 @@ class TestDatasetDocumentToDictBoundary:
 
     def test_full_dict(self):
         doc = DatasetDocument(
-            document_id="doc1", source="src", parser="text_file",
-            text_length=100, chunk_count=3, tenant_id="t1",
-            version=2, version_label="v2", metadata={"key": "value"},
+            document_id="doc1",
+            source="src",
+            parser="text_file",
+            text_length=100,
+            chunk_count=3,
+            tenant_id="t1",
+            version=2,
+            version_label="v2",
+            metadata={"key": "value"},
         )
         result = doc.to_dict()
         assert result["document_id"] == "doc1"
@@ -2761,8 +3031,11 @@ class TestDatasetDocumentToDictBoundary:
 
     def test_default_values(self):
         doc = DatasetDocument(
-            document_id="doc1", source="src", parser="p",
-            text_length=10, chunk_count=1,
+            document_id="doc1",
+            source="src",
+            parser="p",
+            text_length=10,
+            chunk_count=1,
         )
         result = doc.to_dict()
         assert result["tenant_id"] == "default"
@@ -2779,10 +3052,17 @@ class TestDatasetRebuildJobToDictBoundary:
 
     def test_full_dict(self):
         job = DatasetRebuildJob(
-            job_id="job1", dataset_id="ds1", status="completed",
-            tenant_id="t1", metadata_filter={"key": "value"},
-            document_count=5, chunk_count=20, error="",
-            attempt_count=2, max_attempts=3, worker_id="w1",
+            job_id="job1",
+            dataset_id="ds1",
+            status="completed",
+            tenant_id="t1",
+            metadata_filter={"key": "value"},
+            document_count=5,
+            chunk_count=20,
+            error="",
+            attempt_count=2,
+            max_attempts=3,
+            worker_id="w1",
         )
         result = job.to_dict()
         assert result["job_id"] == "job1"
@@ -2818,8 +3098,10 @@ class TestDatasetAccessContextToDictBoundary:
 
     def test_full_dict(self):
         ctx = DatasetAccessContext(
-            actor_id="u1", tenant_id="t1",
-            permissions=frozenset({"a", "b"}), is_admin=True,
+            actor_id="u1",
+            tenant_id="t1",
+            permissions=frozenset({"a", "b"}),
+            is_admin=True,
         )
         result = ctx.to_dict()
         assert result["actor_id"] == "u1"
@@ -2860,12 +3142,14 @@ class TestDefaultStoragePathBoundary:
 
     def test_env_override(self, monkeypatch, tmp_path):
         from app.application.dataset_rag_app_service import _default_storage_path
+
         monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "custom.json"))
         result = _default_storage_path()
         assert "custom.json" in str(result)
 
     def test_xcagi_env_override(self, monkeypatch, tmp_path):
         from app.application.dataset_rag_app_service import _default_storage_path
+
         monkeypatch.delenv("DATASET_RAG_STORE_PATH", raising=False)
         monkeypatch.setenv("XCAGI_DATASET_RAG_STORE_PATH", str(tmp_path / "xcagi.json"))
         result = _default_storage_path()
@@ -2873,6 +3157,7 @@ class TestDefaultStoragePathBoundary:
 
     def test_default_path(self, monkeypatch):
         from app.application.dataset_rag_app_service import _default_storage_path
+
         monkeypatch.delenv("DATASET_RAG_STORE_PATH", raising=False)
         monkeypatch.delenv("XCAGI_DATASET_RAG_STORE_PATH", raising=False)
         result = _default_storage_path()

@@ -101,7 +101,8 @@ def make_service(
         storage_root=tmp_path,
         completion_fn=completion_fn or make_completion(seen),
         employee_executor_fn=executor,
-        department_loader=department_loader or (fake_enterprise_departments if mode == "enterprise" else fake_departments),
+        department_loader=department_loader
+        or (fake_enterprise_departments if mode == "enterprise" else fake_departments),
         employee_loader=(employees if callable(employees) else (lambda: employees or [])),
         mode=mode,
     )
@@ -123,7 +124,9 @@ class TestEnvFloat:
         monkeypatch.setenv("TEST_ENV_FLOAT_VAR", "9.5")
         assert _env_float("TEST_ENV_FLOAT_VAR", 3.14) == 9.5
 
-    def test_env_float_returns_default_when_env_is_empty_string(self, monkeypatch: pytest.MonkeyPatch):
+    def test_env_float_returns_default_when_env_is_empty_string(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("TEST_ENV_FLOAT_VAR", "")
         assert _env_float("TEST_ENV_FLOAT_VAR", 2.5) == 2.5
 
@@ -333,10 +336,12 @@ class TestWithRequiredGroupMembers:
         assert "xcagi-assistant" in ids
 
     def test_with_required_group_members_deduplicates_duplicate_employee_ids(self):
-        result = _with_required_group_members([
-            {"employee_id": "e1", "name": "小销"},
-            {"employee_id": "e1", "name": "重复"},
-        ])
+        result = _with_required_group_members(
+            [
+                {"employee_id": "e1", "name": "小销"},
+                {"employee_id": "e1", "name": "重复"},
+            ]
+        )
         ids = [m["employee_id"] for m in result]
         assert ids.count("e1") == 1
         assert "xcagi-assistant" in ids
@@ -477,7 +482,9 @@ class TestEmployeeManifest:
         result = _employee_manifest("nonexistent-employee-id-xyz")
         assert result == {}
 
-    def test_employee_manifest_returns_empty_when_invalid_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_employee_manifest_returns_empty_when_invalid_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         manifest_dir = tmp_path / "mods" / "_employees" / "bad-emp"
         manifest_dir.mkdir(parents=True)
         (manifest_dir / "manifest.json").write_text("{invalid json", encoding="utf-8")
@@ -523,7 +530,9 @@ class TestAppendSuperEmployees:
         # non-dict entries are skipped when checking existing
         assert len([e for e in employees if isinstance(e, dict)]) == 3
 
-    def test_append_super_employees_silently_returns_on_import_error(self, monkeypatch: pytest.MonkeyPatch):
+    def test_append_super_employees_silently_returns_on_import_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         import builtins
 
         original_import = builtins.__import__
@@ -542,14 +551,18 @@ class TestAppendSuperEmployees:
 class TestDefaultDutyEmployeeLoader:
     """_default_duty_employee_loader 的分支覆盖。"""
 
-    def test_default_duty_employee_loader_returns_empty_when_no_depts(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_duty_employee_loader_returns_empty_when_no_depts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from app.mod_sdk import duty_roster
 
         monkeypatch.setattr(duty_roster, "load_departments", lambda: {})
         result = _default_duty_employee_loader()
         assert result == []
 
-    def test_default_duty_employee_loader_returns_empty_when_depts_not_dict(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_duty_employee_loader_returns_empty_when_depts_not_dict(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from app.mod_sdk import duty_roster
 
         monkeypatch.setattr(duty_roster, "load_departments", lambda: "not-a-dict")
@@ -559,12 +572,14 @@ class TestDefaultDutyEmployeeLoader:
     def test_default_duty_employee_loader_with_employees(self, monkeypatch: pytest.MonkeyPatch):
         from app.mod_sdk import duty_roster
 
-        monkeypatch.setattr(duty_roster, "load_departments", lambda: {
-            "d1": {"subzones": {"s1": {"ids": ["e1"]}}}
-        })
-        monkeypatch.setattr(duty_roster, "load_duty_employee_records", lambda: [
-            {"id": "e1", "name": "小销", "mod_id": "m1"}
-        ])
+        monkeypatch.setattr(
+            duty_roster, "load_departments", lambda: {"d1": {"subzones": {"s1": {"ids": ["e1"]}}}}
+        )
+        monkeypatch.setattr(
+            duty_roster,
+            "load_duty_employee_records",
+            lambda: [{"id": "e1", "name": "小销", "mod_id": "m1"}],
+        )
         monkeypatch.setattr(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             MagicMock(side_effect=Exception("no mod manager")),
@@ -575,12 +590,14 @@ class TestDefaultDutyEmployeeLoader:
         assert e1["name"] == "小销"
         assert e1["department_key"] == "d1"
 
-    def test_default_duty_employee_loader_handles_mod_manager_exception(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_duty_employee_loader_handles_mod_manager_exception(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from app.mod_sdk import duty_roster
 
-        monkeypatch.setattr(duty_roster, "load_departments", lambda: {
-            "d1": {"subzones": {"s1": {"ids": ["e1"]}}}
-        })
+        monkeypatch.setattr(
+            duty_roster, "load_departments", lambda: {"d1": {"subzones": {"s1": {"ids": ["e1"]}}}}
+        )
         monkeypatch.setattr(duty_roster, "load_duty_employee_records", lambda: [])
         mock_mod_manager = MagicMock()
         mock_mod_manager.list_all_mods.side_effect = RuntimeError("boom")
@@ -595,7 +612,9 @@ class TestDefaultDutyEmployeeLoader:
 class TestDefaultEnterpriseEmployeeLoader:
     """_default_enterprise_employee_loader 的分支覆盖。"""
 
-    def test_default_enterprise_employee_loader_returns_empty_on_import_error(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_enterprise_employee_loader_returns_empty_on_import_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         import builtins
 
         original_import = builtins.__import__
@@ -609,7 +628,9 @@ class TestDefaultEnterpriseEmployeeLoader:
         result = _default_enterprise_employee_loader()
         assert result == []
 
-    def test_default_enterprise_employee_loader_returns_empty_on_list_exception(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_enterprise_employee_loader_returns_empty_on_list_exception(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         mock_mod_manager = MagicMock()
         mock_mod_manager.list_all_mods.side_effect = RuntimeError("db error")
         monkeypatch.setattr(
@@ -619,7 +640,9 @@ class TestDefaultEnterpriseEmployeeLoader:
         result = _default_enterprise_employee_loader()
         assert result == []
 
-    def test_default_enterprise_employee_loader_skips_non_dict_mods(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_enterprise_employee_loader_skips_non_dict_mods(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         mock_mod_manager = MagicMock()
         mock_mod_manager.list_all_mods.return_value = ["not-a-dict", 42, None]
         monkeypatch.setattr(
@@ -633,7 +656,9 @@ class TestDefaultEnterpriseEmployeeLoader:
         result = _default_enterprise_employee_loader()
         assert result == []
 
-    def test_default_enterprise_employee_loader_skips_mods_without_workflow_employees(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_enterprise_employee_loader_skips_mods_without_workflow_employees(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         mock_mod_manager = MagicMock()
         mock_mod_manager.list_all_mods.return_value = [
             {"id": "m1", "workflow_employees": "not-a-list"},
@@ -650,7 +675,9 @@ class TestDefaultEnterpriseEmployeeLoader:
         result = _default_enterprise_employee_loader()
         assert result == []
 
-    def test_default_enterprise_employee_loader_skips_non_dict_employees(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_enterprise_employee_loader_skips_non_dict_employees(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         mock_mod_manager = MagicMock()
         mock_mod_manager.list_all_mods.return_value = [
             {"id": "m1", "workflow_employees": ["not-a-dict", 42, None]},
@@ -666,7 +693,9 @@ class TestDefaultEnterpriseEmployeeLoader:
         result = _default_enterprise_employee_loader()
         assert result == []
 
-    def test_default_enterprise_employee_loader_skips_empty_employee_id(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_enterprise_employee_loader_skips_empty_employee_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         mock_mod_manager = MagicMock()
         mock_mod_manager.list_all_mods.return_value = [
             {"id": "m1", "workflow_employees": [{"id": ""}, {"id": "  "}]},
@@ -682,7 +711,9 @@ class TestDefaultEnterpriseEmployeeLoader:
         result = _default_enterprise_employee_loader()
         assert result == []
 
-    def test_default_enterprise_employee_loader_with_valid_employee(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_enterprise_employee_loader_with_valid_employee(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         mock_mod_manager = MagicMock()
         mock_mod_manager.list_all_mods.return_value = [
             {
@@ -701,7 +732,9 @@ class TestDefaultEnterpriseEmployeeLoader:
         assert result[0]["employee_id"] == "e1"
         assert result[0]["mod_id"] == "m1"
 
-    def test_default_enterprise_employee_loader_falls_back_through_name_fields(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_enterprise_employee_loader_falls_back_through_name_fields(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         mock_mod_manager = MagicMock()
         mock_mod_manager.list_all_mods.return_value = [
             {
@@ -901,7 +934,10 @@ class TestHeuristicDispatchTargets:
         assert result[0]["employee_id"] == "cursor-super-employee"
 
     def test_heuristic_dispatch_targets_falls_back_to_all_candidates(self):
-        candidates = [{"employee_id": "e1", "name": "普通1"}, {"employee_id": "e2", "name": "普通2"}]
+        candidates = [
+            {"employee_id": "e1", "name": "普通1"},
+            {"employee_id": "e2", "name": "普通2"},
+        ]
         result = AiGroupChatService._heuristic_dispatch_targets(candidates, "无关键词")
         assert len(result) <= MAX_RESPONDERS
         assert result[0] in candidates
@@ -1176,18 +1212,20 @@ class TestCompactResult:
     """_compact_result 的分支覆盖。"""
 
     def test_compact_result_includes_known_keys(self):
-        result = AiGroupChatService._compact_result({
-            "success": True,
-            "status": "done",
-            "message": "ok",
-            "summary": "完成了",
-            "task_id": "t1",
-            "run_id": "r1",
-            "error": "",
-            "dispatch_request_id": "d1",
-            "dispatcher": "mobile_relay",
-            "relay_id": "relay-1",
-        })
+        result = AiGroupChatService._compact_result(
+            {
+                "success": True,
+                "status": "done",
+                "message": "ok",
+                "summary": "完成了",
+                "task_id": "t1",
+                "run_id": "r1",
+                "error": "",
+                "dispatch_request_id": "d1",
+                "dispatcher": "mobile_relay",
+                "relay_id": "relay-1",
+            }
+        )
         assert result["success"] is True
         assert result["status"] == "done"
         assert result["message"] == "ok"
@@ -1200,10 +1238,12 @@ class TestCompactResult:
         assert result["success"] is True
 
     def test_compact_result_stringifies_non_primitive_values(self):
-        result = AiGroupChatService._compact_result({
-            "summary": {"nested": "dict"},
-            "message": ["list", "value"],
-        })
+        result = AiGroupChatService._compact_result(
+            {
+                "summary": {"nested": "dict"},
+                "message": ["list", "value"],
+            }
+        )
         assert isinstance(result["summary"], str)
         assert isinstance(result["message"], str)
 
@@ -1253,7 +1293,9 @@ class TestExecutionSummary:
         assert len(result) == 1200
 
     def test_execution_summary_skips_empty_values(self):
-        result = AiGroupChatService._execution_summary({"summary": "", "message": "  ", "output": "real"})
+        result = AiGroupChatService._execution_summary(
+            {"summary": "", "message": "  ", "output": "real"}
+        )
         assert result == "real"
 
 
@@ -1285,7 +1327,9 @@ class TestExecutionRisk:
         assert len(result) == 500
 
     def test_execution_risk_skips_empty_values(self):
-        result = AiGroupChatService._execution_risk({"risk": "", "risks": "  ", "blocker": "real"}, True)
+        result = AiGroupChatService._execution_risk(
+            {"risk": "", "risks": "  ", "blocker": "real"}, True
+        )
         assert result == "real"
 
 
@@ -1294,7 +1338,9 @@ class TestRelayResultDispatchValue:
 
     def test_relay_result_dispatch_value_finds_key(self):
         result = {"dispatch_info": {"dispatch": {"dispatcher": "mobile_relay", "status": "queued"}}}
-        assert AiGroupChatService._relay_result_dispatch_value(result, "dispatcher") == "mobile_relay"
+        assert (
+            AiGroupChatService._relay_result_dispatch_value(result, "dispatcher") == "mobile_relay"
+        )
         assert AiGroupChatService._relay_result_dispatch_value(result, "status") == "queued"
 
     def test_relay_result_dispatch_value_returns_empty_when_no_dispatch(self):
@@ -1470,7 +1516,9 @@ class TestAddMember:
         svc = make_service(tmp_path)
         gid = svc.list_groups(user_id=1)[0]["id"]
         svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"})
-        result = svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"})
+        result = svc.add_member(
+            user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"}
+        )
         assert result["member_count"] == 2
 
     def test_add_member_with_no_name_uses_employee_id(self, tmp_path: Path):
@@ -1483,7 +1531,9 @@ class TestAddMember:
         svc = make_service(tmp_path)
         gid = svc.list_groups(user_id=1)[0]["id"]
         long_name = "x" * 100
-        result = svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": long_name})
+        result = svc.add_member(
+            user_id=1, group_id=gid, member={"employee_id": "e1", "name": long_name}
+        )
         added = next(m for m in result["members"] if m["employee_id"] == "e1")
         assert len(added["name"]) == 60
 
@@ -1491,7 +1541,9 @@ class TestAddMember:
         svc = make_service(tmp_path)
         gid = svc.list_groups(user_id=1)[0]["id"]
         long_summary = "s" * 500
-        result = svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "summary": long_summary})
+        result = svc.add_member(
+            user_id=1, group_id=gid, member={"employee_id": "e1", "summary": long_summary}
+        )
         added = next(m for m in result["members"] if m["employee_id"] == "e1")
         assert len(added["summary"]) == 280
 
@@ -1680,8 +1732,13 @@ class TestGetMessages:
         gid = svc.list_groups(user_id=1)[0]["id"]
         # Write a message for user 1
         row = svc._message_row(
-            user_id=1, group_id=gid, role="user", sender_id="user",
-            sender_name="我", sender_avatar="", body="hello",
+            user_id=1,
+            group_id=gid,
+            role="user",
+            sender_id="user",
+            sender_name="我",
+            sender_avatar="",
+            body="hello",
         )
         svc._append_messages([row])
         # User 2 should not see user 1's messages
@@ -1693,8 +1750,13 @@ class TestGetMessages:
         gid1 = svc.list_groups(user_id=1)[0]["id"]
         gid2 = svc.list_groups(user_id=1)[1]["id"]
         row = svc._message_row(
-            user_id=1, group_id=gid1, role="user", sender_id="user",
-            sender_name="我", sender_avatar="", body="hello",
+            user_id=1,
+            group_id=gid1,
+            role="user",
+            sender_id="user",
+            sender_name="我",
+            sender_avatar="",
+            body="hello",
         )
         svc._append_messages([row])
         assert len(svc.get_messages(user_id=1, group_id=gid1)) == 1
@@ -1755,7 +1817,9 @@ class TestListGroups:
 class TestAppendRelayWorkReport:
     """append_relay_work_report 的分支覆盖。"""
 
-    def test_append_relay_work_report_returns_none_when_source_not_mobile_ai_group(self, tmp_path: Path):
+    def test_append_relay_work_report_returns_none_when_source_not_mobile_ai_group(
+        self, tmp_path: Path
+    ):
         svc = make_service(tmp_path)
         task = {
             "task_id": "t1",
@@ -1783,7 +1847,9 @@ class TestAppendRelayWorkReport:
         task = {
             "task_id": "t1",
             "created_by_user_id": 0,
-            "payload": {"context": {"source": "mobile_ai_group", "group_id": "g1", "employee_id": "e1"}},
+            "payload": {
+                "context": {"source": "mobile_ai_group", "group_id": "g1", "employee_id": "e1"}
+            },
         }
         assert svc.append_relay_work_report(task=task) is None
 
@@ -1792,7 +1858,9 @@ class TestAppendRelayWorkReport:
         task = {
             "task_id": "t1",
             "created_by_user_id": 1,
-            "payload": {"context": {"source": "mobile_ai_group", "group_id": "", "employee_id": "e1"}},
+            "payload": {
+                "context": {"source": "mobile_ai_group", "group_id": "", "employee_id": "e1"}
+            },
         }
         assert svc.append_relay_work_report(task=task) is None
 
@@ -1801,7 +1869,9 @@ class TestAppendRelayWorkReport:
         task = {
             "task_id": "t1",
             "created_by_user_id": 1,
-            "payload": {"context": {"source": "mobile_ai_group", "group_id": "g1", "employee_id": ""}},
+            "payload": {
+                "context": {"source": "mobile_ai_group", "group_id": "g1", "employee_id": ""}
+            },
         }
         assert svc.append_relay_work_report(task=task) is None
 
@@ -1810,7 +1880,9 @@ class TestAppendRelayWorkReport:
         task = {
             "task_id": "",
             "created_by_user_id": 1,
-            "payload": {"context": {"source": "mobile_ai_group", "group_id": "g1", "employee_id": "e1"}},
+            "payload": {
+                "context": {"source": "mobile_ai_group", "group_id": "g1", "employee_id": "e1"}
+            },
         }
         assert svc.append_relay_work_report(task=task) is None
 
@@ -1819,14 +1891,22 @@ class TestAppendRelayWorkReport:
         task = {
             "task_id": "t1",
             "created_by_user_id": 1,
-            "payload": {"context": {"source": "mobile_ai_group", "group_id": "nonexistent", "employee_id": "e1"}},
+            "payload": {
+                "context": {
+                    "source": "mobile_ai_group",
+                    "group_id": "nonexistent",
+                    "employee_id": "e1",
+                }
+            },
         }
         assert svc.append_relay_work_report(task=task) is None
 
     def test_append_relay_work_report_returns_existing_when_already_present(self, tmp_path: Path):
         svc = make_service(tmp_path)
         group = svc.create_group(user_id=1, name="test")
-        svc.add_member(user_id=1, group_id=group["id"], member={"employee_id": "e1", "name": "小销"})
+        svc.add_member(
+            user_id=1, group_id=group["id"], member={"employee_id": "e1", "name": "小销"}
+        )
         task = {
             "task_id": "relay-task-1",
             "relay_id": "relay-1",
@@ -1853,7 +1933,9 @@ class TestAppendRelayWorkReport:
     def test_append_relay_work_report_creates_new_report(self, tmp_path: Path):
         svc = make_service(tmp_path)
         group = svc.create_group(user_id=1, name="test")
-        svc.add_member(user_id=1, group_id=group["id"], member={"employee_id": "e1", "name": "小销"})
+        svc.add_member(
+            user_id=1, group_id=group["id"], member={"employee_id": "e1", "name": "小销"}
+        )
         task = {
             "task_id": "relay-task-new",
             "relay_id": "relay-1",
@@ -2175,13 +2257,19 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": [{"name": "小C助理"}]}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "我的判断是" in result
 
     @pytest.mark.asyncio
-    async def test_super_discussion_reply_timeout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    async def test_super_discussion_reply_timeout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setattr(group_chat_module, "SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC", 0.01)
 
         async def slow_completion(messages):
@@ -2192,8 +2280,12 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": []}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "改动文件、命令和测试结果" in result
         assert "按职责待命" not in result
@@ -2207,8 +2299,12 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": []}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "暂时不能参与讨论" in result
         assert "我判断这是" in result
@@ -2222,8 +2318,12 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": []}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "改动文件、命令和测试结果" in result
         assert "按职责待命" not in result
@@ -2238,8 +2338,12 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": []}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "改动文件、命令和测试结果" in result
         assert "按职责待命" not in result
@@ -2253,8 +2357,12 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": []}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "改动文件、命令和测试结果" in result
         assert "按职责待命" not in result
@@ -2268,8 +2376,12 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": []}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "改动文件、命令和测试结果" in result
         assert "按职责待命" not in result
@@ -2283,8 +2395,12 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": []}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert len(result) <= 600
 
@@ -2297,8 +2413,12 @@ class TestSuperDiscussionReply:
         group = {"name": "测试群", "members": []}
         member = {"employee_id": "codex-super-employee"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "我判断这是" in result
         assert "模型回复过于空泛" in result
@@ -2312,8 +2432,12 @@ class TestSuperDiscussionReply:
         group = {"members": []}
         member = {"employee_id": "codex-super-employee", "name": "Codex"}
         result = await svc._super_discussion_reply(
-            group=group, member=member, task="做任务",
-            history=[], discussion_turns=[], round_index=1,
+            group=group,
+            member=member,
+            task="做任务",
+            history=[],
+            discussion_turns=[],
+            round_index=1,
         )
         assert "我判断这是" in result
         assert "模型回复过于空泛" in result
@@ -2332,8 +2456,11 @@ class TestRouteAfterDiscussion:
         svc = make_service(tmp_path)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
         selected, rationale = await svc._route_after_discussion(
-            group={"name": "g"}, task="@所有人 做", candidates=candidates,
-            discussion_turns=[], mentions=None,
+            group={"name": "g"},
+            task="@所有人 做",
+            candidates=candidates,
+            discussion_turns=[],
+            mentions=None,
         )
         assert len(selected) == 2
         assert "明确点名" in rationale
@@ -2343,8 +2470,11 @@ class TestRouteAfterDiscussion:
         svc = make_service(tmp_path)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
         selected, rationale = await svc._route_after_discussion(
-            group={"name": "g"}, task="做", candidates=candidates,
-            discussion_turns=[], mentions=["e1"],
+            group={"name": "g"},
+            task="做",
+            candidates=candidates,
+            discussion_turns=[],
+            mentions=["e1"],
         )
         assert len(selected) == 2
         assert "明确点名" in rationale
@@ -2361,37 +2491,50 @@ class TestRouteAfterDiscussion:
         svc = make_service(tmp_path, completion_fn=completion)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
         selected, rationale = await svc._route_after_discussion(
-            group={"name": "g"}, task="做", candidates=candidates,
-            discussion_turns=[], mentions=None,
+            group={"name": "g"},
+            task="做",
+            candidates=candidates,
+            discussion_turns=[],
+            mentions=None,
         )
         assert len(selected) == 1
         assert selected[0]["employee_id"] == "e1"
         assert rationale == "因为"
 
     @pytest.mark.asyncio
-    async def test_route_after_discussion_llm_returns_empty_falls_back_to_heuristic(self, tmp_path: Path):
+    async def test_route_after_discussion_llm_returns_empty_falls_back_to_heuristic(
+        self, tmp_path: Path
+    ):
         async def completion(messages):
             return {"success": True, "content": '{"target_employee_ids": []}', "error": ""}
 
         svc = make_service(tmp_path, completion_fn=completion)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
         selected, rationale = await svc._route_after_discussion(
-            group={"name": "g"}, task="做", candidates=candidates,
-            discussion_turns=[], mentions=None,
+            group={"name": "g"},
+            task="做",
+            candidates=candidates,
+            discussion_turns=[],
+            mentions=None,
         )
         assert len(selected) >= 1
         assert "按" in rationale and "职责分工" in rationale
 
     @pytest.mark.asyncio
-    async def test_route_after_discussion_llm_exception_falls_back_to_heuristic(self, tmp_path: Path):
+    async def test_route_after_discussion_llm_exception_falls_back_to_heuristic(
+        self, tmp_path: Path
+    ):
         async def completion(messages):
             raise RuntimeError("LLM 不可用")
 
         svc = make_service(tmp_path, completion_fn=completion)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
         selected, rationale = await svc._route_after_discussion(
-            group={"name": "g"}, task="做", candidates=candidates,
-            discussion_turns=[], mentions=None,
+            group={"name": "g"},
+            task="做",
+            candidates=candidates,
+            discussion_turns=[],
+            mentions=None,
         )
         assert len(selected) >= 1
         assert "按" in rationale and "职责分工" in rationale
@@ -2404,8 +2547,11 @@ class TestRouteAfterDiscussion:
         svc = make_service(tmp_path, completion_fn=completion)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
         selected, rationale = await svc._route_after_discussion(
-            group={"name": "g"}, task="做", candidates=candidates,
-            discussion_turns=[], mentions=None,
+            group={"name": "g"},
+            task="做",
+            candidates=candidates,
+            discussion_turns=[],
+            mentions=None,
         )
         assert len(selected) >= 1
         assert "按" in rationale and "职责分工" in rationale
@@ -2418,14 +2564,19 @@ class TestRouteAfterDiscussion:
         svc = make_service(tmp_path, completion_fn=completion)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
         selected, rationale = await svc._route_after_discussion(
-            group={"name": "g"}, task="做", candidates=candidates,
-            discussion_turns=[], mentions=None,
+            group={"name": "g"},
+            task="做",
+            candidates=candidates,
+            discussion_turns=[],
+            mentions=None,
         )
         assert len(selected) >= 1
         assert "按" in rationale and "职责分工" in rationale
 
     @pytest.mark.asyncio
-    async def test_route_after_discussion_llm_returns_no_rationale_uses_default(self, tmp_path: Path):
+    async def test_route_after_discussion_llm_returns_no_rationale_uses_default(
+        self, tmp_path: Path
+    ):
         async def completion(messages):
             return {
                 "success": True,
@@ -2436,8 +2587,11 @@ class TestRouteAfterDiscussion:
         svc = make_service(tmp_path, completion_fn=completion)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
         selected, rationale = await svc._route_after_discussion(
-            group={"name": "g"}, task="做", candidates=candidates,
-            discussion_turns=[], mentions=None,
+            group={"name": "g"},
+            task="做",
+            candidates=candidates,
+            discussion_turns=[],
+            mentions=None,
         )
         assert len(selected) == 1
         assert "按讨论结论分流" in rationale
@@ -2554,8 +2708,11 @@ class TestDispatchWork:
     async def test_dispatch_work_empty_members_returns_blocked(self, tmp_path: Path):
         svc = make_service(tmp_path)
         messages, work_orders = await svc._dispatch_work(
-            group={"id": "g1"}, members=[], task="做任务",
-            user_id=1, sender_name="我",
+            group={"id": "g1"},
+            members=[],
+            task="做任务",
+            user_id=1,
+            sender_name="我",
         )
         assert len(messages) == 1
         assert messages[0].get("status") == "blocked"
@@ -2569,8 +2726,11 @@ class TestDispatchWork:
         svc = make_service(tmp_path, executor=executor)
         members = [{"employee_id": "e1", "name": "小销"}]
         messages, work_orders = await svc._dispatch_work(
-            group={"id": "g1"}, members=members, task="做任务",
-            user_id=1, sender_name="我",
+            group={"id": "g1"},
+            members=members,
+            task="做任务",
+            user_id=1,
+            sender_name="我",
         )
         assert len(messages) == 2  # work_order + work_report
         assert messages[0].get("kind") == "work_order"
@@ -2585,8 +2745,11 @@ class TestDispatchWork:
         svc = make_service(tmp_path, executor=executor)
         members = [{"employee_id": "e1"}]
         messages, work_orders = await svc._dispatch_work(
-            group={"id": "g1"}, members=members, task="做任务",
-            user_id=1, sender_name="我",
+            group={"id": "g1"},
+            members=members,
+            task="做任务",
+            user_id=1,
+            sender_name="我",
         )
         assert messages[1]["sender_name"] == "e1"
 
@@ -2601,9 +2764,14 @@ class TestExecuteEmployeeWork:
 
         svc = make_service(tmp_path, executor=executor)
         result = await svc._execute_employee_work(
-            group={"id": "g1"}, member={"employee_id": "e1", "name": "小销"},
-            task="做任务", assigned_task="做任务", assignment_focus="",
-            work_order_id="wo1", user_id=1, sender_name="我",
+            group={"id": "g1"},
+            member={"employee_id": "e1", "name": "小销"},
+            task="做任务",
+            assigned_task="做任务",
+            assignment_focus="",
+            work_order_id="wo1",
+            user_id=1,
+            sender_name="我",
         )
         assert result["success"] is True
         assert result["status"] == "done"
@@ -2616,9 +2784,14 @@ class TestExecuteEmployeeWork:
 
         svc = make_service(tmp_path, executor=executor)
         result = await svc._execute_employee_work(
-            group={"id": "g1"}, member={"employee_id": "e1", "name": "小销"},
-            task="做任务", assigned_task="做任务", assignment_focus="",
-            work_order_id="wo1", user_id=1, sender_name="我",
+            group={"id": "g1"},
+            member={"employee_id": "e1", "name": "小销"},
+            task="做任务",
+            assigned_task="做任务",
+            assignment_focus="",
+            work_order_id="wo1",
+            user_id=1,
+            sender_name="我",
         )
         assert result["success"] is False
         assert result["status"] == "failed"
@@ -2631,9 +2804,14 @@ class TestExecuteEmployeeWork:
 
         svc = make_service(tmp_path, executor=executor)
         result = await svc._execute_employee_work(
-            group={"id": "g1"}, member={"employee_id": "e1", "name": "小销"},
-            task="做任务", assigned_task="做任务", assignment_focus="",
-            work_order_id="wo1", user_id=1, sender_name="我",
+            group={"id": "g1"},
+            member={"employee_id": "e1", "name": "小销"},
+            task="做任务",
+            assigned_task="做任务",
+            assignment_focus="",
+            work_order_id="wo1",
+            user_id=1,
+            sender_name="我",
         )
         assert result["success"] is False
         assert result["status"] == "failed"
@@ -2645,9 +2823,14 @@ class TestExecuteEmployeeWork:
 
         svc = make_service(tmp_path, executor=executor)
         result = await svc._execute_employee_work(
-            group={"id": "g1"}, member={"employee_id": "e1", "name": "小销"},
-            task="做任务", assigned_task="做任务", assignment_focus="",
-            work_order_id="wo1", user_id=1, sender_name="我",
+            group={"id": "g1"},
+            member={"employee_id": "e1", "name": "小销"},
+            task="做任务",
+            assigned_task="做任务",
+            assignment_focus="",
+            work_order_id="wo1",
+            user_id=1,
+            sender_name="我",
         )
         assert result["success"] is True
         assert result["summary"] == "async done"
@@ -2659,9 +2842,14 @@ class TestExecuteEmployeeWork:
 
         svc = make_service(tmp_path, executor=executor)
         result = await svc._execute_employee_work(
-            group={"id": "g1"}, member={"employee_id": "e1"},
-            task="做任务", assigned_task="做任务", assignment_focus="",
-            work_order_id="wo1", user_id=1, sender_name="我",
+            group={"id": "g1"},
+            member={"employee_id": "e1"},
+            task="做任务",
+            assigned_task="做任务",
+            assignment_focus="",
+            work_order_id="wo1",
+            user_id=1,
+            sender_name="我",
         )
         assert result["employee_name"] == "e1"
 
@@ -2672,9 +2860,14 @@ class TestExecuteEmployeeWork:
 
         svc = make_service(tmp_path, executor=executor)
         result = await svc._execute_employee_work(
-            group={"id": "g1"}, member={"employee_id": "e1", "name": "小销"},
-            task="做任务", assigned_task="做任务", assignment_focus="",
-            work_order_id="wo1", user_id=1, sender_name="我",
+            group={"id": "g1"},
+            member={"employee_id": "e1", "name": "小销"},
+            task="做任务",
+            assigned_task="做任务",
+            assignment_focus="",
+            work_order_id="wo1",
+            user_id=1,
+            sender_name="我",
         )
         assert result["status"] == "done"
 
@@ -2685,9 +2878,14 @@ class TestExecuteEmployeeWork:
 
         svc = make_service(tmp_path, executor=executor)
         result = await svc._execute_employee_work(
-            group={"id": "g1"}, member={"employee_id": "e1", "name": "小销"},
-            task="做任务", assigned_task="做任务", assignment_focus="",
-            work_order_id="wo1", user_id=1, sender_name="我",
+            group={"id": "g1"},
+            member={"employee_id": "e1", "name": "小销"},
+            task="做任务",
+            assigned_task="做任务",
+            assignment_focus="",
+            work_order_id="wo1",
+            user_id=1,
+            sender_name="我",
         )
         assert result["status"] == "failed"
 
@@ -2711,7 +2909,8 @@ class TestInvokeSuperEmployeeTask:
         svc = make_service(tmp_path)
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         result = svc._invoke_super_employee_task(
-            employee_id="codex-super-employee", task="做任务",
+            employee_id="codex-super-employee",
+            task="做任务",
             input_data={"group_id": "g1", "group_name": "群", "work_order_id": "wo1"},
             user_id=1,
         )
@@ -2719,7 +2918,9 @@ class TestInvokeSuperEmployeeTask:
         assert result["dispatcher"] == "mobile_relay"
         assert result["task_id"] == "relay-task-1"
 
-    def test_invoke_super_employee_task_relay_returns_none_falls_back_to_invoke(self, tmp_path: Path):
+    def test_invoke_super_employee_task_relay_returns_none_falls_back_to_invoke(
+        self, tmp_path: Path
+    ):
         class FakeRelay:
             def list_desktops(self, *, user_id):
                 return []  # no paired desktops
@@ -2738,7 +2939,8 @@ class TestInvokeSuperEmployeeTask:
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         svc._super_employee_service = lambda eid: FakeSuperService()  # type: ignore[method-assign]
         result = svc._invoke_super_employee_task(
-            employee_id="codex-super-employee", task="做任务",
+            employee_id="codex-super-employee",
+            task="做任务",
             input_data={"group_id": "g1", "group_name": "群", "work_order_id": "wo1"},
             user_id=1,
         )
@@ -2761,7 +2963,8 @@ class TestInvokeSuperEmployeeTask:
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         svc._super_employee_service = lambda eid: FakeSuperService()  # type: ignore[method-assign]
         result = svc._invoke_super_employee_task(
-            employee_id="codex-super-employee", task="做任务",
+            employee_id="codex-super-employee",
+            task="做任务",
             input_data={"group_id": "g1", "group_name": "群", "work_order_id": "wo1"},
             user_id=1,
         )
@@ -2785,7 +2988,8 @@ class TestInvokeSuperEmployeeTask:
 
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         result = svc._invoke_super_employee_task(
-            employee_id="codex-super-employee", task="做任务",
+            employee_id="codex-super-employee",
+            task="做任务",
             input_data={"group_id": "g1", "group_name": "群", "work_order_id": "wo1"},
             user_id=1,
         )
@@ -2808,7 +3012,8 @@ class TestInvokeSuperEmployeeTask:
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         svc._super_employee_service = lambda eid: FakeSuperService()  # type: ignore[method-assign]
         result = svc._invoke_super_employee_task(
-            employee_id="codex-super-employee", task="做任务",
+            employee_id="codex-super-employee",
+            task="做任务",
             input_data={"group_id": "g1", "group_name": "群", "work_order_id": "wo1"},
             user_id=1,
         )
@@ -2821,8 +3026,10 @@ class TestCreateSuperEmployeeRelayTask:
     def test_create_relay_task_returns_none_for_unknown_employee(self, tmp_path: Path):
         svc = make_service(tmp_path)
         result = svc._create_super_employee_relay_task(
-            employee_id="unknown-super", task="做任务",
-            input_data={}, user_id=1,
+            employee_id="unknown-super",
+            task="做任务",
+            input_data={},
+            user_id=1,
         )
         assert result is None
 
@@ -2834,8 +3041,10 @@ class TestCreateSuperEmployeeRelayTask:
         svc = make_service(tmp_path)
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         result = svc._create_super_employee_relay_task(
-            employee_id="codex-super-employee", task="做任务",
-            input_data={}, user_id=1,
+            employee_id="codex-super-employee",
+            task="做任务",
+            input_data={},
+            user_id=1,
         )
         assert result is None
 
@@ -2847,8 +3056,10 @@ class TestCreateSuperEmployeeRelayTask:
         svc = make_service(tmp_path)
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         result = svc._create_super_employee_relay_task(
-            employee_id="codex-super-employee", task="做任务",
-            input_data={}, user_id=1,
+            employee_id="codex-super-employee",
+            task="做任务",
+            input_data={},
+            user_id=1,
         )
         assert result is None
 
@@ -2863,8 +3074,10 @@ class TestCreateSuperEmployeeRelayTask:
         svc = make_service(tmp_path)
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         result = svc._create_super_employee_relay_task(
-            employee_id="codex-super-employee", task="做任务",
-            input_data={}, user_id=1,
+            employee_id="codex-super-employee",
+            task="做任务",
+            input_data={},
+            user_id=1,
         )
         assert result is None
 
@@ -2879,8 +3092,10 @@ class TestCreateSuperEmployeeRelayTask:
         svc = make_service(tmp_path)
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         result = svc._create_super_employee_relay_task(
-            employee_id="codex-super-employee", task="做任务",
-            input_data={}, user_id=1,
+            employee_id="codex-super-employee",
+            task="做任务",
+            input_data={},
+            user_id=1,
         )
         assert result is None
 
@@ -2895,8 +3110,10 @@ class TestCreateSuperEmployeeRelayTask:
         svc = make_service(tmp_path)
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
         result = svc._create_super_employee_relay_task(
-            employee_id="codex-super-employee", task="做任务",
-            input_data={"group_id": "g1"}, user_id=1,
+            employee_id="codex-super-employee",
+            task="做任务",
+            input_data={"group_id": "g1"},
+            user_id=1,
         )
         assert result is not None
         assert result["success"] is True
@@ -2919,8 +3136,13 @@ class TestRelayReportMessage:
     def test_relay_report_message_finds_existing(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="report",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="report",
             kind="relay_work_report",
             payload={"raw": {"task_id": "t1"}},
         )
@@ -2932,8 +3154,13 @@ class TestRelayReportMessage:
     def test_relay_report_message_filters_by_user_id(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="report",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="report",
             kind="relay_work_report",
             payload={"raw": {"task_id": "t1"}},
         )
@@ -2943,8 +3170,13 @@ class TestRelayReportMessage:
     def test_relay_report_message_filters_by_group_id(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="report",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="report",
             kind="relay_work_report",
             payload={"raw": {"task_id": "t1"}},
         )
@@ -2954,8 +3186,13 @@ class TestRelayReportMessage:
     def test_relay_report_message_filters_by_kind(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="report",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="report",
             kind="chat",
             payload={"raw": {"task_id": "t1"}},
         )
@@ -2965,8 +3202,13 @@ class TestRelayReportMessage:
     def test_relay_report_message_filters_by_task_id(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="report",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="report",
             kind="relay_work_report",
             payload={"raw": {"task_id": "t1"}},
         )
@@ -2976,8 +3218,13 @@ class TestRelayReportMessage:
     def test_relay_report_message_handles_non_dict_payload(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="report",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="report",
             kind="relay_work_report",
             payload="not-a-dict",
         )
@@ -2987,8 +3234,13 @@ class TestRelayReportMessage:
     def test_relay_report_message_handles_non_dict_raw(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="report",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="report",
             kind="relay_work_report",
             payload={"raw": "not-a-dict"},
         )
@@ -3006,7 +3258,10 @@ class TestRelayTaskReport:
             "relay_id": "r1",
             "kind": "codex.invoke",
             "status": "completed",
-            "payload": {"message": "做任务", "context": {"work_order_id": "wo1", "employee_id": "e1"}},
+            "payload": {
+                "message": "做任务",
+                "context": {"work_order_id": "wo1", "employee_id": "e1"},
+            },
             "result": {"ok": True, "summary": "完成了"},
         }
         member = {"employee_id": "e1", "name": "小销"}
@@ -3095,76 +3350,100 @@ class TestRelayResultSummary:
 
     def test_relay_result_summary_from_summary(self):
         result = AiGroupChatService._relay_result_summary(
-            {"summary": "摘要"}, "completed", "t1",
+            {"summary": "摘要"},
+            "completed",
+            "t1",
         )
         assert result == "摘要"
 
     def test_relay_result_summary_from_message(self):
         result = AiGroupChatService._relay_result_summary(
-            {"message": "消息"}, "completed", "t1",
+            {"message": "消息"},
+            "completed",
+            "t1",
         )
         assert result == "消息"
 
     def test_relay_result_summary_from_output(self):
         result = AiGroupChatService._relay_result_summary(
-            {"output": "输出"}, "completed", "t1",
+            {"output": "输出"},
+            "completed",
+            "t1",
         )
         assert result == "输出"
 
     def test_relay_result_summary_from_report(self):
         result = AiGroupChatService._relay_result_summary(
-            {"report": "报告"}, "completed", "t1",
+            {"report": "报告"},
+            "completed",
+            "t1",
         )
         assert result == "报告"
 
     def test_relay_result_summary_from_error(self):
         result = AiGroupChatService._relay_result_summary(
-            {"error": "错误"}, "completed", "t1",
+            {"error": "错误"},
+            "completed",
+            "t1",
         )
         assert result == "错误"
 
     def test_relay_result_summary_from_nested_assistant_message(self):
         result = AiGroupChatService._relay_result_summary(
-            {"dispatch": {"assistant_message": {"body": "助手消息"}}}, "completed", "t1",
+            {"dispatch": {"assistant_message": {"body": "助手消息"}}},
+            "completed",
+            "t1",
         )
         assert result == "助手消息"
 
     def test_relay_result_summary_from_nested_summary(self):
         result = AiGroupChatService._relay_result_summary(
-            {"dispatch": {"summary": "嵌套摘要"}}, "completed", "t1",
+            {"dispatch": {"summary": "嵌套摘要"}},
+            "completed",
+            "t1",
         )
         assert result == "嵌套摘要"
 
     def test_relay_result_summary_from_nested_message(self):
         result = AiGroupChatService._relay_result_summary(
-            {"dispatch": {"message": "嵌套消息"}}, "completed", "t1",
+            {"dispatch": {"message": "嵌套消息"}},
+            "completed",
+            "t1",
         )
         assert result == "嵌套消息"
 
     def test_relay_result_summary_falls_back_to_default(self):
         result = AiGroupChatService._relay_result_summary(
-            {"other": "value"}, "completed", "t1",
+            {"other": "value"},
+            "completed",
+            "t1",
         )
         assert "completed" in result
         assert "t1" in result
 
     def test_relay_result_summary_falls_back_with_empty_status(self):
         result = AiGroupChatService._relay_result_summary(
-            {}, "", "t1",
+            {},
+            "",
+            "t1",
         )
         assert "完成" in result
         assert "t1" in result
 
     def test_relay_result_summary_skips_non_dict_nested(self):
         result = AiGroupChatService._relay_result_summary(
-            {"key": "not-a-dict", "other": {"summary": "found"}}, "completed", "t1",
+            {"key": "not-a-dict", "other": {"summary": "found"}},
+            "completed",
+            "t1",
         )
         assert result == "found"
 
     def test_relay_result_summary_truncates_to_chat_limit(self):
         long_summary = "x" * 2000
         result = AiGroupChatService._relay_result_summary(
-            {"summary": long_summary}, "completed", "t1",
+            {"summary": long_summary},
+            "completed",
+            "t1",
         )
         # _chat_friendly_summary 截断到 CHAT_REPORT_SUMMARY_CHARS(260) 并追加后缀
         assert len(result) < 400
@@ -3176,56 +3455,83 @@ class TestRelayResultRisk:
 
     def test_relay_result_risk_from_risk(self):
         result = AiGroupChatService._relay_result_risk(
-            result={"risk": "有风险"}, success=True, task_id="t1", dispatcher="",
+            result={"risk": "有风险"},
+            success=True,
+            task_id="t1",
+            dispatcher="",
         )
         assert result == "有风险"
 
     def test_relay_result_risk_from_error(self):
         result = AiGroupChatService._relay_result_risk(
-            result={"error": "错误信息"}, success=False, task_id="t1", dispatcher="",
+            result={"error": "错误信息"},
+            success=False,
+            task_id="t1",
+            dispatcher="",
         )
         assert result == "错误信息"
 
     def test_relay_result_risk_from_reason(self):
         result = AiGroupChatService._relay_result_risk(
-            result={"reason": "原因"}, success=False, task_id="t1", dispatcher="",
+            result={"reason": "原因"},
+            success=False,
+            task_id="t1",
+            dispatcher="",
         )
         assert result == "原因"
 
     def test_relay_result_risk_success_default(self):
         result = AiGroupChatService._relay_result_risk(
-            result={}, success=True, task_id="t1", dispatcher="",
+            result={},
+            success=True,
+            task_id="t1",
+            dispatcher="",
         )
         assert "未发现阻塞" in result
 
     def test_relay_result_risk_failure_default(self):
         result = AiGroupChatService._relay_result_risk(
-            result={}, success=False, task_id="t1", dispatcher="",
+            result={},
+            success=False,
+            task_id="t1",
+            dispatcher="",
         )
         assert "未成功完成" in result
 
     def test_relay_result_risk_with_dispatcher(self):
         result = AiGroupChatService._relay_result_risk(
-            result={}, success=True, task_id="t1", dispatcher="mobile_relay",
+            result={},
+            success=True,
+            task_id="t1",
+            dispatcher="mobile_relay",
         )
         assert "mobile_relay" in result
 
     def test_relay_result_risk_with_task_id(self):
         result = AiGroupChatService._relay_result_risk(
-            result={}, success=True, task_id="task-123", dispatcher="",
+            result={},
+            success=True,
+            task_id="task-123",
+            dispatcher="",
         )
         assert "task-123" in result
 
     def test_relay_result_risk_truncates_to_500(self):
         long_risk = "x" * 600
         result = AiGroupChatService._relay_result_risk(
-            result={"risk": long_risk}, success=True, task_id="t1", dispatcher="",
+            result={"risk": long_risk},
+            success=True,
+            task_id="t1",
+            dispatcher="",
         )
         assert len(result) == 500
 
     def test_relay_result_risk_no_task_id_no_dispatcher(self):
         result = AiGroupChatService._relay_result_risk(
-            result={}, success=True, task_id="", dispatcher="",
+            result={},
+            success=True,
+            task_id="",
+            dispatcher="",
         )
         assert "未发现阻塞" in result
         assert result.endswith("。")
@@ -3246,12 +3552,15 @@ class TestSuperEmployeeReply:
                 return {"assistant_message": {"body": "Codex 回复"}}
 
         svc = make_service(tmp_path)
-        with patch("app.application.codex_super_employee_service.CodexSuperEmployeeService") as mock:
+        with patch(
+            "app.application.codex_super_employee_service.CodexSuperEmployeeService"
+        ) as mock:
             mock.return_value = FakeService()
             result = await svc._super_employee_reply(
                 group={"name": "g", "members": []},
                 member={"employee_id": "codex-super-employee", "name": "Codex"},
-                history=[], user_id=1,
+                history=[],
+                user_id=1,
             )
         assert result == "Codex 回复"
 
@@ -3262,12 +3571,15 @@ class TestSuperEmployeeReply:
                 return {"assistant_message": {"body": "Cursor 回复"}}
 
         svc = make_service(tmp_path)
-        with patch("app.application.cursor_super_employee_service.CursorSuperEmployeeService") as mock:
+        with patch(
+            "app.application.cursor_super_employee_service.CursorSuperEmployeeService"
+        ) as mock:
             mock.return_value = FakeService()
             result = await svc._super_employee_reply(
                 group={"name": "g", "members": []},
                 member={"employee_id": "cursor-super-employee", "name": "Cursor"},
-                history=[], user_id=1,
+                history=[],
+                user_id=1,
             )
         assert result == "Cursor 回复"
 
@@ -3278,12 +3590,15 @@ class TestSuperEmployeeReply:
                 return {"assistant_message": {"body": "Claude 回复"}}
 
         svc = make_service(tmp_path)
-        with patch("app.application.claude_super_employee_service.ClaudeSuperEmployeeService") as mock:
+        with patch(
+            "app.application.claude_super_employee_service.ClaudeSuperEmployeeService"
+        ) as mock:
             mock.return_value = FakeService()
             result = await svc._super_employee_reply(
                 group={"name": "g", "members": []},
                 member={"employee_id": "claude-super-employee", "name": "Claude"},
-                history=[], user_id=1,
+                history=[],
+                user_id=1,
             )
         assert result == "Claude 回复"
 
@@ -3294,12 +3609,15 @@ class TestSuperEmployeeReply:
                 return {"assistant_message": {"body": ""}}
 
         svc = make_service(tmp_path)
-        with patch("app.application.codex_super_employee_service.CodexSuperEmployeeService") as mock:
+        with patch(
+            "app.application.codex_super_employee_service.CodexSuperEmployeeService"
+        ) as mock:
             mock.return_value = FakeService()
             result = await svc._super_employee_reply(
                 group={"name": "g", "members": []},
                 member={"employee_id": "codex-super-employee", "name": "Codex"},
-                history=[], user_id=1,
+                history=[],
+                user_id=1,
             )
         assert "暂时无法回应" in result
 
@@ -3310,12 +3628,15 @@ class TestSuperEmployeeReply:
                 return {}
 
         svc = make_service(tmp_path)
-        with patch("app.application.codex_super_employee_service.CodexSuperEmployeeService") as mock:
+        with patch(
+            "app.application.codex_super_employee_service.CodexSuperEmployeeService"
+        ) as mock:
             mock.return_value = FakeService()
             result = await svc._super_employee_reply(
                 group={"name": "g", "members": []},
                 member={"employee_id": "codex-super-employee", "name": "Codex"},
-                history=[], user_id=1,
+                history=[],
+                user_id=1,
             )
         assert "暂时无法回应" in result
 
@@ -3326,12 +3647,15 @@ class TestSuperEmployeeReply:
                 raise RuntimeError("服务不可用")
 
         svc = make_service(tmp_path)
-        with patch("app.application.codex_super_employee_service.CodexSuperEmployeeService") as mock:
+        with patch(
+            "app.application.codex_super_employee_service.CodexSuperEmployeeService"
+        ) as mock:
             mock.return_value = FakeService()
             result = await svc._super_employee_reply(
                 group={"name": "g", "members": []},
                 member={"employee_id": "codex-super-employee", "name": "Codex"},
-                history=[], user_id=1,
+                history=[],
+                user_id=1,
             )
         assert "暂时无法回应" in result
         assert "服务不可用" in result
@@ -3343,12 +3667,15 @@ class TestSuperEmployeeReply:
                 return {"assistant_message": {"body": "ok"}}
 
         svc = make_service(tmp_path)
-        with patch("app.application.codex_super_employee_service.CodexSuperEmployeeService") as mock:
+        with patch(
+            "app.application.codex_super_employee_service.CodexSuperEmployeeService"
+        ) as mock:
             mock.return_value = FakeService()
             result = await svc._super_employee_reply(
                 group={"name": "g", "members": []},
                 member={"employee_id": "codex-super-employee"},
-                history=[], user_id=1,
+                history=[],
+                user_id=1,
             )
         assert result == "ok"
 
@@ -3526,8 +3853,13 @@ class TestMessageRow:
     def test_message_row_minimal(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="user", sender_id="u1",
-            sender_name="我", sender_avatar="", body="hello",
+            user_id=1,
+            group_id="g1",
+            role="user",
+            sender_id="u1",
+            sender_name="我",
+            sender_avatar="",
+            body="hello",
         )
         assert row["role"] == "user"
         assert row["body"] == "hello"
@@ -3539,8 +3871,13 @@ class TestMessageRow:
     def test_message_row_with_kind(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="hi",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="hi",
             kind="work_report",
         )
         assert row["kind"] == "work_report"
@@ -3548,8 +3885,13 @@ class TestMessageRow:
     def test_message_row_with_chat_kind_not_stored(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="hi",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="hi",
             kind="chat",
         )
         assert "kind" not in row
@@ -3557,8 +3899,13 @@ class TestMessageRow:
     def test_message_row_with_status(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="hi",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="hi",
             status="done",
         )
         assert row["status"] == "done"
@@ -3566,8 +3913,13 @@ class TestMessageRow:
     def test_message_row_with_empty_status_not_stored(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="hi",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="hi",
             status="",
         )
         assert "status" not in row
@@ -3575,8 +3927,13 @@ class TestMessageRow:
     def test_message_row_with_work_order_id(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="hi",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="hi",
             work_order_id="wo1",
         )
         assert row["work_order_id"] == "wo1"
@@ -3585,8 +3942,13 @@ class TestMessageRow:
         svc = make_service(tmp_path)
         payload = {"key": "value"}
         row = svc._message_row(
-            user_id=1, group_id="g1", role="ai", sender_id="e1",
-            sender_name="小销", sender_avatar="", body="hi",
+            user_id=1,
+            group_id="g1",
+            role="ai",
+            sender_id="e1",
+            sender_name="小销",
+            sender_avatar="",
+            body="hi",
             payload=payload,
         )
         assert row["payload"] == payload
@@ -3603,8 +3965,13 @@ class TestLatestPreviews:
         svc = make_service(tmp_path)
         for i in range(3):
             row = svc._message_row(
-                user_id=1, group_id="g1", role="user", sender_id="u1",
-                sender_name=f"用户{i}", sender_avatar="", body=f"消息{i}",
+                user_id=1,
+                group_id="g1",
+                role="user",
+                sender_id="u1",
+                sender_name=f"用户{i}",
+                sender_avatar="",
+                body=f"消息{i}",
             )
             svc._append_messages([row])
         previews = svc._latest_previews(user_id=1)
@@ -3614,8 +3981,13 @@ class TestLatestPreviews:
     def test_latest_previews_filters_by_user_id(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="user", sender_id="u1",
-            sender_name="用户1", sender_avatar="", body="hello",
+            user_id=1,
+            group_id="g1",
+            role="user",
+            sender_id="u1",
+            sender_name="用户1",
+            sender_avatar="",
+            body="hello",
         )
         svc._append_messages([row])
         assert svc._latest_previews(user_id=2) == {}
@@ -3623,8 +3995,13 @@ class TestLatestPreviews:
     def test_latest_previews_with_empty_sender(self, tmp_path: Path):
         svc = make_service(tmp_path)
         row = svc._message_row(
-            user_id=1, group_id="g1", role="user", sender_id="u1",
-            sender_name="", sender_avatar="", body="hello",
+            user_id=1,
+            group_id="g1",
+            role="user",
+            sender_id="u1",
+            sender_name="",
+            sender_avatar="",
+            body="hello",
         )
         svc._append_messages([row])
         previews = svc._latest_previews(user_id=1)
@@ -3648,7 +4025,7 @@ class TestReadJsonl:
     def test_read_jsonl_skips_empty_lines(self, tmp_path: Path):
         svc = make_service(tmp_path)
         path = tmp_path / "test.jsonl"
-        path.write_text('\n\n  \n', encoding="utf-8")
+        path.write_text("\n\n  \n", encoding="utf-8")
         assert svc._read_jsonl(path) == []
 
     def test_read_jsonl_skips_invalid_json(self, tmp_path: Path):

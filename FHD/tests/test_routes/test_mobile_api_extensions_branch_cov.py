@@ -105,9 +105,7 @@ class TestMobileSessionIdFromRequest:
         """branch: verify_mobile_jwt raises OPERATIONAL_ERRORS → fallback."""
         req = MagicMock()
         req.headers = {"Authorization": "Bearer bad", "X-Session-ID": "fallback"}
-        with patch(
-            "app.security.mobile_jwt.verify_mobile_jwt", side_effect=ValueError("bad jwt")
-        ):
+        with patch("app.security.mobile_jwt.verify_mobile_jwt", side_effect=ValueError("bad jwt")):
             result = m._mobile_session_id_from_request(req)
         assert result == "fallback"
 
@@ -382,9 +380,7 @@ class TestAdminRosterIdsByDepartmentOrder:
 
     def test_empty_admin_dict(self, m):
         """branch: admin dict has no departments or planned_employee_ids."""
-        with patch(
-            "app.mod_sdk.employee_ssot.derive_admin_duty_roster", return_value={}
-        ):
+        with patch("app.mod_sdk.employee_ssot.derive_admin_duty_roster", return_value={}):
             result = m._admin_roster_ids_by_department_order()
         assert result == []
 
@@ -512,9 +508,7 @@ class TestAdminRosterAreaLabels:
 
     def test_doc_not_dict_returns_empty(self, m):
         """branch: doc is not a dict → {}."""
-        with patch(
-            "app.mod_sdk.duty_roster.load_duty_roster_document", return_value="not-a-dict"
-        ):
+        with patch("app.mod_sdk.duty_roster.load_duty_roster_document", return_value="not-a-dict"):
             result = m._admin_roster_area_labels()
         assert result == {}
 
@@ -663,7 +657,9 @@ class TestAdminDutyRecordsFromRoster:
             patch.object(m, "_admin_roster_ids_by_department_order", return_value=["e1"]),
             patch.object(m, "_admin_roster_area_labels", return_value={"e1": "Sales"}),
             patch.object(
-                m, "_admin_employee_manifest", return_value={"name": "Alice", "employee": {"label": "Alice"}}
+                m,
+                "_admin_employee_manifest",
+                return_value={"name": "Alice", "employee": {"label": "Alice"}},
             ),
         ):
             result = m._admin_duty_records_from_roster()
@@ -1205,7 +1201,9 @@ class TestMobileConversationMarkUnread:
             "app.application.conversation_state_service.ConversationStateService"
         ) as svc_cls:
             svc_cls.return_value.mark_unread.return_value = {"unread": True}
-            result = await m.mobile_conversation_mark_unread(conversation_id="c1", user=_user(uid=5))
+            result = await m.mobile_conversation_mark_unread(
+                conversation_id="c1", user=_user(uid=5)
+            )
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1215,7 +1213,9 @@ class TestMobileConversationMarkUnread:
             "app.application.conversation_state_service.ConversationStateService"
         ) as svc_cls:
             svc_cls.return_value.mark_unread.side_effect = err_class("fail")
-            result = await m.mobile_conversation_mark_unread(conversation_id="c1", user=_user(uid=5))
+            result = await m.mobile_conversation_mark_unread(
+                conversation_id="c1", user=_user(uid=5)
+            )
         assert result.status_code == 500
 
 
@@ -1248,7 +1248,9 @@ class TestMobileConversationMarkRead:
 class TestMobileConversationToggleFollowed:
     @pytest.mark.asyncio
     async def test_uid_zero_returns_401(self, m):
-        result = await m.mobile_conversation_toggle_followed(conversation_id="c1", user=_user(uid=0))
+        result = await m.mobile_conversation_toggle_followed(
+            conversation_id="c1", user=_user(uid=0)
+        )
         assert result.status_code == 401
 
     @pytest.mark.asyncio
@@ -1257,7 +1259,9 @@ class TestMobileConversationToggleFollowed:
             "app.application.conversation_state_service.ConversationStateService"
         ) as svc_cls:
             svc_cls.return_value.toggle_followed.return_value = {"followed": True}
-            result = await m.mobile_conversation_toggle_followed(conversation_id="c1", user=_user(uid=5))
+            result = await m.mobile_conversation_toggle_followed(
+                conversation_id="c1", user=_user(uid=5)
+            )
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1267,7 +1271,9 @@ class TestMobileConversationToggleFollowed:
             "app.application.conversation_state_service.ConversationStateService"
         ) as svc_cls:
             svc_cls.return_value.toggle_followed.side_effect = err_class("fail")
-            result = await m.mobile_conversation_toggle_followed(conversation_id="c1", user=_user(uid=5))
+            result = await m.mobile_conversation_toggle_followed(
+                conversation_id="c1", user=_user(uid=5)
+            )
         assert result.status_code == 500
 
 
@@ -1283,7 +1289,9 @@ class TestMobileConversationToggleHidden:
             "app.application.conversation_state_service.ConversationStateService"
         ) as svc_cls:
             svc_cls.return_value.toggle_hidden.return_value = {"hidden": True}
-            result = await m.mobile_conversation_toggle_hidden(conversation_id="c1", user=_user(uid=5))
+            result = await m.mobile_conversation_toggle_hidden(
+                conversation_id="c1", user=_user(uid=5)
+            )
         assert result is not None
 
     @pytest.mark.asyncio
@@ -1293,7 +1301,9 @@ class TestMobileConversationToggleHidden:
             "app.application.conversation_state_service.ConversationStateService"
         ) as svc_cls:
             svc_cls.return_value.toggle_hidden.side_effect = err_class("fail")
-            result = await m.mobile_conversation_toggle_hidden(conversation_id="c1", user=_user(uid=5))
+            result = await m.mobile_conversation_toggle_hidden(
+                conversation_id="c1", user=_user(uid=5)
+            )
         assert result.status_code == 500
 
 
@@ -2140,9 +2150,7 @@ class TestMobilePaymentPlans:
 class TestMobilePaymentCheckout:
     @pytest.mark.asyncio
     async def test_user_none_returns_401(self, m):
-        result = await m.mobile_payment_checkout(
-            request=MagicMock(), body={}, user=None
-        )
+        result = await m.mobile_payment_checkout(request=MagicMock(), body={}, user=None)
         assert result.status_code == 401
 
     @pytest.mark.asyncio
@@ -2185,9 +2193,7 @@ class TestMobilePaymentCheckout:
 
         with (
             patch.object(m, "_mobile_market_authorization", return_value="Bearer tok"),
-            patch(
-                "app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy
-            ),
+            patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
         ):
             result = await m.mobile_payment_checkout(
                 request=MagicMock(), body={"channel": "alipay"}, user=_user()
@@ -2232,9 +2238,7 @@ class TestMobilePaymentCheckout:
 class TestMobilePaymentQuery:
     @pytest.mark.asyncio
     async def test_user_none_returns_401(self, m):
-        result = await m.mobile_payment_query(
-            request=MagicMock(), out_trade_no="OTN1", user=None
-        )
+        result = await m.mobile_payment_query(request=MagicMock(), out_trade_no="OTN1", user=None)
         assert result.status_code == 401
 
     @pytest.mark.asyncio
@@ -2592,7 +2596,9 @@ class TestMobileAiGroupMessagesSuccess:
 class TestMobileAiGroupPostSuccess:
     @pytest.mark.asyncio
     async def test_success(self, m):
-        body = SimpleNamespace(message="hi", sender_name="me", mentions=[], dispatch=True, branch_context=None)
+        body = SimpleNamespace(
+            message="hi", sender_name="me", mentions=[], dispatch=True, branch_context=None
+        )
         with (
             patch(
                 "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
@@ -2637,7 +2643,9 @@ class TestMobileAiGroupPostSuccess:
 
     @pytest.mark.asyncio
     async def test_value_error(self, m):
-        body = SimpleNamespace(message="hi", sender_name=None, mentions=[], dispatch=True, branch_context=None)
+        body = SimpleNamespace(
+            message="hi", sender_name=None, mentions=[], dispatch=True, branch_context=None
+        )
         with (
             patch(
                 "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
@@ -2655,7 +2663,9 @@ class TestMobileAiGroupPostSuccess:
     @pytest.mark.asyncio
     async def test_recoverable_error(self, m):
         err_class = _err_class(m)
-        body = SimpleNamespace(message="hi", sender_name=None, mentions=[], dispatch=True, branch_context=None)
+        body = SimpleNamespace(
+            message="hi", sender_name=None, mentions=[], dispatch=True, branch_context=None
+        )
         with (
             patch(
                 "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
@@ -2829,9 +2839,7 @@ class TestMobilePairingExchangeBranchCov:
             patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
             patch.object(m, "_enrich_pairing_payload", return_value={"host": "h"}),
             patch.object(m, "_relay_mobile_auth_payload", return_value={"token": "t"}),
-            patch.object(
-                m, "_cached_desktop_relay_for_account_binding", return_value=relay
-            ),
+            patch.object(m, "_cached_desktop_relay_for_account_binding", return_value=relay),
         ):
             result = await m.mobile_pairing_exchange(body=body, user=_user())
         assert result is not None
@@ -2849,11 +2857,11 @@ class TestMobileServiceBridgeRequestRespondHttpEx:
         from fastapi import HTTPException
 
         body = SimpleNamespace(status="resolved", response="ok", responded_by="admin")
-        with patch("app.db.session.get_db", side_effect=HTTPException(status_code=409, detail="conflict")):
+        with patch(
+            "app.db.session.get_db", side_effect=HTTPException(status_code=409, detail="conflict")
+        ):
             with pytest.raises(HTTPException):
-                await m.mobile_service_bridge_request_respond(
-                    request_id=1, body=body, user=_user()
-                )
+                await m.mobile_service_bridge_request_respond(request_id=1, body=body, user=_user())
 
     @pytest.mark.asyncio
     async def test_generic_exception_returns_500(self, m):
@@ -2943,9 +2951,7 @@ class TestMobileAiCircleAddCommentSuccess:
             patch.object(m, "_ai_circle_user", return_value=(1, "u", None)),
             patch("app.application.ai_circle_service.add_comment", return_value=99),
         ):
-            result = await m.mobile_ai_circle_add_comment(
-                post_id=1, body=body, user=_user()
-            )
+            result = await m.mobile_ai_circle_add_comment(post_id=1, body=body, user=_user())
         assert result is not None
 
 
@@ -3111,9 +3117,7 @@ class TestMobileAuthQrConfirmBranchCov:
     @pytest.mark.asyncio
     async def test_qr_status_expired(self, m):
         """branch: rec.status == 'expired' → 400."""
-        with patch(
-            "app.security.auth_qr_login.get_auth_qr", return_value={"status": "expired"}
-        ):
+        with patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "expired"}):
             body = m.AuthQrConfirmBody(qr_id="a" * 8, username="u", password="p")
             result = await m.mobile_auth_qr_confirm(body=body, request=MagicMock())
         assert result.status_code == 400
@@ -3122,9 +3126,7 @@ class TestMobileAuthQrConfirmBranchCov:
     async def test_session_id_empty_returns_500(self, m):
         """branch: result has no session_id → 500."""
         with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}
-            ),
+            patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}),
             patch("app.application.auth_app_service.get_auth_app_service"),
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
@@ -3140,9 +3142,7 @@ class TestMobileAuthQrConfirmBranchCov:
     async def test_confirm_auth_qr_fails_returns_400(self, m):
         """branch: confirm_auth_qr returns False → 400."""
         with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}
-            ),
+            patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}),
             patch("app.application.auth_app_service.get_auth_app_service"),
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
@@ -3171,12 +3171,8 @@ class TestMobileAuthQrConfirmBranchCov:
         mock_db.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}
-            ),
-            patch(
-                "app.security.mobile_jwt.user_id_from_mobile_bearer", return_value=42
-            ),
+            patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}),
+            patch("app.security.mobile_jwt.user_id_from_mobile_bearer", return_value=42),
             patch("app.db.session.get_db", return_value=mock_db),
             patch("app.application.auth_app_service.get_auth_app_service"),
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
@@ -3204,12 +3200,8 @@ class TestMobileAuthQrConfirmBranchCov:
         mock_db.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}
-            ),
-            patch(
-                "app.security.mobile_jwt.user_id_from_mobile_bearer", return_value=42
-            ),
+            patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}),
+            patch("app.security.mobile_jwt.user_id_from_mobile_bearer", return_value=42),
             patch("app.db.session.get_db", return_value=mock_db),
         ):
             body = m.AuthQrConfirmBody(qr_id="a" * 8, username="", password="")
@@ -3223,9 +3215,7 @@ class TestMobileAuthQrConfirmBranchCov:
         err_resp.body = b'{"message": "Invalid credentials"}'
 
         with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}
-            ),
+            patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}),
             patch("app.application.auth_app_service.get_auth_app_service"),
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
@@ -3250,9 +3240,7 @@ class TestMobileAuthQrConfirmBranchCov:
         del err_resp.body
 
         with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}
-            ),
+            patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}),
             patch("app.application.auth_app_service.get_auth_app_service"),
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
@@ -3270,9 +3258,7 @@ class TestMobileAuthQrConfirmBranchCov:
     async def test_success(self, m):
         """branch: full success path."""
         with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}
-            ),
+            patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}),
             patch("app.application.auth_app_service.get_auth_app_service"),
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
@@ -3332,9 +3318,7 @@ class TestMobileAuthOidcExchangeBranchCov:
             ),
             patch(
                 "app.infrastructure.auth.oidc_provider.exchange_oidc_authorization",
-                new=AsyncMock(
-                    return_value={"profile": "not-a-dict", "access_token": "tok"}
-                ),
+                new=AsyncMock(return_value={"profile": "not-a-dict", "access_token": "tok"}),
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
         ):
@@ -3419,7 +3403,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3434,7 +3421,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3448,7 +3438,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3463,7 +3456,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3478,7 +3474,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3493,7 +3492,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3508,7 +3510,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3522,7 +3527,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3536,7 +3544,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr([mod]),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3551,7 +3562,10 @@ class TestMobileModItemsDictBranches:
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
                 return_value=self._mgr(mods),
             ),
-            patch("app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees", return_value=[]),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+                return_value=[],
+            ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
             result = m._mobile_mod_items()
@@ -3671,7 +3685,9 @@ class TestResolveMobileRelayUserBranchCov:
         mock_db = _ctx_db(MagicMock())
         # First call (admin-filtered) returns None; second call (all users) returns row
         mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = any_row
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            any_row
+        )
         with (
             patch("app.db.session.get_db", return_value=mock_db),
             patch.object(m, "_mobile_user_identity", return_value=(0, "")),
@@ -3687,7 +3703,9 @@ class TestResolveMobileRelayUserBranchCov:
         mock_db = _ctx_db(MagicMock())
         # Both queries return None
         mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            None
+        )
         with (
             patch("app.db.session.get_db", return_value=mock_db),
             patch.object(m, "_mobile_user_identity", return_value=(0, "")),

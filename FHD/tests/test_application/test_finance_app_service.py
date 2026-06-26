@@ -414,9 +414,7 @@ class TestCreateTransaction:
                 "app.application.finance_app_service.FinancialTransaction",
                 return_value=mock_txn,
             ):
-                result = svc.create_transaction(
-                    {"transaction_type": "receipt", "amount": "100"}
-                )
+                result = svc.create_transaction({"transaction_type": "receipt", "amount": "100"})
 
         assert result["success"] is False
         assert "db constraint" in result["message"]
@@ -523,9 +521,7 @@ class TestUpdateTransaction:
         db.query.return_value = q
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"
-            ):
+            with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
                 svc.update_transaction(1, {"amount": "250.50"})
 
         # Verify amount was set as Decimal
@@ -544,9 +540,7 @@ class TestUpdateTransaction:
         db.query.return_value = q
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"
-            ):
+            with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
                 svc.update_transaction(
                     1,
                     {
@@ -571,9 +565,7 @@ class TestUpdateTransaction:
         db.query.return_value = q
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"
-            ):
+            with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
                 svc.update_transaction(
                     1,
                     {
@@ -637,9 +629,7 @@ class TestUpdateTransaction:
         db.query.return_value = q
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"
-            ):
+            with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
                 svc.update_transaction(
                     1,
                     {
@@ -775,7 +765,7 @@ class TestGetMonthlyTrend:
         assert result["year"] == datetime.utcnow().year
         assert len(result["data"]) == 12
         for i, month_data in enumerate(result["data"]):
-            assert month_data["month"] == f"{datetime.utcnow().year}-{i+1:02d}"
+            assert month_data["month"] == f"{datetime.utcnow().year}-{i + 1:02d}"
             assert month_data["revenue"] == 0.0
             assert month_data["cost"] == 0.0
             assert month_data["profit"] == 0.0
@@ -803,7 +793,7 @@ class TestGetMonthlyTrend:
         # Alternate revenue and cost values for 12 months
         values = []
         for i in range(12):
-            values.extend([Decimal(f"{(i+1) * 100}.00"), Decimal(f"{(i+1) * 50}.00")])
+            values.extend([Decimal(f"{(i + 1) * 100}.00"), Decimal(f"{(i + 1) * 50}.00")])
         q.scalar.side_effect = values
         db.query.return_value = q
 

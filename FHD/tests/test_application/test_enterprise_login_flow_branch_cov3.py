@@ -284,9 +284,7 @@ class TestFinalizeEnterpriseLogin:
     async def test_market_result_none_personal_sku_sets_password_for_market(self):
         """market_result=None 且 sku != enterprise → password_for_market=True 分支。"""
         result = {"user": {"id": 1}}
-        with patch(
-            "app.fastapi_routes.market_account.save_session_market_token"
-        ) as mock_save:
+        with patch("app.fastapi_routes.market_account.save_session_market_token") as mock_save:
             out = await finalize_enterprise_login(
                 result=result,
                 session_id="sid",
@@ -324,9 +322,7 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow.bind_tenant_for_login",
                 return_value={"tenant_id": 42, "tenant_name": "Brand"},
             ),
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -346,9 +342,7 @@ class TestFinalizeEnterpriseLogin:
         result = {"user": {"id": 1}}
         market = {"success": True, "token": "mtok", "refresh_token": "mref"}
         with (
-            patch(
-                "app.fastapi_routes.market_account.save_session_market_token"
-            ) as mock_save,
+            patch("app.fastapi_routes.market_account.save_session_market_token") as mock_save,
             patch(
                 "app.application.enterprise_login_flow.extract_market_user_blob",
                 return_value={"id": 10, "username": "alice"},
@@ -365,9 +359,7 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow._derive_and_heal_account_kind",
                 return_value="enterprise",
             ),
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
             patch(
                 "app.fastapi_routes.market_account.fetch_market_membership_tier",
                 new_callable=AsyncMock,
@@ -396,9 +388,7 @@ class TestFinalizeEnterpriseLogin:
         result = {"user": {"id": 1}}
         market = {"success": True, "token": "mtok"}
         with (
-            patch(
-                "app.fastapi_routes.market_account.save_session_market_token"
-            ),
+            patch("app.fastapi_routes.market_account.save_session_market_token"),
             patch(
                 "app.application.enterprise_login_flow.extract_market_user_blob",
                 return_value={"id": 10},
@@ -415,9 +405,7 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow._derive_and_heal_account_kind",
                 return_value="personal",
             ),
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
             patch(
                 "app.fastapi_routes.market_account.fetch_market_membership_tier",
                 new_callable=AsyncMock,
@@ -458,9 +446,7 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow._derive_and_heal_account_kind",
                 return_value="personal",
             ),
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
             patch(
                 "app.fastapi_routes.market_account.fetch_market_membership_tier",
                 new_callable=AsyncMock,
@@ -496,16 +482,12 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow.company_brand_from_user_blob",
                 return_value="Brand",
             ),
-            patch(
-                "app.application.enterprise_login_flow.bind_tenant_for_login"
-            ) as mock_bind,
+            patch("app.application.enterprise_login_flow.bind_tenant_for_login") as mock_bind,
             patch(
                 "app.application.enterprise_login_flow._derive_and_heal_account_kind",
                 return_value="personal",
             ),
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
             patch(
                 "app.fastapi_routes.market_account.fetch_market_membership_tier",
                 new_callable=AsyncMock,
@@ -590,9 +572,7 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow._derive_and_heal_account_kind",
                 return_value="enterprise",
             ),
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
             patch(
                 "app.fastapi_routes.market_account.fetch_market_membership_tier",
                 new_callable=AsyncMock,
@@ -603,9 +583,7 @@ class TestFinalizeEnterpriseLogin:
                 new_callable=AsyncMock,
                 return_value=[1, 2, 3],
             ),
-            patch(
-                "app.enterprise.mod_entitlements.persist_entitlements_to_session_row"
-            ),
+            patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
             patch(
                 "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
                 new_callable=AsyncMock,
@@ -648,9 +626,7 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow._derive_and_heal_account_kind",
                 return_value="enterprise",
             ),
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
             patch(
                 "app.fastapi_routes.market_account.fetch_market_membership_tier",
                 new_callable=AsyncMock,
@@ -661,9 +637,7 @@ class TestFinalizeEnterpriseLogin:
                 new_callable=AsyncMock,
                 return_value=[],
             ),
-            patch(
-                "app.enterprise.mod_entitlements.persist_entitlements_to_session_row"
-            ),
+            patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
             patch(
                 "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
                 new_callable=AsyncMock,
@@ -715,12 +689,8 @@ class TestFinalizeEnterpriseLogin:
                 "app.enterprise.account_mod_binding.augment_entitled_client_mod_ids_for_username",
                 return_value={10, 20},
             ),
-            patch(
-                "app.enterprise.mod_entitlements.set_session_entitlements"
-            ),
-            patch(
-                "app.enterprise.mod_entitlements.persist_entitlements_to_session_row"
-            ),
+            patch("app.enterprise.mod_entitlements.set_session_entitlements"),
+            patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
             patch(
                 "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
                 return_value=True,
@@ -807,12 +777,8 @@ class TestFinalizeEnterpriseLogin:
         """skip_market_sync=True 且 result 无 user.id → 跳过 tenant 绑定。"""
         result = {}
         with (
-            patch(
-                "app.application.enterprise_login_flow.bind_tenant_for_login"
-            ) as mock_bind,
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.bind_tenant_for_login") as mock_bind,
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -855,9 +821,7 @@ class TestRunMarketFirstLogin:
                     "tenant_id": 42,
                 },
             ),
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
         ):
             result, err = await run_market_first_login(
                 username="admin",
@@ -1222,9 +1186,7 @@ class TestRunMarketFirstLogin:
                 "app.application.enterprise_login_flow.finalize_enterprise_login",
                 new_callable=AsyncMock,
             ) as mock_finalize,
-            patch(
-                "app.application.enterprise_login_flow.persist_session_account_meta"
-            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
         ):
             result, err = await run_market_first_login(
                 username="admin",
@@ -1486,7 +1448,12 @@ class TestFinalizeAuthAfterOidc:
             patch(
                 "app.fastapi_routes.market_account.login_market_for_oidc_profile",
                 new_callable=AsyncMock,
-                return_value={"success": True, "token": "mtok", "is_enterprise": True, "is_market_admin": True},
+                return_value={
+                    "success": True,
+                    "token": "mtok",
+                    "is_enterprise": True,
+                    "is_market_admin": True,
+                },
             ),
             patch(
                 "app.application.enterprise_login_flow.validate_account_kind_for_market",

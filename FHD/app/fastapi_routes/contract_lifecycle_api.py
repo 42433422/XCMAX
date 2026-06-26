@@ -38,7 +38,7 @@ def esign_channel(request: Request):
     gate = _require_admin_session(request)
     if gate is not None:
         return gate
-    from app.services.esign_adapter import esign_channel_status
+    from app.infrastructure.esign.esign_adapter import esign_channel_status
 
     return JSONResponse(esign_channel_status())
 
@@ -109,8 +109,8 @@ def esign_start(body: EsignStartBody):
 @router.get("/esign/sign/{task_id}")
 def esign_sign_task_public(task_id: str, token: str = ""):
     """客户签署页拉取任务信息（无需登录，须 token）。"""
-    from app.services.esign_adapter import esign_provider_name
-    from app.services.stub_esign_store import (
+    from app.infrastructure.esign.esign_adapter import esign_provider_name
+    from app.infrastructure.esign.stub_esign_store import (
         get_task,
         task_ttl_exceeded,
         verify_sign_token,
@@ -148,14 +148,14 @@ def esign_sign_task_public(task_id: str, token: str = ""):
 @router.post("/esign/sign/{task_id}/complete")
 def esign_sign_complete_public(task_id: str, body: EsignSignCompleteBody):
     """客户在自建签署页确认签署，自动推进合同状态。"""
-    from app.services.contract_lifecycle import handle_esign_webhook
-    from app.services.esign_adapter import esign_provider_name
-    from app.services.stub_esign_store import (
+    from app.infrastructure.esign.esign_adapter import esign_provider_name
+    from app.infrastructure.esign.stub_esign_store import (
         complete_task,
         get_task,
         task_ttl_exceeded,
         verify_sign_token,
     )
+    from app.services.contract_lifecycle import handle_esign_webhook
 
     if esign_provider_name() != "stub":
         return JSONResponse(
@@ -212,12 +212,12 @@ async def esign_webhook(request: Request):
 
 
 async def _fadada_esign_webhook(request: Request) -> PlainTextResponse | JSONResponse:
-    from app.services.contract_lifecycle import handle_esign_webhook
-    from app.services.esign_adapter import get_esign_adapter
-    from app.services.fadada_fasc_client import (
+    from app.infrastructure.esign.esign_adapter import get_esign_adapter
+    from app.infrastructure.esign.fadada_fasc_client import (
         parse_fadada_callback_biz,
         verify_fadada_callback_signature,
     )
+    from app.services.contract_lifecycle import handle_esign_webhook
 
     form = await request.form()
     biz_content = str(form.get("bizContent") or "")

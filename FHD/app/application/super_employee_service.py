@@ -1823,9 +1823,7 @@ class SuperEmployeeService:
     def _safe_context_branch(cls, context: dict[str, Any] | None) -> str:
         data = context if isinstance(context, dict) else {}
         return cls._safe_branch_name(
-            data.get("branch_context")
-            or data.get("branch")
-            or data.get("selected_branch")
+            data.get("branch_context") or data.get("branch") or data.get("selected_branch")
         )
 
     def _resolve_branch_ref(self, base_cwd: str, branch: str) -> str:

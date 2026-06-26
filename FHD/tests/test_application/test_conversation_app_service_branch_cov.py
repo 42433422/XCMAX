@@ -108,7 +108,9 @@ class TestGetSessionMessagesBranches:
         service = ConversationApplicationService()
         with _fake_db_ctx(db):
             service.get_session_messages("sess-1", limit=10)
-        db.query.return_value.filter.return_value.order_by.return_value.limit.assert_called_once_with(10)
+        db.query.return_value.filter.return_value.order_by.return_value.limit.assert_called_once_with(
+            10
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +125,9 @@ class TestGetOrCreateSessionBranches:
         """Session found — returns existing session_id (branch 95->96)."""
         existing = _make_session("sess-existing", "user-1")
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = existing
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            existing
+        )
         service = ConversationApplicationService()
         with _fake_db_ctx(db):
             result = service.get_or_create_session("user-1")
@@ -249,9 +253,7 @@ class TestSaveMessageBranches:
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_conversation_message_saved"
             ):
-                result = service.save_message(
-                    "sess-1", "user-1", "user", "hello", "chat", "{}"
-                )
+                result = service.save_message("sess-1", "user-1", "user", "hello", "chat", "{}")
         assert result == 42
 
     def test_save_message_neuro_notify_error_swallowed(self):
@@ -269,9 +271,7 @@ class TestSaveMessageBranches:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_conversation_message_saved",
                 side_effect=ConnectionError("bus down"),
             ):
-                result = service.save_message(
-                    "sess-1", "user-1", "user", "hello", "chat", "{}"
-                )
+                result = service.save_message("sess-1", "user-1", "user", "hello", "chat", "{}")
         assert result == 99
 
 
@@ -357,4 +357,6 @@ class TestGetSessions:
         service = ConversationApplicationService()
         with _fake_db_ctx(db):
             service.get_sessions("u1", limit=5)
-        db.query.return_value.filter.return_value.order_by.return_value.limit.assert_called_once_with(5)
+        db.query.return_value.filter.return_value.order_by.return_value.limit.assert_called_once_with(
+            5
+        )

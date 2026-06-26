@@ -546,7 +546,9 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         return {"error": str(exc)[:1000]}
 
 
-def _git_op_from_message(payload: dict[str, Any], message: str) -> tuple[str, dict[str, Any]] | None:
+def _git_op_from_message(
+    payload: dict[str, Any], message: str
+) -> tuple[str, dict[str, Any]] | None:
     text = str(message or "").strip()
     lowered = text.lower()
     explicit = str(payload.get("git_op") or payload.get("op") or "").strip()
@@ -571,10 +573,9 @@ def _git_op_from_message(payload: dict[str, Any], message: str) -> tuple[str, di
         or (str(payload.get("branch") or "").strip() if allow_selected_branch else "")
         or (str(context.get("branch") or "").strip() if allow_selected_branch else "")
     )
-    target = (
-        str(payload.get("target_branch") or payload.get("target") or payload.get("base") or "").strip()
-        or _extract_target_branch(text)
-    )
+    target = str(
+        payload.get("target_branch") or payload.get("target") or payload.get("base") or ""
+    ).strip() or _extract_target_branch(text)
     if git_kind == "git.merge" and not target:
         target = _extract_merge_target(text)
     if not source:
@@ -668,9 +669,13 @@ def _classify_terminal_result(row: dict[str, Any], *, message: str) -> tuple[boo
         relay_status = "failed" if _body_indicates_failed(body) else "blocked"
         return False, relay_status, _terminal_error_summary(body, "执行端回写显示未完成")
     if _message_requires_execution_evidence(message) and not _body_has_execution_evidence(body):
-        return False, "blocked", _terminal_error_summary(
-            body,
-            "执行端回写缺少改动文件、命令、测试、构建或手机复测证据",
+        return (
+            False,
+            "blocked",
+            _terminal_error_summary(
+                body,
+                "执行端回写缺少改动文件、命令、测试、构建或手机复测证据",
+            ),
         )
     if status in _COMPLETED_STATUSES or body:
         return True, "completed", ""
@@ -681,13 +686,24 @@ def _body_indicates_unfinished(body: str) -> bool:
     if not body:
         return False
     compact = body.replace(" ", "")
-    return any(marker in body or marker.replace(" ", "") in compact for marker in _FAILURE_BODY_MARKERS)
+    return any(
+        marker in body or marker.replace(" ", "") in compact for marker in _FAILURE_BODY_MARKERS
+    )
 
 
 def _body_indicates_failed(body: str) -> bool:
     return any(
         marker in body
-        for marker in ("失败", "failed", "合并有冲突", "merge conflict", "验证未通过", "❌", "error", "Error")
+        for marker in (
+            "失败",
+            "failed",
+            "合并有冲突",
+            "merge conflict",
+            "验证未通过",
+            "❌",
+            "error",
+            "Error",
+        )
     )
 
 

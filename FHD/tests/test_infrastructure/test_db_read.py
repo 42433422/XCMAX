@@ -77,7 +77,13 @@ class TestLoadProductsForPriceListByCustomer:
         mock_engine = MagicMock()
         mock_conn = MagicMock()
         mock_engine.connect.return_value.__enter__.return_value = mock_conn
-        mock_row = {"model_number": "M1", "name": "P", "specification": "S", "unit": "Acme", "price": 10}
+        mock_row = {
+            "model_number": "M1",
+            "name": "P",
+            "specification": "S",
+            "unit": "Acme",
+            "price": 10,
+        }
         mock_result = MagicMock()
         mock_result.mappings.return_value.all.return_value = [mock_row]
         mock_conn.execute.return_value = mock_result

@@ -328,9 +328,7 @@ class TestRowValuesLookLikeTableHeaders:
         )
 
     def test_two_non_header_values_returns_false(self):
-        assert (
-            AIChatApplicationService._row_values_look_like_table_headers(["abc", "def"]) is False
-        )
+        assert AIChatApplicationService._row_values_look_like_table_headers(["abc", "def"]) is False
 
     def test_with_none_values_filtered(self):
         assert (
@@ -535,7 +533,8 @@ class TestExcelCellLooksLikeProductMeasureUnit:
 
     def test_plain_text_returns_false(self):
         assert (
-            AIChatApplicationService._excel_cell_looks_like_product_measure_unit("客户名称") is False
+            AIChatApplicationService._excel_cell_looks_like_product_measure_unit("客户名称")
+            is False
         )
 
     def test_number_returns_false(self):
@@ -1092,9 +1091,7 @@ class TestTryStructuredReloadRecords:
         ea = {"file_path": str(excel_file)}
 
         mock_structured = {
-            "sample_rows": [
-                {"name": "test", "nan_val": float("nan"), "none_str": "nan"}
-            ]
+            "sample_rows": [{"name": "test", "nan_val": float("nan"), "none_str": "nan"}]
         }
         with patch(
             "app.application.template_grid_core._extract_structured_excel_preview",
@@ -1534,6 +1531,7 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_persist_chat_turn"),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_conn_error(*args, **kwargs):
                 raise ConnectionError("connection failed")
 
@@ -1553,6 +1551,7 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_persist_chat_turn"),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_timeout(*args, **kwargs):
                 raise TimeoutError("timed out")
 
@@ -1572,6 +1571,7 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_persist_chat_turn"),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_apikey_error(*args, **kwargs):
                 raise RuntimeError("api_key invalid")
 
@@ -1591,6 +1591,7 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_persist_chat_turn"),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_apikey_error(*args, **kwargs):
                 raise RuntimeError("APIKEY not set")
 
@@ -1610,6 +1611,7 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_persist_chat_turn"),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_conn_error(*args, **kwargs):
                 raise RuntimeError("connection refused")
 
@@ -1629,6 +1631,7 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_persist_chat_turn"),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_generic_error(*args, **kwargs):
                 raise RuntimeError("something went wrong")
 
@@ -1645,9 +1648,7 @@ class TestProcessChatErrorBranches:
             patch("app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed"),
             patch.object(svc, "_inject_excel_vector_context", return_value={}),
             patch.object(svc, "_handle_confirmation_flow"),
-            patch.object(
-                svc, "_try_handle_dynamic_workflow", return_value=workflow_result
-            ),
+            patch.object(svc, "_try_handle_dynamic_workflow", return_value=workflow_result),
             patch.object(svc, "_persist_chat_turn"),
         ):
             result = svc.process_chat("u1", "查产品", None, None, None)
@@ -1665,6 +1666,7 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_persist_chat_turn"),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def mock_chat_impl(*args, **kwargs):
                 return {"action": "test", "response": "ok"}
 
@@ -1685,6 +1687,7 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_persist_chat_turn"),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def mock_chat_impl(*args, **kwargs):
                 return {"action": "test"}
 
@@ -1701,11 +1704,10 @@ class TestProcessChatErrorBranches:
             patch.object(svc, "_inject_excel_vector_context", return_value={}),
             patch.object(svc, "_handle_confirmation_flow"),
             patch.object(svc, "_try_handle_dynamic_workflow", return_value=None),
-            patch.object(
-                svc, "_persist_chat_turn", side_effect=RuntimeError("persist failed")
-            ),
+            patch.object(svc, "_persist_chat_turn", side_effect=RuntimeError("persist failed")),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def mock_chat_impl(*args, **kwargs):
                 return {"action": "test", "response": "ok"}
 

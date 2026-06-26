@@ -4,6 +4,7 @@ Bug：Codex（只读沙箱）返回 success=True 却在正文说"不能执行命
 被 _execute_employee_work 当成验收通过（false acceptance）。
 修复：在源头用拒绝短语表判真失败，并自动改派到真能执行的 Claude。
 """
+
 from __future__ import annotations
 
 from pathlib import Path

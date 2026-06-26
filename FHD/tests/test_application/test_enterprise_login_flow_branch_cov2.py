@@ -177,47 +177,59 @@ class TestBindTenantForLogin:
             assert result == {"tenant_id": None, "tenant_name": ""}
 
     def test_returns_tenant_id_when_provisioned(self) -> None:
-        with patch(
-            "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            return_value=42,
-        ), patch(
-            "app.application.tenant_subscription_app_service.sync_tenant_display_name",
-            return_value="TenantName",
+        with (
+            patch(
+                "app.application.tenant_subscription_app_service.provision_trial_for_user",
+                return_value=42,
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.sync_tenant_display_name",
+                return_value="TenantName",
+            ),
         ):
             result = bind_tenant_for_login(user_id=1, company_brand="brand", username="user")
             assert result["tenant_id"] == 42
             assert result["tenant_name"] == "TenantName"
 
     def test_returns_empty_tenant_id_when_none(self) -> None:
-        with patch(
-            "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            return_value=None,
-        ), patch(
-            "app.application.tenant_subscription_app_service.sync_tenant_display_name",
-            return_value="",
+        with (
+            patch(
+                "app.application.tenant_subscription_app_service.provision_trial_for_user",
+                return_value=None,
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.sync_tenant_display_name",
+                return_value="",
+            ),
         ):
             result = bind_tenant_for_login(user_id=1, company_brand="brand", username="user")
             assert result["tenant_id"] is None
             assert result["tenant_name"] == "brand"
 
     def test_falls_back_to_company_brand_when_no_name(self) -> None:
-        with patch(
-            "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            return_value=None,
-        ), patch(
-            "app.application.tenant_subscription_app_service.sync_tenant_display_name",
-            return_value="",
+        with (
+            patch(
+                "app.application.tenant_subscription_app_service.provision_trial_for_user",
+                return_value=None,
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.sync_tenant_display_name",
+                return_value="",
+            ),
         ):
             result = bind_tenant_for_login(user_id=1, company_brand="MyBrand", username="user")
             assert result["tenant_name"] == "MyBrand"
 
     def test_returns_empty_tenant_name_when_no_brand(self) -> None:
-        with patch(
-            "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            return_value=None,
-        ), patch(
-            "app.application.tenant_subscription_app_service.sync_tenant_display_name",
-            return_value="",
+        with (
+            patch(
+                "app.application.tenant_subscription_app_service.provision_trial_for_user",
+                return_value=None,
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.sync_tenant_display_name",
+                return_value="",
+            ),
         ):
             result = bind_tenant_for_login(user_id=1, company_brand="", username="user")
             assert result["tenant_name"] == ""
@@ -243,10 +255,13 @@ class TestDeriveAndHealAccountKind:
     def test_returns_derived_when_user_not_found(self) -> None:
         mock_db = MagicMock()
         mock_db.get.return_value = None
-        with patch("app.db.session.get_db") as mock_get_db, patch(
-            "app.application.session_account_meta.derive_account_kind_from_user",
-            return_value="enterprise",
-        ) as mock_derive:
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch(
+                "app.application.session_account_meta.derive_account_kind_from_user",
+                return_value="enterprise",
+            ) as mock_derive,
+        ):
             mock_get_db.return_value.__enter__.return_value = mock_db
             mock_get_db.return_value.__exit__.return_value = None
             result = _derive_and_heal_account_kind(
@@ -262,9 +277,12 @@ class TestDeriveAndHealAccountKind:
         mock_user.tier = ""
         mock_db = MagicMock()
         mock_db.get.return_value = mock_user
-        with patch("app.db.session.get_db") as mock_get_db, patch(
-            "app.application.session_account_meta.derive_account_kind_from_user",
-            return_value="admin",
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch(
+                "app.application.session_account_meta.derive_account_kind_from_user",
+                return_value="admin",
+            ),
         ):
             mock_get_db.return_value.__enter__.return_value = mock_db
             mock_get_db.return_value.__exit__.return_value = None
@@ -283,9 +301,12 @@ class TestDeriveAndHealAccountKind:
         mock_user.tier = "enterprise"
         mock_db = MagicMock()
         mock_db.get.return_value = mock_user
-        with patch("app.db.session.get_db") as mock_get_db, patch(
-            "app.application.session_account_meta.derive_account_kind_from_user",
-            return_value="enterprise",
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch(
+                "app.application.session_account_meta.derive_account_kind_from_user",
+                return_value="enterprise",
+            ),
         ):
             mock_get_db.return_value.__enter__.return_value = mock_db
             mock_get_db.return_value.__exit__.return_value = None
@@ -303,9 +324,12 @@ class TestDeriveAndHealAccountKind:
         mock_user.tier = ""
         mock_db = MagicMock()
         mock_db.get.return_value = mock_user
-        with patch("app.db.session.get_db") as mock_get_db, patch(
-            "app.application.session_account_meta.derive_account_kind_from_user",
-            return_value="personal",
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch(
+                "app.application.session_account_meta.derive_account_kind_from_user",
+                return_value="personal",
+            ),
         ):
             mock_get_db.return_value.__enter__.return_value = mock_db
             mock_get_db.return_value.__exit__.return_value = None
@@ -323,10 +347,13 @@ class TestDeriveAndHealAccountKind:
         mock_ctx = MagicMock()
         mock_ctx.__enter__.side_effect = RuntimeError("db down")
         mock_ctx.__exit__.return_value = None
-        with patch("app.db.session.get_db", return_value=mock_ctx), patch(
-            "app.application.session_account_meta.derive_account_kind_from_user",
-            return_value="personal",
-        ) as mock_derive:
+        with (
+            patch("app.db.session.get_db", return_value=mock_ctx),
+            patch(
+                "app.application.session_account_meta.derive_account_kind_from_user",
+                return_value="personal",
+            ) as mock_derive,
+        ):
             result = _derive_and_heal_account_kind(
                 user_id=1,
                 market_is_admin=False,

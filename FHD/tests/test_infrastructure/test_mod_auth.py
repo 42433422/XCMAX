@@ -106,9 +106,7 @@ class TestGenerateSignature:
         secret = "test-secret-key"
         monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", secret)
         sig = ModContext._generate_signature("mod1")
-        expected = hmac.new(
-            secret.encode(), b"mod1", hashlib.sha256
-        ).hexdigest()[:32]
+        expected = hmac.new(secret.encode(), b"mod1", hashlib.sha256).hexdigest()[:32]
         assert sig == expected
         assert len(sig) == 32
 
@@ -340,9 +338,7 @@ class TestMiddlewareCall:
                 (b"x-xcagi-active-mod-id", b"mod1"),
             ],
         }
-        with patch(
-            "app.infrastructure.mods.mod_manager.ensure_mod_api_ready"
-        ):
+        with patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready"):
             await middleware(scope, MagicMock(), MagicMock())
 
     @pytest.mark.asyncio
@@ -359,9 +355,7 @@ class TestMiddlewareCall:
             "path": "/api/mod/mymod/resource",
             "headers": [],
         }
-        with patch(
-            "app.infrastructure.mods.mod_manager.ensure_mod_api_ready"
-        ):
+        with patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready"):
             await middleware(scope, MagicMock(), MagicMock())
 
     @pytest.mark.asyncio
@@ -416,9 +410,7 @@ class TestMiddlewareCall:
             "path": "/api/other",
             "headers": [],
         }
-        with patch.object(
-            ModContext, "from_request", side_effect=ValueError("parse error")
-        ):
+        with patch.object(ModContext, "from_request", side_effect=ValueError("parse error")):
             await middleware(scope, MagicMock(), MagicMock())
 
     @pytest.mark.asyncio
@@ -433,9 +425,7 @@ class TestMiddlewareCall:
             "path": "/api/other",
             "headers": [],
         }
-        with patch.object(
-            ModContext, "from_request", side_effect=TypeError("type error")
-        ):
+        with patch.object(ModContext, "from_request", side_effect=TypeError("type error")):
             await middleware(scope, MagicMock(), MagicMock())
 
     @pytest.mark.asyncio
@@ -450,9 +440,7 @@ class TestMiddlewareCall:
             "path": "/api/other",
             "headers": [],
         }
-        with patch.object(
-            ModContext, "from_request", side_effect=RuntimeError("runtime error")
-        ):
+        with patch.object(ModContext, "from_request", side_effect=RuntimeError("runtime error")):
             await middleware(scope, MagicMock(), MagicMock())
 
     @pytest.mark.asyncio

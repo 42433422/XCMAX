@@ -45,16 +45,20 @@ def _make_mock_engine(conn: MagicMock | None = None) -> MagicMock:
 
 class TestBusinessDataHidden:
     def test_business_data_not_exposed_returns_empty(self) -> None:
-        with patch(
-            "app.infrastructure.persistence.compat_db.product_queries.business_data_exposed",
-            create=True,
-            return_value=False,
-        ) as mock_exposed, patch(
-            "app.shell.mod_business_scope.business_data_exposed",
-            return_value=False,
-        ), patch(
-            "app.shell.mod_business_scope.business_data_hidden_reason",
-            return_value="data hidden reason",
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.business_data_exposed",
+                create=True,
+                return_value=False,
+            ) as mock_exposed,
+            patch(
+                "app.shell.mod_business_scope.business_data_exposed",
+                return_value=False,
+            ),
+            patch(
+                "app.shell.mod_business_scope.business_data_hidden_reason",
+                return_value="data hidden reason",
+            ),
         ):
             rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
         assert rows == []
@@ -134,9 +138,7 @@ class TestMetaTimeoutParsing:
                 "app.infrastructure.persistence.compat_db.product_queries.inspect",
                 return_value=mock_insp,
             ),
-            patch.dict(
-                os.environ, {"FHD_PRODUCTS_META_TIMEOUT_MS": "invalid"}, clear=False
-            ),
+            patch.dict(os.environ, {"FHD_PRODUCTS_META_TIMEOUT_MS": "invalid"}, clear=False),
             patch(
                 "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
             ),
@@ -165,9 +167,7 @@ class TestMetaTimeoutParsing:
                 "app.infrastructure.persistence.compat_db.product_queries.inspect",
                 return_value=mock_insp,
             ),
-            patch.dict(
-                os.environ, {"FHD_PRODUCTS_META_TIMEOUT_MS": "0"}, clear=False
-            ),
+            patch.dict(os.environ, {"FHD_PRODUCTS_META_TIMEOUT_MS": "0"}, clear=False),
             patch(
                 "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
             ),
@@ -230,9 +230,7 @@ class TestCountQueryBranches:
                 "app.infrastructure.persistence.compat_db.product_queries.inspect",
                 return_value=mock_insp,
             ),
-            patch.dict(
-                os.environ, {"FHD_PRODUCTS_COUNT_TIMEOUT_MS": "0"}, clear=False
-            ),
+            patch.dict(os.environ, {"FHD_PRODUCTS_COUNT_TIMEOUT_MS": "0"}, clear=False),
             patch(
                 "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
             ),
@@ -327,9 +325,7 @@ class TestDataQueryBranches:
                 "app.infrastructure.persistence.compat_db.product_queries.inspect",
                 return_value=mock_insp,
             ),
-            patch.dict(
-                os.environ, {"FHD_PRODUCTS_QUERY_TIMEOUT_MS": "0"}, clear=False
-            ),
+            patch.dict(os.environ, {"FHD_PRODUCTS_QUERY_TIMEOUT_MS": "0"}, clear=False),
             patch(
                 "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
             ),
@@ -816,9 +812,7 @@ class TestOperationalErrorOuter:
     def test_operational_error_at_metadata_returns_connection_error(self) -> None:
         mock_eng = MagicMock()
         # First connect raises OperationalError
-        mock_eng.connect.side_effect = OperationalError(
-            "stmt", {}, RuntimeError("conn refused")
-        )
+        mock_eng.connect.side_effect = OperationalError("stmt", {}, RuntimeError("conn refused"))
         with (
             patch(
                 "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",

@@ -57,7 +57,9 @@ def _patch_excel_text_to_pandas(translate_return=None, translate_side_effect=Non
     else:
         mock_converter.translate.return_value = translate_return
     fake_module = MagicMock(ExcelTextToPandas=MagicMock(return_value=mock_converter))
-    return patch.dict("sys.modules", {"app.legacy.excel_text_to_pandas": fake_module}), mock_converter
+    return patch.dict(
+        "sys.modules", {"app.legacy.excel_text_to_pandas": fake_module}
+    ), mock_converter
 
 
 class TestRunNaturalLanguagePandas:
@@ -65,9 +67,7 @@ class TestRunNaturalLanguagePandas:
 
     def test_value_error_sets_error_msg(self) -> None:
         df = pd.DataFrame({"a": [1, 2]})
-        patch_ctx, _ = _patch_excel_text_to_pandas(
-            translate_side_effect=ValueError("bad query")
-        )
+        patch_ctx, _ = _patch_excel_text_to_pandas(translate_side_effect=ValueError("bad query"))
         with patch_ctx:
             result = run_natural_language_pandas(df, "bad")
         assert "error" in result
@@ -76,9 +76,7 @@ class TestRunNaturalLanguagePandas:
 
     def test_recoverable_error_sets_error_msg(self) -> None:
         df = pd.DataFrame({"a": [1, 2]})
-        patch_ctx, _ = _patch_excel_text_to_pandas(
-            translate_side_effect=OSError("io fail")
-        )
+        patch_ctx, _ = _patch_excel_text_to_pandas(translate_side_effect=OSError("io fail"))
         with patch_ctx:
             result = run_natural_language_pandas(df, "x")
         assert "error" in result
@@ -122,9 +120,7 @@ class TestRunNaturalLanguagePandas:
     def test_successful_code_execution(self) -> None:
         """translate 返回有效代码时执行并返回结果。"""
         df = pd.DataFrame({"a": [1, 2, 3]})
-        patch_ctx, _ = _patch_excel_text_to_pandas(
-            translate_return="result = df.head(1)"
-        )
+        patch_ctx, _ = _patch_excel_text_to_pandas(translate_return="result = df.head(1)")
         with patch_ctx:
             result = run_natural_language_pandas(df, "first row")
         assert result["generated_code"] == "result = df.head(1)"
@@ -132,9 +128,7 @@ class TestRunNaturalLanguagePandas:
 
     def test_runtime_error_sets_error_msg(self) -> None:
         df = pd.DataFrame({"a": [1, 2]})
-        patch_ctx, _ = _patch_excel_text_to_pandas(
-            translate_side_effect=RuntimeError("rt fail")
-        )
+        patch_ctx, _ = _patch_excel_text_to_pandas(translate_side_effect=RuntimeError("rt fail"))
         with patch_ctx:
             result = run_natural_language_pandas(df, "x")
         assert "error" in result
@@ -164,9 +158,7 @@ class TestHandleExcelAnalysis:
         assert "denied" in result["error"]
 
     def test_file_not_found_returns_error(self, tmp_path: Path) -> None:
-        result = handle_excel_analysis(
-            {"file_path": "missing.xlsx"}, workspace_root=str(tmp_path)
-        )
+        result = handle_excel_analysis({"file_path": "missing.xlsx"}, workspace_root=str(tmp_path))
         assert result["success"] is False
         assert result["error"] == "file not found"
 
@@ -187,11 +179,12 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.application.tools.workflow.run_natural_language_pandas",
-            return_value={"generated_code": "x", "row_count": 2},
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.application.tools.workflow.run_natural_language_pandas",
+                return_value={"generated_code": "x", "row_count": 2},
+            ),
         ):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "excel_query", "natural_language": "x"},
@@ -203,12 +196,13 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.application.template_grid_core._extract_customer_hint_from_excel",
-            return_value="客户A",
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.application.template_grid_core._extract_customer_hint_from_excel",
+                return_value="客户A",
+                create=True,
+            ),
         ):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "read"}, workspace_root=str(tmp_path)
@@ -221,12 +215,13 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.application.template_grid_core._extract_customer_hint_from_excel",
-            side_effect=OSError("fail"),
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.application.template_grid_core._extract_customer_hint_from_excel",
+                side_effect=OSError("fail"),
+                create=True,
+            ),
         ):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "read"}, workspace_root=str(tmp_path)
@@ -238,12 +233,13 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.application.template_grid_core._extract_customer_hint_from_excel",
-            return_value="",
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.application.template_grid_core._extract_customer_hint_from_excel",
+                return_value="",
+                create=True,
+            ),
         ):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "read", "header_row": 2},
@@ -256,9 +252,7 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "query", "query_expression": "a > 1"},
                 workspace_root=str(tmp_path),
@@ -271,9 +265,7 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2, 3]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "query"},
                 workspace_root=str(tmp_path),
@@ -285,9 +277,7 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"cat": ["a", "a", "b"], "val": [1, 2, 3]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {
                     "file_path": "data.xlsx",
@@ -304,9 +294,7 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"cat": ["a"], "val": [1]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {
                     "file_path": "data.xlsx",
@@ -322,9 +310,7 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "aggregate"},
                 workspace_root=str(tmp_path),
@@ -335,9 +321,7 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2, 3]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "statistics"},
                 workspace_root=str(tmp_path),
@@ -350,9 +334,7 @@ class TestHandleExcelAnalysis:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "unknown"},
                 workspace_root=str(tmp_path),
@@ -476,7 +458,12 @@ class TestExecuteWorkflowToolJoinCompare:
         with patch("pandas.read_excel", side_effect=[a, b]):
             result = self._call(
                 "excel_join_compare",
-                {"action": "diff", "file_path_a": "fa.xlsx", "file_path_b": "fb.xlsx", "key_columns": ["id"]},
+                {
+                    "action": "diff",
+                    "file_path_a": "fa.xlsx",
+                    "file_path_b": "fb.xlsx",
+                    "key_columns": ["id"],
+                },
                 workspace_root=str(tmp_path),
             )
         data = json.loads(result)
@@ -488,7 +475,9 @@ class TestExecuteWorkflowToolJoinCompare:
         fa.write_text("not excel")
         fb = tmp_path / "fb.xlsx"
         fb.write_text("not excel")
-        with patch("pandas.read_excel", side_effect=[pd.DataFrame({"a": [1]}), pd.DataFrame({"a": [2]})]):
+        with patch(
+            "pandas.read_excel", side_effect=[pd.DataFrame({"a": [1]}), pd.DataFrame({"a": [2]})]
+        ):
             result = self._call(
                 "excel_join_compare",
                 {"action": "diff", "file_path_a": "fa.xlsx", "file_path_b": "fb.xlsx"},
@@ -561,9 +550,7 @@ class TestExecuteWorkflowToolProphet:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"v": [1]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = self._call({"file_path": "data.xlsx"}, workspace_root=str(tmp_path))
         data = json.loads(result)
         assert data["action"] == "forecast"
@@ -573,10 +560,10 @@ class TestExecuteWorkflowToolProphet:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"v": [1.0, 2.0, 3.0, 4.0]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
-            result = self._call({"file_path": "data.xlsx", "periods": 3}, workspace_root=str(tmp_path))
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
+            result = self._call(
+                {"file_path": "data.xlsx", "periods": 3}, workspace_root=str(tmp_path)
+            )
         data = json.loads(result)
         assert data["action"] == "forecast"
         assert data["model"] == "linear_regression"
@@ -586,9 +573,7 @@ class TestExecuteWorkflowToolProphet:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"name": ["a", "b"], "v": [1.0, 2.0, 3.0, 4.0][:2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = self._call(
                 {"file_path": "data.xlsx", "value_column": "missing"},
                 workspace_root=str(tmp_path),
@@ -600,9 +585,7 @@ class TestExecuteWorkflowToolProphet:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"name": ["a", "b"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = self._call({"file_path": "data.xlsx"}, workspace_root=str(tmp_path))
         data = json.loads(result)
         assert data["action"] == "forecast"
@@ -612,9 +595,7 @@ class TestExecuteWorkflowToolProphet:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"v": [1.0, 2.0, 3.0]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = self._call(
                 {"file_path": "data.xlsx", "periods": 100},
                 workspace_root=str(tmp_path),
@@ -659,7 +640,9 @@ class TestExecuteWorkflowToolSchemaUnderstand:
                 create=True,
             ),
         ):
-            return execute_workflow_tool("excel_schema_understand", args, workspace_root=workspace_root)
+            return execute_workflow_tool(
+                "excel_schema_understand", args, workspace_root=workspace_root
+            )
 
     def test_file_not_found(self, tmp_path: Path) -> None:
         result = self._call({"file_path": "missing.xlsx"}, workspace_root=str(tmp_path))
@@ -671,11 +654,12 @@ class TestExecuteWorkflowToolSchemaUnderstand:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.infrastructure.excel.schema_service.ExcelSchemaUnderstandingService.understand_dataframe",
-            return_value={"success": True, "fields": []},
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.infrastructure.excel.schema_service.ExcelSchemaUnderstandingService.understand_dataframe",
+                return_value={"success": True, "fields": []},
+            ),
         ):
             result = self._call({"file_path": "data.xlsx"}, workspace_root=str(tmp_path))
         data = json.loads(result)
@@ -811,7 +795,9 @@ class TestExecuteWorkflowToolGenerateOffice:
                 create=True,
             ),
         ):
-            return execute_workflow_tool("generate_office_document", args, workspace_root=workspace_root)
+            return execute_workflow_tool(
+                "generate_office_document", args, workspace_root=workspace_root
+            )
 
     def test_missing_user_request(self) -> None:
         result = self._call({"output_format": "docx"})
@@ -820,14 +806,17 @@ class TestExecuteWorkflowToolGenerateOffice:
         assert data["error"] == "missing_user_request"
 
     def test_invalid_format_defaults_to_docx(self) -> None:
-        with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file",
-            return_value=(b"content", "file.docx"),
-            create=True,
-        ), patch(
-            "app.services.kitten_ai_document.pickup.store_document_pickup",
-            return_value="token123",
-            create=True,
+        with (
+            patch(
+                "app.services.kitten_ai_document.generate.generate_office_file",
+                return_value=(b"content", "file.docx"),
+                create=True,
+            ),
+            patch(
+                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                return_value="token123",
+                create=True,
+            ),
         ):
             result = self._call({"user_request": "make a doc", "output_format": "pdf"})
         data = json.loads(result)
@@ -835,14 +824,17 @@ class TestExecuteWorkflowToolGenerateOffice:
         assert data["file_name"] == "file.docx"
 
     def test_xlsx_format(self) -> None:
-        with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file",
-            return_value=(b"content", "file.xlsx"),
-            create=True,
-        ), patch(
-            "app.services.kitten_ai_document.pickup.store_document_pickup",
-            return_value="token123",
-            create=True,
+        with (
+            patch(
+                "app.services.kitten_ai_document.generate.generate_office_file",
+                return_value=(b"content", "file.xlsx"),
+                create=True,
+            ),
+            patch(
+                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                return_value="token123",
+                create=True,
+            ),
         ):
             result = self._call({"user_request": "make a sheet", "output_format": "xlsx"})
         data = json.loads(result)
@@ -861,14 +853,17 @@ class TestExecuteWorkflowToolGenerateOffice:
         assert "disk full" in data["error"]
 
     def test_prompt_alias_for_user_request(self) -> None:
-        with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file",
-            return_value=(b"content", "file.docx"),
-            create=True,
-        ), patch(
-            "app.services.kitten_ai_document.pickup.store_document_pickup",
-            return_value="token123",
-            create=True,
+        with (
+            patch(
+                "app.services.kitten_ai_document.generate.generate_office_file",
+                return_value=(b"content", "file.docx"),
+                create=True,
+            ),
+            patch(
+                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                return_value="token123",
+                create=True,
+            ),
         ):
             result = self._call({"prompt": "via prompt alias"})
         data = json.loads(result)
@@ -1062,11 +1057,17 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"], "型号": ["x"]})
-        with patch.dict("os.environ", {"FHD_DB_WRITE_TOKEN": "secret"}), patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
+        with (
+            patch.dict("os.environ", {"FHD_DB_WRITE_TOKEN": "secret"}),
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
         ):
             result = _handle_import_excel_to_database(
-                {"import_type": "products", "file_path": "data.xlsx", "db_write_token": "secret", "preview_only": True},
+                {
+                    "import_type": "products",
+                    "file_path": "data.xlsx",
+                    "db_write_token": "secret",
+                    "preview_only": True,
+                },
                 workspace_root=str(tmp_path),
             )
         data = json.loads(result)
@@ -1092,9 +1093,7 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame()
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = _handle_import_excel_to_database(
                 {"import_type": "products", "file_path": "data.xlsx"},
                 workspace_root=str(tmp_path),
@@ -1107,9 +1106,7 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = _handle_import_excel_to_database(
                 {"import_type": "products", "file_path": "data.xlsx", "last_data_row_1based": 1},
                 workspace_root=str(tmp_path),
@@ -1122,11 +1119,13 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = _handle_import_excel_to_database(
-                {"import_type": "products", "file_path": "data.xlsx", "last_data_row_1based": "abc"},
+                {
+                    "import_type": "products",
+                    "file_path": "data.xlsx",
+                    "last_data_row_1based": "abc",
+                },
                 workspace_root=str(tmp_path),
             )
         data = json.loads(result)
@@ -1138,9 +1137,7 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"], "数量": [1], "购买单位": ["客户A"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = _handle_import_excel_to_database(
                 {"import_type": "orders", "file_path": "data.xlsx", "preview_only": True},
                 workspace_root=str(tmp_path),
@@ -1153,9 +1150,7 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = _handle_import_excel_to_database(
                 {"import_type": "unknown_type", "file_path": "data.xlsx"},
                 workspace_root=str(tmp_path),
@@ -1169,9 +1164,7 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = _handle_import_excel_to_database(
                 {
                     "import_type": "products",
@@ -1189,9 +1182,7 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = _handle_import_excel_to_database(
                 {
                     "import_type": "products",
@@ -1208,9 +1199,7 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ):
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = _handle_import_excel_to_database(
                 {
                     "import_type": "products",
@@ -1246,12 +1235,13 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.domain.context.session_context.detected_excel_header_row_1based",
-            return_value=3,
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.domain.context.session_context.detected_excel_header_row_1based",
+                return_value=3,
+                create=True,
+            ),
         ):
             result = _handle_import_excel_to_database(
                 {
@@ -1269,12 +1259,13 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.domain.context.session_context.detected_excel_header_row_1based",
-            side_effect=OSError("fail"),
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.domain.context.session_context.detected_excel_header_row_1based",
+                side_effect=OSError("fail"),
+                create=True,
+            ),
         ):
             result = _handle_import_excel_to_database(
                 {
@@ -1292,20 +1283,19 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.application.template_grid_core._extract_inline_customer_hits_from_cell",
-            return_value=["客户W"],
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.application.template_grid_core._extract_inline_customer_hits_from_cell",
+                return_value=["客户W"],
+                create=True,
+            ),
         ):
             result = _handle_import_excel_to_database(
                 {
                     "import_type": "products",
                     "file_path": "data.xlsx",
-                    "context": {
-                        "excel_linked_grid_preview": {"preview_text": "客户W的报价单"}
-                    },
+                    "context": {"excel_linked_grid_preview": {"preview_text": "客户W的报价单"}},
                     "preview_only": True,
                 },
                 workspace_root=str(tmp_path),
@@ -1317,22 +1307,19 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.application.template_grid_core._extract_inline_customer_hits_from_cell",
-            return_value=["客户V"],
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.application.template_grid_core._extract_inline_customer_hits_from_cell",
+                return_value=["客户V"],
+                create=True,
+            ),
         ):
             result = _handle_import_excel_to_database(
                 {
                     "import_type": "products",
                     "file_path": "data.xlsx",
-                    "context": {
-                        "excel_linked_grid_previews": [
-                            {"preview_text": "客户V的报价单"}
-                        ]
-                    },
+                    "context": {"excel_linked_grid_previews": [{"preview_text": "客户V的报价单"}]},
                     "preview_only": True,
                 },
                 workspace_root=str(tmp_path),
@@ -1344,12 +1331,13 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.application.template_grid_core._extract_customer_hint_from_excel",
-            return_value="客户U",
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.application.template_grid_core._extract_customer_hint_from_excel",
+                return_value="客户U",
+                create=True,
+            ),
         ):
             result = _handle_import_excel_to_database(
                 {
@@ -1366,12 +1354,13 @@ class TestHandleImportExcelToDatabase:
         f = tmp_path / "data.xlsx"
         f.write_text("not excel")
         df = pd.DataFrame({"产品名称": ["a"]})
-        with patch(
-            "app.application.tools.workflow._read_excel_dataframe", return_value=df
-        ), patch(
-            "app.application.template_grid_core._extract_customer_hint_from_excel",
-            side_effect=OSError("fail"),
-            create=True,
+        with (
+            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+            patch(
+                "app.application.template_grid_core._extract_customer_hint_from_excel",
+                side_effect=OSError("fail"),
+                create=True,
+            ),
         ):
             result = _handle_import_excel_to_database(
                 {
@@ -1409,7 +1398,9 @@ class TestImportOrdersPreviewOrExecute:
 
     def test_preview_mode(self) -> None:
         df = pd.DataFrame({"产品名称": ["a"], "数量": [1], "购买单位": ["客户A"]})
-        result = json.loads(_import_orders_preview_or_execute(df, list(df.columns), "客户A", False, 1))
+        result = json.loads(
+            _import_orders_preview_or_execute(df, list(df.columns), "客户A", False, 1)
+        )
         assert result["preview"] is True
         assert result["import_type"] == "orders"
         assert "column_mapping" in result
@@ -1419,7 +1410,9 @@ class TestImportOrdersPreviewOrExecute:
         mock_svc = MagicMock()
         mock_svc.create_shipment.return_value = {"success": True}
         with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc, create=True):
-            result = json.loads(_import_orders_preview_or_execute(df, list(df.columns), "客户A", True, 1))
+            result = json.loads(
+                _import_orders_preview_or_execute(df, list(df.columns), "客户A", True, 1)
+            )
         assert result["success"] is True
         assert result["imported"] == 1
 
@@ -1428,7 +1421,9 @@ class TestImportOrdersPreviewOrExecute:
         mock_svc = MagicMock()
         mock_svc.create_shipment.return_value = {"success": True}
         with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc, create=True):
-            result = json.loads(_import_orders_preview_or_execute(df, list(df.columns), "", True, 1))
+            result = json.loads(
+                _import_orders_preview_or_execute(df, list(df.columns), "", True, 1)
+            )
         assert result["success"] is True
         assert result["failed"] == 1
 
@@ -1439,7 +1434,9 @@ class TestImportOrdersPreviewOrExecute:
             side_effect=OSError("db fail"),
             create=True,
         ):
-            result = json.loads(_import_orders_preview_or_execute(df, list(df.columns), "客户A", True, 1))
+            result = json.loads(
+                _import_orders_preview_or_execute(df, list(df.columns), "客户A", True, 1)
+            )
         assert result["success"] is False
         assert "订单导入失败" in result["error"]
 
@@ -1448,7 +1445,9 @@ class TestImportOrdersPreviewOrExecute:
         mock_svc = MagicMock()
         mock_svc.create_shipment.side_effect = RuntimeError("row fail")
         with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc, create=True):
-            result = json.loads(_import_orders_preview_or_execute(df, list(df.columns), "客户A", True, 1))
+            result = json.loads(
+                _import_orders_preview_or_execute(df, list(df.columns), "客户A", True, 1)
+            )
         assert result["success"] is True
         assert result["failed"] == 1
 
