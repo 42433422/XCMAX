@@ -3236,25 +3236,35 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     # regardless of policy_decision so later runs can reuse the knowledge.
     salvage_summary: Optional[Dict[str, Any]] = None
     try:
-        salvage_summary = salvage_kb_from_workspace(run_id=final.get("run_id"))
+        # Para e2e-agent 工作区路径：DEVFLEET_WORKSPACE_ROOT/{para_task_id}
+        para_task_id = final.get("para_task_id") or ""
+        ws_root = os.environ.get(
+            "DEVFLEET_WORKSPACE_ROOT",
+            "/Users/a4243342/XCMAX-runtime/para-main-agent/workspace",
+        )
+        para_workspace = Path(ws_root) / para_task_id if para_task_id else Path(ws_root)
+        salvage_summary = salvage_kb_from_workspace(
+            para_workspace=para_workspace, run_id=final.get("run_id")
+        )
         if salvage_summary and (
-            salvage_summary.get("salvaged", {}).get("fixes")
-            or salvage_summary.get("salvaged", {}).get("patterns")
+            salvage_summary.get("salvaged_fixes")
+            or salvage_summary.get("salvaged_patterns")
         ):
             logger.info(
-                "kb salvage run_id=%s salvaged=%s",
+                "kb salvage run_id=%s salvaged_fixes=%s salvaged_patterns=%s",
                 final.get("run_id"),
-                salvage_summary.get("salvaged"),
+                salvage_summary.get("salvaged_fixes"),
+                salvage_summary.get("salvaged_patterns"),
             )
         _append_ledger(
             {
                 "phase": "kb_salvage",
                 "run_id": final.get("run_id"),
                 "para_task_id": final.get("para_task_id"),
-                "salvaged": salvage_summary.get("salvaged") if salvage_summary else None,
-                "scanned": salvage_summary.get("scanned") if salvage_summary else None,
-                "skipped": salvage_summary.get("skipped") if salvage_summary else None,
-                "errors": salvage_summary.get("errors") if salvage_summary else None,
+                "salvaged_fixes": salvage_summary.get("salvaged_fixes") if salvage_summary else 0,
+                "salvaged_patterns": salvage_summary.get("salvaged_patterns") if salvage_summary else 0,
+                "skipped": salvage_summary.get("skipped") if salvage_summary else 0,
+                "workspace": salvage_summary.get("workspace") if salvage_summary else None,
                 "timestamp": _iso(_utc_now()),
             }
         )
