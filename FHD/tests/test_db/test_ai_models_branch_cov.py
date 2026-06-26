@@ -14,7 +14,6 @@ import pytest
 
 from app.db.models.ai import UserMemory
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -313,10 +312,11 @@ class TestToDict:
 
 class TestCleanupOldRecords:
     def test_deletes_old_records(self) -> None:
-        from app.db.base import Base
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import StaticPool
+
+        from app.db.base import Base
 
         engine = create_engine(
             "sqlite:///:memory:",
@@ -352,10 +352,11 @@ class TestCleanupOldRecords:
             engine.dispose()
 
     def test_no_old_records(self) -> None:
-        from app.db.base import Base
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import StaticPool
+
+        from app.db.base import Base
 
         engine = create_engine(
             "sqlite:///:memory:",

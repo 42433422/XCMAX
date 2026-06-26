@@ -35,7 +35,6 @@ from app.infrastructure.cache.intent_cache import (
     get_intent_cache,
 )
 
-
 # ---------------------------------------------------------------------------
 # make_key
 # ---------------------------------------------------------------------------
@@ -408,9 +407,9 @@ class TestBuildRedisClient:
                 {"CACHE_REDIS_URL": "redis://custom:6380/1"},
                 clear=False,
             ),
-            patch("redis.from_url", mock_redis.from_url) if False else patch.dict(
-                "sys.modules", {"redis": mock_redis}
-            ),
+            patch("redis.from_url", mock_redis.from_url)
+            if False
+            else patch.dict("sys.modules", {"redis": mock_redis}),
         ):
             from app.infrastructure.cache.intent_cache import _build_redis_client
 

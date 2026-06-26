@@ -25,7 +25,6 @@ import app.application  # noqa: F401
 from app.services.kitten_report.plugins import PluginResult
 from app.services.kitten_report.service import KittenReportExportService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -64,9 +63,7 @@ class TestHtmlToText:
         assert result == "a&b"
 
     def test_all_tags_combined(self) -> None:
-        result = KittenReportExportService._html_to_text(
-            "<strong>title</strong><br>&nbsp;&amp;"
-        )
+        result = KittenReportExportService._html_to_text("<strong>title</strong><br>&nbsp;&amp;")
         assert result == "title\n &"
 
     def test_empty_string(self) -> None:
@@ -345,9 +342,7 @@ class TestBuildWorkbookMessages:
         ws = wb["对话记录"]
         assert ws.cell(row=2, column=2).value == "AI"
 
-    def test_message_role_other_shows_user_label(
-        self, service: KittenReportExportService
-    ) -> None:
+    def test_message_role_other_shows_user_label(self, service: KittenReportExportService) -> None:
         messages = [{"role": "user", "content": "question", "time": "10:00"}]
         content = service._build_workbook(
             dataset={},
@@ -793,10 +788,20 @@ class TestAddFinancialSheetBothPlugins:
                     "metrics": {"total_revenue": 1000, "order_count": 10},
                     "monthly_breakdown": [{"month": "2026-01", "revenue": 500, "order_count": 5}],
                     "product_analysis": [
-                        {"product_name": "P1", "total_revenue": 500, "total_qty": 5, "order_count": 2}
+                        {
+                            "product_name": "P1",
+                            "total_revenue": 500,
+                            "total_qty": 5,
+                            "order_count": 2,
+                        }
                     ],
                     "customer_analysis": [
-                        {"customer": "C1", "total_amount": 500, "order_count": 2, "avg_order_value": 250}
+                        {
+                            "customer": "C1",
+                            "total_amount": 500,
+                            "order_count": 2,
+                            "avg_order_value": 250,
+                        }
                     ],
                 },
             },
@@ -872,7 +877,11 @@ class TestBuildReportWithFinancialData:
     def test_build_report_with_ai_message_html(self, service: KittenReportExportService) -> None:
         payload = {
             "messages": [
-                {"role": "ai", "content": "<strong>Analysis</strong><br>Result here", "time": "10:00"},
+                {
+                    "role": "ai",
+                    "content": "<strong>Analysis</strong><br>Result here",
+                    "time": "10:00",
+                },
             ],
         }
         result = service.build_report(payload)

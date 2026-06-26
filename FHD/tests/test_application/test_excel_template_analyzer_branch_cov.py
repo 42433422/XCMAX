@@ -25,7 +25,6 @@ from app.utils.excel_template_analyzer import (
     extract_entries,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers — build real .xlsx files with openpyxl
 # ---------------------------------------------------------------------------
@@ -67,18 +66,14 @@ def _create_workbook_with_content(
 
 class TestGuessMergedPurpose:
     def test_title_delivery(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(1, 1): "送货单"}, merged=["A1:E1"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(1, 1): "送货单"}, merged=["A1:E1"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(1, 1, 1, 5)
         assert purpose == "标题"
 
     def test_title_receipt(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(1, 1): "收据"}, merged=["A1:E1"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(1, 1): "收据"}, merged=["A1:E1"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(1, 1, 1, 5)
@@ -94,72 +89,56 @@ class TestGuessMergedPurpose:
         assert purpose == "购货单位信息"
 
     def test_buyer_info_yifang(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(2, 1): "乙方信息"}, merged=["A2:E2"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(2, 1): "乙方信息"}, merged=["A2:E2"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(2, 2, 1, 5)
         assert purpose == "购货单位信息"
 
     def test_header_xinghao(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(3, 1): "型号列表"}, merged=["A3:E3"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(3, 1): "型号列表"}, merged=["A3:E3"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(3, 3, 1, 5)
         assert purpose == "表头"
 
     def test_summary_heji(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(8, 1): "合计行"}, merged=["A8:E8"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(8, 1): "合计行"}, merged=["A8:E8"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(8, 8, 1, 5)
         assert purpose == "汇总"
 
     def test_summary_sum(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(8, 1): "SUM公式"}, merged=["A8:E8"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(8, 1): "SUM公式"}, merged=["A8:E8"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(8, 8, 1, 5)
         assert purpose == "汇总"
 
     def test_signature(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(9, 1): "签名处"}, merged=["A9:E9"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(9, 1): "签名处"}, merged=["A9:E9"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(9, 9, 1, 5)
         assert purpose == "签名区"
 
     def test_content_area(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(5, 1): "普通内容"}, merged=["A5:E5"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(5, 1): "普通内容"}, merged=["A5:E5"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(5, 5, 1, 5)
         assert purpose == "内容区"
 
     def test_empty_large_row_span(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, merged=["A1:E8"]
-        )
+        path = _create_workbook_with_content(tmp_path, merged=["A1:E8"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(1, 8, 1, 5)
         assert purpose == "大标题区"
 
     def test_empty_small_row_span(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, merged=["A1:E2"]
-        )
+        path = _create_workbook_with_content(tmp_path, merged=["A1:E2"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         purpose = analyzer._guess_merged_purpose(1, 2, 1, 5)
@@ -681,9 +660,7 @@ class TestLoadWorkbook:
 
 class TestGetMergedRange:
     def test_address_in_merged_range(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(1, 1): "标题"}, merged=["A1:E1"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(1, 1): "标题"}, merged=["A1:E1"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         analyzer._extract_structure()
@@ -693,9 +670,7 @@ class TestGetMergedRange:
         assert "A1" in mr
 
     def test_address_not_in_merged_range(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(1, 1): "标题"}, merged=["A1:E1"]
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(1, 1): "标题"}, merged=["A1:E1"])
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         analyzer._extract_structure()
@@ -882,9 +857,7 @@ class TestExtractMergedCells:
 
 class TestExtractStructure:
     def test_max_row_col(self, tmp_path):
-        path = _create_workbook_with_content(
-            tmp_path, cells={(1, 1): "a", (10, 5): "b"}
-        )
+        path = _create_workbook_with_content(tmp_path, cells={(1, 1): "a", (10, 5): "b"})
         analyzer = ExcelTemplateAnalyzer(str(path))
         analyzer._load_workbook()
         analyzer._extract_structure()
@@ -939,9 +912,7 @@ class TestAnalyzeIntegration:
         assert len(result["merged_cells"]) == 2
         assert "cells" in result
         # Formula cells should be detected
-        formula_cells = [
-            c for c in result["cells"].values() if c.get("type") == "formula"
-        ]
+        formula_cells = [c for c in result["cells"].values() if c.get("type") == "formula"]
         assert len(formula_cells) >= 5
         # Zones should include header and data
         zone_names = [z["name"] for z in result["zones"]]

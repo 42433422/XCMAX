@@ -41,7 +41,6 @@ from app.application.ai_group_chat_service import (
     AiGroupChatService,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers（与第一批保持一致）
 # ---------------------------------------------------------------------------
@@ -89,7 +88,8 @@ def make_service(
         storage_root=tmp_path,
         completion_fn=completion_fn or make_completion(seen),
         employee_executor_fn=executor,
-        department_loader=department_loader or (fake_enterprise_departments if mode == "enterprise" else fake_departments),
+        department_loader=department_loader
+        or (fake_enterprise_departments if mode == "enterprise" else fake_departments),
         employee_loader=(employees if callable(employees) else (lambda: employees or [])),
         mode=mode,
     )
@@ -99,8 +99,18 @@ def _make_super_members() -> list[dict]:
     """构造 3 个超级员工成员。"""
     return [
         {"employee_id": "codex-super-employee", "name": "Codex", "avatar": "", "summary": "Codex"},
-        {"employee_id": "cursor-super-employee", "name": "Cursor", "avatar": "", "summary": "Cursor"},
-        {"employee_id": "claude-super-employee", "name": "Claude", "avatar": "", "summary": "Claude"},
+        {
+            "employee_id": "cursor-super-employee",
+            "name": "Cursor",
+            "avatar": "",
+            "summary": "Cursor",
+        },
+        {
+            "employee_id": "claude-super-employee",
+            "name": "Claude",
+            "avatar": "",
+            "summary": "Claude",
+        },
     ]
 
 
@@ -160,7 +170,10 @@ class TestDispatchDifficultyEdge:
         assert AiGroupChatService._dispatch_difficulty(text) == "medium"
 
     def test_dispatch_difficulty_medium_with_no_markers(self):
-        text = "这是一个中等复杂度的任务描述，没有命中任何关键词，需要超过九十字符才能进入中等难度分级" * 3
+        text = (
+            "这是一个中等复杂度的任务描述，没有命中任何关键词，需要超过九十字符才能进入中等难度分级"
+            * 3
+        )
         assert AiGroupChatService._dispatch_difficulty(text) == "medium"
 
     def test_dispatch_difficulty_empty_string(self):
@@ -226,7 +239,9 @@ class TestPreferredSingleDispatchTargetEdge:
 
     def test_preferred_android_with_backend_returns_codex(self):
         candidates = _make_super_members()
-        result = AiGroupChatService._preferred_single_dispatch_target(candidates, "android 后端接口")
+        result = AiGroupChatService._preferred_single_dispatch_target(
+            candidates, "android 后端接口"
+        )
         assert result["employee_id"] == "codex-super-employee"
 
     def test_preferred_android_with_api_returns_codex(self):
@@ -236,7 +251,9 @@ class TestPreferredSingleDispatchTargetEdge:
 
     def test_preferred_android_with_pytest_returns_codex(self):
         candidates = _make_super_members()
-        result = AiGroupChatService._preferred_single_dispatch_target(candidates, "手机 pytest 测试")
+        result = AiGroupChatService._preferred_single_dispatch_target(
+            candidates, "手机 pytest 测试"
+        )
         assert result["employee_id"] == "codex-super-employee"
 
     def test_preferred_default_returns_codex(self):
@@ -505,7 +522,9 @@ class TestChatFriendlySummaryEdge:
 
     def test_chat_friendly_summary_truncates_to_limit(self):
         text = "a" * (CHAT_REPORT_SUMMARY_CHARS + 100)
-        result = AiGroupChatService._chat_friendly_summary(text, limit=50, include_detail_note=False)
+        result = AiGroupChatService._chat_friendly_summary(
+            text, limit=50, include_detail_note=False
+        )
         assert len(result) <= 51  # 50 + …
         assert result.endswith("…")
 
@@ -775,10 +794,8 @@ class TestCompactPublicAcceptanceBodyEdge:
         assert "风险：" not in result
 
     def test_compact_acceptance_body_more_than_4_members(self):
-        body = (
-            "【小C验收】这单已收口\n"
-            "结论：可以验收\n"
-            + "\n".join(f"- 成员{i}：完成。摘要" for i in range(6))
+        body = "【小C验收】这单已收口\n结论：可以验收\n" + "\n".join(
+            f"- 成员{i}：完成。摘要" for i in range(6)
         )
         result = AiGroupChatService._compact_public_acceptance_body(body)
         assert "成员0" in result
@@ -1117,16 +1134,12 @@ class TestAppendWorkAcceptanceIfReadyEdge:
 
     def test_append_acceptance_empty_work_order_id(self, tmp_path: Path):
         svc = make_service(tmp_path)
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id=""
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="")
         assert result is None
 
     def test_append_acceptance_no_rows(self, tmp_path: Path):
         svc = make_service(tmp_path)
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id="wo1"
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is None
 
     def test_append_acceptance_already_exists(self, tmp_path: Path):
@@ -1147,9 +1160,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
             "created_at": "2026-01-01T00:00:00+00:00",
         }
         svc._append_messages([existing])
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id="wo1"
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is not None
         assert result["id"] == "msg1"
 
@@ -1172,9 +1183,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
             "payload": {"raw": {"task_id": "task1"}},
         }
         svc._append_messages([report])
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id="wo1"
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is None
 
     def test_append_acceptance_no_initial_reports(self, tmp_path: Path):
@@ -1195,9 +1204,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
             "payload": {"task": "做任务"},
         }
         svc._append_messages([work_order])
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id="wo1"
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is None
 
     def test_append_acceptance_initial_reports_no_final(self, tmp_path: Path):
@@ -1233,9 +1240,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
             "payload": {"raw": {"task_id": "task1"}},
         }
         svc._append_messages([work_order, report])
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id="wo1"
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is None
 
     def test_append_acceptance_final_reports_not_terminal(self, tmp_path: Path):
@@ -1286,9 +1291,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
             "payload": {"raw": {"task_id": "task1"}},
         }
         svc._append_messages([work_order, report, final])
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id="wo1"
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is None
 
     def test_append_acceptance_all_completed(self, tmp_path: Path):
@@ -1343,9 +1346,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
             },
         }
         svc._append_messages([work_order, report, final])
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id="wo1"
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is not None
         assert result["kind"] == "work_acceptance"
         assert result["status"] == "completed"
@@ -1428,9 +1429,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
             "payload": {"raw": {"task_id": "task2"}, "summary": "失败了"},
         }
         svc._append_messages([work_order, report1, report2, final1, final2])
-        result = svc._append_work_acceptance_if_ready(
-            user_id=1, group_id="g1", work_order_id="wo1"
-        )
+        result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is not None
         assert result["status"] == "needs_review"
 
@@ -1445,70 +1444,84 @@ class TestNormalizeBranchContextEdge:
 
     def test_normalize_branch_empty(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         assert _normalize_branch_context("") == ""
 
     def test_normalize_branch_none(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         assert _normalize_branch_context(None) == ""
 
     def test_normalize_branch_origin_prefix(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         assert _normalize_branch_context("origin/main") == "main"
 
     def test_normalize_branch_special_chars(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         result = _normalize_branch_context("feature@branch#test")
         assert "@" not in result
         assert "#" not in result
 
     def test_normalize_branch_spaces_replaced(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         result = _normalize_branch_context("feature branch")
         assert " " not in result
         assert "-" in result
 
     def test_normalize_branch_multiple_slashes(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         result = _normalize_branch_context("feature//branch")
         assert "//" not in result
 
     def test_normalize_branch_double_dot(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         result = _normalize_branch_context("feature..branch")
         assert ".." not in result
 
     def test_normalize_branch_head_returns_empty(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         assert _normalize_branch_context("HEAD") == ""
 
     def test_normalize_branch_dot_returns_empty(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         assert _normalize_branch_context(".") == ""
 
     def test_normalize_branch_double_dot_only_returns_empty(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         assert _normalize_branch_context("..") == ""
 
     def test_normalize_branch_truncates_to_180(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         long_branch = "a" * 200
         result = _normalize_branch_context(long_branch)
         assert len(result) <= 180
 
     def test_normalize_branch_strips_leading_trailing_slash(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         result = _normalize_branch_context("/feature/")
         assert not result.startswith("/")
         assert not result.endswith("/")
 
     def test_normalize_branch_strips_leading_trailing_dot(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         result = _normalize_branch_context(".feature.")
         assert not result.startswith(".")
         assert not result.endswith(".")
 
     def test_normalize_branch_normal(self):
         from app.application.ai_group_chat_service import _normalize_branch_context
+
         assert _normalize_branch_context("feature/branch-1") == "feature/branch-1"
 
 
@@ -1872,9 +1885,7 @@ class TestRelayResultSummaryExtraEdge:
         assert "报告内容" in result
 
     def test_relay_summary_from_error(self):
-        result = AiGroupChatService._relay_result_summary(
-            {"error": "错误内容"}, "failed", "task1"
-        )
+        result = AiGroupChatService._relay_result_summary({"error": "错误内容"}, "failed", "task1")
         assert "错误内容" in result
 
     def test_relay_summary_from_nested_assistant_message(self):
@@ -2015,15 +2026,11 @@ class TestExecutionSummaryExtraEdge:
         assert result == "报告"
 
     def test_execution_summary_from_data_dict(self):
-        result = AiGroupChatService._execution_summary(
-            {"data": {"summary": "数据摘要"}}
-        )
+        result = AiGroupChatService._execution_summary({"data": {"summary": "数据摘要"}})
         assert result == "数据摘要"
 
     def test_execution_summary_from_data_dict_message(self):
-        result = AiGroupChatService._execution_summary(
-            {"data": {"message": "数据消息"}}
-        )
+        result = AiGroupChatService._execution_summary({"data": {"message": "数据消息"}})
         assert result == "数据消息"
 
     def test_execution_summary_no_candidates_returns_stringified(self):
@@ -2037,9 +2044,7 @@ class TestExecutionSummaryExtraEdge:
 
     def test_execution_summary_from_data_truncates_to_1200(self):
         long_summary = "a" * 2000
-        result = AiGroupChatService._execution_summary(
-            {"data": {"summary": long_summary}}
-        )
+        result = AiGroupChatService._execution_summary({"data": {"summary": long_summary}})
         assert len(result) <= 1200
 
 
@@ -2151,18 +2156,20 @@ class TestCompactResultExtraEdge:
         assert result == {}
 
     def test_compact_result_all_keys(self):
-        result = AiGroupChatService._compact_result({
-            "success": True,
-            "status": "done",
-            "message": "msg",
-            "summary": "sum",
-            "task_id": "t1",
-            "run_id": "r1",
-            "error": "err",
-            "dispatch_request_id": "dr1",
-            "dispatcher": "disp",
-            "relay_id": "rel1",
-        })
+        result = AiGroupChatService._compact_result(
+            {
+                "success": True,
+                "status": "done",
+                "message": "msg",
+                "summary": "sum",
+                "task_id": "t1",
+                "run_id": "r1",
+                "error": "err",
+                "dispatch_request_id": "dr1",
+                "dispatcher": "disp",
+                "relay_id": "rel1",
+            }
+        )
         assert result["success"] is True
         assert result["status"] == "done"
         assert result["message"] == "msg"
@@ -2175,43 +2182,53 @@ class TestCompactResultExtraEdge:
         assert result["relay_id"] == "rel1"
 
     def test_compact_result_none_values(self):
-        result = AiGroupChatService._compact_result({
-            "success": None,
-            "status": None,
-            "message": None,
-        })
+        result = AiGroupChatService._compact_result(
+            {
+                "success": None,
+                "status": None,
+                "message": None,
+            }
+        )
         assert result["success"] is None
         assert result["status"] is None
         assert result["message"] is None
 
     def test_compact_result_complex_values_stringified(self):
-        result = AiGroupChatService._compact_result({
-            "summary": {"nested": "dict"},
-            "message": ["list", "value"],
-        })
+        result = AiGroupChatService._compact_result(
+            {
+                "summary": {"nested": "dict"},
+                "message": ["list", "value"],
+            }
+        )
         assert isinstance(result["summary"], str)
         assert isinstance(result["message"], str)
 
     def test_compact_result_ignores_unknown_keys(self):
-        result = AiGroupChatService._compact_result({
-            "unknown_key": "value",
-            "success": True,
-        })
+        result = AiGroupChatService._compact_result(
+            {
+                "unknown_key": "value",
+                "success": True,
+            }
+        )
         assert "unknown_key" not in result
         assert result["success"] is True
 
     def test_compact_result_int_and_float(self):
-        result = AiGroupChatService._compact_result({
-            "task_id": 123,
-            "run_id": 4.56,
-        })
+        result = AiGroupChatService._compact_result(
+            {
+                "task_id": 123,
+                "run_id": 4.56,
+            }
+        )
         assert result["task_id"] == 123
         assert result["run_id"] == 4.56
 
     def test_compact_result_bool(self):
-        result = AiGroupChatService._compact_result({
-            "success": True,
-        })
+        result = AiGroupChatService._compact_result(
+            {
+                "success": True,
+            }
+        )
         assert result["success"] is True
 
 

@@ -339,9 +339,21 @@ async def test_super_development_group_discusses_routes_then_dispatches(tmp_path
     )
     group = svc.create_group(user_id=9, name="超级开发部")
     for member in [
-        {"employee_id": "codex-super-employee", "mod_id": "super-employee", "name": "超级员工-Codex"},
-        {"employee_id": "cursor-super-employee", "mod_id": "super-employee", "name": "超级员工-Cursor"},
-        {"employee_id": "claude-super-employee", "mod_id": "super-employee", "name": "超级员工-Claude"},
+        {
+            "employee_id": "codex-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Codex",
+        },
+        {
+            "employee_id": "cursor-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Cursor",
+        },
+        {
+            "employee_id": "claude-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Claude",
+        },
     ]:
         svc.add_member(user_id=9, group_id=group["id"], member=member)
 
@@ -383,7 +395,11 @@ async def test_super_development_group_discusses_routes_then_dispatches(tmp_path
     ]
     assert "移动端体验" in calls[0]["task"]
     assert "服务端链路" in calls[1]["task"]
-    assert all("原始需求：全链路优化发起群聊的顶部输入框、后端状态和验收反馈，多个模块需要分工" in c["task"] for c in calls)
+    assert all(
+        "原始需求：全链路优化发起群聊的顶部输入框、后端状态和验收反馈，多个模块需要分工"
+        in c["task"]
+        for c in calls
+    )
     assert calls[0]["input_data"]["assigned_task"] == calls[0]["task"]
     assert calls[1]["input_data"]["assigned_task"] == calls[1]["task"]
     assert calls[0]["input_data"]["assignment_focus"] != calls[1]["input_data"]["assignment_focus"]
@@ -423,9 +439,21 @@ async def test_super_development_group_discussion_timeout_keeps_dispatch_moving(
     )
     group = svc.create_group(user_id=9, name="超级开发部")
     for member in [
-        {"employee_id": "codex-super-employee", "mod_id": "super-employee", "name": "超级员工-Codex"},
-        {"employee_id": "cursor-super-employee", "mod_id": "super-employee", "name": "超级员工-Cursor"},
-        {"employee_id": "claude-super-employee", "mod_id": "super-employee", "name": "超级员工-Claude"},
+        {
+            "employee_id": "codex-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Codex",
+        },
+        {
+            "employee_id": "cursor-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Cursor",
+        },
+        {
+            "employee_id": "claude-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Claude",
+        },
     ]:
         svc.add_member(user_id=9, group_id=group["id"], member=member)
 
@@ -478,8 +506,16 @@ async def test_super_development_group_replaces_placeholder_discussion(tmp_path:
     )
     group = svc.create_group(user_id=9, name="超级开发部")
     for member in [
-        {"employee_id": "codex-super-employee", "mod_id": "super-employee", "name": "超级员工-Codex"},
-        {"employee_id": "cursor-super-employee", "mod_id": "super-employee", "name": "超级员工-Cursor"},
+        {
+            "employee_id": "codex-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Codex",
+        },
+        {
+            "employee_id": "cursor-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Cursor",
+        },
     ]:
         svc.add_member(user_id=9, group_id=group["id"], member=member)
 
@@ -523,8 +559,16 @@ async def test_super_development_group_dispatches_super_employees_via_mobile_rel
 
         def list_desktops(self, *, user_id: int):
             return [
-                {"relay_id": "old-relay", "status": "paired", "last_seen_at": "2026-01-01T00:00:00Z"},
-                {"relay_id": "fresh-relay", "status": "paired", "last_seen_at": "2026-01-01T00:00:10Z"},
+                {
+                    "relay_id": "old-relay",
+                    "status": "paired",
+                    "last_seen_at": "2026-01-01T00:00:00Z",
+                },
+                {
+                    "relay_id": "fresh-relay",
+                    "status": "paired",
+                    "last_seen_at": "2026-01-01T00:00:10Z",
+                },
             ]
 
         def create_task(self, *, user_id: int, relay_id: str, kind: str, payload: dict):
@@ -556,9 +600,21 @@ async def test_super_development_group_dispatches_super_employees_via_mobile_rel
     svc._mobile_relay_service = lambda: relay  # type: ignore[method-assign]
     group = svc.create_group(user_id=9, name="超级开发部")
     for member in [
-        {"employee_id": "codex-super-employee", "mod_id": "super-employee", "name": "超级员工-Codex"},
-        {"employee_id": "cursor-super-employee", "mod_id": "super-employee", "name": "超级员工-Cursor"},
-        {"employee_id": "claude-super-employee", "mod_id": "super-employee", "name": "超级员工-Claude"},
+        {
+            "employee_id": "codex-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Codex",
+        },
+        {
+            "employee_id": "cursor-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Cursor",
+        },
+        {
+            "employee_id": "claude-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Claude",
+        },
     ]:
         svc.add_member(user_id=9, group_id=group["id"], member=member)
 
@@ -593,13 +649,11 @@ async def test_super_development_group_dispatches_super_employees_via_mobile_rel
     original_task = "全链路移动端派工链路测试，多个模块一起验收"
     assert all(f"原始需求：{original_task}" in message for message in messages)
     assert all(
-        item["payload"]["context"]["original_task"] == original_task
-        for item in relay.created
+        item["payload"]["context"]["original_task"] == original_task for item in relay.created
     )
     assert all(item["payload"]["branch"] == "mobile-group/relay-clean" for item in relay.created)
     assert all(
-        item["payload"]["context"]["branch"] == "mobile-group/relay-clean"
-        for item in relay.created
+        item["payload"]["context"]["branch"] == "mobile-group/relay-clean" for item in relay.created
     )
     assert {item["payload"]["context"]["assignment_focus"] for item in relay.created} == {
         "服务端链路、数据状态、接口和自动化测试证据",
@@ -614,7 +668,9 @@ async def test_super_development_group_relay_dispatch_returns_immediate_progress
 ):
     class FakeRelay:
         def list_desktops(self, *, user_id: int):
-            return [{"relay_id": "relay-1", "status": "paired", "last_seen_at": "2026-01-01T00:00:00Z"}]
+            return [
+                {"relay_id": "relay-1", "status": "paired", "last_seen_at": "2026-01-01T00:00:00Z"}
+            ]
 
         def create_task(self, *, user_id: int, relay_id: str, kind: str, payload: dict):
             return {"task_id": "relay-task-progress", "status": "queued"}
@@ -641,9 +697,21 @@ async def test_super_development_group_relay_dispatch_returns_immediate_progress
     svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
     group = svc.create_group(user_id=9, name="超级开发部")
     for member in [
-        {"employee_id": "codex-super-employee", "mod_id": "super-employee", "name": "超级员工-Codex"},
-        {"employee_id": "cursor-super-employee", "mod_id": "super-employee", "name": "超级员工-Cursor"},
-        {"employee_id": "claude-super-employee", "mod_id": "super-employee", "name": "超级员工-Claude"},
+        {
+            "employee_id": "codex-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Codex",
+        },
+        {
+            "employee_id": "cursor-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Cursor",
+        },
+        {
+            "employee_id": "claude-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Claude",
+        },
     ]:
         svc.add_member(user_id=9, group_id=group["id"], member=member)
 
@@ -667,12 +735,26 @@ async def test_super_development_group_relay_dispatch_returns_immediate_progress
 
 def test_duplicate_super_development_groups_are_merged_and_alias_resolves(tmp_path: Path):
     svc = make_service(tmp_path)
-    first = svc.create_group(user_id=1, name="小C助理、超级员工-Codex、超级员工-Cursor、超级员工-Claude")
+    first = svc.create_group(
+        user_id=1, name="小C助理、超级员工-Codex、超级员工-Cursor、超级员工-Claude"
+    )
     second = svc.create_group(user_id=1, name="超级开发部")
     members = [
-        {"employee_id": "codex-super-employee", "mod_id": "super-employee", "name": "超级员工-Codex"},
-        {"employee_id": "cursor-super-employee", "mod_id": "super-employee", "name": "超级员工-Cursor"},
-        {"employee_id": "claude-super-employee", "mod_id": "super-employee", "name": "超级员工-Claude"},
+        {
+            "employee_id": "codex-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Codex",
+        },
+        {
+            "employee_id": "cursor-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Cursor",
+        },
+        {
+            "employee_id": "claude-super-employee",
+            "mod_id": "super-employee",
+            "name": "超级员工-Claude",
+        },
     ]
     for group in [first, second]:
         for member in members:

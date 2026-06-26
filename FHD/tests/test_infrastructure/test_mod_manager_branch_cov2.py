@@ -242,8 +242,10 @@ class TestModManagerScanFingerprint:
 
     def test_listdir_oserror_handled(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]), \
-             patch("os.listdir", side_effect=OSError("denied")):
+        with (
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch("os.listdir", side_effect=OSError("denied")),
+        ):
             fp = mm._mods_scan_fingerprint()
             assert str(tmp_path) in fp
 
@@ -253,8 +255,10 @@ class TestModManagerScanFingerprint:
         manifest = mod_dir / "manifest.json"
         manifest.write_text("{}")
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]), \
-             patch("os.path.getmtime", side_effect=OSError("denied")):
+        with (
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch("os.path.getmtime", side_effect=OSError("denied")),
+        ):
             fp = mm._mods_scan_fingerprint()
             assert "my-mod" in fp
 
@@ -410,8 +414,12 @@ class TestRefreshModsRootIfNeeded:
 
     def test_env_empty_and_current_missing_re_resolves(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root="/nonexistent/old")
-        with patch.dict("os.environ", {}, clear=True), \
-             patch("app.infrastructure.mods.mod_manager._default_mods_root", return_value=str(tmp_path)):
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch(
+                "app.infrastructure.mods.mod_manager._default_mods_root", return_value=str(tmp_path)
+            ),
+        ):
             mm._refresh_mods_root_if_needed()
             assert mm.mods_root == str(tmp_path)
 
@@ -449,25 +457,45 @@ class TestModAllowedForApiLoad:
         assert _mod_allowed_for_api_load("   ") is False
 
     def test_filter_not_active_returns_true(self) -> None:
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False
+        ):
             assert _mod_allowed_for_api_load("any-mod") is True
 
     def test_filter_active_and_visible_returns_true(self) -> None:
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", return_value=True):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", return_value=True
+            ),
+        ):
             assert _mod_allowed_for_api_load("visible-mod") is True
 
     def test_filter_active_and_not_visible_returns_false(self) -> None:
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", return_value=False):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", return_value=False
+            ),
+        ):
             assert _mod_allowed_for_api_load("hidden-mod") is False
 
     def test_import_error_returns_false(self) -> None:
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", side_effect=ImportError("no module")):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
+            side_effect=ImportError("no module"),
+        ):
             assert _mod_allowed_for_api_load("any-mod") is False
 
     def test_runtime_error_returns_false(self) -> None:
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
+            side_effect=RuntimeError("fail"),
+        ):
             assert _mod_allowed_for_api_load("any-mod") is False
 
 
@@ -475,32 +503,46 @@ class TestAllModsRoots:
     """_all_mods_roots 分支覆盖。"""
 
     def test_primary_valid_added(self, tmp_path: Path) -> None:
-        with patch("app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[]):
+        with patch(
+            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[]
+        ):
             result = _all_mods_roots(str(tmp_path))
             assert str(tmp_path) in result
 
     def test_primary_invalid_not_added(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[]):
+        with patch(
+            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[]
+        ):
             result = _all_mods_roots("/nonexistent")
             assert "/nonexistent" not in result
 
     def test_env_root_added(self, tmp_path: Path) -> None:
         env_dir = tmp_path / "env-mods"
         env_dir.mkdir()
-        with patch.dict("os.environ", {"XCAGI_MODS_ROOT": str(env_dir)}), \
-             patch("app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[]):
+        with (
+            patch.dict("os.environ", {"XCAGI_MODS_ROOT": str(env_dir)}),
+            patch(
+                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[]
+            ),
+        ):
             result = _all_mods_roots(str(tmp_path))
             assert str(env_dir) in result
 
     def test_dedup(self, tmp_path: Path) -> None:
-        with patch("app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[str(tmp_path)]):
+        with patch(
+            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+            return_value=[str(tmp_path)],
+        ):
             result = _all_mods_roots(str(tmp_path))
             assert result.count(str(tmp_path)) == 1
 
     def test_repo_candidates_appended(self, tmp_path: Path) -> None:
         other = tmp_path / "other-mods"
         other.mkdir()
-        with patch("app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[str(other)]):
+        with patch(
+            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+            return_value=[str(other)],
+        ):
             result = _all_mods_roots(str(tmp_path))
             assert str(other) in result
             assert str(tmp_path) in result
@@ -546,9 +588,11 @@ class TestModManagerResolveModDirectory:
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text('{"id": "canonical-id"}')
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]), \
-             patch("app.mod_sdk.industry_mod_aliases.canonical_mod_id", return_value="canonical-id"), \
-             patch("app.mod_sdk.industry_mod_aliases.legacy_mod_ids_for", return_value=[]):
+        with (
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch("app.mod_sdk.industry_mod_aliases.canonical_mod_id", return_value="canonical-id"),
+            patch("app.mod_sdk.industry_mod_aliases.legacy_mod_ids_for", return_value=[]),
+        ):
             result = mm.resolve_mod_directory("legacy-id")
             assert result is not None
             assert "canonical-id" in result
@@ -558,9 +602,13 @@ class TestModManagerResolveModDirectory:
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text('{"id": "legacy-mod"}')
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]), \
-             patch("app.mod_sdk.industry_mod_aliases.canonical_mod_id", return_value="some-id"), \
-             patch("app.mod_sdk.industry_mod_aliases.legacy_mod_ids_for", return_value=["legacy-mod"]):
+        with (
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch("app.mod_sdk.industry_mod_aliases.canonical_mod_id", return_value="some-id"),
+            patch(
+                "app.mod_sdk.industry_mod_aliases.legacy_mod_ids_for", return_value=["legacy-mod"]
+            ),
+        ):
             result = mm.resolve_mod_directory("some-id")
             assert result is not None
             assert "legacy-mod" in result

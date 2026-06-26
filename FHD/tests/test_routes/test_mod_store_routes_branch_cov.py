@@ -291,9 +291,7 @@ class TestRemoteRows:
                 with patch.object(_mod, "_installed_by_id", return_value={}):
                     result = _sync(_mod._remote_rows())
         finally:
-            sys.modules[
-                "app.mod_sdk.host_foundation"
-            ].is_infrastructure_mod_hidden_from_store = old
+            sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = old
         ids = [r["id"] for r in result]
         assert "hidden-mod" not in ids
         assert "visible-mod" in ids
@@ -313,9 +311,7 @@ class TestRemoteRows:
                 with patch.object(_mod, "_installed_by_id", return_value={}):
                     result = _sync(_mod._remote_rows())
         finally:
-            sys.modules[
-                "app.mod_sdk.host_foundation"
-            ].is_infrastructure_mod_hidden_from_store = old
+            sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = old
         assert len(result) == 1
         assert result[0]["id"] == "hidden-listed"
 
@@ -345,9 +341,7 @@ class TestMapMarketCatalogPageHintBranch:
         sys.modules["app.application.mod_store_catalog_app"].is_public_catalog_row = MagicMock(
             return_value=True
         )
-        sys.modules[
-            "app.application.mod_store_catalog_app"
-        ].market_item_to_package_row = MagicMock(
+        sys.modules["app.application.mod_store_catalog_app"].market_item_to_package_row = MagicMock(
             return_value={"id": "p1", "commerce": {"collection": "from_commerce"}}
         )
         sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection = MagicMock(
@@ -368,9 +362,7 @@ class TestMapMarketCatalogPageHintBranch:
         sys.modules["app.application.mod_store_catalog_app"].is_public_catalog_row = MagicMock(
             return_value=True
         )
-        sys.modules[
-            "app.application.mod_store_catalog_app"
-        ].market_item_to_package_row = MagicMock(
+        sys.modules["app.application.mod_store_catalog_app"].market_item_to_package_row = MagicMock(
             return_value={"id": "p1", "commerce": {"collection": "commerce_coll"}}
         )
         sys.modules["app.mod_sdk.host_foundation"].catalog_store_collection = MagicMock(
@@ -406,9 +398,7 @@ class TestCombinedRows:
             patch.object(_mod, "_installed_by_id", return_value=installed_map),
             patch.object(_mod, "_remote_rows", AsyncMock(return_value=remote_rows)),
             patch.object(_mod, "_inject_host_foundation_row") as mock_inject,
-            patch(
-                "app.mod_sdk.host_foundation.inject_aux_employee_pack_rows"
-            ) as mock_aux,
+            patch("app.mod_sdk.host_foundation.inject_aux_employee_pack_rows") as mock_aux,
         ):
             available, installed_visible = _sync(_mod._combined_rows())
         # r1 already in remote (seen), i1 is new
@@ -445,9 +435,7 @@ class TestCombinedRows:
             ):
                 available, installed_visible = _sync(_mod._combined_rows())
         finally:
-            sys.modules[
-                "app.mod_sdk.host_foundation"
-            ].is_infrastructure_mod_hidden_from_store = old
+            sys.modules["app.mod_sdk.host_foundation"].is_infrastructure_mod_hidden_from_store = old
         # hidden-1 not added to available (already not in seen, but hidden)
         avail_ids = [r["id"] for r in available]
         assert "hidden-1" not in avail_ids
@@ -477,9 +465,7 @@ class TestInstallFromCatalog:
                 _mod,
                 "_install_host_foundation_internal",
                 AsyncMock(
-                    return_value=_mod.ModStoreInstallResult(
-                        success=True, message="hf installed"
-                    )
+                    return_value=_mod.ModStoreInstallResult(success=True, message="hf installed")
                 ),
             ) as mock_internal:
                 result = _sync(_mod._install_from_catalog("hf-pack", "1.0"))
@@ -499,9 +485,7 @@ class TestInstallFromCatalog:
         )
         sys.modules[
             "app.mod_sdk.host_foundation"
-        ].install_aux_employee_pack_from_repo_seed = MagicMock(
-            return_value=(True, "aux seeded")
-        )
+        ].install_aux_employee_pack_from_repo_seed = MagicMock(return_value=(True, "aux seeded"))
         try:
             result = _sync(_mod._install_from_catalog("aux-pack", "1.0", activate=False))
         finally:
@@ -524,13 +508,11 @@ class TestInstallFromCatalog:
         )
         sys.modules[
             "app.mod_sdk.host_foundation"
-        ].install_aux_employee_pack_from_repo_seed = MagicMock(
-            return_value=(False, "seed failed")
-        )
+        ].install_aux_employee_pack_from_repo_seed = MagicMock(return_value=(False, "seed failed"))
         try:
-            with patch.object(_mod, "catalog_get_json", AsyncMock(
-                return_value={"versions": [{"version": "2.0"}]}
-            )):
+            with patch.object(
+                _mod, "catalog_get_json", AsyncMock(return_value={"versions": [{"version": "2.0"}]})
+            ):
                 with patch.object(_mod, "catalog_download_to", AsyncMock()):
                     with patch(
                         "app.infrastructure.mods.artifact_package.peek_artifact",
@@ -619,9 +601,7 @@ class TestInstallFromCatalog:
                 "app.infrastructure.mods.artifact_package.peek_artifact",
                 return_value="employee_pack",
             ),
-            patch(
-                "app.infrastructure.mods.employee_registry.get_employee_registry"
-            ) as mock_reg,
+            patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
         ):
             mock_reg.return_value.install_from_package.return_value = (True, "emp installed")
             result = _sync(_mod._install_from_catalog("my-mod", "1.0", activate=True))
@@ -793,7 +773,17 @@ class TestModStoreDetailsFallback:
 
     def test_for_loop_no_match_raises_404(self):
         """Branch: for loop finds no match → 404."""
-        rows = [{"id": "other-mod", "name": "Other", "version": "1.0", "author": "", "description": "", "source": "local", "catalog_base_url": ""}]
+        rows = [
+            {
+                "id": "other-mod",
+                "name": "Other",
+                "version": "1.0",
+                "author": "",
+                "description": "",
+                "source": "local",
+                "catalog_base_url": "",
+            }
+        ]
         with (
             patch.object(
                 _mod,
@@ -819,7 +809,9 @@ class TestEnsureHostFoundationEmployeeOnDisk:
         """Branch: dest is dir → return (True, 'employee pack present')."""
         with (
             patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
-            patch("app.infrastructure.mods.employee_registry.employees_root", return_value="/tmp/emp"),
+            patch(
+                "app.infrastructure.mods.employee_registry.employees_root", return_value="/tmp/emp"
+            ),
             patch("os.path.isdir", return_value=True),
         ):
             mock_reg.return_value.mods_root = "/tmp/mods"
@@ -830,7 +822,9 @@ class TestEnsureHostFoundationEmployeeOnDisk:
         """Branch: src not a dir → return (False, '内置员工包目录缺失')."""
         with (
             patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
-            patch("app.infrastructure.mods.employee_registry.employees_root", return_value="/tmp/emp"),
+            patch(
+                "app.infrastructure.mods.employee_registry.employees_root", return_value="/tmp/emp"
+            ),
             patch("os.path.isdir", side_effect=lambda p: False),
         ):
             mock_reg.return_value.mods_root = "/tmp/mods"
@@ -842,8 +836,13 @@ class TestEnsureHostFoundationEmployeeOnDisk:
         """Branch: src exists, copytree succeeds → (True, 'employee pack seeded')."""
         with (
             patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
-            patch("app.infrastructure.mods.employee_registry.employees_root", return_value="/tmp/emp"),
-            patch("os.path.isdir", side_effect=lambda p: p == "/tmp/mods/_employees/xcagi-host-foundation-employee"),
+            patch(
+                "app.infrastructure.mods.employee_registry.employees_root", return_value="/tmp/emp"
+            ),
+            patch(
+                "os.path.isdir",
+                side_effect=lambda p: p == "/tmp/mods/_employees/xcagi-host-foundation-employee",
+            ),
             patch("os.makedirs"),
             patch("shutil.copytree") as mock_copy,
         ):
@@ -1113,7 +1112,9 @@ class TestInstallRouteActivateFlag:
             AsyncMock(return_value=_mod.ModStoreInstallResult(success=True, message="ok")),
         ) as mock_install:
             with _make_client() as client:
-                resp = client.post("/install", json={"pkg_id": "m1", "version": "1.0", "activate": "false"})
+                resp = client.post(
+                    "/install", json={"pkg_id": "m1", "version": "1.0", "activate": "false"}
+                )
         assert resp.status_code == 200
         args, kwargs = mock_install.call_args
         assert kwargs.get("activate") is False
@@ -1126,7 +1127,9 @@ class TestInstallRouteActivateFlag:
             AsyncMock(return_value=_mod.ModStoreInstallResult(success=True, message="ok")),
         ) as mock_install:
             with _make_client() as client:
-                resp = client.post("/install", json={"pkg_id": "m1", "version": "1.0", "activate": "0"})
+                resp = client.post(
+                    "/install", json={"pkg_id": "m1", "version": "1.0", "activate": "0"}
+                )
         assert resp.status_code == 200
         args, kwargs = mock_install.call_args
         assert kwargs.get("activate") is False
@@ -1139,7 +1142,9 @@ class TestInstallRouteActivateFlag:
             AsyncMock(return_value=_mod.ModStoreInstallResult(success=True, message="ok")),
         ) as mock_install:
             with _make_client() as client:
-                resp = client.post("/install", json={"pkg_id": "m1", "version": "1.0", "activate": "no"})
+                resp = client.post(
+                    "/install", json={"pkg_id": "m1", "version": "1.0", "activate": "no"}
+                )
         assert resp.status_code == 200
         args, kwargs = mock_install.call_args
         assert kwargs.get("activate") is False
@@ -1201,9 +1206,7 @@ class TestInstallHostFoundationRouteDeep:
             _mod,
             "_install_host_foundation_internal",
             AsyncMock(
-                return_value=_mod.ModStoreInstallResult(
-                    success=False, message="fail", data=None
-                )
+                return_value=_mod.ModStoreInstallResult(success=False, message="fail", data=None)
             ),
         ) as mock_internal:
             with _make_client() as client:
@@ -1223,7 +1226,9 @@ class TestBootstrapEditionPackEditionResolution:
 
     def test_edition_from_resolve_edition_when_not_provided(self):
         """Branch: edition=None → uses resolve_edition()."""
-        sys.modules["app.mod_sdk.edition_policy"].resolve_edition = MagicMock(return_value="minimal")
+        sys.modules["app.mod_sdk.edition_policy"].resolve_edition = MagicMock(
+            return_value="minimal"
+        )
         sys.modules["app.mod_sdk.product_skus"].assert_bootstrap_edition_allowed = MagicMock(
             return_value=None
         )
@@ -1237,7 +1242,9 @@ class TestBootstrapEditionPackEditionResolution:
 
     def test_edition_whitespace_stripped(self):
         """Branch: edition has whitespace → stripped and lowered."""
-        sys.modules["app.mod_sdk.edition_policy"].resolve_edition = MagicMock(return_value="generic")
+        sys.modules["app.mod_sdk.edition_policy"].resolve_edition = MagicMock(
+            return_value="generic"
+        )
         sys.modules["app.mod_sdk.product_skus"].assert_bootstrap_edition_allowed = MagicMock(
             return_value=None
         )
@@ -1251,7 +1258,9 @@ class TestBootstrapEditionPackEditionResolution:
 
     def test_permission_error_detail_forwarded(self):
         """Branch: PermissionError → 400 with detail."""
-        sys.modules["app.mod_sdk.edition_policy"].resolve_edition = MagicMock(return_value="generic")
+        sys.modules["app.mod_sdk.edition_policy"].resolve_edition = MagicMock(
+            return_value="generic"
+        )
         sys.modules["app.mod_sdk.product_skus"].assert_bootstrap_edition_allowed = MagicMock(
             side_effect=PermissionError("edition not allowed for this SKU")
         )
@@ -1282,9 +1291,7 @@ class TestRemoteToModInfoEdgeCases:
 
     def test_commerce_seller_fallback_for_author(self):
         """Branch: author and publisher missing → uses commerce.seller."""
-        info = _mod._remote_to_mod_info(
-            {"id": "m1", "commerce": {"seller": "SellerInc"}}, set()
-        )
+        info = _mod._remote_to_mod_info({"id": "m1", "commerce": {"seller": "SellerInc"}}, set())
         assert info["author"] == "SellerInc"
 
     def test_download_count_fallback_to_total_downloads(self):

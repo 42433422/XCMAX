@@ -33,7 +33,6 @@ import pytest
 # app.services.get_products_service (circular).
 # Importing app.application first ensures the chain resolves cleanly.
 import app.application  # noqa: F401
-
 from app.services.tools_workflow_registered import (
     _execute_excel_import_records,
     _normalize_business_db_entity,
@@ -58,7 +57,6 @@ from app.services.tools_workflow_registered import (
     execute_registered_workflow_tool,
 )
 
-
 # ===========================================================================
 # _registered_router_business_event
 # ===========================================================================
@@ -66,20 +64,20 @@ from app.services.tools_workflow_registered import (
 
 class TestBusinessEventRouter:
     def test_print_label_success(self):
-        with patch(
-            "app.neuro_bus.domains.print_domain.get_print_domain"
-        ) as mock_get:
+        with patch("app.neuro_bus.domains.print_domain.get_print_domain") as mock_get:
             mock_get.return_value.emit_job_submitted.return_value = True
             result = _registered_router_business_event(
-                "print_label", {"job_id": "j1", "document_name": "doc", "printer_id": "p1"}, {}, "admin", ""
+                "print_label",
+                {"job_id": "j1", "document_name": "doc", "printer_id": "p1"},
+                {},
+                "admin",
+                "",
             )
         assert result["success"] is True
         assert result["job_id"] == "j1"
 
     def test_print_label_generates_uuid_when_missing(self):
-        with patch(
-            "app.neuro_bus.domains.print_domain.get_print_domain"
-        ) as mock_get:
+        with patch("app.neuro_bus.domains.print_domain.get_print_domain") as mock_get:
             mock_get.return_value.emit_job_submitted.return_value = True
             result = _registered_router_business_event(
                 "print_label", {"document_name": "doc"}, {}, "admin", ""
@@ -88,9 +86,7 @@ class TestBusinessEventRouter:
         assert result["job_id"]  # auto-generated uuid
 
     def test_print_label_failure(self):
-        with patch(
-            "app.neuro_bus.domains.print_domain.get_print_domain"
-        ) as mock_get:
+        with patch("app.neuro_bus.domains.print_domain.get_print_domain") as mock_get:
             mock_get.return_value.emit_job_submitted.return_value = False
             result = _registered_router_business_event(
                 "print_label", {"job_id": "j1"}, {}, "admin", ""
@@ -98,9 +94,7 @@ class TestBusinessEventRouter:
         assert result["success"] is False
 
     def test_inventory_update_success(self):
-        with patch(
-            "app.neuro_bus.domains.inventory_domain.get_inventory_domain"
-        ) as mock_get:
+        with patch("app.neuro_bus.domains.inventory_domain.get_inventory_domain") as mock_get:
             mock_get.return_value.emit_stock_changed.return_value = True
             result = _registered_router_business_event(
                 "inventory_update", {"product_id": "p1", "delta": 5}, {}, "admin", ""
@@ -108,13 +102,9 @@ class TestBusinessEventRouter:
         assert result["success"] is True
 
     def test_inventory_update_failure(self):
-        with patch(
-            "app.neuro_bus.domains.inventory_domain.get_inventory_domain"
-        ) as mock_get:
+        with patch("app.neuro_bus.domains.inventory_domain.get_inventory_domain") as mock_get:
             mock_get.return_value.emit_stock_changed.return_value = False
-            result = _registered_router_business_event(
-                "inventory_update", {}, {}, "admin", ""
-            )
+            result = _registered_router_business_event("inventory_update", {}, {}, "admin", "")
         assert result["success"] is False
 
     def test_shipment_create_success(self):
@@ -137,9 +127,7 @@ class TestBusinessEventRouter:
             "app.neuro_bus.application_neuro_bridge.publish_neuro_event",
             return_value=False,
         ):
-            result = _registered_router_business_event(
-                "shipment_create", {}, {}, "admin", ""
-            )
+            result = _registered_router_business_event("shipment_create", {}, {}, "admin", "")
         assert result["success"] is False
         assert result["published"] is False
 
@@ -156,9 +144,7 @@ class TestBusinessEventRouter:
 
 class TestSystemMaintenanceRouter:
     def test_set_default_printer_success(self):
-        with patch(
-            "app.application.facades.session_facade.get_system_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_system_service") as mock_get:
             mock_get.return_value.set_default_printer.return_value = {"success": True}
             result = _registered_router_system_maintenance(
                 "set_default_printer", {"printer_name": "HP"}, {}, "admin", ""
@@ -167,9 +153,7 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 200
 
     def test_set_default_printer_failure(self):
-        with patch(
-            "app.application.facades.session_facade.get_system_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_system_service") as mock_get:
             mock_get.return_value.set_default_printer.return_value = {"success": False}
             result = _registered_router_system_maintenance(
                 "set_default_printer", {"printer_name": ""}, {}, "admin", ""
@@ -177,69 +161,43 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 500
 
     def test_enable_startup_success(self):
-        with patch(
-            "app.application.facades.session_facade.get_system_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_system_service") as mock_get:
             mock_get.return_value.enable_startup.return_value = {"success": True}
-            result = _registered_router_system_maintenance(
-                "enable_startup", {}, {}, "admin", ""
-            )
+            result = _registered_router_system_maintenance("enable_startup", {}, {}, "admin", "")
         assert result["http_status_code"] == 200
 
     def test_enable_startup_failure(self):
-        with patch(
-            "app.application.facades.session_facade.get_system_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_system_service") as mock_get:
             mock_get.return_value.enable_startup.return_value = {"success": False}
-            result = _registered_router_system_maintenance(
-                "enable_startup", {}, {}, "admin", ""
-            )
+            result = _registered_router_system_maintenance("enable_startup", {}, {}, "admin", "")
         assert result["http_status_code"] == 500
 
     def test_disable_startup_success(self):
-        with patch(
-            "app.application.facades.session_facade.get_system_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_system_service") as mock_get:
             mock_get.return_value.disable_startup.return_value = {"success": True}
-            result = _registered_router_system_maintenance(
-                "disable_startup", {}, {}, "admin", ""
-            )
+            result = _registered_router_system_maintenance("disable_startup", {}, {}, "admin", "")
         assert result["http_status_code"] == 200
 
     def test_disable_startup_failure(self):
-        with patch(
-            "app.application.facades.session_facade.get_system_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_system_service") as mock_get:
             mock_get.return_value.disable_startup.return_value = {"success": False}
-            result = _registered_router_system_maintenance(
-                "disable_startup", {}, {}, "admin", ""
-            )
+            result = _registered_router_system_maintenance("disable_startup", {}, {}, "admin", "")
         assert result["http_status_code"] == 500
 
     def test_backup_database_success(self):
-        with patch(
-            "app.application.facades.session_facade.get_database_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_database_service") as mock_get:
             mock_get.return_value.backup_database.return_value = {"success": True}
-            result = _registered_router_system_maintenance(
-                "backup_database", {}, {}, "admin", ""
-            )
+            result = _registered_router_system_maintenance("backup_database", {}, {}, "admin", "")
         assert result["http_status_code"] == 200
 
     def test_backup_database_failure(self):
-        with patch(
-            "app.application.facades.session_facade.get_database_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_database_service") as mock_get:
             mock_get.return_value.backup_database.return_value = {"success": False}
-            result = _registered_router_system_maintenance(
-                "backup_database", {}, {}, "admin", ""
-            )
+            result = _registered_router_system_maintenance("backup_database", {}, {}, "admin", "")
         assert result["http_status_code"] == 500
 
     def test_delete_database_backup_success(self):
-        with patch(
-            "app.application.facades.session_facade.get_database_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_database_service") as mock_get:
             mock_get.return_value.delete_backup.return_value = {"success": True}
             result = _registered_router_system_maintenance(
                 "delete_database_backup", {"backup_file": "bak.sql"}, {}, "admin", ""
@@ -247,9 +205,7 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 200
 
     def test_delete_database_backup_failure(self):
-        with patch(
-            "app.application.facades.session_facade.get_database_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_database_service") as mock_get:
             mock_get.return_value.delete_backup.return_value = {"success": False}
             result = _registered_router_system_maintenance(
                 "delete_database_backup", {}, {}, "admin", ""
@@ -257,9 +213,7 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 500
 
     def test_restore_database_success(self):
-        with patch(
-            "app.application.facades.session_facade.get_database_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_database_service") as mock_get:
             mock_get.return_value.restore_database.return_value = {"success": True}
             result = _registered_router_system_maintenance(
                 "restore_database", {"backup_file": "bak.sql"}, {}, "admin", ""
@@ -267,19 +221,13 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 200
 
     def test_restore_database_failure(self):
-        with patch(
-            "app.application.facades.session_facade.get_database_service"
-        ) as mock_get:
+        with patch("app.application.facades.session_facade.get_database_service") as mock_get:
             mock_get.return_value.restore_database.return_value = {"success": False}
-            result = _registered_router_system_maintenance(
-                "restore_database", {}, {}, "admin", ""
-            )
+            result = _registered_router_system_maintenance("restore_database", {}, {}, "admin", "")
         assert result["http_status_code"] == 400
 
     def test_clear_performance_cache_no_redis(self):
-        with patch(
-            "app.utils.performance_initializer.get_performance_optimizer"
-        ) as mock_get:
+        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
             mock_get.return_value.redis_cache = None
             result = _registered_router_system_maintenance(
                 "clear_performance_cache", {}, {}, "admin", ""
@@ -288,9 +236,7 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 503
 
     def test_clear_performance_cache_with_pattern(self):
-        with patch(
-            "app.utils.performance_initializer.get_performance_optimizer"
-        ) as mock_get:
+        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
             mock_get.return_value.redis_cache.clear_pattern.return_value = 5
             result = _registered_router_system_maintenance(
                 "clear_performance_cache", {"pattern": "user:*"}, {}, "admin", ""
@@ -299,9 +245,7 @@ class TestSystemMaintenanceRouter:
         assert "user:*" in result["message"]
 
     def test_clear_performance_cache_without_pattern(self):
-        with patch(
-            "app.utils.performance_initializer.get_performance_optimizer"
-        ) as mock_get:
+        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
             mock_get.return_value.redis_cache.clear_local_cache = MagicMock()
             result = _registered_router_system_maintenance(
                 "clear_performance_cache", {}, {}, "admin", ""
@@ -310,9 +254,7 @@ class TestSystemMaintenanceRouter:
         assert "本地缓存" in result["message"]
 
     def test_invalidate_performance_cache_no_redis(self):
-        with patch(
-            "app.utils.performance_initializer.get_performance_optimizer"
-        ) as mock_get:
+        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
             mock_get.return_value.redis_cache = None
             result = _registered_router_system_maintenance(
                 "invalidate_performance_cache", {}, {}, "admin", ""
@@ -320,9 +262,7 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 503
 
     def test_invalidate_performance_cache_success(self):
-        with patch(
-            "app.utils.performance_initializer.get_performance_optimizer"
-        ) as mock_get:
+        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
             mock_get.return_value.redis_cache.delete.return_value = 3
             result = _registered_router_system_maintenance(
                 "invalidate_performance_cache", {"keys": ["k1", "k2", "k3"]}, {}, "admin", ""
@@ -331,9 +271,7 @@ class TestSystemMaintenanceRouter:
         assert result["data"]["deleted_count"] == 3
 
     def test_reinitialize_performance(self):
-        with patch(
-            "app.utils.performance_initializer.init_performance_optimization"
-        ) as mock_init:
+        with patch("app.utils.performance_initializer.init_performance_optimization") as mock_init:
             mock_init.return_value.get_status.return_value = {"ok": True}
             result = _registered_router_system_maintenance(
                 "reinitialize_performance", {}, {}, "admin", ""
@@ -539,9 +477,7 @@ class TestDocumentTemplateRouter:
             "app.fastapi_routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": True}, 201),
         ):
-            result = _registered_router_document_template(
-                "create", {"name": "T1"}, {}, "admin", ""
-            )
+            result = _registered_router_document_template("create", {"name": "T1"}, {}, "admin", "")
         assert result["success"] is True
         assert result["http_status_code"] == 201
 
@@ -550,9 +486,7 @@ class TestDocumentTemplateRouter:
             "app.fastapi_routes.document_templates_compat.run_archive_template_update",
             return_value=({"success": True}, 200),
         ):
-            result = _registered_router_document_template(
-                "update", {"id": 1}, {}, "admin", ""
-            )
+            result = _registered_router_document_template("update", {"id": 1}, {}, "admin", "")
         assert result["http_status_code"] == 200
 
     def test_delete(self):
@@ -585,9 +519,7 @@ class TestDocumentTemplateRouter:
             "app.fastapi_routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": True}, None),
         ):
-            result = _registered_router_document_template(
-                "create", {}, {}, "admin", ""
-            )
+            result = _registered_router_document_template("create", {}, {}, "admin", "")
         assert result["http_status_code"] == 200
 
     def test_none_status_code_failure_defaults(self):
@@ -595,9 +527,7 @@ class TestDocumentTemplateRouter:
             "app.fastapi_routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": False}, None),
         ):
-            result = _registered_router_document_template(
-                "create", {}, {}, "admin", ""
-            )
+            result = _registered_router_document_template("create", {}, {}, "admin", "")
         assert result["http_status_code"] == 400
 
 
@@ -715,9 +645,7 @@ class TestBusinessDbRouter:
     def test_read_products(self):
         with patch("app.services.get_products_service") as mock_get:
             mock_get.return_value.get_products.return_value = {"success": True, "data": []}
-            result = _registered_router_business_db(
-                "read", {"entity": "products"}, {}, "admin", ""
-            )
+            result = _registered_router_business_db("read", {"entity": "products"}, {}, "admin", "")
         assert result["success"] is True
 
     def test_read_materials(self):
@@ -737,9 +665,7 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_unknown_action(self):
-        result = _registered_router_business_db(
-            "fly", {"entity": "customers"}, {}, "admin", ""
-        )
+        result = _registered_router_business_db("fly", {"entity": "customers"}, {}, "admin", "")
         assert result["success"] is False
 
     def test_write_non_dict_payload(self):
@@ -767,7 +693,11 @@ class TestBusinessDbRouter:
             mock_get.return_value.create.return_value = {"success": True}
             result = _registered_router_business_db(
                 "write",
-                {"entity": "customers", "operation": "ensure_exists", "payload": {"customer_name": "X"}},
+                {
+                    "entity": "customers",
+                    "operation": "ensure_exists",
+                    "payload": {"customer_name": "X"},
+                },
                 {},
                 "admin",
                 "",
@@ -801,7 +731,11 @@ class TestBusinessDbRouter:
             mock_get.return_value.create_product.return_value = {"success": True}
             result = _registered_router_business_db(
                 "write",
-                {"entity": "products", "operation": "create", "payload": {"name": "P1", "unit_name": "U1"}},
+                {
+                    "entity": "products",
+                    "operation": "create",
+                    "payload": {"name": "P1", "unit_name": "U1"},
+                },
                 {},
                 "admin",
                 "",
@@ -886,9 +820,7 @@ class TestDatasetRagRouter:
         assert result["dataset_id"] == "ds1"
 
     def test_query_missing_query(self):
-        result = _registered_router_dataset_rag(
-            "query", {"dataset_id": "ds1"}, {}, "admin", ""
-        )
+        result = _registered_router_dataset_rag("query", {"dataset_id": "ds1"}, {}, "admin", "")
         assert result["success"] is False
 
     def test_query_with_answer(self):
@@ -1065,16 +997,12 @@ class TestMemoryV2Router:
     def test_missing_user_id(self):
         # user_id defaults to "default" via `or "default"` fallback, so we
         # must pass whitespace-only to make str(...).strip() produce "".
-        result = _registered_router_memory_v2(
-            "confirm", {"user_id": "  "}, {}, "admin", ""
-        )
+        result = _registered_router_memory_v2("confirm", {"user_id": "  "}, {}, "admin", "")
         assert result["success"] is False
         assert "user_id" in result["message"]
 
     def test_propose_candidate_missing_key(self):
-        with patch(
-            "app.services.user_memory_service.get_user_memory_service"
-        ):
+        with patch("app.services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "propose_candidate", {"user_id": "u1", "value": "v"}, {}, "admin", ""
             )
@@ -1082,9 +1010,7 @@ class TestMemoryV2Router:
         assert "key" in result["message"]
 
     def test_propose_candidate_missing_value(self):
-        with patch(
-            "app.services.user_memory_service.get_user_memory_service"
-        ):
+        with patch("app.services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "propose_candidate", {"user_id": "u1", "key": "k"}, {}, "admin", ""
             )
@@ -1092,9 +1018,7 @@ class TestMemoryV2Router:
         assert "value" in result["message"]
 
     def test_propose_candidate_bad_confidence(self):
-        with patch(
-            "app.services.user_memory_service.get_user_memory_service"
-        ):
+        with patch("app.services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "propose_candidate",
                 {"user_id": "u1", "key": "k", "value": "v", "confidence": "abc"},
@@ -1139,12 +1063,8 @@ class TestMemoryV2Router:
         assert result["success"] is True
 
     def test_missing_memory_id(self):
-        with patch(
-            "app.services.user_memory_service.get_user_memory_service"
-        ):
-            result = _registered_router_memory_v2(
-                "confirm", {"user_id": "u1"}, {}, "admin", ""
-            )
+        with patch("app.services.user_memory_service.get_user_memory_service"):
+            result = _registered_router_memory_v2("confirm", {"user_id": "u1"}, {}, "admin", "")
         assert result["success"] is False
         assert "memory_id" in result["message"]
 
@@ -1213,9 +1133,7 @@ class TestMemoryV2Router:
         assert result["success"] is True
 
     def test_unknown_action(self):
-        with patch(
-            "app.services.user_memory_service.get_user_memory_service"
-        ):
+        with patch("app.services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "fly", {"user_id": "u1", "memory_id": "m1"}, {}, "admin", ""
             )
@@ -1237,12 +1155,15 @@ class TestExcelAnalysisRouter:
         mock_toolkit = MagicMock()
         mock_toolkit.execute.return_value = {"success": True}
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "read",
@@ -1257,12 +1178,15 @@ class TestExcelAnalysisRouter:
         mock_toolkit = MagicMock()
         mock_toolkit.execute.return_value = {"success": True}
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "read",
@@ -1291,12 +1215,15 @@ class TestExcelAnalysisRouter:
         mock_toolkit = MagicMock()
         mock_toolkit.execute.return_value = {"success": True, "content": []}
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "read", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
@@ -1307,12 +1234,15 @@ class TestExcelAnalysisRouter:
         mock_toolkit = MagicMock()
         mock_analyzer = MagicMock()
         mock_analyzer.execute.return_value = {"success": True}
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "structure", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
@@ -1327,12 +1257,15 @@ class TestExcelAnalysisRouter:
             "row_count": 1,
         }
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
@@ -1348,12 +1281,15 @@ class TestExcelAnalysisRouter:
             "row_count": 1,
         }
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
@@ -1365,12 +1301,15 @@ class TestExcelAnalysisRouter:
         mock_toolkit = MagicMock()
         mock_toolkit.execute.return_value = {"success": False}
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
@@ -1384,12 +1323,15 @@ class TestExcelAnalysisRouter:
             "content": [{"cells": [{"value": 1}]}],
         }
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "query", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
@@ -1404,12 +1346,15 @@ class TestExcelAnalysisRouter:
             "content": [{"cells": [{"value": 1}, {"value": 2}]}],
         }
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "query",
@@ -1428,12 +1373,15 @@ class TestExcelAnalysisRouter:
             "content": [{"cells": [{"value": 5}, {"value": 3}]}],
         }
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "query",
@@ -1452,12 +1400,15 @@ class TestExcelAnalysisRouter:
             "content": [{"cells": [{"value": None}]}],
         }
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "query",
@@ -1473,12 +1424,15 @@ class TestExcelAnalysisRouter:
         mock_toolkit = MagicMock()
         mock_toolkit.execute.return_value = {"success": False}
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "query", {"file_path": "/tmp/x.xlsx", "question": "x"}, {}, "admin", ""
@@ -1492,12 +1446,15 @@ class TestExcelAnalysisRouter:
             "content": [{"cells": [{"value": 1}]}],
         }
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "query",
@@ -1511,12 +1468,15 @@ class TestExcelAnalysisRouter:
     def test_unknown_action(self):
         mock_toolkit = MagicMock()
         mock_analyzer = MagicMock()
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_toolkit,
-        ), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=mock_analyzer,
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_toolkit,
+            ),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+                return_value=mock_analyzer,
+            ),
         ):
             result = _registered_router_excel_analysis(
                 "fly", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
@@ -1712,9 +1672,7 @@ class TestOcrRouter:
         mock_service = MagicMock()
         mock_service.extract_structured_data.return_value = {"name": "Alice"}
         with patch("app.fastapi_routes.ocr._get_ocr_service", return_value=mock_service):
-            result = _registered_router_ocr(
-                "extract", {"text": "hello"}, {}, "admin", ""
-            )
+            result = _registered_router_ocr("extract", {"text": "hello"}, {}, "admin", "")
         assert result["success"] is True
 
     def test_analyze_missing_text(self):
@@ -1726,9 +1684,7 @@ class TestOcrRouter:
         mock_service = MagicMock()
         mock_service.analyze_text.return_value = {"confidence": 0.9}
         with patch("app.fastapi_routes.ocr._get_ocr_service", return_value=mock_service):
-            result = _registered_router_ocr(
-                "analyze", {"text": "hello"}, {}, "admin", ""
-            )
+            result = _registered_router_ocr("analyze", {"text": "hello"}, {}, "admin", "")
         assert result["success"] is True
 
     def test_recognize_and_extract_missing_file_path(self):
@@ -1803,10 +1759,13 @@ class TestExcelImportRouter:
         assert result["success"] is False
 
     def test_execute_import_success(self):
-        with patch("app.application.get_ai_chat_app_service") as mock_get, patch(
-            "app.services.tools_workflow_registered._execute_excel_import_records",
-            return_value={"success": True},
-        ) as mock_exec:
+        with (
+            patch("app.application.get_ai_chat_app_service") as mock_get,
+            patch(
+                "app.services.tools_workflow_registered._execute_excel_import_records",
+                return_value={"success": True},
+            ) as mock_exec,
+        ):
             mock_svc = MagicMock()
             # Use a real dict so .get() works, but track pop via a separate mock
             pending = {"x1": {"records": [{"unit_name": "Co"}]}}
@@ -1846,9 +1805,10 @@ class TestExecuteExcelImportRecords:
         assert result["success"] is False
 
     def test_import_success(self):
-        with patch("app.bootstrap.get_products_service") as mock_products, patch(
-            "app.bootstrap.get_customer_app_service"
-        ) as mock_customers:
+        with (
+            patch("app.bootstrap.get_products_service") as mock_products,
+            patch("app.bootstrap.get_customer_app_service") as mock_customers,
+        ):
             mock_products.return_value.get_products.return_value = {"success": True, "data": []}
             mock_products.return_value.create_product.return_value = {"success": True}
             mock_customers.return_value.match_purchase_unit.return_value = None
@@ -1860,9 +1820,10 @@ class TestExecuteExcelImportRecords:
         assert result["data"]["result"]["created_products"] == 1
 
     def test_import_skips_existing(self):
-        with patch("app.bootstrap.get_products_service") as mock_products, patch(
-            "app.bootstrap.get_customer_app_service"
-        ) as mock_customers:
+        with (
+            patch("app.bootstrap.get_products_service") as mock_products,
+            patch("app.bootstrap.get_customer_app_service") as mock_customers,
+        ):
             mock_products.return_value.get_products.return_value = {
                 "success": True,
                 "data": [{"name": "P1", "model_number": "M1"}],
@@ -1882,8 +1843,9 @@ class TestExecuteExcelImportRecords:
                 raise ImportError("no service")
             return real_import(name, *args, **kwargs)
 
-        with patch("app.bootstrap.get_products_service") as mock_products, patch(
-            "builtins.__import__", side_effect=fake_import
+        with (
+            patch("app.bootstrap.get_products_service") as mock_products,
+            patch("builtins.__import__", side_effect=fake_import),
         ):
             mock_products.return_value.get_products.return_value = {"success": True, "data": []}
             mock_products.return_value.create_product.return_value = {"success": True}
@@ -1923,9 +1885,7 @@ class TestUnitProductsImportRouter:
         assert result["success"] is False
 
     def test_import_success(self):
-        with patch(
-            "app.application.get_unit_products_import_app_service"
-        ) as mock_get:
+        with patch("app.application.get_unit_products_import_app_service") as mock_get:
             mock_get.return_value.import_unit_products.return_value = {
                 "success": True,
                 "created_unit": True,
@@ -1964,18 +1924,15 @@ class TestUnitProductsImportRouter:
 
 class TestPrintRouterWorkflowLabel:
     def test_workflow_label_dispatch_missing_model_number(self):
-        result = _registered_router_print(
-            "workflow_label_dispatch", {}, {}, "admin", ""
-        )
+        result = _registered_router_print("workflow_label_dispatch", {}, {}, "admin", "")
         assert result["success"] is False
         assert "model_number" in result["message"]
 
     def test_workflow_label_dispatch_no_product_found(self):
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_print, patch(
-            "app.application.get_product_app_service"
-        ) as mock_products:
+        with (
+            patch("app.application.print_app_service.get_print_application_service") as mock_print,
+            patch("app.application.get_product_app_service") as mock_products,
+        ):
             mock_products.return_value.search_products.return_value = []
             mock_print.return_value.print_single_label.return_value = {"success": True}
             result = _registered_router_print(
@@ -1988,11 +1945,10 @@ class TestPrintRouterWorkflowLabel:
         assert result["success"] is True
 
     def test_workflow_label_dispatch_with_product(self):
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_print, patch(
-            "app.application.get_product_app_service"
-        ) as mock_products:
+        with (
+            patch("app.application.print_app_service.get_print_application_service") as mock_print,
+            patch("app.application.get_product_app_service") as mock_products,
+        ):
             mock_products.return_value.search_products.return_value = [
                 {"name": "Widget", "specification": "spec", "unit": "个"}
             ]
@@ -2007,11 +1963,12 @@ class TestPrintRouterWorkflowLabel:
         assert result["success"] is True
 
     def test_workflow_label_dispatch_product_lookup_fails(self):
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_print, patch(
-            "app.application.get_product_app_service",
-            side_effect=RuntimeError("db down"),
+        with (
+            patch("app.application.print_app_service.get_print_application_service") as mock_print,
+            patch(
+                "app.application.get_product_app_service",
+                side_effect=RuntimeError("db down"),
+            ),
         ):
             mock_print.return_value.print_single_label.return_value = {"success": True}
             result = _registered_router_print(
@@ -2024,11 +1981,10 @@ class TestPrintRouterWorkflowLabel:
         assert result["success"] is True
 
     def test_workflow_label_dispatch_quantity_clamped(self):
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_print, patch(
-            "app.application.get_product_app_service"
-        ) as mock_products:
+        with (
+            patch("app.application.print_app_service.get_print_application_service") as mock_print,
+            patch("app.application.get_product_app_service") as mock_products,
+        ):
             mock_products.return_value.search_products.return_value = []
             mock_print.return_value.print_single_label.return_value = {"success": True}
             _registered_router_print(
@@ -2118,47 +2074,38 @@ class TestPrintRouterSavePrinterSelection:
 
 class TestEmployeeRouter:
     def test_list_action(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_build:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:
             mock_build.return_value = {"registered_tool_count": 3}
             result = _registered_router_employee("list", {}, {}, "admin", "")
         assert result["success"] is True
         assert result["data"]["registered_tool_count"] == 3
 
     def test_query_alias(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_build:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:
             mock_build.return_value = {"registered_tool_count": 1}
             result = _registered_router_employee("query", {}, {}, "admin", "")
         assert result["success"] is True
 
     def test_unknown_action(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ):
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status"):
             result = _registered_router_employee("fly", {}, {}, "admin", "")
         assert result["success"] is False
 
     def test_execute_missing_employee_id_no_message(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_build:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:
             mock_build.return_value = {"employee_pack_tools": []}
             result = _registered_router_employee("execute", {}, {}, "admin", "")
         assert result["success"] is False
         assert "employee_id" in result["message"]
 
     def test_execute_missing_employee_id_with_user_message_match(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_build, patch(
-            "app.application.employee_runtime.executor.execute_employee_task_local"
-        ) as mock_exec:
-            mock_build.return_value = {
-                "employee_pack_tools": [{"pack_id": "emp-001"}]
-            }
+        with (
+            patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build,
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local"
+            ) as mock_exec,
+        ):
+            mock_build.return_value = {"employee_pack_tools": [{"pack_id": "emp-001"}]}
             mock_exec.return_value = {"success": True}
             result = _registered_router_employee(
                 "execute",
@@ -2171,9 +2118,7 @@ class TestEmployeeRouter:
         assert result["employee_id"] == "emp-001"
 
     def test_execute_missing_task(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_build:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:
             mock_build.return_value = {"employee_pack_tools": []}
             result = _registered_router_employee(
                 "execute", {"employee_id": "emp-001"}, {}, "admin", ""
@@ -2182,11 +2127,12 @@ class TestEmployeeRouter:
         assert "task" in result["message"]
 
     def test_execute_success(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_build, patch(
-            "app.application.employee_runtime.executor.execute_employee_task_local"
-        ) as mock_exec:
+        with (
+            patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build,
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local"
+            ) as mock_exec,
+        ):
             mock_build.return_value = {"employee_pack_tools": []}
             mock_exec.return_value = {"success": True}
             result = _registered_router_employee(
@@ -2199,11 +2145,12 @@ class TestEmployeeRouter:
         assert result["success"] is True
 
     def test_execute_blocked_by_risk_gate(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_build, patch(
-            "app.application.employee_runtime.executor.execute_employee_task_local"
-        ) as mock_exec:
+        with (
+            patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build,
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local"
+            ) as mock_exec,
+        ):
             mock_build.return_value = {"employee_pack_tools": []}
             mock_exec.return_value = {"success": True, "blocked_by_risk_gate": True}
             result = _registered_router_employee(
@@ -2216,11 +2163,12 @@ class TestEmployeeRouter:
         assert result["success"] is False
 
     def test_execute_with_input_data(self):
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_build, patch(
-            "app.application.employee_runtime.executor.execute_employee_task_local"
-        ) as mock_exec:
+        with (
+            patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build,
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local"
+            ) as mock_exec,
+        ):
             mock_build.return_value = {"employee_pack_tools": []}
             mock_exec.return_value = {"success": True}
             result = _registered_router_employee(
@@ -2247,15 +2195,19 @@ class TestEmployeeRouter:
 
 class TestExecuteRegisteredWorkflowToolEmployee:
     def test_dispatches_employee_tool(self):
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="admin",
-        ), patch(
-            "app.mod_sdk.employee_tool_registry.execute_employee_tool",
-            return_value='{"success": true}',
-        ) as mock_exec, patch(
-            "app.mod_sdk.employee_tool_registry.is_employee_tool",
-            return_value=True,
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="admin",
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.execute_employee_tool",
+                return_value='{"success": true}',
+            ) as mock_exec,
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=True,
+            ),
         ):
             result = execute_registered_workflow_tool(
                 "custom-emp-tool",
@@ -2266,47 +2218,52 @@ class TestExecuteRegisteredWorkflowToolEmployee:
         mock_exec.assert_called_once()
 
     def test_employee_tool_returns_non_dict_json(self):
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="admin",
-        ), patch(
-            "app.mod_sdk.employee_tool_registry.execute_employee_tool",
-            return_value='"just a string"',
-        ), patch(
-            "app.mod_sdk.employee_tool_registry.is_employee_tool",
-            return_value=True,
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="admin",
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.execute_employee_tool",
+                return_value='"just a string"',
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=True,
+            ),
         ):
-            result = execute_registered_workflow_tool(
-                "custom-emp-tool", "run", {}
-            )
+            result = execute_registered_workflow_tool("custom-emp-tool", "run", {})
         assert result["success"] is False
 
     def test_employee_tool_dispatch_exception(self):
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="admin",
-        ), patch(
-            "app.mod_sdk.employee_tool_registry.execute_employee_tool",
-            side_effect=RuntimeError("boom"),
-        ), patch(
-            "app.mod_sdk.employee_tool_registry.is_employee_tool",
-            return_value=True,
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="admin",
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.execute_employee_tool",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=True,
+            ),
         ):
-            result = execute_registered_workflow_tool(
-                "custom-emp-tool", "run", {}
-            )
+            result = execute_registered_workflow_tool("custom-emp-tool", "run", {})
         assert result["success"] is False
 
     def test_unknown_tool_returns_failure(self):
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="admin",
-        ), patch(
-            "app.mod_sdk.employee_tool_registry.is_employee_tool",
-            return_value=False,
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="admin",
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=False,
+            ),
         ):
-            result = execute_registered_workflow_tool(
-                "nonexistent-tool", "run", {}
-            )
+            result = execute_registered_workflow_tool("nonexistent-tool", "run", {})
         assert result["success"] is False
         assert "未注册" in result["message"]

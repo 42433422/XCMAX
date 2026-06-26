@@ -39,10 +39,7 @@ import pytest
 
 _spec = importlib.util.spec_from_file_location(
     "_twr_module",
-    Path(__file__).resolve().parents[2]
-    / "app"
-    / "services"
-    / "tools_workflow_registered.py",
+    Path(__file__).resolve().parents[2] / "app" / "services" / "tools_workflow_registered.py",
 )
 assert _spec is not None and _spec.loader is not None
 _twr = importlib.util.module_from_spec(_spec)
@@ -131,9 +128,7 @@ class TestNormalSlotDispatch:
             mock_fn.assert_called_once_with("user-order")
 
     def test_unknown_action_returns_failure(self) -> None:
-        result = _registered_router_normal_slot_dispatch(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_normal_slot_dispatch("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
         assert "unknown" in result["message"]
 
@@ -155,16 +150,12 @@ class TestCustomersRouter:
         mock_svc = MagicMock()
         mock_svc.get_all.return_value = {"success": True, "data": []}
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            _registered_router_customers(
-                "query", {"unit_name": "acme"}, _ctx(), "normal", ""
-            )
+            _registered_router_customers("query", {"unit_name": "acme"}, _ctx(), "normal", "")
             mock_svc.get_all.assert_called_once_with(keyword="acme", page=1, per_page=20)
 
     def test_ensure_exists_missing_unit_name(self) -> None:
         with patch("app.application.get_customer_app_service"):
-            result = _registered_router_customers(
-                "ensure_exists", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_customers("ensure_exists", {}, _ctx(), "normal", "")
             assert result["success"] is False
             assert "unit_name" in result["message"]
 
@@ -238,9 +229,7 @@ class TestProductsRouter:
             "app.application.normal_chat_dispatch.run_workflow_products_query_normal_profile"
         ) as mock_fn:
             mock_fn.return_value = {"success": True}
-            result = _registered_router_products(
-                "query", {}, _ctx(), "normal", "find products"
-            )
+            result = _registered_router_products("query", {}, _ctx(), "normal", "find products")
             assert result["success"] is True
 
     def test_query_non_normal_profile(self) -> None:
@@ -287,9 +276,7 @@ class TestProductsRouter:
 
     def test_create_missing_name_or_unit(self) -> None:
         with patch("app.services.get_products_service"):
-            result = _registered_router_products(
-                "create", {"unit_name": ""}, _ctx(), "normal", ""
-            )
+            result = _registered_router_products("create", {"unit_name": ""}, _ctx(), "normal", "")
             assert result["success"] is False
 
     def test_create_invalid_price_falls_back_to_zero(self) -> None:
@@ -350,9 +337,7 @@ class TestProductsRouter:
 
     def test_batch_delete_not_list(self) -> None:
         with patch("app.services.get_products_service"):
-            result = _registered_router_products(
-                "batch_delete", {"ids": "x"}, _ctx(), "normal", ""
-            )
+            result = _registered_router_products("batch_delete", {"ids": "x"}, _ctx(), "normal", "")
             assert result["success"] is False
 
     def test_batch_delete_all_invalid_ids(self) -> None:
@@ -395,20 +380,14 @@ class TestMaterialsRouter:
     def test_list_query(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_all_materials.return_value = {"success": True}
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
-            result = _registered_router_materials(
-                "list", {"search": "abc"}, _ctx(), "normal", ""
-            )
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
+            result = _registered_router_materials("list", {"search": "abc"}, _ctx(), "normal", "")
             assert result["success"] is True
 
     def test_create(self) -> None:
         mock_svc = MagicMock()
         mock_svc.create_material.return_value = {"success": True}
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "create", {"material_name": "steel"}, _ctx(), "normal", ""
             )
@@ -417,9 +396,7 @@ class TestMaterialsRouter:
     def test_update_returns_dict(self) -> None:
         mock_svc = MagicMock()
         mock_svc.update_material.return_value = {"success": True}
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "update", {"id": 1, "name": "x"}, _ctx(), "normal", ""
             )
@@ -428,9 +405,7 @@ class TestMaterialsRouter:
     def test_update_returns_non_dict(self) -> None:
         mock_svc = MagicMock()
         mock_svc.update_material.return_value = True
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "update", {"id": 1, "name": "x"}, _ctx(), "normal", ""
             )
@@ -439,31 +414,21 @@ class TestMaterialsRouter:
     def test_delete_returns_dict(self) -> None:
         mock_svc = MagicMock()
         mock_svc.delete_material.return_value = {"success": True}
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
-            result = _registered_router_materials(
-                "delete", {"id": 1}, _ctx(), "normal", ""
-            )
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
+            result = _registered_router_materials("delete", {"id": 1}, _ctx(), "normal", "")
             assert result["success"] is True
 
     def test_delete_returns_non_dict(self) -> None:
         mock_svc = MagicMock()
         mock_svc.delete_material.return_value = True
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
-            result = _registered_router_materials(
-                "delete", {"id": 1}, _ctx(), "normal", ""
-            )
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
+            result = _registered_router_materials("delete", {"id": 1}, _ctx(), "normal", "")
             assert result["success"] is True
 
     def test_batch_delete_with_exception(self) -> None:
         mock_svc = MagicMock()
         mock_svc.batch_delete_materials.side_effect = RuntimeError("db down")
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1, 2]}, _ctx(), "normal", ""
             )
@@ -474,9 +439,7 @@ class TestMaterialsRouter:
     def test_batch_delete_returns_dict(self) -> None:
         mock_svc = MagicMock()
         mock_svc.batch_delete_materials.return_value = {"success": True}
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1]}, _ctx(), "normal", ""
             )
@@ -486,9 +449,7 @@ class TestMaterialsRouter:
     def test_batch_delete_returns_non_dict(self) -> None:
         mock_svc = MagicMock()
         mock_svc.batch_delete_materials.return_value = True
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1]}, _ctx(), "normal", ""
             )
@@ -497,12 +458,8 @@ class TestMaterialsRouter:
     def test_export(self) -> None:
         mock_svc = MagicMock()
         mock_svc.export_to_excel.return_value = {"success": True}
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
-            result = _registered_router_materials(
-                "export", {"search": "x"}, _ctx(), "normal", ""
-            )
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
+            result = _registered_router_materials("export", {"search": "x"}, _ctx(), "normal", "")
             assert result["success"] is True
 
 
@@ -529,8 +486,11 @@ class TestInventoryRouter:
             return_value=mock_svc,
         ):
             result = _registered_router_inventory(
-                "stock_in", {"product_id": 1, "warehouse_id": 2, "quantity": 5},
-                _ctx(), "normal", ""
+                "stock_in",
+                {"product_id": 1, "warehouse_id": 2, "quantity": 5},
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["success"] is True
 
@@ -542,8 +502,11 @@ class TestInventoryRouter:
             return_value=mock_svc,
         ):
             result = _registered_router_inventory(
-                "stock_out", {"product_id": 1, "warehouse_id": 2, "quantity": 3},
-                _ctx(), "normal", ""
+                "stock_out",
+                {"product_id": 1, "warehouse_id": 2, "quantity": 3},
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["success"] is True
 
@@ -557,17 +520,15 @@ class TestInventoryRouter:
             result = _registered_router_inventory(
                 "transfer",
                 {"product_id": 1, "from_warehouse_id": 2, "to_warehouse_id": 3, "quantity": 1},
-                _ctx(), "normal", ""
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["success"] is True
 
     def test_unknown_action(self) -> None:
-        with patch(
-            "app.application.inventory_app_service.InventoryAppService"
-        ):
-            result = _registered_router_inventory(
-                "unknown", {}, _ctx(), "normal", ""
-            )
+        with patch("app.application.inventory_app_service.InventoryAppService"):
+            result = _registered_router_inventory("unknown", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
 
@@ -594,8 +555,7 @@ class TestPurchaseRouter:
             return_value=mock_svc,
         ):
             result = _registered_router_purchase(
-                "approve_order", {"order_id": 1, "approver": "admin"},
-                _ctx(), "normal", ""
+                "approve_order", {"order_id": 1, "approver": "admin"}, _ctx(), "normal", ""
             )
             assert result["success"] is True
 
@@ -612,12 +572,8 @@ class TestPurchaseRouter:
             assert result["success"] is True
 
     def test_unknown_action(self) -> None:
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService"
-        ):
-            result = _registered_router_purchase(
-                "unknown", {}, _ctx(), "normal", ""
-            )
+        with patch("app.application.facades.inventory_facade.PurchaseService"):
+            result = _registered_router_purchase("unknown", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
 
@@ -649,9 +605,7 @@ class TestFinanceRouter:
             assert result["success"] is True
 
     def test_unknown_action(self) -> None:
-        with patch(
-            "app.application.finance_app_service.FinanceAppService"
-        ):
+        with patch("app.application.finance_app_service.FinanceAppService"):
             result = _registered_router_finance("unknown", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
@@ -671,9 +625,7 @@ class TestShipmentRecordsRouter:
 
     def test_create_missing_unit_name(self) -> None:
         with patch("app.bootstrap.get_shipment_app_service"):
-            result = _registered_router_shipment_records(
-                "create", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_shipment_records("create", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
     def test_create_success(self) -> None:
@@ -681,8 +633,7 @@ class TestShipmentRecordsRouter:
         mock_svc.create_shipment.return_value = {"success": True}
         with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
             result = _registered_router_shipment_records(
-                "create", {"unit_name": "acme", "products": [{"id": 1}]},
-                _ctx(), "normal", ""
+                "create", {"unit_name": "acme", "products": [{"id": 1}]}, _ctx(), "normal", ""
             )
             assert result["success"] is True
 
@@ -691,8 +642,7 @@ class TestShipmentRecordsRouter:
         mock_svc.create_shipment.return_value = {"success": True}
         with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
             _registered_router_shipment_records(
-                "create", {"unit_name": "acme", "products": "not-list"},
-                _ctx(), "normal", ""
+                "create", {"unit_name": "acme", "products": "not-list"}, _ctx(), "normal", ""
             )
             mock_svc.create_shipment.assert_called_once()
             assert mock_svc.create_shipment.call_args.kwargs["items_data"] == []
@@ -708,9 +658,7 @@ class TestShipmentRecordsRouter:
 
     def test_unknown_action(self) -> None:
         with patch("app.bootstrap.get_shipment_app_service"):
-            result = _registered_router_shipment_records(
-                "unknown", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_shipment_records("unknown", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
 
@@ -785,8 +733,7 @@ class TestSystemMaintenanceRouter:
             return_value=mock_svc,
         ):
             result = _registered_router_system_maintenance(
-                "delete_database_backup", {"backup_file": "bak.sql"},
-                _ctx(), "normal", ""
+                "delete_database_backup", {"backup_file": "bak.sql"}, _ctx(), "normal", ""
             )
             assert result["http_status_code"] == 500
 
@@ -798,8 +745,7 @@ class TestSystemMaintenanceRouter:
             return_value=mock_svc,
         ):
             result = _registered_router_system_maintenance(
-                "restore_database", {"backup_file": "bak.sql"},
-                _ctx(), "normal", ""
+                "restore_database", {"backup_file": "bak.sql"}, _ctx(), "normal", ""
             )
             assert result["http_status_code"] == 200
 
@@ -811,8 +757,7 @@ class TestSystemMaintenanceRouter:
             return_value=mock_svc,
         ):
             result = _registered_router_system_maintenance(
-                "restore_database", {"backup_file": "bak.sql"},
-                _ctx(), "normal", ""
+                "restore_database", {"backup_file": "bak.sql"}, _ctx(), "normal", ""
             )
             assert result["http_status_code"] == 400
 
@@ -837,8 +782,7 @@ class TestSystemMaintenanceRouter:
             return_value=mock_opt,
         ):
             result = _registered_router_system_maintenance(
-                "clear_performance_cache", {"pattern": "test:*"},
-                _ctx(), "normal", ""
+                "clear_performance_cache", {"pattern": "test:*"}, _ctx(), "normal", ""
             )
             assert result["success"] is True
             assert "5" in result["message"]
@@ -876,8 +820,7 @@ class TestSystemMaintenanceRouter:
             return_value=mock_opt,
         ):
             result = _registered_router_system_maintenance(
-                "invalidate_performance_cache", {"keys": ["a", "b"]},
-                _ctx(), "normal", ""
+                "invalidate_performance_cache", {"keys": ["a", "b"]}, _ctx(), "normal", ""
             )
             assert result["success"] is True
             assert result["data"]["deleted_count"] == 3
@@ -895,9 +838,7 @@ class TestSystemMaintenanceRouter:
             assert result["success"] is True
 
     def test_unknown_action(self) -> None:
-        result = _registered_router_system_maintenance(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_system_maintenance("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
 
@@ -905,15 +846,11 @@ class TestExcelAnalyzerRouter:
     """_registered_router_excel_analyzer 分支覆盖。"""
 
     def test_unknown_action(self) -> None:
-        result = _registered_router_excel_analyzer(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_excel_analyzer("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_missing_file_path(self) -> None:
-        result = _registered_router_excel_analyzer(
-            "analyze", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_excel_analyzer("analyze", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_import_error(self) -> None:
@@ -938,21 +875,15 @@ class TestExcelToolkitRouter:
     """_registered_router_excel_toolkit 分支覆盖。"""
 
     def test_unknown_action(self) -> None:
-        result = _registered_router_excel_toolkit(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_excel_toolkit("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_missing_file_path(self) -> None:
-        result = _registered_router_excel_toolkit(
-            "view", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_excel_toolkit("view", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_empty_action_defaults_to_view(self) -> None:
-        result = _registered_router_excel_toolkit(
-            "", {"file_path": ""}, _ctx(), "normal", ""
-        )
+        result = _registered_router_excel_toolkit("", {"file_path": ""}, _ctx(), "normal", "")
         assert result["success"] is False
         assert "view" in result["message"]
 
@@ -961,15 +892,11 @@ class TestLabelTemplateGeneratorRouter:
     """_registered_router_label_template_generator 分支覆盖。"""
 
     def test_unknown_action(self) -> None:
-        result = _registered_router_label_template_generator(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_label_template_generator("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_missing_image_path(self) -> None:
-        result = _registered_router_label_template_generator(
-            "execute", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_label_template_generator("execute", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
 
@@ -992,9 +919,7 @@ class TestDocumentTemplateRouter:
             "app.fastapi_routes.document_templates_compat.run_archive_template_update"
         ) as mock_fn:
             mock_fn.return_value = ({"success": False}, 400)
-            result = _registered_router_document_template(
-                "update", {"id": 1}, _ctx(), "normal", ""
-            )
+            result = _registered_router_document_template("update", {"id": 1}, _ctx(), "normal", "")
             assert result["http_status_code"] == 400
 
     def test_delete_with_base_dir(self) -> None:
@@ -1013,15 +938,11 @@ class TestDocumentTemplateRouter:
             "app.fastapi_routes.document_templates_compat.run_archive_template_delete"
         ) as mock_fn:
             mock_fn.return_value = ({"success": True}, 200)
-            _registered_router_document_template(
-                "delete", {"id": 1}, _ctx(), "normal", ""
-            )
+            _registered_router_document_template("delete", {"id": 1}, _ctx(), "normal", "")
             assert mock_fn.call_args.kwargs["base_dir"] is None
 
     def test_unknown_action(self) -> None:
-        result = _registered_router_document_template(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_document_template("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_status_code_fallback_when_none(self) -> None:
@@ -1029,9 +950,7 @@ class TestDocumentTemplateRouter:
             "app.fastapi_routes.document_templates_compat.run_archive_template_create"
         ) as mock_fn:
             mock_fn.return_value = ({"success": True}, None)
-            result = _registered_router_document_template(
-                "create", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_document_template("create", {}, _ctx(), "normal", "")
             assert result["http_status_code"] == 200
 
 
@@ -1039,9 +958,7 @@ class TestTemplatePreviewRouter:
     """_registered_router_template_preview 分支覆盖。"""
 
     def test_view_redirect(self) -> None:
-        result = _registered_router_template_preview(
-            "view", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_template_preview("view", {}, _ctx(), "normal", "")
         assert result["success"] is True
         assert "redirect" in result
 
@@ -1049,18 +966,14 @@ class TestTemplatePreviewRouter:
         mock_svc = MagicMock()
         mock_svc.get_templates.return_value = {"success": True, "data": []}
         with patch("app.application.get_template_app_service", return_value=mock_svc):
-            result = _registered_router_template_preview(
-                "list", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_template_preview("list", {}, _ctx(), "normal", "")
             assert result["success"] is True
 
     def test_list_returns_non_dict(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_templates.return_value = [{"id": 1}]
         with patch("app.application.get_template_app_service", return_value=mock_svc):
-            result = _registered_router_template_preview(
-                "query", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_template_preview("query", {}, _ctx(), "normal", "")
             assert result["success"] is True
             assert result["data"] == [{"id": 1}]
 
@@ -1076,23 +989,21 @@ class TestWechatRouter:
     def test_list_query(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_contacts.return_value = [{"id": 1}]
-        with patch(
-            "app.application.get_wechat_contact_app_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_wechat_contact_app_service", return_value=mock_svc):
             result = _registered_router_wechat(
                 "list", {"type": "friend", "keyword": "a"}, _ctx(), "normal", ""
             )
             assert result["success"] is True
 
     def test_refresh_contact_cache(self) -> None:
-        with patch("app.application.get_wechat_contact_app_service"), \
-             patch(
-                 "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs"
-             ) as mock_fn:
+        with (
+            patch("app.application.get_wechat_contact_app_service"),
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs"
+            ) as mock_fn,
+        ):
             mock_fn.return_value = {"success": True}
-            result = _registered_router_wechat(
-                "refresh_contact_cache", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_wechat("refresh_contact_cache", {}, _ctx(), "normal", "")
             assert result["success"] is True
 
 
@@ -1100,36 +1011,40 @@ class TestPrintRouter:
     """_registered_router_print 分支覆盖。"""
 
     def test_workflow_label_dispatch_missing_model_number(self) -> None:
-        result = _registered_router_print(
-            "workflow_label_dispatch", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_print("workflow_label_dispatch", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_workflow_label_dispatch_product_lookup_fails(self) -> None:
-        with patch("app.application.get_product_app_service") as mock_get, \
-             patch(
-                 "app.application.print_app_service.get_print_application_service"
-             ) as mock_print_svc:
+        with (
+            patch("app.application.get_product_app_service") as mock_get,
+            patch(
+                "app.application.print_app_service.get_print_application_service"
+            ) as mock_print_svc,
+        ):
             mock_get.side_effect = RuntimeError("db down")
             mock_print_svc.return_value.print_single_label.return_value = {"success": True}
             result = _registered_router_print(
-                "workflow_label_dispatch", {"model_number": "M01"},
-                _ctx(), "normal", ""
+                "workflow_label_dispatch", {"model_number": "M01"}, _ctx(), "normal", ""
             )
             assert result["success"] is True
 
     def test_workflow_label_dispatch_with_product_found(self) -> None:
-        with patch("app.application.get_product_app_service") as mock_get, \
-             patch(
-                 "app.application.print_app_service.get_print_application_service"
-             ) as mock_print_svc:
+        with (
+            patch("app.application.get_product_app_service") as mock_get,
+            patch(
+                "app.application.print_app_service.get_print_application_service"
+            ) as mock_print_svc,
+        ):
             mock_get.return_value.search_products.return_value = [
                 {"name": "Widget", "specification": "10x10", "unit": "箱"}
             ]
             mock_print_svc.return_value.print_single_label.return_value = {"success": True}
             result = _registered_router_print(
-                "workflow_label_dispatch", {"model_number": "M01", "quantity": 5},
-                _ctx(), "normal", ""
+                "workflow_label_dispatch",
+                {"model_number": "M01", "quantity": 5},
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["success"] is True
 
@@ -1150,8 +1065,7 @@ class TestPrintRouter:
         mock_svc.get_printers.return_value = {"printers": [{"name": "HP"}]}
         with patch("app.services.get_printer_service", return_value=mock_svc):
             result = _registered_router_print(
-                "save_printer_selection", {"document_printer": "Epson"},
-                _ctx(), "normal", ""
+                "save_printer_selection", {"document_printer": "Epson"}, _ctx(), "normal", ""
             )
             assert result["success"] is False
 
@@ -1162,7 +1076,9 @@ class TestPrintRouter:
             result = _registered_router_print(
                 "save_printer_selection",
                 {"document_printer": "HP", "label_printer": "Epson"},
-                _ctx(), "normal", ""
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["success"] is False
 
@@ -1175,7 +1091,9 @@ class TestPrintRouter:
             result = _registered_router_print(
                 "save_printer_selection",
                 {"document_printer": "HP", "label_printer": "HP"},
-                _ctx(), "normal", ""
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["success"] is True
 
@@ -1229,27 +1147,21 @@ class TestSettingsRouter:
         mock_svc = MagicMock()
         mock_svc.get_startup_config.return_value = {"auto": True}
         with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _registered_router_settings(
-                "get_startup_config", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_settings("get_startup_config", {}, _ctx(), "normal", "")
             assert result["data"]["auto"] is True
 
     def test_enable_startup(self) -> None:
         mock_svc = MagicMock()
         mock_svc.enable_startup.return_value = {"success": True}
         with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _registered_router_settings(
-                "enable_startup", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_settings("enable_startup", {}, _ctx(), "normal", "")
             assert result["success"] is True
 
     def test_disable_startup(self) -> None:
         mock_svc = MagicMock()
         mock_svc.disable_startup.return_value = {"success": True}
         with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _registered_router_settings(
-                "disable_startup", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_settings("disable_startup", {}, _ctx(), "normal", "")
             assert result["success"] is True
 
 
@@ -1257,36 +1169,26 @@ class TestEmployeeRouter:
     """_registered_router_employee 分支覆盖。"""
 
     def test_list_query(self) -> None:
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_fn:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn:
             mock_fn.return_value = {"registered_tool_count": 3}
             result = _registered_router_employee("list", {}, _ctx(), "normal", "")
             assert result["success"] is True
             assert "3" in result["message"]
 
     def test_unknown_action(self) -> None:
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ):
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status"):
             result = _registered_router_employee("unknown", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
     def test_execute_missing_employee_id_no_message(self) -> None:
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_fn:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn:
             mock_fn.return_value = {"employee_pack_tools": []}
-            result = _registered_router_employee(
-                "execute", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_employee("execute", {}, _ctx(), "normal", "")
             assert result["success"] is False
             assert "employee_id" in result["message"]
 
     def test_execute_missing_task(self) -> None:
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_fn:
+        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn:
             mock_fn.return_value = {"employee_pack_tools": []}
             result = _registered_router_employee(
                 "execute", {"employee_id": "emp1"}, _ctx(), "normal", ""
@@ -1295,12 +1197,12 @@ class TestEmployeeRouter:
             assert "task" in result["message"]
 
     def test_execute_finds_employee_from_message(self) -> None:
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_fn, \
-             patch(
-                 "app.application.employee_runtime.executor.execute_employee_task_local"
-             ) as mock_exec:
+        with (
+            patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn,
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local"
+            ) as mock_exec,
+        ):
             mock_fn.return_value = {
                 "employee_pack_tools": [{"pack_id": "emp1", "tool_name": "emp1"}]
             }
@@ -1312,12 +1214,12 @@ class TestEmployeeRouter:
             assert result["employee_id"] == "emp1"
 
     def test_execute_success(self) -> None:
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_fn, \
-             patch(
-                 "app.application.employee_runtime.executor.execute_employee_task_local"
-             ) as mock_exec:
+        with (
+            patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn,
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local"
+            ) as mock_exec,
+        ):
             mock_fn.return_value = {"employee_pack_tools": []}
             mock_exec.return_value = {"success": True}
             result = _registered_router_employee(
@@ -1330,12 +1232,12 @@ class TestEmployeeRouter:
             assert result["success"] is True
 
     def test_execute_blocked_by_risk_gate(self) -> None:
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_fn, \
-             patch(
-                 "app.application.employee_runtime.executor.execute_employee_task_local"
-             ) as mock_exec:
+        with (
+            patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn,
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local"
+            ) as mock_exec,
+        ):
             mock_fn.return_value = {"employee_pack_tools": []}
             mock_exec.return_value = {"success": True, "blocked_by_risk_gate": True}
             result = _registered_router_employee(
@@ -1348,12 +1250,12 @@ class TestEmployeeRouter:
             assert result["success"] is False
 
     def test_execute_invalid_user_id(self) -> None:
-        with patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status"
-        ) as mock_fn, \
-             patch(
-                 "app.application.employee_runtime.executor.execute_employee_task_local"
-             ) as mock_exec:
+        with (
+            patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn,
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local"
+            ) as mock_exec,
+        ):
             mock_fn.return_value = {"employee_pack_tools": []}
             mock_exec.return_value = {"success": True}
             _registered_router_employee(
@@ -1389,9 +1291,7 @@ class TestBusinessDbRouter:
     """_registered_router_business_db 分支覆盖。"""
 
     def test_missing_entity(self) -> None:
-        result = _registered_router_business_db(
-            "read", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_business_db("read", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_rejects_sql(self) -> None:
@@ -1420,9 +1320,7 @@ class TestBusinessDbRouter:
     def test_read_materials(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_all_materials.return_value = {"success": True, "data": []}
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_business_db(
                 "read", {"entity": "materials"}, _ctx(), "normal", ""
             )
@@ -1454,7 +1352,9 @@ class TestBusinessDbRouter:
             result = _registered_router_business_db(
                 "write",
                 {"entity": "customers", "operation": "create", "payload": {"unit_name": "x"}},
-                _ctx(), "normal", ""
+                _ctx(),
+                "normal",
+                "",
             )
             assert isinstance(result, dict)
 
@@ -1462,8 +1362,14 @@ class TestBusinessDbRouter:
         with patch("app.application.get_customer_app_service"):
             result = _registered_router_business_db(
                 "write",
-                {"entity": "customers", "operation": "ensure_exists", "payload": {"unit_name": "x"}},
-                _ctx(), "normal", ""
+                {
+                    "entity": "customers",
+                    "operation": "ensure_exists",
+                    "payload": {"unit_name": "x"},
+                },
+                _ctx(),
+                "normal",
+                "",
             )
             assert isinstance(result, dict)
 
@@ -1471,7 +1377,9 @@ class TestBusinessDbRouter:
         result = _registered_router_business_db(
             "write",
             {"entity": "customers", "operation": "delete", "payload": {}},
-            _ctx(), "normal", ""
+            _ctx(),
+            "normal",
+            "",
         )
         assert result["success"] is False
 
@@ -1480,7 +1388,9 @@ class TestBusinessDbRouter:
             result = _registered_router_business_db(
                 "write",
                 {"entity": "products", "operation": "create", "payload": {"unit_name": "x"}},
-                _ctx(), "normal", ""
+                _ctx(),
+                "normal",
+                "",
             )
             assert isinstance(result, dict)
 
@@ -1488,20 +1398,22 @@ class TestBusinessDbRouter:
         result = _registered_router_business_db(
             "write",
             {"entity": "products", "operation": "delete", "payload": {}},
-            _ctx(), "normal", ""
+            _ctx(),
+            "normal",
+            "",
         )
         assert result["success"] is False
 
     def test_write_materials_create(self) -> None:
         mock_svc = MagicMock()
         mock_svc.create_material.return_value = {"success": True}
-        with patch(
-            "app.application.get_material_application_service", return_value=mock_svc
-        ):
+        with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_business_db(
                 "write",
                 {"entity": "materials", "operation": "create", "payload": {"name": "x"}},
-                _ctx(), "normal", ""
+                _ctx(),
+                "normal",
+                "",
             )
             assert isinstance(result, dict)
 
@@ -1509,7 +1421,9 @@ class TestBusinessDbRouter:
         result = _registered_router_business_db(
             "write",
             {"entity": "materials", "operation": "export", "payload": {}},
-            _ctx(), "normal", ""
+            _ctx(),
+            "normal",
+            "",
         )
         assert result["success"] is False
 
@@ -1520,7 +1434,9 @@ class TestBusinessDbRouter:
             result = _registered_router_business_db(
                 "write",
                 {"entity": "shipment_records", "operation": "update", "payload": {"id": 1}},
-                _ctx(), "normal", ""
+                _ctx(),
+                "normal",
+                "",
             )
             assert isinstance(result, dict)
 
@@ -1528,7 +1444,9 @@ class TestBusinessDbRouter:
         result = _registered_router_business_db(
             "write",
             {"entity": "shipment_records", "operation": "create", "payload": {}},
-            _ctx(), "normal", ""
+            _ctx(),
+            "normal",
+            "",
         )
         assert result["success"] is False
 
@@ -1548,15 +1466,11 @@ class TestBusinessEventRouter:
     def test_print_label_generates_job_id(self) -> None:
         with patch("app.neuro_bus.domains.print_domain.get_print_domain") as mock_get:
             mock_get.return_value.emit_job_submitted.return_value = True
-            result = _registered_router_business_event(
-                "print_label", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_business_event("print_label", {}, _ctx(), "normal", "")
             assert result["job_id"] != ""
 
     def test_inventory_update(self) -> None:
-        with patch(
-            "app.neuro_bus.domains.inventory_domain.get_inventory_domain"
-        ) as mock_get:
+        with patch("app.neuro_bus.domains.inventory_domain.get_inventory_domain") as mock_get:
             mock_get.return_value.emit_stock_changed.return_value = True
             result = _registered_router_business_event(
                 "inventory_update", {"product_id": "p1"}, _ctx(), "normal", ""
@@ -1584,9 +1498,7 @@ class TestBusinessEventRouter:
             assert result["success"] is False
 
     def test_unknown_action(self) -> None:
-        result = _registered_router_business_event(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_business_event("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
 
@@ -1594,15 +1506,11 @@ class TestBusinessDockingFamilyRouter:
     """_registered_router_business_docking_family 分支覆盖。"""
 
     def test_view_redirect(self) -> None:
-        result = _registered_router_business_docking_family(
-            "view", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_business_docking_family("view", {}, _ctx(), "normal", "")
         assert result["success"] is True
 
     def test_missing_file_path(self) -> None:
-        result = _registered_router_business_docking_family(
-            "extract", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_business_docking_family("extract", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_file_not_exists(self) -> None:
@@ -1661,28 +1569,28 @@ class TestOcrRouter:
 
     def test_request_missing_image_url(self) -> None:
         with patch("app.fastapi_routes.ocr._get_ocr_service"):
-            result = _registered_router_ocr(
-                "request", {"request_id": "r1"}, _ctx(), "normal", ""
-            )
+            result = _registered_router_ocr("request", {"request_id": "r1"}, _ctx(), "normal", "")
             assert result["success"] is False
 
     def test_request_success(self) -> None:
-        with patch("app.fastapi_routes.ocr._get_ocr_service"), \
-             patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_domain:
+        with (
+            patch("app.fastapi_routes.ocr._get_ocr_service"),
+            patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_domain,
+        ):
             mock_domain.return_value.emit_ocr_requested.return_value = True
             result = _registered_router_ocr(
                 "request",
                 {"request_id": "r1", "image_url": "http://x", "ocr_type": "invoice"},
-                _ctx(), "normal", ""
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["success"] is True
             assert result["ocr_type"] == "invoice"
 
     def test_recognize_missing_file_path(self) -> None:
         with patch("app.fastapi_routes.ocr._get_ocr_service"):
-            result = _registered_router_ocr(
-                "recognize", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_ocr("recognize", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
     def test_recognize_success(self) -> None:
@@ -1717,9 +1625,7 @@ class TestOcrRouter:
         mock_svc = MagicMock()
         mock_svc.extract_structured_data.return_value = {"key": "val"}
         with patch("app.fastapi_routes.ocr._get_ocr_service", return_value=mock_svc):
-            result = _registered_router_ocr(
-                "extract", {"text": "some text"}, _ctx(), "normal", ""
-            )
+            result = _registered_router_ocr("extract", {"text": "some text"}, _ctx(), "normal", "")
             assert result["success"] is True
 
     def test_analyze_missing_text(self) -> None:
@@ -1731,16 +1637,12 @@ class TestOcrRouter:
         mock_svc = MagicMock()
         mock_svc.analyze_text.return_value = {"sentiment": "positive"}
         with patch("app.fastapi_routes.ocr._get_ocr_service", return_value=mock_svc):
-            result = _registered_router_ocr(
-                "analyze", {"text": "good"}, _ctx(), "normal", ""
-            )
+            result = _registered_router_ocr("analyze", {"text": "good"}, _ctx(), "normal", "")
             assert result["success"] is True
 
     def test_recognize_and_extract_missing_file_path(self) -> None:
         with patch("app.fastapi_routes.ocr._get_ocr_service"):
-            result = _registered_router_ocr(
-                "recognize_and_extract", {}, _ctx(), "normal", ""
-            )
+            result = _registered_router_ocr("recognize_and_extract", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
     def test_recognize_and_extract_recognize_fails(self) -> None:
@@ -1748,8 +1650,7 @@ class TestOcrRouter:
         mock_svc.recognize_file.return_value = {"success": False}
         with patch("app.fastapi_routes.ocr._get_ocr_service", return_value=mock_svc):
             result = _registered_router_ocr(
-                "recognize_and_extract", {"file_path": "/tmp/x.png"},
-                _ctx(), "normal", ""
+                "recognize_and_extract", {"file_path": "/tmp/x.png"}, _ctx(), "normal", ""
             )
             assert result["success"] is False
 
@@ -1764,8 +1665,7 @@ class TestOcrRouter:
         mock_svc.analyze_text.return_value = {"confidence": 0.9}
         with patch("app.fastapi_routes.ocr._get_ocr_service", return_value=mock_svc):
             result = _registered_router_ocr(
-                "recognize_and_extract", {"file_path": "/tmp/x.png"},
-                _ctx(), "normal", ""
+                "recognize_and_extract", {"file_path": "/tmp/x.png"}, _ctx(), "normal", ""
             )
             assert result["success"] is True
             assert len(result["artifacts"]) >= 1
@@ -1790,8 +1690,10 @@ class TestExecuteExcelImportRecords:
         assert result["success"] is False
 
     def test_customer_service_unavailable(self) -> None:
-        with patch("app.bootstrap.get_products_service") as mock_products, \
-             patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("down")):
+        with (
+            patch("app.bootstrap.get_products_service") as mock_products,
+            patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("down")),
+        ):
             mock_products.return_value.get_products.return_value = {
                 "success": True,
                 "data": [],
@@ -1811,8 +1713,10 @@ class TestExecuteExcelImportRecords:
         }
         mock_customer = MagicMock()
         mock_customer.match_purchase_unit.return_value = MagicMock(unit_name="u")
-        with patch("app.bootstrap.get_products_service", return_value=mock_products), \
-             patch("app.bootstrap.get_customer_app_service", return_value=mock_customer):
+        with (
+            patch("app.bootstrap.get_products_service", return_value=mock_products),
+            patch("app.bootstrap.get_customer_app_service", return_value=mock_customer),
+        ):
             result = _execute_excel_import_records(
                 [{"unit_name": "u", "product_name": "p", "model_number": "M01"}]
             )
@@ -1826,8 +1730,10 @@ class TestExecuteExcelImportRecords:
         mock_customer = MagicMock()
         mock_customer.match_purchase_unit.return_value = None
         mock_customer.create.return_value = {"success": True}
-        with patch("app.bootstrap.get_products_service", return_value=mock_products), \
-             patch("app.bootstrap.get_customer_app_service", return_value=mock_customer):
+        with (
+            patch("app.bootstrap.get_products_service", return_value=mock_products),
+            patch("app.bootstrap.get_customer_app_service", return_value=mock_customer),
+        ):
             result = _execute_excel_import_records(
                 [{"unit_name": "u", "product_name": "p", "model_number": "M01"}]
             )
@@ -1837,9 +1743,7 @@ class TestExecuteExcelImportRecords:
 
     def test_recoverable_error(self) -> None:
         with patch("app.bootstrap.get_products_service", side_effect=RuntimeError("db down")):
-            result = _execute_excel_import_records(
-                [{"unit_name": "u", "product_name": "p"}]
-            )
+            result = _execute_excel_import_records([{"unit_name": "u", "product_name": "p"}])
             assert result["success"] is False
             assert "导入执行失败" in result["message"]
 
@@ -1848,9 +1752,7 @@ class TestExcelImportRouter:
     """_registered_router_excel_import 分支覆盖。"""
 
     def test_execute_import_missing_id(self) -> None:
-        result = _registered_router_excel_import(
-            "execute_import", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_excel_import("execute_import", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_execute_import_not_found(self) -> None:
@@ -1893,9 +1795,7 @@ class TestExcelImportRouter:
         assert result["success"] is False
 
     def test_unknown_action(self) -> None:
-        result = _registered_router_excel_import(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_excel_import("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
 
@@ -1903,9 +1803,7 @@ class TestUnitProductsImportRouter:
     """_registered_router_unit_products_import 分支覆盖。"""
 
     def test_unknown_action(self) -> None:
-        result = _registered_router_unit_products_import(
-            "unknown", {}, _ctx(), "normal", ""
-        )
+        result = _registered_router_unit_products_import("unknown", {}, _ctx(), "normal", "")
         assert result["success"] is False
 
     def test_missing_saved_name(self) -> None:
@@ -1933,50 +1831,56 @@ class TestExecuteRegisteredWorkflowTool:
             assert result["success"] is True
 
     def test_unknown_tool_returns_failure(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="normal",
-        ), \
-             patch(
-                 "app.mod_sdk.employee_tool_registry.execute_employee_tool",
-                 side_effect=RuntimeError("not found"),
-             ), \
-             patch(
-                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
-                 return_value=False,
-             ):
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="normal",
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.execute_employee_tool",
+                side_effect=RuntimeError("not found"),
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=False,
+            ),
+        ):
             result = execute_registered_workflow_tool("nonexistent_tool", "action")
             assert result["success"] is False
 
     def test_employee_tool_dispatch_success(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="normal",
-        ), \
-             patch(
-                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
-                 return_value=True,
-             ), \
-             patch(
-                 "app.mod_sdk.employee_tool_registry.execute_employee_tool",
-                 return_value='{"success": true}',
-             ):
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="normal",
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=True,
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.execute_employee_tool",
+                return_value='{"success": true}',
+            ),
+        ):
             result = execute_registered_workflow_tool("emp_tool", "action", {"task": "do"})
             assert result["success"] is True
 
     def test_employee_tool_returns_non_dict(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="normal",
-        ), \
-             patch(
-                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
-                 return_value=True,
-             ), \
-             patch(
-                 "app.mod_sdk.employee_tool_registry.execute_employee_tool",
-                 return_value='"just a string"',
-             ):
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="normal",
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.is_employee_tool",
+                return_value=True,
+            ),
+            patch(
+                "app.mod_sdk.employee_tool_registry.execute_employee_tool",
+                return_value='"just a string"',
+            ),
+        ):
             result = execute_registered_workflow_tool("emp_tool", "action")
             assert result["success"] is False
 
