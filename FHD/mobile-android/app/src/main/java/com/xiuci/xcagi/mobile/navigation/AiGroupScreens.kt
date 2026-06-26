@@ -104,6 +104,7 @@ private fun aiGroupAvatarFallback(employeeId: String, name: String = "", avatarK
         key == "codex" || id.contains("codex") || label.contains("codex") -> AppAvatarFallback.CODEX
         key == "cursor" || id.contains("cursor") || label.contains("cursor") -> AppAvatarFallback.CURSOR
         key == "claude" || id.contains("claude") || label.contains("claude") -> AppAvatarFallback.CLAUDE
+        key == "trae" || id.contains("trae") || label.contains("trae") -> AppAvatarFallback.TRAE
         else -> AppAvatarFallback.AI_EMPLOYEE
     }
 }
@@ -453,7 +454,7 @@ fun AiGroupChatScreen(
     val branches by vm.gitBranches.collectAsState()
     val userAvatar by vm.userAvatarSource.collectAsState()
     val modInfos by vm.modInfos.collectAsState()
-    val allEmployees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
+    val allEmployees = remember(modInfos) { modInfos.aiGroupMemberCatalog() }
     var input by remember { mutableStateOf("") }
     var showMembers by remember { mutableStateOf(false) }
     var showBranchPicker by remember { mutableStateOf(false) }
@@ -1038,8 +1039,16 @@ private fun GroupMembersSheet(
                     AppAvatar(imageSource = m.avatar.ifBlank { null }, fallback = aiGroupAvatarFallback(m.employee_id, m.name, m.avatar_key), size = 38.dp, shape = RoundedCornerShape(8.dp))
                     Spacer(Modifier.width(Spacing.md))
                     Text(m.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { onRemove(m.employee_id) }) {
-                        Icon(Icons.Default.PersonRemove, contentDescription = "移除", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                    if (isRequiredAiGroupMember(m.employee_id)) {
+                        Text(
+                            "固定",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        IconButton(onClick = { onRemove(m.employee_id) }) {
+                            Icon(Icons.Default.PersonRemove, contentDescription = "移除", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             }
@@ -1087,11 +1096,14 @@ fun AiGroupCreateScreen(
     onCreated: () -> Unit,
 ) {
     val modInfos by vm.modInfos.collectAsState()
-    val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
-    val selectedKeys = remember { mutableStateListOf<String>() }
+    val employees = remember(modInfos) { modInfos.aiGroupMemberCatalog() }
+    val selectedKeys = remember { mutableStateListOf(XIAOC_GROUP_PROFILE.key) }
     var name by remember { mutableStateOf("") }
     var creating by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.refreshModInfos() }
+    LaunchedEffect(employees) {
+        if (XIAOC_GROUP_PROFILE.key !in selectedKeys) selectedKeys.add(XIAOC_GROUP_PROFILE.key)
+    }
     val picked = remember(selectedKeys.toList(), employees) { employees.filter { it.key in selectedKeys } }
     val autoName = remember(picked) { picked.joinToString("、") { it.name }.take(40) }
 
@@ -1147,15 +1159,21 @@ fun AiGroupCreateScreen(
                 LazyColumn(Modifier.fillMaxSize()) {
                     itemsIndexed(employees, key = { _, e -> e.key }) { _, e ->
                         val checked = e.key in selectedKeys
+                        val locked = isRequiredAiGroupMember(e.employeeId)
                         Row(
                             Modifier.fillMaxWidth()
-                                .clickable { if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key) }
+                                .clickable(enabled = !locked) { if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key) }
                                 .padding(horizontal = Spacing.md, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Checkbox(
                                 checked = checked,
-                                onCheckedChange = { if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key) },
+                                enabled = !locked,
+                                onCheckedChange = {
+                                    if (!locked) {
+                                        if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key)
+                                    }
+                                },
                             )
                             Spacer(Modifier.width(Spacing.sm))
                             AppAvatar(imageSource = e.avatarUrl, fallback = aiGroupAvatarFallback(e.employeeId, e.name), size = 40.dp, shape = RoundedCornerShape(8.dp))
@@ -1163,6 +1181,13 @@ fun AiGroupCreateScreen(
                             Column(Modifier.weight(1f)) {
                                 Text(e.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
                                 Text(e.summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                            if (locked) {
+                                Text(
+                                    "固定",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 84.dp))
