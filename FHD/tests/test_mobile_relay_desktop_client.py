@@ -387,3 +387,65 @@ def test_execute_task_freechat_strips_mode_but_still_forces_cli(monkeypatch):
     ctx = _CaptureCodexService.captured
     assert ctx.get("force_cli_direct") is True
     assert "mode" not in ctx
+
+
+def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path):
+    """工作区 GC：超期残留清掉、近期(活跃)保留。"""
+    import time as _t
+
+    from app.services import mobile_relay_desktop_client as relay
+
+    monkeypatch.setattr(relay.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("XCAGI_RELAY_WORKSPACE_GC_MAX_AGE_SEC", "100")
+    stale = tmp_path / "xcagi-wt-stale-1"
+    fresh = tmp_path / "xcagi-wt-fresh-2"
+    stale.mkdir()
+    fresh.mkdir()
+    old = _t.time() - 9999
+    import os as _os
+
+    _os.utime(stale, (old, old))
+
+    removed = relay._gc_orphan_workspaces()
+    assert removed == 1
+    assert not stale.exists()
+    assert fresh.exists()
+
+
+def test_complete_relay_task_writes_elapsed_and_error_code(monkeypatch):
+    """回写 /complete 的 result 带 elapsed_seconds；blocked 结果带 error_code/error_message。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    posted = {}
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, json=None, **k):
+            posted["url"] = url
+            posted["json"] = json
+            return _Resp()
+
+    monkeypatch.setattr(
+        relay,
+        "_execute_task",
+        lambda task: {"_relay_status": "blocked", "error": "未执行命令，未修改文件。"},
+    )
+    monkeypatch.setattr(relay.httpx, "Client", _Client)
+    relay._complete_relay_task({"task_id": "t-1"}, "relay-1", "tok", "https://xiu-ci.com/fhd-api/")
+    body = posted["json"]
+    assert body["status"] == "blocked"
+    assert "elapsed_seconds" in body["result"]
+    assert body["result"]["error_code"] == "blocked"
+    assert body["result"]["error_message"] == "未执行命令，未修改文件。"
