@@ -83,6 +83,7 @@ data class AiGroupMemberDto(
     val mod_id: String = "",
     val name: String = "",
     val avatar: String = "",
+    val avatar_key: String = "",
     val summary: String = "",
 )
 
@@ -134,6 +135,7 @@ data class AiGroupMemberBody(
     val mod_id: String = "",
     val name: String = "",
     val avatar: String = "",
+    val avatar_key: String = "",
     val summary: String = "",
 )
 data class AiGroupMessageBody(

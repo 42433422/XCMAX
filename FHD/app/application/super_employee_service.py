@@ -197,7 +197,7 @@ class SuperEmployeeToolProfile:
     cli_stream_json: bool = False  # stdout 是否为 stream-json(逐事件)，需解析出最终回复
     cli_command_builder: Callable[[str, str, Path, str], list[str]] = _codex_cli_command
     avatar_key: str = ""  # 前端/App 识别：codex | claude | cursor
-    avatar_path: str = ""  # 静态资源路径（相对站点根，如 /brand/cursor-app-icon.svg）
+    avatar_path: str = ""  # 静态资源路径（相对站点根，如 /brand/cursor-app-icon.png）
 
 
 CODEX_PROFILE = SuperEmployeeToolProfile(
@@ -266,7 +266,7 @@ CURSOR_PROFILE = SuperEmployeeToolProfile(
     cli_stream_json=True,
     cli_command_builder=_cursor_cli_command,
     avatar_key="cursor",
-    avatar_path="/brand/cursor-app-icon.svg",
+    avatar_path="/brand/cursor-app-icon.png",
 )
 
 
