@@ -2,7 +2,7 @@
   "string": [
     {
       "name": "app_name",
-      "value": "XCAGI 企业版"
+      "value": "XCAGI"
     },
     {
       "name": "company_name",
@@ -14,11 +14,11 @@
     },
     {
       "name": "module_desc",
-      "value": "XCAGI 企业版鸿蒙客户端，提供企业 AI 员工、消息协同、审批与插件市场入口"
+      "value": "XCAGI 鸿蒙客户端,提供企业 AI 员工、消息协同、审批与插件市场入口"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "XCAGI 企业版入口"
+      "value": "XCAGI 入口"
     }
   ]
 }

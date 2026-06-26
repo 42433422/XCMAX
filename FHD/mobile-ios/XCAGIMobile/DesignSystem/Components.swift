@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// 文字头像(取名字首字,稳定底色)。
+/// 头像:有 `url` 时加载真实头像,加载中/失败回退名字首字色块(对标 Android AppAvatar)。
 struct AvatarView: View {
     let text: String
+    var url: String? = nil
     var size: CGFloat = 44
 
     private var initial: String {
@@ -10,13 +11,35 @@ struct AvatarView: View {
         return t.isEmpty ? "AI" : String(t.prefix(1))
     }
 
+    private var resolvedURL: URL? {
+        guard let raw = url?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        return URL(string: raw)
+    }
+
     var body: some View {
+        Group {
+            if let resolvedURL {
+                AsyncImage(url: resolvedURL) { phase in
+                    if case .success(let image) = phase {
+                        image.resizable().scaledToFill()
+                    } else {
+                        textAvatar   // 加载中 / 失败 → 首字母回退
+                    }
+                }
+            } else {
+                textAvatar
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private var textAvatar: some View {
         Text(initial)
             .font(.system(size: size * 0.42, weight: .semibold))
             .foregroundColor(.white)
             .frame(width: size, height: size)
             .background(Color.avatarTint(for: text))
-            .clipShape(Circle())
     }
 }
 
