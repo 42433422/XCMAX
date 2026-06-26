@@ -279,7 +279,32 @@ docker_stack_up() {
   log "docker compose 基础设施已 up"
 }
 
+ensure_scheduler_unit() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+  local unit="/etc/systemd/system/modstore-scheduler.service"
+  local tmpl="${MODSTORE_ROOT}/systemd/modstore-scheduler.service.example"
+  if systemctl is-enabled modstore-scheduler >/dev/null 2>&1 && [[ -f "$unit" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$tmpl" ]]; then
+    log "WARN: 缺少 scheduler 模板 ${tmpl}，无法自愈安装"
+    return 1
+  fi
+  log "scheduler unit 缺失/未启用，从模板安装并 enable"
+  sed "s#/root/modstore-git/MODstore_deploy#${MODSTORE_ROOT}#g" "$tmpl" >"$unit"
+  systemctl daemon-reload >>"$LOG" 2>&1 || true
+  if systemctl enable --now modstore-scheduler >>"$LOG" 2>&1; then
+    log "modstore-scheduler 已 enable --now"
+  else
+    log "ERROR: modstore-scheduler enable --now 失败"
+    return 1
+  fi
+}
+
 restart_app_services() {
+  ensure_scheduler_unit || log "WARN: scheduler 自愈未完成"
   local units=(modstore modstore-payment modstore-scheduler fhd-sandbox)
   for u in "${units[@]}"; do
     if systemctl is-enabled "$u" >/dev/null 2>&1 || systemctl list-unit-files "$u.service" --no-legend 2>/dev/null | grep -q .; then

@@ -1,0 +1,81 @@
+name: Deploy MODstore Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Server Git branch
+        required: false
+        default: main
+      require_platform_key:
+        description: Fail when platform LLM key is missing
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+concurrency:
+  group: modstore-prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: SSH deploy and diagnose
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.FHD_PUSH_HOST }}
+          username: root
+          key: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          script_stop: true
+          command_timeout: 25m
+          envs: STRICT_KEY
+          script: |
+            set -euo pipefail
+
+            BRANCH="${{ github.event.inputs.branch }}"
+            [ -z "${BRANCH}" ] && BRANCH="${{ vars.XCMAX_GIT_BRANCH }}"
+            [ -z "${BRANCH}" ] && BRANCH="main"
+
+            REMOTE_ROOT="${{ vars.XCMAX_REMOTE_ROOT }}"
+            if [ -z "${REMOTE_ROOT}" ]; then
+              for c in /root/XCMAX /root/modstore-git; do
+                [ -d "${c}/.git" ] && REMOTE_ROOT="${c}" && break
+              done
+            fi
+            if [ -z "${REMOTE_ROOT}" ] || [ ! -d "${REMOTE_ROOT}/.git" ]; then
+              echo "[err] XCMAX git root not found. Set XCMAX_REMOTE_ROOT."
+              exit 1
+            fi
+
+            DEPLOY_DIR="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy"
+            AUTO="${DEPLOY_DIR}/scripts/xcmax-site-auto-update.sh"
+            DIAG="${DEPLOY_DIR}/scripts/diagnose_production_landing.sh"
+            echo "[info] XCMAX_ROOT=${REMOTE_ROOT} branch=${BRANCH}"
+
+            export XCMAX_ROOT="${REMOTE_ROOT}"
+            export XCMAX_GIT_BRANCH="${BRANCH}"
+            export XCMAX_GIT_RESET_HARD=1
+            if [ ! -f "${AUTO}" ]; then
+              git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
+              git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+            fi
+            bash "${AUTO}"
+
+            export MODSTORE_DEPLOY_DIR="${DEPLOY_DIR}"
+            export XCMAX_MONOREPO_ROOT="${REMOTE_ROOT}"
+            export STRICT_PLATFORM_KEY="${STRICT_KEY}"
+            bash "${DIAG}"
+        env:
+          STRICT_KEY: ${{ github.event.inputs.require_platform_key == 'false' && '0' || '1' }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "MODstore production deploy finished."
+          echo "Green means code, scheduler, platform key, and health gates passed."
