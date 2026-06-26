@@ -184,9 +184,21 @@ def test_real_failures_still_trigger_rewrite(tmp_path, monkeypatch):
         lambda _manifest: {"cognition": {"agent": {"system_prompt": "原始 system prompt"}}},
     )
     monkeypatch.setattr(policy, "record_employee_degradation", lambda **_kw: {"ok": True})
-    monkeypatch.setattr(
-        svc, "create_employee_suggestion", lambda **_kw: {"ok": True, "suggestion_id": 9}
-    )
+
+    def _fake_create_suggestion(**_kw):
+        from modstore_server.models import EmployeeSuggestion
+
+        sf = models.get_session_factory()
+        with sf() as session:
+            suggestion = EmployeeSuggestion(
+                source_employee_id="emp-real",
+                kind="employee_evolution",
+            )
+            session.add(suggestion)
+            session.commit()
+            return {"ok": True, "suggestion_id": int(suggestion.id)}
+
+    monkeypatch.setattr(svc, "create_employee_suggestion", _fake_create_suggestion)
     monkeypatch.setattr(
         ab, "maybe_auto_apply_prompt_evolution", lambda **_kw: {"applied": False, "ab": {}}
     )
