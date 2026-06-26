@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 ClaudeSuperEmployeeService: Any | None = None
 CodexSuperEmployeeService: Any | None = None
 CursorSuperEmployeeService: Any | None = None
+TraeSuperEmployeeService: Any | None = None
 
 _STATE_LOCK = threading.Lock()
 _WORKER_THREAD: threading.Thread | None = None
@@ -158,11 +159,12 @@ _COMPLETED_STATUSES = {"completed", "done", "merged"}
 
 
 def _ensure_super_employee_service_classes() -> None:
-    global ClaudeSuperEmployeeService, CodexSuperEmployeeService, CursorSuperEmployeeService
+    global ClaudeSuperEmployeeService, CodexSuperEmployeeService, CursorSuperEmployeeService, TraeSuperEmployeeService
     if (
         ClaudeSuperEmployeeService is not None
         and CodexSuperEmployeeService is not None
         and CursorSuperEmployeeService is not None
+        and TraeSuperEmployeeService is not None
     ):
         return
     if ClaudeSuperEmployeeService is None:
@@ -183,6 +185,12 @@ def _ensure_super_employee_service_classes() -> None:
         )
 
         CursorSuperEmployeeService = _CursorSuperEmployeeService
+    if TraeSuperEmployeeService is None:
+        from app.application.trae_super_employee_service import (
+            TraeSuperEmployeeService as _TraeSuperEmployeeService,
+        )
+
+        TraeSuperEmployeeService = _TraeSuperEmployeeService
 
 
 def _max_concurrent() -> int:
@@ -275,6 +283,8 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
             "claude_cli": True,
             "cursor": True,
             "cursor_cli": True,
+            "trae": True,
+            "trae_cli": True,
             "desktop": True,
             "host": host,
             "port": int(port),
@@ -442,7 +452,7 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     if parsed_git_op is not None:
         git_kind, git_payload = parsed_git_op
         return handle_git_op(git_kind, git_payload)
-    # 中继泛化：按 kind 前缀选择超级员工(codex.* / claude.* / cursor.*)，本地执行后回写。
+    # 中继泛化：按 kind 前缀选择超级员工(codex.* / claude.* / cursor.* / trae.*)，本地执行后回写。
     _ensure_super_employee_service_classes()
     if kind.startswith("claude"):
         service: Any = ClaudeSuperEmployeeService()
@@ -450,6 +460,9 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     elif kind.startswith("cursor"):
         service = CursorSuperEmployeeService()
         tool_label = "Cursor"
+    elif kind.startswith("trae"):
+        service = TraeSuperEmployeeService()
+        tool_label = "Trae"
     elif kind.startswith("codex"):
         service = CodexSuperEmployeeService()
         tool_label = "Codex"

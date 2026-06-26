@@ -77,6 +77,12 @@ data class CursorSuperEmployeeMobileMessageBody(
     val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
 )
 
+data class TraeSuperEmployeeMobileMessageBody(
+    val body: String = "",
+    val message: String = "",
+    val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
+)
+
 // ── AI 群聊 ──
 data class AiGroupMemberDto(
     val employee_id: String = "",
@@ -110,6 +116,9 @@ data class AiGroupMessageDto(
     val sender_avatar: String = "",
     val body: String = "",
     val created_at: String = "",
+    val kind: String = "",
+    val status: String = "",
+    val work_order_id: String = "",
 )
 
 data class AiGroupListData(val groups: List<AiGroupDto> = emptyList())

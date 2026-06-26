@@ -56,6 +56,7 @@ internal object FixedPartnerKinds {
     const val CODEX = "codex"
     const val CURSOR = "cursor"
     const val CLAUDE = "claude"
+    const val TRAE = "trae"
 }
 
 private data class FixedPartnerProfileSpec(
@@ -84,6 +85,7 @@ fun FixedPartnerProfileScreen(
     val codexAvatarColor = XcagiTheme.extra.n700
     val cursorAvatarColor = XcagiTheme.extra.brandBlue
     val claudeAvatarColor = XcagiTheme.extra.momentAccent
+    val traeAvatarColor = XcagiTheme.extra.warning
 
     LaunchedEffect(partnerKind) {
         if (partnerKind == FixedPartnerKinds.CUSTOMER_SERVICE) {
@@ -100,6 +102,7 @@ fun FixedPartnerProfileScreen(
             codexAvatarColor,
             cursorAvatarColor,
             claudeAvatarColor,
+            traeAvatarColor,
         ) {
             fixedPartnerProfileSpec(
                 partnerKind = partnerKind,
@@ -109,6 +112,7 @@ fun FixedPartnerProfileScreen(
                 codexAvatarColor = codexAvatarColor,
                 cursorAvatarColor = cursorAvatarColor,
                 claudeAvatarColor = claudeAvatarColor,
+                traeAvatarColor = traeAvatarColor,
             )
         }
     if (spec == null) {
@@ -189,6 +193,7 @@ private fun fixedPartnerProfileSpec(
     codexAvatarColor: Color,
     cursorAvatarColor: Color,
     claudeAvatarColor: Color,
+    traeAvatarColor: Color,
 ): FixedPartnerProfileSpec? =
     when (partnerKind) {
         FixedPartnerKinds.CODEX ->
@@ -226,6 +231,18 @@ private fun fixedPartnerProfileSpec(
                 circleLabels = listOf("派工", "协同", "开发"),
                 avatarFallback = AppAvatarFallback.CLAUDE,
                 avatarColor = claudeAvatarColor,
+            )
+        FixedPartnerKinds.TRAE ->
+            FixedPartnerProfileSpec(
+                name = "超级员工-Trae",
+                alias = "全设备协同 · Trae 执行端",
+                accountId = "XCAGI-TRAE",
+                summary = "与 Codex/Cursor/Claude 同构的第四个超级员工，负责 Trae CLI 执行端、IDE 自动化、备用模型额度和补位协作。",
+                source = "XCAGI 超级员工 · Trae 通道",
+                abilityLabels = listOf("多设备派工", "Trae CLI", "备用额度", "补位执行"),
+                circleLabels = listOf("派工", "协同", "Trae"),
+                avatarFallback = AppAvatarFallback.TRAE,
+                avatarColor = traeAvatarColor,
             )
         FixedPartnerKinds.ASSISTANT ->
             FixedPartnerProfileSpec(

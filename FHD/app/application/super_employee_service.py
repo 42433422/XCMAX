@@ -177,6 +177,23 @@ def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str)
     ]
 
 
+def _trae_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    perm = (
+        os.environ.get("DEVFLEET_TRAE_PERMISSION_MODE")
+        or os.environ.get("XCMAX_TRAE_PERMISSION_MODE")
+        or "default"
+    ).strip() or "default"
+    return [
+        cli_path,
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--permission-mode",
+        perm,
+        prompt,
+    ]
+
+
 @dataclass(frozen=True)
 class SuperEmployeeToolProfile:
     """A concrete super-employee tool's identity + dispatch configuration."""
@@ -269,6 +286,31 @@ CURSOR_PROFILE = SuperEmployeeToolProfile(
     avatar_path="/brand/cursor-app-icon.png",
 )
 
+TRAE_PROFILE = SuperEmployeeToolProfile(
+    employee_id="trae-super-employee",
+    employee_name="超级员工-Trae",
+    display_tool="Trae",
+    tool_name="trae",
+    capability_key="trae_cli",
+    storage_subdir="trae_super_employee",
+    result_kind="trae_result",
+    direct_kind="trae_direct",
+    env_super_prefix="XCMAX_TRAE_SUPER_EMPLOYEE",
+    env_tool_prefix="XCMAX_TRAE",
+    cli_binary="trae-cli",
+    cli_extra_candidates=(
+        os.path.expanduser("~/.local/bin/trae-cli"),
+        os.path.expanduser("~/.local/share/trae-cli/trae-cli"),
+        "trae-agent",
+        "ta",
+    ),
+    cli_reads_output_file=False,
+    cli_stream_json=True,
+    cli_command_builder=_trae_cli_command,
+    avatar_key="trae",
+    avatar_path="/brand/trae-app-icon.png",
+)
+
 
 class SuperEmployeeService:
     """Persist software-internal tool calls and optionally dispatch them out."""
@@ -316,7 +358,8 @@ class SuperEmployeeService:
         text = (message or "").strip()
         if not text:
             raise ValueError("message 不能为空")
-        ctx = context if isinstance(context, dict) else {}
+        ctx = dict(context) if isinstance(context, dict) else {}
+        ctx.setdefault("user_id", int(user_id))
         request_id = uuid.uuid4().hex
         created_at = _utc_now()
         user_msg = self._message_row(
@@ -1251,9 +1294,15 @@ class SuperEmployeeService:
             logger.warning("写 session store 失败", exc_info=True)
 
     def _session_key(self, context: dict[str, Any]) -> str:
-        """会话键：手机端是单一 pinned 会话，按工具名即可隔离 claude/codex 各自一条续接会话。"""
+        """会话键：按工具 + 用户 + 会话隔离，避免不同入口复用同一 CLI resume 上下文。"""
+        user_id = str((context or {}).get("user_id") or "").strip()
         conv = str((context or {}).get("conversation_id") or "").strip()
-        return f"{self._p.tool_name}:{conv}" if conv else self._p.tool_name
+        parts = [self._p.tool_name]
+        if user_id:
+            parts.append(f"user:{user_id}")
+        if conv:
+            parts.append(f"conversation:{conv}")
+        return ":".join(parts)
 
     def _ensure_session_workspace(self, key: str) -> tuple[str | None, str | None]:
         """持久隔离工作区：同一会话复用一个 git worktree（不碰 live checkout、不破坏运行中的 FHD）。"""
@@ -2201,6 +2250,7 @@ __all__ = [
     "CODEX_PROFILE",
     "CLAUDE_PROFILE",
     "CURSOR_PROFILE",
+    "TRAE_PROFILE",
     "SuperEmployeeService",
     "SuperEmployeeToolProfile",
 ]

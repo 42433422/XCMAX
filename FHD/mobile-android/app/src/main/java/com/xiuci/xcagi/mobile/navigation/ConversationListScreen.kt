@@ -258,6 +258,7 @@ fun ConversationListScreen(
                                             PinnedIds.CODEX -> onOpenConversation(PinnedIds.CODEX)
                                             PinnedIds.CURSOR -> onOpenConversation(PinnedIds.CURSOR)
                                             PinnedIds.CLAUDE -> onOpenConversation(PinnedIds.CLAUDE)
+                                            PinnedIds.TRAE -> onOpenConversation(PinnedIds.TRAE)
                                             else -> onOpenConversation(item.id)
                                         }
                                     },
@@ -522,6 +523,7 @@ internal fun SearchBarField(
         onValueChange: (String) -> Unit,
         onClear: () -> Unit,
         modifier: Modifier = Modifier,
+        placeholder: String = "查找会话或伙伴",
 ) {
     Surface(
             shape = RoundedCornerShape(20.dp),
@@ -554,7 +556,7 @@ internal fun SearchBarField(
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                             if (value.isEmpty()) {
                                 Text(
-                                        "查找会话或伙伴",
+                                        placeholder,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = XcagiTheme.extra.n400,
                                 )
@@ -868,7 +870,8 @@ private fun ConversationCell(
                     ConversationType.PINNED_CS,
                     ConversationType.PINNED_CODEX,
                     ConversationType.PINNED_CURSOR,
-                    ConversationType.PINNED_CLAUDE -> PinnedAvatar(type = item.type)
+                    ConversationType.PINNED_CLAUDE,
+                    ConversationType.PINNED_TRAE -> PinnedAvatar(type = item.type)
                     else -> AppAvatar(
                         imageSource = item.avatarUrl,
                         fallback = AppAvatarFallback.AI_EMPLOYEE,
@@ -1011,6 +1014,7 @@ private fun PinnedAvatar(type: ConversationType) {
         ConversationType.PINNED_CODEX -> CodexAvatar()
         ConversationType.PINNED_CURSOR -> CursorAvatar()
         ConversationType.PINNED_CLAUDE -> ClaudeAvatar()
+        ConversationType.PINNED_TRAE -> TraeAvatar()
         else -> AssistantAvatar()
     }
 }
@@ -1067,6 +1071,17 @@ private fun ClaudeAvatar() {
         size = MessageAvatarLayout.conversationAvatarSize,
         shape = MessageAvatarLayout.conversationAvatarShape(),
         contentDescription = "超级员工-Claude",
+    )
+}
+
+/** 超级员工-Trae 头像 */
+@Composable
+private fun TraeAvatar() {
+    AppAvatar(
+        fallback = AppAvatarFallback.TRAE,
+        size = MessageAvatarLayout.conversationAvatarSize,
+        shape = MessageAvatarLayout.conversationAvatarShape(),
+        contentDescription = "超级员工-Trae",
     )
 }
 

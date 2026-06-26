@@ -394,6 +394,10 @@ import {
   fetchCursorSuperEmployeeMessages,
   sendCursorSuperEmployeeMessage,
 } from '@/api/cursorSuperEmployee';
+import {
+  fetchTraeSuperEmployeeMessages,
+  sendTraeSuperEmployeeMessage,
+} from '@/api/traeSuperEmployee';
 
 type CurrentUserPayload = {
   user?: { id?: number };
@@ -425,6 +429,14 @@ type CursorSuperEmployeeEntry = {
   is_cursor_super_employee: true;
 };
 
+type TraeSuperEmployeeEntry = {
+  id: 'trae-super-employee';
+  display_name: '超级员工-Trae';
+  username: 'trae-super-employee';
+  subtitle: '全设备协同 · Trae 派工';
+  is_trae_super_employee: true;
+};
+
 type DutyEmployeeEntry = {
   id: string;
   display_name: string;
@@ -438,7 +450,7 @@ type DutyEmployeeEntry = {
   is_duty_employee_entry: true;
 };
 
-type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | DutyEmployeeEntry;
+type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | TraeSuperEmployeeEntry | DutyEmployeeEntry;
 type PinnedImEntry = ImContact | SystemEmployeeEntry;
 type CodexDisplayMessage = CodexSuperEmployeeMessage & {
   streaming?: boolean;
@@ -513,6 +525,14 @@ const CURSOR_SUPER_EMPLOYEE_ENTRY: CursorSuperEmployeeEntry = {
   username: 'cursor-super-employee',
   subtitle: '全设备协同 · Agent 派工',
   is_cursor_super_employee: true,
+};
+
+const TRAE_SUPER_EMPLOYEE_ENTRY: TraeSuperEmployeeEntry = {
+  id: 'trae-super-employee',
+  display_name: '超级员工-Trae',
+  username: 'trae-super-employee',
+  subtitle: '全设备协同 · Trae 派工',
+  is_trae_super_employee: true,
 };
 
 const localUserId = ref<number | null>(null);
@@ -594,13 +614,14 @@ const codexApiScope = computed<CodexSuperEmployeeApiScope>(() =>
   isAdminConsoleSpa() ? 'admin' : 'mobile',
 );
 
-type ActiveSuperTool = 'codex' | 'claude' | 'cursor';
+type ActiveSuperTool = 'codex' | 'claude' | 'cursor' | 'trae';
 
 function activeSuperTool(entry: SystemEmployeeEntry | null): ActiveSuperTool | null {
   if (!entry) return null;
   if (isCodexSuperEmployeeEntry(entry)) return 'codex';
   if (isClaudeSuperEmployeeEntry(entry)) return 'claude';
   if (isCursorSuperEmployeeEntry(entry)) return 'cursor';
+  if (isTraeSuperEmployeeEntry(entry)) return 'trae';
   return null;
 }
 
@@ -612,6 +633,9 @@ function fetchActiveSuperMessages(): Promise<CodexSuperEmployeeMessage[]> {
   if (tool === 'cursor') {
     return fetchCursorSuperEmployeeMessages({ scope: codexApiScope.value });
   }
+  if (tool === 'trae') {
+    return fetchTraeSuperEmployeeMessages({ scope: codexApiScope.value });
+  }
   return fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
 }
 
@@ -622,6 +646,9 @@ function sendActiveSuperMessage(message: string, context: Record<string, unknown
   }
   if (tool === 'cursor') {
     return sendCursorSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
+  }
+  if (tool === 'trae') {
+    return sendTraeSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
   }
   return sendCodexSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
 }
@@ -686,7 +713,7 @@ const filteredContacts = computed(() => {
 
 const pinnedContacts = computed<PinnedImEntry[]>(() => {
   if (isAdminCustomerServiceConsole.value) {
-    return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
+    return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, TRAE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
   }
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
 });
@@ -709,16 +736,21 @@ function isCursorSuperEmployeeEntry(entry: PinnedImEntry): entry is CursorSuperE
   return 'is_cursor_super_employee' in entry && entry.is_cursor_super_employee;
 }
 
-/** 超级员工（Codex / Claude / Cursor）共用同一套合成器、消息管线与轮询。 */
+function isTraeSuperEmployeeEntry(entry: PinnedImEntry): entry is TraeSuperEmployeeEntry {
+  return 'is_trae_super_employee' in entry && entry.is_trae_super_employee;
+}
+
+/** 超级员工（Codex / Claude / Cursor / Trae）共用同一套合成器、消息管线与轮询。 */
 function isSuperEmployeeEntry(
   entry: PinnedImEntry | null,
-): entry is CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry {
+): entry is CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | TraeSuperEmployeeEntry {
   return Boolean(
     entry
     && (
       isCodexSuperEmployeeEntry(entry)
       || isClaudeSuperEmployeeEntry(entry)
       || isCursorSuperEmployeeEntry(entry)
+      || isTraeSuperEmployeeEntry(entry)
     ),
   );
 }
@@ -737,6 +769,7 @@ function superEmployeeAvatarKey(entry: PinnedImEntry): SuperEmployeeAvatarKey | 
   if (isCodexSuperEmployeeEntry(entry)) return 'codex';
   if (isClaudeSuperEmployeeEntry(entry)) return 'claude';
   if (isCursorSuperEmployeeEntry(entry)) return 'cursor';
+  if (isTraeSuperEmployeeEntry(entry)) return 'trae';
   return null;
 }
 
@@ -748,6 +781,7 @@ function pinnedAvatarText(entry: PinnedImEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return 'Codex';
   if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
   if (isCursorSuperEmployeeEntry(entry)) return 'Cursor';
+  if (isTraeSuperEmployeeEntry(entry)) return 'Trae';
   if (isDutyEmployeeEntry(entry)) return avatarText(entry.display_name);
   return avatarText(entry.display_name);
 }
@@ -773,6 +807,7 @@ function systemEntryDispatch(entry: SystemEmployeeEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return '全设备 Codex';
   if (isClaudeSuperEmployeeEntry(entry)) return '全设备 Claude';
   if (isCursorSuperEmployeeEntry(entry)) return '全设备 Cursor';
+  if (isTraeSuperEmployeeEntry(entry)) return '全设备 Trae';
   if (entry.api_base_path) return `${dutyContactLabel(entry.phone_channel)} · ${entry.api_base_path}`;
   return dutyContactLabel(entry.phone_channel);
 }
