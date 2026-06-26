@@ -129,6 +129,9 @@ data class AiGroupMessageDto(
     val sender_avatar: String = "",
     val body: String = "",
     val created_at: String = "",
+    val kind: String = "",
+    val status: String = "",
+    val work_order_id: String = "",
 )
 
 data class AiGroupListData(val groups: List<AiGroupDto> = emptyList())

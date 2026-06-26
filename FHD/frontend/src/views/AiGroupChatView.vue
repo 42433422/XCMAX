@@ -43,7 +43,7 @@
           class="aigc-msg"
           :class="{
             'is-user': m.role === 'user',
-            'is-work': m.kind === 'work_order' || m.kind === 'work_report',
+            [messageUi(m).bubbleClass]: Boolean(messageUi(m).bubbleClass),
           }"
         >
           <div v-if="m.role !== 'user'" class="aigc-msg__avatar">
@@ -59,6 +59,13 @@
           </div>
           <div class="aigc-msg__col">
             <div v-if="m.role !== 'user'" class="aigc-msg__sender">{{ m.sender_name }}</div>
+            <div
+              v-if="messageUi(m).badge"
+              class="aigc-msg__badge"
+              :class="{ 'is-review': messageUi(m).needsReview }"
+            >
+              {{ messageUi(m).badge }}
+            </div>
             <div class="aigc-msg__bubble">{{ m.body }}</div>
           </div>
         </div>
@@ -150,6 +157,7 @@ import {
 } from '@/api/aiGroups';
 import { resolveSuperEmployeeAvatarSrc } from '@/constants/superEmployeeAvatars';
 import { apiFetch } from '@/utils/apiBase';
+import { groupSendingLabel, resolveAiGroupMessageUi } from '@/utils/aiGroupMessageUi';
 
 type PickEmployee = { employee_id: string; mod_id: string; name: string; avatar: string; summary: string };
 
@@ -172,9 +180,11 @@ const inputPlaceholder = computed(() =>
   dispatchMode.value ? '派工给群成员（@成员 可点对点派工）' : '发群消息（@成员 可单独点名）',
 );
 
-const sendingLabel = computed(() =>
-  dispatchMode.value ? '员工正在执行并汇报…' : 'AI 成员正在回复…',
-);
+const sendingLabel = computed(() => groupSendingLabel(dispatchMode.value));
+
+function messageUi(m: AiGroupMessage) {
+  return resolveAiGroupMessageUi(m.kind, m.status, m.body);
+}
 
 function withBaseUrl(path: string): string {
   const raw = String(path || '').trim();
@@ -341,7 +351,23 @@ onMounted(() => {
 .aigc-msg__sender { font-size: 11px; color: var(--color-text-2, #999); margin: 0 2px 3px; }
 .aigc-msg__bubble { padding: 9px 12px; border-radius: 10px; background: var(--color-surface, #fff); border: 1px solid var(--color-border-weak, #eee); font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .aigc-msg.is-user .aigc-msg__bubble { background: #95ec69; border-color: #7fd957; color: #1f2329; }
+.aigc-msg__badge {
+  display: inline-block;
+  margin: 0 2px 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #245bdb;
+  background: #eef4ff;
+  border: 1px solid #c9dcff;
+}
+.aigc-msg__badge.is-review { color: #b45309; background: #fff7ed; border-color: #fed7aa; }
+.aigc-msg.is-discussion .aigc-msg__bubble { border-color: #7c3aed44; background: #faf5ff; }
+.aigc-msg.is-routing .aigc-msg__bubble { border-color: #0d948844; background: #f0fdfa; }
 .aigc-msg.is-work .aigc-msg__bubble { border-color: #5b8def55; background: #f7fbff; }
+.aigc-msg.is-acceptance .aigc-msg__bubble { border-color: #16a34a55; background: #f0fdf4; }
+.aigc-msg.is-acceptance-review .aigc-msg__bubble { border-color: #ea580c55; background: #fff7ed; }
 .aigc-typing { font-size: 12px; color: var(--color-text-2, #999); }
 .aigc-chat__input { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--color-border, #e5e7eb); background: var(--color-surface, #fff); }
 .aigc-input { flex: 1; border: 1px solid var(--color-border, #ddd); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }

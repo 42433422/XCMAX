@@ -182,6 +182,37 @@ describe('AiGroupChatView', () => {
     expect(postAiGroupMessage).toHaveBeenCalledWith('g1', '你好', [], 'admin', { dispatch: false })
   })
 
+  it('shows discussion badge for discussion messages', async () => {
+    const discussionMsg = {
+      ...sampleMessage,
+      id: 'd1',
+      kind: 'discussion',
+      body: '我建议先对齐需求边界，再定负责人。',
+    };
+    fetchAiGroups.mockResolvedValue([sampleGroup]);
+    fetchAiGroupMessages.mockResolvedValue([discussionMsg]);
+    const wrapper = mountView();
+    await flushPromises();
+    expect(wrapper.find('.aigc-msg__badge').text()).toBe('讨论');
+    expect(wrapper.find('.aigc-msg').classes()).toContain('is-discussion');
+  });
+
+  it('shows needs-review badge for false acceptance', async () => {
+    const acceptanceMsg = {
+      ...sampleMessage,
+      id: 'a1',
+      kind: 'work_acceptance',
+      status: 'needs_review',
+      body: '【小C验收】需要复核 0/2',
+    };
+    fetchAiGroups.mockResolvedValue([sampleGroup]);
+    fetchAiGroupMessages.mockResolvedValue([acceptanceMsg]);
+    const wrapper = mountView();
+    await flushPromises();
+    expect(wrapper.find('.aigc-msg__badge').text()).toBe('待复核');
+    expect(wrapper.find('.aigc-msg__badge').classes()).toContain('is-review');
+  });
+
   it('sends message in dispatch mode when dispatch toggle is active', async () => {
     fetchAiGroups.mockResolvedValue([sampleGroup])
     fetchAiGroupMessages.mockResolvedValue([])
