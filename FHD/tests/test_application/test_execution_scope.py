@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """执行信任域 :mod:`app.application.execution_scope` 的安全不变量守卫。
 
 把"deny-by-default + 令牌不可伪造 + 闸门硬拒"钉死成回归门。

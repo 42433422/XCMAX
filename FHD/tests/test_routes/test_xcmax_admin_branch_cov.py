@@ -442,7 +442,7 @@ class TestAdminSetUserProfileDeep:
         user.username = kwargs.get("username", "existing")
         user.tier = kwargs.get("tier", "")
         user.industry_id = kwargs.get("industry_id", "")
-        user.account_tier = kwargs.get("account_tier", None)
+        user.account_tier = kwargs.get("account_tier")
         user.budget_range = kwargs.get("budget_range", "")
         user.entitled_industries = kwargs.get("entitled_industries", [])
         return user

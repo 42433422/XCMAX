@@ -56,7 +56,6 @@ from app.application.excel_vector_app_service import (
     get_vector_store,
 )
 
-
 # ---------------------------------------------------------------------------
 # HashEmbedder.__init__ — branch coverage
 # ---------------------------------------------------------------------------

@@ -33,7 +33,6 @@ import pytest
 # app.services.get_products_service (circular).
 # Importing app.application first ensures the chain resolves cleanly.
 import app.application  # noqa: F401
-
 from app.services.tools_workflow_registered import (
     _execute_excel_import_records,
     _normalize_business_db_entity,
@@ -57,7 +56,6 @@ from app.services.tools_workflow_registered import (
     _registered_router_unit_products_import,
     execute_registered_workflow_tool,
 )
-
 
 # ===========================================================================
 # _registered_router_business_event

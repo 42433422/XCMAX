@@ -45,7 +45,6 @@ from app.application.session_account_meta import (
     validate_account_kind_for_market,
 )
 
-
 # ───────────────────── normalize_account_kind ─────────────────────
 
 

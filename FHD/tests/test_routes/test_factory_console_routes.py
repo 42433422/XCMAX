@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """顶层管理端「项目工厂」控制台端点守卫：仅管理端可见、闭环载荷正确。"""
 
 from __future__ import annotations

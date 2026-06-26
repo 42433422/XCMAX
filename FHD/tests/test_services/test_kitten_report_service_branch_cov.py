@@ -25,7 +25,6 @@ import app.application  # noqa: F401
 from app.services.kitten_report.plugins import PluginResult
 from app.services.kitten_report.service import KittenReportExportService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

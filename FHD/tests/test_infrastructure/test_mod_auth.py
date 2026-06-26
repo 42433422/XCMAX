@@ -25,7 +25,6 @@ from app.infrastructure.mods.mod_auth import (
     require_verified_mod,
 )
 
-
 # ---------------------------------------------------------------------------
 # ModContext.__post_init__
 # ---------------------------------------------------------------------------
@@ -108,7 +107,7 @@ class TestGenerateSignature:
         monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", secret)
         sig = ModContext._generate_signature("mod1")
         expected = hmac.new(
-            secret.encode(), "mod1".encode(), hashlib.sha256
+            secret.encode(), b"mod1", hashlib.sha256
         ).hexdigest()[:32]
         assert sig == expected
         assert len(sig) == 32
@@ -220,7 +219,7 @@ class TestFromRequest:
     def test_with_secret_valid_signature(self, monkeypatch):
         secret = "test-secret"
         monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", secret)
-        sig = hmac.new(secret.encode(), "mod1".encode(), hashlib.sha256).hexdigest()[:32]
+        sig = hmac.new(secret.encode(), b"mod1", hashlib.sha256).hexdigest()[:32]
         request = _make_request(
             headers={"X-XCAGI-Active-Mod-Id": "mod1", "X-XCAGI-Mod-Signature": sig}
         )
@@ -248,7 +247,7 @@ class TestFromRequest:
     def test_lowercase_signature_header(self, monkeypatch):
         secret = "test-secret"
         monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", secret)
-        sig = hmac.new(secret.encode(), "mod1".encode(), hashlib.sha256).hexdigest()[:32]
+        sig = hmac.new(secret.encode(), b"mod1", hashlib.sha256).hexdigest()[:32]
         request = _make_request(
             headers={"X-XCAGI-Active-Mod-Id": "mod1", "x-xcagi-mod-signature": sig}
         )

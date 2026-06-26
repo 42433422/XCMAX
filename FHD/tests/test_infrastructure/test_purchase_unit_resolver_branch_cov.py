@@ -34,7 +34,6 @@ from app.infrastructure.lookups.purchase_unit_resolver import (
     resolve_purchase_unit,
 )
 
-
 # ---------------------------------------------------------------------------
 # _to_pinyin — branch coverage
 # ---------------------------------------------------------------------------

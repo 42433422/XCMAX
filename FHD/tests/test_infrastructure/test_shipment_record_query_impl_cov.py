@@ -22,7 +22,6 @@ from app.infrastructure.persistence.shipment_record_query_impl import (
     _record_to_dict,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -27,7 +27,6 @@ from app.application.employee_runtime.orchestrator import (
 )
 from app.domain.employee.collaboration_graph import CollaborationGraph
 
-
 # ---------------------------------------------------------------------------
 # _resolve_depends_on
 # ---------------------------------------------------------------------------

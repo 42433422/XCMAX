@@ -28,7 +28,6 @@ from app.application.tenant_workspace_prefs import (
     save_selected_industry,
 )
 
-
 # ---------------------------------------------------------------------------
 # Test fixture: in-memory preference service
 # ---------------------------------------------------------------------------

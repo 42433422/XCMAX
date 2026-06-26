@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """AI 员工三阶级 + 小C助理身份 单一真相源（SSOT）加载器。
 
 真相源：``config/ai_workforce.json``。本模块是「员工系统 ↔ 人格系统」联系的唯一程序入口：
@@ -76,6 +75,20 @@ _FALLBACK_DOC: dict[str, Any] = {
             "display_tool": "Codex",
             "avatar_letter": "超",
         },
+        "cursor-super-employee": {
+            "id": "cursor-super-employee",
+            "tier": "super",
+            "display_name": "超级员工-Cursor",
+            "display_tool": "Cursor",
+            "avatar_letter": "超",
+        },
+        "trae-super-employee": {
+            "id": "trae-super-employee",
+            "tier": "super",
+            "display_name": "超级员工-Trae",
+            "display_tool": "Trae",
+            "avatar_letter": "超",
+        },
     },
     "factory_employees": {
         "claude-factory-employee": {
@@ -94,6 +107,24 @@ _FALLBACK_DOC: dict[str, Any] = {
             "visibility": "internal",
             "display_name": "工厂员工-Codex",
             "display_tool": "Codex",
+            "avatar_letter": "厂",
+        },
+        "cursor-factory-employee": {
+            "id": "cursor-factory-employee",
+            "tier": "super",
+            "scope": "factory",
+            "visibility": "internal",
+            "display_name": "工厂员工-Cursor",
+            "display_tool": "Cursor",
+            "avatar_letter": "厂",
+        },
+        "trae-factory-employee": {
+            "id": "trae-factory-employee",
+            "tier": "super",
+            "scope": "factory",
+            "visibility": "internal",
+            "display_name": "工厂员工-Trae",
+            "display_tool": "Trae",
             "avatar_letter": "厂",
         },
     },

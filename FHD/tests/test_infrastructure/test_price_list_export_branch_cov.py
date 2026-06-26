@@ -54,8 +54,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 from app.infrastructure.documents.price_list_export import (
-    _apply_tc_borders_to_all_body_rows,
     _append_tr_clone_from_last,
+    _apply_tc_borders_to_all_body_rows,
     _border_el_effective,
     _border_element_as_w_bottom,
     _cell_bottom_effective,
@@ -86,7 +86,6 @@ from app.infrastructure.documents.price_list_export import (
     _write_product_row,
     build_price_list_docx_bytes,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers — lightweight fakes that exercise real OOXML branches

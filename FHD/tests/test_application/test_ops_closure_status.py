@@ -19,7 +19,6 @@ from app.application.ops_closure_status import (
     build_ops_closure_status,
 )
 
-
 # ---------------------------------------------------------------------------
 # _installed_employee_pack_ids
 # ---------------------------------------------------------------------------

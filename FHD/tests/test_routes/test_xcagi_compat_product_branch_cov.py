@@ -18,7 +18,6 @@ from fastapi import HTTPException
 
 from app.fastapi_routes import xcagi_compat_product as xp
 
-
 # ---------------------------------------------------------------------------
 # _agent_node_output
 # ---------------------------------------------------------------------------

@@ -20,7 +20,6 @@ import pytest
 from app.application import conversation_app_service as cas_mod
 from app.application.conversation_app_service import ConversationApplicationService
 
-
 # ---------------------------------------------------------------------------
 # Helpers — context-managed fake DB session
 # ---------------------------------------------------------------------------

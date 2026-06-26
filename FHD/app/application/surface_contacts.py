@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """按 surface SSOT 解析某端(device×side)的「固定联系人」。
 
 平台员工(platform)是动态集合,各端经各自端点(/home mods / admin employees)提供,

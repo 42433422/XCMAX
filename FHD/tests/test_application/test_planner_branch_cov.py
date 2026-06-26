@@ -23,7 +23,6 @@ from app.application.workflow.planner import (
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

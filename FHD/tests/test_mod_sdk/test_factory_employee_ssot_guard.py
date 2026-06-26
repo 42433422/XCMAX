@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """工厂员工 SSOT 守卫：内部工厂角色与客户面 super_employees 分离，且绝不进任何选人器。
 
 这条门若红，说明工厂版超级员工有泄漏进客户/管理联系人的风险——即权限边界破口。
@@ -11,16 +10,23 @@ from app.mod_sdk import assistant_ssot
 
 
 def test_super_employee_ids_contract_unchanged():
-    # 既有契约：客户面超级员工恰好两个，不被工厂角色污染。
+    # 客户面超级员工由 SSOT 明确列出，不被工厂角色污染。
     assert assistant_ssot.super_employee_ids() == {
         "claude-super-employee",
         "codex-super-employee",
+        "cursor-super-employee",
+        "trae-super-employee",
     }
 
 
 def test_factory_ids_disjoint_from_super():
     fac = assistant_ssot.factory_employee_ids()
-    assert fac == {"claude-factory-employee", "codex-factory-employee"}
+    assert fac == {
+        "claude-factory-employee",
+        "codex-factory-employee",
+        "cursor-factory-employee",
+        "trae-factory-employee",
+    }
     assert fac.isdisjoint(assistant_ssot.super_employee_ids())
 
 
@@ -33,6 +39,8 @@ def test_factory_employees_marked_internal_and_factory_scope():
 def test_is_factory_employee_classification():
     assert assistant_ssot.is_factory_employee("claude-factory-employee") is True
     assert assistant_ssot.is_factory_employee("codex-factory-employee") is True
+    assert assistant_ssot.is_factory_employee("cursor-factory-employee") is True
+    assert assistant_ssot.is_factory_employee("trae-factory-employee") is True
     assert assistant_ssot.is_factory_employee("claude-super-employee") is False
     assert assistant_ssot.is_factory_employee("") is False
 

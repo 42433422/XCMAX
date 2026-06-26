@@ -25,7 +25,6 @@ from app.utils.excel_template_analyzer import (
     extract_entries,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers — build real .xlsx files with openpyxl
 # ---------------------------------------------------------------------------
