@@ -133,7 +133,10 @@ async function doRegister() {
       return
     }
     const res = await api.register(username.value, password.value, em, code)
-    localStorage.setItem('modstore_token', res.token)
+    // P0-4：存储 web_tokens（access + refresh），session 认证由 httpOnly cookie 管理
+    const wt = (res as any).web_tokens || {}
+    localStorage.setItem('modstore_token', wt.access_token || res.token || '')
+    if (wt.refresh_token) localStorage.setItem('modstore_refresh_token', wt.refresh_token)
     await router.push('/')
   } catch (e) {
     err.value = e.message

@@ -20,6 +20,7 @@ interface ModstoreApi {
     suspend fun appConfig(
         @Query("platform") platform: String = "android",
         @Query("sku") sku: String,
+        @Query("current_version_code") currentVersionCode: Int = 0,
     ): AppConfigResponse
 
     @POST("api/app/feedback")

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,13 +26,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CallMerge
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -78,15 +82,31 @@ import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.core.model.AiGroupDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDraft
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
+import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
+import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDto
 import kotlin.math.ceil
+
+private fun aiGroupAvatarFallback(employeeId: String, name: String = "", avatarKey: String = ""): AppAvatarFallback {
+    val key = avatarKey.trim().lowercase()
+    val id = employeeId.trim().lowercase()
+    val label = name.trim().lowercase()
+    val isXiaoc = id == "xcagi-assistant" || id == "xiaoc-assistant" || label.contains("小c")
+    return when {
+        isXiaoc -> AppAvatarFallback.ASSISTANT
+        key == "codex" || id.contains("codex") || label.contains("codex") -> AppAvatarFallback.CODEX
+        key == "cursor" || id.contains("cursor") || label.contains("cursor") -> AppAvatarFallback.CURSOR
+        key == "claude" || id.contains("claude") || label.contains("claude") -> AppAvatarFallback.CLAUDE
+        else -> AppAvatarFallback.AI_EMPLOYEE
+    }
+}
 
 // ══════════════════════════════════════════
 //  AI 群聊列表（默认 6 部门群 + 自定义群）
@@ -249,7 +269,10 @@ internal fun GroupGridAvatar(members: List<AiGroupMemberDto>, size: androidx.com
     val shown = members.take(9)
     val n = shown.size
     Box(
-        modifier = Modifier.size(size).clip(RoundedCornerShape(10.dp)).background(XcagiTheme.extra.n200),
+        modifier = Modifier
+            .size(size)
+            .clip(MessageAvatarLayout.conversationAvatarShape())
+            .background(XcagiTheme.extra.n200),
         contentAlignment = Alignment.Center,
     ) {
         if (n == 0) {
@@ -275,7 +298,7 @@ internal fun GroupGridAvatar(members: List<AiGroupMemberDto>, size: androidx.com
                             if (idx < n) {
                                 AppAvatar(
                                     imageSource = shown[idx].avatar.ifBlank { null },
-                                    fallback = AppAvatarFallback.AI_EMPLOYEE,
+                                    fallback = aiGroupAvatarFallback(shown[idx].employee_id, shown[idx].name, shown[idx].avatar_key),
                                     size = cell,
                                     shape = RoundedCornerShape(3.dp),
                                 )
@@ -309,11 +332,16 @@ internal fun GroupConversationRow(
         ),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = 11.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = MessageAvatarLayout.conversationRowHorizontalPadding,
+                    vertical = MessageAvatarLayout.conversationRowVerticalPadding,
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            GroupGridAvatar(group.members, 52.dp)
-            Spacer(Modifier.width(Spacing.md))
+            GroupGridAvatar(group.members, MessageAvatarLayout.conversationAvatarSize)
+            Spacer(Modifier.width(MessageAvatarLayout.conversationAvatarTextGap))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (group.is_pinned) {
@@ -404,11 +432,14 @@ fun AiGroupChatScreen(
     val group by vm.currentGroup.collectAsState()
     val messages by vm.groupMessages.collectAsState()
     val sending by vm.groupSending.collectAsState()
+    val branches by vm.gitBranches.collectAsState()
     val userAvatar by vm.userAvatarSource.collectAsState()
     val modInfos by vm.modInfos.collectAsState()
     val allEmployees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
     var input by remember { mutableStateOf("") }
     var showMembers by remember { mutableStateOf(false) }
+    var showBranchPicker by remember { mutableStateOf(false) }
+    var selectedBranch by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val haptics = rememberHaptics()
     val g = group
@@ -436,7 +467,20 @@ fun AiGroupChatScreen(
     LaunchedEffect(messages.size, sending) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
-    LaunchedEffect(Unit) { vm.refreshModInfos() }
+    LaunchedEffect(Unit) {
+        vm.refreshModInfos()
+        vm.loadGitBranches()
+    }
+
+    if (showBranchPicker) {
+        BranchPickerSheet(
+            branches = branches,
+            selectedBranch = selectedBranch,
+            onDismiss = { showBranchPicker = false },
+            onSelect = { selectedBranch = it },
+            onRefresh = { vm.loadGitBranches() },
+        )
+    }
 
     if (showMembers && g != null) {
         GroupMembersSheet(
@@ -495,11 +539,17 @@ fun AiGroupChatScreen(
                 value = input,
                 onValueChange = { input = it },
                 sending = sending,
+                selectedBranch = selectedBranch,
+                onBranchClick = { showBranchPicker = true },
                 onVoice = { startGroupVoice() },
                 onSend = {
                     if (g != null && input.isNotBlank()) {
                         haptics.confirm()
-                        vm.sendGroupMessage(g.id, input.trim())
+                        vm.sendGroupMessage(
+                            groupId = g.id,
+                            text = input.trim(),
+                            branchContext = selectedBranch.orEmpty(),
+                        )
                         input = ""
                     }
                 },
@@ -557,7 +607,7 @@ private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
         if (!isUser) {
             AppAvatar(
                 imageSource = message.sender_avatar.ifBlank { null },
-                fallback = AppAvatarFallback.AI_EMPLOYEE,
+                fallback = aiGroupAvatarFallback(message.sender_id, message.sender_name),
                 size = 40.dp,
                 shape = RoundedCornerShape(8.dp),
             )
@@ -644,15 +694,48 @@ private fun GroupInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     sending: Boolean,
+    selectedBranch: String?,
+    onBranchClick: () -> Unit,
     onVoice: () -> Unit,
     onSend: () -> Unit,
 ) {
     val canSend = value.isNotBlank() && !sending
+    val branchLabel = selectedBranch?.takeIf { it.isNotBlank() }?.substringAfterLast('/') ?: "自动新建"
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Column {
             HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp).padding(bottom = Spacing.md),
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.clickable(onClick = onBranchClick),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 7.dp).widthIn(max = 260.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.CallMerge,
+                            contentDescription = "工作分支",
+                            tint = XcagiTheme.extra.brandBlue,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "工作分支 · $branchLabel",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp).padding(bottom = Spacing.md),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -707,6 +790,125 @@ private fun GroupInputBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BranchPickerSheet(
+    branches: List<GitBranchDto>,
+    selectedBranch: String?,
+    onDismiss: () -> Unit,
+    onSelect: (String?) -> Unit,
+    onRefresh: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxWidth().padding(bottom = Spacing.xxl)) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "工作分支",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onRefresh) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新分支", modifier = Modifier.size(20.dp))
+                }
+            }
+            BranchPickerRow(
+                title = "自动新建任务分支",
+                subtitle = "普通派工默认隔离，跑完后再合并",
+                active = selectedBranch.isNullOrBlank(),
+                onClick = {
+                    onSelect(null)
+                    onDismiss()
+                },
+            )
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            if (branches.isEmpty()) {
+                Text(
+                    "暂无可选分支，点右上角刷新",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                )
+            } else {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    itemsIndexed(branches, key = { _, branch -> branch.name }) { _, branch ->
+                        val subtitle = when {
+                            branch.current -> "当前分支"
+                            branch.remote -> "远端分支"
+                            else -> "本地分支"
+                        }
+                        BranchPickerRow(
+                            title = branch.name,
+                            subtitle = subtitle,
+                            active = selectedBranch == branch.name,
+                            onClick = {
+                                onSelect(branch.name)
+                                onDismiss()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BranchPickerRow(
+    title: String,
+    subtitle: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = Spacing.lg, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.size(38.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.AutoMirrored.Filled.CallMerge,
+                    contentDescription = null,
+                    tint = if (active) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        if (active) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = "已选择",
+                tint = XcagiTheme.extra.brandBlue,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
 // ══════════════════════════════════════════
 //  群成员管理（查看 / 移除 / 添加 AI）
 // ══════════════════════════════════════════
@@ -732,7 +934,7 @@ private fun GroupMembersSheet(
                     Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    AppAvatar(imageSource = m.avatar.ifBlank { null }, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 38.dp, shape = RoundedCornerShape(8.dp))
+                    AppAvatar(imageSource = m.avatar.ifBlank { null }, fallback = aiGroupAvatarFallback(m.employee_id, m.name, m.avatar_key), size = 38.dp, shape = RoundedCornerShape(8.dp))
                     Spacer(Modifier.width(Spacing.md))
                     Text(m.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                     IconButton(onClick = { onRemove(m.employee_id) }) {
@@ -758,7 +960,7 @@ private fun GroupMembersSheet(
                             Modifier.fillMaxWidth().clickable { onAdd(emp) }.padding(horizontal = Spacing.lg, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            AppAvatar(imageSource = emp.avatarUrl, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 38.dp, shape = RoundedCornerShape(8.dp))
+                            AppAvatar(imageSource = emp.avatarUrl, fallback = aiGroupAvatarFallback(emp.employeeId, emp.name), size = 38.dp, shape = RoundedCornerShape(8.dp))
                             Spacer(Modifier.width(Spacing.md))
                             Column(Modifier.weight(1f)) {
                                 Text(emp.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
@@ -855,7 +1057,7 @@ fun AiGroupCreateScreen(
                                 onCheckedChange = { if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key) },
                             )
                             Spacer(Modifier.width(Spacing.sm))
-                            AppAvatar(imageSource = e.avatarUrl, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 40.dp, shape = RoundedCornerShape(8.dp))
+                            AppAvatar(imageSource = e.avatarUrl, fallback = aiGroupAvatarFallback(e.employeeId, e.name), size = 40.dp, shape = RoundedCornerShape(8.dp))
                             Spacer(Modifier.width(Spacing.md))
                             Column(Modifier.weight(1f)) {
                                 Text(e.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)

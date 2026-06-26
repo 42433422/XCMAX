@@ -23,7 +23,7 @@ const errorMessage = ref('');
 const industryId = ref('通用');
 const budgetRange = ref('');
 const industryOptions = INDUSTRY_PRESET_IDS.filter((id) => id !== '管理端');
-const BUDGET_OPTIONS = ['5 万以内', '5–20 万', '20–50 万', '50 万以上'];
+const BUDGET_OPTIONS = ['1–5 万', '5–10 万', '10–50 万', '50–100 万'];
 
 const productSku = ref<string>('generic');
 const isEnterpriseEdition = computed(() => productSku.value === 'enterprise');

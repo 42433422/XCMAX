@@ -37,14 +37,32 @@
       </header>
 
       <div class="aigc-chat__body" ref="bodyRef">
-        <div v-for="m in messages" :key="m.id" class="aigc-msg" :class="{ 'is-user': m.role === 'user' }">
-          <div v-if="m.role !== 'user'" class="aigc-msg__avatar">{{ (m.sender_name || 'AI').slice(0, 1) }}</div>
+        <div
+          v-for="m in messages"
+          :key="m.id"
+          class="aigc-msg"
+          :class="{
+            'is-user': m.role === 'user',
+            'is-work': m.kind === 'work_order' || m.kind === 'work_report',
+          }"
+        >
+          <div v-if="m.role !== 'user'" class="aigc-msg__avatar">
+            <img
+              v-if="messageAvatarSrc(m)"
+              class="aigc-msg__avatar-img"
+              :src="messageAvatarSrc(m) || undefined"
+              alt=""
+              decoding="async"
+              draggable="false"
+            />
+            <template v-else>{{ (m.sender_name || 'AI').slice(0, 1) }}</template>
+          </div>
           <div class="aigc-msg__col">
             <div v-if="m.role !== 'user'" class="aigc-msg__sender">{{ m.sender_name }}</div>
             <div class="aigc-msg__bubble">{{ m.body }}</div>
           </div>
         </div>
-        <div v-if="sending" class="aigc-typing">AI 成员正在回复…</div>
+        <div v-if="sending" class="aigc-typing">{{ sendingLabel }}</div>
         <div v-if="!messages.length && !sending" class="aigc-empty">
           {{ activeGroup.member_count ? '群里安静得很，发条消息试试' : '点「群成员」把 AI 员工拉进群，然后开聊' }}
         </div>
@@ -54,10 +72,19 @@
         <input
           v-model="input"
           class="aigc-input"
-          placeholder="发群消息（@成员 可单独点名）"
+          :placeholder="inputPlaceholder"
           :disabled="sending"
           @keyup.enter="send"
         />
+        <button
+          type="button"
+          class="aigc-mode"
+          :class="{ 'is-active': dispatchMode }"
+          :disabled="sending"
+          @click="dispatchMode = !dispatchMode"
+        >
+          派工
+        </button>
         <button class="aigc-send" :disabled="!input.trim() || sending" @click="send">发送</button>
       </footer>
     </section>
@@ -69,13 +96,39 @@
     <aside class="aigc-members" v-if="showMembers && activeGroup">
       <div class="aigc-members__head">群成员（{{ activeGroup.member_count }}）</div>
       <div v-for="mem in activeGroup.members" :key="mem.employee_id" class="aigc-member">
-        <span class="aigc-member__name">{{ mem.name }}</span>
+        <div class="aigc-member__main">
+          <div class="aigc-member__avatar">
+            <img
+              v-if="memberAvatarSrc(mem)"
+              class="aigc-member__avatar-img"
+              :src="memberAvatarSrc(mem) || undefined"
+              alt=""
+              decoding="async"
+              draggable="false"
+            />
+            <template v-else>{{ (mem.name || 'AI').slice(0, 1) }}</template>
+          </div>
+          <span class="aigc-member__name">{{ mem.name }}</span>
+        </div>
         <button class="aigc-text-btn aigc-text-btn--danger" @click="removeMember(mem.employee_id)">移出</button>
       </div>
       <div class="aigc-members__head">添加 AI 成员</div>
       <div v-if="!addableEmployees.length" class="aigc-empty aigc-empty--sm">没有可添加的 AI 员工</div>
       <button v-for="e in addableEmployees" :key="e.employee_id" class="aigc-member aigc-member--add" @click="addMember(e)">
-        <span class="aigc-member__name">{{ e.name }}</span>
+        <div class="aigc-member__main">
+          <div class="aigc-member__avatar">
+            <img
+              v-if="pickEmployeeAvatarSrc(e)"
+              class="aigc-member__avatar-img"
+              :src="pickEmployeeAvatarSrc(e) || undefined"
+              alt=""
+              decoding="async"
+              draggable="false"
+            />
+            <template v-else>{{ (e.name || 'AI').slice(0, 1) }}</template>
+          </div>
+          <span class="aigc-member__name">{{ e.name }}</span>
+        </div>
         <span class="aigc-member__add">＋</span>
       </button>
     </aside>
@@ -95,6 +148,7 @@ import {
   type AiGroupMember,
   type AiGroupMessage,
 } from '@/api/aiGroups';
+import { resolveSuperEmployeeAvatarSrc } from '@/constants/superEmployeeAvatars';
 import { apiFetch } from '@/utils/apiBase';
 
 type PickEmployee = { employee_id: string; mod_id: string; name: string; avatar: string; summary: string };
@@ -106,12 +160,44 @@ const employees = ref<PickEmployee[]>([]);
 const input = ref('');
 const sending = ref(false);
 const showMembers = ref(false);
+const dispatchMode = ref(false);
 const bodyRef = ref<HTMLElement | null>(null);
 
 const addableEmployees = computed(() => {
   const inGroup = new Set((activeGroup.value?.members || []).map((m: AiGroupMember) => m.employee_id));
   return employees.value.filter((e) => !inGroup.has(e.employee_id));
 });
+
+const inputPlaceholder = computed(() =>
+  dispatchMode.value ? '派工给群成员（@成员 可点对点派工）' : '发群消息（@成员 可单独点名）',
+);
+
+const sendingLabel = computed(() =>
+  dispatchMode.value ? '员工正在执行并汇报…' : 'AI 成员正在回复…',
+);
+
+function withBaseUrl(path: string): string {
+  const raw = String(path || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const base = String(import.meta.env.BASE_URL || '/');
+  return `${base.replace(/\/$/, '')}/${raw.replace(/^\//, '')}`;
+}
+
+function memberAvatarSrc(member: AiGroupMember): string | null {
+  const resolved = resolveSuperEmployeeAvatarSrc(member.employee_id, member.avatar);
+  return resolved ? withBaseUrl(resolved) : null;
+}
+
+function pickEmployeeAvatarSrc(employee: PickEmployee): string | null {
+  const resolved = resolveSuperEmployeeAvatarSrc(employee.employee_id, employee.avatar);
+  return resolved ? withBaseUrl(resolved) : null;
+}
+
+function messageAvatarSrc(message: AiGroupMessage): string | null {
+  const resolved = resolveSuperEmployeeAvatarSrc(message.sender_id, message.sender_avatar);
+  return resolved ? withBaseUrl(resolved) : null;
+}
 
 async function loadGroups(): Promise<void> {
   try {
@@ -145,7 +231,7 @@ async function send(): Promise<void> {
   sending.value = true;
   await scrollToBottom();
   try {
-    const res = await postAiGroupMessage(g.id, text, [], 'admin');
+    const res = await postAiGroupMessage(g.id, text, [], 'admin', { dispatch: dispatchMode.value });
     messages.value = [...messages.value.filter((m) => !m.id.startsWith('local-')), ...res.messages];
     if (res.group) {
       activeGroup.value = res.group;
@@ -249,19 +335,27 @@ onMounted(() => {
 .aigc-chat__body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
 .aigc-msg { display: flex; gap: 8px; align-items: flex-start; max-width: 72%; }
 .aigc-msg.is-user { align-self: flex-end; flex-direction: row-reverse; }
-.aigc-msg__avatar { width: 34px; height: 34px; border-radius: 8px; background: #5b8def22; color: #3a5bb8; display: flex; align-items: center; justify-content: center; font-size: 13px; flex: none; }
+.aigc-msg__avatar { width: 34px; height: 34px; border-radius: 8px; background: #5b8def22; color: #3a5bb8; display: flex; align-items: center; justify-content: center; font-size: 13px; flex: none; overflow: hidden; }
+.aigc-msg__avatar-img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .aigc-msg__col { display: flex; flex-direction: column; }
 .aigc-msg__sender { font-size: 11px; color: var(--color-text-2, #999); margin: 0 2px 3px; }
 .aigc-msg__bubble { padding: 9px 12px; border-radius: 10px; background: var(--color-surface, #fff); border: 1px solid var(--color-border-weak, #eee); font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .aigc-msg.is-user .aigc-msg__bubble { background: #95ec69; border-color: #7fd957; color: #1f2329; }
+.aigc-msg.is-work .aigc-msg__bubble { border-color: #5b8def55; background: #f7fbff; }
 .aigc-typing { font-size: 12px; color: var(--color-text-2, #999); }
 .aigc-chat__input { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--color-border, #e5e7eb); background: var(--color-surface, #fff); }
 .aigc-input { flex: 1; border: 1px solid var(--color-border, #ddd); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }
+.aigc-mode { border: 1px solid var(--color-border, #ddd); background: var(--color-surface, #fff); color: var(--color-text-1, #333); border-radius: 8px; padding: 0 12px; font-size: 13px; cursor: pointer; }
+.aigc-mode.is-active { border-color: #3370ff; background: #eef4ff; color: #245bdb; font-weight: 600; }
+.aigc-mode:disabled { color: #9ca3af; cursor: not-allowed; }
 .aigc-send { padding: 0 18px; border: none; border-radius: 8px; background: #07c160; color: #fff; cursor: pointer; }
 .aigc-send:disabled { background: #c8c9cc; cursor: not-allowed; }
 .aigc-members { width: 240px; border-left: 1px solid var(--color-border, #e5e7eb); background: var(--color-surface, #fff); padding: 12px 14px; overflow-y: auto; }
 .aigc-members__head { font-size: 12px; color: var(--color-text-2, #888); margin: 12px 0 6px; }
-.aigc-member { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 8px 4px; border: none; background: none; border-bottom: 1px solid var(--color-border-weak, #f0f0f0); cursor: default; }
+.aigc-member { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 8px 4px; border: none; background: none; border-bottom: 1px solid var(--color-border-weak, #f0f0f0); cursor: default; gap: 8px; }
+.aigc-member__main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.aigc-member__avatar { width: 28px; height: 28px; border-radius: 7px; background: #5b8def22; color: #3a5bb8; display: flex; align-items: center; justify-content: center; font-size: 12px; flex: none; overflow: hidden; }
+.aigc-member__avatar-img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .aigc-member--add { cursor: pointer; }
 .aigc-member__name { font-size: 13px; }
 .aigc-member__add { color: #3370ff; }

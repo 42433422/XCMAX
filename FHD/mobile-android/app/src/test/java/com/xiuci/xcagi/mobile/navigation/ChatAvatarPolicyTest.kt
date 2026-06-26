@@ -19,6 +19,24 @@ class ChatAvatarPolicyTest {
     }
 
     @Test
+    fun `cursor pinned conversation uses cursor avatar policy`() {
+        assertTrue(isCursorConversation(PinnedIds.CURSOR))
+        assertEquals(
+            AppAvatarFallback.CURSOR,
+            chatAvatarFallback(PinnedIds.CURSOR, hasEmployeeProfile = false),
+        )
+    }
+
+    @Test
+    fun `claude pinned conversation uses claude avatar policy`() {
+        assertTrue(isClaudeConversation(PinnedIds.CLAUDE))
+        assertEquals(
+            AppAvatarFallback.CLAUDE,
+            chatAvatarFallback(PinnedIds.CLAUDE, hasEmployeeProfile = false),
+        )
+    }
+
+    @Test
     fun `other conversations do not use codex avatar policy`() {
         assertFalse(isCodexConversation(null))
         assertFalse(isCodexConversation("assistant"))

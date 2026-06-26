@@ -7,6 +7,7 @@ import com.xiuci.xcagi.mobile.core.db.ChatCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.im.ImRepository
+import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.network.FhdApi
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.core.network.SyncPullBody
@@ -23,7 +24,30 @@ data class SyncStatusSummary(
     val healthy: Boolean = false,
     val cursor: Int = 0,
     val lastSyncAt: String = "",
+    val employeeCount: Int = 0,
 )
+
+internal object MobileSyncPolicy {
+    fun shouldSkipAutoSync(host: String, mode: String): Boolean =
+        host.isBlank() && mode.trim().lowercase() != "cloud"
+
+    fun isAdminAccountKind(accountKind: String): Boolean =
+        accountKind.trim().lowercase() in setOf("admin", "admin_portal")
+
+    fun shouldRefreshEmployeeRoster(accountKind: String, showsEnterpriseNav: Boolean): Boolean =
+        showsEnterpriseNav || isAdminAccountKind(accountKind)
+
+    fun statusLabel(lastSyncAt: String, mode: String, pcOnline: Boolean): String {
+        val last = lastSyncAt.trim()
+        val normalizedMode = mode.trim().lowercase()
+        return when {
+            last.isBlank() -> "尚未同步"
+            normalizedMode == "cloud" -> "云端同步 ${last.take(19).replace('T', ' ')}"
+            !pcOnline -> "桌面执行端未连接"
+            else -> "上次同步 ${last.take(19).replace('T', ' ')}"
+        }
+    }
+}
 
 @Singleton
 class MobileSyncRepository @Inject constructor(
@@ -64,9 +88,7 @@ class MobileSyncRepository @Inject constructor(
     suspend fun pullAndCache(): Result<SyncStatusSummary> {
         return try {
             repo.syncRouterFromStore()
-            if (!repo.checkHealth()) {
-                return Result.failure(Exception("电脑未在线"))
-            }
+            repo.preferCloudIfLanUnreachable()
             val since = sessionStore.syncCursor()
             val res = fhd().mobileSyncPull(SyncPullBody(since))
             if (!res.success) {
@@ -135,12 +157,29 @@ class MobileSyncRepository @Inject constructor(
                 )
             }
 
+            val accountKind = sessionStore.accountKindFlow.first()
+            val adminMode = MobileSyncPolicy.isAdminAccountKind(accountKind)
+            val employeeCount =
+                if (MobileSyncPolicy.shouldRefreshEmployeeRoster(
+                        accountKind,
+                        ProductSkuConfig.showsEnterpriseNav,
+                    )
+                ) {
+                    repo.refreshAndCacheModInfos(adminMode)
+                        .getOrNull()
+                        ?.sumOf { it.workflow_employees.size }
+                        ?: 0
+                } else {
+                    0
+                }
+
             Result.success(
                 SyncStatusSummary(
                     label = "已同步",
                     healthy = true,
                     cursor = cursor,
                     lastSyncAt = now,
+                    employeeCount = employeeCount,
                 ),
             )
         } catch (e: Exception) {
@@ -150,10 +189,7 @@ class MobileSyncRepository @Inject constructor(
 
     suspend fun statusLabel(pcOnline: Boolean): String {
         val last = sessionStore.lastSyncAtFlow.first()
-        return when {
-            !pcOnline -> "需连接电脑"
-            last.isBlank() -> "尚未同步"
-            else -> "上次同步 ${last.take(19).replace('T', ' ')}"
-        }
+        val mode = sessionStore.serverModeFlow.first()
+        return MobileSyncPolicy.statusLabel(last, mode, pcOnline)
     }
 }

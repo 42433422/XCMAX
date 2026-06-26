@@ -8,7 +8,7 @@ import {
 describe('superEmployeeAvatars', () => {
   it('maps super employee ids to avatar keys and brand assets', () => {
     expect(superEmployeeAvatarKeyForId('cursor-super-employee')).toBe('cursor');
-    expect(superEmployeeAvatarSrcForId('cursor-super-employee')).toContain('cursor-app-icon.svg');
+    expect(superEmployeeAvatarSrcForId('cursor-super-employee')).toContain('cursor-app-icon.png');
     expect(superEmployeeAvatarSrcForId('codex-super-employee')).toContain('codex-app-icon.png');
     expect(superEmployeeAvatarSrcForId('claude-super-employee')).toContain('claude-app-icon.svg');
   });

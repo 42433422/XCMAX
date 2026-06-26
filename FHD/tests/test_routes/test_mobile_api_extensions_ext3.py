@@ -1218,6 +1218,10 @@ class TestMobileSyncStatusAdditional:
         else:
             data = result
         assert data.get("data", {}).get("inbox_pending") == 5
+        assert data.get("data", {}).get("sync_mode") == "cloud"
+        assert data.get("data", {}).get("standalone_supported") is True
+        assert data.get("data", {}).get("desktop_required") is False
+        assert data.get("data", {}).get("desktop_executor", {}).get("required") is False
 
     @pytest.mark.asyncio
     async def test_status_with_zero_inbox_pending(self, ext_mod):
@@ -1275,6 +1279,8 @@ class TestMobileSyncPullAdditional:
             data = json.loads(result.body)
         else:
             data = result
+        assert data.get("data", {}).get("source") == "cloud"
+        assert data.get("data", {}).get("executor_required") is False
         assert data.get("data", {}).get("im_change_count") == 2
         # update_remote_cursor should be called with cursor=10
         mock_sync_db.update_remote_cursor.assert_called_once_with(10)

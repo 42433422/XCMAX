@@ -1,7 +1,7 @@
 {
   "app": {
     "bundleName": "com.xiuci.xcagi.mobile.enterprise",
-    "vendor": "xiuci",
+    "vendor": "成都修茈科技有限公司",
     "versionCode": 100000,
     "versionName": "10.0.0",
     "icon": "$media:app_icon",

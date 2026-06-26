@@ -17,6 +17,7 @@ OpenAPI 与实际路由一致性测试（pytest 版）
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -109,3 +110,29 @@ def test_openapi_schema_builds_without_pydantic_errors():
     assert isinstance(schema, dict)
     assert schema.get("paths"), "OpenAPI schema 必须包含非空 paths"
     assert "/api/health" in (schema.get("paths") or {}), "健康检查端点必须在 OpenAPI 中可见"
+
+
+def test_warning_baseline_detects_new_warning(tmp_path: Path):
+    """strict 模式应允许已登记 warning，但阻断新增 warning。"""
+    checker = _load_checker_module()
+    known = checker.Finding(
+        level="warn",
+        code="MISSING_SUMMARY",
+        message="known",
+        method="GET",
+        path="/known",
+    )
+    new = checker.Finding(
+        level="warn",
+        code="MISSING_SUMMARY",
+        message="new",
+        method="GET",
+        path="/new",
+    )
+    baseline = tmp_path / "openapi_warning_baseline.json"
+    baseline.write_text(
+        json.dumps(checker._warning_baseline_payload([known]), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    assert checker._new_warnings_against_baseline([known, new], baseline) == [new]

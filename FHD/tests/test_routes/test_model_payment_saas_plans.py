@@ -27,3 +27,6 @@ def test_plan_by_id_resolves_trial_plan() -> None:
     plan = _plan_by_id("saas-trial-30")
     assert plan is not None
     assert plan["amount_cents"] == 9900
+    assert plan["quota_cents"] == 10_000
+    assert plan["duration_days"] == 30
+    assert plan["expires_behavior"] == "freeze"
