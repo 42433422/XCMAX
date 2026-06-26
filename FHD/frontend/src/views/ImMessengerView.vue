@@ -1060,9 +1060,13 @@ function isPinnedContactActive(contact: PinnedImEntry): boolean {
 
 function closeOverlappingAssistantFloat(): void {
   const emitClose = () => {
-    window.dispatchEvent(new CustomEvent('xcagi:close-assistant-float'));
-    window.dispatchEvent(new CustomEvent('xcagi:close-floating-chat'));
-    window.dispatchEvent(new CustomEvent('xcagi:suppress-floating-chat'));
+    try {
+      window.dispatchEvent(new CustomEvent('xcagi:close-assistant-float'));
+      window.dispatchEvent(new CustomEvent('xcagi:close-floating-chat'));
+      window.dispatchEvent(new CustomEvent('xcagi:suppress-floating-chat'));
+    } catch {
+      /* ignore non-browser / post-teardown environments */
+    }
   };
   try {
     emitClose();
