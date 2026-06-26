@@ -16,12 +16,12 @@ router = APIRouter(tags=["app"])
 _DEFAULT_BASE = "https://xiu-ci.com"
 _LEGAL_VERSION = os.environ.get("XCAGI_LEGAL_VERSION", "1").strip() or "1"
 _ICP_NUMBER = (
-    os.environ.get("XCAGI_ICP_NUMBER", "蜀ICP备2026014056号-1").strip() or "蜀ICP备2026014056号-1"
+    os.environ.get("XCAGI_ICP_NUMBER", "蜀ICP备2026014056号-3A").strip() or "蜀ICP备2026014056号-3A"
 )
 _APP_FILING_NUMBER = (
-    os.environ.get("XCAGI_APP_FILING_NUMBER", "蜀ICP备2026015936号").strip()
+    os.environ.get("XCAGI_APP_FILING_NUMBER", "蜀ICP备2026014056号-3A").strip()
     or os.environ.get("XCAGI_ANDROID_APP_FILING_NUMBER", "").strip()
-    or "蜀ICP备2026015936号"
+    or "蜀ICP备2026014056号-3A"
 )
 _APP_FILING_APPROVED = (
     os.environ.get("XCAGI_ANDROID_APP_FILING_APPROVED", "1") or ""
