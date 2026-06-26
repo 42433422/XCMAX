@@ -75,6 +75,8 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.ChatComposerBar
 import com.xiuci.xcagi.mobile.ui.components.mobile.ChatToolCardAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
