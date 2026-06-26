@@ -18,6 +18,7 @@ import com.xiuci.xcagi.mobile.core.model.GitBranchListData
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.TraeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.MeData
@@ -389,6 +390,16 @@ interface FhdApi {
         @Body body: CursorSuperEmployeeMobileMessageBody,
     ): MobileEnvelope<Map<String, Any?>>
 
+    @GET(ApiEndpoints.ADMIN_TRAE_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun getTraeSuperEmployeeMessages(
+        @Query("limit") limit: Int = 80,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ADMIN_TRAE_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun postTraeSuperEmployeeMessage(
+        @Body body: TraeSuperEmployeeMobileMessageBody,
+    ): MobileEnvelope<Map<String, Any?>>
+
     // ── AI 群聊 ──
     @GET(ApiEndpoints.GIT_BRANCHES)
     suspend fun getGitBranches(): MobileEnvelope<GitBranchListData>
@@ -410,6 +421,12 @@ interface FhdApi {
         @Path("groupId") groupId: String,
         @Body body: AiGroupMessageBody,
     ): MobileEnvelope<AiGroupPostData>
+
+    @DELETE(ApiEndpoints.AI_GROUP_MESSAGE)
+    suspend fun deleteAiGroupMessage(
+        @Path("groupId") groupId: String,
+        @Path("messageId") messageId: String,
+    ): MobileEnvelope<Map<String, Any?>>
 
     @POST(ApiEndpoints.AI_GROUP_MEMBERS)
     suspend fun addAiGroupMember(

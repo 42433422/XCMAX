@@ -24,6 +24,7 @@ from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+from app.application.trae_super_employee_service import TraeSuperEmployeeService
 from app.application.facades.mobile_relay_facade import MobileRelayService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
@@ -67,6 +68,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     ClaudeSuperEmployeeMobileMessageBody,
     CodexSuperEmployeeMobileMessageBody,
     CursorSuperEmployeeMobileMessageBody,
+    TraeSuperEmployeeMobileMessageBody,
     DeviceRegisterBody,
     MobileServiceBridgeRespondBody,
     OidcExchangeBody,
@@ -1588,6 +1590,74 @@ async def mobile_admin_cursor_super_employee_invoke(
         )
 
 
+@extension_router.get("/admin/trae-super-employee/messages")
+async def mobile_admin_trae_super_employee_messages(
+    request: Request,
+    limit: int = Query(default=80, ge=1, le=200),
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的 Trae 超级员工对话记录。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        messages = TraeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_trae_super_employee_messages")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/admin/trae-super-employee/messages")
+async def mobile_admin_trae_super_employee_invoke(
+    request: Request,
+    body: TraeSuperEmployeeMobileMessageBody,
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的软件内 Trae 调用入口。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    text = (body.message or body.body or "").strip()
+    context = dict(body.context or {})
+    context.setdefault("source", "mobile_im")
+    context.setdefault("device_scope", "all_devices")
+    context.setdefault("target_devices", ["all"])
+    try:
+        result = TraeSuperEmployeeService().invoke(
+            user_id=uid,
+            message=text,
+            context=context,
+        )
+        return format_mobile_response(data=result)
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400),
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_trae_super_employee_invoke")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
 # ── AI 群聊（微信式多 AI 群组）──
 
 
@@ -1888,6 +1958,40 @@ async def mobile_ai_group_post(
         )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_ai_group_post")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.delete("/ai-groups/{group_id}/messages/{message_id}")
+async def mobile_ai_group_delete_message(
+    request: Request,
+    group_id: str,
+    message_id: str,
+    user=Depends(get_mobile_user),
+):
+    """删除自己在 AI 群聊里发送的一条消息。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        result = AiGroupChatService(mode=_mobile_group_mode(request)).delete_message(
+            user_id=uid,
+            group_id=group_id,
+            message_id=message_id,
+        )
+        return format_mobile_response(data=result)
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_delete_message")
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500), status_code=500
         )

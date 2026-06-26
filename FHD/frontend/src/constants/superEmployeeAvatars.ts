@@ -1,20 +1,22 @@
-/** 超级员工（Codex / Claude / Cursor）头像 key 与静态资源路径。 */
-export type SuperEmployeeAvatarKey = 'codex' | 'claude' | 'cursor';
+/** 超级员工（Codex / Claude / Cursor / Trae）头像 key 与静态资源路径。 */
+export type SuperEmployeeAvatarKey = 'codex' | 'claude' | 'cursor' | 'trae';
 
 const BRAND_BASE = `${import.meta.env.BASE_URL || '/'}brand/`;
 
-export const SUPER_EMPLOYEE_AVATAR_KEYS = ['codex', 'claude', 'cursor'] as const;
+export const SUPER_EMPLOYEE_AVATAR_KEYS = ['codex', 'claude', 'cursor', 'trae'] as const;
 
 export const SUPER_EMPLOYEE_AVATAR_SRC: Record<SuperEmployeeAvatarKey, string> = {
   codex: `${BRAND_BASE}codex-app-icon.png`,
   claude: `${BRAND_BASE}claude-app-icon.svg`,
   cursor: `${BRAND_BASE}cursor-app-icon.png`,
+  trae: `${BRAND_BASE}trae-app-icon.png`,
 };
 
 export const SUPER_EMPLOYEE_ID_TO_AVATAR_KEY: Record<string, SuperEmployeeAvatarKey> = {
   'codex-super-employee': 'codex',
   'claude-super-employee': 'claude',
   'cursor-super-employee': 'cursor',
+  'trae-super-employee': 'trae',
 };
 
 export function superEmployeeAvatarKeyForId(

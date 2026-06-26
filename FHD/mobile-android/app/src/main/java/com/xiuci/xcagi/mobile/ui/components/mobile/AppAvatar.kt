@@ -26,6 +26,7 @@ enum class AppAvatarFallback(@DrawableRes val drawableRes: Int) {
     CODEX(R.drawable.codex_app_icon),
     CLAUDE(R.drawable.claude_app_icon),
     CURSOR(R.drawable.cursor_app_icon),
+    TRAE(R.drawable.trae_app_icon),
 }
 
 @Composable

@@ -530,6 +530,7 @@ fun XcagiNavHost(
                         PinnedIds.CODEX -> FixedPartnerKinds.CODEX
                         PinnedIds.CURSOR -> FixedPartnerKinds.CURSOR
                         PinnedIds.CLAUDE -> FixedPartnerKinds.CLAUDE
+                        PinnedIds.TRAE -> FixedPartnerKinds.TRAE
                         else -> null
                     }
                     ChatScreen(
@@ -659,6 +660,7 @@ fun XcagiNavHost(
                                             FixedPartnerKinds.CODEX -> Routes.conversationChat(PinnedIds.CODEX)
                                             FixedPartnerKinds.CURSOR -> Routes.conversationChat(PinnedIds.CURSOR)
                                             FixedPartnerKinds.CLAUDE -> Routes.conversationChat(PinnedIds.CLAUDE)
+                                            FixedPartnerKinds.TRAE -> Routes.conversationChat(PinnedIds.TRAE)
                                             else -> Routes.AI_CHAT
                                         }
                                 nav.navigate(target) { launchSingleTop = true }

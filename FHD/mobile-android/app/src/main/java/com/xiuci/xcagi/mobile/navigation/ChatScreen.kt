@@ -26,11 +26,9 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -45,8 +43,9 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Difference
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -88,8 +87,6 @@ import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
@@ -162,6 +159,9 @@ internal fun isCursorConversation(conversationId: String?): Boolean =
 internal fun isClaudeConversation(conversationId: String?): Boolean =
     conversationId?.trim() == PinnedIds.CLAUDE
 
+internal fun isTraeConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.TRAE
+
 internal fun chatAvatarFallback(
     conversationId: String?,
     hasEmployeeProfile: Boolean,
@@ -170,6 +170,7 @@ internal fun chatAvatarFallback(
         isCodexConversation(conversationId) -> AppAvatarFallback.CODEX
         isCursorConversation(conversationId) -> AppAvatarFallback.CURSOR
         isClaudeConversation(conversationId) -> AppAvatarFallback.CLAUDE
+        isTraeConversation(conversationId) -> AppAvatarFallback.TRAE
         hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
         else -> AppAvatarFallback.ASSISTANT
     }
@@ -194,7 +195,6 @@ fun ChatScreen(
     val userAvatarSource by vm.userAvatarSource.collectAsState()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showMoreSheet by remember { mutableStateOf(false) }
     var showVoiceSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -258,6 +258,7 @@ fun ChatScreen(
     val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
     val cursorConversation = remember(conversationId) { isCursorConversation(conversationId) }
     val claudeConversation = remember(conversationId) { isClaudeConversation(conversationId) }
+    val traeConversation = remember(conversationId) { isTraeConversation(conversationId) }
     val employeeProfile =
         remember(employeeRef, employees) {
             employeeRef?.let { ref -> employees.findEmployee(ref.modId, ref.employeeId) }
@@ -268,6 +269,7 @@ fun ChatScreen(
             codexConversation -> "超级员工-Codex"
             cursorConversation -> "超级员工-Cursor"
             claudeConversation -> "超级员工-Claude"
+            traeConversation -> "超级员工-Trae"
             else -> conversationTitle
         }
     val aiAvatarFallback = chatAvatarFallback(conversationId, employeeProfile != null)
@@ -322,43 +324,6 @@ fun ChatScreen(
         )
     }
 
-    // 更多 BottomSheet
-    if (showMoreSheet) {
-        androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { showMoreSheet = false },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(Modifier.padding(bottom = Spacing.xxl)) {
-                Text(
-                    "更多",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                    modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
-                )
-                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                WeCellGroup {
-                    WeCell(
-                        title = "新建对话",
-                        subtitle = "清空当前对话，开始新的一轮",
-                        iconTint = XcagiTheme.extra.brandBlue,
-                        iconBg = MaterialTheme.colorScheme.primaryContainer,
-                        showArrow = true,
-                        showDivider = true,
-                        onClick = { showMoreSheet = false; vm.clearChat(); input = "" },
-                    )
-                    WeCell(
-                        title = "OCR 拍照识别",
-                        iconTint = MaterialTheme.colorScheme.secondary,
-                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                        showArrow = true,
-                        showDivider = false,
-                        onClick = { showMoreSheet = false; onOpenOcr() },
-                    )
-                }
-            }
-        }
-    }
-
     Scaffold(
         containerColor = imChatBg(),
         topBar = {
@@ -381,12 +346,58 @@ fun ChatScreen(
         bottomBar = {
             ImInputBar(
                 value = input,
-                onValueChange = { input = it },
-                onSend = { submitMessage() },
+                onValueChange = {
+                    input = it
+                    if (it.isNotBlank()) showMoreSheet = false
+                },
+                onSend = {
+                    submitMessage()
+                    showMoreSheet = false
+                },
                 onStop = { vm.stopChat() },
                 streaming = streaming,
                 onVoice = { startVoiceInput() },
-                onMore = { showMoreSheet = true },
+                onMore = { showMoreSheet = !showMoreSheet },
+                showToolPanel = showMoreSheet && !streaming && input.isBlank(),
+                onNewChat = {
+                    showMoreSheet = false
+                    vm.clearChat()
+                    input = ""
+                },
+                onOpenOcr = {
+                    showMoreSheet = false
+                    onOpenOcr()
+                },
+                onVoiceInput = {
+                    showMoreSheet = false
+                    startVoiceInput()
+                },
+                onSyncWork = {
+                    showMoreSheet = false
+                    vm.runSyncNow()
+                },
+                onRefreshSuggestions = {
+                    showMoreSheet = false
+                    vm.loadHomeHub()
+                },
+                onOpenProfile = onOpenProfile?.let {
+                    {
+                        showMoreSheet = false
+                        it.invoke()
+                    }
+                },
+                onOpenCurrentEmployee = employeeRef?.let { ref ->
+                    {
+                        showMoreSheet = false
+                        onOpenEmployeeProfile(ref.modId, ref.employeeId)
+                    }
+                },
+                onOpenCurrentMod = employeeProfile?.modId?.takeIf { it.isNotBlank() }?.let { modId ->
+                    {
+                        showMoreSheet = false
+                        onOpenMod(modId)
+                    }
+                },
                 gitBranch = gitBranch,
                 showDevTools = claudeConversation || codexConversation || cursorConversation,
                 onGitMerge = { gitBranch?.let { vm.gitMerge(it, conversationId) } },
@@ -657,6 +668,15 @@ private fun ImInputBar(
     modifier: Modifier = Modifier,
     onVoice: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
+    showToolPanel: Boolean = false,
+    onNewChat: () -> Unit = {},
+    onOpenOcr: () -> Unit = {},
+    onVoiceInput: () -> Unit = {},
+    onSyncWork: () -> Unit = {},
+    onRefreshSuggestions: () -> Unit = {},
+    onOpenProfile: (() -> Unit)? = null,
+    onOpenCurrentEmployee: (() -> Unit)? = null,
+    onOpenCurrentMod: (() -> Unit)? = null,
     gitBranch: String? = null,
     showDevTools: Boolean = false,
     onGitMerge: () -> Unit = {},
@@ -778,15 +798,35 @@ private fun ImInputBar(
                         }
                     }
                 } else if (onMore != null) {
-                    IconButton(onClick = onMore, modifier = Modifier.size(38.dp)) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = "更多",
-                            tint = imTextPrimary(),
-                            modifier = Modifier.size(26.dp),
-                        )
-                    }
+                    XcagiComposerMoreButton(
+                        expanded = showToolPanel,
+                        onClick = onMore,
+                        tint = imTextPrimary(),
+                    )
                 }
+            }
+            if (showToolPanel && onMore != null) {
+                val closeTools = onMore
+                XcagiComposerToolPanel(
+                    actions =
+                        buildList {
+                            add(XcagiComposerToolAction("新建对话", "清空当前上下文", Icons.Default.AutoAwesome, onNewChat))
+                            add(XcagiComposerToolAction("语音输入", "打开系统语音识别", Icons.Default.Mic, onVoiceInput))
+                            add(XcagiComposerToolAction("OCR 识别", "拍照或选图识别", Icons.Default.PhotoCamera, onOpenOcr))
+                            add(XcagiComposerToolAction("同步工作台", "刷新移动端缓存", Icons.Default.Refresh, onSyncWork))
+                            add(XcagiComposerToolAction("刷新建议", "更新快捷问题", Icons.Default.QrCodeScanner, onRefreshSuggestions))
+                            onOpenCurrentEmployee?.let {
+                                add(XcagiComposerToolAction("员工资料", "查看当前 AI 员工", Icons.Default.Person, it))
+                            }
+                            onOpenCurrentMod?.let {
+                                add(XcagiComposerToolAction("打开 Mod", "进入员工来源模块", Icons.Default.Apps, it))
+                            }
+                            onOpenProfile?.let {
+                                add(XcagiComposerToolAction("个人资料", "查看账号与工作身份", Icons.Default.Person, it))
+                            }
+                            add(XcagiComposerToolAction("收起工具", "回到输入状态", Icons.Default.Close, closeTools))
+                        },
+                )
             }
         }
     }

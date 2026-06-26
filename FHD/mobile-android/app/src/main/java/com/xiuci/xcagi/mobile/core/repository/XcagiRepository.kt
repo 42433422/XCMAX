@@ -19,6 +19,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.TraeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.MarketAuthResponse
@@ -167,6 +168,24 @@ class XcagiRepository @Inject constructor(
         if (sessionStore.serverModeFlow.first() == "cloud") return false
         val host = sessionStore.fhdHostFlow.first()
         return host.isNotBlank() && checkHealth(host)
+    }
+
+    private suspend fun preferLanForSuperEmployee(): Boolean {
+        syncRouterFromStore()
+        val currentHost = sessionStore.fhdHostFlow.first()
+        if (sessionStore.serverModeFlow.first() != "cloud" && currentHost.isNotBlank()) {
+            return checkHealth(currentHost)
+        }
+        val localBase = sessionStore.localBaseUrl().trim()
+        val (host, port) = hostPortFromApiBase(localBase)
+        if (host.isBlank()) return false
+        val hostWithPort = compactHostPort(host, port.takeIf { it > 0 } ?: BuildConfig.FHD_DEFAULT_PORT)
+        if (!checkHealth(hostWithPort)) return false
+        sessionStore.setFhdHost(hostWithPort)
+        sessionStore.setServerMode("lan")
+        serverRouter.fhdHost = hostWithPort
+        serverRouter.mode = ServerMode.LAN
+        return true
     }
 
     private suspend fun authHeader(): String {
@@ -1196,13 +1215,14 @@ class XcagiRepository @Inject constructor(
         if (superEmployeeRelayKind != null) {
             val isClaude = conversationId == PinnedIds.CLAUDE
             val isCursor = conversationId == PinnedIds.CURSOR
+            val isTrae = conversationId == PinnedIds.TRAE
             val tokenSink: (String) -> Unit = { t -> acc.append(t); onToken(t) }
             // 捕获最终回复用于本地持久化：relay 路径真正的结果经 onDone 下发（不进 acc），
             // 必须在此截获，否则缓存到的只是"思考中…"等状态闲话。
             var finalReply = ""
             val doneSink: (String) -> Unit = { full -> finalReply = full; onDone(full) }
             // 连不到本地 PC 但已配对中继电脑 → 经服务器中继到本地电脑执行（超级员工必须本地设备）。
-            val relayId = if (!isPcReachable()) relayIdForSuperEmployeeDispatch() else ""
+            val relayId = if (!preferLanForSuperEmployee()) relayIdForSuperEmployeeDispatch() else ""
             if (relayId.isNotBlank()) {
                 streamRelayCodexTask(
                     relayId = relayId,
@@ -1216,6 +1236,7 @@ class XcagiRepository @Inject constructor(
             } else when {
                 isClaude -> streamClaudeSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
                 isCursor -> streamCursorSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
+                isTrae -> streamTraeSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
                 else -> streamCodexSuperEmployeeChat(message = message, onToken = tokenSink, onDone = doneSink, onError = onError)
             }
             val finalText = finalReply.ifBlank { acc.toString() }
@@ -1280,7 +1301,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
+                        "conversation_id" to PinnedIds.CODEX,
                     ),
                 ),
             )
@@ -1354,7 +1375,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
+                        "conversation_id" to PinnedIds.CLAUDE,
                     ),
                 ),
             )
@@ -1428,7 +1449,7 @@ class XcagiRepository @Inject constructor(
                     context = mapOf(
                         "source" to "mobile_chat",
                         "client_surface" to "mobile",
-                        "mode" to "code",
+                        "conversation_id" to PinnedIds.CURSOR,
                     ),
                 ),
             )
@@ -1483,6 +1504,80 @@ class XcagiRepository @Inject constructor(
         }
     }
 
+    // 超级员工-Trae：与 Codex/Cursor/Claude 同构，仅工具/端点不同。
+    private suspend fun streamTraeSuperEmployeeChat(
+        message: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        try {
+            val statusPrefix = "已提交到超级员工-Trae，正在执行"
+            onToken(statusPrefix)
+            var emitted = statusPrefix
+
+            val response = fhd().postTraeSuperEmployeeMessage(
+                body = TraeSuperEmployeeMobileMessageBody(
+                    message = message,
+                    body = message,
+                    context = mapOf(
+                        "source" to "mobile_chat",
+                        "client_surface" to "mobile",
+                        "conversation_id" to PinnedIds.TRAE,
+                    ),
+                ),
+            )
+            if (!response.success) {
+                onError(response.message.ifBlank { "超级员工-Trae 调用失败" })
+                return
+            }
+
+            val requestId = extractDispatchRequestId(response.data)
+            val taskId = extractTaskId(response.data)
+            val immediate = extractCodexMessageText(response.data, requestId, taskId)
+            if (immediate.isNotBlank()) {
+                val immediateTrimmed = immediate.trim()
+                val delta = immediateTrimmed.removePrefix(emitted)
+                if (delta.isNotBlank()) {
+                    onToken(delta)
+                    emitted = immediateTrimmed
+                }
+                onDone(immediateTrimmed)
+                return
+            }
+
+            var finalText = ""
+            repeat(60) {
+                delay(1000)
+                val polled = fetchMatchingTraeMessage(requestId, taskId)
+                if (polled.isNotBlank()) {
+                    finalText = polled.trim()
+                    if (finalText != emitted) {
+                        val delta = finalText.removePrefix(emitted)
+                        if (delta.isNotBlank()) {
+                            onToken(delta)
+                        }
+                        emitted = finalText
+                    }
+                    onDone(finalText)
+                    return
+                }
+                val progressText = "已提交到超级员工-Trae，正在执行 $requestId"
+                if (progressText != emitted) {
+                    onToken("\n$progressText")
+                    emitted = progressText
+                }
+            }
+
+            finalText = "已提交到超级员工-Trae，任务将在电脑端执行后回写。"
+            onDone(finalText)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onError(e.message ?: "超级员工-Trae 调用失败")
+        }
+    }
+
     private suspend fun fetchLatestCodexMessage(): String =
         fetchMatchingCodexMessage(requestId = null, taskId = null)
 
@@ -1505,6 +1600,19 @@ class XcagiRepository @Inject constructor(
     ): String {
         return try {
             val response = fhd().getCursorSuperEmployeeMessages(80)
+            if (!response.success) return ""
+            extractCodexMessageFromList(response.data?.get("messages"), requestId, taskId)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private suspend fun fetchMatchingTraeMessage(
+        requestId: String?,
+        taskId: String?,
+    ): String {
+        return try {
+            val response = fhd().getTraeSuperEmployeeMessages(80)
             if (!response.success) return ""
             extractCodexMessageFromList(response.data?.get("messages"), requestId, taskId)
         } catch (_: Exception) {
@@ -1567,6 +1675,12 @@ class XcagiRepository @Inject constructor(
                 branch = branchContext,
             ),
         ).let { if (it.success) Result.success(it.data ?: AiGroupPostData()) else fail(it) }
+    }
+
+    suspend fun deleteAiGroupMessage(groupId: String, messageId: String): Result<Boolean> = aiGroupCall {
+        fhd().deleteAiGroupMessage(groupId, messageId).let {
+            if (it.success) Result.success(true) else fail(it)
+        }
     }
 
     suspend fun addAiGroupMember(
@@ -1778,6 +1892,40 @@ class XcagiRepository @Inject constructor(
             Result.failure(e)
         }
 
+    suspend fun loadTraeSuperEmployeeMessages(limit: Int = 80): Result<List<Pair<String, String>>> =
+        try {
+            syncRouterFromStore()
+            preferCloudIfLanUnreachable()
+            val response = fhd().getTraeSuperEmployeeMessages(limit)
+            if (!response.success) {
+                Result.failure(Exception(response.message.ifBlank { "加载超级员工会话失败" }))
+            } else {
+                val rawMessages = response.data?.get("messages")
+                val rows = codexMessageRows(rawMessages)
+                rows
+                    .mapNotNull { row ->
+                        ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"])
+                    }
+                    .maxOrNull()
+                    ?.let { latestTs ->
+                        val latestRow = rows.maxByOrNull { row ->
+                            ImRepository.parseTimestampMs(row["created_at"] ?: row["timestamp"]) ?: 0L
+                        }
+                        val preview = latestRow?.let { row ->
+                            val role = row["role"]?.toString()?.trim()?.lowercase().orEmpty()
+                            val body = row["body"]?.toString()?.trim().orEmpty()
+                            if (body.isNotBlank() && role in setOf("user", "assistant") && !isCodexSchedulerNotice(row)) {
+                                formatMessagePreview(role, body)
+                            } else ""
+                        }.orEmpty()
+                        markConversationActivity(PinnedIds.TRAE, latestTs, preview)
+                    }
+                Result.success(codexMessagesToPairs(rawMessages))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
     private fun extractCodexMessageText(
         data: Map<String, Any?>?,
         requestId: String?,
@@ -1955,7 +2103,7 @@ class XcagiRepository @Inject constructor(
                         "context" to mapOf(
                             "source" to "mobile_chat",
                             "client_surface" to "mobile",
-                            "mode" to "code",
+                            "conversation_id" to conversationId,
                         ),
                     ),
                 ),
@@ -2081,6 +2229,7 @@ class XcagiRepository @Inject constructor(
         val taskId = sessionStore.inflightRelayTask(conversationId)
         if (taskId.isBlank()) return false
         val toolLabel = when (conversationId) {
+            PinnedIds.TRAE -> "Trae"
             PinnedIds.CLAUDE -> "Claude"
             PinnedIds.CURSOR -> "Cursor"
             else -> "Codex"

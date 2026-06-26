@@ -376,6 +376,7 @@ constructor(
                         showCodex = isEnterprise || adminMode,
                         showCursor = isEnterprise || adminMode,
                         showClaude = isEnterprise || adminMode,
+                        showTrae = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                         timestamps = timestamps,
                         previews = previews,
@@ -853,11 +854,11 @@ constructor(
         loadAiGroupMessages(group.id)
     }
 
-    fun loadAiGroupMessages(groupId: String) =
+    fun loadAiGroupMessages(groupId: String, showError: Boolean = true) =
             viewModelScope.launch {
                 repo.loadAiGroupMessages(groupId)
                     .onSuccess { _groupMessages.value = it }
-                    .onFailure { snack("群消息加载失败", true) }
+                    .onFailure { if (showError) snack("群消息加载失败", true) }
             }
 
     fun loadGitBranches() =
@@ -871,12 +872,13 @@ constructor(
         groupId: String,
         text: String,
         mentions: List<String> = emptyList(),
+        dispatch: Boolean = false,
         branchContext: String = "",
     ) {
         val body = text.trim()
         if (body.isBlank() || _groupSending.value) return
         val branch = branchContext.trim()
-        val dispatch = branch.isNotBlank() || shouldDispatchAiGroupTask(body)
+        val shouldDispatch = dispatch || branch.isNotBlank() || shouldDispatchAiGroupTask(body)
         // 本地先回显用户消息
         _groupMessages.value = _groupMessages.value + com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto(
             id = "local-${System.currentTimeMillis()}",
@@ -892,7 +894,7 @@ constructor(
                 groupId = groupId,
                 message = body,
                 mentions = mentions,
-                dispatch = dispatch,
+                dispatch = shouldDispatch,
                 branchContext = branch,
             )
                 .onSuccess { data ->
@@ -905,6 +907,17 @@ constructor(
             _groupSending.value = false
         }
     }
+
+    fun deleteGroupMessage(groupId: String, messageId: String) =
+            viewModelScope.launch {
+                repo.deleteAiGroupMessage(groupId, messageId)
+                    .onSuccess {
+                        _groupMessages.value = _groupMessages.value.filterNot { it.id == messageId }
+                        loadAiGroups()
+                        snack("已删除")
+                    }
+                    .onFailure { snack(it.message ?: "删除失败", true) }
+            }
 
     fun addGroupMember(
         groupId: String,
@@ -1182,6 +1195,7 @@ constructor(
             showCodex: Boolean,
             showCursor: Boolean,
             showClaude: Boolean,
+            showTrae: Boolean,
             showCustomerService: Boolean,
             timestamps: Map<String, Long>,
             previews: Map<String, String>,
@@ -1240,6 +1254,21 @@ constructor(
                             subtitle = cachedConversationPreview(PinnedIds.CLAUDE, previews)
                                 .ifBlank { "全设备协同 · 排比派工" },
                             timestamp = cachedConversationTimestamp(PinnedIds.CLAUDE, timestamps),
+                            isOnline = true,
+                            isPinned = true,
+                    )
+                )
+        }
+
+        if (showTrae) {
+                items.add(
+                    ConversationItem(
+                            id = PinnedIds.TRAE,
+                            type = ConversationType.PINNED_TRAE,
+                            title = "超级员工-Trae",
+                            subtitle = cachedConversationPreview(PinnedIds.TRAE, previews)
+                                .ifBlank { "全设备协同 · Trae" },
+                            timestamp = cachedConversationTimestamp(PinnedIds.TRAE, timestamps),
                             isOnline = true,
                             isPinned = true,
                     )
@@ -1640,7 +1669,12 @@ constructor(
                 _streaming.value = false
                 _chatAction.value = null
                 _chatMessages.value = emptyList()
-                if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CURSOR || conversationId == PinnedIds.CLAUDE) {
+                if (
+                    conversationId == PinnedIds.CODEX ||
+                    conversationId == PinnedIds.CURSOR ||
+                    conversationId == PinnedIds.CLAUDE ||
+                    conversationId == PinnedIds.TRAE
+                ) {
                     // relay/直答的回复存在本地缓存，云端历史接口里没有(且登录过期会 401)，
                     // 故 super-employee 会话以本地缓存为准；本地为空才取云端历史兜底。
                     val local = repo.loadCachedChat(conversationId)
@@ -1651,6 +1685,7 @@ constructor(
                                 when (conversationId) {
                                     PinnedIds.CLAUDE -> repo.loadClaudeSuperEmployeeMessages()
                                     PinnedIds.CURSOR -> repo.loadCursorSuperEmployeeMessages()
+                                    PinnedIds.TRAE -> repo.loadTraeSuperEmployeeMessages()
                                     else -> repo.loadCodexSuperEmployeeMessages()
                                 }
                         remote.onSuccess { _chatMessages.value = it }

@@ -11,11 +11,13 @@ internal object SuperEmployeeRoutingPolicy {
             PinnedIds.CODEX -> "codex.invoke"
             PinnedIds.CURSOR -> "cursor.invoke"
             PinnedIds.CLAUDE -> "claude.invoke"
+            PinnedIds.TRAE -> "trae.invoke"
             else -> null
         }
 
     fun toolLabelForRelayKind(kind: String): String =
         when {
+            kind.startsWith("trae") -> "Trae"
             kind.startsWith("claude") -> "Claude"
             kind.startsWith("cursor") -> "Cursor"
             else -> "Codex"
