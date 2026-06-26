@@ -44,7 +44,12 @@ def test_employees_lists_only_factory_identities_with_endpoints():
     assert res["success"] is True
     emps = res["employees"]
     ids = {e["id"] for e in emps}
-    assert ids == {"claude-factory-employee", "codex-factory-employee"}
+    assert ids == {
+        "claude-factory-employee",
+        "codex-factory-employee",
+        "cursor-factory-employee",
+        "trae-factory-employee",
+    }
     # 全部 scope=factory，且映射到现有超级员工对话端点（闭环派工通道）。
     for e in emps:
         assert e["scope"] == "factory"
