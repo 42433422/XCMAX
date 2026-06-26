@@ -2054,3 +2054,32 @@ class TestMobileWalletBalance:
         ):
             result = await m.mobile_wallet_balance(request=self._req("Bearer jwt"), user=_user())
         assert result is not None
+
+
+class TestMobileAiGroupCandidates:
+    @pytest.mark.asyncio
+    async def test_returns_super_employee_candidates(self, m):
+        request = _admin_request()
+        candidates = [
+            {
+                "employee_id": "codex-super-employee",
+                "mod_id": "super",
+                "name": "超级员工-Codex",
+                "is_super": True,
+            }
+        ]
+        svc = MagicMock()
+        svc.list_member_candidates.return_value = candidates
+
+        with (
+            patch.object(m, "_require_mobile_admin_or_enterprise", return_value=(None, None)),
+            patch.object(m, "_mobile_group_uid", return_value=1),
+            patch.object(m, "_mobile_group_mode", return_value="admin"),
+            patch.object(m, "AiGroupChatService", return_value=svc),
+        ):
+            result = await m.mobile_ai_group_candidates(request=request, user=_user())
+
+        assert result["success"] is True
+        assert result["data"]["candidates"] == candidates
+        assert result["data"]["items"] == candidates
+        assert result["data"]["count"] == 1

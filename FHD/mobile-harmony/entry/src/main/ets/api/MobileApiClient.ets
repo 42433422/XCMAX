@@ -2,6 +2,8 @@ import http from '@ohos.net.http';
 import { ApiEndpoints } from './ApiEndpoints';
 import {
   AiGroup,
+  AiGroupCandidate,
+  AiGroupCandidatesData,
   AiGroupCreateData,
   AiGroupMessage,
   AiGroupMessagesData,
@@ -223,6 +225,15 @@ export class MobileApiClient {
   async aiGroups(): Promise<AiGroup[]> {
     const envelope = await this.request<AiGroupsData>(ApiEndpoints.AI_GROUPS, http.RequestMethod.GET);
     return (envelope.data && envelope.data.groups) ? envelope.data.groups : [];
+  }
+
+  async aiGroupCandidates(): Promise<AiGroupCandidate[]> {
+    const envelope = await this.request<AiGroupCandidatesData>(
+      ApiEndpoints.AI_GROUP_CANDIDATES, http.RequestMethod.GET);
+    if (!envelope.data) {
+      return [];
+    }
+    return envelope.data.candidates || envelope.data.items || [];
   }
 
   async createAiGroup(name: string): Promise<AiGroup> {

@@ -83,6 +83,7 @@ export class ApiEndpoints {
 
   // AI 群聊(对标 Android AiGroupScreens.kt)
   static readonly AI_GROUPS: string = `${ApiEndpoints.BASE}/ai-groups`;
+  static readonly AI_GROUP_CANDIDATES: string = `${ApiEndpoints.BASE}/ai-groups/candidates`;
   static readonly AI_GROUP_MESSAGES: string = `${ApiEndpoints.BASE}/ai-groups/{id}/messages`;
   static readonly AI_GROUP_MEMBERS: string = `${ApiEndpoints.BASE}/ai-groups/{id}/members`;
   static readonly AI_GROUP_MARK_READ: string = `${ApiEndpoints.BASE}/ai-groups/{id}/mark-read`;
