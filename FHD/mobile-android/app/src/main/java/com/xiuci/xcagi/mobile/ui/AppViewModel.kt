@@ -12,9 +12,11 @@ import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.cs.CsRepository
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
+import com.xiuci.xcagi.mobile.core.model.ApkDeltaConfig
 import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
 import com.xiuci.xcagi.mobile.core.model.AiCirclePost
 import com.xiuci.xcagi.mobile.core.model.ApprovalDetail
+import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.ModMenuItem
@@ -28,7 +30,9 @@ import com.xiuci.xcagi.mobile.core.push.PushRegistrar
 import com.xiuci.xcagi.mobile.core.im.ImRepository
 import com.xiuci.xcagi.mobile.core.repository.XcagiRepository
 import com.xiuci.xcagi.mobile.core.sync.MobileSyncRepository
-import com.xiuci.xcagi.mobile.core.update.ApkUpdater
+import com.xiuci.xcagi.mobile.core.update.AppUpdateInstaller
+import com.xiuci.xcagi.mobile.core.update.PackageDeltaSpec
+import com.xiuci.xcagi.mobile.core.update.PackageUpdateResult
 import com.xiuci.xcagi.mobile.core.work.MobileSyncWorker
 import com.xiuci.xcagi.mobile.core.work.PushPollWorker
 import com.xiuci.xcagi.mobile.model.ConversationItem
@@ -38,7 +42,6 @@ import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -63,18 +66,54 @@ data class UpdatePrompt(
         val force: Boolean,
         val versionName: String,
         val downloadUrl: String,
+        val delta: ApkDeltaConfig = ApkDeltaConfig(),
 )
 
-/** 应用内自更新下载状态，驱动更新弹窗 UI。 */
-sealed interface UpdateDownload {
-    /** 未开始 / 已重置。 */
-    data object Idle : UpdateDownload
-    /** 下载中，[percent] 为 0..100。 */
-    data class Downloading(val percent: Int) : UpdateDownload
-    /** 下载完成，APK 落盘在 [apkPath]，等待安装。 */
-    data class Ready(val apkPath: String) : UpdateDownload
-    /** 下载失败，[reason] 为简短原因。 */
-    data class Failed(val reason: String) : UpdateDownload
+data class UpdateInstallState(
+        val downloading: Boolean = false,
+        val message: String = "",
+)
+
+private fun ApkDeltaConfig.toPackageDeltaSpec(): PackageDeltaSpec? {
+    if (!available) return null
+    return PackageDeltaSpec(
+            format = format,
+            patchUrl = patch_url,
+            baseVersionCode = base_version_code,
+            targetVersionCode = target_version_code,
+            patchSha256 = patch_sha256,
+            baseApkSha256 = base_apk_sha256,
+            targetApkSha256 = target_apk_sha256,
+    )
+}
+
+private fun shouldDispatchAiGroupTask(text: String): Boolean {
+    val normalized = text.trim().lowercase().replace("\\s+".toRegex(), "")
+    if (normalized.isBlank()) return false
+    val markers = listOf(
+            "任务",
+            "修复",
+            "实现",
+            "开发",
+            "构建",
+            "打包",
+            "测试",
+            "验证",
+            "回归",
+            "闪退",
+            "bug",
+            "分支",
+            "合并",
+            "新增",
+            "添加",
+            "优化",
+            "解决",
+            "完成",
+            "派发",
+            "上线",
+            "部署",
+    )
+    return markers.any { normalized.contains(it) }
 }
 
 internal fun cachedConversationTimestamp(
@@ -98,6 +137,7 @@ constructor(
         private val serverRouter: ServerRouter,
         private val syncRepo: MobileSyncRepository,
         private val pushRegistrar: PushRegistrar,
+        private val appUpdateInstaller: AppUpdateInstaller,
         private val analytics: XcagiAnalytics,
         private val csRepository: CsRepository,
 ) : ViewModel() {
@@ -289,9 +329,23 @@ constructor(
     val currentGroup: StateFlow<com.xiuci.xcagi.mobile.core.model.AiGroupDto?> = _currentGroup.asStateFlow()
     private val _groupSending = MutableStateFlow(false)
     val groupSending: StateFlow<Boolean> = _groupSending.asStateFlow()
+    private val _gitBranches = MutableStateFlow<List<GitBranchDto>>(emptyList())
+    val gitBranches: StateFlow<List<GitBranchDto>> = _gitBranches.asStateFlow()
 
     private val _walletBalance = MutableStateFlow<WalletBalanceDto?>(null)
     val walletBalance: StateFlow<WalletBalanceDto?> = _walletBalance.asStateFlow()
+
+    private val _onboardingIndustries = MutableStateFlow<List<ListItem>>(emptyList())
+    val onboardingIndustries: StateFlow<List<ListItem>> = _onboardingIndustries.asStateFlow()
+
+    private val _industryBootstrapStatus = MutableStateFlow("")
+    val industryBootstrapStatus: StateFlow<String> = _industryBootstrapStatus.asStateFlow()
+
+    private val _paymentPlans = MutableStateFlow<List<ListItem>>(emptyList())
+    val paymentPlans: StateFlow<List<ListItem>> = _paymentPlans.asStateFlow()
+
+    private val _paymentStatus = MutableStateFlow("")
+    val paymentStatus: StateFlow<String> = _paymentStatus.asStateFlow()
 
     private val _aiCirclePosts = MutableStateFlow<List<AiCirclePost>>(emptyList())
     val aiCirclePosts: StateFlow<List<AiCirclePost>> = _aiCirclePosts.asStateFlow()
@@ -363,13 +417,11 @@ constructor(
     val appConfig: StateFlow<AppConfigResponse?> = _appConfig.asStateFlow()
 
     private val _updatePrompt = MutableStateFlow<UpdatePrompt?>(null)
+    private val _updateInstallState = MutableStateFlow(UpdateInstallState())
     private val _autoLoggingIn = MutableStateFlow(false)
     val autoLoggingIn: StateFlow<Boolean> = _autoLoggingIn.asStateFlow()
     val updatePrompt: StateFlow<UpdatePrompt?> = _updatePrompt.asStateFlow()
-
-    private val _updateDownload = MutableStateFlow<UpdateDownload>(UpdateDownload.Idle)
-    val updateDownload: StateFlow<UpdateDownload> = _updateDownload.asStateFlow()
-    private var updateDownloadJob: Job? = null
+    val updateInstallState: StateFlow<UpdateInstallState> = _updateInstallState.asStateFlow()
 
     // 微信风格：modInfos 也从 DB Flow 派生，与 conversations 共享同一数据源，彻底消除头像不一致
     val modInfos: StateFlow<List<ModInfo>> =
@@ -387,6 +439,15 @@ constructor(
     fun refreshUserAvatar() {
         viewModelScope.launch {
             _userAvatarUrl.value = repo.refreshMe()
+        }
+    }
+
+    fun refreshAppConfig() {
+        viewModelScope.launch {
+            repo.fetchAppConfig().onSuccess {
+                _appConfig.value = it
+                ProductSkuConfig.remoteSku = it.sku
+            }
         }
     }
 
@@ -450,7 +511,12 @@ constructor(
             updateSyncWork(sessionStore.autoSyncFlow.first())
             // 已登录用户：冷启动后台静默刷新余额（缓存已秒出，此处更新最新值）
             if (sessionStore.isLoggedInFlow.first()) {
+                repo.validateMobileSession().onFailure {
+                    /* 保留离线可用性；下一次登录会刷新会话 */
+                }
                 loadWalletBalance()
+                loadNavMenu()
+                refreshModInfos()
             }
         }
     }
@@ -465,12 +531,14 @@ constructor(
                     return@launch
                 }
                 val loggedIn = sessionStore.isLoggedInFlow.first()
+                val setupComplete = sessionStore.isSetupComplete()
                 _startRoute.value =
                         when {
                             needLegal -> Routes.LEGAL
                             !loggedIn && sessionStore.canAutoLogin() -> Routes.AUTH_AUTO_LOGIN
                             !loggedIn -> Routes.AUTH
-                            else -> Routes.CHAT
+                            setupComplete -> Routes.CHAT
+                            else -> Routes.ONBOARDING
                         }
             }
 
@@ -483,7 +551,7 @@ constructor(
                 _autoLoggingIn.value = true
                 repo.loginUnified(u, p)
                         .onSuccess {
-                            sessionStore.setSetupComplete(true)
+                            sessionStore.setSetupComplete(false)
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
                             serverRouter.mode = mode
@@ -493,7 +561,7 @@ constructor(
                             refreshUserAvatar()
                             loadWalletBalance()
                             registerPushWithHint()
-                            _startRoute.value = Routes.CHAT
+                            _startRoute.value = Routes.ONBOARDING
                         }
                         .onFailure { snack("自动登录失败，请手动登录", true) }
                         .also { _autoLoggingIn.value = false }
@@ -509,8 +577,18 @@ constructor(
 
     fun checkForUpdate(manual: Boolean) =
             viewModelScope.launch {
+                val freshCfg =
+                        if (manual) {
+                            repo.fetchAppConfig().getOrNull()?.also {
+                                _appConfig.value = it
+                                ProductSkuConfig.remoteSku = it.sku
+                            }
+                        } else {
+                            null
+                        }
                 val cfg =
-                        _appConfig.value
+                        freshCfg
+                                ?: _appConfig.value
                                 ?: repo.fetchAppConfig().getOrNull().also {
                                     _appConfig.value = it
                                     ProductSkuConfig.remoteSku = it?.sku ?: ""
@@ -526,15 +604,23 @@ constructor(
                     _updatePrompt.value =
                             UpdatePrompt(
                                     force = true,
-                                    versionName = cfg.latest_android_version_name,
+                                    versionName =
+                                            cfg.latest_android_version_name.ifBlank {
+                                                cfg.latest_android_version.toString()
+                                            },
                                     downloadUrl = cfg.apk_download_url,
+                                    delta = cfg.apk_delta,
                             )
                 } else if (manual && cur < cfg.latest_android_version) {
                     _updatePrompt.value =
                             UpdatePrompt(
                                     force = false,
-                                    versionName = cfg.latest_android_version_name,
+                                    versionName =
+                                            cfg.latest_android_version_name.ifBlank {
+                                            cfg.latest_android_version.toString()
+                                            },
                                     downloadUrl = cfg.apk_download_url,
+                                    delta = cfg.apk_delta,
                             )
                 } else if (manual) {
                     snack("已是最新版本")
@@ -543,57 +629,58 @@ constructor(
 
     fun dismissUpdatePrompt() {
         _updatePrompt.value = null
-        // 重置终态下载状态，避免下次打开弹窗显示陈旧的「已完成 / 失败」；下载中不动。
-        if (_updateDownload.value !is UpdateDownload.Downloading) {
-            _updateDownload.value = UpdateDownload.Idle
-        }
+        _updateInstallState.value = UpdateInstallState()
     }
 
-    /** 应用内自更新：流式下载整包 APK，完成后自动尝试拉起系统安装器。 */
-    fun startInAppUpdate(url: String) {
-        if (updateDownloadJob?.isActive == true) return
-        if (url.isBlank()) {
-            snack("暂无应用内下载地址，请前往官网更新", isError = true)
-            return
-        }
-        updateDownloadJob =
-                viewModelScope.launch {
-                    _updateDownload.value = UpdateDownload.Downloading(0)
-                    ApkUpdater.download(appContext, url) { pct ->
-                                _updateDownload.value = UpdateDownload.Downloading(pct)
-                            }
-                            .onSuccess { file ->
-                                _updateDownload.value = UpdateDownload.Ready(file.absolutePath)
-                                launchInstall(file)
-                            }
-                            .onFailure { e ->
-                                _updateDownload.value =
-                                        UpdateDownload.Failed(e.message?.take(120) ?: "下载失败")
-                            }
+    fun startPackageUpdate(prompt: UpdatePrompt) =
+            viewModelScope.launch {
+                if (_updateInstallState.value.downloading) return@launch
+                if (prompt.downloadUrl.isBlank()) {
+                    snack("安装包下载地址为空", true)
+                    return@launch
                 }
-    }
-
-    /** 安装已下载完成的更新包（用户在弹窗点「立即安装」时调用）。 */
-    fun installDownloadedUpdate() {
-        val state = _updateDownload.value
-        if (state is UpdateDownload.Ready) launchInstall(File(state.apkPath))
-    }
-
-    /** 取消进行中的下载并复位状态。 */
-    fun cancelUpdateDownload() {
-        updateDownloadJob?.cancel()
-        updateDownloadJob = null
-        _updateDownload.value = UpdateDownload.Idle
-    }
-
-    private fun launchInstall(file: File) {
-        if (!ApkUpdater.canInstall(appContext)) {
-            snack("请在系统设置中允许「安装未知应用」后重试", isError = true)
-            ApkUpdater.requestInstallPermission(appContext)
-            return
-        }
-        runCatching { ApkUpdater.install(appContext, file) }
-                .onFailure { snack("启动安装失败：${it.message}", isError = true) }
+                if (!appUpdateInstaller.canInstallPackages()) {
+                    _updateInstallState.value =
+                            UpdateInstallState(
+                                    message = "请先允许 XCAGI 安装应用，返回后再次点击去更新",
+                            )
+                    appUpdateInstaller.openInstallPermissionSettings()
+                    snack("请打开“允许来自此来源的应用”后返回更新")
+                    return@launch
+                }
+                _updateInstallState.value = UpdateInstallState(true, "正在连接下载服务器…")
+                runCatching {
+                            appUpdateInstaller.downloadAndOpenInstaller(
+                                    prompt.downloadUrl,
+                                    prompt.versionName,
+                                    deltaSpec = prompt.delta.toPackageDeltaSpec(),
+                                    currentVersionCode = BuildConfig.VERSION_CODE,
+                            ) { status ->
+                                _updateInstallState.value = UpdateInstallState(true, status)
+                            }
+                        }
+                        .onSuccess { result ->
+                            when (result) {
+                                is PackageUpdateResult.InstallerOpened -> {
+                                    _updateInstallState.value =
+                                            UpdateInstallState(message = "系统安装器已打开")
+                                    snack("系统安装器已打开，请确认安装")
+                                    if (!prompt.force) dismissUpdatePrompt()
+                                }
+                                PackageUpdateResult.InstallPermissionRequired -> {
+                                    _updateInstallState.value =
+                                            UpdateInstallState(
+                                                    message = "请授权安装未知应用后再点击去更新",
+                                            )
+                                    snack("请授权安装未知应用后再点击去更新")
+                                }
+                            }
+                        }
+                        .onFailure {
+                            _updateInstallState.value =
+                                    UpdateInstallState(message = "安装包更新失败")
+                            snack(it.message ?: "安装包更新失败", true)
+                        }
     }
 
     fun setBiometricEnabled(enabled: Boolean) =
@@ -660,15 +747,19 @@ constructor(
                     repo.preferCloudIfLanUnreachable()
                     val host = sessionStore.fhdHostFlow.first()
                     val relayId = sessionStore.relayDesktopId()
-                    val online =
-                            if (relayId.isNotBlank()) {
+                    val mode = sessionStore.serverModeFlow.first()
+                    val desktopOnline =
+                            if (mode == "cloud") {
+                                false
+                            } else if (relayId.isNotBlank()) {
                                 repo.checkHealth()
                             } else {
                                 host.isNotBlank() && repo.checkHealth(host)
                             }
-                    val syncLabel = syncRepo.statusLabel(online)
+                    val backendOnline = if (mode == "cloud") repo.checkHealth() else desktopOnline
+                    val syncLabel = syncRepo.statusLabel(desktopOnline)
                     val (mods, fromCloud) =
-                            if (online) {
+                            if (backendOnline) {
                                 val list =
                                         repo.fetchHome().getOrNull()?.let { data ->
                                             @Suppress("UNCHECKED_CAST")
@@ -683,19 +774,19 @@ constructor(
                                             }
                                         }
                                                 ?: repo.mods().getOrElse { emptyList() }
-                                list to false
+                                list to (mode == "cloud")
                             } else {
                                 repo.marketCatalog().getOrElse { emptyList() } to true
                             }
                     _homeHub.value =
                             HomeHubState(
                                     loading = false,
-                                    pcOnline = online,
+                                    pcOnline = desktopOnline,
                                     mods = mods,
                                     modsFromCloud = fromCloud,
                                     syncLabel = syncLabel,
                             )
-                    rebuildChatSuggestions(mods, online)
+                    rebuildChatSuggestions(mods, desktopOnline)
                 } catch (_: Exception) {
                     _homeHub.value =
                             _homeHub.value.copy(
@@ -770,9 +861,23 @@ constructor(
                     .onFailure { snack("群消息加载失败", true) }
             }
 
-    fun sendGroupMessage(groupId: String, text: String, mentions: List<String> = emptyList()) {
+    fun loadGitBranches() =
+            viewModelScope.launch {
+                repo.loadGitBranches()
+                    .onSuccess { _gitBranches.value = it }
+                    .onFailure { snack("工作分支加载失败", true) }
+            }
+
+    fun sendGroupMessage(
+        groupId: String,
+        text: String,
+        mentions: List<String> = emptyList(),
+        branchContext: String = "",
+    ) {
         val body = text.trim()
         if (body.isBlank() || _groupSending.value) return
+        val branch = branchContext.trim()
+        val dispatch = branch.isNotBlank() || shouldDispatchAiGroupTask(body)
         // 本地先回显用户消息
         _groupMessages.value = _groupMessages.value + com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto(
             id = "local-${System.currentTimeMillis()}",
@@ -784,7 +889,13 @@ constructor(
         )
         _groupSending.value = true
         viewModelScope.launch {
-            repo.postAiGroupMessage(groupId, body, mentions)
+            repo.postAiGroupMessage(
+                groupId = groupId,
+                message = body,
+                mentions = mentions,
+                dispatch = dispatch,
+                branchContext = branch,
+            )
                 .onSuccess { data ->
                     // 用服务端权威消息替换尾部（去掉本地回显，拼接服务端返回的 user+ai）
                     val withoutLocalTail = _groupMessages.value.dropLastWhile { it.id.startsWith("local-") }
@@ -1322,8 +1433,8 @@ constructor(
             viewModelScope.launch {
                 repo.loginUnified(u, p, isAdmin)
                         .onSuccess {
-                            // 登录成功后自动完成设置，并回到与账号源一致的后端模式
-                            sessionStore.setSetupComplete(true)
+                            // 登录只建立账号会话；行业能力和支付入口在移动端启动配置中完成。
+                            sessionStore.setSetupComplete(false)
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
                             serverRouter.mode = mode
@@ -1346,14 +1457,32 @@ constructor(
                         }
             }
 
-    fun register(u: String, p: String, e: String, onDone: (Boolean) -> Unit) =
+    fun register(
+            u: String,
+            p: String,
+            e: String,
+            industryId: String = "通用",
+            budgetRange: String = "",
+            onDone: (Boolean) -> Unit,
+    ) =
             viewModelScope.launch {
-                repo.register(u, p, e)
+                repo.register(u, p, e, industryId, budgetRange)
                         .onSuccess {
-                            snack("注册成功，请登录")
+                            sessionStore.setSetupComplete(false)
+                            val mode = repo.preferredServerModeAfterLogin()
+                            sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
+                            serverRouter.mode = mode
+                            snack("注册成功，欢迎 $it")
+                            analytics.log("register_success", mapOf("method" to "password"))
+                            refreshMarketTokens()
+                            refreshConversationRuntime()
+                            refreshUserAvatar()
+                            loadWalletBalance()
+                            registerPushWithHint()
                             onDone(true)
                         }
                         .onFailure {
+                            analytics.log("register_fail", mapOf("method" to "password"))
                             snack(it.message ?: "注册失败，请稍后重试", true)
                             onDone(false)
                         }
@@ -1371,7 +1500,7 @@ constructor(
             viewModelScope.launch {
                 repo.loginMarketPhone(phone, code)
                         .onSuccess {
-                            sessionStore.setSetupComplete(true)
+                            sessionStore.setSetupComplete(false)
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
                             serverRouter.mode = mode
@@ -1398,12 +1527,11 @@ constructor(
     ) =
             viewModelScope.launch {
                 val parsed = PairingQrCodec.parse(raw)
-                if (parsed != null) {
+                val result =
+                    if (parsed != null) {
                     if (parsed.version >= 3 && parsed.relayId.isNotBlank()) {
-                        repo.relayPairingConfirm(
-                                relayId = parsed.relayId,
-                                code = parsed.token,
-                                relayBaseUrl = parsed.relayBaseUrl,
+                        Result.failure(
+                                Exception("云中继绑定已改为账号鉴权，请刷新电脑端内网二维码后绑定")
                         )
                     } else if (
                             parsed.token.length == 6 &&
@@ -1411,18 +1539,11 @@ constructor(
                                     parsed.host.isBlank() &&
                                     targetHost.isBlank()
                     ) {
-                        val relayResult = repo.relayPairingConfirmCode(parsed.token)
-                        if (relayResult.isSuccess) {
-                            relayResult
-                        } else if (parsed.host.isNotBlank() || targetHost.isNotBlank()) {
-                            repo.pairingExchange(
-                                    code = parsed.token,
-                                    exchangeHost = parsed.host.ifBlank { targetHost },
-                                    exchangePort = parsed.port.takeIf { it > 0 } ?: targetPort,
-                            )
-                        } else {
-                            relayResult
-                        }
+                        repo.pairingExchange(
+                                code = parsed.token,
+                                exchangeHost = targetHost,
+                                exchangePort = targetPort,
+                        )
                     } else if (
                             parsed.token.length == 6 &&
                                     parsed.token.all { it.isDigit() }
@@ -1448,6 +1569,7 @@ constructor(
                 } else {
                     repo.pairingExchange(nonce = raw.trim())
                 }
+                result
                         .onSuccess { (_, _) ->
                             sessionStore.setSetupComplete(true)
                             val employeeCount = refreshBoundRuntimeAfterPairing()
@@ -1524,6 +1646,8 @@ constructor(
             viewModelScope.launch {
                 // 切换会话：取消上一个会话仍在进行的流式任务并清空，避免消息串台到当前会话。
                 chatJob?.cancel()
+                _streaming.value = false
+                _chatAction.value = null
                 _chatMessages.value = emptyList()
                 if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CURSOR || conversationId == PinnedIds.CLAUDE) {
                     // relay/直答的回复存在本地缓存，云端历史接口里没有(且登录过期会 401)，
@@ -1568,13 +1692,16 @@ constructor(
     /** 进入超级员工会话时，若有上次未完成的中继任务，恢复轮询并把结果续到界面+缓存。 */
     private fun resumeRelayChat(conversationId: String) {
         chatJob?.cancel()
-        chatJob =
+                chatJob =
                 viewModelScope.launch {
-                    if (!repo.hasInflightRelay(conversationId)) return@launch
+                    if (!repo.hasInflightRelay(conversationId)) {
+                        _streaming.value = false
+                        return@launch
+                    }
                     _streaming.value = true
                     _chatMessages.value = _chatMessages.value + ("assistant" to "")
                     var acc = ""
-                    repo.resumeRelayTask(
+                    val resumed = repo.resumeRelayTask(
                             conversationId,
                             onToken = { t ->
                                 acc += t
@@ -1593,6 +1720,10 @@ constructor(
                                         _chatMessages.value.dropLast(1) + ("assistant" to "（$e）")
                             },
                     )
+                    if (!resumed) {
+                        _streaming.value = false
+                        _chatMessages.value = _chatMessages.value.dropLast(1)
+                    }
                 }
     }
 
@@ -1920,7 +2051,137 @@ constructor(
                         .onFailure { snack(productErrorMessage(it.message, "评论失败"), true) }
             }
 
-    fun loadMarket() = loadEnterpriseList { repo.marketCatalog() }
+    fun loadMarket() {
+        loadEnterpriseList { repo.marketCatalog() }
+        loadMobileOnboarding()
+        loadPaymentPlans()
+    }
+
+    fun loadMobileOnboarding() =
+            viewModelScope.launch {
+                repo.onboardingIndustries()
+                        .onSuccess { industries ->
+                            _onboardingIndustries.value = industries
+                            val selected = industries.firstOrNull()?.id ?: "通用"
+                            repo.industryBaseline(selected)
+                                    .onSuccess { baseline ->
+                                        val ready =
+                                                baseline["full_stack_ready"] == true ||
+                                                        baseline["baseline_ready"] == true
+                                        val missing =
+                                                (baseline["missing_required_mod_ids"] as? List<*>)?.size ?: 0
+                                        _industryBootstrapStatus.value =
+                                                if (ready) "当前行业基础能力已就绪"
+                                                else "待安装 $missing 个基础能力"
+                                    }
+                        }
+                        .onFailure {
+                            _industryBootstrapStatus.value = it.message ?: "行业初始化状态不可用"
+                        }
+            }
+
+    fun bootstrapIndustry(industryId: String) =
+            viewModelScope.launch {
+                _industryBootstrapStatus.value = "正在装齐行业能力…"
+                repo.bootstrapIndustry(industryId)
+                        .onSuccess {
+                            _industryBootstrapStatus.value = it
+                            snack(it)
+                            refreshModInfos()
+                            loadHomeHub()
+                            loadNavMenu()
+                            loadMobileOnboarding()
+                        }
+                        .onFailure {
+                            val msg = it.message ?: "行业能力安装失败"
+                            _industryBootstrapStatus.value = msg
+                            snack(msg, true)
+                        }
+            }
+
+    fun loadPaymentPlans() =
+            viewModelScope.launch {
+                repo.paymentPlans()
+                        .onSuccess { _paymentPlans.value = it }
+                        .onFailure { _paymentStatus.value = it.message ?: "套餐加载失败" }
+            }
+
+    private fun findStringDeep(value: Any?, key: String): String {
+        if (value is Map<*, *>) {
+            value[key]?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
+            for (v in value.values) {
+                val found = findStringDeep(v, key)
+                if (found.isNotBlank()) return found
+            }
+        }
+        if (value is List<*>) {
+            for (v in value) {
+                val found = findStringDeep(v, key)
+                if (found.isNotBlank()) return found
+            }
+        }
+        return ""
+    }
+
+    private fun handlePaymentCheckoutData(data: Map<String, Any?>, onRedirect: (String) -> Unit) {
+        val redirect = findStringDeep(data, "redirect_url")
+        val orderId = findStringDeep(data, "order_id")
+            .ifBlank { findStringDeep(data, "out_trade_no") }
+        if (redirect.isNotBlank()) {
+            _paymentStatus.value = if (orderId.isNotBlank()) {
+                "订单已创建，支付完成后返回刷新"
+            } else {
+                "已跳转支付"
+            }
+            onRedirect(redirect)
+        } else {
+            _paymentStatus.value =
+                    findStringDeep(data, "setup_hint").ifBlank { "支付渠道未返回跳转地址" }
+            snack(_paymentStatus.value, true)
+        }
+    }
+
+    fun checkoutPayment(planId: String, onRedirect: (String) -> Unit) =
+            checkoutPayment(planId, "mobile_h5", onRedirect)
+
+    fun checkoutPayment(planId: String, channel: String, onRedirect: (String) -> Unit) =
+            viewModelScope.launch {
+                _paymentStatus.value = "正在创建订单…"
+                repo.checkoutPaymentPlan(planId, channel)
+                        .onSuccess { data ->
+                            handlePaymentCheckoutData(data, onRedirect)
+                        }
+                        .onFailure {
+                            _paymentStatus.value = it.message ?: "支付下单失败"
+                            snack(_paymentStatus.value, true)
+                        }
+            }
+
+    fun checkoutWalletRecharge(amountYuan: String, channel: String, onRedirect: (String) -> Unit) =
+            viewModelScope.launch {
+                _paymentStatus.value = "正在创建充值订单…"
+                repo.checkoutWalletRecharge(amountYuan, channel)
+                        .onSuccess { data ->
+                            handlePaymentCheckoutData(data, onRedirect)
+                        }
+                        .onFailure {
+                            _paymentStatus.value = it.message ?: "充值下单失败"
+                            snack(_paymentStatus.value, true)
+                        }
+            }
+
+    fun refreshPaymentAndWallet(orderId: String = "") =
+            viewModelScope.launch {
+                if (orderId.isNotBlank()) {
+                    repo.queryPayment(orderId)
+                            .onSuccess { _paymentStatus.value = "订单状态已刷新" }
+                            .onFailure { _paymentStatus.value = it.message ?: "订单状态刷新失败" }
+                }
+                loadWalletBalance()
+                refreshMarketTokens()
+                refreshModInfos()
+                loadPaymentPlans()
+            }
 
     fun loadInventory() =
             viewModelScope.launch {
@@ -1945,7 +2206,8 @@ constructor(
     fun desktopPageUrl(path: String): String {
         val base = repo.fhdBaseUrl()
         val cleanPath = if (path.startsWith("/")) path else "/$path"
-        return "${base.trimEnd('/')}$cleanPath?shell=1"
+        val separator = if (cleanPath.contains("?")) "&" else "?"
+        return "${base.trimEnd('/')}$cleanPath${separator}shell=1"
     }
 
     suspend fun modOpensInCloudWorkbench() = repo.modOpensInCloudWorkbench()
@@ -1994,6 +2256,11 @@ constructor(
     fun handleDeepLink(route: String, nav: (String) -> Unit) {
         val normalized = route.trim().trimStart('/')
         when {
+            normalized.startsWith("payment/complete") -> {
+                refreshPaymentAndWallet()
+                snack("已返回应用，正在刷新支付状态")
+                nav(Routes.MARKET)
+            }
             normalized.startsWith(Routes.AI_EMPLOYEES) || normalized == Routes.WORK -> nav(Routes.AI_EMPLOYEES)
             normalized.startsWith(Routes.AI_CIRCLE) || normalized == Routes.DISCOVER -> nav(Routes.AI_CIRCLE)
             normalized.startsWith("ai_employee/") -> nav(normalized)

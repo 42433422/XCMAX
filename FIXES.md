@@ -6,9 +6,15 @@
 
 ## P0 — 安全漏洞（必须立即修复）
 
-### P0-1 自实现 JWT 存在安全风险
+> **2026-06-25 修复状态**：P0-1/P0-2/P0-3/P0-4 全部修复完成。
+
+### P0-1 自实现 JWT 存在安全风险 ✅ 已修复
 
 **文件**: `FHD/app/security/mobile_jwt.py`
+
+**状态**: 已修复。已迁移到 PyJWT，强制 HS256 算法白名单，添加 iss/aud 声明，
+refresh token jti 一次性使用（内存 + Redis 黑名单），移除硬编码密钥回退（改用
+进程级 `secrets.token_urlsafe(48)` 随机密钥）。
 
 **问题**: 手写 JWT 编解码而非使用 PyJWT 库，缺少以下安全机制：
 - 无 `iss`（签发者）声明，无法验证 token 来源
@@ -28,9 +34,14 @@
 
 ---
 
-### P0-2 官网支付签名密钥硬编码前端
+### P0-2 官网支付签名密钥硬编码前端 ✅ 已修复
 
 **文件**: `成都修茈科技有限公司/src/api.ts`
+
+**状态**: 已修复。移除 `paymentSecretKey()` 中的 `'default_secret_key'` 硬编码回退，
+函数返回空字符串。后端 `/api/model-payment/checkout` 直接用 plan_id 查套餐金额并调
+支付宝下单，不信任前端传值，因此前端签名是"假安全"——真正的签名由后端
+`app/infrastructure/payment/alipay.py` 完成（密钥仅存服务端 env）。
 
 **问题**: `paymentSecretKey()` 中 `return fromEnv || 'default_secret_key'`，支付签名密钥硬编码在前端代码中且 fallback 为可预测默认值，攻击者可伪造支付请求
 
@@ -43,9 +54,13 @@
 
 ---
 
-### P0-3 AI Tier token 比较存在时序攻击风险
+### P0-3 AI Tier token 比较存在时序攻击风险 ✅ 已修复
 
 **文件**: `FHD/app/domain/ai/tier.py`
+
+**状态**: 已修复。`hmac.compare_digest` 已使用（恒定时间比较）。环境变量
+`FHD_AI_ELEVATED_TOKEN` 和 `FHD_AI_TIER_STRICT` 已缓存为模块级变量
+（`_ELEVATED_TOKEN` / `_TIER_STRICT`），避免每次请求读 `os.environ`。
 
 **问题**: `resolve_ai_tier` 中 token 比较使用 `==` 而非 `hmac.compare_digest`，存在时序攻击风险。同项目 `mobile_jwt.py` 已正确使用 `compare_digest`，但此处不一致
 
@@ -57,9 +72,24 @@
 
 ---
 
-### P0-4 官网无 CSRF 防护且 token 无刷新机制
+### P0-4 官网无 CSRF 防护且 token 无刷新机制 ✅ 已完整闭环
 
-**文件**: `成都修茈科技有限公司/src/api.ts`
+**文件**: `成都修茈科技有限公司/src/api.ts` + `src/stores/auth.ts` + 3 个登录视图 + 后端已有
+
+**状态**: 已完整闭环（前端 + 后端）。
+
+**后端已实现**（无需改动）：
+1. [csrf.py](file:///Users/a4243342/Desktop/XCMAX/FHD/app/middleware/csrf.py) CSRF 中间件：GET 自动下发 `csrf_token` cookie（`SameSite=Lax`），写操作校验 `X-CSRF-Token` header 与 cookie 一致（`secrets.compare_digest`）
+2. [web_jwt.py](file:///Users/a4243342/Desktop/XCMAX/FHD/app/security/web_jwt.py) Web JWT：access 12h + refresh 14d，HS256 + iss/aud/exp 强校验，refresh 一次性轮转（jti 黑名单）
+3. [routes.py](file:///Users/a4243342/Desktop/XCMAX/FHD/app/fastapi_routes/domains/auth/routes.py) `/api/auth/login` 签发 `web_tokens`，`/api/auth/token/refresh` 轮转
+4. session cookie 已 `httpOnly` + `SameSite=Lax`（`SESSION_COOKIE_HTTPONLY=1`）
+
+**前端本次修复**：
+1. [api.ts](file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/src/api.ts) 添加 CSRF 双重提交 cookie（写操作自动注入 `X-CSRF-Token`）
+2. [api.ts](file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/src/api.ts) 添加 JWT exp 过期预检 + 401 自动 refresh + 重试（并发去重，避免循环）
+3. [api.ts](file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/src/api.ts) 导出 `setTokens()` 供登录后存储 access + refresh
+4. [auth.ts](file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/src/stores/auth.ts) token 过期预检 + `storeTokens()` + logout 清除 refresh_token
+5. [LoginView.vue](file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/src/views/LoginView.vue#L43-L47) / [RegisterView.vue](file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/src/views/RegisterView.vue#L135-L139) / [LoginByEmailView.vue](file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/src/views/LoginByEmailView.vue#L97-L101) 登录后存储 `web_tokens`
 
 **问题**: 无 CSRF 防护机制；token 存储在 localStorage 无加密；无 token 过期/刷新逻辑
 

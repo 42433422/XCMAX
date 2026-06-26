@@ -5,6 +5,7 @@
 - 总共 60 页
 - 每页带页眉：软件名 + 版本号；每页带页脚：第 X 页 / 共 Y 页
 """
+from __future__ import annotations  # 兼容 Python 3.9：str | None 等注解延迟求值
 import os
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
@@ -91,7 +92,7 @@ def _line_to_paragraph(line: str) -> str:
 
 def generate_pdf(output_file: str, source_file: str,
                  software_name: str = 'XCAGI 企业 AI 员工平台',
-                 version: str = 'V9.0',
+                 version: str = 'V10.0.0',
                  copyright_holder: str = '李佳泷'):
     """生成源代码 PDF 文档
 
@@ -204,7 +205,7 @@ def generate_pdf(output_file: str, source_file: str,
 
 if __name__ == '__main__':
     software_name = 'XCAGI 企业 AI 员工平台'
-    version = 'V9.0'
+    version = 'V10.0.0'
     copyright_holder = '李佳泷'
     source_file = '完整源代码.txt'
     output_file = f'源代码文档_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'

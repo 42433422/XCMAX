@@ -4,20 +4,25 @@
 - 真相源：``User.budget_range``（注册时用户选的预算区间）
 - 派生值：``User.account_tier``（注册时由 budget_range 派生写入；仅 ``tier=enterprise`` 有意义）
 
-预算区间的规范展示值与 contact.html / RegisterView 一致（注意中文长连字符 ``–`` U+2013）。
+预算区间的规范展示值与 RegisterView / saas_plans.json 一致（注意中文长连字符 ``–`` U+2013）。
 派生匹配时对连字符与空格做归一化，兼容前端可能传来的短横 ``-`` 等变体。
 """
 
 from __future__ import annotations
 
 # 预算区间规范展示值（前端 select 选项；空值/“暂未确定”表示未选）
-BUDGET_RANGES: tuple[str, ...] = ("5 万以内", "5–20 万", "20–50 万", "50 万以上")
+BUDGET_RANGES: tuple[str, ...] = ("1–5 万", "5–10 万", "10–50 万", "50–100 万")
 
 VALID_ACCOUNT_TIERS: frozenset[str] = frozenset({"normal", "pro", "max", "ultra"})
 DEFAULT_ACCOUNT_TIER = "normal"
 
 # 归一化后的预算 → 账号等级映射
 _NORMALIZED_BUDGET_TO_TIER: dict[str, str] = {
+    "1-5万": "normal",
+    "5-10万": "pro",
+    "10-50万": "max",
+    "50-100万": "ultra",
+    # 旧档位兼容：保持原有 tier 语义，避免存量预算值回退到 normal。
     "5万以内": "normal",
     "5-20万": "pro",
     "20-50万": "max",

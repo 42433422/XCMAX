@@ -675,13 +675,13 @@ class TestMarketAuthorizationFromRequest:
         body: dict[str, Any] = {}
         assert ma._authorization_from_request(req, body) == "Bearer tok1"
 
-    def test_from_latest_token_when_no_session(self) -> None:
+    def test_no_session_does_not_use_latest_token(self) -> None:
         with patch.object(ma, "latest_session_market_token", return_value="latest-tok"):
             req = MagicMock()
             req.cookies = {}
             req.headers = {}
             body: dict[str, Any] = {}
-            assert ma._authorization_from_request(req, body) == "Bearer latest-tok"
+            assert ma._authorization_from_request(req, body) == ""
 
     def test_from_body_authorization(self) -> None:
         req = MagicMock()

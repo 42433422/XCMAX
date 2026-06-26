@@ -92,6 +92,8 @@ log "同步运行时镜像 → ${RUNTIME_DEPLOY_ROOT}"
 rsync -a --delete \
   --exclude "market/coverage-current/" \
   --exclude "market/coverage-current/.tmp/" \
+  --exclude ".venv/" \
+  --exclude "node_modules/" \
   --exclude ".pytest_cache/" \
   --exclude "__pycache__/" \
   "${MODSTORE_DEPLOY_ROOT}/" "${RUNTIME_DEPLOY_ROOT}/"
@@ -120,6 +122,7 @@ for d in XCAGI app mods static templates resources scripts frontend; do
   if [[ -d "${FHD_ROOT}/${d}" ]]; then
     mkdir -p "${RUNTIME_FHD_ROOT}/${d}"
     rsync -a --delete \
+      --exclude "node_modules/" \
       --exclude ".pytest_cache/" \
       --exclude "__pycache__/" \
       --exclude ".mypy_cache/" \

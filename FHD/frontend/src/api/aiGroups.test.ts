@@ -229,6 +229,22 @@ describe('aiGroups API', () => {
       )
     })
 
+    it('passes dispatch flag only when requested', async () => {
+      apiFetchMock.mockResolvedValue(jsonResponse({ messages: [] }))
+      await postAiGroupMessage('g1', 'hi', ['user1'], 'admin', { dispatch: true })
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: JSON.stringify({
+            message: 'hi',
+            mentions: ['user1'],
+            sender_name: '我',
+            dispatch: true,
+          }),
+        }),
+      )
+    })
+
     it('returns empty messages when no messages field', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({}))
       const result = await postAiGroupMessage('g1', 'hi')

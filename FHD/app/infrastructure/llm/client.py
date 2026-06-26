@@ -27,7 +27,10 @@ _openai_client: Any | None = None
 
 
 def _env_mode() -> Literal["online", "offline"] | None:
-    raw = (os.environ.get("FHD_LLM_MODE") or os.environ.get("LLM_MODE") or "").strip().lower()
+    if "FHD_LLM_MODE" in os.environ:
+        raw = os.environ.get("FHD_LLM_MODE", "").strip().lower()
+    else:
+        raw = os.environ.get("LLM_MODE", "").strip().lower()
     if raw in ("offline", "local", "ollama"):
         return "offline"
     if raw in ("online", "cloud", "api"):
