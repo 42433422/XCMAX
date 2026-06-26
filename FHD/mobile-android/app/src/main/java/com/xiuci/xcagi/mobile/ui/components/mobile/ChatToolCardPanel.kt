@@ -61,9 +61,10 @@ fun ChatComposerBar(
     onToggleTools: () -> Unit,
     toolActions: List<ChatToolCardAction>,
     modifier: Modifier = Modifier,
+    canSendWhenEmpty: Boolean = false,
     topContent: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    val canSend = value.isNotBlank() && !busy
+    val canSend = (value.isNotBlank() || canSendWhenEmpty) && !busy
     val canStop = busy && onStop != null
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
