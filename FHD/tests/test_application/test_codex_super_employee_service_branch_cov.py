@@ -1730,22 +1730,30 @@ class TestCliWorkspaceBoundary:
     """_cli_workspace 的解析逻辑。
 
     签名: _cli_workspace(self, context: dict) -> str
+
+    产品域（product grant）的安全策略：绝不采信客户提供的宿主路径，
+    始终返回隔离临时区（_product_ephemeral_workspace），context/env 无效。
     """
 
     def test_context_workspace_root(self, tmp_path, monkeypatch):
-        # _cli_workspace 会检查 Path(candidate).exists()，需用真实路径
+        # 产品域忽略 context["workspace_root"]，始终用隔离临时区（安全边界）
         ws = tmp_path / "ws"
         ws.mkdir()
         svc = _make_svc(tmp_path)
         ctx = {"workspace_root": str(ws)}
-        assert svc._cli_workspace(ctx) == str(ws)
+        result = svc._cli_workspace(ctx)
+        assert result != str(ws)
+        assert "xcmax_product_scratch" in result
 
     def test_env_workspace(self, tmp_path, monkeypatch):
+        # 产品域忽略 XCMAX_CODEX_WORKSPACE_ROOT，始终用隔离临时区（安全边界）
         ws = tmp_path / "envws"
         ws.mkdir()
         monkeypatch.setenv("XCMAX_CODEX_WORKSPACE_ROOT", str(ws))
         svc = _make_svc(tmp_path)
-        assert svc._cli_workspace({}) == str(ws)
+        result = svc._cli_workspace({})
+        assert result != str(ws)
+        assert "xcmax_product_scratch" in result
 
     def test_default_workspace(self, tmp_path, monkeypatch):
         monkeypatch.delenv("XCMAX_CODEX_WORKSPACE_ROOT", raising=False)

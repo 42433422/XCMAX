@@ -697,10 +697,13 @@ class TestCreateParaTask:
 
 
 class TestCliSubprocessEnv:
-    def test_no_proxy_returns_none(self, tmp_path, monkeypatch) -> None:
+    def test_no_proxy_product_domain_returns_env(self, tmp_path, monkeypatch) -> None:
+        # 产品域（信任墙第2层）：即使无代理也返回剥掉工厂令牌的 env dict（非 None）
         monkeypatch.delenv("XCMAX_CLI_PROXY", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        assert svc._cli_subprocess_env() is None
+        env = svc._cli_subprocess_env()
+        assert env is not None
+        assert isinstance(env, dict)
 
     def test_proxy_set_injects_env_vars(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CLI_PROXY", "http://proxy:8080")
@@ -714,10 +717,15 @@ class TestCliSubprocessEnv:
         assert env["https_proxy"] == "http://proxy:8080"
         assert env["all_proxy"] == "http://proxy:8080"
 
-    def test_empty_proxy_returns_none(self, tmp_path, monkeypatch) -> None:
+    def test_empty_proxy_product_domain_returns_env(self, tmp_path, monkeypatch) -> None:
+        # 产品域：空代理字符串时不注入 XCMAX_CLI_PROXY 值到代理键，但仍返回 env dict（剥令牌）
         monkeypatch.setenv("XCMAX_CLI_PROXY", "  ")
+        monkeypatch.delenv("HTTP_PROXY", raising=False)
+        monkeypatch.delenv("HTTPS_PROXY", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        assert svc._cli_subprocess_env() is None
+        env = svc._cli_subprocess_env()
+        assert env is not None
+        assert env.get("HTTP_PROXY") != "  ".strip()  # whitespace not injected as proxy
 
 
 # ───────────────────── _fetch_para_task ─────────────────────

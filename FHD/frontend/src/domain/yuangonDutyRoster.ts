@@ -207,7 +207,7 @@ export const YUANGON_PKG_DESCRIPTIONS: Record<string, string> = {
   'miniapp-builder': '为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑',
   'mobile-android-release-officer': 'P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。',
   'mobile-harmony-release-officer': 'P-S 鸿蒙 HarmonyOS 渠道构建与发布：build-hap.sh、publish-release-harmony.sh、HAP/HSP 产出与签名、企业版发版。',
-  'mobile-ios-release-officer': 'P-S iOS 渠道发布：双 SKU Bundle ID、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。',
+  'mobile-ios-release-officer': 'XCAGI iOS 渠道发布：主线上架、冻结兼容 SKU、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。',
   'mods-and-eskill-curator': '管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。',
   'modstore-backend-api': '维护 MODstore 平台的 Flask 蓝图 API：工作台、市场目录、工作流、LLM 代理与 WebSocket 实时通道；不触碰前端 Vue 文件。',
   'nginx-config-engineer': '维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。',
