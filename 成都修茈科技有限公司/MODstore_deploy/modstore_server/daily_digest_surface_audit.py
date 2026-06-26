@@ -973,8 +973,11 @@ async def _inject_market_auth(context: Any, auth: Dict[str, Any], target_url: st
         try:
             await context.add_cookies(cookie_rows)
         except Exception as exc:
+            # Log only the exception type — cookie_rows may contain session tokens.
             logger.warning(
-                "surface audit: inject auth cookies failed url=%s err=%s", cookie_url, exc
+                "surface audit: inject auth cookies failed url=%s err=%s",
+                cookie_url,
+                type(exc).__name__,
             )
 
     access = str(auth.get("access_token") or "").strip()
@@ -1639,9 +1642,7 @@ async def run_surface_audit_async() -> Dict[str, Any]:
             if any(t.lane == "P-S" for t in _targets):
                 ps_auth = _login_surface_audit_sync(account_kind="enterprise", label="P-S")
                 if ps_auth:
-                    logger.info(
-                        "surface audit: P-S enterprise login ok user=%s", ps_auth.get("username")
-                    )
+                    logger.info("surface audit: P-S enterprise login ok")
                 else:
                     raise RuntimeError(
                         "surface audit: P-S enterprise login required but login failed "
