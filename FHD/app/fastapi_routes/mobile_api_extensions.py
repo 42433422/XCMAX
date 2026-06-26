@@ -26,6 +26,7 @@ from app.application.codex_super_employee_service import CodexSuperEmployeeServi
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.application.execution_scope import factory_context
 from app.application.facades.mobile_relay_facade import MobileRelayService
+from app.application.trae_super_employee_service import TraeSuperEmployeeService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _admin_employee_match_keys,
@@ -84,6 +85,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     SyncAckBody,
     SyncPullBody,
     SyncPushBody,
+    TraeSuperEmployeeMobileMessageBody,
 )
 from app.fastapi_routes.mobile_extensions.models import (
     SyncPushItem as SyncPushItem,
@@ -1664,6 +1666,81 @@ async def mobile_admin_cursor_super_employee_invoke(
         )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_admin_cursor_super_employee_invoke")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.get("/admin/trae-super-employee/messages")
+async def mobile_admin_trae_super_employee_messages(
+    request: Request,
+    limit: int = Query(default=80, ge=1, le=200),
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的 Trae 超级员工对话记录。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        messages = TraeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_trae_super_employee_messages")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/admin/trae-super-employee/messages")
+async def mobile_admin_trae_super_employee_invoke(
+    request: Request,
+    body: TraeSuperEmployeeMobileMessageBody,
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的软件内 Trae 调用入口。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    text = (body.message or body.body or "").strip()
+    context = dict(body.context or {})
+    context.setdefault("source", "mobile_im")
+    context.setdefault("client_surface", "mobile")
+    context.setdefault("device_scope", "all_devices")
+    context.setdefault("target_devices", ["all"])
+    if (
+        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        == "admin"
+    ):
+        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=_wsid, base=context)
+    try:
+        result = TraeSuperEmployeeService().invoke(
+            user_id=uid,
+            message=text,
+            context=context,
+        )
+        return format_mobile_response(data=result)
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400),
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_trae_super_employee_invoke")
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
             status_code=500,

@@ -87,6 +87,12 @@ class CursorSuperEmployeeMobileMessageBody(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
+class TraeSuperEmployeeMobileMessageBody(BaseModel):
+    message: str = Field(default="", max_length=4000)
+    body: str = Field(default="", max_length=4000)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
 class AiGroupCreateBody(BaseModel):
     name: str = Field(default="", max_length=60)
 
