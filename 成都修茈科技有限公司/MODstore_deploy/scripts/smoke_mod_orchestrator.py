@@ -55,8 +55,8 @@ async def _watch_steps(sid: str, stop: asyncio.Event) -> None:
 
 async def _main(user_id: Optional[int]) -> int:
     os.chdir(ROOT)
-    from modstore_server.models import CatalogItem, User, get_session_factory
     from modstore_server.mod_scaffold_runner import analyze_mod_employee_readiness
+    from modstore_server.models import CatalogItem, User, get_session_factory
     from modstore_server.workbench_api import (
         WORKBENCH_SESSIONS,
         _default_steps,

@@ -105,18 +105,18 @@ def main(argv: List[str] | None = None) -> int:
 
     try:
         from modstore_server import vector_engine
-        from modstore_server.knowledge_vector_store_redis import (
-            CHUNK_PREFIX,
-            DOC_PREFIX,
-            USER_DOCS_PREFIX,
-            INDEX_NAME,
-            get_redis,
-            redis_url,
-            vector_dim,
-        )
         from modstore_server.knowledge_vector_store import (
             DEFAULT_USER_COLLECTION_NAME,
             _ensure_user_default_collection,
+        )
+        from modstore_server.knowledge_vector_store_redis import (
+            CHUNK_PREFIX,
+            DOC_PREFIX,
+            INDEX_NAME,
+            USER_DOCS_PREFIX,
+            get_redis,
+            redis_url,
+            vector_dim,
         )
         from modstore_server.models import (
             KnowledgeDocument,

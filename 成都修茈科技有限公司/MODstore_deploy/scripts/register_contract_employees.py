@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-import json, os, sys, zipfile, shutil, subprocess
+import json
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
 
 BASE = "/root/成都修茈科技有限公司/MODstore_deploy"
 LIBRARY = os.path.join(BASE, "library")
