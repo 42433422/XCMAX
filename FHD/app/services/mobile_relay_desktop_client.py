@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_utils import get_app_data_dir, get_desktop_state_dir
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,35 @@ CursorSuperEmployeeService: Any | None = None
 _STATE_LOCK = threading.Lock()
 _WORKER_THREAD: threading.Thread | None = None
 _STOP_EVENT = threading.Event()
-_CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
+# 配对凭证落在稳定的桌面态目录，绝不随源码 cwd 漂移（见 get_desktop_state_dir 文档）。
+# 历史上 get_app_data_dir() 源码直跑会回落到仓库根，桌面便以与手机已配对 relay 不同
+# 的身份去轮询，任务永远卡在「排队中」。
+_CONFIG_FILE = Path(get_desktop_state_dir()) / "mobile_relay_desktop.json"
+_LEGACY_CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
+_LEGACY_MIGRATION_DONE = False
+
+
+def _migrate_legacy_config_once() -> None:
+    """旧版把配对凭证写到 get_app_data_dir()（可能回落仓库根）。
+
+    若稳定路径尚无配置、而旧路径存在，则一次性迁移过来，避免源码升级后丢失既有配对。
+    稳定路径已有配置时**绝不覆盖**（它才是当前权威绑定）。
+    """
+    global _LEGACY_MIGRATION_DONE
+    if _LEGACY_MIGRATION_DONE:
+        return
+    _LEGACY_MIGRATION_DONE = True
+    try:
+        if _CONFIG_FILE.is_file() or not _LEGACY_CONFIG_FILE.is_file():
+            return
+        if _CONFIG_FILE.resolve() == _LEGACY_CONFIG_FILE.resolve():
+            return
+        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CONFIG_FILE.write_text(_LEGACY_CONFIG_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+        logger.info("迁移历史云中继配对凭证 %s -> %s", _LEGACY_CONFIG_FILE, _CONFIG_FILE)
+    except OSError:
+        logger.warning("云中继配对凭证迁移失败", exc_info=True)
+
 
 # 并发执行：poll 循环只负责"认领+派发"，每个任务在独立线程里跑，
 # 避免单个长任务(开发任务可跑数分钟)堵死整条队列、导致新消息卡住。
@@ -320,6 +348,10 @@ def start_desktop_relay_poller() -> bool:
     config = _read_config()
     if not config.get("relay_id") or not config.get("desktop_token"):
         return False
+    # 轮询每 4s 一次、长年累月运行；httpx 默认对每个请求打一行 INFO，会把
+    # poll 日志刷成噪音（~2 万行/天），白白撑大桌面端日志文件占满磁盘。降到 WARNING，
+    # 真正的失败仍由 _poll_loop 自己的 logger.warning 记录。
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     global _WORKER_THREAD
     with _STATE_LOCK:
         if _WORKER_THREAD and _WORKER_THREAD.is_alive():
