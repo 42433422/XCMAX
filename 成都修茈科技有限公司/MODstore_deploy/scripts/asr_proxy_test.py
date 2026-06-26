@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """通过 modstore ASR 代理发送示例 WAV，验证 offline 文本回传。"""
+
 from __future__ import annotations
 
 import asyncio

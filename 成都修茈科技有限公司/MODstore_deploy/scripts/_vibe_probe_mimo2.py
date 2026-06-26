@@ -1,4 +1,5 @@
 """临时：用真正的 SYSTEM_PROMPT_EMPLOYEE 直连 mimo，观察 content / reasoning_tokens。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,8 +9,8 @@ import sys
 
 
 async def go() -> None:
-    from modstore_server.llm_chat_proxy import chat_dispatch
     from modstore_server.employee_ai_scaffold import SYSTEM_PROMPT_EMPLOYEE
+    from modstore_server.llm_chat_proxy import chat_dispatch
 
     api_key = os.environ.get("MIMO_API_KEY", "")
     if not api_key:

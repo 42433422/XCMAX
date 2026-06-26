@@ -1730,6 +1730,9 @@ class TestCliWorkspaceBoundary:
     """_cli_workspace 的解析逻辑。
 
     签名: _cli_workspace(self, context: dict) -> str
+
+    产品域（product grant）的安全策略：绝不采信客户提供的宿主路径，
+    始终返回隔离临时区（_product_ephemeral_workspace），context/env 无效。
     """
 
     def test_product_context_workspace_root_is_ignored(self, tmp_path, monkeypatch):

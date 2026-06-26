@@ -13,7 +13,6 @@ import stat
 import sys
 from pathlib import Path
 
-
 KEY_NAME = "MODSTORE_LLM_MASTER_KEY"
 ASSIGN_RE = re.compile(rf"^\s*(?:export\s+)?{re.escape(KEY_NAME)}\s*=", re.ASCII)
 

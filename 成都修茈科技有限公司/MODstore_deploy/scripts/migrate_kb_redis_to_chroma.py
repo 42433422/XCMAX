@@ -54,7 +54,7 @@ def _scan_user_chunks(redis_client) -> Iterable[Tuple[int, str, List[Dict[str, A
     for key in redis_client.scan_iter(match=b"modstore:kb:chunk:*", count=200):
         if not key.startswith(chunk_prefix):
             continue
-        suffix = key[len(chunk_prefix):].decode("utf-8", errors="ignore")
+        suffix = key[len(chunk_prefix) :].decode("utf-8", errors="ignore")
         parts = suffix.split(":")
         if len(parts) < 3:
             continue
@@ -105,18 +105,18 @@ def main(argv: List[str] | None = None) -> int:
 
     try:
         from modstore_server import vector_engine
-        from modstore_server.knowledge_vector_store_redis import (
-            CHUNK_PREFIX,
-            DOC_PREFIX,
-            USER_DOCS_PREFIX,
-            INDEX_NAME,
-            get_redis,
-            redis_url,
-            vector_dim,
-        )
         from modstore_server.knowledge_vector_store import (
             DEFAULT_USER_COLLECTION_NAME,
             _ensure_user_default_collection,
+        )
+        from modstore_server.knowledge_vector_store_redis import (
+            CHUNK_PREFIX,
+            DOC_PREFIX,
+            INDEX_NAME,
+            USER_DOCS_PREFIX,
+            get_redis,
+            redis_url,
+            vector_dim,
         )
         from modstore_server.models import (
             KnowledgeDocument,
@@ -199,7 +199,9 @@ def main(argv: List[str] | None = None) -> int:
                 metadatas.append(meta)
 
             if not ids:
-                logger.warning("user=%s doc=%s 没有可迁移的 chunk（embedding 缺失）", user_id, doc_id)
+                logger.warning(
+                    "user=%s doc=%s 没有可迁移的 chunk（embedding 缺失）", user_id, doc_id
+                )
                 continue
 
             try:

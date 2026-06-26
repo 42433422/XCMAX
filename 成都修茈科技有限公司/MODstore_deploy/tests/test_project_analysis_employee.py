@@ -166,7 +166,7 @@ def test_scan_project_tree_basic(tmp_path):
     (tmp_path / "node_modules").mkdir()  # should be skipped
     (tmp_path / "node_modules" / "pkg.js").write_text("x")
 
-    result = asyncio.get_event_loop().run_until_complete(tool_scan_project_tree(str(tmp_path), "."))
+    result = asyncio.run(tool_scan_project_tree(str(tmp_path), "."))
     assert result["ok"] is True
     paths = [e["path"] for e in result["files"]]
     assert any("main.py" in p for p in paths)
@@ -178,9 +178,7 @@ def test_scan_project_tree_basic(tmp_path):
 def test_scan_project_tree_path_escape(tmp_path):
     from modstore_server.mod_employee_agent_runner import tool_scan_project_tree
 
-    result = asyncio.get_event_loop().run_until_complete(
-        tool_scan_project_tree(str(tmp_path), "../../etc")
-    )
+    result = asyncio.run(tool_scan_project_tree(str(tmp_path), "../../etc"))
     assert result["ok"] is False
     assert "越界" in result["error"]
 
@@ -192,9 +190,7 @@ def test_identify_file_types(tmp_path):
     (tmp_path / "b.py").write_text("")
     (tmp_path / "c.ts").write_text("")
 
-    result = asyncio.get_event_loop().run_until_complete(
-        tool_identify_file_types(str(tmp_path), ".")
-    )
+    result = asyncio.run(tool_identify_file_types(str(tmp_path), "."))
     assert result["ok"] is True
     ft = result["file_types"]
     assert ft.get(".py", 0) == 2
@@ -207,9 +203,7 @@ def test_analyze_project_summary_fallback(tmp_path):
     (tmp_path / "package.json").write_text('{"name":"test","version":"1.0.0"}')
     (tmp_path / "README.md").write_text("# My Project\nHello world.")
 
-    result = asyncio.get_event_loop().run_until_complete(
-        tool_analyze_project_summary(str(tmp_path), ".")
-    )
+    result = asyncio.run(tool_analyze_project_summary(str(tmp_path), "."))
     assert result["ok"] is True
     assert "manifests" in result or "top_level" in result
     # README snippet
@@ -248,7 +242,7 @@ def test_agent_runner_dispatches_scan_project_tree(tmp_path):
         "workspace_root": str(tmp_path),
         "employee_id": "test",
     }
-    result = asyncio.get_event_loop().run_until_complete(EmployeeAgentRunner(ctx).run("扫描项目"))
+    result = asyncio.run(EmployeeAgentRunner(ctx).run("扫描项目"))
     assert result["ok"] is True
     # Tool call was scan_project_tree
     assert result["tool_calls"][0]["tool"] == "scan_project_tree"

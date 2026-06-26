@@ -11,9 +11,15 @@ import time
 import traceback
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
 from functools import wraps
 from typing import Any
+
+try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime, timezone
+
+    UTC = timezone.utc  # noqa: UP017
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

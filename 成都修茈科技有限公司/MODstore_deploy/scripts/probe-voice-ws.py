@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Probe local voice WebSocket endpoints (no auth = expect ready or error after accept)."""
+
 from __future__ import annotations
 
 import asyncio

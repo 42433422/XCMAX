@@ -75,7 +75,9 @@ def _build_pack(spec: dict) -> tuple[Path, bytes, dict, dict]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--publish", action="store_true", help="Write to catalog_store + catalog_items")
+    parser.add_argument(
+        "--publish", action="store_true", help="Write to catalog_store + catalog_items"
+    )
     parser.add_argument("--public", action="store_true", help="Set is_public=true on catalog rows")
     args = parser.parse_args()
 
@@ -135,8 +137,12 @@ def main() -> int:
             row.description = saved.get("description") or rec["description"]
             row.price = 0.0
             row.artifact = "employee_pack"
-            row.material_category = saved.get("material_category") or rec.get("material_category") or "ai_employee"
-            row.workpiece_type = saved.get("workpiece_type") or rec.get("workpiece_type") or "document_processor"
+            row.material_category = (
+                saved.get("material_category") or rec.get("material_category") or "ai_employee"
+            )
+            row.workpiece_type = (
+                saved.get("workpiece_type") or rec.get("workpiece_type") or "document_processor"
+            )
             row.industry = saved.get("industry") or rec["industry"]
             row.stored_filename = saved.get("stored_filename") or ""
             row.sha256 = saved.get("sha256") or ""

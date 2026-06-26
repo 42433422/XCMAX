@@ -1,4 +1,5 @@
 """临时：直连 mimo 看原始 chat_dispatch 响应。可删。"""
+
 from __future__ import annotations
 
 import asyncio

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """One-off: ensure api_mod_ai_scaffold passes industry_id to runner."""
-from pathlib import Path
 
 import sys
+from pathlib import Path
 
 root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
 p = root / "modstore_server" / "api" / "authoring.py"

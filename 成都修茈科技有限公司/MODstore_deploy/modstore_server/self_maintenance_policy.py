@@ -8,7 +8,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
 MARKER_STATUS_FILENAME = "self_maintenance_loop_status.py"
 _STAT_FOOTER_RE = re.compile(
     r"^\s*\d+\s+files?\s+changed\b|^\s*\d+\s+insertions?\b|^\s*\d+\s+deletions?\b",
@@ -56,7 +55,9 @@ def load_loop_memory(path: Optional[Path] = None) -> Dict[str, Any]:
         return {"_parse_error": f"{p}: {exc}"}
 
 
-def loop_memory_requires_executable_change(memory: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def loop_memory_requires_executable_change(
+    memory: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     mem = memory if isinstance(memory, dict) else load_loop_memory()
     parse_error = str(mem.get("_parse_error") or "").strip()
     if parse_error:
@@ -115,7 +116,10 @@ def loop_memory_requires_executable_change(memory: Optional[Dict[str, Any]] = No
                 continue
             action = str(item.get("action") or "")
             status = str(item.get("status") or "")
-            if action == "await_human_strategy_approval" or status == "completed_waiting_human_strategy":
+            if (
+                action == "await_human_strategy_approval"
+                or status == "completed_waiting_human_strategy"
+            ):
                 return {
                     "required": True,
                     "reason": "recent self-maintenance run required human strategy approval",
@@ -139,9 +143,7 @@ def parse_diff_stat_paths(diff_summary: str) -> List[str]:
 
 def is_marker_status_path(path: str) -> bool:
     normalized = (path or "").replace("\\", "/").strip().strip('"').strip("'")
-    return normalized == MARKER_STATUS_FILENAME or normalized.endswith(
-        "/" + MARKER_STATUS_FILENAME
-    )
+    return normalized == MARKER_STATUS_FILENAME or normalized.endswith("/" + MARKER_STATUS_FILENAME)
 
 
 def should_block_marker_only_diff_summary(

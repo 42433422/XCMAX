@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Idempotent patch: add xcmax OpenAPI tag + optional router to app_factory.py."""
+
 from __future__ import annotations
 
 from pathlib import Path

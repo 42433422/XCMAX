@@ -8,8 +8,9 @@ Create Date: 2026-05-05
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy import inspect as sa_inspect
+
+from alembic import op
 
 revision = "20260505_new_tables"
 down_revision = "20260502_money"
@@ -440,20 +441,35 @@ def downgrade() -> None:
         return
     # 按依赖倒序删除
     _drop_order = [
-        "reconciliation_reports", "invoices", "author_withdrawals", "author_earnings",
-        "script_workflow_runs", "script_workflow_versions", "script_workflows",
-        "event_outbox_dlq", "event_outbox",
+        "reconciliation_reports",
+        "invoices",
+        "author_withdrawals",
+        "author_earnings",
+        "script_workflow_runs",
+        "script_workflow_versions",
+        "script_workflows",
+        "event_outbox_dlq",
+        "event_outbox",
         "risk_events",
-        "knowledge_documents", "knowledge_memberships", "knowledge_collections",
-        "llm_model_capabilities", "ai_model_prices",
+        "knowledge_documents",
+        "knowledge_memberships",
+        "knowledge_collections",
+        "llm_model_capabilities",
+        "ai_model_prices",
         "refund_requests",
         "notifications",
-        "developer_key_export_events", "developer_tokens",
-        "webhook_deliveries", "webhook_subscriptions",
-        "workflow_versions", "workflow_triggers",
+        "developer_key_export_events",
+        "developer_tokens",
+        "webhook_deliveries",
+        "webhook_subscriptions",
+        "workflow_versions",
+        "workflow_triggers",
         "employee_execution_metrics",
-        "entitlements", "quotas",
-        "eskill_runs", "eskill_versions", "eskills",
+        "entitlements",
+        "quotas",
+        "eskill_runs",
+        "eskill_versions",
+        "eskills",
     ]
     for table in _drop_order:
         op.execute(sa.text(f"DROP TABLE IF EXISTS {table} CASCADE"))

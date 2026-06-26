@@ -32,9 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MODSTORE_ROOT = REPO_ROOT / "MODstore_deploy"
 MIANSHI_DIR = REPO_ROOT / "mianshi"
 STATE_FILE = REPO_ROOT / "MODstore_deploy" / "var" / "intake_watcher_state.json"
-EVENT_OUTBOX = (
-    REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "event_outbox.jsonl"
-)
+EVENT_OUTBOX = REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "event_outbox.jsonl"
 
 
 def _load_state() -> dict[str, dict]:
@@ -146,7 +144,12 @@ def _stream_subscribe_loop(*, interval_seconds: int, filter_prefix: str = "ops.i
                 if filter_prefix and not et.startswith(filter_prefix):
                     continue
                 payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
-                subject = str(payload.get("subject_id") or payload.get("ticket_no") or payload.get("path") or "?")
+                subject = str(
+                    payload.get("subject_id")
+                    or payload.get("ticket_no")
+                    or payload.get("path")
+                    or "?"
+                )
                 print(f"[STREAM] {et} subject={subject} mid={mid}")
             if mids:
                 ack(group, mids)
@@ -197,7 +200,9 @@ def main() -> int:
             print("[OK] no new candidate packs")
         else:
             for e in events:
-                print(f"[EVENT] ops.intake.candidate_pack subject={e['subject_id']} path={e['path']}")
+                print(
+                    f"[EVENT] ops.intake.candidate_pack subject={e['subject_id']} path={e['path']}"
+                )
         return 0
 
     stream_on = bool(args.stream_subscribe)
@@ -222,7 +227,9 @@ def main() -> int:
         while True:
             events = scan_once()
             for e in events:
-                print(f"[EVENT] ops.intake.candidate_pack subject={e['subject_id']} path={e['path']}")
+                print(
+                    f"[EVENT] ops.intake.candidate_pack subject={e['subject_id']} path={e['path']}"
+                )
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("[WATCH] stopped")

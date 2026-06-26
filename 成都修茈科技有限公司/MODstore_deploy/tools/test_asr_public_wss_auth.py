@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """公网 WSS ASR 冒烟：带 token 握手 + 可选 TTS 语音识别。"""
+
 from __future__ import annotations
 
 import asyncio

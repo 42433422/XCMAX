@@ -56,7 +56,8 @@ MODstore_deploy/modstore_server/data/event_outbox.jsonl
 MODstore_deploy/modstore_server/data/event_outbox_*.jsonl
 MODstore_deploy/modstore_server/data/payment_orders/
 MODstore_deploy/modstore_server/data/chroma/
-MODstore_deploy/modstore_server/data/
+MODstore_deploy/modstore_server/data/*.jsonl
+# 静态数据文件（如 llm_official_prices.json）是源码的一部分，应追踪入库
 
 # 组件化拆仓脚本生成目录（由 scripts/split/split-*.sh 生成）
 .split-out/

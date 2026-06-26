@@ -10,7 +10,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -52,7 +51,7 @@ SCENARIOS: dict[str, Scenario] = {
         inject=[["docker", "compose", "restart", "payment-service"]],
         recover=[["docker", "compose", "up", "-d", "payment-service"]],
         observe=[
-            "modstore_payment_proxy_requests_total{status=\"502\"}",
+            'modstore_payment_proxy_requests_total{status="502"}',
             "payment-service /actuator/health",
             "sre_smoke_check payment.health",
         ],
@@ -111,7 +110,9 @@ def main() -> int:
     parser.add_argument("--scenario", choices=sorted(SCENARIOS), required=True)
     parser.add_argument("--duration", type=int, default=60, help="Fault duration in seconds")
     parser.add_argument("--confirm", action="store_true", help="Actually execute the drill")
-    parser.add_argument("--skip-smoke", action="store_true", help="Skip smoke checks before and after the drill")
+    parser.add_argument(
+        "--skip-smoke", action="store_true", help="Skip smoke checks before and after the drill"
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:8765")
     parser.add_argument("--market-url", default="http://127.0.0.1:4173")
     parser.add_argument("--payment-url", default="http://127.0.0.1:8080")

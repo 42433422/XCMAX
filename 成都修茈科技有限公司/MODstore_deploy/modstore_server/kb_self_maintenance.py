@@ -84,7 +84,10 @@ def _load_docs(kind: str) -> List[Tuple[Path, Dict[str, Any]]]:
 
 def _write_doc(path: Path, data: Dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    tmp.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
     tmp.replace(path)
 
 
@@ -99,13 +102,20 @@ def _archive_doc(path: Path, kind: str, reason: str) -> Path:
     sidecar = target.with_suffix(target.suffix + ".archive_reason.json")
     path.replace(target)
     sidecar.write_text(
-        json.dumps({"archived_at": time.time(), "reason": reason, "source": str(path)}, ensure_ascii=False, sort_keys=True) + "\n",
+        json.dumps(
+            {"archived_at": time.time(), "reason": reason, "source": str(path)},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return target
 
 
-def _confidence_for_doc(path: Path, doc: Dict[str, Any], now: float) -> Tuple[float, Dict[str, Any]]:
+def _confidence_for_doc(
+    path: Path, doc: Dict[str, Any], now: float
+) -> Tuple[float, Dict[str, Any]]:
     metadata = doc.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
@@ -132,7 +142,9 @@ def _confidence_for_doc(path: Path, doc: Dict[str, Any], now: float) -> Tuple[fl
     return confidence, doc
 
 
-def _merge_similar(kind: str, docs: List[Tuple[Path, Dict[str, Any]]], dry_run: bool) -> List[Dict[str, Any]]:
+def _merge_similar(
+    kind: str, docs: List[Tuple[Path, Dict[str, Any]]], dry_run: bool
+) -> List[Dict[str, Any]]:
     threshold = _env_float("MODSTORE_KB_SIMILARITY_MERGE_THRESHOLD", 0.82)
     actions: List[Dict[str, Any]] = []
     archived: set[str] = set()
@@ -149,9 +161,17 @@ def _merge_similar(kind: str, docs: List[Tuple[Path, Dict[str, Any]]], dry_run: 
             meta_b = doc_b.get("metadata") if isinstance(doc_b.get("metadata"), dict) else {}
             conf_a = float(meta_a.get("confidence") or 0.0)
             conf_b = float(meta_b.get("confidence") or 0.0)
-            keep_path, keep_doc, drop_path = (path_a, doc_a, path_b) if conf_a >= conf_b else (path_b, doc_b, path_a)
-            keep_meta = keep_doc.get("metadata") if isinstance(keep_doc.get("metadata"), dict) else {}
-            merged_sources = keep_meta.get("merged_sources") if isinstance(keep_meta.get("merged_sources"), list) else []
+            keep_path, keep_doc, drop_path = (
+                (path_a, doc_a, path_b) if conf_a >= conf_b else (path_b, doc_b, path_a)
+            )
+            keep_meta = (
+                keep_doc.get("metadata") if isinstance(keep_doc.get("metadata"), dict) else {}
+            )
+            merged_sources = (
+                keep_meta.get("merged_sources")
+                if isinstance(keep_meta.get("merged_sources"), list)
+                else []
+            )
             merged_sources.append({"path": str(drop_path), "similarity": round(score, 4)})
             keep_meta["merged_sources"] = merged_sources[-20:]
             keep_meta["merged_at"] = datetime.now(timezone.utc).isoformat()
@@ -175,7 +195,9 @@ def _merge_similar(kind: str, docs: List[Tuple[Path, Dict[str, Any]]], dry_run: 
 
 def run_kb_self_maintenance_once(*, dry_run: bool | None = None) -> Dict[str, Any]:
     if dry_run is None:
-        dry_run = (os.environ.get("MODSTORE_KB_SELF_MAINTENANCE_DRY_RUN") or "0").strip().lower() in {
+        dry_run = (
+            os.environ.get("MODSTORE_KB_SELF_MAINTENANCE_DRY_RUN") or "0"
+        ).strip().lower() in {
             "1",
             "true",
             "yes",

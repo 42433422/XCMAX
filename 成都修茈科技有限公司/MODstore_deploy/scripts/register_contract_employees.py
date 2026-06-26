@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-import json, os, sys, zipfile, shutil, subprocess
+import json
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
 
 BASE = "/root/成都修茈科技有限公司/MODstore_deploy"
 LIBRARY = os.path.join(BASE, "library")
@@ -9,6 +14,7 @@ FILES_DIR = os.path.join(CATALOG_STORE, "files")
 
 CONTRACT_EMPLOYEES = ["ai-contract-advisor", "ai-contract-drafter", "ai-contract-consultant"]
 
+
 def main():
     os.makedirs(FILES_DIR, exist_ok=True)
 
@@ -16,7 +22,9 @@ def main():
         with open(PACKAGES_JSON) as f:
             raw = json.load(f)
         if isinstance(raw, dict):
-            packages = list(raw.values()) if all(isinstance(v, dict) for v in raw.values()) else [raw]
+            packages = (
+                list(raw.values()) if all(isinstance(v, dict) for v in raw.values()) else [raw]
+            )
         elif isinstance(raw, list):
             packages = raw
         else:
@@ -50,7 +58,9 @@ def main():
         zip_path = os.path.join(FILES_DIR, zip_filename)
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(f"{emp_id}/manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+            zf.writestr(
+                f"{emp_id}/manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2)
+            )
             backend_dir = os.path.join(lib_dir, "backend")
             if os.path.isdir(backend_dir):
                 for root, dirs, files in os.walk(backend_dir):
@@ -60,6 +70,7 @@ def main():
                         zf.write(fpath, arcname)
 
         import hashlib
+
         with open(zip_path, "rb") as f:
             sha256 = hashlib.sha256(f.read()).hexdigest()
 
@@ -76,16 +87,24 @@ def main():
         }
 
         if emp_id in existing_ids:
-            packages = [rec if (p.get("pkg_id", p.get("id", "")) == emp_id) else p for p in packages if isinstance(p, dict)]
+            packages = [
+                rec if (p.get("pkg_id", p.get("id", "")) == emp_id) else p
+                for p in packages
+                if isinstance(p, dict)
+            ]
         else:
             packages.append(rec)
             existing_ids.add(emp_id)
 
-        print(f"  Written {zip_filename} ({os.path.getsize(zip_path)} bytes, sha256={sha256[:16]}...)")
+        print(
+            f"  Written {zip_filename} ({os.path.getsize(zip_path)} bytes, sha256={sha256[:16]}...)"
+        )
 
     with open(PACKAGES_JSON, "w") as f:
         json.dump(packages, f, ensure_ascii=False, indent=2)
-    print(f"\nUpdated {PACKAGES_JSON} with {len([p for p in packages if isinstance(p, dict) and p.get('artifact') == 'employee_pack'])} employee packs")
+    print(
+        f"\nUpdated {PACKAGES_JSON} with {len([p for p in packages if isinstance(p, dict) and p.get('artifact') == 'employee_pack'])} employee packs"
+    )
 
     print("\n=== Registering in database ===")
     for emp_id in CONTRACT_EMPLOYEES:
@@ -99,8 +118,22 @@ def main():
         zip_filename = f"{emp_id}-v{manifest.get('version', '1.0.0')}.xcemp"
         sql = f"INSERT INTO catalog_items (pkg_id, name, version, artifact, description, industry, stored_filename, author_id) VALUES ('{emp_id}', '{manifest.get('name', emp_id).replace(chr(39), chr(39)+chr(39))}', '{manifest.get('version', '1.0.0')}', 'employee_pack', '{manifest.get('description', '').replace(chr(39), chr(39)+chr(39))}', '{manifest.get('industry', '通用')}', '{zip_filename}', 2) ON CONFLICT (pkg_id) DO UPDATE SET name=EXCLUDED.name, version=EXCLUDED.version, description=EXCLUDED.description, stored_filename=EXCLUDED.stored_filename;"
         r = subprocess.run(
-            ["psql", "-h", "127.0.0.1", "-p", "5433", "-U", "modstore", "-d", "modstore", "-c", sql],
-            capture_output=True, text=True, env={**os.environ, "PGPASSWORD": "modstore"}
+            [
+                "psql",
+                "-h",
+                "127.0.0.1",
+                "-p",
+                "5433",
+                "-U",
+                "modstore",
+                "-d",
+                "modstore",
+                "-c",
+                sql,
+            ],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PGPASSWORD": "modstore"},
         )
         if r.returncode == 0:
             print(f"  DB: {emp_id} registered OK")
@@ -110,6 +143,7 @@ def main():
     print("\nDone! Restarting MODstore...")
     subprocess.run(["systemctl", "restart", "modstore"], capture_output=True)
     print("MODstore restarted.")
+
 
 if __name__ == "__main__":
     main()

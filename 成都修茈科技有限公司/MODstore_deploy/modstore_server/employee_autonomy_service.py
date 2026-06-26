@@ -21,7 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import func, or_
 
-from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA
+from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
 from modstore_server.models import (
     EmployeeChangeRequest,
     EmployeeCollabMessage,
@@ -926,6 +926,7 @@ def _evolution_failure_candidates(
     若计入会导致配额耗尽时进化引擎空转（见上方说明）。
     """
     err_col = func.coalesce(EmployeeExecutionMetric.error, "")
+    infra_kinds = [FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT]
     query = session.query(
         EmployeeExecutionMetric.employee_id,
         func.count(EmployeeExecutionMetric.id).label("fail_count"),
@@ -934,7 +935,7 @@ def _evolution_failure_candidates(
         EmployeeExecutionMetric.status != "success",
         or_(
             EmployeeExecutionMetric.failure_kind.is_(None),
-            EmployeeExecutionMetric.failure_kind != FAILURE_KIND_QUOTA,
+            ~EmployeeExecutionMetric.failure_kind.in_(infra_kinds),
         ),
     )
     for marker in _EVOLUTION_INFRA_FAILURE_MARKERS:

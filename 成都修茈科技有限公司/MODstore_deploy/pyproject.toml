@@ -58,11 +58,13 @@ vibe = [
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",
+  "pytest-asyncio>=0.23",
   "PyYAML>=6.0",
   "black>=24.3",
   "isort>=5.13",
   "jsonschema>=4.21",
   "mypy>=1.8",
+  "openpyxl>=3.1",
 ]
 
 [project.scripts]
@@ -93,6 +95,7 @@ known_first_party = ["modman", "modstore_server"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+asyncio_mode = "auto"
 xfail_strict = true
 markers = [
     "integration: HTTP/webhook integration tests",

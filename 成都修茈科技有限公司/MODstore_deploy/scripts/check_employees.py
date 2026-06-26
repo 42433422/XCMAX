@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import json, os, sys
+import json
+import os
+import sys
 
 old_base = "/root/成都修茈科技有限公司/MODstore_deploy"
 new_base = "/root/modstore-git/MODstore_deploy"
@@ -29,10 +31,26 @@ for lib_dir in [os.path.join(old_base, "library"), os.path.join(new_base, "modst
 print("\n=== DB catalog_items ===")
 try:
     import subprocess
+
     r = subprocess.run(
-        ["psql", "-h", "127.0.0.1", "-p", "5433", "-U", "modstore", "-d", "modstore",
-         "-t", "-A", "-c", "SELECT pkg_id, name FROM catalog_items WHERE artifact='employee_pack' ORDER BY pkg_id"],
-        capture_output=True, text=True, env={**os.environ, "PGPASSWORD": "modstore"}
+        [
+            "psql",
+            "-h",
+            "127.0.0.1",
+            "-p",
+            "5433",
+            "-U",
+            "modstore",
+            "-d",
+            "modstore",
+            "-t",
+            "-A",
+            "-c",
+            "SELECT pkg_id, name FROM catalog_items WHERE artifact='employee_pack' ORDER BY pkg_id",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PGPASSWORD": "modstore"},
     )
     if r.stdout.strip():
         for line in r.stdout.strip().split("\n"):

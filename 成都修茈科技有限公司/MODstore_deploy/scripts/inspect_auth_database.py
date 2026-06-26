@@ -27,7 +27,9 @@ def _redact_database_url(url: str) -> str:
     if not url.startswith(("postgresql://", "postgres://")):
         return url
     try:
-        parsed = urlparse(url if url.startswith("postgresql") else "postgresql" + url[len("postgres") :])
+        parsed = urlparse(
+            url if url.startswith("postgresql") else "postgresql" + url[len("postgres") :]
+        )
         if parsed.password:
             netloc = re.sub(r":([^:@]+)@", r":***@", parsed.netloc, count=1)
             parsed = parsed._replace(netloc=netloc)
@@ -43,7 +45,9 @@ def main() -> int:
         default="",
         help="可选：用户名或邮箱子串（不区分大小写），列出最多 20 条匹配",
     )
-    p.add_argument("--limit", type=int, default=10, help="无 --match 时列出的用户行数上限（默认 10）")
+    p.add_argument(
+        "--limit", type=int, default=10, help="无 --match 时列出的用户行数上限（默认 10）"
+    )
     args = p.parse_args()
     lim = max(1, min(args.limit, 100))
 
@@ -104,8 +108,12 @@ def main() -> int:
         return 1
 
     print()
-    print("恢复提示：空库可设 MODSTORE_BOOTSTRAP_ADMIN；已有用户可用 scripts/grant_admin.py --reset-password")
-    print("或 POST /api/admin/reset-user-password（需 MODSTORE_ADMIN_RECHARGE_TOKEN + X-Modstore-Recharge-Token）。")
+    print(
+        "恢复提示：空库可设 MODSTORE_BOOTSTRAP_ADMIN；已有用户可用 scripts/grant_admin.py --reset-password"
+    )
+    print(
+        "或 POST /api/admin/reset-user-password（需 MODSTORE_ADMIN_RECHARGE_TOKEN + X-Modstore-Recharge-Token）。"
+    )
     return 0
 
 

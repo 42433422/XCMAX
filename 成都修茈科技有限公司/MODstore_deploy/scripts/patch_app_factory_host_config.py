@@ -13,7 +13,7 @@ elif needle in text:
     p.write_text(text.replace(needle, repl, 1), encoding="utf-8")
     print("patched app_factory.py")
 else:
-  # alternate closing
+    # alternate closing
     needle2 = '    "modstore_server.xcmax_admin_api",\n)\n'
     if needle2 in text and "host_config" not in text:
         p.write_text(text.replace(needle2, repl + "\n", 1), encoding="utf-8")

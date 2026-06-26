@@ -130,6 +130,13 @@ def _install_torch_transformers_stubs() -> None:
     # torch.onnx.export
     torch_mod.onnx = types.SimpleNamespace(export=lambda *_a, **_k: None)
 
+    # torch.optim — needed for `from torch.optim import AdamW as TorchAdamW`
+    torch_optim = types.ModuleType("torch.optim")
+    torch_optim.AdamW = MagicMock
+    torch_mod.optim = torch_optim
+    sys.modules["torch.optim"] = torch_optim
+    torch_mod.__path__ = []  # marks torch as a package so submodule imports work
+
     # torch.utils.data.Dataset / DataLoader
     torch_utils = types.ModuleType("torch.utils")
     torch_utils_data = types.ModuleType("torch.utils.data")

@@ -3,6 +3,7 @@
 Example:
   python scripts/trigger_remote_onboard_yuangon.py --pkg-ids a,b
 """
+
 from __future__ import annotations
 
 import argparse

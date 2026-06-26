@@ -1,18 +1,17 @@
 from __future__ import annotations
 
+import re
+import shutil
+import unicodedata
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-import re
-import shutil
-import unicodedata
 from typing import Iterable
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import range_boundaries
-
 
 DETAIL_HEADER_ROWS = 3
 DETAIL_PERSON_BLOCK_ROWS = 6
@@ -302,9 +301,7 @@ class TemplateEmployeeProfile:
     size_week_anchor: date | None = None
 
 
-_NATURE_OT_RE = re.compile(
-    r"(?P<h>\d{1,2})\s*[:：]\s*(?P<m>\d{2})\s*(?:记加班|加班)"
-)
+_NATURE_OT_RE = re.compile(r"(?P<h>\d{1,2})\s*[:：]\s*(?P<m>\d{2})\s*(?:记加班|加班)")
 _NATURE_WORK_RE = re.compile(r"(?P<h>\d{1,2})\s*[:：]\s*(?P<m>\d{2})\s*上班")
 _SIZE_WEEK_ANCHOR_RE = re.compile(
     r"(?:大小周锚|锚周六|个人大周六)\s*[:：]?\s*(\d{4})-(\d{1,2})-(\d{1,2})"
@@ -333,7 +330,9 @@ def _safe_hhmm(h: int, m: int) -> time | None:
     return None
 
 
-def _parse_profile_rules_from_nature_plain(nature_plain: str) -> tuple[time, tuple[float, float, float, float], time | None]:
+def _parse_profile_rules_from_nature_plain(
+    nature_plain: str,
+) -> tuple[time, tuple[float, float, float, float], time | None]:
     """从明细 B 列（规格/备注）纯文本解析：加班起算点、上午块、自定义上班点。"""
     overtime_start = time(18, 0)
     block_values: tuple[float, float, float, float] = (2.0, 2.0, 2.0, 2.0)
@@ -382,7 +381,9 @@ def open_output_workbook(output_path: Path, template_path: Path | None = None):
     return _ensure_template_workbook(output_path, template_path)
 
 
-def _snapshot_first_person_block(ws, block_top: int) -> tuple[dict[tuple[int, int], object], list[tuple[int, int, int, int]]]:
+def _snapshot_first_person_block(
+    ws, block_top: int
+) -> tuple[dict[tuple[int, int], object], list[tuple[int, int, int, int]]]:
     """复制首个人员块（6 行）的单元格值与合并区域（相对块内行 1-6）。
 
     不含 ``DETAIL_TEMPLATE_SUMMARY_BEGIN_COL`` 及以右列，避免每人块粘贴时覆盖侧栏 SUMIF/夜班公式。
@@ -401,9 +402,7 @@ def _snapshot_first_person_block(ws, block_top: int) -> tuple[dict[tuple[int, in
             and min_col >= 1
             and max_col <= cap
         ):
-            rel_merges.append(
-                (min_col, min_row - block_top + 1, max_col, max_row - block_top + 1)
-            )
+            rel_merges.append((min_col, min_row - block_top + 1, max_col, max_row - block_top + 1))
     return vals, rel_merges
 
 
@@ -500,9 +499,7 @@ def _paste_one_person_block(
             ws.merge_cells(ref)
         except ValueError:
             pass
-    _normalize_block_chinese_numerals(
-        ws, block_top, 1, DETAIL_TEMPLATE_SUMMARY_BEGIN_COL - 1
-    )
+    _normalize_block_chinese_numerals(ws, block_top, 1, DETAIL_TEMPLATE_SUMMARY_BEGIN_COL - 1)
 
 
 def rebuild_detail_sheet_person_blocks(
@@ -651,7 +648,11 @@ def _detail_side_month_link_column_map(ws) -> dict[str, int]:
     for crit_row in crit_rows:
         for c in range(DETAIL_SIDE_SUMMARY_SUMIF_START_COL, DETAIL_SIDE_SUMMARY_SUMIF_END_COL + 1):
             raw = ws.cell(crit_row, c).value
-            t = unicodedata.normalize("NFKC", _plain_cell_text(raw)).replace(" ", "").replace("\n", "")
+            t = (
+                unicodedata.normalize("NFKC", _plain_cell_text(raw))
+                .replace(" ", "")
+                .replace("\n", "")
+            )
             if not t:
                 continue
             for key, needles in _DETAIL_MONTH_LINK_RULES:
@@ -827,9 +828,7 @@ def write_detail_sheet(
     # 考勤区 E/AJ/BO… 与侧栏 BP—CH 等列常带 [DBNum1]，会盖过单元格格式导致 ``1.`` / 中文数字。
     _strip_dbnum_column_styles(ws, DETAIL_SUM_COL_START, DETAIL_ONSHEET_BLOCK_TOTAL_COL)
     for br in base_rows.values():
-        _normalize_block_chinese_numerals(
-            ws, br, 1, DETAIL_TEMPLATE_SUMMARY_BEGIN_COL - 1
-        )
+        _normalize_block_chinese_numerals(ws, br, 1, DETAIL_TEMPLATE_SUMMARY_BEGIN_COL - 1)
 
     matched = 0
     unmatched: list[str] = []
@@ -868,9 +867,7 @@ def write_detail_sheet(
             )
 
     for br in sorted(set(base_rows.values())):
-        _normalize_block_chinese_numerals(
-            ws, br, 1, DETAIL_TEMPLATE_SUMMARY_BEGIN_COL - 1
-        )
+        _normalize_block_chinese_numerals(ws, br, 1, DETAIL_TEMPLATE_SUMMARY_BEGIN_COL - 1)
 
     _refresh_detail_side_summary_formulas(ws)
 
@@ -948,13 +945,15 @@ def _formula_monthly_detail_metric(
     col = sumif_col_letter
     if base_row is not None:
         return f"={q}!{col}{base_row}"
-    return (
-        f"=IFERROR(INDEX({q}!{col}:{col},MATCH(TRIM({nm}),{q}!$C:$C,0)),\"\")"
-    )
+    return f'=IFERROR(INDEX({q}!{col}:{col},MATCH(TRIM({nm}),{q}!$C:$C,0)),"")'
 
 
 def write_analysis_sheet(workbook, rows: list[dict[str, object]]) -> None:
-    ws = workbook["钉钉解析"] if "钉钉解析" in workbook.sheetnames else workbook.create_sheet("钉钉解析")
+    ws = (
+        workbook["钉钉解析"]
+        if "钉钉解析" in workbook.sheetnames
+        else workbook.create_sheet("钉钉解析")
+    )
     headers = [
         "姓名",
         "考勤组",
@@ -992,7 +991,11 @@ def write_monthly_sheet(
     - 若已知姓名在明细块首行的行号，写 ``='明细'!BRn``；否则用 ``INDEX/MATCH(姓名, 明细!C:C)`` 定位块首行。
     - 未识别到侧栏列的指标（如模板无「警告」列）仍写入聚合静态值。
     """
-    ws = workbook["月度统计"] if "月度统计" in workbook.sheetnames else workbook.create_sheet("月度统计")
+    ws = (
+        workbook["月度统计"]
+        if "月度统计" in workbook.sheetnames
+        else workbook.create_sheet("月度统计")
+    )
     headers = [
         "姓名",
         "考勤组",
@@ -1066,9 +1069,7 @@ def write_monthly_sheet(
             dcol = link_map.get(h) if h in _MONTHLY_LINKABLE_METRICS else None
             if link_detail_side_totals and detail_ws is not None and dcol is not None:
                 letter = get_column_letter(int(dcol))
-                cell.value = _formula_monthly_detail_metric(
-                    detail_title, letter, 1, ridx, base_r
-                )
+                cell.value = _formula_monthly_detail_metric(detail_title, letter, 1, ridx, base_r)
                 _force_arabic_number_format(cell, None)
             else:
                 cell.value = row.get(h, "")

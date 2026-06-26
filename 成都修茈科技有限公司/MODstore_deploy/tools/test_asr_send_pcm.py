@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Only send pre-generated 16kHz s16le PCM files through ASR proxy."""
+
 from __future__ import annotations
 
 import asyncio
@@ -44,6 +45,7 @@ def iter_pcm_chunks(pcm: bytes):
 
 async def recognize_pcm(pcm: bytes, label: str) -> dict:
     import ssl
+
     import websockets
 
     url = build_ws_url()

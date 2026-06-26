@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import importlib.util
+import io
 import json
 import os
 import sys
 import zipfile
 from pathlib import Path
-
 
 BRIEF = """我要创建一个和现有「太阳鸟考勤员」一模一样的员工包。
 
@@ -40,9 +39,13 @@ async def main() -> int:
         materialize_asset_employee_pack,
         prepare_employee_assets,
     )
-    from modstore_server.models import User
-    from modstore_server.llm_key_resolver import OAI_COMPAT_OPENAI_STYLE_PROVIDERS, resolve_api_key, resolve_base_url
+    from modstore_server.llm_key_resolver import (
+        OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
+        resolve_api_key,
+        resolve_base_url,
+    )
     from modstore_server.mod_scaffold_runner import chat_dispatch
+    from modstore_server.models import User
 
     src = Path(r"e:\FHD\424\钉钉导出来的考勤数据.xlsx")
     template = Path(r"e:\FHD\424\考勤-2026-3月份考勤统计表.xlsx")
@@ -66,13 +69,20 @@ async def main() -> int:
     if user is None:
         user = db.query(User).first()
     if user is None:
-        user = User(username="smoke-admin", email="smoke-admin@example.local", password_hash="x", is_admin=True)
+        user = User(
+            username="smoke-admin",
+            email="smoke-admin@example.local",
+            password_hash="x",
+            is_admin=True,
+        )
         db.add(user)
         db.commit()
         db.refresh(user)
 
     try:
-        asset_manifest = prepare_employee_assets(session_id="real-files-smoke", user_id=int(user.id), raw_files=raw_files)
+        asset_manifest = prepare_employee_assets(
+            session_id="real-files-smoke", user_id=int(user.id), raw_files=raw_files
+        )
         rule_spec = build_rule_spec(BRIEF, asset_manifest)
         provider = (os.environ.get("SMOKE_LLM_PROVIDER") or "deepseek").strip()
         model = (os.environ.get("SMOKE_LLM_MODEL") or "deepseek-chat").strip()
@@ -146,7 +156,9 @@ async def main() -> int:
         spec.loader.exec_module(mod)
         return await mod.run(payload, {"workspace_root": str(current_pack_dir)})
 
-    async def _repair_convert(previous_code: str, failure: dict, round_no: int) -> tuple[str | None, dict]:
+    async def _repair_convert(
+        previous_code: str, failure: dict, round_no: int
+    ) -> tuple[str | None, dict]:
         models.init_db()
         sf2 = models.get_session_factory()
         db2 = sf2()
@@ -179,7 +191,10 @@ async def main() -> int:
                 api_key=api_key,
                 base_url=base,
                 model=model,
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": user_msg}],
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
                 max_tokens=8000,
             )
             if not out.get("ok"):
@@ -196,7 +211,9 @@ async def main() -> int:
     repair_history = []
     current_code = generated_convert or ""
     for round_no in range(1, 4):
-        output_path_probe = Path(str(((result.get("items") or [{}])[0] or {}).get("output_path") or ""))
+        output_path_probe = Path(
+            str(((result.get("items") or [{}])[0] or {}).get("output_path") or "")
+        )
         if result.get("ok") and output_path_probe.is_file():
             break
         repaired, repair_meta = await _repair_convert(current_code, result, round_no)
@@ -232,8 +249,14 @@ async def main() -> int:
         "manifest": {
             "id": manifest.get("id"),
             "name": manifest.get("name"),
-            "handlers": (((manifest.get("employee_config_v2") or {}).get("actions") or {}).get("handlers")),
-            "direct_python": (((manifest.get("employee_config_v2") or {}).get("actions") or {}).get("direct_python")),
+            "handlers": (
+                ((manifest.get("employee_config_v2") or {}).get("actions") or {}).get("handlers")
+            ),
+            "direct_python": (
+                ((manifest.get("employee_config_v2") or {}).get("actions") or {}).get(
+                    "direct_python"
+                )
+            ),
         },
         "manifest_generation": manifest_meta,
         "runtime_generation": runtime_meta,

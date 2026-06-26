@@ -49,10 +49,11 @@ def _collect() -> list[dict[str, Any]]:
                 "id": str(d.get("id") or "").strip(),
                 "name": str(d.get("name") or "").strip(),
                 "area": str(d.get("area") or "").strip(),
-                "domain": str(d.get("domain") or "").strip().splitlines()[:1] and " ".join(
-                    str(d.get("domain") or "").split()
-                )[:200],
-                "scope_globs": [s for s in (d.get("scope_globs") or []) if isinstance(s, str) and s.strip()],
+                "domain": str(d.get("domain") or "").strip().splitlines()[:1]
+                and " ".join(str(d.get("domain") or "").split())[:200],
+                "scope_globs": [
+                    s for s in (d.get("scope_globs") or []) if isinstance(s, str) and s.strip()
+                ],
                 "forbidden_globs": [
                     s for s in (d.get("forbidden_globs") or []) if isinstance(s, str) and s.strip()
                 ],
@@ -92,7 +93,9 @@ def _render_md(rows: list[dict[str, Any]]) -> str:
         lines.append("")
         lines.append(f"### `{r['id']}` — {r['name']}")
         lines.append("")
-        lines.append(f"- area: `{r['area']}`  ·  version: `{r['version']}`  ·  yaml: [`{r['yaml_path']}`](../../{r['yaml_path']})")
+        lines.append(
+            f"- area: `{r['area']}`  ·  version: `{r['version']}`  ·  yaml: [`{r['yaml_path']}`](../../{r['yaml_path']})"
+        )
         if r["domain"]:
             lines.append(f"- domain: {r['domain']}")
         if r["depends_on"]:
@@ -143,7 +146,9 @@ def main() -> int:
         old_md = DOCS_OUT.read_text(encoding="utf-8") if DOCS_OUT.exists() else ""
         old_json = JSON_OUT.read_text(encoding="utf-8") if JSON_OUT.exists() else ""
         if old_md.strip() != md_text.strip() or old_json.strip() != json_text.strip():
-            print("[CHECK] routing table is stale; run without --check to regenerate", file=sys.stderr)
+            print(
+                "[CHECK] routing table is stale; run without --check to regenerate", file=sys.stderr
+            )
             return 1
         print("[CHECK] routing table is up-to-date")
         return 0

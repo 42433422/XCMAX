@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Pack a yuangon employee directory into market_files/*.xcemp."""
+
 from __future__ import annotations
 
 import argparse
@@ -80,7 +81,12 @@ def build_xcemp(employee_id: str, *, out_dir: Path | None = None) -> Path:
     out_path = dest / f"{pack_id}-{version}.xcemp"
 
     allowed_suffixes = {
-        ".json", ".md", ".py", ".yaml", ".yml", ".txt",
+        ".json",
+        ".md",
+        ".py",
+        ".yaml",
+        ".yml",
+        ".txt",
     }
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

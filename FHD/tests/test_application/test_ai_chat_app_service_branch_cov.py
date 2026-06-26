@@ -2409,12 +2409,10 @@ class TestInjectExcelVectorContext:
         ctx = {"excel_index_id": "idx1"}
         import sys
 
-        saved = sys.modules.pop("app.application", None)
-        try:
+        # Use patch.dict to block app.application; restores both sys.modules and
+        # the parent-package attribute so subsequent tests see the real module.
+        with patch.dict(sys.modules, {"app.application": None}):
             result = svc._inject_excel_vector_context("msg", ctx)
-        finally:
-            if saved is not None:
-                sys.modules["app.application"] = saved
         assert result is ctx
 
 

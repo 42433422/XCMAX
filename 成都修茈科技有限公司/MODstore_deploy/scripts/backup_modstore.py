@@ -11,7 +11,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -154,7 +153,9 @@ def main() -> int:
         }
 
     manifest_path = output_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     print(f"Backup complete: {output_dir}")
     return 0
 

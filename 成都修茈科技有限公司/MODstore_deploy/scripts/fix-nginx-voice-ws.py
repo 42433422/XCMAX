@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fix /api/workbench/voice/ nginx WebSocket block on xiu-ci.com."""
+
 from __future__ import annotations
 
 from pathlib import Path

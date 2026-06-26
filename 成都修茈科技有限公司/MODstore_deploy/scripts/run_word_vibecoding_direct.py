@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """直调后端 vibecoding（不经 8765 编排），MiMo 写 convert + 冒烟 + 黄金对比。"""
+
 from __future__ import annotations
 
 import argparse
@@ -34,8 +35,12 @@ async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--user-id", type=int, default=None)
     parser.add_argument("--pack-id", type=str, default="")
-    parser.add_argument("--provider", type=str, default=os.environ.get("SMOKE_LLM_PROVIDER") or "xiaomi")
-    parser.add_argument("--model", type=str, default=os.environ.get("SMOKE_LLM_MODEL") or "mimo-v2.5-pro")
+    parser.add_argument(
+        "--provider", type=str, default=os.environ.get("SMOKE_LLM_PROVIDER") or "xiaomi"
+    )
+    parser.add_argument(
+        "--model", type=str, default=os.environ.get("SMOKE_LLM_MODEL") or "mimo-v2.5-pro"
+    )
     parser.add_argument("--no-cleanup", action="store_true")
     args = parser.parse_args()
 
@@ -61,7 +66,10 @@ async def main() -> int:
             print(json.dumps({"ok": False, "error": "no user in DB"}, ensure_ascii=False))
             return 2
 
-        print(f"user_id={user.id} pack_id={pack_id} provider={args.provider} model={args.model}", flush=True)
+        print(
+            f"user_id={user.id} pack_id={pack_id} provider={args.provider} model={args.model}",
+            flush=True,
+        )
         res = await run_word_extract_employee_scaffold_async(
             db,
             user,

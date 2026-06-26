@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "20260601_llm_official_prices"
@@ -41,7 +42,9 @@ def upgrade() -> None:
         if not _col_exists("ai_model_prices", col):
             op.add_column("ai_model_prices", sa.Column(col, typ, nullable=True))
     if not _col_exists("ai_model_prices", "official_synced_at"):
-        op.add_column("ai_model_prices", sa.Column("official_synced_at", sa.DateTime(), nullable=True))
+        op.add_column(
+            "ai_model_prices", sa.Column("official_synced_at", sa.DateTime(), nullable=True)
+        )
 
 
 def downgrade() -> None:

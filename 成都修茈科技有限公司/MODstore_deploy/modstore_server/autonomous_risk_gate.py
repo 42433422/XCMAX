@@ -34,7 +34,9 @@ def _env_int(name: str, default: int) -> int:
 
 
 def min_safety_score_v3() -> int:
-    return max(0, min(_env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V3", 95), 100))
+    return max(
+        0, min(_env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V3", 95), 100)
+    )
 
 
 def _line_changes(diff_stats: Dict[str, Any]) -> int:
@@ -52,7 +54,10 @@ def _file_risk(file_name: str) -> int:
         return 35
     if any(token in lower for token in ("migration", "alembic", "models.py", "/models/")):
         return 32
-    if any(token in lower for token in ("dockerfile", "docker-compose", ".github/workflows", "pyproject.toml")):
+    if any(
+        token in lower
+        for token in ("dockerfile", "docker-compose", ".github/workflows", "pyproject.toml")
+    ):
         return 28
     if any(token in lower for token in ("/api/", "route", "scheduler", "workflow", "employee")):
         return 22
@@ -153,7 +158,9 @@ def _security_scan(diff_excerpt: str, files: Sequence[str]) -> Dict[str, Any]:
     }
 
 
-def _semantic_penalty_from_v2(safety_score_v2: Optional[Dict[str, Any]]) -> Tuple[int, Dict[str, Any]]:
+def _semantic_penalty_from_v2(
+    safety_score_v2: Optional[Dict[str, Any]],
+) -> Tuple[int, Dict[str, Any]]:
     if not isinstance(safety_score_v2, dict):
         return 18, {"available": False, "reason": "missing_v2_semantic_signal"}
     semantic = safety_score_v2.get("semantic_llm_analysis")
@@ -234,7 +241,9 @@ def assess_any_code_auto_merge_v3(
         missing_signals.append("ci_pass_rate")
     if not semantic.get("available"):
         missing_signals.append("structured_llm_semantic")
-    uncertainty_score = max(0, min(100, (100 - score) + len(missing_signals) * 6 + len(hard_blockers) * 20))
+    uncertainty_score = max(
+        0, min(100, (100 - score) + len(missing_signals) * 6 + len(hard_blockers) * 20)
+    )
     return {
         "ci_pass_rate": ci_pass_rate,
         "components": {
@@ -253,7 +262,9 @@ def assess_any_code_auto_merge_v3(
         "min_allowed": min_allowed,
         "missing_signals": missing_signals,
         "ok": ok,
-        "reason": "risk_score_v3_policy_passed" if ok else "risk_score_v3_below_threshold_or_blocked",
+        "reason": (
+            "risk_score_v3_policy_passed" if ok else "risk_score_v3_below_threshold_or_blocked"
+        ),
         "schema_version": 3,
         "score": score,
         "security_scan": security,

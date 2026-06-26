@@ -1,4 +1,5 @@
 """Bootstrap json-report-employee 到 library（json_quant_report runtime）。"""
+
 from __future__ import annotations
 
 import json
