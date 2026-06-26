@@ -160,22 +160,30 @@ def test_platform_employees_differ_by_side():
 
 
 def test_super_employees_ssot_ids():
-    assert assistant_ssot.super_employee_ids() == {
+    expected = {
         "claude-super-employee",
         "codex-super-employee",
         "cursor-super-employee",
         "trae-super-employee",
     }
+    assert assistant_ssot.super_employee_ids() == expected
     sup = assistant_ssot.super_employees()
     assert sup["claude-super-employee"]["display_name"] == "超级员工-Claude"
     assert sup["codex-super-employee"]["display_name"] == "超级员工-Codex"
+    assert sup["cursor-super-employee"]["display_name"] == "超级员工-Cursor"
+    assert sup["trae-super-employee"]["display_name"] == "超级员工-Trae"
 
 
 def test_super_employee_ssot_matches_service_profiles():
     """SSOT 身份与 super_employee_service 运行 profile 不漂移(id/名一致)。"""
-    from app.application.super_employee_service import CLAUDE_PROFILE, CODEX_PROFILE
+    from app.application.super_employee_service import (
+        CLAUDE_PROFILE,
+        CODEX_PROFILE,
+        CURSOR_PROFILE,
+        TRAE_PROFILE,
+    )
 
     sup = assistant_ssot.super_employees()
-    for profile in (CLAUDE_PROFILE, CODEX_PROFILE):
+    for profile in (CLAUDE_PROFILE, CODEX_PROFILE, CURSOR_PROFILE, TRAE_PROFILE):
         assert profile.employee_id in sup
         assert sup[profile.employee_id]["display_name"] == profile.employee_name

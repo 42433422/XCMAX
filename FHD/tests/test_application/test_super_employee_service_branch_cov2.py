@@ -37,6 +37,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from app.application.execution_scope import CapabilityGrant, ExecutionScope
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -697,13 +698,25 @@ class TestCreateParaTask:
 
 
 class TestCliSubprocessEnv:
-    def test_no_proxy_product_domain_returns_env(self, tmp_path, monkeypatch) -> None:
-        # 产品域（信任墙第2层）：即使无代理也返回剥掉工厂令牌的 env dict（非 None）
+    def test_factory_no_proxy_returns_none(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("XCMAX_CLI_PROXY", raising=False)
+        svc = _make_svc(tmp_path, cli_runner=_null_runner)
+        svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "xcmax")
+        assert svc._cli_subprocess_env() is None
+
+    def test_product_no_proxy_returns_sanitized_env(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.delenv("XCMAX_CLI_PROXY", raising=False)
+        monkeypatch.setenv("XCMAX_FACTORY_CAPABILITY_TOKEN", "factory-secret")
+        monkeypatch.setenv("XCMAX_FACTORY_WORKSPACE_ID", "xcmax")
+        monkeypatch.setenv("GITHUB_TOKEN", "git-secret")
+        monkeypatch.setenv("GIT_ASKPASS", "helper")
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         env = svc._cli_subprocess_env()
         assert env is not None
-        assert isinstance(env, dict)
+        assert "XCMAX_FACTORY_CAPABILITY_TOKEN" not in env
+        assert "XCMAX_FACTORY_WORKSPACE_ID" not in env
+        assert "GITHUB_TOKEN" not in env
+        assert "GIT_ASKPASS" not in env
 
     def test_proxy_set_injects_env_vars(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CLI_PROXY", "http://proxy:8080")
@@ -717,15 +730,24 @@ class TestCliSubprocessEnv:
         assert env["https_proxy"] == "http://proxy:8080"
         assert env["all_proxy"] == "http://proxy:8080"
 
-    def test_empty_proxy_product_domain_returns_env(self, tmp_path, monkeypatch) -> None:
-        # 产品域：空代理字符串时不注入 XCMAX_CLI_PROXY 值到代理键，但仍返回 env dict（剥令牌）
+    def test_empty_proxy_returns_sanitized_product_env(self, tmp_path, monkeypatch) -> None:
+        for key in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ):
+            monkeypatch.delenv(key, raising=False)
         monkeypatch.setenv("XCMAX_CLI_PROXY", "  ")
-        monkeypatch.delenv("HTTP_PROXY", raising=False)
-        monkeypatch.delenv("HTTPS_PROXY", raising=False)
+        monkeypatch.setenv("GITHUB_TOKEN", "git-secret")
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         env = svc._cli_subprocess_env()
         assert env is not None
-        assert env.get("HTTP_PROXY") != "  ".strip()  # whitespace not injected as proxy
+        assert "GITHUB_TOKEN" not in env
+        assert "HTTP_PROXY" not in env
+        assert "http_proxy" not in env
 
 
 # ───────────────────── _fetch_para_task ─────────────────────
