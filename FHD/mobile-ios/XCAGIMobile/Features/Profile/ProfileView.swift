@@ -43,7 +43,7 @@ struct ProfileView: View {
     @State private var deletePassword = ""
 
     /// App 备案号(对标 Android strings.xml `app_filing_number`,工信部备案已通过)。
-    static let appFilingNumber = "蜀ICP备2026015936号"
+    static let appFilingNumber = "蜀ICP备2026014056号-3A"
 
     var body: some View {
         NavigationStack {
