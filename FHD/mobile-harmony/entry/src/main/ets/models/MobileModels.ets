@@ -20,8 +20,18 @@ export interface MobileEnvelope<T> {
   data?: T;
 }
 
+export interface MessageAvatarLayout {
+  conversationAvatarSize: number;
+  conversationAvatarRadius: number;
+  conversationAvatarTextGap: number;
+  conversationRowPadding: number;
+  conversationRowMarginHorizontal: number;
+  conversationCardRadius: number;
+  conversationAvatarFontSize: number;
+}
+
 /** 消息页头像尺寸与位置 SSOT（对标 Android MessageAvatarLayout）。 */
-export const MESSAGE_AVATAR_LAYOUT = {
+export const MESSAGE_AVATAR_LAYOUT: MessageAvatarLayout = {
   conversationAvatarSize: 48,
   conversationAvatarRadius: 14,
   conversationAvatarTextGap: 12,
@@ -406,6 +416,23 @@ export interface AiGroupMember {
   name?: string;
   avatar?: string;
   summary?: string;
+}
+
+/** 可拉入群聊的 AI 员工候选（普通员工 + 超级员工）。 */
+export interface AiGroupCandidate {
+  employee_id?: string;
+  mod_id?: string;
+  name?: string;
+  avatar?: string;
+  summary?: string;
+  department_key?: string;
+  is_super?: boolean;
+}
+
+export interface AiGroupCandidatesData {
+  candidates?: AiGroupCandidate[];
+  items?: AiGroupCandidate[];
+  count?: number;
 }
 
 /** AI 群聊(_public_group)。 */

@@ -1961,6 +1961,33 @@ async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user))
         )
 
 
+@extension_router.get("/ai-groups/candidates")
+async def mobile_ai_group_candidates(request: Request, user=Depends(get_mobile_user)):
+    """可拉入群聊的 AI 员工候选（普通员工 + 超级员工）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_group_uid(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        candidates = AiGroupChatService(mode=_mobile_group_mode(request)).list_member_candidates()
+        return format_mobile_response(
+            data={
+                "candidates": candidates,
+                "items": candidates,
+                "count": len(candidates),
+            }
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_ai_group_candidates")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
 @extension_router.post("/ai-groups")
 async def mobile_ai_groups_create(
     request: Request, body: AiGroupCreateBody, user=Depends(get_mobile_user)

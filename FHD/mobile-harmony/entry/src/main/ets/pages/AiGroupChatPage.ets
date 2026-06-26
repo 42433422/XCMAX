@@ -3,18 +3,17 @@
  *
  * 对标 Android AiGroupScreens.kt(群聊):群成员各回一条;@了具体成员则只有 TA 回复。
  * 数据源:GET/POST /api/mobile/v1/ai-groups/{id}/messages。
- * 支持从企业端员工里邀请成员入群(POST /ai-groups/{id}/members)。
+ * 支持从候选员工名录里邀请成员入群(POST /ai-groups/{id}/members)。
  */
 
 import { MobileApiClient } from '../api/MobileApiClient';
-import { AiEmployeeProfile, AiGroupMessage, AiGroupPostResult, cleanText, firstChar } from '../models/MobileModels';
+import { AiGroupCandidate, AiGroupMessage, AiGroupPostResult, cleanText, firstChar } from '../models/MobileModels';
 
 @Component
 export struct AiGroupChatPage {
   @Consume baseUrl: string;
   @Consume accessToken: string;
   @Consume displayName: string;
-  @Consume employees: AiEmployeeProfile[];
 
   @Prop groupId: string = '';
   @Prop groupName: string = '';
@@ -25,6 +24,8 @@ export struct AiGroupChatPage {
   @State sending: boolean = false;
   @State errorMsg: string = '';
   @State showInvite: boolean = false;
+  @State candidates: AiGroupCandidate[] = [];
+  @State loadingCandidates: boolean = false;
 
   private api: MobileApiClient = new MobileApiClient('', '');
 
@@ -76,14 +77,38 @@ export struct AiGroupChatPage {
     }
   }
 
-  private async inviteMember(employee: AiEmployeeProfile): Promise<void> {
+  private toggleInvite(): void {
+    this.showInvite = !this.showInvite;
+    if (this.showInvite && this.candidates.length === 0 && !this.loadingCandidates) {
+      this.loadCandidates();
+    }
+  }
+
+  private async loadCandidates(): Promise<void> {
+    this.loadingCandidates = true;
+    try {
+      this.candidates = await this.api.aiGroupCandidates();
+    } catch (err) {
+      this.errorMsg = cleanText((err as Error).message, '加载候选员工失败');
+    } finally {
+      this.loadingCandidates = false;
+    }
+  }
+
+  private async inviteMember(candidate: AiGroupCandidate): Promise<void> {
     this.showInvite = false;
+    const name = cleanText(candidate.name, 'AI 员工');
     try {
       await this.api.addAiGroupMember(
-        this.groupId, employee.employeeId, employee.modId, employee.name, '', employee.summary);
+        this.groupId,
+        cleanText(candidate.employee_id, ''),
+        cleanText(candidate.mod_id, ''),
+        name,
+        cleanText(candidate.avatar, ''),
+        cleanText(candidate.summary, ''));
       const note: AiGroupMessage = {
         id: `sys-${new Date().getTime()}`, group_id: this.groupId, role: 'ai',
-        sender_name: '系统', body: `已邀请「${employee.name}」入群`, created_at: ''
+        sender_name: '系统', body: `已邀请「${name}」入群`, created_at: ''
       };
       this.messages = this.messages.concat([note]);
     } catch (err) {
@@ -154,7 +179,7 @@ export struct AiGroupChatPage {
       Text('邀请')
         .fontSize(14)
         .fontColor('#1D4ED8')
-        .onClick(() => { this.showInvite = !this.showInvite; });
+        .onClick(() => { this.toggleInvite(); });
     }
     .width('100%')
     .padding({ left: 12, right: 14, top: 10, bottom: 10 })
@@ -165,43 +190,27 @@ export struct AiGroupChatPage {
   @Builder
   InvitePanel() {
     Column({ space: 0 }) {
-      Text('邀请企业端员工入群')
+      Text('邀请员工入群（含超级员工）')
         .fontSize(13)
         .fontColor('#6B7280')
         .width('100%')
         .padding({ left: 16, top: 10, bottom: 6 });
       Scroll() {
         Column({ space: 0 }) {
-          if (this.employees.length === 0) {
-            Text('暂无可邀请的企业员工')
+          if (this.loadingCandidates && this.candidates.length === 0) {
+            Text('加载中...')
+              .fontSize(13)
+              .fontColor('#9CA3AF')
+              .padding(16);
+          } else if (this.candidates.length === 0) {
+            Text('暂无可邀请的员工')
               .fontSize(13)
               .fontColor('#9CA3AF')
               .padding(16);
           } else {
-            ForEach(this.employees, (employee: AiEmployeeProfile) => {
-              Row({ space: 10 }) {
-                Text(firstChar(employee.name))
-                  .width(32)
-                  .height(32)
-                  .borderRadius(16)
-                  .fontSize(13)
-                  .fontColor('#FFFFFF')
-                  .textAlign(TextAlign.Center)
-                  .backgroundColor('#1D4ED8');
-                Text(employee.name)
-                  .fontSize(14)
-                  .fontColor('#111827')
-                  .layoutWeight(1)
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis });
-                Text('邀请')
-                  .fontSize(13)
-                  .fontColor('#1D4ED8');
-              }
-              .width('100%')
-              .padding({ left: 16, right: 16, top: 10, bottom: 10 })
-              .onClick(() => this.inviteMember(employee));
-            }, (employee: AiEmployeeProfile) => employee.key);
+            ForEach(this.candidates, (candidate: AiGroupCandidate) => {
+              this.CandidateRow(candidate);
+            }, (candidate: AiGroupCandidate) => cleanText(candidate.employee_id, cleanText(candidate.name, '')));
           }
         }
         .width('100%');
@@ -212,6 +221,40 @@ export struct AiGroupChatPage {
     .width('100%')
     .backgroundColor('#FFFFFF')
     .border({ width: { bottom: 1 }, color: '#E5E7EB' });
+  }
+
+  @Builder
+  CandidateRow(candidate: AiGroupCandidate) {
+    Row({ space: 10 }) {
+      Text(firstChar(cleanText(candidate.name, 'AI')))
+        .width(32)
+        .height(32)
+        .borderRadius(16)
+        .fontSize(13)
+        .fontColor('#FFFFFF')
+        .textAlign(TextAlign.Center)
+        .backgroundColor(candidate.is_super === true ? '#7C3AED' : '#1D4ED8');
+      Text(cleanText(candidate.name, 'AI 员工'))
+        .fontSize(14)
+        .fontColor('#111827')
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis });
+      if (candidate.is_super === true) {
+        Text('超级员工')
+          .fontSize(11)
+          .fontColor('#7C3AED')
+          .backgroundColor('#F3E8FF')
+          .borderRadius(8)
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 });
+      }
+      Blank().layoutWeight(1);
+      Text('邀请')
+        .fontSize(13)
+        .fontColor('#1D4ED8');
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .onClick(() => this.inviteMember(candidate));
   }
 
   @Builder
