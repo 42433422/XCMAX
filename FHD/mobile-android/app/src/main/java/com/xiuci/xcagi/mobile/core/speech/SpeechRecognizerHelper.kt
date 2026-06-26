@@ -1,9 +1,11 @@
 package com.xiuci.xcagi.mobile.core.speech
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +46,8 @@ class SpeechRecognizerHelper(private val context: Context) {
     val errorText: StateFlow<String> = _errorText.asStateFlow()
 
     /** 语音识别是否可用 */
-    fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
+    fun isAvailable(): Boolean =
+        SpeechRecognizer.isRecognitionAvailable(context) || recognitionServiceComponent() != null
 
     /** 开始监听语音（重试也调用此方法）。 */
     fun start() {
@@ -58,7 +61,10 @@ class SpeechRecognizerHelper(private val context: Context) {
         _finalResult.value = ""
         _errorText.value = ""
         _rms.value = 0f
-        recognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+        val serviceComponent = recognitionServiceComponent()
+        recognizer = (serviceComponent?.let { component ->
+            SpeechRecognizer.createSpeechRecognizer(context, component)
+        } ?: SpeechRecognizer.createSpeechRecognizer(context)).apply {
             setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
                     _state.value = SpeechState.LISTENING
@@ -127,7 +133,9 @@ class SpeechRecognizerHelper(private val context: Context) {
     fun stop() {
         recognizer?.stopListening()
         _rms.value = 0f
-        _state.value = SpeechState.IDLE
+        if (_state.value == SpeechState.LISTENING) {
+            _state.value = SpeechState.PROCESSING
+        }
     }
 
     /** 释放资源 */
@@ -136,6 +144,18 @@ class SpeechRecognizerHelper(private val context: Context) {
         recognizer = null
         _rms.value = 0f
         _state.value = SpeechState.IDLE
+    }
+
+    private fun recognitionServiceComponent(): ComponentName? {
+        val serviceIntent = Intent(RecognitionService.SERVICE_INTERFACE)
+        @Suppress("DEPRECATION")
+        val services = context.packageManager.queryIntentServices(
+            serviceIntent,
+            0,
+        )
+        return services.firstOrNull()?.serviceInfo?.let { serviceInfo ->
+            ComponentName(serviceInfo.packageName, serviceInfo.name)
+        }
     }
 
     /** 错误码 → 友好中文提示。 */
@@ -149,6 +169,7 @@ class SpeechRecognizerHelper(private val context: Context) {
             SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "识别服务忙，请稍后重试"
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "缺少麦克风权限"
             SpeechRecognizer.ERROR_SERVER -> "识别服务异常，请稍后重试"
+            SpeechRecognizer.ERROR_CLIENT -> "识别服务启动失败，请重试"
             else -> "识别失败，请重试"
         }
 }

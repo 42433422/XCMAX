@@ -1,14 +1,14 @@
 package com.xiuci.xcagi.mobile.core.speech
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,20 +16,27 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -43,20 +50,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 
-/**
- * 语音输入底部弹窗。
- *
- * @param onResult 识别完成回调，返回识别到的文字
- * @param onDismiss 关闭回调
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceInputSheet(
-        onResult: (String) -> Unit,
-        onDismiss: () -> Unit,
+    onResult: (String) -> Unit,
+    onDismiss: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val helper = remember { SpeechRecognizerHelper(context) }
@@ -66,20 +69,12 @@ fun VoiceInputSheet(
     val rms by helper.rms.collectAsState()
     val errorText by helper.errorText.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val finalText = final.trim()
+    val recognizedText = finalText.ifBlank { partial }
+    val hasFinalResult = finalText.isNotBlank()
 
-    // 进入时自动开始监听
     LaunchedEffect(Unit) { helper.start() }
 
-    // 识别完成时回调
-    LaunchedEffect(final) {
-        if (final.isNotBlank()) {
-            onResult(final)
-            helper.destroy()
-            onDismiss()
-        }
-    }
-
-    // 离开组合时释放识别器，避免泄漏（无论何种关闭路径）。
     DisposableEffect(Unit) {
         onDispose { helper.destroy() }
     }
@@ -89,178 +84,299 @@ fun VoiceInputSheet(
         onDismiss()
     }
 
+    fun primaryAction() {
+        when {
+            hasFinalResult -> {
+                onResult(finalText)
+                dismiss()
+            }
+            state == SpeechState.ERROR -> helper.start()
+            state == SpeechState.PROCESSING -> Unit
+            else -> helper.stop()
+        }
+    }
+
     ModalBottomSheet(
-            onDismissRequest = { dismiss() },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
+        onDismissRequest = { dismiss() },
+        sheetState = sheetState,
+        containerColor = VoiceInputDesign.palette(state).sheetBackground,
+        tonalElevation = Elevation.level3,
+        shape = RoundedCornerShape(
+            topStart = VoiceInputDesign.sheetTopCornerRadius,
+            topEnd = VoiceInputDesign.sheetTopCornerRadius,
+        ),
+        dragHandle = { VoiceDragHandle() },
     ) {
         Column(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VoiceInputDesign.sheetHorizontalPadding)
+                .padding(top = VoiceInputDesign.sheetTopPadding, bottom = VoiceInputDesign.sheetBottomPadding),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
-            val isError = state == SpeechState.ERROR
-            val isListening = state == SpeechState.LISTENING
-            val micColor =
-                    when (state) {
-                        SpeechState.LISTENING -> MaterialTheme.colorScheme.error
-                        SpeechState.PROCESSING -> MaterialTheme.colorScheme.primary
-                        SpeechState.ERROR -> MaterialTheme.colorScheme.onSurfaceVariant
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-
-            // 麦克风（聆听时随音量轻微缩放）
-            val micScale by animateFloatAsState(
-                    targetValue = if (isListening) 1f + rms * 0.35f else 1f,
-                    animationSpec = spring(),
-                    label = "micScale",
+            VoiceSheetHeader(
+                state = state,
+                errorText = errorText,
+                hasResult = hasFinalResult,
+                onDismiss = { dismiss() },
             )
-            Box(
-                    modifier = Modifier.size(132.dp),
-                    contentAlignment = Alignment.Center,
+            VoiceListeningCard(
+                state = state,
+                rms = rms,
+                preview = recognizedText,
+                errorText = errorText,
+                hasResult = hasFinalResult,
+            )
+            VoiceActionRow(
+                state = state,
+                hasResult = hasFinalResult,
+                onPrimary = { primaryAction() },
+                onCancel = { dismiss() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoiceDragHandle() {
+    val palette = VoiceInputDesign.palette(SpeechState.IDLE)
+    Box(
+        modifier = Modifier
+            .padding(top = Spacing.sm, bottom = Spacing.xs)
+            .size(width = VoiceInputDesign.dragHandleWidth, height = VoiceInputDesign.dragHandleHeight)
+            .clip(RoundedCornerShape(VoiceInputDesign.dragHandleCornerRadius))
+            .background(palette.dragHandle),
+    )
+}
+
+@Composable
+private fun VoiceSheetHeader(
+    state: SpeechState,
+    errorText: String,
+    hasResult: Boolean,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "语音输入",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(Spacing.xs))
+            VoiceStatusPill(state = state, errorText = errorText, hasResult = hasResult)
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "关闭",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoiceStatusPill(state: SpeechState, errorText: String, hasResult: Boolean) {
+    val palette = VoiceInputDesign.palette(state)
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = palette.statusBackground,
+    ) {
+        Text(
+            text = VoiceInputDesign.statusLabel(state, errorText, hasResult),
+            modifier = Modifier.padding(horizontal = Spacing.md, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = palette.statusForeground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun VoiceListeningCard(
+    state: SpeechState,
+    rms: Float,
+    preview: String,
+    errorText: String,
+    hasResult: Boolean,
+) {
+    val isListening = state == SpeechState.LISTENING
+    val palette = VoiceInputDesign.palette(state)
+    val micScale by animateFloatAsState(
+        targetValue = if (isListening) 1f + rms * 0.22f else 1f,
+        animationSpec = spring(),
+        label = "voiceMicScale",
+    )
+
+    val cardShape = RoundedCornerShape(VoiceInputDesign.cardCornerRadius)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(palette.cardBackground)
+            .border(1.dp, palette.cardBorder, cardShape),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = VoiceInputDesign.cardVerticalPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.lg),
             ) {
-                // 聆听时的脉冲环（两层错相位向外扩散淡出）——premium「正在听」反馈
-                if (isListening) {
-                    val pulse = rememberInfiniteTransition(label = "voicePulse")
-                    listOf(0, 750).forEach { delayMs ->
-                        val p by pulse.animateFloat(
-                                initialValue = 0f,
-                                targetValue = 1f,
-                                animationSpec = infiniteRepeatable(
-                                        animation = tween(1500, delayMillis = delayMs),
-                                        repeatMode = RepeatMode.Restart,
-                                ),
-                                label = "ring$delayMs",
-                        )
-                        Box(
-                                modifier = Modifier
-                                        .size((84 + p * 46).dp)
-                                        .clip(CircleShape)
-                                        .background(micColor.copy(alpha = (1f - p) * 0.16f)),
-                        )
-                    }
-                }
                 Box(
-                        modifier = Modifier.size(84.dp).clip(CircleShape)
-                                .background(micColor.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(VoiceInputDesign.micOuterSize),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
+                    if (isListening) VoicePulse(palette.pulse)
+                    Box(
+                        modifier = Modifier
+                            .size(VoiceInputDesign.micInnerSize)
+                            .clip(CircleShape)
+                            .background(palette.micBackground),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
                             Icons.Default.Mic,
                             contentDescription = "语音输入",
-                            tint = micColor,
-                            modifier = Modifier.size(40.dp).scale(micScale),
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(Spacing.md))
-
-            // 音量波形（仅聆听态显示）
-            if (isListening) {
-                Waveform(level = rms, color = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(Spacing.md))
-            }
-
-            // 状态文字
-            val statusText =
-                    when (state) {
-                        SpeechState.LISTENING -> "正在聆听…"
-                        SpeechState.PROCESSING -> "识别中…"
-                        SpeechState.ERROR -> errorText.ifBlank { "识别失败，请重试" }
-                        SpeechState.IDLE -> "点击麦克风开始说话"
+                            tint = palette.micForeground,
+                            modifier = Modifier
+                                .size(VoiceInputDesign.micIconSize)
+                                .scale(micScale),
+                        )
                     }
-            Text(
-                    statusText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (isError) FontWeight.Medium else FontWeight.Normal,
-                    color = if (isError) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurface,
-            )
-
-            // 部分识别结果
-            if (partial.isNotBlank() && !isError) {
-                Spacer(Modifier.height(Spacing.sm))
-                Text(
-                        partial,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg),
-                )
-            }
-
-            Spacer(Modifier.height(Spacing.lg))
-
-            // 底部操作：出错时显示「重试 + 取消」，否则只显示「取消」
-            Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.xl),
-                    verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (isError) {
-                    CircleAction(
-                            icon = Icons.Default.Refresh,
-                            label = "重试",
-                            tint = MaterialTheme.colorScheme.primary,
-                            bg = MaterialTheme.colorScheme.primaryContainer,
-                            onClick = { helper.start() },
-                    )
                 }
-                CircleAction(
-                        icon = Icons.Default.Close,
-                        label = "取消",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        bg = MaterialTheme.colorScheme.surfaceVariant,
-                        onClick = { dismiss() },
+                VoiceWaveform(
+                    level = if (isListening) rms else 0.16f,
+                    color = palette.waveform,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            val previewShape = RoundedCornerShape(VoiceInputDesign.previewCornerRadius)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = VoiceInputDesign.previewMinHeight)
+                    .clip(previewShape)
+                    .background(palette.previewBackground),
+            ) {
+                val displayText = preview.ifBlank { VoiceInputDesign.statusLabel(state, errorText, hasResult) }
+                Text(
+                    text = displayText,
+                    modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (preview.isBlank()) palette.previewPlaceholder else palette.previewForeground,
+                    textAlign = TextAlign.Start,
                 )
             }
         }
     }
 }
 
-/** 圆形操作按钮（图标 + 文案）。 */
 @Composable
-private fun CircleAction(
-        icon: androidx.compose.ui.graphics.vector.ImageVector,
-        label: String,
-        tint: androidx.compose.ui.graphics.Color,
-        bg: androidx.compose.ui.graphics.Color,
-        onClick: () -> Unit,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun VoicePulse(color: androidx.compose.ui.graphics.Color) {
+    val pulse = rememberInfiniteTransition(label = "voicePulse")
+    listOf(0, 520).forEach { delayMs ->
+        val p by pulse.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1320, delayMillis = delayMs),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "voicePulse$delayMs",
+        )
         Box(
-                modifier = Modifier.size(48.dp).clip(CircleShape).background(bg)
-                        .clickable(onClick = onClick),
-                contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            modifier = Modifier
+                .size((VoiceInputDesign.micInnerSize.value + 30f * p).dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = (1f - p) * 0.15f)),
+        )
     }
 }
 
-/** 简易音量波形：5 根随音量起伏的竖条。 */
 @Composable
-private fun Waveform(level: Float, color: androidx.compose.ui.graphics.Color) {
-    val weights = listOf(0.3f, 0.5f, 0.72f, 0.9f, 1f, 0.9f, 0.72f, 0.5f, 0.3f)
+private fun VoiceWaveform(
+    level: Float,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
     Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.height(30.dp),
+        modifier = modifier.height(VoiceInputDesign.waveformHeight),
+        horizontalArrangement = Arrangement.spacedBy(VoiceInputDesign.waveformBarGap),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        weights.forEach { w ->
-            val target = (6f + level * 22f * w).dp
-            val h by animateFloatAsState(
-                    targetValue = target.value,
-                    animationSpec = spring(),
-                    label = "bar",
+        VoiceInputDesign.waveformWeights.forEachIndexed { index, weight ->
+            val targetHeight = 8f + (level.coerceIn(0f, 1f) * 30f * weight)
+            val animatedHeight by animateFloatAsState(
+                targetValue = targetHeight,
+                animationSpec = spring(),
+                label = "voiceBar$index",
             )
             Box(
-                    modifier = Modifier.width(4.dp).height(h.dp).clip(RoundedCornerShape(2.dp))
-                            .background(color.copy(alpha = 0.85f)),
+                modifier = Modifier
+                    .width(VoiceInputDesign.waveformBarWidth)
+                    .height(animatedHeight.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(color.copy(alpha = 0.34f + weight * 0.42f)),
             )
+        }
+    }
+}
+
+@Composable
+private fun VoiceActionRow(
+    state: SpeechState,
+    hasResult: Boolean,
+    onPrimary: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val isProcessing = state == SpeechState.PROCESSING
+    val palette = VoiceInputDesign.palette(state)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        TextButton(
+            onClick = onCancel,
+            modifier = Modifier
+                .weight(1f)
+                .height(VoiceInputDesign.actionHeight),
+        ) {
+            Text("取消", color = palette.cancelForeground)
+        }
+        Button(
+            onClick = onPrimary,
+            enabled = !isProcessing,
+            modifier = Modifier
+                .weight(1f)
+                .height(VoiceInputDesign.actionHeight),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = palette.primaryBackground,
+                contentColor = palette.primaryForeground,
+                disabledContainerColor = palette.disabledPrimaryBackground,
+                disabledContentColor = palette.disabledPrimaryForeground,
+            ),
+            shape = RoundedCornerShape(999.dp),
+        ) {
+            val icon = when {
+                hasResult -> Icons.Default.Check
+                state == SpeechState.ERROR -> Icons.Default.Refresh
+                else -> Icons.Default.Mic
+            }
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(Spacing.xs))
+            Text(VoiceInputDesign.primaryActionLabel(state, hasResult))
         }
     }
 }

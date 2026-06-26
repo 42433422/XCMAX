@@ -90,11 +90,7 @@ import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 import com.xiuci.xcagi.mobile.core.speech.VoiceInputSheet
 import android.Manifest
-import android.content.ActivityNotFoundException
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
@@ -196,7 +192,6 @@ fun ChatScreen(
     var showVoiceSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // 录音权限请求（仅 app 内识别器兜底路径用）
     val recordPermissionLauncher =
             rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
@@ -205,49 +200,12 @@ fun ChatScreen(
                 else vm.snack("需要麦克风权限才能使用语音输入")
             }
 
-    // 系统语音输入(ACTION_RECOGNIZE_SPEECH)：由系统语音引擎(如小米/讯飞)弹 UI 并回写转写。
-    // 这是「用手机自带语音」最兼容的方式——很多国产 ROM 没注册默认 RecognitionService，
-    // 程序化 SpeechRecognizer 用不了，但这个 Activity 意图能用。
-    val speechIntentLauncher =
-            rememberLauncherForActivityResult(
-                    ActivityResultContracts.StartActivityForResult()
-            ) { result ->
-                if (result.resultCode == android.app.Activity.RESULT_OK) {
-                    val text = result.data
-                            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                            ?.firstOrNull()
-                            .orEmpty()
-                    if (text.isNotBlank()) {
-                        input = if (input.isBlank()) text else "$input $text"
-                    }
-                }
-            }
-
     fun startVoiceInput() {
-        // 优先用应用内语音面板（统一的脉冲环 UI、视觉一致、可控）；
-        // 仅在设备无 SpeechRecognizer 时才兜底系统语音识别界面。
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            val hasPermission =
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                            PackageManager.PERMISSION_GRANTED
-            if (hasPermission) showVoiceSheet = true
-            else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            return
-        }
-        val intent =
-                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(
-                            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-                    )
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话…")
-                }
-        try {
-            speechIntentLauncher.launch(intent)
-        } catch (_: ActivityNotFoundException) {
-            vm.snack("当前设备未提供语音输入")
-        }
+        val hasPermission =
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+        if (hasPermission) showVoiceSheet = true
+        else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }

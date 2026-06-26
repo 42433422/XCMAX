@@ -1,5 +1,6 @@
 package com.xiuci.xcagi.mobile.navigation
 
+import android.Manifest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -39,9 +40,8 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
-import android.app.Activity
-import android.content.Intent
-import android.speech.RecognizerIntent
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -84,6 +84,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDraft
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessageUi
 import com.xiuci.xcagi.mobile.core.model.GitBranchDto
+import com.xiuci.xcagi.mobile.core.speech.VoiceInputSheet
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.ChatComposerBar
 import com.xiuci.xcagi.mobile.ui.components.mobile.ChatToolCardAction
@@ -466,28 +467,24 @@ fun AiGroupChatScreen(
     var selectedBranch by remember { mutableStateOf<String?>(null) }
     var selectedWorkMode by remember { mutableStateOf<GroupWorkMode?>(null) }
     var pendingDispatchMode by remember { mutableStateOf(false) }
+    var showVoiceSheet by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val haptics = rememberHaptics()
+    val context = LocalContext.current
     val g = group
 
-    // 系统语音输入（与主聊天一致：小米等系统语音引擎弹 UI 回写）。
-    val speechLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
-                if (text.isNotBlank()) input = if (input.isBlank()) text else "$input $text"
-            }
+    val recordPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) showVoiceSheet = true
+            else vm.snack("需要麦克风权限才能使用语音输入")
         }
+
     fun startGroupVoice() {
-        runCatching {
-            speechLauncher.launch(
-                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话…")
-                },
-            )
-        }
+        val hasPermission =
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        if (hasPermission) showVoiceSheet = true
+        else recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     LaunchedEffect(messages.size, sending) {
@@ -506,6 +503,14 @@ fun AiGroupChatScreen(
             onDismiss = { showBranchPicker = false },
             onSelect = { selectedBranch = it },
             onRefresh = { vm.loadGitBranches() },
+        )
+    }
+    if (showVoiceSheet) {
+        VoiceInputSheet(
+            onResult = { text ->
+                input = if (input.isBlank()) text else "$input $text"
+            },
+            onDismiss = { showVoiceSheet = false },
         )
     }
 
