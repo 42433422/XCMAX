@@ -1732,20 +1732,25 @@ class TestCliWorkspaceBoundary:
     签名: _cli_workspace(self, context: dict) -> str
     """
 
-    def test_context_workspace_root(self, tmp_path, monkeypatch):
-        # _cli_workspace 会检查 Path(candidate).exists()，需用真实路径
+    def test_product_context_workspace_root_is_ignored(self, tmp_path, monkeypatch):
         ws = tmp_path / "ws"
         ws.mkdir()
         svc = _make_svc(tmp_path)
         ctx = {"workspace_root": str(ws)}
-        assert svc._cli_workspace(ctx) == str(ws)
+        result = Path(svc._cli_workspace(ctx))
+        assert result != ws
+        assert result.name == "codex_super_employee"
+        assert result.parent.name == "xcmax_product_scratch"
 
-    def test_env_workspace(self, tmp_path, monkeypatch):
+    def test_product_env_workspace_is_ignored(self, tmp_path, monkeypatch):
         ws = tmp_path / "envws"
         ws.mkdir()
         monkeypatch.setenv("XCMAX_CODEX_WORKSPACE_ROOT", str(ws))
         svc = _make_svc(tmp_path)
-        assert svc._cli_workspace({}) == str(ws)
+        result = Path(svc._cli_workspace({}))
+        assert result != ws
+        assert result.name == "codex_super_employee"
+        assert result.parent.name == "xcmax_product_scratch"
 
     def test_default_workspace(self, tmp_path, monkeypatch):
         monkeypatch.delenv("XCMAX_CODEX_WORKSPACE_ROOT", raising=False)
