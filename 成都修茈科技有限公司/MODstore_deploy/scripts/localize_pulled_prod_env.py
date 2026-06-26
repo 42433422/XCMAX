@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """将 SSH 拉取的生产 .env 改写为 Mac 本地日更可用（路径 + 开启 digest，禁提交 git）。"""
+
 from __future__ import annotations
 
 import argparse
@@ -110,16 +111,22 @@ def localize(
     local_root = local_root.expanduser().resolve()
     text = _strip_managed_block(raw_text)
     text = text.replace("/root/XCMAX", str(local_root))
-    text = text.replace("/root/modstore-git", str(local_root / "成都修茈科技有限公司" / "MODstore_deploy"))
+    text = text.replace(
+        "/root/modstore-git", str(local_root / "成都修茈科技有限公司" / "MODstore_deploy")
+    )
 
     values = _parse_env(text)
-    modstore_db = local_root / "成都修茈科技有限公司" / "MODstore_deploy" / "modstore_server" / "modstore.db"
+    modstore_db = (
+        local_root / "成都修茈科技有限公司" / "MODstore_deploy" / "modstore_server" / "modstore.db"
+    )
     for k in _PG_KEYS + _REDIS_KEYS:
         values.pop(k, None)
     values["MODSTORE_DB_PATH"] = str(modstore_db)
     values["XCMAX_MONOREPO_ROOT"] = str(local_root)
     values["MODSTORE_REPO_ROOT"] = str(local_root)
-    values["MODSTORE_RELEASE_TRAIN_JSON"] = str(local_root / "FHD" / "config" / "release_train.json")
+    values["MODSTORE_RELEASE_TRAIN_JSON"] = str(
+        local_root / "FHD" / "config" / "release_train.json"
+    )
     values["MODSTORE_DEPLOY_HEALTH_URL"] = f"http://127.0.0.1:{modstore_port}/api/health"
     values["MODSTORE_API_PORT"] = modstore_port
     local_modstore = f"http://127.0.0.1:{modstore_port}"

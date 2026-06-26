@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test ASR proxy WebSocket through nginx (health + optional token)."""
+
 import asyncio
 import json
 import os

@@ -3,6 +3,7 @@
 纯 Python 脚本型封装：直接导入 taiyangniao-pro 的考勤转换模块并在本机文件路径上执行，
 不依赖网页上传，也不调用 HTTP 接口。
 """
+
 from __future__ import annotations
 
 import importlib
@@ -25,7 +26,9 @@ SYSTEM_PROMPT = (
 )
 
 
-def _ok(data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _ok(
+    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     return {
         "ok": True,
         "summary": _summary(data),
@@ -36,7 +39,9 @@ def _ok(data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[
     }
 
 
-def _err(msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _err(
+    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     return {
         "ok": False,
         "summary": msg[:400],
@@ -101,7 +106,9 @@ def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
     return Path(str(raw)).expanduser()
 
 
-def _resolve_path(path: str, ctx: Dict[str, Any], payload: Dict[str, Any]) -> Tuple[Optional[Path], str]:
+def _resolve_path(
+    path: str, ctx: Dict[str, Any], payload: Dict[str, Any]
+) -> Tuple[Optional[Path], str]:
     if not path:
         return None, "缺少 file_path：请提供钉钉导出的 .xlsx/.xlsm/.xls 文件路径。"
 
@@ -140,7 +147,11 @@ def _resolve_template_path(raw_path: str, ctx: Dict[str, Any], payload: Dict[str
 
 
 def _candidate_backend_dirs(ctx: Dict[str, Any], payload: Dict[str, Any]) -> List[Path]:
-    explicit = payload.get("taiyangniao_backend_path") or payload.get("source_backend_path") or os.environ.get("TAIYANGNIAO_BACKEND_PATH")
+    explicit = (
+        payload.get("taiyangniao_backend_path")
+        or payload.get("source_backend_path")
+        or os.environ.get("TAIYANGNIAO_BACKEND_PATH")
+    )
     repo_root = (os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
     here = Path(__file__).resolve()
     roots = [
@@ -192,7 +203,11 @@ def _load_taiyangniao_modules(ctx: Dict[str, Any], payload: Dict[str, Any]) -> T
             return convert_mod, rules_mod, backend_str
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{backend_dir}: {exc}")
-    detail = "; ".join(errors[-3:]) if errors else "未找到 taiyangniao-pro/backend/taiyangniao_attendance"
+    detail = (
+        "; ".join(errors[-3:])
+        if errors
+        else "未找到 taiyangniao-pro/backend/taiyangniao_attendance"
+    )
     raise ImportError(detail)
 
 
@@ -260,7 +275,15 @@ async def _rules(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]
             meta={"handler": "direct_python", "action": "rules", "source_mod_id": SOURCE_MOD_ID},
         )
     data = _rules_payload(rules_mod)
-    return _ok(data, meta={"handler": "direct_python", "action": "rules", "source_mod_id": SOURCE_MOD_ID, "backend_dir": backend_dir})
+    return _ok(
+        data,
+        meta={
+            "handler": "direct_python",
+            "action": "rules",
+            "source_mod_id": SOURCE_MOD_ID,
+            "backend_dir": backend_dir,
+        },
+    )
 
 
 async def _convert(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -274,19 +297,30 @@ async def _convert(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, An
         )
     assert src_path is not None
     if src_path.suffix.lower() not in {".xlsx", ".xlsm", ".xls"}:
-        return _err(f"不支持的文件类型：{src_path.suffix or '(无后缀)'}", meta={"handler": "direct_python", "action": "convert"})
+        return _err(
+            f"不支持的文件类型：{src_path.suffix or '(无后缀)'}",
+            meta={"handler": "direct_python", "action": "convert"},
+        )
 
     try:
         convert_mod, _rules_mod, backend_dir = _load_taiyangniao_modules(ctx, payload)
     except Exception as exc:  # noqa: BLE001
         return _err(
             "无法导入太阳鸟 pro 转换模块：" + str(exc),
-            warnings=["可通过 payload.taiyangniao_backend_path 指定 e:/FHD/mods/taiyangniao-pro/backend。"],
+            warnings=[
+                "可通过 payload.taiyangniao_backend_path 指定 e:/FHD/mods/taiyangniao-pro/backend。"
+            ],
             meta={"handler": "direct_python", "action": "convert", "source_mod_id": SOURCE_MOD_ID},
         )
 
-    out_rel = str(payload.get("output_relpath") or DEFAULT_OUTPUT_RELPATH).strip() or DEFAULT_OUTPUT_RELPATH
-    tpl_rel = str(payload.get("template_relpath") or DEFAULT_TEMPLATE_RELPATH).strip() or DEFAULT_TEMPLATE_RELPATH
+    out_rel = (
+        str(payload.get("output_relpath") or DEFAULT_OUTPUT_RELPATH).strip()
+        or DEFAULT_OUTPUT_RELPATH
+    )
+    tpl_rel = (
+        str(payload.get("template_relpath") or DEFAULT_TEMPLATE_RELPATH).strip()
+        or DEFAULT_TEMPLATE_RELPATH
+    )
     out_path = _resolve_output_path(out_rel, ctx, payload)
     tpl_path = _resolve_template_path(tpl_rel, ctx, payload)
     if not tpl_path.is_file():
@@ -301,7 +335,9 @@ async def _convert(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, An
             str(out_path),
             template_path=str(tpl_path),
             month=str(payload.get("month") or "") or None,
-            header_row=int(payload.get("header_row") if payload.get("header_row") is not None else 0),
+            header_row=int(
+                payload.get("header_row") if payload.get("header_row") is not None else 0
+            ),
             use_llm=bool(payload.get("use_llm")),
             personnel_roster=None,
         )
@@ -332,7 +368,12 @@ async def _convert(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, An
             "output_sheet_names": result.get("output_sheet_names"),
             "raw": result,
         },
-        meta={"handler": "direct_python", "action": "convert", "source_mod_id": SOURCE_MOD_ID, "backend_dir": backend_dir},
+        meta={
+            "handler": "direct_python",
+            "action": "convert",
+            "source_mod_id": SOURCE_MOD_ID,
+            "backend_dir": backend_dir,
+        },
     )
 
 

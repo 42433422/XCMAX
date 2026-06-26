@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate TTS speech clips and run them through FunASR via ASR proxy."""
+
 from __future__ import annotations
 
 import asyncio
@@ -186,7 +187,9 @@ async def main() -> int:
             result = await recognize_pcm(pcm, phrase)
             results.append(result)
             status = "PASS" if result["ok"] else "FAIL"
-            print(f"{status} text={result.get('text')!r} latency={result['latency_ms']}ms chunks={result['chunks']}")
+            print(
+                f"{status} text={result.get('text')!r} latency={result['latency_ms']}ms chunks={result['chunks']}"
+            )
             if result.get("partials"):
                 print("partials:", " | ".join(result["partials"]))
 

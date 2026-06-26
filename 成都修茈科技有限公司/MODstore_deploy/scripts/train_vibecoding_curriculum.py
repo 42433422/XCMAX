@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """并行 vibecoding 课程表训练：多员工会话 + 黄金对比 + 实验包清理。"""
+
 from __future__ import annotations
 
 import argparse
@@ -76,7 +77,14 @@ RUNTIME_BRIEF: Dict[str, str] = {
 }
 
 
-def _http_json_sync(method: str, url: str, *, token: Optional[str] = None, body: Optional[dict] = None, timeout: int = 120):
+def _http_json_sync(
+    method: str,
+    url: str,
+    *,
+    token: Optional[str] = None,
+    body: Optional[dict] = None,
+    timeout: int = 120,
+):
     import urllib.error
     import urllib.request
 
@@ -143,7 +151,10 @@ async def _run_one_pack(
     from modstore_server.employee_pack_cleanup import cleanup_experimental_pack
 
     train_pack_id = f"{golden_id}-vibecode-train-{run_id[:8]}"
-    brief = RUNTIME_BRIEF.get(golden_id) or f"参考 {golden_id}，制作等价 direct_python 员工包。runtime_kind 与黄金包一致。"
+    brief = (
+        RUNTIME_BRIEF.get(golden_id)
+        or f"参考 {golden_id}，制作等价 direct_python 员工包。runtime_kind 与黄金包一致。"
+    )
     brief = f"员工包 ID：{train_pack_id}\n{brief}"
 
     entry: Dict[str, Any] = {
@@ -249,9 +260,15 @@ def main() -> int:
     parser.add_argument("--deadline-min", type=int, default=45)
     args = parser.parse_args()
 
-    packs = [p.strip() for p in args.pack.split(",") if p.strip()] if args.pack else list(WAVE_PACKS[args.wave])
+    packs = (
+        [p.strip() for p in args.pack.split(",") if p.strip()]
+        if args.pack
+        else list(WAVE_PACKS[args.wave])
+    )
     summary = asyncio.run(
-        run_curriculum(wave=args.wave, packs=packs, parallel=args.parallel, deadline_min=args.deadline_min)
+        run_curriculum(
+            wave=args.wave, packs=packs, parallel=args.parallel, deadline_min=args.deadline_min
+        )
     )
     return 0 if summary.get("passed") == summary.get("total") and summary.get("total") else 1
 

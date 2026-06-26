@@ -1,4 +1,5 @@
 """Rebuild test-qa-runner.xcemp at version from yuangon employee.yaml."""
+
 from __future__ import annotations
 
 import hashlib

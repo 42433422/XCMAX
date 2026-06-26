@@ -28,6 +28,7 @@
 | claimed-vs-actual（对外声称 vs 实测） | [CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) | 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成 |
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
 | account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全 |
+| project-state（项目真实状态） | [PROJECT_STATE.md](PROJECT_STATE.md) | 项目健康度/完成度诚实仪表盘，唯一禁止撒谎的状态文档 |
 
 ## 已退役 SSOT（指针化）
 

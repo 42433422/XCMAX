@@ -1,4 +1,5 @@
 """临时：用 Python 子进程方式启动 uvicorn，确保 CJK 环境变量不被 PowerShell 重编码。可删。"""
+
 from __future__ import annotations
 
 import os
@@ -18,10 +19,19 @@ def main() -> None:
     os.environ.setdefault("VIBE_CODING_STORE_DIR", str(deploy_root / "var" / "vibe_coding"))
 
     # 打印 sanity-check
-    print("[uvicorn-launcher] MODSTORE_TENANT_WORKSPACE_ROOT =", repr(os.environ["MODSTORE_TENANT_WORKSPACE_ROOT"]), flush=True)
-    print("[uvicorn-launcher] VIBE_CODING_STORE_DIR        =", repr(os.environ["VIBE_CODING_STORE_DIR"]), flush=True)
+    print(
+        "[uvicorn-launcher] MODSTORE_TENANT_WORKSPACE_ROOT =",
+        repr(os.environ["MODSTORE_TENANT_WORKSPACE_ROOT"]),
+        flush=True,
+    )
+    print(
+        "[uvicorn-launcher] VIBE_CODING_STORE_DIR        =",
+        repr(os.environ["VIBE_CODING_STORE_DIR"]),
+        flush=True,
+    )
 
     import uvicorn
+
     uvicorn.run(
         "modstore_server.app:app",
         host="127.0.0.1",

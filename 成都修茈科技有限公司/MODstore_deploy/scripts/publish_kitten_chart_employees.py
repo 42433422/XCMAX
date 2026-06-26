@@ -1,4 +1,5 @@
 """将 chart-*-employee 可视化员工发布到 catalog 并设为 AI 市场公开展示。"""
+
 from __future__ import annotations
 
 import json
@@ -33,8 +34,8 @@ def _publish_one(meta: dict) -> dict:
     from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
     from modstore_server.employee_asset_pipeline import build_employee_pack_zip_for_library
-    from modstore_server.models import CatalogItem, User, get_session_factory, init_db
     from modstore_server.mod_scaffold_runner import modstore_library_path
+    from modstore_server.models import CatalogItem, User, get_session_factory, init_db
 
     pkg_id = meta["pkg_id"]
     lib = modstore_library_path()

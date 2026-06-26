@@ -128,9 +128,7 @@ _PS_DESKTOP_PAGES: Tuple[Tuple[str, str], ...] = (
     ("规划桥 Mod", "/mod/xcagi-planner-bridge/chat"),
 )
 
-_AI_STORE_TABS: Tuple[Tuple[str, str], ...] = (
-    ("AI市场-AI员工", "ai_employee"),
-)
+_AI_STORE_TABS: Tuple[Tuple[str, str], ...] = (("AI市场-AI员工", "ai_employee"),)
 
 _AI_STORE_TAB_LABELS: Dict[str, str] = {
     "all": "全部商品",
@@ -194,7 +192,9 @@ def _safe_slug_name(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "-", str(name or "")).strip()[:96] or "page"
 
 
-def _fetch_market_catalog_sync(base: str, *, max_items: Optional[int] = None) -> List[Dict[str, Any]]:
+def _fetch_market_catalog_sync(
+    base: str, *, max_items: Optional[int] = None
+) -> List[Dict[str, Any]]:
     """拉取 AI 市场公开目录（用于 /market/catalog/:id 截图）；不全量分页，够筛 1–3 即停。"""
     cap = _catalog_screenshot_max()
     if cap <= 0:
@@ -383,9 +383,7 @@ def _pick_sample_targets(full: List[SurfaceTarget]) -> List[SurfaceTarget]:
     return out
 
 
-def _limit_targets_per_lane(
-    targets: List[SurfaceTarget], *, per_lane: int
-) -> List[SurfaceTarget]:
+def _limit_targets_per_lane(targets: List[SurfaceTarget], *, per_lane: int) -> List[SurfaceTarget]:
     if per_lane <= 0:
         return list(targets)
     counts: Dict[str, int] = {}
@@ -399,9 +397,7 @@ def _limit_targets_per_lane(
     return out
 
 
-def _append_pw_catalog_targets(
-    out: List[SurfaceTarget], catalog: List[Dict[str, Any]]
-) -> None:
+def _append_pw_catalog_targets(out: List[SurfaceTarget], catalog: List[Dict[str, Any]]) -> None:
     for item in catalog:
         cid = item.get("id")
         if cid is None:
@@ -518,9 +514,7 @@ def build_digest_surface_targets() -> List[SurfaceTarget]:
     if _ps_audit_enabled():
         ps_base = _ps_base_url()
         for name, path in _PS_DESKTOP_PAGES:
-            out.append(
-                SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base)
-            )
+            out.append(SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base))
 
     for name, path in _PAPP_PUBLIC_PAGES:
         out.append(SurfaceTarget("P-App", "App P-App", name, path, "mobile"))
@@ -552,9 +546,7 @@ def build_surface_targets() -> List[SurfaceTarget]:
     if _ps_audit_enabled():
         ps_base = _ps_base_url()
         for name, path in _PS_DESKTOP_PAGES:
-            out.append(
-                SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base)
-            )
+            out.append(SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base))
 
     for name, path in _PAPP_PUBLIC_PAGES:
         out.append(SurfaceTarget("P-App", "App P-App", name, path, "mobile"))
@@ -750,9 +742,7 @@ def _surface_audit_login_api_base(account_kind: str) -> str:
             or "http://127.0.0.1:5102"
         )
         return str(raw).strip().rstrip("/")
-    raw = (
-        os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base()
-    )
+    raw = os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base()
     return str(raw).strip().rstrip("/")
 
 
@@ -764,7 +754,9 @@ def _login_surface_audit_sync(
     label: str = "market",
 ) -> Dict[str, Any]:
     """Playwright 截图前登录对应系统，并返回可注入的 token/cookie/session。"""
-    account_kind = (account_kind or os.environ.get("MODSTORE_SURFACE_AUDIT_ACCOUNT_KIND") or "admin").strip()
+    account_kind = (
+        account_kind or os.environ.get("MODSTORE_SURFACE_AUDIT_ACCOUNT_KIND") or "admin"
+    ).strip()
     api_base = _surface_audit_login_api_base(account_kind)
     if account_kind == "enterprise":
         demo_user, demo_password = _surface_demo_account_defaults()
@@ -856,10 +848,14 @@ def _login_surface_audit_sync(
                 handoff_data.get("market_access_token") or handoff_data.get("token") or ""
             ).strip()
             refresh = str(
-                handoff_data.get("market_refresh_token") or handoff_data.get("refresh_token") or refresh
+                handoff_data.get("market_refresh_token")
+                or handoff_data.get("refresh_token")
+                or refresh
             ).strip()
         except Exception as exc:
-            logger.warning("surface audit: %s session-handoff failed base=%s err=%s", label, api_base, exc)
+            logger.warning(
+                "surface audit: %s session-handoff failed base=%s err=%s", label, api_base, exc
+            )
 
     has_required_state = bool(access) or (account_kind == "enterprise" and bool(session_id))
     if not ok or not has_required_state:
@@ -886,7 +882,9 @@ def _login_surface_audit_sync(
 def _fetch_admin_digest_code_sync(auth: Dict[str, str]) -> str:
     """从 MODstore API 拉取管理端 6 位校验码（对齐 FHD digest-identity 自签发）。"""
     api_base = (
-        (os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base()).strip().rstrip("/")
+        (os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base())
+        .strip()
+        .rstrip("/")
     )
     headers = {"Accept": "application/json", "User-Agent": "MODstore-surface-audit/1.0"}
     token = str(auth.get("access_token") or "").strip()
@@ -975,7 +973,12 @@ async def _inject_market_auth(context: Any, auth: Dict[str, Any], target_url: st
         try:
             await context.add_cookies(cookie_rows)
         except Exception as exc:
-            logger.warning("surface audit: inject auth cookies failed url=%s err=%s", cookie_url, exc)
+            # Log only the exception type — cookie_rows may contain session tokens.
+            logger.warning(
+                "surface audit: inject auth cookies failed url=%s err=%s",
+                cookie_url,
+                type(exc).__name__,
+            )
 
     access = str(auth.get("access_token") or "").strip()
     if not access and not session_id:
@@ -992,14 +995,22 @@ async def _inject_market_auth(context: Any, auth: Dict[str, Any], target_url: st
     script = (
         "(function(){try{"
         + (f"localStorage.setItem('modstore_token', {json.dumps(access)});" if access else "")
-        + (f"localStorage.setItem('xcagi_market_access_token', {json.dumps(access)});" if access else "")
+        + (
+            f"localStorage.setItem('xcagi_market_access_token', {json.dumps(access)});"
+            if access
+            else ""
+        )
         + (
             f"localStorage.setItem('modstore_refresh_token', {json.dumps(refresh)});"
             f"localStorage.setItem('xcagi_market_refresh_token', {json.dumps(refresh)});"
             if refresh
             else ""
         )
-        + (f"localStorage.setItem('xcagi_surface_audit_session_id', {json.dumps(session_id)});" if session_id else "")
+        + (
+            f"localStorage.setItem('xcagi_surface_audit_session_id', {json.dumps(session_id)});"
+            if session_id
+            else ""
+        )
         + f"localStorage.setItem('xcagi_market_user_json', {json.dumps(json.dumps(market_user, ensure_ascii=False))});"
         + "}catch(e){}})();"
     )
@@ -1356,7 +1367,9 @@ async def analyze_surface_lanes(report: Dict[str, Any], *, user_id: int = 0) -> 
                 "source": "rule",
             }
             if enabled not in ("0", "false", "no", "off"):
-                logger.warning("surface audit: lane analysis fallback lane=%s err=bench LLM 未配置", lane)
+                logger.warning(
+                    "surface audit: lane analysis fallback lane=%s err=bench LLM 未配置", lane
+                )
             continue
         system = _LANE_ANALYSIS_SYSTEM.format(lane=lane, owners="、".join(owners[:3]) or lane)
         user_content = _build_lane_analysis_user_content(lane, lane_labels.get(lane, lane), rows)
@@ -1629,7 +1642,7 @@ async def run_surface_audit_async() -> Dict[str, Any]:
             if any(t.lane == "P-S" for t in _targets):
                 ps_auth = _login_surface_audit_sync(account_kind="enterprise", label="P-S")
                 if ps_auth:
-                    logger.info("surface audit: P-S enterprise login ok user=%s", ps_auth.get("username"))
+                    logger.info("surface audit: P-S enterprise login ok")
                 else:
                     raise RuntimeError(
                         "surface audit: P-S enterprise login required but login failed "
@@ -1721,11 +1734,7 @@ async def run_surface_audit_async() -> Dict[str, Any]:
             r["analysis_owners"] = la.get("owners") or []
 
     if not ok:
-        bad = [
-            r
-            for r in results
-            if r.get("error") or int(r.get("status") or 0) >= 400
-        ]
+        bad = [r for r in results if r.get("error") or int(r.get("status") or 0) >= 400]
         sample = bad[0] if bad else {}
         raise RuntimeError(
             f"surface audit failed: {len(bad)} page(s) with errors; "
@@ -1892,7 +1901,8 @@ def _lane_count_overview_html(results: List[Dict[str, Any]]) -> str:
         warn = sum(
             1
             for r in rows
-            if not ((r.get("status") or 0) >= 400 or r.get("error")) and (r.get("console_errors") or [])
+            if not ((r.get("status") or 0) >= 400 or r.get("error"))
+            and (r.get("console_errors") or [])
         )
         ok = total - bad - warn
         if total == 0:

@@ -21,8 +21,8 @@ def main() -> int:
     args = p.parse_args()
 
     os.environ.setdefault("MODSTORE_DB_PATH", "")
-    from modstore_server.models import OutboxEvent, get_session_factory
     from modstore_server.eventing.db_outbox import drain
+    from modstore_server.models import OutboxEvent, get_session_factory
 
     sf = get_session_factory()
     with sf() as db:

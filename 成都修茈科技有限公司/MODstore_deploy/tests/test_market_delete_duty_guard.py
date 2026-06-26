@@ -6,7 +6,7 @@ import types
 
 
 def test_admin_delete_employee_pack_forbidden_for_duty_roster_id(client):
-    from modstore_server import market_api as ma
+    from modstore_server import market_auth_api as ma
     from modstore_server.app import app
 
     admin = types.SimpleNamespace(id=1, username="a", is_admin=True, email="a@a")
@@ -22,7 +22,7 @@ def test_admin_delete_employee_pack_forbidden_for_duty_roster_id(client):
 def test_admin_delete_employee_pack_not_duty_forbidden_for_random_id(client, monkeypatch):
     """非编制 id：不得触发 duty 403。"""
     from modstore_server import catalog_store
-    from modstore_server import market_api as ma
+    from modstore_server import market_auth_api as ma
     from modstore_server.app import app
 
     admin = types.SimpleNamespace(id=1, username="a", is_admin=True, email="a@a")

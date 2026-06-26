@@ -11,6 +11,13 @@ from modstore_server.api.deps import get_current_user
 
 
 def _new_client(tmp_path, monkeypatch):
+    import pytest
+
+    try:
+        import modstore_server.ai_employee_account_api  # noqa: F401
+    except ImportError as exc:
+        pytest.skip(f"ai_employee_account_api not importable (missing dep): {exc}")
+
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "ai_employee_accounts.sqlite"))
     import modstore_server.models as models
 

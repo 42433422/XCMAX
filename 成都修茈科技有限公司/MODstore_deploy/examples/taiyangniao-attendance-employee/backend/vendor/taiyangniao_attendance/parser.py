@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from pathlib import Path
-import re
 from typing import Iterable
 
 from openpyxl import load_workbook
@@ -14,7 +14,6 @@ from .header_resolver import (
     resolve_daily_stats_header,
     resolve_raw_records_header,
 )
-
 
 DATE_RE = re.compile(r"(\d{2,4})-(\d{1,2})-(\d{1,2})")
 DATETIME_FORMATS = (
@@ -327,7 +326,9 @@ def parse_attendance_workbook(
         wb.close()
 
 
-def distinct_people_for_detail_template(records: list[AttendanceDayRecord]) -> list[tuple[str, str, str]]:
+def distinct_people_for_detail_template(
+    records: list[AttendanceDayRecord],
+) -> list[tuple[str, str, str]]:
     """(部门, 考勤组/性质, 姓名) 去重，按姓名排序；用于按数据人员重排「明细」6 行块。"""
     by_name: dict[str, tuple[str, str, str]] = {}
     for r in records:

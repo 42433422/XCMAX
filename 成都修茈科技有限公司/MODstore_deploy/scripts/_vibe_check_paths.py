@@ -1,4 +1,5 @@
 """临时：直接对比 manifest root 与 MODSTORE_TENANT_WORKSPACE_ROOT 的 unicode codepoints。"""
+
 from __future__ import annotations
 
 import json

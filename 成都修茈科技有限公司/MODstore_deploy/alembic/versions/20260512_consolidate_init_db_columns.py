@@ -21,6 +21,7 @@ Create Date: 2026-05-12
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "20260512_consolidate_init_db_columns"
@@ -63,7 +64,10 @@ def upgrade() -> None:
         ("license_scope", sa.Column("license_scope", sa.String(32), server_default="personal")),
         ("origin_type", sa.Column("origin_type", sa.String(32), server_default="original")),
         ("ip_risk_level", sa.Column("ip_risk_level", sa.String(16), server_default="low")),
-        ("compliance_status", sa.Column("compliance_status", sa.String(32), server_default="approved")),
+        (
+            "compliance_status",
+            sa.Column("compliance_status", sa.String(32), server_default="approved"),
+        ),
         ("rank_score", sa.Column("rank_score", sa.Float(), server_default="100.0")),
         ("delist_reason", sa.Column("delist_reason", sa.Text(), server_default="")),
         ("industry", sa.Column("industry", sa.Text(), server_default="通用")),
@@ -73,7 +77,10 @@ def upgrade() -> None:
         ("description_embedding", sa.Column("description_embedding", sa.Text(), server_default="")),
         ("template_category", sa.Column("template_category", sa.Text(), server_default="")),
         ("template_difficulty", sa.Column("template_difficulty", sa.Text(), server_default="")),
-        ("install_count", sa.Column("install_count", sa.Integer(), server_default="0", nullable=False)),
+        (
+            "install_count",
+            sa.Column("install_count", sa.Integer(), server_default="0", nullable=False),
+        ),
         ("graph_snapshot", sa.Column("graph_snapshot", sa.Text(), server_default="")),
     ]:
         _add_col("catalog_items", col_name, col_def)
@@ -93,7 +100,10 @@ def upgrade() -> None:
         _add_col("workflows", col_name, col_def)
 
     for col_name, col_def in [
-        ("auto_renew", sa.Column("auto_renew", sa.Boolean(), server_default=sa.text("1"), nullable=False)),
+        (
+            "auto_renew",
+            sa.Column("auto_renew", sa.Boolean(), server_default=sa.text("1"), nullable=False),
+        ),
         ("renewal_fail_reason", sa.Column("renewal_fail_reason", sa.Text(), server_default="")),
     ]:
         _add_col("user_plans", col_name, col_def)
@@ -102,7 +112,10 @@ def upgrade() -> None:
         ("git_branch", sa.Column("git_branch", sa.String(256), server_default="")),
         ("base_commit_sha", sa.Column("base_commit_sha", sa.String(64), server_default="")),
         ("staged_commit_sha", sa.Column("staged_commit_sha", sa.String(64), server_default="")),
-        ("approval_required_globs_json", sa.Column("approval_required_globs_json", sa.Text(), server_default="[]")),
+        (
+            "approval_required_globs_json",
+            sa.Column("approval_required_globs_json", sa.Text(), server_default="[]"),
+        ),
     ]:
         _add_col("employee_change_requests", col_name, col_def)
 
@@ -122,11 +135,22 @@ def downgrade() -> None:
             op.drop_column("knowledge_collections", col)
 
     for col in [
-        "material_category", "license_scope", "origin_type", "ip_risk_level",
-        "compliance_status", "rank_score", "delist_reason", "industry",
-        "security_level", "industry_code", "industry_secondary",
-        "description_embedding", "template_category", "template_difficulty",
-        "install_count", "graph_snapshot",
+        "material_category",
+        "license_scope",
+        "origin_type",
+        "ip_risk_level",
+        "compliance_status",
+        "rank_score",
+        "delist_reason",
+        "industry",
+        "security_level",
+        "industry_code",
+        "industry_secondary",
+        "description_embedding",
+        "template_category",
+        "template_difficulty",
+        "install_count",
+        "graph_snapshot",
     ]:
         if _col_exists("catalog_items", col):
             op.drop_column("catalog_items", col)
@@ -143,7 +167,12 @@ def downgrade() -> None:
         if _col_exists("user_plans", col):
             op.drop_column("user_plans", col)
 
-    for col in ["git_branch", "base_commit_sha", "staged_commit_sha", "approval_required_globs_json"]:
+    for col in [
+        "git_branch",
+        "base_commit_sha",
+        "staged_commit_sha",
+        "approval_required_globs_json",
+    ]:
         if _col_exists("employee_change_requests", col):
             op.drop_column("employee_change_requests", col)
 

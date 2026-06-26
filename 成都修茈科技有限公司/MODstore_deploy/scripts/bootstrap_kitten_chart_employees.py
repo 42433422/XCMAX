@@ -1,4 +1,5 @@
 """Bootstrap 小猫分析可视化 chart-*-employee 到 MODstore library。"""
+
 from __future__ import annotations
 
 import json

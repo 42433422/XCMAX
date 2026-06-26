@@ -27,7 +27,7 @@
     "pytest_failed": 196,
     "pytest_errors": 7,
     "pytest_skipped": 39,
-    "note": "2026-06-17 快照；HEAD 已于 2026-06-20 bump 至 85.07%，此 WIP 快照需重新测量以反映当前工作区状态"
+    "note": "2026-06-17 快照；floor已升至89，WIP快照需重新测量"
   },
   "quality_gate": {
     "status": "failed",

@@ -199,7 +199,9 @@ def main() -> int:
             continue
         orphans.append(f)
 
-    print(f"[coverage] repo_files={len(files)}  scope_globs={len(scope_globs)}  ignored_rules={len(ignore_globs)}")
+    print(
+        f"[coverage] repo_files={len(files)}  scope_globs={len(scope_globs)}  ignored_rules={len(ignore_globs)}"
+    )
     if not orphans:
         print("[coverage] OK — every file is owned or explicitly ignored.")
         return 0

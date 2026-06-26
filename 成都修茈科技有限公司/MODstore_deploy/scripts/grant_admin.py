@@ -68,9 +68,7 @@ def main() -> int:
             print(f"plan_id 不存在：{plan_id}\n可用：{available}", file=sys.stderr)
             return 3
 
-        user: Optional[User] = (
-            session.query(User).filter(User.username == username).first()
-        )
+        user: Optional[User] = session.query(User).filter(User.username == username).first()
         created = False
         if user is None:
             session.close()

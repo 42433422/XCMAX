@@ -22,9 +22,7 @@ def resolve_yuangon_repo_root(
 
     root = Path(repo_root).expanduser().resolve()
     base_roots = [
-        Path(value).expanduser().resolve()
-        for value in extra_roots
-        if str(value or "").strip()
+        Path(value).expanduser().resolve() for value in extra_roots if str(value or "").strip()
     ]
     base_roots.append(root)
 

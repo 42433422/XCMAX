@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from modstore_server import employee_autonomy_service as svc
+from modstore_server.llm_failure_classifier import classify_failure_kind
 from modstore_server.models import EmployeeExecutionMetric, get_session_factory, init_db
 
 
@@ -22,6 +23,7 @@ def _db():
 
 def _add_failures(session, employee_id: str, n: int, error: str) -> None:
     now = datetime.now(timezone.utc)
+    kind = classify_failure_kind(error)
     for _ in range(n):
         session.add(
             EmployeeExecutionMetric(
@@ -30,6 +32,7 @@ def _add_failures(session, employee_id: str, n: int, error: str) -> None:
                 task="t",
                 status="failed",
                 error=error,
+                failure_kind=kind,
                 created_at=now,
             )
         )

@@ -9,7 +9,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -17,7 +16,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Restore MODstore PostgreSQL from backup.")
     parser.add_argument("dump", help="Path to postgres.dump produced by scripts/backup_modstore.py")
     parser.add_argument("--confirm", action="store_true", help="Required to execute the restore")
-    parser.add_argument("--clean", action="store_true", help="Pass --clean --if-exists to pg_restore")
+    parser.add_argument(
+        "--clean", action="store_true", help="Pass --clean --if-exists to pg_restore"
+    )
     args = parser.parse_args()
 
     dump = Path(args.dump).resolve()

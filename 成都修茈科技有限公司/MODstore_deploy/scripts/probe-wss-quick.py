@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import asyncio
 import sys
+
 import websockets
+
 
 async def main() -> None:
     base = sys.argv[1] if len(sys.argv) > 1 else "wss://xiu-ci.com"
@@ -17,6 +19,7 @@ async def main() -> None:
                 print(f"OK {path} -> {msg[:100]}")
         except Exception as exc:
             print(f"FAIL {path} -> {exc}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

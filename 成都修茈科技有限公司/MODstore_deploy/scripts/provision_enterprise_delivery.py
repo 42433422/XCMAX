@@ -67,11 +67,7 @@ def _resolve_args(args: argparse.Namespace) -> tuple[str, list[str], str]:
 def provision(username: str, mod_ids: list[str], *, dry_run: bool = False) -> dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
-        user = (
-            session.query(User)
-            .filter(func.lower(User.username) == username.lower())
-            .first()
-        )
+        user = session.query(User).filter(func.lower(User.username) == username.lower()).first()
         if user is None:
             return {"ok": False, "error": "USER_NOT_FOUND", "username": username}
         user_id = int(user.id)
@@ -89,7 +85,9 @@ def provision(username: str, mod_ids: list[str], *, dry_run: bool = False) -> di
             if mod_id not in before_set:
                 added.append(mod_id)
 
-    after_mod_ids = sorted(set(before_mod_ids) | set(mod_ids)) if dry_run else sorted(get_user_mod_ids(user_id))
+    after_mod_ids = (
+        sorted(set(before_mod_ids) | set(mod_ids)) if dry_run else sorted(get_user_mod_ids(user_id))
+    )
     return {
         "ok": True,
         "username": username,
