@@ -24,7 +24,7 @@ jobs:
       run:
         working-directory: FHD
     env:
-      DATABASE_URL: sqlite:///${{ runner.temp }}/fhd_alembic_ssot_parity.db
+      DATABASE_URL: sqlite:////tmp/fhd_alembic_ssot_parity.db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
