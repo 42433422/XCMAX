@@ -377,6 +377,7 @@ constructor(
                         showCodex = isEnterprise || adminMode,
                         showCursor = isEnterprise || adminMode,
                         showClaude = isEnterprise || adminMode,
+                        showTrae = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                         timestamps = timestamps,
                         previews = previews,
@@ -873,11 +874,13 @@ constructor(
         text: String,
         mentions: List<String> = emptyList(),
         branchContext: String = "",
+        forceDispatch: Boolean = false,
+        context: Map<String, String> = emptyMap(),
     ) {
         val body = text.trim()
         if (body.isBlank() || _groupSending.value) return
         val branch = branchContext.trim()
-        val dispatch = branch.isNotBlank() || shouldDispatchAiGroupTask(body)
+        val dispatch = forceDispatch || branch.isNotBlank() || shouldDispatchAiGroupTask(body)
         // 本地先回显用户消息
         _groupMessages.value = _groupMessages.value + com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto(
             id = "local-${System.currentTimeMillis()}",
@@ -895,6 +898,7 @@ constructor(
                 mentions = mentions,
                 dispatch = dispatch,
                 branchContext = branch,
+                context = context,
             )
                 .onSuccess { data ->
                     // 用服务端权威消息替换尾部（去掉本地回显，拼接服务端返回的 user+ai）
@@ -1183,6 +1187,7 @@ constructor(
             showCodex: Boolean,
             showCursor: Boolean,
             showClaude: Boolean,
+            showTrae: Boolean,
             showCustomerService: Boolean,
             timestamps: Map<String, Long>,
             previews: Map<String, String>,
@@ -1241,6 +1246,21 @@ constructor(
                             subtitle = cachedConversationPreview(PinnedIds.CLAUDE, previews)
                                 .ifBlank { "全设备协同 · 排比派工" },
                             timestamp = cachedConversationTimestamp(PinnedIds.CLAUDE, timestamps),
+                            isOnline = true,
+                            isPinned = true,
+                    )
+                )
+        }
+
+        if (showTrae) {
+                items.add(
+                    ConversationItem(
+                            id = PinnedIds.TRAE,
+                            type = ConversationType.PINNED_TRAE,
+                            title = "超级员工-Trae",
+                            subtitle = cachedConversationPreview(PinnedIds.TRAE, previews)
+                                .ifBlank { "全设备协同 · Trae" },
+                            timestamp = cachedConversationTimestamp(PinnedIds.TRAE, timestamps),
                             isOnline = true,
                             isPinned = true,
                     )

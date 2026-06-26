@@ -12,6 +12,23 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+# 内存对话历史滚动上限（原硬编码 20，现为可配置）
+_DEFAULT_HISTORY_MAX = 50
+
+
+def _resolve_history_max() -> int:
+    """从环境变量 ``FHD_CONVERSATION_HISTORY_MAX`` 读取内存历史上限。
+
+    Returns:
+        历史上限（``int``，≥ 10）。无效值或未设置时返回默认 50。
+    """
+    raw = os.environ.get("FHD_CONVERSATION_HISTORY_MAX", "")
+    try:
+        value = int(raw) if raw else _DEFAULT_HISTORY_MAX
+    except (TypeError, ValueError):
+        return _DEFAULT_HISTORY_MAX
+    return max(10, value)
+
 
 class AIConversationService(
     ContextMixin,
@@ -171,9 +188,18 @@ class AIConversationService(
 
         context.conversation_history.append({"role": role, "content": content})
 
-        if len(context.conversation_history) > 20:
-            context.conversation_history = context.conversation_history[-20:]
+        # 内存历史滚动上限可配置（默认 50，原硬编码 20）
+        # 全量历史仍可保留在 DB（AIConversation 表），内存只保留近期窗口
+        # 实际 token 预算裁剪由 ContextWindowManager 在 call_llm_api 内统一处理
+        history_max = _resolve_history_max()
+        if len(context.conversation_history) > history_max:
+            context.conversation_history = context.conversation_history[-history_max:]
+            # 更新摘要覆盖索引：被裁剪的老消息不再可用，summary_covered_until 重置
+            context.summary_covered_until = -1
+            context.summary = None
 
+        # 刷新 token 估算缓存
+        context.estimate_history_tokens()
         context.updated_at = time.time()
         return True
 

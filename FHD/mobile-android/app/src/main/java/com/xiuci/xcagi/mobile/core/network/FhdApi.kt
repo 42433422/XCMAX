@@ -22,6 +22,7 @@ import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.MeData
+import com.xiuci.xcagi.mobile.core.model.TraeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.model.CsMessageResponseDto
 import com.xiuci.xcagi.mobile.model.CsMessagesListDto
@@ -393,6 +394,16 @@ interface FhdApi {
     @POST(ApiEndpoints.ADMIN_CURSOR_SUPER_EMPLOYEE_MESSAGES)
     suspend fun postCursorSuperEmployeeMessage(
         @Body body: CursorSuperEmployeeMobileMessageBody,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.ADMIN_TRAE_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun getTraeSuperEmployeeMessages(
+        @Query("limit") limit: Int = 80,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ADMIN_TRAE_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun postTraeSuperEmployeeMessage(
+        @Body body: TraeSuperEmployeeMobileMessageBody,
     ): MobileEnvelope<Map<String, Any?>>
 
     // ── AI 群聊 ──

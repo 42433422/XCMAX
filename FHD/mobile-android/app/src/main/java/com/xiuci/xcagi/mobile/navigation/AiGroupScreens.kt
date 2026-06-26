@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,13 +22,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CallMerge
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -73,8 +72,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -84,6 +82,8 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDraft
 import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.ChatComposerBar
+import com.xiuci.xcagi.mobile.ui.components.mobile.ChatToolCardAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
@@ -106,6 +106,24 @@ private fun aiGroupAvatarFallback(employeeId: String, name: String = "", avatarK
         key == "claude" || id.contains("claude") || label.contains("claude") -> AppAvatarFallback.CLAUDE
         else -> AppAvatarFallback.AI_EMPLOYEE
     }
+}
+
+private enum class GroupWorkMode {
+    DISPATCH,
+    FOLLOWUP,
+    BUGFIX,
+}
+
+private fun GroupWorkMode.label(): String = when (this) {
+    GroupWorkMode.DISPATCH -> "任务派工"
+    GroupWorkMode.FOLLOWUP -> "验收回访"
+    GroupWorkMode.BUGFIX -> "问题修复"
+}
+
+private fun GroupWorkMode.placeholder(): String = when (this) {
+    GroupWorkMode.DISPATCH -> "输入要派发的任务"
+    GroupWorkMode.FOLLOWUP -> "可补充要回访哪一单"
+    GroupWorkMode.BUGFIX -> "输入要修复的问题"
 }
 
 // ══════════════════════════════════════════
@@ -439,7 +457,9 @@ fun AiGroupChatScreen(
     var input by remember { mutableStateOf("") }
     var showMembers by remember { mutableStateOf(false) }
     var showBranchPicker by remember { mutableStateOf(false) }
+    var showTools by remember { mutableStateOf(false) }
     var selectedBranch by remember { mutableStateOf<String?>(null) }
+    var selectedWorkMode by remember { mutableStateOf<GroupWorkMode?>(null) }
     val listState = rememberLazyListState()
     val haptics = rememberHaptics()
     val g = group
@@ -540,17 +560,85 @@ fun AiGroupChatScreen(
                 onValueChange = { input = it },
                 sending = sending,
                 selectedBranch = selectedBranch,
+                selectedWorkMode = selectedWorkMode,
+                showTools = showTools,
                 onBranchClick = { showBranchPicker = true },
                 onVoice = { startGroupVoice() },
+                onToggleTools = {
+                    haptics.tap()
+                    showTools = !showTools
+                },
+                onMembersClick = {
+                    showTools = false
+                    showMembers = true
+                },
+                onSelectWorkMode = { mode ->
+                    haptics.tap()
+                    selectedWorkMode = mode
+                    showTools = false
+                },
+                onClearWorkMode = {
+                    haptics.tap()
+                    selectedWorkMode = null
+                },
                 onSend = {
-                    if (g != null && input.isNotBlank()) {
-                        haptics.confirm()
-                        vm.sendGroupMessage(
-                            groupId = g.id,
-                            text = input.trim(),
-                            branchContext = selectedBranch.orEmpty(),
-                        )
-                        input = ""
+                    if (g == null) return@GroupInputBar
+                    val task = input.trim()
+                    when (selectedWorkMode) {
+                        GroupWorkMode.DISPATCH -> {
+                            if (task.isBlank()) {
+                                vm.snack("先输入要派发的任务")
+                                return@GroupInputBar
+                            }
+                            haptics.confirm()
+                            vm.sendGroupMessage(
+                                groupId = g.id,
+                                text = task,
+                                branchContext = selectedBranch.orEmpty(),
+                                forceDispatch = true,
+                                context = mapOf("tool_action" to "dispatch_task"),
+                            )
+                            input = ""
+                            selectedWorkMode = null
+                        }
+                        GroupWorkMode.FOLLOWUP -> {
+                            haptics.confirm()
+                            vm.sendGroupMessage(
+                                groupId = g.id,
+                                text = task.ifBlank { "小C，回访一下最近一次派工的进度和验收结论。" },
+                                forceDispatch = false,
+                                context = mapOf("tool_action" to "acceptance_followup"),
+                            )
+                            input = ""
+                            selectedWorkMode = null
+                        }
+                        GroupWorkMode.BUGFIX -> {
+                            if (task.isBlank()) {
+                                vm.snack("先输入要修复的问题")
+                                return@GroupInputBar
+                            }
+                            haptics.confirm()
+                            vm.sendGroupMessage(
+                                groupId = g.id,
+                                text = task,
+                                branchContext = selectedBranch.orEmpty(),
+                                forceDispatch = true,
+                                context = mapOf("tool_action" to "bugfix_task"),
+                            )
+                            input = ""
+                            selectedWorkMode = null
+                        }
+                        null -> {
+                            if (task.isNotBlank()) {
+                                haptics.confirm()
+                                vm.sendGroupMessage(
+                                    groupId = g.id,
+                                    text = task,
+                                    branchContext = selectedBranch.orEmpty(),
+                                )
+                                input = ""
+                            }
+                        }
                     }
                 },
             )
@@ -695,96 +783,109 @@ private fun GroupInputBar(
     onValueChange: (String) -> Unit,
     sending: Boolean,
     selectedBranch: String?,
+    selectedWorkMode: GroupWorkMode?,
+    showTools: Boolean,
     onBranchClick: () -> Unit,
     onVoice: () -> Unit,
+    onToggleTools: () -> Unit,
+    onMembersClick: () -> Unit,
+    onSelectWorkMode: (GroupWorkMode) -> Unit,
+    onClearWorkMode: () -> Unit,
     onSend: () -> Unit,
 ) {
-    val canSend = value.isNotBlank() && !sending
     val branchLabel = selectedBranch?.takeIf { it.isNotBlank() }?.substringAfterLast('/') ?: "自动新建"
-    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-        Column {
-            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+    ChatComposerBar(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = selectedWorkMode?.placeholder() ?: "发群消息（@成员 可单独点名）",
+        busy = sending,
+        onSend = onSend,
+        onVoice = onVoice,
+        showTools = showTools,
+        onToggleTools = onToggleTools,
+        toolActions = listOf(
+            ChatToolCardAction(Icons.AutoMirrored.Filled.CallMerge, "工作分支", "选择已有分支或自动新建", onBranchClick),
+            ChatToolCardAction(Icons.Default.GroupAdd, "群成员", "拉人进群或移除成员", onMembersClick),
+            ChatToolCardAction(Icons.Default.Mic, "语音输入", "用系统语音录入消息", onVoice),
+            ChatToolCardAction(Icons.Default.Group, "任务派工", "先讨论，再选负责人") { onSelectWorkMode(GroupWorkMode.DISPATCH) },
+            ChatToolCardAction(Icons.Default.Check, "验收回访", "查看进度和结论") { onSelectWorkMode(GroupWorkMode.FOLLOWUP) },
+            ChatToolCardAction(Icons.Default.Refresh, "问题修复", "按问题直接派工") { onSelectWorkMode(GroupWorkMode.BUGFIX) },
+        ),
+        canSendWhenEmpty = selectedWorkMode == GroupWorkMode.FOLLOWUP,
+        topContent = {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.clickable(onClick = onBranchClick),
-                ) {
-                    Row(
-                        Modifier.padding(horizontal = 12.dp, vertical = 7.dp).widthIn(max = 260.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.CallMerge,
-                            contentDescription = "工作分支",
-                            tint = XcagiTheme.extra.brandBlue,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "工作分支 · $branchLabel",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        )
-                    }
+                GroupComposerChip(
+                    icon = Icons.AutoMirrored.Filled.CallMerge,
+                    label = "工作分支 · $branchLabel",
+                    onClick = onBranchClick,
+                )
+                if (selectedWorkMode != null) {
+                    GroupComposerChip(
+                        icon = selectedWorkMode.icon(),
+                        label = "工作模式 · ${selectedWorkMode.label()}",
+                        active = true,
+                        trailingIcon = Icons.Default.Close,
+                        onClick = onClearWorkMode,
+                    )
                 }
             }
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp).padding(bottom = Spacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onVoice),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Default.Mic,
-                        contentDescription = "语音",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.background,
-                    modifier = Modifier.weight(1f).height(40.dp),
-                ) {
-                    BasicTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxSize(),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
-                        cursorBrush = SolidColor(XcagiTheme.extra.weChatOnline),
-                        decorationBox = { inner ->
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                                if (value.isEmpty()) {
-                                    Text("发群消息（@成员 可单独点名）", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                inner()
-                            }
-                        },
-                    )
-                }
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape)
-                        .background(if (canSend) XcagiTheme.extra.weChatOnline else MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable(enabled = canSend, onClick = onSend),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "发送",
-                        tint = if (canSend) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(19.dp),
-                    )
-                }
+        },
+    )
+}
+
+private fun GroupWorkMode.icon(): ImageVector = when (this) {
+    GroupWorkMode.DISPATCH -> Icons.Default.Group
+    GroupWorkMode.FOLLOWUP -> Icons.Default.Check
+    GroupWorkMode.BUGFIX -> Icons.Default.Refresh
+}
+
+@Composable
+private fun GroupComposerChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    active: Boolean = false,
+    trailingIcon: ImageVector? = null,
+) {
+    val chipTint = XcagiTheme.extra.brandBlue
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (active) chipTint.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 7.dp).widthIn(max = 260.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = chipTint,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            if (trailingIcon != null) {
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    trailingIcon,
+                    contentDescription = "清除",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp),
+                )
             }
         }
     }

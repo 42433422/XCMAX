@@ -217,13 +217,26 @@ SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC = max(
 )
 # 超级员工 employee_id 集合：命中时走专用 invoke 通道而非 mod_employee_complete。
 _SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset(
-    {"codex-super-employee", "claude-super-employee", "cursor-super-employee"}
+    {
+        "codex-super-employee",
+        "claude-super-employee",
+        "cursor-super-employee",
+        "trae-super-employee",
+    }
+)
+_LEGACY_SUPER_EMPLOYEE_IDS: frozenset[str] = frozenset(
+    {
+        "codex-super-employee",
+        "claude-super-employee",
+        "cursor-super-employee",
+    }
 )
 _DEFAULT_SINGLE_CLI_EMPLOYEE_ID = "codex-super-employee"
 _SUPER_EMPLOYEE_RELAY_KINDS: dict[str, str] = {
     "codex-super-employee": "codex.invoke",
     "cursor-super-employee": "cursor.invoke",
     "claude-super-employee": "claude.invoke",
+    "trae-super-employee": "trae.invoke",
 }
 _XIAOC_ASSISTANT_ID = "xcagi-assistant"
 _REQUIRED_GROUP_MEMBER_IDS: frozenset[str] = frozenset({_XIAOC_ASSISTANT_ID})
@@ -292,6 +305,8 @@ def _member_public_shape(member: dict[str, Any]) -> dict[str, Any]:
             avatar_key = "cursor"
         elif "claude" in identity:
             avatar_key = "claude"
+        elif "trae" in identity:
+            avatar_key = "trae"
     return {
         "employee_id": employee_id,
         "mod_id": str(member.get("mod_id") or ""),
@@ -495,11 +510,12 @@ def _append_super_employees(employees: list[dict[str, Any]]) -> None:
             CLAUDE_PROFILE,
             CODEX_PROFILE,
             CURSOR_PROFILE,
+            TRAE_PROFILE,
         )
     except Exception:  # noqa: BLE001 - 超级员工模块不可用时静默跳过
         return
     existing = {str(e.get("employee_id") or "") for e in employees if isinstance(e, dict)}
-    for profile in (CODEX_PROFILE, CURSOR_PROFILE, CLAUDE_PROFILE):
+    for profile in (CODEX_PROFILE, CURSOR_PROFILE, CLAUDE_PROFILE, TRAE_PROFILE):
         if profile.employee_id in existing:
             continue
         employees.append(
@@ -791,7 +807,10 @@ class AiGroupChatService:
         members = [m for m in group.get("members", []) if isinstance(m, dict)]
         ids = {str(m.get("employee_id") or "").strip() for m in members}
         name = str(group.get("name") or "").strip()
-        if _SUPER_EMPLOYEE_IDS.issubset(ids) and _XIAOC_ASSISTANT_ID in ids:
+        has_super_roster = _SUPER_EMPLOYEE_IDS.issubset(ids) or _LEGACY_SUPER_EMPLOYEE_IDS.issubset(
+            ids
+        )
+        if has_super_roster and _XIAOC_ASSISTANT_ID in ids:
             roster_like = (
                 not name
                 or name in {"新建群聊", "群聊"}
@@ -1436,10 +1455,13 @@ class AiGroupChatService:
         mentions: list[str] | None = None,
         dispatch: bool = False,
         branch_context: str = "",
+        context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         body = (text or "").strip()
         if not body:
             raise ValueError("message 不能为空")
+        action_context = context if isinstance(context, dict) else {}
+        tool_action = str(action_context.get("tool_action") or "").strip()
         branch_context = _normalize_branch_context(branch_context)
         group_id = self._resolve_group_id(user_id=user_id, group_id=group_id)
         groups = self._user_groups(user_id)
@@ -1465,6 +1487,16 @@ class AiGroupChatService:
         )
         new_messages = [user_msg]
         self._append_messages([user_msg])
+
+        if tool_action == "acceptance_followup":
+            followup = self._append_acceptance_followup(user_id=user_id, group_id=group_id)
+            if followup is not None:
+                new_messages.append(followup)
+            previews = self._latest_previews(user_id)
+            return {
+                "group": self._public_group(group, previews.get(str(group.get("id")))),
+                "messages": [self._public_message(m) for m in new_messages],
+            }
 
         members = [m for m in group.get("members", []) if isinstance(m, dict)]
         history = self.get_messages(user_id=user_id, group_id=group_id, limit=CONTEXT_TURNS)
@@ -1519,6 +1551,128 @@ class AiGroupChatService:
         if dispatch:
             result["work_orders"] = work_orders
         return result
+
+    def _append_acceptance_followup(self, *, user_id: int, group_id: str) -> dict[str, Any] | None:
+        self._sync_relay_progress_for_group(user_id=user_id, group_id=group_id)
+        self._sync_super_employee_progress_for_group(user_id=user_id, group_id=group_id)
+        rows = [
+            row
+            for row in self._read_messages()
+            if int(row.get("user_id") or 0) == int(user_id)
+            and str(row.get("group_id") or "") == str(group_id)
+        ]
+        work_orders = [row for row in rows if str(row.get("kind") or "") == "work_order"]
+        if not work_orders:
+            row = self._message_row(
+                user_id=user_id,
+                group_id=group_id,
+                role="ai",
+                sender_id=_XIAOC_ASSISTANT_ID,
+                sender_name="小C助理",
+                sender_avatar="",
+                body="【小C回访】还没有可回访的派工单。\n先输入任务后点“任务派工”，我会在群里派负责人并收口验收。",
+                kind="work_followup",
+                status="empty",
+            )
+            self._append_messages([row])
+            return row
+        work_order = max(work_orders, key=lambda row: str(row.get("created_at") or ""))
+        work_order_id = str(work_order.get("work_order_id") or "")
+        had_acceptance = any(
+            str(row.get("kind") or "") == "work_acceptance"
+            and str(row.get("work_order_id") or "") == work_order_id
+            for row in rows
+        )
+        acceptance = self._append_work_acceptance_if_ready(
+            user_id=user_id,
+            group_id=group_id,
+            work_order_id=work_order_id,
+        )
+        if acceptance is not None and not had_acceptance:
+            return next(
+                (
+                    row
+                    for row in self._read_messages()
+                    if str(row.get("id") or "") == str(acceptance.get("id") or "")
+                ),
+                None,
+            )
+        body = self._format_acceptance_followup_message(
+            work_order=work_order,
+            rows=[
+                row
+                for row in self._read_messages()
+                if str(row.get("work_order_id") or "") == work_order_id
+            ],
+            had_acceptance=bool(acceptance),
+        )
+        row = self._message_row(
+            user_id=user_id,
+            group_id=group_id,
+            role="ai",
+            sender_id=_XIAOC_ASSISTANT_ID,
+            sender_name="小C助理",
+            sender_avatar="",
+            body=body,
+            kind="work_followup",
+            status="completed" if acceptance is not None else "in_progress",
+            work_order_id=work_order_id,
+        )
+        self._append_messages([row])
+        return row
+
+    @classmethod
+    def _format_acceptance_followup_message(
+        cls,
+        *,
+        work_order: dict[str, Any],
+        rows: list[dict[str, Any]],
+        had_acceptance: bool,
+    ) -> str:
+        payload = work_order.get("payload") if isinstance(work_order.get("payload"), dict) else {}
+        task = str(payload.get("task") or "").strip() or cls._strip_label_from_body(
+            str(work_order.get("body") or ""),
+            "【小C派单】",
+        )
+        if had_acceptance:
+            return (
+                "【小C回访】最新派工已有验收结论。\n"
+                f"任务：{task[:80]}\n"
+                "你可以继续补充问题，或直接派下一步。"
+            )
+        reports = [
+            row
+            for row in rows
+            if str(row.get("kind") or "") in {"work_report", "work_progress", "relay_work_report"}
+        ]
+        if not reports:
+            return (
+                "【小C回访】最新派工已发出，正在等待负责人接单或回报。\n"
+                f"任务：{task[:80]}\n"
+                "我会继续把进度同步到群里。"
+            )
+        latest_by_task: dict[str, dict[str, Any]] = {}
+        for row in reports:
+            task_id = cls._report_relay_task_id(row) or str(row.get("id") or "")
+            old = latest_by_task.get(task_id)
+            if old is None or str(row.get("created_at") or "") >= str(old.get("created_at") or ""):
+                latest_by_task[task_id] = row
+        lines = []
+        for row in list(latest_by_task.values())[:6]:
+            name = str(row.get("sender_name") or "负责人")
+            status = cls._public_status_label(cls._effective_report_status(row))
+            summary = cls._chat_friendly_summary(
+                str(row.get("body") or ""),
+                limit=54,
+                include_detail_note=False,
+            )
+            lines.append(f"- {name}：{status}。{summary}")
+        return (
+            "【小C回访】最新派工还在处理中。\n"
+            f"任务：{task[:80]}\n"
+            + ("进度：\n" + "\n".join(lines) + "\n" if lines else "")
+            + "结论：暂未达到自动验收条件。"
+        )
 
     # ── 回复编排 ──
 
@@ -1847,6 +2001,7 @@ class AiGroupChatService:
             "codex-super-employee": "我适合补服务端链路、接口状态和自动化测试证据。",
             "cursor-super-employee": "我适合看移动端页面、交互细节和可见 UI 结果。",
             "claude-super-employee": "我适合做验收口径、风险收口和是否需要拆分的判断。",
+            "trae-super-employee": "我适合承接 Trae 执行端、IDE 自动化和备用额度执行。",
         }.get(employee_id, f"我适合负责{focus}。")
         reason_line = f"（{reason}，走确定性讨论兜底）" if reason else ""
         return (
@@ -2031,6 +2186,8 @@ class AiGroupChatService:
             )
         ):
             wanted.append("claude-super-employee")
+        if any(k in text for k in ("trae", "ide", "备用", "额度", "模型", "执行端")):
+            wanted.append("trae-super-employee")
         selected = [by_id[eid] for eid in wanted if eid in by_id]
         if selected:
             return selected[:MAX_RESPONDERS]
@@ -2130,6 +2287,7 @@ class AiGroupChatService:
                 _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
                 "cursor-super-employee",
                 "claude-super-employee",
+                "trae-super-employee",
             ]
         for employee_id in priority:
             if employee_id in by_id:
@@ -2194,6 +2352,8 @@ class AiGroupChatService:
             return "服务端链路、数据状态、接口和自动化测试证据"
         if employee_id == "claude-super-employee":
             return "方案拆解、风险评审、验收标准和最终收口"
+        if employee_id == "trae-super-employee":
+            return "Trae 执行端、IDE 自动化、备用模型额度和补位执行"
         if "测试" in text or "验收" in text:
             return "按岗位职责完成验收相关部分"
         return "按岗位职责处理"
@@ -2204,6 +2364,7 @@ class AiGroupChatService:
             "cursor-super-employee": "只负责移动端/前端体验相关判断，不重复做后端日志核查。",
             "codex-super-employee": "只负责服务端/接口/测试证据，不重复做 UI 体验评价。",
             "claude-super-employee": "只负责验收口径、风险和团队收口，不重复实现或跑同一套检查。",
+            "trae-super-employee": "只负责 Trae 执行端、IDE 自动化和备用执行，不重复做其它成员已负责的部分。",
         }.get(employee_id, "只处理自己职责范围内的部分。")
         return (
             f"子任务：{focus}。\n"
@@ -2716,11 +2877,14 @@ class AiGroupChatService:
         from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
         from app.application.codex_super_employee_service import CodexSuperEmployeeService
         from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+        from app.application.trae_super_employee_service import TraeSuperEmployeeService
 
         if employee_id == "codex-super-employee":
             return CodexSuperEmployeeService()
         if employee_id == "cursor-super-employee":
             return CursorSuperEmployeeService()
+        if employee_id == "trae-super-employee":
+            return TraeSuperEmployeeService()
         return ClaudeSuperEmployeeService()
 
     @staticmethod
@@ -3333,6 +3497,7 @@ class AiGroupChatService:
         from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
         from app.application.codex_super_employee_service import CodexSuperEmployeeService
         from app.application.cursor_super_employee_service import CursorSuperEmployeeService
+        from app.application.trae_super_employee_service import TraeSuperEmployeeService
 
         employee_id = str(member.get("employee_id") or "")
         me = str(member.get("name") or employee_id)
@@ -3354,6 +3519,8 @@ class AiGroupChatService:
                 service = CodexSuperEmployeeService()
             elif employee_id == "cursor-super-employee":
                 service = CursorSuperEmployeeService()
+            elif employee_id == "trae-super-employee":
+                service = TraeSuperEmployeeService()
             else:
                 service = ClaudeSuperEmployeeService()
             # 群聊场景强制走 CLI 直答（mode=chat），避免 transcript 里包含

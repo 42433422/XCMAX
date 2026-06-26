@@ -11,8 +11,8 @@
 
 注意：
 - 路由函数内部使用延迟导入，monkeypatch 必须打在源模块上
-- ``app.services.esign_adapter`` / ``app.services.stub_esign_store`` /
-  ``app.services.fadada_fasc_client`` 尚未实现，需要在 sys.modules 中注入 mock 模块
+- ``app.infrastructure.esign.esign_adapter`` / ``app.infrastructure.esign.stub_esign_store`` /
+  ``app.infrastructure.esign.fadada_fasc_client`` 尚未实现，需要在 sys.modules 中注入 mock 模块
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ from fastapi.testclient import TestClient
 from app.fastapi_routes import contract_lifecycle_api as cl_module
 
 # Short aliases for sys.modules access
-_EA = "app.services.esign_adapter"
-_SES = "app.services.stub_esign_store"
-_FFC = "app.services.fadada_fasc_client"
+_EA = "app.infrastructure.esign.esign_adapter"
+_SES = "app.infrastructure.esign.stub_esign_store"
+_FFC = "app.infrastructure.esign.fadada_fasc_client"
 
 
 def _install_mock_module(name: str) -> types.ModuleType:

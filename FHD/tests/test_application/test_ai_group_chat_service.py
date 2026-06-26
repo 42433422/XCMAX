@@ -733,6 +733,90 @@ async def test_super_development_group_relay_dispatch_returns_immediate_progress
     assert sum(1 for m in messages if m.get("kind") == "work_progress") == 1
 
 
+@pytest.mark.asyncio
+async def test_acceptance_followup_without_work_order_explains_next_step(tmp_path: Path):
+    svc = make_service(tmp_path)
+    gid = svc.list_groups(user_id=1)[0]["id"]
+
+    result = await svc.post_message(
+        user_id=1,
+        group_id=gid,
+        text="回访最近一次任务",
+        context={"tool_action": "acceptance_followup"},
+    )
+
+    assert [m["role"] for m in result["messages"]] == ["user", "ai"]
+    followup = result["messages"][-1]
+    assert followup["sender_id"] == "xcagi-assistant"
+    assert followup["kind"] == "work_followup"
+    assert followup["status"] == "empty"
+    assert "还没有可回访的派工单" in followup["body"]
+    assert "任务派工" in followup["body"]
+
+
+@pytest.mark.asyncio
+async def test_acceptance_followup_reports_pending_work_order_progress(tmp_path: Path):
+    svc = make_service(tmp_path)
+    group = svc.create_group(user_id=1, name="超级开发部")
+    svc.add_member(
+        user_id=1,
+        group_id=group["id"],
+        member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
+    )
+    work_order_id = "work-order-pending"
+    svc._append_messages(  # noqa: SLF001 - 覆盖工具卡片回访真实消息流水
+        [
+            svc._message_row(  # noqa: SLF001
+                user_id=1,
+                group_id=group["id"],
+                role="ai",
+                sender_id="ai-group-dispatcher",
+                sender_name="工作流调度",
+                sender_avatar="",
+                body=svc._format_work_order_message(  # noqa: SLF001
+                    "修复手机端消息长按复制删除",
+                    ["超级员工-Codex"],
+                ),
+                kind="work_order",
+                status="assigned",
+                work_order_id=work_order_id,
+                payload={"task": "修复手机端消息长按复制删除"},
+            ),
+            svc._message_row(  # noqa: SLF001
+                user_id=1,
+                group_id=group["id"],
+                role="ai",
+                sender_id="codex-super-employee",
+                sender_name="超级员工-Codex",
+                sender_avatar="",
+                body="Codex 已接单，正在处理长按菜单。",
+                kind="work_report",
+                status="queued",
+                work_order_id=work_order_id,
+                payload={"raw": {"task_id": "relay-task-pending"}},
+            ),
+        ]
+    )
+
+    result = await svc.post_message(
+        user_id=1,
+        group_id=group["id"],
+        text="回访最近一次任务",
+        context={"tool_action": "acceptance_followup"},
+    )
+
+    followup = result["messages"][-1]
+    assert followup["kind"] == "work_followup"
+    assert followup["status"] == "in_progress"
+    assert followup["work_order_id"] == work_order_id
+    assert "最新派工还在处理中" in followup["body"]
+    assert "修复手机端消息长按复制删除" in followup["body"]
+    assert "超级员工-Codex" in followup["body"]
+    assert "暂未达到自动验收条件" in followup["body"]
+    messages = svc.get_messages(user_id=1, group_id=group["id"])
+    assert not any(m.get("kind") == "work_acceptance" for m in messages)
+
+
 def test_duplicate_super_development_groups_are_merged_and_alias_resolves(tmp_path: Path):
     svc = make_service(tmp_path)
     first = svc.create_group(

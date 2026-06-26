@@ -135,12 +135,12 @@
                 <input :id="'pf-model-' + row.id" v-model.trim="row.model_number" type="text" class="product-input" :placeholder="uiText.modelLabel.value">
               </div>
               <div class="product-field">
-                <label class="product-field-label" :for="'pf-price-' + row.id">{{ uiText.priceLabel.value }}</label>
-                <input :id="'pf-price-' + row.id" v-model.number="row.price" type="number" step="0.01" class="product-input" :placeholder="uiText.priceLabel.value">
+                <label class="product-field-label" :for="'pf-price-' + row.id">{{ productPriceLabel }}</label>
+                <input :id="'pf-price-' + row.id" v-model.number="row.price" type="number" step="0.01" class="product-input" :placeholder="productPriceLabel">
               </div>
               <div class="product-field">
-                <label class="product-field-label" :for="'pf-unit-' + row.id">{{ uiText.categoryLabel.value }}/{{ uiText.unitLabel.value }}</label>
-                <input :id="'pf-unit-' + row.id" v-model.trim="row.unit" type="text" class="product-input" :placeholder="`${uiText.categoryLabel.value}、${uiText.unitLabel.value}`">
+                <label class="product-field-label" :for="'pf-unit-' + row.id">{{ productCategoryLabel }}/{{ productUnitLabel }}</label>
+                <input :id="'pf-unit-' + row.id" v-model.trim="row.unit" type="text" class="product-input" :placeholder="`${productCategoryLabel}、${productUnitLabel}`">
               </div>
               <div class="product-actions">
                 <button
@@ -286,6 +286,9 @@ const onboardingTutorialStore = useOnboardingTutorialStore();
 const { tutorialTracks, advancedTrackHint, buildContext: tutorialBuildContext } = useTutorialCatalog();
 const modsStore = useModsStore();
 const uiText = useIndustryUiText();
+const productPriceLabel = computed(() => String(uiText.priceLabel?.value || '价格'));
+const productCategoryLabel = computed(() => String(uiText.categoryLabel?.value || '分类'));
+const productUnitLabel = computed(() => String(uiText.unitLabel?.value || '单位'));
 const { modWorkflowEmployeesActive } = useWorkflowModsRuntimeContext();
 const workflowAiEmployeesStore = useWorkflowAiEmployeesStore();
 const { enabled: workflowEmployeesEnabled, registryLoaded: workflowRegistryLoaded } = storeToRefs(workflowAiEmployeesStore);
