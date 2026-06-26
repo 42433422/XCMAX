@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -39,13 +39,13 @@ async def main() -> int:
         materialize_asset_employee_pack,
         prepare_employee_assets,
     )
-    from modstore_server.models import User
     from modstore_server.llm_key_resolver import (
         OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
         resolve_api_key,
         resolve_base_url,
     )
     from modstore_server.mod_scaffold_runner import chat_dispatch
+    from modstore_server.models import User
 
     src = Path(r"e:\FHD\424\钉钉导出来的考勤数据.xlsx")
     template = Path(r"e:\FHD\424\考勤-2026-3月份考勤统计表.xlsx")

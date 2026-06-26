@@ -1,8 +1,8 @@
 import sys
 
 sys.path.insert(0, "/root/成都修茈科技有限公司/MODstore_deploy")
-from modstore_server.models_user import UserLlmCredential
 from modstore_server.db.base import get_session_factory
+from modstore_server.models_user import UserLlmCredential
 
 SessionFactory = get_session_factory()
 with SessionFactory() as s:

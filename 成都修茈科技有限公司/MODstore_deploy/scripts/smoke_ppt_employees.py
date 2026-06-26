@@ -181,8 +181,9 @@ def main() -> int:
         }
         # 本地校验：pptx_export 与员工生成应一致可读
         try:
-            from pptx import Presentation
             import io
+
+            from pptx import Presentation
 
             prs = Presentation(io.BytesIO(rebuilt))
             report["roundtrip"]["slide_count_pptx"] = len(prs.slides)

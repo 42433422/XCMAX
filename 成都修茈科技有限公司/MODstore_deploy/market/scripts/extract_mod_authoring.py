@@ -1,5 +1,5 @@
-import re
 import pathlib
+import re
 
 src = pathlib.Path(__file__).resolve().parents[1] / "src/views/ModAuthoringView.vue"
 text = src.read_text(encoding="utf-8")

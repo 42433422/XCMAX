@@ -117,8 +117,8 @@ def main() -> int:
         }
         files = None
     elif SMOKE_CASE == "word_gen":
-        from modstore_server.word_generate_runtime import minimal_document_full_json
         from modstore_server.word_extract_runtime import minimal_docx_bytes
+        from modstore_server.word_generate_runtime import minimal_document_full_json
 
         brief = WORD_GEN_BRIEF
         metadata = {

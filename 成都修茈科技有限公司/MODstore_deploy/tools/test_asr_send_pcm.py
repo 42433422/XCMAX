@@ -45,6 +45,7 @@ def iter_pcm_chunks(pcm: bytes):
 
 async def recognize_pcm(pcm: bytes, label: str) -> dict:
     import ssl
+
     import websockets
 
     url = build_ws_url()

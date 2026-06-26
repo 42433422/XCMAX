@@ -108,8 +108,8 @@ def _bootstrap_one(*, brief: str, extra_files: dict | None = None) -> Path:
 
 
 def main() -> int:
-    from modstore_server.word_generate_runtime import minimal_document_full_json
     from modstore_server.word_extract_runtime import minimal_docx_bytes
+    from modstore_server.word_generate_runtime import minimal_document_full_json
 
     _bootstrap_one(brief=WORD_READ_BRIEF)
     _bootstrap_one(
