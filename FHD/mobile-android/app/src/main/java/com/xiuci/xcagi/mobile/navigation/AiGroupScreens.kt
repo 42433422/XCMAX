@@ -94,6 +94,20 @@ import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDto
 import kotlin.math.ceil
 
+private fun aiGroupAvatarFallback(employeeId: String, name: String = "", avatarKey: String = ""): AppAvatarFallback {
+    val key = avatarKey.trim().lowercase()
+    val id = employeeId.trim().lowercase()
+    val label = name.trim().lowercase()
+    val isXiaoc = id == "xcagi-assistant" || id == "xiaoc-assistant" || label.contains("小c")
+    return when {
+        isXiaoc -> AppAvatarFallback.ASSISTANT
+        key == "codex" || id.contains("codex") || label.contains("codex") -> AppAvatarFallback.CODEX
+        key == "cursor" || id.contains("cursor") || label.contains("cursor") -> AppAvatarFallback.CURSOR
+        key == "claude" || id.contains("claude") || label.contains("claude") -> AppAvatarFallback.CLAUDE
+        else -> AppAvatarFallback.AI_EMPLOYEE
+    }
+}
+
 // ══════════════════════════════════════════
 //  AI 群聊列表（默认 6 部门群 + 自定义群）
 // ══════════════════════════════════════════
@@ -284,7 +298,7 @@ internal fun GroupGridAvatar(members: List<AiGroupMemberDto>, size: androidx.com
                             if (idx < n) {
                                 AppAvatar(
                                     imageSource = shown[idx].avatar.ifBlank { null },
-                                    fallback = AppAvatarFallback.AI_EMPLOYEE,
+                                    fallback = aiGroupAvatarFallback(shown[idx].employee_id, shown[idx].name, shown[idx].avatar_key),
                                     size = cell,
                                     shape = RoundedCornerShape(3.dp),
                                 )
@@ -593,7 +607,7 @@ private fun GroupBubble(message: AiGroupMessageDto, userAvatarUrl: String?) {
         if (!isUser) {
             AppAvatar(
                 imageSource = message.sender_avatar.ifBlank { null },
-                fallback = AppAvatarFallback.AI_EMPLOYEE,
+                fallback = aiGroupAvatarFallback(message.sender_id, message.sender_name),
                 size = 40.dp,
                 shape = RoundedCornerShape(8.dp),
             )
@@ -920,7 +934,7 @@ private fun GroupMembersSheet(
                     Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    AppAvatar(imageSource = m.avatar.ifBlank { null }, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 38.dp, shape = RoundedCornerShape(8.dp))
+                    AppAvatar(imageSource = m.avatar.ifBlank { null }, fallback = aiGroupAvatarFallback(m.employee_id, m.name, m.avatar_key), size = 38.dp, shape = RoundedCornerShape(8.dp))
                     Spacer(Modifier.width(Spacing.md))
                     Text(m.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                     IconButton(onClick = { onRemove(m.employee_id) }) {
@@ -946,7 +960,7 @@ private fun GroupMembersSheet(
                             Modifier.fillMaxWidth().clickable { onAdd(emp) }.padding(horizontal = Spacing.lg, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            AppAvatar(imageSource = emp.avatarUrl, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 38.dp, shape = RoundedCornerShape(8.dp))
+                            AppAvatar(imageSource = emp.avatarUrl, fallback = aiGroupAvatarFallback(emp.employeeId, emp.name), size = 38.dp, shape = RoundedCornerShape(8.dp))
                             Spacer(Modifier.width(Spacing.md))
                             Column(Modifier.weight(1f)) {
                                 Text(emp.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
@@ -1043,7 +1057,7 @@ fun AiGroupCreateScreen(
                                 onCheckedChange = { if (checked) selectedKeys.remove(e.key) else selectedKeys.add(e.key) },
                             )
                             Spacer(Modifier.width(Spacing.sm))
-                            AppAvatar(imageSource = e.avatarUrl, fallback = AppAvatarFallback.AI_EMPLOYEE, size = 40.dp, shape = RoundedCornerShape(8.dp))
+                            AppAvatar(imageSource = e.avatarUrl, fallback = aiGroupAvatarFallback(e.employeeId, e.name), size = 40.dp, shape = RoundedCornerShape(8.dp))
                             Spacer(Modifier.width(Spacing.md))
                             Column(Modifier.weight(1f)) {
                                 Text(e.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)

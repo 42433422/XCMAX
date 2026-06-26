@@ -266,6 +266,7 @@ def _xiaoc_assistant_member() -> dict[str, Any]:
         "mod_id": "xcagi-core-assistant",
         "name": "小C助理",
         "avatar": "",
+        "avatar_key": "assistant",
         "summary": "企业智能助手，负责群内上下文、任务拆解和工作汇报串联。",
         "department_key": "",
     }
@@ -273,11 +274,28 @@ def _xiaoc_assistant_member() -> dict[str, Any]:
 
 def _member_public_shape(member: dict[str, Any]) -> dict[str, Any]:
     employee_id = str(member.get("employee_id") or "").strip()
+    name = str(member.get("name") or employee_id)[:60]
+    avatar = str(member.get("avatar") or "")
+    avatar_key = str(member.get("avatar_key") or "").strip()
+    is_xiaoc = employee_id in {_XIAOC_ASSISTANT_ID, "xiaoc-assistant"} or "小c" in name.lower()
+    if avatar_key == "assistant" and not is_xiaoc:
+        avatar_key = ""
+    if not avatar_key:
+        identity = f"{employee_id} {name} {avatar}".lower()
+        if is_xiaoc:
+            avatar_key = "assistant"
+        elif "codex" in identity:
+            avatar_key = "codex"
+        elif "cursor" in identity:
+            avatar_key = "cursor"
+        elif "claude" in identity:
+            avatar_key = "claude"
     return {
         "employee_id": employee_id,
         "mod_id": str(member.get("mod_id") or ""),
-        "name": str(member.get("name") or employee_id)[:60],
-        "avatar": str(member.get("avatar") or ""),
+        "name": name,
+        "avatar": avatar,
+        "avatar_key": avatar_key,
         "summary": str(member.get("summary") or "")[:280],
     }
 
@@ -813,6 +831,7 @@ class AiGroupChatService:
                         "mod_id": str(emp.get("mod_id") or ""),
                         "name": str(emp.get("name") or emp.get("employee_id") or "")[:60],
                         "avatar": str(emp.get("avatar") or ""),
+                        "avatar_key": str(emp.get("avatar_key") or ""),
                         "summary": str(emp.get("summary") or "")[:280],
                     }
                 )
@@ -885,6 +904,7 @@ class AiGroupChatService:
                 "mod_id": str(member.get("mod_id") or ""),
                 "name": str(member.get("name") or employee_id)[:60],
                 "avatar": str(member.get("avatar") or ""),
+                "avatar_key": str(member.get("avatar_key") or ""),
                 "summary": str(member.get("summary") or "")[:280],
             }
         )
@@ -3326,16 +3346,7 @@ class AiGroupChatService:
             "name": self._canonical_group_name(group),
             "department_key": str(group.get("department_key") or ""),
             "member_count": len(members),
-            "members": [
-                {
-                    "employee_id": str(m.get("employee_id")),
-                    "mod_id": str(m.get("mod_id") or ""),
-                    "name": str(m.get("name") or ""),
-                    "avatar": str(m.get("avatar") or ""),
-                    "summary": str(m.get("summary") or ""),
-                }
-                for m in members
-            ],
+            "members": [_member_public_shape(m) for m in members],
             "is_pinned": bool(group.get("is_pinned")),
             "is_hidden": bool(group.get("is_hidden")),
             "is_followed": bool(group.get("is_followed", True)),

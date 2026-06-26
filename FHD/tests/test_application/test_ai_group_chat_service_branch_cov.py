@@ -177,6 +177,7 @@ class TestXiaocAssistantMember:
         assert member["mod_id"] == "xcagi-core-assistant"
         assert member["name"] == "小C助理"
         assert member["avatar"] == ""
+        assert member["avatar_key"] == "assistant"
         assert "department_key" in member
         assert member["department_key"] == ""
 
@@ -190,6 +191,7 @@ class TestMemberPublicShape:
             "mod_id": "m1",
             "name": "小销",
             "avatar": "http://a.com/1.png",
+            "avatar_key": "cursor",
             "summary": "负责获客",
         }
         result = _member_public_shape(member)
@@ -197,6 +199,7 @@ class TestMemberPublicShape:
         assert result["mod_id"] == "m1"
         assert result["name"] == "小销"
         assert result["avatar"] == "http://a.com/1.png"
+        assert result["avatar_key"] == "cursor"
         assert result["summary"] == "负责获客"
 
     def test_member_public_shape_with_empty_employee_id(self):
@@ -250,6 +253,38 @@ class TestMemberPublicShape:
         result = _member_public_shape({"employee_id": "e1", "avatar": None})
         assert result["avatar"] == ""
 
+    def test_member_public_shape_with_no_avatar_key(self):
+        result = _member_public_shape({"employee_id": "e1"})
+        assert result["avatar_key"] == ""
+
+    def test_member_public_shape_with_none_avatar_key(self):
+        result = _member_public_shape({"employee_id": "e1", "avatar_key": None})
+        assert result["avatar_key"] == ""
+
+    def test_member_public_shape_infers_xiaoc_avatar_key(self):
+        result = _member_public_shape({"employee_id": "xcagi-assistant", "name": "小C助理"})
+        assert result["avatar_key"] == "assistant"
+
+    def test_member_public_shape_ignores_generic_assistant_avatar_key(self):
+        result = _member_public_shape(
+            {
+                "employee_id": "employee-interview-assistant",
+                "name": "员工信息访谈员",
+                "avatar_key": "assistant",
+            }
+        )
+        assert result["avatar_key"] == ""
+
+    def test_member_public_shape_infers_super_employee_avatar_key(self):
+        result = _member_public_shape(
+            {
+                "employee_id": "cursor-super-employee",
+                "name": "超级员工-Cursor",
+                "avatar": "/brand/cursor-app-icon.png",
+            }
+        )
+        assert result["avatar_key"] == "cursor"
+
     def test_member_public_shape_with_no_summary(self):
         result = _member_public_shape({"employee_id": "e1"})
         assert result["summary"] == ""
@@ -266,6 +301,7 @@ class TestWithRequiredGroupMembers:
         result = _with_required_group_members([])
         assert len(result) == 1
         assert result[0]["employee_id"] == "xcagi-assistant"
+        assert result[0]["avatar_key"] == "assistant"
 
     def test_with_required_group_members_adds_xiaoc_to_existing(self):
         result = _with_required_group_members([{"employee_id": "e1", "name": "小销"}])
@@ -3375,7 +3411,7 @@ class TestPublicGroup:
             "id": "g1",
             "name": "测试群",
             "department_key": "d1",
-            "members": [{"employee_id": "e1", "name": "小销"}],
+            "members": [{"employee_id": "cursor-super-employee", "name": "超级员工-Cursor"}],
             "is_pinned": True,
             "is_hidden": False,
             "is_followed": True,
@@ -3393,6 +3429,7 @@ class TestPublicGroup:
         assert result["unread_count"] == 5
         assert result["last_message_preview"] == "最新消息"
         assert result["last_message_at"] == "2026-01-02"
+        assert result["members"][0]["avatar_key"] == "cursor"
 
     def test_public_group_no_preview(self, tmp_path: Path):
         svc = make_service(tmp_path)
