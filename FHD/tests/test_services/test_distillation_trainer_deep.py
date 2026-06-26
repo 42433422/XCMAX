@@ -26,7 +26,7 @@ import pytest
 _MISSING_MODULE = object()
 _ORIGINAL_ML_MODULES = {
     name: sys.modules.get(name, _MISSING_MODULE)
-    for name in ("torch", "torch.utils", "torch.utils.data", "transformers")
+    for name in ("torch", "torch.optim", "torch.utils", "torch.utils.data", "transformers")
 }
 
 # ---------------------------------------------------------------------------
@@ -92,6 +92,9 @@ def _install_torch_transformers_stubs() -> None:
     torch_mod.randn = lambda *_a, **_kw: _FakeTensor()
     torch_mod.long = "long"
     torch_mod.float = "float"
+    torch_optim = types.ModuleType("torch.optim")
+    torch_optim.AdamW = MagicMock
+    torch_mod.optim = torch_optim
 
     def _argmax(*_args, **_kwargs):
         return _FakeTensor()
@@ -169,6 +172,7 @@ def _install_torch_transformers_stubs() -> None:
     transformers_mod.TrainingArguments = MagicMock
 
     sys.modules["torch"] = torch_mod
+    sys.modules["torch.optim"] = torch_optim
     sys.modules["torch.utils"] = torch_utils
     sys.modules["torch.utils.data"] = torch_utils_data
     sys.modules["transformers"] = transformers_mod
