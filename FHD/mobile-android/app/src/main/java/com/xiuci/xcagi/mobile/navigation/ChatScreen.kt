@@ -295,8 +295,11 @@ fun ChatScreen(
         showToolPanel = false
     }
 
-    fun insertTemplate(template: String) {
-        input = if (input.isBlank()) template else "$input\n$template"
+    fun sendToolCommand(text: String) {
+        val body = text.trim()
+        if (body.isBlank() || streaming) return
+        vm.sendChat(body, conversationId)
+        input = ""
         showToolPanel = false
     }
 
@@ -346,17 +349,29 @@ fun ChatScreen(
             }
             add(
                 ChatToolCardAction(Icons.Default.Group, "任务派工", "先讨论再执行") {
-                    insertTemplate("任务：请先判断难度、讨论是否需要多人协作；如果是简单任务，只选一个负责人执行。完成后汇报改动、验证结果和风险。")
+                    val task = input.trim()
+                    if (task.isBlank()) {
+                        vm.snack("先输入要派发的任务")
+                        showToolPanel = false
+                    } else {
+                        sendToolCommand(if (task.startsWith("【任务派工】")) task else "【任务派工】$task")
+                    }
                 },
             )
             add(
                 ChatToolCardAction(Icons.Default.Check, "验收回访", "要结论和证据") {
-                    insertTemplate("验收：请回访这个任务现在做到哪一步，给出是否完成、验证证据、剩余风险和下一步。")
+                    sendToolCommand("【验收回访】回访最近一次任务")
                 },
             )
             add(
                 ChatToolCardAction(Icons.Default.AutoAwesome, "问题修复", "定位根因并验证") {
-                    insertTemplate("修复：请定位问题根因，给出最小改动方案，完成后跑验证，并说明是否影响现有流程。")
+                    val task = input.trim()
+                    if (task.isBlank()) {
+                        vm.snack("先输入要修复的问题")
+                        showToolPanel = false
+                    } else {
+                        sendToolCommand(if (task.startsWith("【问题修复】") || task.startsWith("修复")) task else "【问题修复】$task")
+                    }
                 },
             )
         }

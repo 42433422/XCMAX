@@ -873,11 +873,13 @@ constructor(
         text: String,
         mentions: List<String> = emptyList(),
         branchContext: String = "",
+        forceDispatch: Boolean = false,
+        context: Map<String, String> = emptyMap(),
     ) {
         val body = text.trim()
         if (body.isBlank() || _groupSending.value) return
         val branch = branchContext.trim()
-        val dispatch = branch.isNotBlank() || shouldDispatchAiGroupTask(body)
+        val dispatch = forceDispatch || branch.isNotBlank() || shouldDispatchAiGroupTask(body)
         // 本地先回显用户消息
         _groupMessages.value = _groupMessages.value + com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto(
             id = "local-${System.currentTimeMillis()}",
@@ -895,6 +897,7 @@ constructor(
                 mentions = mentions,
                 dispatch = dispatch,
                 branchContext = branch,
+                context = context,
             )
                 .onSuccess { data ->
                     // 用服务端权威消息替换尾部（去掉本地回显，拼接服务端返回的 user+ai）
