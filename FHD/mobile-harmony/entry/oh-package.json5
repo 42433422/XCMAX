@@ -1,9 +1,9 @@
 {
   "name": "entry",
   "version": "10.0.0",
-  "description": "XCAGI Enterprise HarmonyOS entry module",
+  "description": "XCAGI 企业版 HarmonyOS entry module",
   "main": "",
-  "author": "Xiuci",
+  "author": "成都修茈科技有限公司",
   "license": "UNLICENSED",
   "dependencies": {}
 }

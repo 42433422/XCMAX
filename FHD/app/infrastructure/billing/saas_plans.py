@@ -47,16 +47,24 @@ def list_saas_plans() -> list[dict[str, Any]]:
     for raw in cfg.get("plans") or []:
         if not isinstance(raw, dict) or not raw.get("id"):
             continue
-        plans.append(
-            {
-                "id": str(raw["id"]),
-                "title": str(raw.get("title") or raw["id"]),
-                "description": str(raw.get("description") or ""),
-                "amount_cents": int(raw.get("amount_cents") or 0),
-                "currency": currency,
-                "badge": raw.get("badge"),
-            }
-        )
+        plan: dict[str, Any] = {
+            "id": str(raw["id"]),
+            "title": str(raw.get("title") or raw["id"]),
+            "description": str(raw.get("description") or ""),
+            "amount_cents": int(raw.get("amount_cents") or 0),
+            "currency": currency,
+            "badge": raw.get("badge"),
+        }
+        for key in (
+            "quota_cents",
+            "duration_days",
+            "license_type",
+            "expires_behavior",
+            "account_tier",
+        ):
+            if key in raw:
+                plan[key] = raw[key]
+        plans.append(plan)
     return plans
 
 
@@ -80,16 +88,32 @@ def is_saas_plan_id(plan_id: str) -> bool:
 
 
 _BUDGET_ALIASES: dict[str, str] = {
-    "5 万以内": "5 万以内",
-    "under-50k": "5 万以内",
-    "5–20 万": "5–20 万",
-    "5-20 万": "5–20 万",
-    "50k-200k": "5–20 万",
-    "20–50 万": "20–50 万",
-    "20-50 万": "20–50 万",
-    "200k-500k": "20–50 万",
-    "50 万以上": "50 万以上",
-    "500k-plus": "50 万以上",
+    "1–5 万": "1–5 万",
+    "1-5 万": "1–5 万",
+    "1-5万": "1–5 万",
+    "5 万以内": "1–5 万",
+    "5万以内": "1–5 万",
+    "under-50k": "1–5 万",
+    "5–10 万": "5–10 万",
+    "5-10 万": "5–10 万",
+    "5-10万": "5–10 万",
+    "5–20 万": "5–10 万",
+    "5-20 万": "5–10 万",
+    "5-20万": "5–10 万",
+    "50k-200k": "5–10 万",
+    "10–50 万": "10–50 万",
+    "10-50 万": "10–50 万",
+    "10-50万": "10–50 万",
+    "20–50 万": "10–50 万",
+    "20-50 万": "10–50 万",
+    "20-50万": "10–50 万",
+    "200k-500k": "10–50 万",
+    "50–100 万": "50–100 万",
+    "50-100 万": "50–100 万",
+    "50-100万": "50–100 万",
+    "50 万以上": "50–100 万",
+    "50万以上": "50–100 万",
+    "500k-plus": "50–100 万",
 }
 
 
@@ -113,7 +137,7 @@ def permanent_plan_id_for_budget(budget_range: str | None) -> str:
     normalized = normalize_budget_range(budget_range)
     if normalized and normalized in mapping:
         return mapping[normalized]
-    return mapping.get("5 万以内") or "saas-permanent-starter"
+    return mapping.get("1–5 万") or mapping.get("5 万以内") or "saas-permanent-starter"
 
 
 def permanent_plan_for_budget(budget_range: str | None) -> dict[str, Any] | None:

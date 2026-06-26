@@ -1,8 +1,37 @@
-# 账号体系：单一真相源 + 自动派生
+# 产品端与账号体系：单一真相源 + 自动派生
 
-> 本文档描述 XCMAX/FHD 账号体系的四个维度、各自的**真相源字段**、**运行时派生规则**、
-> **字段写入权限**与**校验规则**。实现遵循「单一真相源（SSOT）+ 自动派生」：每个维度只有一个
-> 持久化写入点，所有运行时身份/档位均由真相源派生，不再由前端登录入口决定。
+> 本文档描述 XCMAX/FHD 的产品端矩阵、账号体系四个维度、行业/Persona 派生规则、各自的
+> **真相源字段**、**运行时派生规则**、**字段写入权限**与**校验规则**。实现遵循「单一真相源（SSOT）+
+> 自动派生」：每个维度只有一个持久化写入点，所有运行时身份/档位均由真相源派生，不再由前端登录入口决定。
+
+## 零、产品端与分发矩阵
+
+| 产品端 | 分发/入口 | 支持平台 | 允许账号 | 规则 |
+|--------|-----------|----------|----------|------|
+| 网站 | 官网 / AI 市场 / 软件下载页 | Web | personal / enterprise / admin | 唯一公开注册与购买入口；个人账号仅能在网站使用 |
+| 桌面端软件 | 软件下载 / 企业交付包 | Windows / macOS | enterprise / admin | 必须绑定企业或管理员会话；不接受 personal 账号进入本地工作台 |
+| 手机 App | 应用商店 / 企业分发 | Android / iOS / HarmonyOS | enterprise / admin | 作为企业移动工作台与消息/审批入口；账号能力跟随企业授权 |
+
+产品端只决定可进入的运行环境，不决定账号身份。账号身份仍以 `User.tier` 与市场身份提升规则为准。
+
+### 0.1 产品端能力边界
+
+| 产品端 | personal | enterprise | admin |
+|--------|----------|------------|-------|
+| 官网/网站 | 注册、登录、购买 VIP/月计划、查看个人消费 | 企业注册、购买体验/永久账户、下载软件、管理授权 | 平台后台、市场运营、企业审核、软件下载发布 |
+| 桌面端 Windows/macOS | 不允许进入 | 本地业务工作台、行业 Mod、文件/打印/本地数据能力 | 运维诊断、代管排障、企业配置审计 |
+| 手机端 Android/iOS/HarmonyOS | 不允许进入 | 消息、审批、移动看板、扫码登录/绑定桌面端 | 移动运维告警、企业会话排障 |
+
+约束：个人账号只服务网站个人消费场景；企业账号是业务系统主体；管理员账号是平台运营主体。桌面端和手机端只能接受企业或管理员会话，不能因为前端入口传了 `account_kind` 就放行 personal。
+
+### 0.2 入口与下载分发
+
+| 入口 | 主要用途 | 绑定规则 |
+|------|----------|----------|
+| 官网 | 对外介绍、需求问卷、开户注册、软件下载入口 | 表单预算只作为销售线索，不直接写 `User.account_tier` |
+| AI 市场 | VIP/月计划、额度、企业身份/管理员身份来源 | 市场身份只能向上提升本地 `User.tier` |
+| 软件下载页 | Windows/macOS/Android/iOS/HarmonyOS 安装包分发 | 下载可公开，首次使用必须登录并校验账号端权限 |
+| 管理后台 | 企业审核、授权、RBAC、套餐/行业配置 | 仅 admin 或具备管理权限的企业角色可进入对应后台 |
 
 ## 一、四维真相源
 
@@ -10,7 +39,7 @@
 |------|-----------|------|-------|-----------|
 | 1 账号身份 | `User.tier` | personal / enterprise / admin | 注册（按 SKU）/ 管理端 / 登录时按市场身份提升 | `Session.account_kind`（登录派生） |
 | 2 行业 | `User.industry_id` + `User.entitled_industries` | 通用/涂料/考勤/批发/电商/餐饮/物流/管理端 | 注册 / 管理端 | `request.state.industry_id` → Persona 身份 |
-| 3 会员体系 | 修茈市场会员等级（外部，`user_plans`） | free/vip/vip_plus/svip1..svip8 | 市场侧购买 | `Session.market_membership_tier`（登录同步） |
+| 3 会员体系 | 修茈市场会员等级（外部，`user_plans`） | free/vip/vip_plus/svip/svip2..svip8 | 市场侧月计划购买 | `Session.market_membership_tier`（登录同步） |
 | 4 账号等级 | `User.account_tier`（派生来源 `User.budget_range`） | normal / pro / max / ultra | 注册时按预算派生 / 管理端 | `/api/auth/me` 返回；仅 enterprise 有意义 |
 
 ## 二、派生规则（运行时计算）
@@ -29,13 +58,25 @@
 
 | budget_range | account_tier |
 |--------------|--------------|
-| 5 万以内 | normal |
-| 5–20 万 | pro |
-| 20–50 万 | max |
-| 50 万以上 | ultra |
+| 1–5 万 | normal |
+| 5–10 万 | pro |
+| 10–50 万 | max |
+| 50–100 万 | ultra |
 | 空 / 暂未确定 / 未知 | normal（默认） |
 
-> 匹配时对连字符（`–`/`-`/`—`）与空格做归一化。实现：[app/application/account_tier_derivation.py](../app/application/account_tier_derivation.py)。
+> 旧值 `5 万以内` / `5–20 万` / `20–50 万` / `50 万以上` 作为兼容别名保留。匹配时对连字符（`–`/`-`/`—`）与空格做归一化。实现：[app/application/account_tier_derivation.py](../app/application/account_tier_derivation.py)。
+
+### 2.2.1 企业购买形态
+
+| 购买形态 | 价格/额度 | 到期规则 | 账号等级 |
+|----------|-----------|----------|----------|
+| 体验账户 | 99 元购买，含 100 元额度 | 30 天到期后冻结 | normal |
+| 永久账户 · normal | 1–5 万 | 永久 | normal |
+| 永久账户 · pro | 5–10 万 | 永久 | pro |
+| 永久账户 · max | 10–50 万 | 永久 | max |
+| 永久账户 · ultra | 50–100 万 | 永久 | ultra |
+
+企业 SaaS 定价的机器配置为 [config/saas_plans.json](../config/saas_plans.json)。`account_tier` 只表达企业授权档位，不根据 AI 额度消耗动态升降。
 
 ### 2.3 行业授权初始化
 `User.entitled_industries ← init_entitled_industries_for_user(tier, industry_id)`
@@ -49,11 +90,162 @@
 `Session.market_membership_tier ← 修茈市场 GET /api/payment/my-plan 的 membership.tier`
 - 登录响应不含会员等级，登录 finalize 时用市场 token 单独拉取。
 - 套餐列表由后端 `GET /api/market/membership-plans` 代理市场 `GET /api/payment/plans`，前端 `ModelPaymentView` 读取（失败回退本地 FALLBACK）。
+- VIP 是月计划权益层（vip / vip_plus / svip / svip2..svip8），与企业永久授权档位并列存在；AI 额度消耗不反向决定 VIP 或 `account_tier`。
 - 实现：[app/fastapi_routes/market_account.py](../app/fastapi_routes/market_account.py) `fetch_market_membership_tier` / `market_membership_plans`。
 
 ### 2.5 行业 → Persona
 `request.state.industry_id ← User.industry_id`（admin → 管理端，兜底 通用），再派生 Persona 身份。
 - 实现：[app/middleware/industry_context.py](../app/middleware/industry_context.py)、[app/application/planner_compat_service.py](../app/application/planner_compat_service.py)。
+
+行业体系的当前可注册范围为 7 选 1：通用、涂料、考勤、批发、电商、餐饮、物流；管理端为 admin 专用行业，不出现在企业注册选择中。后续新增行业只能先进入 [config/industry_presets.json](../config/industry_presets.json)，再绑定对应 Mod、字段词表、导航标签、示例数据与权限策略。
+
+Persona 不作为用户可随意填写的字段持久化，统一运行时派生：
+
+| 输入 | 派生内容 | 用途 |
+|------|----------|------|
+| `account_kind` | personal / enterprise / admin 工作身份 | 决定入口、权限边界、默认工具集 |
+| `industry_id` | 行业助手人格 | 决定术语、快捷指令、菜单标签、业务对象称呼 |
+| `account_tier` | normal / pro / max / ultra 能力档位 | 决定企业能力包、并发/自动化/高级工具上限 |
+| 产品端 | web / desktop / mobile 交互人格 | 决定界面密度、离线/本地能力、移动审批与消息能力 |
+
+换句话说：行业是“业务语境”，Persona 是“在某个端、某个账号、某个行业里说话和做事的执行角色”。新增 Persona 时必须能被上述四个输入稳定派生，禁止单独开一套手工选择的人格系统。
+
+### 2.6 账号类型总表
+
+| 账号类型 | 真相源 | 购买/开通 | 可用端 | 数据归属 | 说明 |
+|----------|--------|-----------|--------|----------|------|
+| 个人账号 | `User.tier=personal` | 网站注册 / VIP 月计划 | 网站 | 个人消费与个人资料 | 只能使用网站能力；不能进入桌面端、手机端企业工作台 |
+| 企业账号 | `User.tier=enterprise` | 体验账户或永久账户 | 网站 + 桌面端 + 手机端 | 企业租户 `tenant_id` | 业务系统主体；行业、授权、Mod、人员、审批、数据都挂在企业租户下 |
+| 平台管理员账号 | `User.tier=admin` | 平台创建/市场管理员身份提升 | 网站后台 + 桌面/手机运维入口 | 平台运维数据 | 用于运营、审核、排障、代管；不是客户企业的数据所有者 |
+
+企业内部的“管理员”不是 `User.tier=admin`。企业管理员应通过 RBAC 角色表达，仍然属于 `User.tier=enterprise`；平台管理员才是 `User.tier=admin`。
+
+### 2.7 管理账号体系
+
+| 层级 | 推荐角色 | 权限边界 | 禁止事项 |
+|------|----------|----------|----------|
+| 平台超级管理员 | `platform_owner` | 全局配置、管理员账号、套餐、发布、应急开关 | 禁止作为日常业务用户写入企业业务数据 |
+| 平台运营管理员 | `platform_ops` | 企业审核、订单/授权核查、软件下载发布、公告 | 禁止修改底层安全策略和密钥 |
+| 平台客服/实施 | `platform_support` | 查看企业状态、发起代管、处理工单 | 禁止无审批直接改企业数据 |
+| 企业所有者 | `enterprise_owner` | 企业资料、套餐、行业、成员、账单、RBAC | 禁止越租户访问其他企业 |
+| 企业管理员 | `enterprise_admin` | 成员、业务配置、审批流程、行业 Mod | 禁止改套餐和企业所有权 |
+| 企业操作员 | `enterprise_operator` | 日常业务录入、审批、执行自动化 | 禁止改权限、账单、行业授权 |
+| 企业只读/审计 | `enterprise_viewer` | 看板、报表、审计记录 | 禁止写业务数据 |
+
+实现原则：账号身份用 `User.tier`，细粒度管理能力用 `Role` / `Permission`。不要新增 `admin_type`、`enterprise_role` 之类平行字段，除非先证明 RBAC 无法表达。
+
+### 2.8 行业体系
+
+行业不是前端标签，也不是单个 Mod。行业是“业务语境 + 授权范围 + 行业包 + Persona 输入”的组合。
+
+| 层 | 真相源/配置 | 作用 | 禁止事项 |
+|----|-------------|------|----------|
+| 行业 ID | `User.industry_id` | 当前默认行业，进入请求上下文 | 禁止前端临时覆盖未授权行业 |
+| 授权行业 | `User.entitled_industries` | 租户可切换/可安装的行业集合 | 禁止 `industry_id` 不在授权集合内 |
+| 行业 UI 词表 | [config/industry_presets.json](../config/industry_presets.json) | 欢迎语、快捷按钮、菜单名、业务对象称呼 | 禁止只改页面文案不改 SSOT |
+| 行业能力包 | [config/industry_baseline.json](../config/industry_baseline.json) | 核心 Mod、可选 Mod、行业包绑定、开放状态 | 禁止无 Mod/服务支撑就标成正式行业 |
+| 行业别名 | [config/industry_mod_aliases.json](../config/industry_mod_aliases.json) | 行业与 Mod/市场别名兼容 | 禁止把别名当成新行业 |
+
+当前行业分层：
+
+| 类型 | 行业 | 状态 | 说明 |
+|------|------|------|------|
+| 基础行业 | 通用 | ga | 所有账号兜底行业；不绑定专属行业包 |
+| 首批行业包 | 涂料、考勤 | pilot/ga 优先 | 已在 `industry_baseline.json` 明确 `industry_packages`，可作为首批真实交付行业 |
+| 预置方向 | 批发、电商、餐饮、物流 | draft/pilot | 已有 UI 词表与基础 Mod 组合，正式开放前必须补行业包、测试数据和闭环验证 |
+| 平台行业 | 管理端 | admin-only | 平台运维专用，不进入企业注册 7 选 1 |
+
+企业注册当前展示 7 选 1：通用、涂料、考勤、批发、电商、餐饮、物流。开放策略不能只看展示列表，还要看 `industry_baseline.json.onboarding_open_industry_ids`：只有进入该列表的行业才允许作为首批自助开通行业；其余行业可以保留为销售/实施选择，但不能声称已完整交付。
+
+行业包必须包含：
+
+| 模块 | 必填内容 | 验收口径 |
+|------|----------|----------|
+| 词表 | 业务对象、字段别名、菜单标签、快捷按钮、提示语 | `industry_presets.json` 有完整条目 |
+| 数据模型 | 核心实体、导入字段、列表/详情、查询条件 | 至少有一个真实读写闭环 |
+| 流程 | 查询、录入、审批、导入导出、打印中的至少一条主流程 | API/前端/测试账号可跑通 |
+| Mod 绑定 | host Mod、optional Mod、行业专属 Mod | `industry_baseline.json` 可追溯 |
+| 权限 | owner/admin/operator/viewer 对行业对象的读写边界 | RBAC 权限可表达 |
+| 样例 | 种子数据、演示账号、演示任务 | 新租户可一键体验 |
+| 测试 | 配置校验、路由/API、核心流程 smoke | CI 或本地测试可验证 |
+
+行业授权规则：
+
+| 账号 | 初始化授权 | 可变更方式 | 运行时规则 |
+|------|------------|------------|------------|
+| personal | `["通用"]` | 不开放 | 固定通用，不进入行业工作台 |
+| enterprise | `["通用", industry_id]` | 企业管理员申请，平台/企业 owner 审批 | active industry 必须属于 `entitled_industries` |
+| admin | `["管理端"]` | 平台超级管理员 | 默认管理端；代管企业时只继承被代管企业授权，不写回自身 |
+
+行业生命周期：
+
+| 阶段 | 状态 | 进入条件 | 对用户可见性 | 退出条件 |
+|------|------|----------|--------------|----------|
+| 草稿 | draft | 只有概念、词表或页面样稿 | 不出现在注册选择 | 补齐词表和主流程进入 pilot |
+| 试点 | pilot | 有一个可跑闭环、行业包草版、测试账号 | 仅管理员、销售实施或灰度企业可见 | 补齐权限/数据/测试进入 ga |
+| 正式 | ga | 行业包、样例数据、权限、文档、测试均完成 | 可进入自助注册/开通列表 | 发现重大缺口降级为 pilot |
+| 退役 | retired | 被新行业替代或无人维护 | 不允许新开通，存量只读或迁移 | 完成迁移后移除入口 |
+
+新增行业必须先补配置和验收资产，再开放入口。新增顺序为：`industry_presets.json` → `industry_baseline.json` → 行业 Mod/服务 → 种子数据/测试账号 → 注册/管理端入口。
+
+### 2.9 人格体系
+
+人格不是用户手动选择的“角色皮肤”。人格是运行时由账号、行业、档位、端、任务共同合成的执行身份，用于决定语气、工具、权限和默认工作方式。
+
+Persona 由六层合成，后层只能收窄或特化，不能突破前层权限：
+
+| 层 | 输入 | 例子 | 决定内容 |
+|----|------|------|----------|
+| 产品层 | 产品线 | XCMAX/FHD 企业助手 | 总体语气、安全边界、默认协作方式 |
+| 账号层 | `account_kind` + RBAC | personal、enterprise_owner、enterprise_operator、admin | 可见数据、可执行动作、是否能管理他人 |
+| 行业层 | `industry_id` | 涂料、考勤、物流、管理端 | 术语、菜单、业务对象、快捷问题 |
+| 档位层 | `account_tier` + VIP | normal/pro/max/ultra、vip/svip | 模型/工具上限、自动化深度、并发与额度策略 |
+| 端层 | surface | web、desktop、mobile | 交互密度、本地文件/打印、移动审批、扫码绑定 |
+| 任务层 | 当前任务上下文 | 查价、开单、审批、导入 Excel、打印标签 | 临时工具选择、输出格式、确认策略 |
+
+人格类型：
+
+| 类型 | 触发来源 | 用户可见名称 | 典型行为 |
+|------|----------|--------------|----------|
+| 个人网站助手 | personal + web | 个人 AI 助手 | 解释产品、管理个人消费/VIP、不能进入企业数据 |
+| 企业行业助手 | enterprise + 行业 + web/desktop/mobile | 涂料企业助手、考勤移动助手 | 围绕行业对象执行查询、开单、审批、导入导出 |
+| 企业管理助手 | enterprise_owner/admin + web/desktop | 企业管理助手 | 管成员、RBAC、行业授权、账单、配置 |
+| 企业操作助手 | enterprise_operator + 行业 | 业务操作助手 | 做日常业务，不改权限和套餐 |
+| 平台运维助手 | admin + 管理端 | 平台运维助手 | 管平台、审核企业、发布软件、排障和代管 |
+| 代管助手 | admin impersonation + enterprise tenant | 代管排障助手 | 临时进入企业上下文，所有动作必须审计 |
+
+内部 Persona key 使用稳定拼接，不单独持久化：
+
+```text
+{account_kind}:{rbac_role}:{industry_id}:{account_tier}:{membership_tier}:{surface}
+```
+
+示例：
+
+| 场景 | Persona key | 用户可见名称 |
+|------|-------------|--------------|
+| 涂料企业老板在桌面端 | `enterprise:enterprise_owner:涂料:pro:vip:desktop` | 涂料企业管理助手 |
+| 考勤操作员在手机端 | `enterprise:enterprise_operator:考勤:normal:none:mobile` | 考勤移动助手 |
+| 平台管理员在官网后台 | `admin:platform_ops:管理端:none:none:web` | 平台运维助手 |
+
+人格合成伪规则：
+
+```text
+base = product persona
+base = apply_account_policy(base, account_kind, rbac_role)
+base = apply_industry_language(base, industry_id)
+base = apply_plan_limits(base, account_tier, membership_tier)
+base = apply_surface_capabilities(base, surface)
+persona = apply_task_context(base, current_task)
+```
+
+权限优先级：RBAC/租户隔离 > 账号类型 > 行业授权 > 档位/VIP > 端能力 > 任务偏好。任何人格文案、快捷按钮或工具推荐都不能绕过这个优先级。
+
+人格落地到界面和模型时遵循：
+- UI 名称来自行业与端，例如 `涂料助手`、`考勤移动助手`、`平台运维助手`。
+- System prompt 只引用派生后的 Persona，不允许用户输入覆盖 `account_kind`、`industry_id`、`tenant_id`。
+- 工具列表按 Persona 过滤；不可用工具不展示、不注入、不接受后端调用。
+- 任务完成后的审计记录必须写入真实账号、租户、行业和端，而不是只写 Persona 名称。
 
 ## 三、字段写入权限矩阵
 

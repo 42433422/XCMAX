@@ -183,7 +183,7 @@ def _apply_market_profile(
     )
 
 
-# ── Duty 员工注册表 ──
+# ── Duty 员工展示元数据注册表 ──
 
 
 def _candidate_duty_registry_paths() -> list[Path]:

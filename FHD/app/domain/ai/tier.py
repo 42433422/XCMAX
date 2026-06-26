@@ -14,6 +14,18 @@ from fastapi import HTTPException, Request
 
 P1_BLOCKED_TOOL_NAMES: frozenset[str] = frozenset({"products_bulk_import"})
 
+_ENV_ELEVATED_TOKEN_AT_IMPORT: str = (os.environ.get("FHD_AI_ELEVATED_TOKEN") or "").strip()
+_ENV_TIER_STRICT_AT_IMPORT: str = (os.environ.get("FHD_AI_TIER_STRICT") or "").strip()
+
+# 测试可通过 monkeypatch 重新赋值 `tier._ELEVATED_TOKEN` / `tier._TIER_STRICT`。
+_ELEVATED_TOKEN: str = _ENV_ELEVATED_TOKEN_AT_IMPORT
+_TIER_STRICT: bool = _ENV_TIER_STRICT_AT_IMPORT.lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 
 def _header(request: Request | None, name: str) -> str:
     if request is None:
@@ -21,12 +33,30 @@ def _header(request: Request | None, name: str) -> str:
     return (request.headers.get(name) or "").strip()
 
 
+def _truthy(raw: str) -> bool:
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _elevated_token() -> str:
+    current_env = (os.environ.get("FHD_AI_ELEVATED_TOKEN") or "").strip()
+    if current_env != _ENV_ELEVATED_TOKEN_AT_IMPORT:
+        return current_env
+    return _ELEVATED_TOKEN
+
+
+def _tier_strict() -> bool:
+    current_env = (os.environ.get("FHD_AI_TIER_STRICT") or "").strip()
+    if current_env != _ENV_TIER_STRICT_AT_IMPORT:
+        return _truthy(current_env)
+    return _TIER_STRICT
+
+
 def resolve_ai_tier(request: Request | None) -> str:
     claimed = _header(request, "X-XCAGI-AI-Tier").lower()
     if claimed != "p2":
         return "p1"
-    secret = (os.environ.get("FHD_AI_ELEVATED_TOKEN") or "").strip()
     token = _header(request, "X-XCAGI-Elevated-Token")
+    secret = _elevated_token()
     # 恒定时间比较，避免按字符短路导致的时序侧信道（与 mobile_jwt 校验一致）。
     if secret and token and hmac.compare_digest(token.encode("utf-8"), secret.encode("utf-8")):
         return "p2"
@@ -35,13 +65,7 @@ def resolve_ai_tier(request: Request | None) -> str:
 
 def assert_p2_elevated_claim_or_raise(request: Request | None) -> None:
     claimed = _header(request, "X-XCAGI-AI-Tier").lower()
-    strict = (os.environ.get("FHD_AI_TIER_STRICT") or "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-    if claimed == "p2" and strict and resolve_ai_tier(request) != "p2":
+    if claimed == "p2" and _tier_strict() and resolve_ai_tier(request) != "p2":
         raise HTTPException(status_code=403, detail="p2 elevated token invalid")
 
 

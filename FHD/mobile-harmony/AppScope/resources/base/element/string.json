@@ -3,6 +3,14 @@
     {
       "name": "app_name",
       "value": "XCAGI"
+    },
+    {
+      "name": "company_name",
+      "value": "成都修茈科技有限公司"
+    },
+    {
+      "name": "app_one_line_intro",
+      "value": "企业 AI 员工、协同办公与插件市场移动工作台"
     }
   ]
 }

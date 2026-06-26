@@ -9,6 +9,7 @@
 | `route_inventory_baseline.json` | `python scripts/route_inventory_diff.py --json-out docs/evidence/arch/route_inventory_baseline.json` |
 | `openapi_consistency_baseline.json` | `python scripts/check_openapi_consistency.py --json-out docs/evidence/arch/openapi_consistency_baseline.json` |
 | `openapi_consistency_baseline.md` | 同上 `--md-out docs/evidence/arch/openapi_consistency_baseline.md` |
+| `openapi_warning_baseline.json` | `python scripts/check_openapi_consistency.py --update-warning-baseline` |
 
 ## PR 门禁
 
@@ -18,6 +19,7 @@
 python scripts/route_inventory_diff.py --json-out /tmp/routes.json
 # 与 baseline 对比 method+path 集合应为 0 diff
 python scripts/check_openapi_consistency.py
+python scripts/check_openapi_consistency.py --strict
 python scripts/arch_fitness.py
 ```
 

@@ -18,10 +18,11 @@ cd /path/to/MODstore_deploy
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install -e ".[web]"
+pip install -e ".[web,dev]"
 uvicorn modstore_server.app:app --host 127.0.0.1 --port 8000
 ```
 
+- **干净环境验证**：如果 `.venv` 缺少 `pyvenv.cfg` 或导入依赖时走到全局/uv 缓存，直接删除后重建；用 `.venv/bin/python -m pytest tests -q` 验证测试环境，而不要用系统 `pytest`。
 - 腾讯云 TencentOS / CentOS 系可先查仓库是否提供 `python3.11` 包；若无，可用 [pyenv](https://github.com/pyenv/pyenv)、官方源码编译，或用自带 **Python 3.10+** 的容器镜像部署同一套代码。
 
 ### 跨域（CORS）

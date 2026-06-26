@@ -5,8 +5,16 @@
       "value": "XCAGI"
     },
     {
+      "name": "company_name",
+      "value": "成都修茈科技有限公司"
+    },
+    {
+      "name": "app_one_line_intro",
+      "value": "企业 AI 员工、协同办公与插件市场移动工作台"
+    },
+    {
       "name": "module_desc",
-      "value": "XCAGI 鸿蒙客户端"
+      "value": "XCAGI 鸿蒙客户端,提供企业 AI 员工、消息协同、审批与插件市场入口"
     },
     {
       "name": "EntryAbility_desc",

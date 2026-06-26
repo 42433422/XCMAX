@@ -21,13 +21,40 @@ from datetime import datetime
 import torch
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
+from torch.optim import AdamW as TorchAdamW
 from torch.utils.data import DataLoader, Dataset
-from transformers import (
-    AdamW,
-    BertForSequenceClassification,
-    BertTokenizer,
-    get_linear_schedule_with_warmup,
-)
+
+_TRANSFORMERS_IMPORT_ERROR: ImportError | None = None
+
+try:
+    from transformers import (
+        BertForSequenceClassification,
+        BertTokenizer,
+        get_linear_schedule_with_warmup,
+    )
+except ImportError as exc:
+    _TRANSFORMERS_IMPORT_ERROR = exc
+
+    class _MissingTransformerComponent:
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs):
+            raise ImportError(
+                "transformers is required for distillation model loading"
+            ) from _TRANSFORMERS_IMPORT_ERROR
+
+    BertForSequenceClassification = _MissingTransformerComponent
+    BertTokenizer = _MissingTransformerComponent
+
+    def get_linear_schedule_with_warmup(*args, **kwargs):
+        raise ImportError(
+            "transformers is required to build the distillation scheduler"
+        ) from _TRANSFORMERS_IMPORT_ERROR
+
+
+try:
+    from transformers import AdamW
+except ImportError:
+    AdamW = TorchAdamW
 
 from app.utils.distillation_paths import (
     get_distillation_checkpoints_dir,
@@ -162,9 +189,9 @@ class DistillationTrainer:
                 for line in f:
                     parts = line.strip().split("\t")
                     if len(parts) >= 2:
-                        texts.append(parts[0])
                         label = parts[1]
                         if label in LABEL_TO_ID:
+                            texts.append(parts[0])
                             labels.append(LABEL_TO_ID[label])
 
         logger.info("加载数据: %s 条", len(texts))
