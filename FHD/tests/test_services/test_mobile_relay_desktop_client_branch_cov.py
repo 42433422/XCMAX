@@ -1269,7 +1269,9 @@ class TestExecuteTaskAdditional:
 
 
 class TestPollOnceAdditional:
-    def test_no_desktop_token_returns_early(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_desktop_token_returns_early(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         cfg_file = tmp_path / "relay.json"
         cfg_file.write_text(
             json.dumps({"relay_id": "r1", "desktop_token": ""}),
@@ -1300,7 +1302,9 @@ class TestPollOnceAdditional:
             _poll_once()
             mock_client_cls.assert_not_called()
 
-    def test_successful_poll_with_tasks(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_successful_poll_with_tasks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         cfg_file = tmp_path / "relay.json"
         cfg_file.write_text(
             json.dumps(
@@ -1354,9 +1358,7 @@ class TestPollOnceAdditional:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
-        mock_resp.json.return_value = {
-            "data": {"tasks": ["not-a-dict", {"task_id": ""}]}
-        }
+        mock_resp.json.return_value = {"data": {"tasks": ["not-a-dict", {"task_id": ""}]}}
 
         with (
             patch("httpx.Client") as mock_client_cls,
@@ -1599,9 +1601,7 @@ class TestWriteConfig:
 
 
 class TestRegisterDesktopRelaySuccess:
-    def test_successful_registration(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_successful_registration(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         cfg_file = tmp_path / "relay.json"
         monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
 

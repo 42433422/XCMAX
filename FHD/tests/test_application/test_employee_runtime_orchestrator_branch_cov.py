@@ -166,9 +166,7 @@ class TestBuildGlobalCollaborationGraph:
 class TestEmployeeDispatcher:
     def test_success_path(self) -> None:
         # EmployeeAgent is imported inside _employee_dispatcher, so patch the source module
-        with patch(
-            "app.application.employee_runtime.agent.EmployeeAgent"
-        ) as mock_agent_cls:
+        with patch("app.application.employee_runtime.agent.EmployeeAgent") as mock_agent_cls:
             mock_agent = MagicMock()
             mock_agent.run.return_value = {"success": True, "data": "ok"}
             mock_agent_cls.return_value = mock_agent
@@ -182,28 +180,20 @@ class TestEmployeeDispatcher:
         assert "完成" in result["message"]
 
     def test_failure_path_returns_failure_message(self) -> None:
-        with patch(
-            "app.application.employee_runtime.agent.EmployeeAgent"
-        ) as mock_agent_cls:
+        with patch("app.application.employee_runtime.agent.EmployeeAgent") as mock_agent_cls:
             mock_agent = MagicMock()
             mock_agent.run.return_value = {"success": False, "error": "boom"}
             mock_agent_cls.return_value = mock_agent
-            result = _employee_dispatcher(
-                tool_id="emp-1", action="run", params={"task": "x"}
-            )
+            result = _employee_dispatcher(tool_id="emp-1", action="run", params={"task": "x"})
         assert result["success"] is False
         assert "失败" in result["message"]
 
     def test_recoverable_error_returns_error_dict(self) -> None:
-        with patch(
-            "app.application.employee_runtime.agent.EmployeeAgent"
-        ) as mock_agent_cls:
+        with patch("app.application.employee_runtime.agent.EmployeeAgent") as mock_agent_cls:
             mock_agent = MagicMock()
             mock_agent.run.side_effect = RuntimeError("agent crashed")
             mock_agent_cls.return_value = mock_agent
-            result = _employee_dispatcher(
-                tool_id="emp-1", action="run", params={"task": "x"}
-            )
+            result = _employee_dispatcher(tool_id="emp-1", action="run", params={"task": "x"})
         assert result["success"] is False
         assert "agent crashed" in result["error"]
         assert result["employee_id"] == "emp-1"
@@ -246,9 +236,7 @@ class TestEmployeeDispatcher:
             "app.application.employee_runtime.agent.EmployeeAgent",
             _SpyAgent,
         ):
-            _employee_dispatcher(
-                tool_id="emp", action="run", params={"user_request": "from-ur"}
-            )
+            _employee_dispatcher(tool_id="emp", action="run", params={"user_request": "from-ur"})
         assert captured["task"] == "from-ur"
 
     def test_task_resolution_falls_back_to_ctx_task(self) -> None:
@@ -381,9 +369,7 @@ class TestEmployeeDispatcher:
             "app.application.employee_runtime.agent.EmployeeAgent",
             _SpyAgent,
         ):
-            _employee_dispatcher(
-                tool_id="emp", action="run", params={"task": "t", "user_id": 42}
-            )
+            _employee_dispatcher(tool_id="emp", action="run", params={"task": "t", "user_id": 42})
         assert captured["kw"]["user_id"] == 42
 
     def test_user_id_resolution_from_ctx(self) -> None:
@@ -699,7 +685,5 @@ class TestRunWithDependencies:
         graph = CollaborationGraph()
         orch = EmployeeOrchestrator(graph=graph)
         # manifest/config empty → no deps → skipped
-        result = orch.run_with_dependencies(
-            "emp-1", "task", manifest={}, config={}
-        )
+        result = orch.run_with_dependencies("emp-1", "task", manifest={}, config={})
         assert result["skipped"] is True

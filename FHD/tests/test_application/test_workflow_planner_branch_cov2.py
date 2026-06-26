@@ -122,7 +122,9 @@ class TestLooksLikeBusinessDbWrite:
         assert _looks_like_business_db_write("add to db", "add to db") is True
 
     def test_english_keyword_with_database(self) -> None:
-        assert _looks_like_business_db_write("create database entry", "create database entry") is True
+        assert (
+            _looks_like_business_db_write("create database entry", "create database entry") is True
+        )
 
     def test_chinese_keyword_with_入库(self) -> None:
         assert _looks_like_business_db_write("入库产品", "入库产品") is True
@@ -255,35 +257,50 @@ class TestExecuteTool:
 
     def test_default_action_for_price_list(self) -> None:
         mock_handler = MagicMock(return_value={"success": True})
-        with patch.dict("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS", {("price_list", "export"): mock_handler}):
+        with patch.dict(
+            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
+            {("price_list", "export"): mock_handler},
+        ):
             result = execute_tool("price_list", {"customer_name": "test"})
             assert result["success"] is True
             mock_handler.assert_called_once()
 
     def test_default_action_for_products(self) -> None:
         mock_handler = MagicMock(return_value={"success": True})
-        with patch.dict("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS", {("products", "query"): mock_handler}):
+        with patch.dict(
+            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
+            {("products", "query"): mock_handler},
+        ):
             result = execute_tool("products", {"keyword": "test"})
             assert result["success"] is True
             mock_handler.assert_called_once()
 
     def test_explicit_action_overrides_default(self) -> None:
         mock_handler = MagicMock(return_value={"success": True})
-        with patch.dict("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS", {("customers", "ensure_exists"): mock_handler}):
+        with patch.dict(
+            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
+            {("customers", "ensure_exists"): mock_handler},
+        ):
             result = execute_tool("customers", {"_action": "ensure_exists", "unit_name": "test"})
             assert result["success"] is True
             mock_handler.assert_called_once()
 
     def test_runtime_context_popped(self) -> None:
         mock_handler = MagicMock(return_value={"success": True})
-        with patch.dict("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS", {("products", "query"): mock_handler}):
+        with patch.dict(
+            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
+            {("products", "query"): mock_handler},
+        ):
             execute_tool("products", {"keyword": "test", "_runtime_context": {"foo": "bar"}})
             args, kwargs = mock_handler.call_args
             assert "_runtime_context" not in args[0]
 
     def test_action_normalized_to_lower(self) -> None:
         mock_handler = MagicMock(return_value={"success": True})
-        with patch.dict("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS", {("products", "query"): mock_handler}):
+        with patch.dict(
+            "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
+            {("products", "query"): mock_handler},
+        ):
             execute_tool("products", {"_action": "QUERY", "keyword": "test"})
             mock_handler.assert_called_once()
 
@@ -308,7 +325,10 @@ class TestFilterToolRegistryForProfile:
     def test_pro_default_filters_normal_only(self) -> None:
         registry = {
             "tool1": {"availability": "shared", "actions": {"query": {"availability": "shared"}}},
-            "tool2": {"availability": "normal_only", "actions": {"query": {"availability": "shared"}}},
+            "tool2": {
+                "availability": "normal_only",
+                "actions": {"query": {"availability": "shared"}},
+            },
         }
         result = _filter_tool_registry_for_profile(registry, "pro_default")
         assert "tool1" in result
@@ -329,7 +349,10 @@ class TestFilterToolRegistryForProfile:
         assert "admin" not in result["tool1"]["actions"]
 
     def test_skips_non_dict_spec(self) -> None:
-        registry = {"tool1": "not a dict", "tool2": {"availability": "shared", "actions": {"q": {"availability": "shared"}}}}
+        registry = {
+            "tool1": "not a dict",
+            "tool2": {"availability": "shared", "actions": {"q": {"availability": "shared"}}},
+        }
         result = _filter_tool_registry_for_profile(registry, "normal")
         assert "tool1" not in result
         assert "tool2" in result
@@ -345,7 +368,9 @@ class TestFilterToolRegistryForProfile:
         assert "tool1" not in result
 
     def test_empty_actions_filtered_out(self) -> None:
-        registry = {"tool1": {"availability": "shared", "actions": {"q": {"availability": "pro_only"}}}}
+        registry = {
+            "tool1": {"availability": "shared", "actions": {"q": {"availability": "pro_only"}}}
+        }
         result = _filter_tool_registry_for_profile(registry, "normal")
         assert "tool1" not in result
 
@@ -364,7 +389,11 @@ class TestValidateRequiredParams:
         plan = PlanGraph(
             plan_id="p1",
             intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={"keyword": "x"})],
+            nodes=[
+                WorkflowNode(
+                    node_id="n1", tool_id="products", action="query", params={"keyword": "x"}
+                )
+            ],
         )
         registry = {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
         assert LLMWorkflowPlanner._validate_required_params(plan, registry) is None
@@ -384,7 +413,11 @@ class TestValidateRequiredParams:
         plan = PlanGraph(
             plan_id="p1",
             intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={"keyword": "  "})],
+            nodes=[
+                WorkflowNode(
+                    node_id="n1", tool_id="products", action="query", params={"keyword": "  "}
+                )
+            ],
         )
         registry = {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
         err = LLMWorkflowPlanner._validate_required_params(plan, registry)
@@ -394,7 +427,11 @@ class TestValidateRequiredParams:
         plan = PlanGraph(
             plan_id="p1",
             intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={"keyword": None})],
+            nodes=[
+                WorkflowNode(
+                    node_id="n1", tool_id="products", action="query", params={"keyword": None}
+                )
+            ],
         )
         registry = {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
         err = LLMWorkflowPlanner._validate_required_params(plan, registry)
@@ -512,9 +549,7 @@ class TestFallbackPlan:
 
     def test_add_product_to_unit(self) -> None:
         planner = self._make_planner()
-        plan = planner._fallback_plan(
-            "p1", "新增产品", {"customers": {}, "products": {}}
-        )
+        plan = planner._fallback_plan("p1", "新增产品", {"customers": {}, "products": {}})
         assert plan.intent == "add_product_to_unit"
         assert len(plan.nodes) == 2
         assert plan.nodes[0].tool_id == "customers"

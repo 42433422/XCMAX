@@ -31,7 +31,9 @@ def _load_relay_gitops_module():
 relay_gitops = _load_relay_gitops_module()
 
 
-def _completed(stdout: str = "", stderr: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
+def _completed(
+    stdout: str = "", stderr: str = "", returncode: int = 0
+) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(
         args=["git"], returncode=returncode, stdout=stdout, stderr=stderr
     )
@@ -48,7 +50,9 @@ class TestGitHelper:
             mock_run.assert_called_once()
 
     def test_repo_root_finds_fhd_parent(self) -> None:
-        with patch.object(Path, "resolve", return_value=Path("/x/FHD/app/services/relay_gitops.py")):
+        with patch.object(
+            Path, "resolve", return_value=Path("/x/FHD/app/services/relay_gitops.py")
+        ):
             root = relay_gitops._repo_root()
             assert root == "/x"
 
@@ -64,15 +68,19 @@ class TestGitHelper:
             assert relay_gitops._merge_base_branch("/repo") == "develop"
 
     def test_merge_base_branch_uses_symbolic_ref(self) -> None:
-        with patch.dict("os.environ", {}, clear=True), patch.object(
-            relay_gitops, "_git", return_value=_completed(stdout="main\n")
-        ) as mock_git:
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(
+                relay_gitops, "_git", return_value=_completed(stdout="main\n")
+            ) as mock_git,
+        ):
             assert relay_gitops._merge_base_branch("/repo") == "main"
             mock_git.assert_called_once()
 
     def test_merge_base_branch_fallback_when_empty(self) -> None:
-        with patch.dict("os.environ", {}, clear=True), patch.object(
-            relay_gitops, "_git", return_value=_completed(stdout="")
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(relay_gitops, "_git", return_value=_completed(stdout="")),
         ):
             assert relay_gitops._merge_base_branch("/repo") == "main"
 
@@ -114,8 +122,9 @@ class TestVerifyMerged:
                 assert "异常" in msg
 
     def test_verify_no_py_changes(self, tmp_path: Path) -> None:
-        with patch.dict("os.environ", {}, clear=True), patch.object(
-            relay_gitops, "_git", return_value=_completed(stdout="readme.md\n")
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(relay_gitops, "_git", return_value=_completed(stdout="readme.md\n")),
         ):
             ok, msg = relay_gitops._verify_merged(str(tmp_path), "main")
             assert ok is True
@@ -124,8 +133,9 @@ class TestVerifyMerged:
     def test_verify_py_compile_success(self, tmp_path: Path) -> None:
         py_file = tmp_path / "ok.py"
         py_file.write_text("x = 1\n")
-        with patch.dict("os.environ", {}, clear=True), patch.object(
-            relay_gitops, "_git", return_value=_completed(stdout="ok.py\n")
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(relay_gitops, "_git", return_value=_completed(stdout="ok.py\n")),
         ):
             ok, msg = relay_gitops._verify_merged(str(tmp_path), "main")
             assert ok is True
@@ -134,16 +144,18 @@ class TestVerifyMerged:
     def test_verify_py_compile_error(self, tmp_path: Path) -> None:
         py_file = tmp_path / "bad.py"
         py_file.write_text("def (\n")
-        with patch.dict("os.environ", {}, clear=True), patch.object(
-            relay_gitops, "_git", return_value=_completed(stdout="bad.py\n")
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(relay_gitops, "_git", return_value=_completed(stdout="bad.py\n")),
         ):
             ok, msg = relay_gitops._verify_merged(str(tmp_path), "main")
             assert ok is False
             assert "语法错误" in msg
 
     def test_verify_skips_missing_py_file(self, tmp_path: Path) -> None:
-        with patch.dict("os.environ", {}, clear=True), patch.object(
-            relay_gitops, "_git", return_value=_completed(stdout="missing.py\n")
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(relay_gitops, "_git", return_value=_completed(stdout="missing.py\n")),
         ):
             ok, msg = relay_gitops._verify_merged(str(tmp_path), "main")
             assert ok is True
@@ -261,9 +273,11 @@ class TestGitMerge:
         assert "缺少分支名" in result["reply"]
 
     def test_merge_worktree_add_failure(self) -> None:
-        with patch.object(relay_gitops, "_git") as mock_git, patch.object(
-            relay_gitops, "_verify_merged"
-        ), patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
+        with (
+            patch.object(relay_gitops, "_git") as mock_git,
+            patch.object(relay_gitops, "_verify_merged"),
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
+        ):
             mock_git.side_effect = [
                 _completed(returncode=0),  # fetch
                 _completed(returncode=1, stderr="worktree add failed"),  # worktree add
@@ -274,9 +288,11 @@ class TestGitMerge:
             assert "准备合并环境失败" in result["reply"]
 
     def test_merge_conflict_aborts(self) -> None:
-        with patch.object(relay_gitops, "_git") as mock_git, patch.object(
-            relay_gitops, "_verify_merged"
-        ), patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
+        with (
+            patch.object(relay_gitops, "_git") as mock_git,
+            patch.object(relay_gitops, "_verify_merged"),
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
+        ):
             mock_git.side_effect = [
                 _completed(returncode=0),  # fetch
                 _completed(returncode=0),  # worktree add
@@ -289,9 +305,11 @@ class TestGitMerge:
             assert "冲突" in result["reply"]
 
     def test_merge_verify_failure(self) -> None:
-        with patch.object(relay_gitops, "_git") as mock_git, patch.object(
-            relay_gitops, "_verify_merged", return_value=(False, "verify failed")
-        ), patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
+        with (
+            patch.object(relay_gitops, "_git") as mock_git,
+            patch.object(relay_gitops, "_verify_merged", return_value=(False, "verify failed")),
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
+        ):
             mock_git.side_effect = [
                 _completed(returncode=0),  # fetch
                 _completed(returncode=0),  # worktree add
@@ -303,9 +321,11 @@ class TestGitMerge:
             assert "验证未通过" in result["reply"]
 
     def test_merge_push_failure(self) -> None:
-        with patch.object(relay_gitops, "_git") as mock_git, patch.object(
-            relay_gitops, "_verify_merged", return_value=(True, "ok")
-        ), patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
+        with (
+            patch.object(relay_gitops, "_git") as mock_git,
+            patch.object(relay_gitops, "_verify_merged", return_value=(True, "ok")),
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
+        ):
             mock_git.side_effect = [
                 _completed(returncode=0),  # fetch
                 _completed(returncode=0),  # worktree add
@@ -318,9 +338,11 @@ class TestGitMerge:
             assert "推送" in result["reply"] and "失败" in result["reply"]
 
     def test_merge_success(self) -> None:
-        with patch.object(relay_gitops, "_git") as mock_git, patch.object(
-            relay_gitops, "_verify_merged", return_value=(True, "ok")
-        ), patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
+        with (
+            patch.object(relay_gitops, "_git") as mock_git,
+            patch.object(relay_gitops, "_verify_merged", return_value=(True, "ok")),
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
+        ):
             mock_git.side_effect = [
                 _completed(returncode=0),  # fetch
                 _completed(returncode=0),  # worktree add
@@ -334,8 +356,9 @@ class TestGitMerge:
 
     def test_merge_exception_returns_failed(self) -> None:
         # fetch 在 try 块外，必须成功；worktree add 在 try 块内，抛异常触发 except
-        with patch.object(relay_gitops, "_git") as mock_git, patch.object(
-            relay_gitops, "_merge_base_branch", return_value="main"
+        with (
+            patch.object(relay_gitops, "_git") as mock_git,
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
         ):
             mock_git.side_effect = [
                 _completed(returncode=0),  # fetch (outside try, must succeed)

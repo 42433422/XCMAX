@@ -104,20 +104,28 @@ def _make_request(request_id: str = "req-1", **overrides) -> dict:
 
 
 def _mock_response(
-    status_code: int = 200, json_data: dict | None = None, text: str = "", content: bytes | None = None
+    status_code: int = 200,
+    json_data: dict | None = None,
+    text: str = "",
+    content: bytes | None = None,
 ) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status_code
-    resp.content = content if content is not None else (json.dumps(json_data).encode() if json_data else b"")
+    resp.content = (
+        content if content is not None else (json.dumps(json_data).encode() if json_data else b"")
+    )
     resp.text = text or (json.dumps(json_data) if json_data else "")
     resp.json = MagicMock(return_value=json_data or {})
     return resp
 
 
 def _mock_http_client(
-    *, post_resp: MagicMock | None = None, get_resp: MagicMock | None = None,
+    *,
+    post_resp: MagicMock | None = None,
+    get_resp: MagicMock | None = None,
     request_resp: MagicMock | None = None,
-    post_exc: Exception | None = None, get_exc: Exception | None = None,
+    post_exc: Exception | None = None,
+    get_exc: Exception | None = None,
     request_exc: Exception | None = None,
 ) -> MagicMock:
     """Build a mock httpx.Client-compatible context manager.
@@ -177,7 +185,9 @@ class TestCursorCliCommand:
         assert "--force" not in cmd
 
     def test_prompt_appended_last(self, tmp_path) -> None:
-        cmd = _cursor_cli_command("/usr/bin/cursor", "my prompt", tmp_path / "out.txt", str(tmp_path))
+        cmd = _cursor_cli_command(
+            "/usr/bin/cursor", "my prompt", tmp_path / "out.txt", str(tmp_path)
+        )
         assert cmd[-1] == "my prompt"
 
 
@@ -537,7 +547,11 @@ class TestParaRequest:
         mock_resp = _mock_response(status_code=200, json_data={"ok": True})
         mock_client.request.return_value = mock_resp
         body = svc._para_request(
-            mock_client, "http://para.test", "tok", "POST", "/api/tasks",
+            mock_client,
+            "http://para.test",
+            "tok",
+            "POST",
+            "/api/tasks",
             json_body={"title": "t"},
         )
         assert body == {"ok": True}
@@ -598,7 +612,10 @@ class TestCreateParaTask:
         mock_client.request.return_value = mock_resp
         req = _make_request()
         result = svc._create_para_task(
-            mock_client, "http://para.test", "tok", req,
+            mock_client,
+            "http://para.test",
+            "tok",
+            req,
             [{"id": "d1", "name": "dev1"}],
             tier=1,
         )
@@ -618,7 +635,10 @@ class TestCreateParaTask:
         mock_client.request.return_value = mock_resp
         req = _make_request()
         result = svc._create_para_task(
-            mock_client, "http://para.test", "tok", req,
+            mock_client,
+            "http://para.test",
+            "tok",
+            req,
             [{"id": "d1", "name": "dev1"}],
             tier=2,
         )
@@ -630,13 +650,20 @@ class TestCreateParaTask:
         mock_client = MagicMock()
         # First call returns task with id, second call should include task_id
         responses = [
-            _mock_response(status_code=200, json_data={"task": {"id": "t1"}, "subtask": {"id": "s1"}}),
-            _mock_response(status_code=200, json_data={"task": {"id": "t1"}, "subtask": {"id": "s2"}}),
+            _mock_response(
+                status_code=200, json_data={"task": {"id": "t1"}, "subtask": {"id": "s1"}}
+            ),
+            _mock_response(
+                status_code=200, json_data={"task": {"id": "t1"}, "subtask": {"id": "s2"}}
+            ),
         ]
         mock_client.request.side_effect = responses
         req = _make_request()
         result = svc._create_para_task(
-            mock_client, "http://para.test", "tok", req,
+            mock_client,
+            "http://para.test",
+            "tok",
+            req,
             [{"id": "d1", "name": "dev1"}, {"id": "d2", "name": "dev2"}],
             tier=2,
         )
@@ -655,7 +682,10 @@ class TestCreateParaTask:
         mock_client.request.return_value = mock_resp
         req = _make_request()
         result = svc._create_para_task(
-            mock_client, "http://para.test", "tok", req,
+            mock_client,
+            "http://para.test",
+            "tok",
+            req,
             [{"id": "d1", "name": "dev1"}],
             tier=1,
         )
@@ -841,7 +871,10 @@ class TestUpsertResultMessages:
             "subTasks": [{"id": "s1", "status": "completed", "logs": [{"content": "done"}]}],
         }
         changed = svc._upsert_result_messages(
-            user_id=1, dispatch_row=dispatch_row, task=task, rows=rows,
+            user_id=1,
+            dispatch_row=dispatch_row,
+            task=task,
+            rows=rows,
         )
         assert changed is True
         assert existing["status"] == "completed"
@@ -857,7 +890,10 @@ class TestUpsertResultMessages:
             "subTasks": [{"id": "s1", "status": "completed", "logs": [{"content": "done"}]}],
         }
         changed = svc._upsert_result_messages(
-            user_id=1, dispatch_row=dispatch_row, task=task, rows=rows,
+            user_id=1,
+            dispatch_row=dispatch_row,
+            task=task,
+            rows=rows,
         )
         assert changed is True
         assert len(rows) == 1
@@ -873,7 +909,10 @@ class TestUpsertResultMessages:
             "subTasks": [{"id": "s1", "status": "running", "logs": []}],
         }
         changed = svc._upsert_result_messages(
-            user_id=1, dispatch_row=dispatch_row, task=task, rows=rows,
+            user_id=1,
+            dispatch_row=dispatch_row,
+            task=task,
+            rows=rows,
         )
         assert changed is False
         assert len(rows) == 0
@@ -889,7 +928,10 @@ class TestUpsertResultMessages:
         # subtask completed but no logs and no last_error → body is "prefix\n\ntool 已完成该子任务。"
         # which is non-empty, so this WILL be added
         changed = svc._upsert_result_messages(
-            user_id=1, dispatch_row=dispatch_row, task=task, rows=rows,
+            user_id=1,
+            dispatch_row=dispatch_row,
+            task=task,
+            rows=rows,
         )
         # body is non-empty (completed → "已完成该子任务")
         assert changed is True
@@ -903,7 +945,10 @@ class TestUpsertResultMessages:
             "subTasks": [{"id": "s1", "status": "failed", "last_error": "boom", "logs": []}],
         }
         changed = svc._upsert_result_messages(
-            user_id=1, dispatch_row=dispatch_row, task=task, rows=rows,
+            user_id=1,
+            dispatch_row=dispatch_row,
+            task=task,
+            rows=rows,
         )
         assert changed is True
         assert "boom" in rows[0]["body"]
@@ -916,7 +961,10 @@ class TestUpsertResultMessages:
             "subTasks": [{"id": "s1", "status": "completed", "logs": [{"content": "ok"}]}],
         }
         svc._upsert_result_messages(
-            user_id=1, dispatch_row=dispatch_row, task=task, rows=rows,
+            user_id=1,
+            dispatch_row=dispatch_row,
+            task=task,
+            rows=rows,
         )
         assert rows[0]["task_id"] == "from_dispatch"
 
@@ -1282,8 +1330,10 @@ class TestPrepareWorktree:
         mock_result.returncode = 1
         mock_result.stderr = "worktree error"
         mock_result.stdout = ""
-        with patch.object(svc, "_is_git_repo", return_value=True), \
-             patch.object(svc, "_git", return_value=mock_result):
+        with (
+            patch.object(svc, "_is_git_repo", return_value=True),
+            patch.object(svc, "_git", return_value=mock_result),
+        ):
             assert svc._prepare_worktree(str(tmp_path), "task") is None
 
     def test_worktree_add_success(self, tmp_path) -> None:
@@ -1292,8 +1342,10 @@ class TestPrepareWorktree:
         mock_result.returncode = 0
         mock_result.stderr = ""
         mock_result.stdout = ""
-        with patch.object(svc, "_is_git_repo", return_value=True), \
-             patch.object(svc, "_git", return_value=mock_result) as mock_git:
+        with (
+            patch.object(svc, "_is_git_repo", return_value=True),
+            patch.object(svc, "_git", return_value=mock_result) as mock_git,
+        ):
             result = svc._prepare_worktree(str(tmp_path), "task")
             assert result is not None
             wt_path, branch = result
@@ -1305,9 +1357,11 @@ class TestPrepareWorktree:
         mock_result.returncode = 0
         mock_result.stderr = ""
         mock_result.stdout = ""
-        with patch.object(svc, "_is_git_repo", return_value=True), \
-             patch.object(svc, "_resolve_branch_ref", return_value="origin/feature/mobile"), \
-             patch.object(svc, "_git", return_value=mock_result) as mock_git:
+        with (
+            patch.object(svc, "_is_git_repo", return_value=True),
+            patch.object(svc, "_resolve_branch_ref", return_value="origin/feature/mobile"),
+            patch.object(svc, "_git", return_value=mock_result) as mock_git,
+        ):
             result = svc._prepare_worktree(str(tmp_path), "task", "origin/feature/mobile")
             assert result is not None
             _, branch = result
@@ -1317,8 +1371,10 @@ class TestPrepareWorktree:
 
     def test_worktree_add_exception(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        with patch.object(svc, "_is_git_repo", return_value=True), \
-             patch.object(svc, "_git", side_effect=Exception("crash")):
+        with (
+            patch.object(svc, "_is_git_repo", return_value=True),
+            patch.object(svc, "_git", side_effect=Exception("crash")),
+        ):
             assert svc._prepare_worktree(str(tmp_path), "task") is None
 
 
@@ -1334,8 +1390,10 @@ class TestRunDevTaskLoop:
 
     def test_selected_branch_worktree_fail_does_not_write_live_checkout(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("cli answer"))
-        with patch.object(svc, "_prepare_worktree", return_value=None), \
-             patch.object(svc, "_run_cli_once") as run_once:
+        with (
+            patch.object(svc, "_prepare_worktree", return_value=None),
+            patch.object(svc, "_run_cli_once") as run_once,
+        ):
             result = svc._run_dev_task_loop(
                 "/fake/cli",
                 "do task",
@@ -1349,10 +1407,12 @@ class TestRunDevTaskLoop:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("fixed"))
         wt_path = str(tmp_path / "wt")
         Path(wt_path).mkdir()
-        with patch.object(svc, "_prepare_worktree", return_value=(wt_path, "branch")), \
-             patch.object(svc, "_verify_workspace", side_effect=[(False, "error"), (True, "ok")]), \
-             patch.object(svc, "_commit_and_push", return_value=(True, "pushed")), \
-             patch.object(svc, "_remove_worktree"):
+        with (
+            patch.object(svc, "_prepare_worktree", return_value=(wt_path, "branch")),
+            patch.object(svc, "_verify_workspace", side_effect=[(False, "error"), (True, "ok")]),
+            patch.object(svc, "_commit_and_push", return_value=(True, "pushed")),
+            patch.object(svc, "_remove_worktree"),
+        ):
             result = svc._run_dev_task_loop("/fake/cli", "do task", str(tmp_path))
             assert "fixed" in result
 
@@ -1360,10 +1420,12 @@ class TestRunDevTaskLoop:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("done"))
         wt_path = str(tmp_path / "wt")
         Path(wt_path).mkdir()
-        with patch.object(svc, "_prepare_worktree", return_value=(wt_path, "branch")), \
-             patch.object(svc, "_verify_workspace", return_value=(True, "ok")), \
-             patch.object(svc, "_commit_and_push", return_value=(True, "pushed")), \
-             patch.object(svc, "_remove_worktree"):
+        with (
+            patch.object(svc, "_prepare_worktree", return_value=(wt_path, "branch")),
+            patch.object(svc, "_verify_workspace", return_value=(True, "ok")),
+            patch.object(svc, "_commit_and_push", return_value=(True, "pushed")),
+            patch.object(svc, "_remove_worktree"),
+        ):
             result = svc._run_dev_task_loop("/fake/cli", "do task", str(tmp_path))
             assert "done" in result
             assert "✅" in result
@@ -1393,8 +1455,10 @@ class TestEnsureSessionWorkspace:
 
     def test_not_git_repo_returns_none(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        with patch.object(svc, "_is_git_repo", return_value=False), \
-             patch.object(svc, "_cli_workspace", return_value=str(tmp_path)):
+        with (
+            patch.object(svc, "_is_git_repo", return_value=False),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+        ):
             result = svc._ensure_session_workspace("codex:newkey")
             assert result == (None, None)
 
@@ -1407,9 +1471,11 @@ class TestEnsureSessionWorkspace:
         mock_worktree_add.returncode = 0
         mock_worktree_add.stderr = ""
         mock_worktree_add.stdout = ""
-        with patch.object(svc, "_is_git_repo", return_value=True), \
-             patch.object(svc, "_cli_workspace", return_value=str(tmp_path)), \
-             patch.object(svc, "_git", side_effect=[mock_remove, mock_rev_parse, mock_worktree_add]):
+        with (
+            patch.object(svc, "_is_git_repo", return_value=True),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_git", side_effect=[mock_remove, mock_rev_parse, mock_worktree_add]),
+        ):
             result = svc._ensure_session_workspace("codex:newkey2")
             assert result[0] is not None
 
@@ -1422,9 +1488,11 @@ class TestEnsureSessionWorkspace:
         mock_worktree_add.returncode = 0
         mock_worktree_add.stderr = ""
         mock_worktree_add.stdout = ""
-        with patch.object(svc, "_is_git_repo", return_value=True), \
-             patch.object(svc, "_cli_workspace", return_value=str(tmp_path)), \
-             patch.object(svc, "_git", side_effect=[mock_remove, mock_rev_parse, mock_worktree_add]):
+        with (
+            patch.object(svc, "_is_git_repo", return_value=True),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_git", side_effect=[mock_remove, mock_rev_parse, mock_worktree_add]),
+        ):
             result = svc._ensure_session_workspace("codex:newkey3")
             assert result[0] is not None
             assert "super-employee/codex/" in result[1]
@@ -1438,9 +1506,11 @@ class TestEnsureSessionWorkspace:
         mock_worktree_add.returncode = 1
         mock_worktree_add.stderr = "error"
         mock_worktree_add.stdout = ""
-        with patch.object(svc, "_is_git_repo", return_value=True), \
-             patch.object(svc, "_cli_workspace", return_value=str(tmp_path)), \
-             patch.object(svc, "_git", side_effect=[mock_remove, mock_rev_parse, mock_worktree_add]):
+        with (
+            patch.object(svc, "_is_git_repo", return_value=True),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_git", side_effect=[mock_remove, mock_rev_parse, mock_worktree_add]),
+        ):
             result = svc._ensure_session_workspace("codex:newkey4")
             assert result == (None, None)
 

@@ -610,20 +610,13 @@ class TestResolveToolExecutionProfile:
         )
 
     def test_explicit_normal_uppercase(self):
-        assert (
-            resolve_tool_execution_profile({"tool_execution_profile": "NORMAL"}) == "normal"
-        )
+        assert resolve_tool_execution_profile({"tool_execution_profile": "NORMAL"}) == "normal"
 
     def test_explicit_normal_with_spaces(self):
-        assert (
-            resolve_tool_execution_profile({"tool_execution_profile": "  normal  "})
-            == "normal"
-        )
+        assert resolve_tool_execution_profile({"tool_execution_profile": "  normal  "}) == "normal"
 
     def test_ui_normal_intent_pro_returns_normal(self):
-        result = resolve_tool_execution_profile(
-            {"ui_surface": "normal", "intent_channel": "pro"}
-        )
+        result = resolve_tool_execution_profile({"ui_surface": "normal", "intent_channel": "pro"})
         assert result == "normal"
 
     def test_ui_normal_intent_normal_returns_pro_default(self):
@@ -634,9 +627,7 @@ class TestResolveToolExecutionProfile:
         assert result == "pro_default"
 
     def test_ui_pro_intent_pro_returns_pro_default(self):
-        result = resolve_tool_execution_profile(
-            {"ui_surface": "pro", "intent_channel": "pro"}
-        )
+        result = resolve_tool_execution_profile({"ui_surface": "pro", "intent_channel": "pro"})
         assert result == "pro_default"
 
     def test_no_context_returns_pro_default(self):
@@ -835,9 +826,7 @@ class TestBuildCustomersQueryResponseDict:
     def test_no_keyword_uses_get_all_with_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = [
-            {"customer_name": "客户A", "contact_person": "联系人A"}
-        ]
+        mock_svc.get_all.return_value = [{"customer_name": "客户A", "contact_person": "联系人A"}]
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
@@ -895,9 +884,7 @@ class TestBuildInventoryAlertResponseDict:
 
     def test_no_low_stock_items(self):
         route = {"intent": "inventory_alert", "slots": {}}
-        with patch(
-            "app.application.get_material_application_service"
-        ) as mock_get:
+        with patch("app.application.get_material_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.get_low_stock_materials.return_value = {"data": []}
             mock_get.return_value = mock_svc
@@ -907,9 +894,7 @@ class TestBuildInventoryAlertResponseDict:
 
     def test_with_low_stock_items(self):
         route = {"intent": "inventory_alert", "slots": {}}
-        with patch(
-            "app.application.get_material_application_service"
-        ) as mock_get:
+        with patch("app.application.get_material_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.get_low_stock_materials.return_value = {
                 "data": [
@@ -935,12 +920,8 @@ class TestBuildInventoryAlertResponseDict:
 
     def test_more_than_10_items_truncated_in_response(self):
         route = {"intent": "inventory_alert", "slots": {}}
-        items = [
-            {"name": f"原料{i}", "quantity": i, "unit": "kg"} for i in range(15)
-        ]
-        with patch(
-            "app.application.get_material_application_service"
-        ) as mock_get:
+        items = [{"name": f"原料{i}", "quantity": i, "unit": "kg"} for i in range(15)]
+        with patch("app.application.get_material_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.get_low_stock_materials.return_value = {"data": items}
             mock_get.return_value = mock_svc
@@ -952,9 +933,7 @@ class TestBuildInventoryAlertResponseDict:
 
     def test_no_data_key_in_result(self):
         route = {"intent": "inventory_alert", "slots": {}}
-        with patch(
-            "app.application.get_material_application_service"
-        ) as mock_get:
+        with patch("app.application.get_material_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.get_low_stock_materials.return_value = {}
             mock_get.return_value = mock_svc
@@ -989,9 +968,7 @@ class TestBuildLabelPrintResponseDict:
 
     def test_print_success(self):
         route = {"intent": "label_print", "slots": {"model_number": "A001", "quantity": 2}}
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_get:
+        with patch("app.application.print_app_service.get_print_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": True, "message": "ok"}
             mock_get.return_value = mock_svc
@@ -1002,9 +979,7 @@ class TestBuildLabelPrintResponseDict:
 
     def test_print_failure(self):
         route = {"intent": "label_print", "slots": {"model_number": "A001", "quantity": 1}}
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_get:
+        with patch("app.application.print_app_service.get_print_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {
                 "success": False,
@@ -1017,9 +992,7 @@ class TestBuildLabelPrintResponseDict:
 
     def test_print_failure_no_message(self):
         route = {"intent": "label_print", "slots": {"model_number": "A001", "quantity": 1}}
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_get:
+        with patch("app.application.print_app_service.get_print_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": False}
             mock_get.return_value = mock_svc
@@ -1041,9 +1014,7 @@ class TestBuildLabelPrintResponseDict:
     def test_quantity_zero_becomes_one(self):
         """quantity=0 时通过 max(1, ...) 变为 1。"""
         route = {"intent": "label_print", "slots": {"model_number": "A001", "quantity": 0}}
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_get:
+        with patch("app.application.print_app_service.get_print_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": True}
             mock_get.return_value = mock_svc
@@ -1055,9 +1026,7 @@ class TestBuildLabelPrintResponseDict:
 
     def test_quantity_none_becomes_one(self):
         route = {"intent": "label_print", "slots": {"model_number": "A001", "quantity": None}}
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_get:
+        with patch("app.application.print_app_service.get_print_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": True}
             mock_get.return_value = mock_svc
@@ -1066,9 +1035,7 @@ class TestBuildLabelPrintResponseDict:
 
     def test_quantity_negative_becomes_one(self):
         route = {"intent": "label_print", "slots": {"model_number": "A001", "quantity": -5}}
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as mock_get:
+        with patch("app.application.print_app_service.get_print_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": True}
             mock_get.return_value = mock_svc

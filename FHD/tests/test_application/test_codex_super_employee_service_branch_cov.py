@@ -1428,9 +1428,7 @@ class TestDispatchToParaExceptions:
     def test_generic_exception(self, tmp_path, monkeypatch):
         """通用异常被捕获并写入 outbox（返回 dict 而非 None）。"""
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")
-        svc = _make_svc(
-            tmp_path, http_client_factory=_fake_http_factory(exc=RuntimeError("boom"))
-        )
+        svc = _make_svc(tmp_path, http_client_factory=_fake_http_factory(exc=RuntimeError("boom")))
         result, reason = svc._dispatch_to_para({"request_id": "r1", "created_at": "t"})
         # 通用异常走 _write_outbox 分支，返回 dict（accepted=False, status=dispatch_error）
         assert result is not None
@@ -1711,7 +1709,9 @@ class TestCliPathBoundary:
     def test_empty_env_falls_back_to_which(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_CLI_PATH", "")
         svc = _make_svc(tmp_path)
-        with patch("app.application.super_employee_service.shutil.which", return_value="/found/codex"):
+        with patch(
+            "app.application.super_employee_service.shutil.which", return_value="/found/codex"
+        ):
             with patch("app.application.super_employee_service.Path.is_file", return_value=True):
                 assert svc._cli_path() == "/found/codex"
 
@@ -1857,23 +1857,21 @@ class TestIsGitRepoBoundary:
 
     def test_exception_returns_false(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch("app.application.super_employee_service.subprocess.run", side_effect=OSError("boom")):
+        with patch(
+            "app.application.super_employee_service.subprocess.run", side_effect=OSError("boom")
+        ):
             assert svc._is_git_repo(str(tmp_path)) is False
 
     def test_false_stdout(self, tmp_path):
         svc = _make_svc(tmp_path)
         with patch("app.application.super_employee_service.subprocess.run") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                [], 0, stdout="false", stderr=""
-            )
+            mock_run.return_value = subprocess.CompletedProcess([], 0, stdout="false", stderr="")
             assert svc._is_git_repo(str(tmp_path)) is False
 
     def test_true_stdout(self, tmp_path):
         svc = _make_svc(tmp_path)
         with patch("app.application.super_employee_service.subprocess.run") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                [], 0, stdout="true", stderr=""
-            )
+            mock_run.return_value = subprocess.CompletedProcess([], 0, stdout="true", stderr="")
             assert svc._is_git_repo(str(tmp_path)) is True
 
     def test_git_runs_without_interactive_prompts(self, tmp_path, monkeypatch):
@@ -1881,9 +1879,7 @@ class TestIsGitRepoBoundary:
         monkeypatch.delenv("GIT_ASKPASS", raising=False)
         svc = _make_svc(tmp_path)
         with patch("app.application.super_employee_service.subprocess.run") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                [], 0, stdout="true", stderr=""
-            )
+            mock_run.return_value = subprocess.CompletedProcess([], 0, stdout="true", stderr="")
             svc._git(str(tmp_path), "status")
         env = mock_run.call_args.kwargs["env"]
         assert env["GIT_TERMINAL_PROMPT"] == "0"
@@ -2529,7 +2525,13 @@ class TestSelectDevicesByTierBoundary:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_FORCE_TIER", "1")
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DEVICE_ID", "dev1")
         svc = _make_svc(tmp_path)
-        devices = [{"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]}]
+        devices = [
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            }
+        ]
         tier, selected = svc._select_devices_by_tier(devices, {"raw_context": {}})
         assert tier == 1
         assert len(selected) == 1
@@ -2540,7 +2542,11 @@ class TestSelectDevicesByTierBoundary:
         svc = _make_svc(tmp_path)
         devices = [
             {"id": "dev1", "status": "offline", "tools": [{"toolName": "codex"}]},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         tier, selected = svc._select_devices_by_tier(devices, {"raw_context": {}})
         # 本机不可用 → 升二级
@@ -2551,8 +2557,16 @@ class TestSelectDevicesByTierBoundary:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_FORCE_TIER", "2")
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         tier, selected = svc._select_devices_by_tier(devices, {"raw_context": {}})
         assert tier == 2
@@ -2577,8 +2591,16 @@ class TestSelectParaDevicesBoundary:
     def test_target_all(self, tmp_path):
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["all"]})
         assert len(result) == 2
@@ -2586,8 +2608,16 @@ class TestSelectParaDevicesBoundary:
     def test_target_by_id(self, tmp_path):
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["dev1"]})
         assert all(d["id"] == "dev1" for d in result)
@@ -2595,8 +2625,18 @@ class TestSelectParaDevicesBoundary:
     def test_target_by_name(self, tmp_path):
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "dev1", "name": "worker1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
-            {"id": "dev2", "name": "worker2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev1",
+                "name": "worker1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
+            {
+                "id": "dev2",
+                "name": "worker2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["worker1"]})
         assert all(d.get("name") == "worker1" for d in result)
@@ -2604,8 +2644,16 @@ class TestSelectParaDevicesBoundary:
     def test_no_target_selects_all_eligible(self, tmp_path):
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         result = svc._select_para_devices(devices, {})
         assert len(result) == 2
@@ -2614,7 +2662,11 @@ class TestSelectParaDevicesBoundary:
         svc = _make_svc(tmp_path)
         devices = [
             {"id": "dev1", "status": "offline", "tools": [{"toolName": "codex"}]},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["all"]})
         assert len(result) == 1
@@ -2623,8 +2675,17 @@ class TestSelectParaDevicesBoundary:
     def test_workers_preferred_over_primary(self, tmp_path):
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}], "isPrimary": True},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+                "isPrimary": True,
+            },
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["all"]})
         # workers 优先
@@ -2634,8 +2695,16 @@ class TestSelectParaDevicesBoundary:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_MAX_DEVICES", "1")
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         result = svc._select_para_devices(devices, {"target_devices": ["all"], "raw_context": {}})
         assert len(result) <= 1
@@ -2654,7 +2723,13 @@ class TestSelectLocalDeviceBoundary:
     def test_local_id_found_eligible(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DEVICE_ID", "dev1")
         svc = _make_svc(tmp_path)
-        devices = [{"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]}]
+        devices = [
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            }
+        ]
         result = svc._select_local_device(devices, {"raw_context": {}})
         assert len(result) == 1
         assert result[0]["id"] == "dev1"
@@ -2669,19 +2744,34 @@ class TestSelectLocalDeviceBoundary:
     def test_local_id_not_found(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DEVICE_ID", "dev_missing")
         svc = _make_svc(tmp_path)
-        devices = [{"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]}]
+        devices = [
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            }
+        ]
         result = svc._select_local_device(devices, {"raw_context": {}})
         assert len(result) == 0
 
     def test_primary_eligible(self, tmp_path):
         svc = _make_svc(tmp_path)
-        devices = [{"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}], "isPrimary": True}]
+        devices = [
+            {
+                "id": "dev1",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+                "isPrimary": True,
+            }
+        ]
         result = svc._select_local_device(devices, {"raw_context": {}})
         assert len(result) == 1
 
     def test_primary_ineligible(self, tmp_path):
         svc = _make_svc(tmp_path)
-        devices = [{"id": "dev1", "status": "offline", "tools": [{"toolName": "codex"}], "isPrimary": True}]
+        devices = [
+            {"id": "dev1", "status": "offline", "tools": [{"toolName": "codex"}], "isPrimary": True}
+        ]
         result = svc._select_local_device(devices, {"raw_context": {}})
         assert len(result) == 0
 
@@ -2689,7 +2779,11 @@ class TestSelectLocalDeviceBoundary:
         svc = _make_svc(tmp_path)
         devices = [
             {"id": "dev1", "status": "offline", "tools": [{"toolName": "codex"}]},
-            {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+            {
+                "id": "dev2",
+                "status": "online",
+                "tools": [{"toolName": "codex", "status": "installed"}],
+            },
         ]
         result = svc._select_local_device(devices, {"raw_context": {}})
         assert len(result) == 1

@@ -596,7 +596,9 @@ def _admin_duty_records_from_roster() -> list[dict[str, Any]]:
     for eid in roster_ids:
         raw = dict(registry_by_id.get(eid) or {})
         manifest = _admin_employee_manifest(eid)
-        employee_meta = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+        employee_meta = (
+            manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+        )
         raw.setdefault("id", eid)
         raw.setdefault("pkg_id", eid)
         raw.setdefault("name", manifest.get("name") or employee_meta.get("label") or eid)
@@ -3418,9 +3420,11 @@ async def mobile_payment_plans(request: Request, user=Depends(get_mobile_user)):
         if isinstance(payload, dict) and payload.get("__proxy_error__"):
             status = int(payload.get("status_code") or 502)
             return JSONResponse(
-                format_mobile_response(payload.get("payload"), "套餐加载失败", success=False, code=status),
+                format_mobile_response(
+                    payload.get("payload"), "套餐加载失败", success=False, code=status
+                ),
                 status_code=status,
-        )
+            )
         if isinstance(payload, dict):
             payload = {
                 **payload,
@@ -3455,9 +3459,7 @@ async def mobile_payment_checkout(
         from app.fastapi_routes.market_account import _proxy_json
 
         checkout_body = dict(body or {})
-        checkout_body["channel"] = _normalize_mobile_payment_channel(
-            checkout_body.get("channel")
-        )
+        checkout_body["channel"] = _normalize_mobile_payment_channel(checkout_body.get("channel"))
         checkout_body["client"] = str(checkout_body.get("client") or "android").strip()
         checkout_body.setdefault("return_url", "xcagi://payment/complete")
         signed = await _proxy_json(
@@ -3470,7 +3472,9 @@ async def mobile_payment_checkout(
         if isinstance(signed, dict) and signed.get("__proxy_error__"):
             status = int(signed.get("status_code") or 502)
             return JSONResponse(
-                format_mobile_response(signed.get("payload"), "支付签名失败", success=False, code=status),
+                format_mobile_response(
+                    signed.get("payload"), "支付签名失败", success=False, code=status
+                ),
                 status_code=status,
             )
         if isinstance(signed, dict):
@@ -3485,7 +3489,9 @@ async def mobile_payment_checkout(
         if isinstance(payload, dict) and payload.get("__proxy_error__"):
             status = int(payload.get("status_code") or 502)
             return JSONResponse(
-                format_mobile_response(payload.get("payload"), "支付下单失败", success=False, code=status),
+                format_mobile_response(
+                    payload.get("payload"), "支付下单失败", success=False, code=status
+                ),
                 status_code=status,
             )
         return format_mobile_response(data=payload, message="下单成功")
@@ -3518,7 +3524,9 @@ async def mobile_payment_query(
         if isinstance(payload, dict) and payload.get("__proxy_error__"):
             status = int(payload.get("status_code") or 502)
             return JSONResponse(
-                format_mobile_response(payload.get("payload"), "订单查询失败", success=False, code=status),
+                format_mobile_response(
+                    payload.get("payload"), "订单查询失败", success=False, code=status
+                ),
                 status_code=status,
             )
         return format_mobile_response(data=payload)

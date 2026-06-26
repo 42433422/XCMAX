@@ -377,6 +377,7 @@ constructor(
                         showCodex = isEnterprise || adminMode,
                         showCursor = isEnterprise || adminMode,
                         showClaude = isEnterprise || adminMode,
+                        showTrae = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                         timestamps = timestamps,
                         previews = previews,
@@ -1186,6 +1187,7 @@ constructor(
             showCodex: Boolean,
             showCursor: Boolean,
             showClaude: Boolean,
+            showTrae: Boolean,
             showCustomerService: Boolean,
             timestamps: Map<String, Long>,
             previews: Map<String, String>,
@@ -1244,6 +1246,21 @@ constructor(
                             subtitle = cachedConversationPreview(PinnedIds.CLAUDE, previews)
                                 .ifBlank { "全设备协同 · 排比派工" },
                             timestamp = cachedConversationTimestamp(PinnedIds.CLAUDE, timestamps),
+                            isOnline = true,
+                            isPinned = true,
+                    )
+                )
+        }
+
+        if (showTrae) {
+                items.add(
+                    ConversationItem(
+                            id = PinnedIds.TRAE,
+                            type = ConversationType.PINNED_TRAE,
+                            title = "超级员工-Trae",
+                            subtitle = cachedConversationPreview(PinnedIds.TRAE, previews)
+                                .ifBlank { "全设备协同 · Trae" },
+                            timestamp = cachedConversationTimestamp(PinnedIds.TRAE, timestamps),
                             isOnline = true,
                             isPinned = true,
                     )

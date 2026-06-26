@@ -694,7 +694,10 @@ class TestVectorStoreFactoryBranches:
         with (
             patch.object(evas_mod, "_sqlite_vector_store_instance", None),
             patch.object(evas_mod, "SQLiteVectorStore", return_value=mock_sqlite),
-            patch("app.application.excel_vector_app_service._default_vector_db_path", return_value="/tmp/test.db"),
+            patch(
+                "app.application.excel_vector_app_service._default_vector_db_path",
+                return_value="/tmp/test.db",
+            ),
         ):
             result = get_sqlite_vector_store()
         assert result is mock_sqlite

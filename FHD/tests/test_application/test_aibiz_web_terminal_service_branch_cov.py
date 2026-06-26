@@ -1905,9 +1905,7 @@ class TestLoadSurfacePngBytesBranchCov:
                 return_value=None,
             ),
         ):
-            result = await _load_surface_png_bytes(
-                "P-S", 0, prefer_remote=False, authorization=""
-            )
+            result = await _load_surface_png_bytes("P-S", 0, prefer_remote=False, authorization="")
         # No file, no resolve, no b64 → None
         assert result is None
 
@@ -1951,9 +1949,7 @@ class TestLoadSurfacePngBytesBranchCov:
             # This should be caught by the outer try/except in _page_bytes? No, _page_bytes has no try/except
             # The exception will propagate up
             with pytest.raises(FileNotFoundError):
-                await _load_surface_png_bytes(
-                    "P-S", 0, prefer_remote=False, authorization=""
-                )
+                await _load_surface_png_bytes("P-S", 0, prefer_remote=False, authorization="")
 
     @pytest.mark.asyncio
     async def test_remote_path_200_returns_content(self):
@@ -2046,9 +2042,7 @@ class TestLoadSurfacePngBytesBranchCov:
                 return_value=None,
             ),
         ):
-            result = await _load_surface_png_bytes(
-                "P-W", 0, prefer_remote=True, authorization=""
-            )
+            result = await _load_surface_png_bytes("P-W", 0, prefer_remote=True, authorization="")
         # Should call local (prefer_remote=True skips first local, no auth skips remote,
         # then falls to second local call)
         assert result == b"local"
@@ -2070,9 +2064,7 @@ class TestLoadSurfacePngBytesBranchCov:
                 return_value=None,
             ),
         ):
-            result = await _load_surface_png_bytes(
-                "P-S", 0, prefer_remote=False, authorization=""
-            )
+            result = await _load_surface_png_bytes("P-S", 0, prefer_remote=False, authorization="")
         assert result == b"b64 only png"
 
 

@@ -88,10 +88,7 @@ class TestDeriveAccountKindFromUser:
         assert derive_account_kind_from_user(tier="admin") == "admin"
 
     def test_market_is_admin_returns_admin_even_if_tier_personal(self) -> None:
-        assert (
-            derive_account_kind_from_user(tier="personal", market_is_admin=True)
-            == "admin"
-        )
+        assert derive_account_kind_from_user(tier="personal", market_is_admin=True) == "admin"
 
     def test_tier_enterprise_returns_enterprise(self) -> None:
         assert derive_account_kind_from_user(tier="enterprise") == "enterprise"
@@ -103,12 +100,7 @@ class TestDeriveAccountKindFromUser:
         )
 
     def test_admin_overrides_enterprise(self) -> None:
-        assert (
-            derive_account_kind_from_user(
-                tier="enterprise", market_is_admin=True
-            )
-            == "admin"
-        )
+        assert derive_account_kind_from_user(tier="enterprise", market_is_admin=True) == "admin"
 
     def test_personal_when_no_flags(self) -> None:
         assert derive_account_kind_from_user(tier="personal") == "personal"
@@ -189,18 +181,16 @@ class TestCompanyBrandFromUserBlob:
         assert company_brand_from_user_blob({"username": "user1"}) == "user1"
 
     def test_empty_company_falls_back_to_display(self) -> None:
-        assert (
-            company_brand_from_user_blob({"company": "", "display_name": "D"}) == "D"
-        )
+        assert company_brand_from_user_blob({"company": "", "display_name": "D"}) == "D"
 
     def test_empty_all_returns_empty(self) -> None:
-        assert company_brand_from_user_blob({"company": "", "display_name": "", "username": ""}) == ""
+        assert (
+            company_brand_from_user_blob({"company": "", "display_name": "", "username": ""}) == ""
+        )
 
     def test_company_takes_priority_over_display_and_username(self) -> None:
         assert (
-            company_brand_from_user_blob(
-                {"company": "C", "display_name": "D", "username": "U"}
-            )
+            company_brand_from_user_blob({"company": "C", "display_name": "D", "username": "U"})
             == "C"
         )
 
@@ -211,16 +201,12 @@ class TestCompanyBrandFromUserBlob:
 class TestValidateAccountKindForMarket:
     def test_admin_with_market_admin_passes(self) -> None:
         assert (
-            validate_account_kind_for_market(
-                "admin", is_enterprise=False, is_market_admin=True
-            )
+            validate_account_kind_for_market("admin", is_enterprise=False, is_market_admin=True)
             is None
         )
 
     def test_admin_without_market_admin_returns_error(self) -> None:
-        err = validate_account_kind_for_market(
-            "admin", is_enterprise=True, is_market_admin=False
-        )
+        err = validate_account_kind_for_market("admin", is_enterprise=True, is_market_admin=False)
         assert err is not None
         assert "管理员" in err
 
@@ -247,9 +233,7 @@ class TestValidateAccountKindForMarket:
         )
 
     def test_personal_with_market_admin_returns_error(self) -> None:
-        err = validate_account_kind_for_market(
-            "personal", is_enterprise=True, is_market_admin=True
-        )
+        err = validate_account_kind_for_market("personal", is_enterprise=True, is_market_admin=True)
         assert err is not None
         assert "管理员" in err
 
@@ -262,9 +246,7 @@ class TestValidateAccountKindForMarket:
 
     def test_personal_with_enterprise_passes(self) -> None:
         assert (
-            validate_account_kind_for_market(
-                "personal", is_enterprise=True, is_market_admin=False
-            )
+            validate_account_kind_for_market("personal", is_enterprise=True, is_market_admin=False)
             is None
         )
 
@@ -345,9 +327,7 @@ class TestPersistSessionAccountMeta:
         with patch("app.application.session_account_meta.get_host_db") as mock_get:
             mock_get.return_value.__enter__.return_value = mock_db
             mock_get.return_value.__exit__.return_value = None
-            persist_session_account_meta(
-                "sid", account_kind="personal", market_user_id=None
-            )
+            persist_session_account_meta("sid", account_kind="personal", market_user_id=None)
             # market_user_id 不应被赋值（因为 None）
             mock_row.market_user_id = mock_row.market_user_id  # no-op
 
@@ -394,9 +374,7 @@ class TestPersistSessionAccountMeta:
         with patch("app.application.session_account_meta.get_host_db") as mock_get:
             mock_get.return_value.__enter__.return_value = mock_db
             mock_get.return_value.__exit__.return_value = None
-            persist_session_account_meta(
-                "sid", account_kind="personal", company_brand=long_brand
-            )
+            persist_session_account_meta("sid", account_kind="personal", company_brand=long_brand)
             assert len(mock_row.company_brand) == 256
 
     def test_recoverable_error_swallowed(self) -> None:
@@ -674,12 +652,13 @@ class TestEnrichSessionMetaWithTenant:
             assert "local_user_id" not in result
 
     def test_tenant_id_from_meta(self) -> None:
-        with patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "enterprise", "tenant_id": 5},
-        ), patch(
-            "app.application.session_account_meta.get_host_db"
-        ) as mock_get:
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise", "tenant_id": 5},
+            ),
+            patch("app.application.session_account_meta.get_host_db") as mock_get,
+        ):
             mock_db = MagicMock()
             mock_query = MagicMock()
             mock_filter = MagicMock()
@@ -696,10 +675,13 @@ class TestEnrichSessionMetaWithTenant:
         user.id = 1
         user.tenant_id = 7
         user.username = "u"
-        with patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "enterprise"},
-        ), patch("app.application.session_account_meta.get_host_db") as mock_get:
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise"},
+            ),
+            patch("app.application.session_account_meta.get_host_db") as mock_get,
+        ):
             mock_db = MagicMock()
             mock_query = MagicMock()
             mock_filter = MagicMock()
@@ -720,10 +702,13 @@ class TestEnrichSessionMetaWithTenant:
         mock_filter.first.return_value = mock_tenant
         mock_query.filter.return_value = mock_filter
         mock_db.query.return_value = mock_query
-        with patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "enterprise", "tenant_id": 3},
-        ), patch("app.application.session_account_meta.get_host_db") as mock_get:
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise", "tenant_id": 3},
+            ),
+            patch("app.application.session_account_meta.get_host_db") as mock_get,
+        ):
             mock_get.return_value.__enter__.return_value = mock_db
             mock_get.return_value.__exit__.return_value = None
             result = enrich_session_meta_with_tenant("sid", None)
@@ -736,14 +721,17 @@ class TestEnrichSessionMetaWithTenant:
         mock_filter.first.return_value = None
         mock_query.filter.return_value = mock_filter
         mock_db.query.return_value = mock_query
-        with patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={
-                "account_kind": "enterprise",
-                "tenant_id": 3,
-                "company_brand": "MyBrand",
-            },
-        ), patch("app.application.session_account_meta.get_host_db") as mock_get:
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={
+                    "account_kind": "enterprise",
+                    "tenant_id": 3,
+                    "company_brand": "MyBrand",
+                },
+            ),
+            patch("app.application.session_account_meta.get_host_db") as mock_get,
+        ):
             mock_get.return_value.__enter__.return_value = mock_db
             mock_get.return_value.__exit__.return_value = None
             result = enrich_session_meta_with_tenant("sid", None)
@@ -758,10 +746,13 @@ class TestEnrichSessionMetaWithTenant:
         mock_filter.first.return_value = mock_row
         mock_query.filter.return_value = mock_filter
         mock_db.query.return_value = mock_query
-        with patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "enterprise", "tenant_id": 5},
-        ), patch("app.application.session_account_meta.get_host_db") as mock_get:
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise", "tenant_id": 5},
+            ),
+            patch("app.application.session_account_meta.get_host_db") as mock_get,
+        ):
             mock_get.return_value.__enter__.return_value = mock_db
             mock_get.return_value.__exit__.return_value = None
             enrich_session_meta_with_tenant("sid", None)
@@ -773,13 +764,17 @@ class TestEnrichSessionMetaWithTenant:
         user.id = 1
         user.tenant_id = None
         user.username = "u"
-        with patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "enterprise", "local_user_id": 1},
-        ), patch(
-            "app.application.enterprise_login_flow.bind_tenant_for_login",
-            return_value={"tenant_id": 42, "tenant_name": "Bound"},
-        ), patch("app.application.session_account_meta.get_host_db") as mock_get:
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise", "local_user_id": 1},
+            ),
+            patch(
+                "app.application.enterprise_login_flow.bind_tenant_for_login",
+                return_value={"tenant_id": 42, "tenant_name": "Bound"},
+            ),
+            patch("app.application.session_account_meta.get_host_db") as mock_get,
+        ):
             mock_db = MagicMock()
             mock_query = MagicMock()
             mock_filter = MagicMock()
@@ -793,12 +788,15 @@ class TestEnrichSessionMetaWithTenant:
             assert result["tenant_name"] == "Bound"
 
     def test_tenant_lookup_error_swallowed(self) -> None:
-        with patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "enterprise", "tenant_id": 3},
-        ), patch(
-            "app.application.session_account_meta.get_host_db",
-            side_effect=RuntimeError("db down"),
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise", "tenant_id": 3},
+            ),
+            patch(
+                "app.application.session_account_meta.get_host_db",
+                side_effect=RuntimeError("db down"),
+            ),
         ):
             result = enrich_session_meta_with_tenant("sid", None)
             # 不应抛出；tenant_id 仍保留
@@ -893,30 +891,21 @@ class TestShouldReceiveEnterpriseDedicatedCs:
             "app.application.session_account_meta.load_session_account_meta",
             return_value={"account_kind": "admin", "market_is_admin": True},
         ):
-            assert (
-                should_receive_enterprise_dedicated_cs("sid", 1, MagicMock())
-                is False
-            )
+            assert should_receive_enterprise_dedicated_cs("sid", 1, MagicMock()) is False
 
     def test_meta_market_admin_returns_false(self) -> None:
         with patch(
             "app.application.session_account_meta.load_session_account_meta",
             return_value={"account_kind": "personal", "market_is_admin": True},
         ):
-            assert (
-                should_receive_enterprise_dedicated_cs("sid", 1, MagicMock())
-                is False
-            )
+            assert should_receive_enterprise_dedicated_cs("sid", 1, MagicMock()) is False
 
     def test_meta_enterprise_returns_true(self) -> None:
         with patch(
             "app.application.session_account_meta.load_session_account_meta",
             return_value={"account_kind": "enterprise", "market_is_admin": False},
         ):
-            assert (
-                should_receive_enterprise_dedicated_cs("sid", 1, MagicMock())
-                is True
-            )
+            assert should_receive_enterprise_dedicated_cs("sid", 1, MagicMock()) is True
 
     def test_meta_market_enterprise_returns_true(self) -> None:
         with patch(
@@ -927,10 +916,7 @@ class TestShouldReceiveEnterpriseDedicatedCs:
                 "market_is_enterprise": True,
             },
         ):
-            assert (
-                should_receive_enterprise_dedicated_cs("sid", 1, MagicMock())
-                is True
-            )
+            assert should_receive_enterprise_dedicated_cs("sid", 1, MagicMock()) is True
 
     def test_meta_impersonating_returns_true(self) -> None:
         with patch(
@@ -942,10 +928,7 @@ class TestShouldReceiveEnterpriseDedicatedCs:
                 "impersonating_market_user_id": 5,
             },
         ):
-            assert (
-                should_receive_enterprise_dedicated_cs("sid", 1, MagicMock())
-                is True
-            )
+            assert should_receive_enterprise_dedicated_cs("sid", 1, MagicMock()) is True
 
     def test_no_session_no_user_returns_false(self) -> None:
         assert should_receive_enterprise_dedicated_cs(None, None, None) is False
@@ -1022,9 +1005,7 @@ class TestShouldReceiveEnterpriseDedicatedCs:
             mock_user.role = "user"
             mock_db = MagicMock()
             mock_db.get.return_value = mock_user
-            assert (
-                should_receive_enterprise_dedicated_cs("", 1, mock_db) is True
-            )
+            assert should_receive_enterprise_dedicated_cs("", 1, mock_db) is True
 
 
 # ───────────────────── effective_entitlement_market_user_id ─────────────────────

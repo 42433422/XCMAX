@@ -185,19 +185,7 @@ class TestStaffingAreasFromDoc:
         assert result == []
 
     def test_nested_subzones_recursion(self):
-        doc = {
-            "areas": {
-                "zone1": {
-                    "subzones": {
-                        "sub1": {
-                            "subzones": {
-                                "deep1": {"ids": ["e1"]}
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        doc = {"areas": {"zone1": {"subzones": {"sub1": {"subzones": {"deep1": {"ids": ["e1"]}}}}}}}
         result = _staffing_areas_from_doc(doc, set())
         assert len(result) == 1
         assert result[0]["key"] == "zone1/sub1/deep1"
@@ -228,9 +216,7 @@ class TestReadLocalEmployeeManifest:
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = [str(tmp_path)]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("  emp-1  ")
 
         assert result is not None
@@ -242,17 +228,13 @@ class TestReadLocalEmployeeManifest:
     def test_all_mods_roots_returns_none_falls_to_primary(self, tmp_path):
         emp_dir = tmp_path / "_employees" / "emp-1"
         emp_dir.mkdir(parents=True)
-        (emp_dir / "manifest.json").write_text(
-            json.dumps({"name": "Test"}), encoding="utf-8"
-        )
+        (emp_dir / "manifest.json").write_text(json.dumps({"name": "Test"}), encoding="utf-8")
 
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = None
         mgr.mods_root = str(tmp_path)
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is not None
@@ -261,17 +243,13 @@ class TestReadLocalEmployeeManifest:
     def test_all_mods_roots_empty_falls_to_primary(self, tmp_path):
         emp_dir = tmp_path / "_employees" / "emp-1"
         emp_dir.mkdir(parents=True)
-        (emp_dir / "manifest.json").write_text(
-            json.dumps({"name": "Test"}), encoding="utf-8"
-        )
+        (emp_dir / "manifest.json").write_text(json.dumps({"name": "Test"}), encoding="utf-8")
 
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = []
         mgr.mods_root = str(tmp_path)
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is not None
@@ -279,17 +257,13 @@ class TestReadLocalEmployeeManifest:
     def test_all_mods_roots_raises_error_falls_to_primary(self, tmp_path):
         emp_dir = tmp_path / "_employees" / "emp-1"
         emp_dir.mkdir(parents=True)
-        (emp_dir / "manifest.json").write_text(
-            json.dumps({"name": "Test"}), encoding="utf-8"
-        )
+        (emp_dir / "manifest.json").write_text(json.dumps({"name": "Test"}), encoding="utf-8")
 
         mgr = MagicMock()
         mgr.all_mods_roots.side_effect = RuntimeError("fail")
         mgr.mods_root = str(tmp_path)
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is not None
@@ -299,9 +273,7 @@ class TestReadLocalEmployeeManifest:
         mgr.all_mods_roots.return_value = []
         mgr.mods_root = None
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is None
@@ -311,9 +283,7 @@ class TestReadLocalEmployeeManifest:
         mgr.all_mods_roots.return_value = []
         mgr.mods_root = ""
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is None
@@ -322,9 +292,7 @@ class TestReadLocalEmployeeManifest:
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = [str(tmp_path)]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("nonexistent")
 
         assert result is None
@@ -332,17 +300,13 @@ class TestReadLocalEmployeeManifest:
     def test_empty_mods_root_skipped(self, tmp_path):
         emp_dir = tmp_path / "_employees" / "emp-1"
         emp_dir.mkdir(parents=True)
-        (emp_dir / "manifest.json").write_text(
-            json.dumps({"name": "Test"}), encoding="utf-8"
-        )
+        (emp_dir / "manifest.json").write_text(json.dumps({"name": "Test"}), encoding="utf-8")
 
         mgr = MagicMock()
         # First root is empty (should be skipped), second has the file
         mgr.all_mods_roots.return_value = ["", str(tmp_path)]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is not None
@@ -350,16 +314,12 @@ class TestReadLocalEmployeeManifest:
     def test_none_mods_root_skipped(self, tmp_path):
         emp_dir = tmp_path / "_employees" / "emp-1"
         emp_dir.mkdir(parents=True)
-        (emp_dir / "manifest.json").write_text(
-            json.dumps({"name": "Test"}), encoding="utf-8"
-        )
+        (emp_dir / "manifest.json").write_text(json.dumps({"name": "Test"}), encoding="utf-8")
 
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = [None, str(tmp_path)]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is not None
@@ -367,16 +327,12 @@ class TestReadLocalEmployeeManifest:
     def test_non_dict_manifest_returns_none(self, tmp_path):
         emp_dir = tmp_path / "_employees" / "emp-1"
         emp_dir.mkdir(parents=True)
-        (emp_dir / "manifest.json").write_text(
-            json.dumps([1, 2, 3]), encoding="utf-8"
-        )
+        (emp_dir / "manifest.json").write_text(json.dumps([1, 2, 3]), encoding="utf-8")
 
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = [str(tmp_path)]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is None
@@ -389,9 +345,7 @@ class TestReadLocalEmployeeManifest:
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = [str(tmp_path)]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is None
@@ -419,9 +373,7 @@ class TestReadLocalEmployeeManifest:
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = [str(root1), str(root2)]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is not None
@@ -431,16 +383,12 @@ class TestReadLocalEmployeeManifest:
         emp_dir = tmp_path / "_employees" / "emp-1"
         emp_dir.mkdir(parents=True)
         manifest = {"name": "Test", "version": "2.0", "custom_field": "value"}
-        (emp_dir / "manifest.json").write_text(
-            json.dumps(manifest), encoding="utf-8"
-        )
+        (emp_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
         mgr = MagicMock()
         mgr.all_mods_roots.return_value = [str(tmp_path)]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr
-        ):
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
             result = read_local_employee_manifest("emp-1")
 
         assert result is not None

@@ -68,8 +68,9 @@ class TestDefaultModsRoot:
         mods_dir = tmp_path / "mods"
         mods_dir.mkdir()
 
-        with patch.dict("os.environ", {"XCAGI_MODS_ROOT": "/nonexistent/xyz"}, clear=False), patch(
-            "app.infrastructure.mods.mod_manager.__file__", str(fake_file)
+        with (
+            patch.dict("os.environ", {"XCAGI_MODS_ROOT": "/nonexistent/xyz"}, clear=False),
+            patch("app.infrastructure.mods.mod_manager.__file__", str(fake_file)),
         ):
             result = _default_mods_root()
             assert isinstance(result, str)
@@ -82,9 +83,10 @@ class TestDefaultModsRoot:
             assert os.path.abspath(str(tmp_path)) == result
 
     def test_env_xcagi_mods_dir_valid(self, tmp_path: Path) -> None:
-        with patch.dict(
-            "os.environ", {"XCAGI_MODS_DIR": str(tmp_path)}, clear=False
-        ), patch.dict("os.environ", {"XCAGI_MODS_ROOT": ""}, clear=False):
+        with (
+            patch.dict("os.environ", {"XCAGI_MODS_DIR": str(tmp_path)}, clear=False),
+            patch.dict("os.environ", {"XCAGI_MODS_ROOT": ""}, clear=False),
+        ):
             result = _default_mods_root()
             assert os.path.abspath(str(tmp_path)) == result
 
@@ -97,8 +99,9 @@ class TestDefaultModsRoot:
         mods_dir = tmp_path / "mods"
         mods_dir.mkdir()
 
-        with patch.dict("os.environ", {}, clear=True), patch(
-            "app.infrastructure.mods.mod_manager.__file__", str(fake_file)
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("app.infrastructure.mods.mod_manager.__file__", str(fake_file)),
         ):
             result = _default_mods_root()
             assert mods_dir.exists()
@@ -115,15 +118,18 @@ class TestDefaultModsRoot:
         cwd_mods.mkdir()
 
         monkeypatch.chdir(tmp_path)
-        with patch.dict("os.environ", {}, clear=True), patch(
-            "app.infrastructure.mods.mod_manager.__file__", str(fake_file)
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("app.infrastructure.mods.mod_manager.__file__", str(fake_file)),
         ):
             result = _default_mods_root()
             assert "mods" in result
 
     def test_walk_up_finds_mods(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """向上 8 级查找 mods 目录。"""
-        fake_file = tmp_path / "a" / "b" / "c" / "d" / "app" / "infrastructure" / "mods" / "mod_manager.py"
+        fake_file = (
+            tmp_path / "a" / "b" / "c" / "d" / "app" / "infrastructure" / "mods" / "mod_manager.py"
+        )
         fake_file.parent.mkdir(parents=True)
         fake_file.write_text("")
 
@@ -134,13 +140,16 @@ class TestDefaultModsRoot:
         walk_mods.mkdir()
 
         monkeypatch.chdir(deep_cwd)
-        with patch.dict("os.environ", {}, clear=True), patch(
-            "app.infrastructure.mods.mod_manager.__file__", str(fake_file)
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("app.infrastructure.mods.mod_manager.__file__", str(fake_file)),
         ):
             result = _default_mods_root()
             assert "mods" in result
 
-    def test_walk_up_reaches_root_returns_fallback(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_walk_up_reaches_root_returns_fallback(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """向上查找到达根目录仍无 mods → 返回包相对路径（兜底）。"""
         sandbox = tmp_path / "sandbox"
         sandbox.mkdir()
@@ -160,9 +169,11 @@ class TestDefaultModsRoot:
                 return False
             return real_isdir(p)
 
-        with patch.dict("os.environ", {}, clear=True), patch(
-            "app.infrastructure.mods.mod_manager.__file__", str(fake_file)
-        ), patch("os.path.isdir", side_effect=_fake_isdir):
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("app.infrastructure.mods.mod_manager.__file__", str(fake_file)),
+            patch("os.path.isdir", side_effect=_fake_isdir),
+        ):
             result = _default_mods_root()
             assert isinstance(result, str)
             assert result.endswith("mods")
@@ -392,10 +403,13 @@ class TestRegisterModHooks:
             hooks={"event": "hooks.on_event"},
         )
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.import_mod_backend_py",
-            side_effect=OSError("disk error"),
-        ), caplog.at_level("ERROR"):
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.import_mod_backend_py",
+                side_effect=OSError("disk error"),
+            ),
+            caplog.at_level("ERROR"),
+        ):
             _register_mod_hooks("m", m)
         assert any("Failed to register hook" in r.message for r in caplog.records)
 
@@ -430,19 +444,23 @@ class TestEnsureModsLoaded:
 
     def test_already_loaded_returns_early(self) -> None:
         mm = ModManager(mods_root="/tmp")
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "list_loaded_mods", return_value=[MagicMock()]) as llm, \
-             patch.object(mm, "scan_mods") as sm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "list_loaded_mods", return_value=[MagicMock()]) as llm,
+            patch.object(mm, "scan_mods") as sm,
+        ):
             mm.ensure_mods_loaded(app=None)
             llm.assert_called_once()
             sm.assert_not_called()
 
     def test_no_discovered_returns(self) -> None:
         mm = ModManager(mods_root="/tmp")
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "list_loaded_mods", return_value=[]), \
-             patch.object(mm, "scan_mods", return_value=[]), \
-             patch.object(mm, "load_all_mods") as lam:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", return_value=[]),
+            patch.object(mm, "load_all_mods") as lam,
+        ):
             mm.ensure_mods_loaded(app=None)
             lam.assert_not_called()
 
@@ -452,38 +470,46 @@ class TestEnsureModsLoaded:
 
         mm = ModManager(mods_root="/tmp")
         mm._last_ensure_at = time.monotonic()  # 刚刚
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "list_loaded_mods", return_value=[]), \
-             patch.object(mm, "scan_mods", return_value=[MagicMock()]), \
-             patch.object(mm, "load_all_mods") as lam:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as lam,
+        ):
             mm.ensure_mods_loaded(app=None)
             lam.assert_not_called()
 
     def test_max_attempts_reached_returns(self) -> None:
         mm = ModManager(mods_root="/tmp")
         mm._ensure_attempts = 20
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "list_loaded_mods", return_value=[]), \
-             patch.object(mm, "scan_mods", return_value=[MagicMock()]), \
-             patch.object(mm, "load_all_mods") as lam:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as lam,
+        ):
             mm.ensure_mods_loaded(app=None)
             lam.assert_not_called()
 
     def test_successful_load_calls_load_all_and_routes(self) -> None:
         mm = ModManager(mods_root="/tmp")
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "list_loaded_mods", return_value=[]), \
-             patch.object(mm, "scan_mods", return_value=[MagicMock()]), \
-             patch.object(mm, "load_all_mods") as lam, \
-             patch("app.infrastructure.mods.mod_manager.load_mod_routes") as lmr:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", return_value=[MagicMock()]),
+            patch.object(mm, "load_all_mods") as lam,
+            patch("app.infrastructure.mods.mod_manager.load_mod_routes") as lmr,
+        ):
             mm.ensure_mods_loaded(app="myapp")
             lam.assert_called_once()
             lmr.assert_called_once_with("myapp", mm)
 
     def test_recoverable_error_swallowed(self) -> None:
         mm = ModManager(mods_root="/tmp")
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "_refresh_mods_root_if_needed", side_effect=OSError("boom")):
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "_refresh_mods_root_if_needed", side_effect=OSError("boom")),
+        ):
             # 不应抛异常
             mm.ensure_mods_loaded(app=None)
 
@@ -550,9 +576,7 @@ class TestScanModsFromBuildIndex:
 
         index_path = tmp_path / "mods-index.json"
         index_path.write_text(
-            json.dumps(
-                {"fingerprint": "fp1", "mods": [{"mod_path": str(mod_dir)}]}
-            )
+            json.dumps({"fingerprint": "fp1", "mods": [{"mod_path": str(mod_dir)}]})
         )
         mm = ModManager(mods_root=str(tmp_path))
         with patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]):
@@ -598,8 +622,10 @@ class TestScanModsCacheAndIndex:
         mm._scan_cache_fp = "cached_fp"
         cached_mod = MagicMock()
         mm._scan_cache_mods = [cached_mod]
-        with patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "_mods_scan_fingerprint", return_value="cached_fp"):
+        with (
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "_mods_scan_fingerprint", return_value="cached_fp"),
+        ):
             result = mm.scan_mods(use_cache=True)
             assert len(result) == 1
             assert result[0] is cached_mod
@@ -615,9 +641,11 @@ class TestScanModsCacheAndIndex:
         )
 
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"), \
-             patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]):
+        with (
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"),
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+        ):
             result = mm.scan_mods(use_cache=True)
             assert len(result) == 1
             assert result[0].id == "idx-mod"
@@ -631,21 +659,27 @@ class TestScanModsCacheAndIndex:
         (mod_dir / "manifest.json").write_text(json.dumps({"id": "live-mod", "name": "Live"}))
 
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"), \
-             patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]), \
-             patch.object(mm, "_scan_mods_from_build_index") as sbi:
+        with (
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"),
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch.object(mm, "_scan_mods_from_build_index") as sbi,
+        ):
             result = mm.scan_mods(use_cache=False)
             sbi.assert_not_called()
             assert len(result) == 1
             assert result[0].id == "live-mod"
 
-    def test_root_not_dir_logs_warning(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    def test_root_not_dir_logs_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"), \
-             patch.object(mm, "all_mods_roots", return_value=["/nonexistent/xyz"]), \
-             patch.object(mm, "_scan_mods_from_build_index", return_value=None):
+        with (
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"),
+            patch.object(mm, "all_mods_roots", return_value=["/nonexistent/xyz"]),
+            patch.object(mm, "_scan_mods_from_build_index", return_value=None),
+        ):
             with caplog.at_level("WARNING"):
                 result = mm.scan_mods()
             assert result == []
@@ -655,32 +689,40 @@ class TestScanModsCacheAndIndex:
         (tmp_path / "_internal").mkdir()
         (tmp_path / "_internal" / "manifest.json").write_text(json.dumps({"id": "internal"}))
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"), \
-             patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]), \
-             patch.object(mm, "_scan_mods_from_build_index", return_value=None):
+        with (
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"),
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch.object(mm, "_scan_mods_from_build_index", return_value=None),
+        ):
             result = mm.scan_mods()
             assert result == []
 
     def test_non_dir_entry_skipped(self, tmp_path: Path) -> None:
         (tmp_path / "file.txt").write_text("not a dir")
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"), \
-             patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]), \
-             patch.object(mm, "_scan_mods_from_build_index", return_value=None):
+        with (
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"),
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch.object(mm, "_scan_mods_from_build_index", return_value=None),
+        ):
             result = mm.scan_mods()
             assert result == []
 
-    def test_manifest_parse_failed_records_error(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    def test_manifest_parse_failed_records_error(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         mod_dir = tmp_path / "broken-mod"
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text("not json {{{")
         mm = ModManager(mods_root=str(tmp_path))
-        with patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"), \
-             patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]), \
-             patch.object(mm, "_scan_mods_from_build_index", return_value=None):
+        with (
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"),
+            patch.object(mm, "all_mods_roots", return_value=[str(tmp_path)]),
+            patch.object(mm, "_scan_mods_from_build_index", return_value=None),
+        ):
             with caplog.at_level("WARNING"):
                 result = mm.scan_mods()
             assert result == []
@@ -699,10 +741,12 @@ class TestScanModsCacheAndIndex:
             (mod_dir / "manifest.json").write_text(json.dumps({"id": "same-mod", "name": "Same"}))
 
         mm = ModManager(mods_root=str(root1))
-        with patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"), \
-             patch.object(mm, "all_mods_roots", return_value=[str(root1), str(root2)]), \
-             patch.object(mm, "_scan_mods_from_build_index", return_value=None):
+        with (
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "_mods_scan_fingerprint", return_value="fp1"),
+            patch.object(mm, "all_mods_roots", return_value=[str(root1), str(root2)]),
+            patch.object(mm, "_scan_mods_from_build_index", return_value=None),
+        ):
             result = mm.scan_mods()
             assert len(result) == 1
             assert result[0].id == "same-mod"
@@ -730,11 +774,10 @@ class TestLoadModBranches:
         """注册表已有 metadata 但 _loaded_mods 漏记 → 同步列表。"""
         mm = ModManager(mods_root="/tmp")
         meta = ModMetadata(id="loaded-mod", name="Loaded", version="1.0.0")
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr:
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = meta
             gr.return_value = reg
@@ -743,11 +786,10 @@ class TestLoadModBranches:
 
     def test_mod_path_not_found_returns_false(self) -> None:
         mm = ModManager(mods_root="/tmp")
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr:
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None
             gr.return_value = reg
@@ -761,11 +803,10 @@ class TestLoadModBranches:
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text("not json {{{")
         mm = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr:
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None
             gr.return_value = reg
@@ -784,14 +825,11 @@ class TestLoadModBranches:
             mod_path="/mods/bundle",
             artifact="bundle",
         )
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr, patch(
-            "app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta
-        ), patch(
-            "app.infrastructure.mods.mod_manager.normalize_artifact", return_value="bundle"
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="bundle"),
         ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = meta  # 已注册
@@ -808,14 +846,11 @@ class TestLoadModBranches:
             mod_path="/mods/bundle",
             artifact="bundle",
         )
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr, patch(
-            "app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta
-        ), patch(
-            "app.infrastructure.mods.mod_manager.normalize_artifact", return_value="bundle"
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="bundle"),
         ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None  # 未注册
@@ -836,14 +871,11 @@ class TestLoadModBranches:
             mod_path="/mods/bundle",
             artifact="bundle",
         )
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr, patch(
-            "app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta
-        ), patch(
-            "app.infrastructure.mods.mod_manager.normalize_artifact", return_value="bundle"
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="bundle"),
         ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None
@@ -861,16 +893,12 @@ class TestLoadModBranches:
             mod_path="/mods/dep",
             dependencies={"other-mod": ">=1.0.0"},
         )
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr, patch(
-            "app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta
-        ), patch(
-            "app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.validate_dependencies", return_value=False
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"),
+            patch("app.infrastructure.mods.mod_manager.validate_dependencies", return_value=False),
         ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None
@@ -889,24 +917,21 @@ class TestLoadModBranches:
             version="1.0.0",
             mod_path="/mods/backend",
         )
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr, patch(
-            "app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta
-        ), patch(
-            "app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.validate_dependencies", return_value=True
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"),
+            patch("app.infrastructure.mods.mod_manager.validate_dependencies", return_value=True),
         ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None
             reg.list_mod_ids.return_value = []
             gr.return_value = reg
-            with patch.object(
-                mm, "_load_mod_backend", side_effect=OSError("backend boom")
-            ), patch.object(mm, "resolve_mod_directory", return_value="/mods/backend"):
+            with (
+                patch.object(mm, "_load_mod_backend", side_effect=OSError("backend boom")),
+                patch.object(mm, "resolve_mod_directory", return_value="/mods/backend"),
+            ):
                 assert mm.load_mod("backend-mod") is False
                 failures = mm.get_recent_load_failures()
                 assert any(f["stage"] == "backend" for f in failures)
@@ -919,23 +944,20 @@ class TestLoadModBranches:
             version="1.0.0",
             mod_path="/mods/real",
         )
-        with patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry"
-        ) as gr, patch(
-            "app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta
-        ), patch(
-            "app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"
-        ), patch(
-            "app.infrastructure.mods.mod_manager.validate_dependencies", return_value=True
+        with (
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.parse_manifest", return_value=meta),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"),
+            patch("app.infrastructure.mods.mod_manager.validate_dependencies", return_value=True),
         ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None
             reg.list_mod_ids.return_value = []
             gr.return_value = reg
-            with patch.object(mm, "_load_mod_backend") as lb, patch.object(
-                mm, "resolve_mod_directory", return_value="/mods/real"
+            with (
+                patch.object(mm, "_load_mod_backend") as lb,
+                patch.object(mm, "resolve_mod_directory", return_value="/mods/real"),
             ):
                 assert mm.load_mod("requested-id") is True
                 lb.assert_called_once()
@@ -1153,12 +1175,18 @@ class TestInstallModPackage:
 
     def test_sku_blocked_returns_false(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        with patch(
-            "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-            return_value=(str(tmp_path / "extracted"), {"id": "blocked-mod", "version": "1.0.0"}),
-        ), patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku",
-            side_effect=PermissionError("sku blocked"),
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(
+                    str(tmp_path / "extracted"),
+                    {"id": "blocked-mod", "version": "1.0.0"},
+                ),
+            ),
+            patch(
+                "app.mod_sdk.product_skus.assert_mod_allowed_for_sku",
+                side_effect=PermissionError("sku blocked"),
+            ),
         ):
             ok, msg, meta = mm.install_mod_package("/pkg.xcmod")
             assert ok is False
@@ -1170,7 +1198,9 @@ class TestInstallModPackage:
         mods_root.mkdir()
         existing = mods_root / "existing-mod"
         existing.mkdir()
-        (existing / "manifest.json").write_text(json.dumps({"id": "existing-mod", "version": "1.0.0"}))
+        (existing / "manifest.json").write_text(
+            json.dumps({"id": "existing-mod", "version": "1.0.0"})
+        )
 
         extract_dir = tmp_path / "extract"
         extract_dir.mkdir()
@@ -1179,12 +1209,17 @@ class TestInstallModPackage:
         )
 
         mm = ModManager(mods_root=str(mods_root))
-        with patch(
-            "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-            return_value=(str(extract_dir), {"id": "existing-mod", "name": "Existing", "version": "2.0.0"}),
-        ), patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch.object(mm, "load_mod", return_value=False):
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(
+                    str(extract_dir),
+                    {"id": "existing-mod", "name": "Existing", "version": "2.0.0"},
+                ),
+            ),
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch.object(mm, "load_mod", return_value=False),
+        ):
             ok, msg, meta = mm.install_mod_package("/pkg.xcmod", activate=True)
             assert ok is False  # 加载失败
             assert "加载失败" in msg
@@ -1199,12 +1234,17 @@ class TestInstallModPackage:
         )
 
         mm = ModManager(mods_root=str(mods_root))
-        with patch(
-            "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-            return_value=(str(extract_dir), {"id": "new-mod", "name": "New", "version": "1.0.0"}),
-        ), patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch.object(mm, "load_mod", return_value=True):
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(
+                    str(extract_dir),
+                    {"id": "new-mod", "name": "New", "version": "1.0.0"},
+                ),
+            ),
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch.object(mm, "load_mod", return_value=True),
+        ):
             ok, msg, meta = mm.install_mod_package("/pkg.xcmod", activate=True)
             assert ok is True
             assert "安装成功" in msg
@@ -1220,12 +1260,17 @@ class TestInstallModPackage:
         )
 
         mm = ModManager(mods_root=str(mods_root))
-        with patch(
-            "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-            return_value=(str(extract_dir), {"id": "inactive-mod", "name": "Inactive", "version": "1.0.0"}),
-        ), patch(
-            "app.mod_sdk.product_skus.assert_mod_allowed_for_sku"
-        ), patch.object(mm, "load_mod") as lm:
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(
+                    str(extract_dir),
+                    {"id": "inactive-mod", "name": "Inactive", "version": "1.0.0"},
+                ),
+            ),
+            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
+            patch.object(mm, "load_mod") as lm,
+        ):
             ok, msg, meta = mm.install_mod_package("/pkg.xcmod", activate=False)
             assert ok is True
             assert "未激活" in msg
@@ -1261,9 +1306,7 @@ class TestUninstallMod:
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None
             gr.return_value = reg
-            with patch(
-                "app.infrastructure.mods.employee_registry.get_employee_registry"
-            ) as ge:
+            with patch("app.infrastructure.mods.employee_registry.get_employee_registry") as ge:
                 er = MagicMock()
                 er._root.return_value = str(mods_root / "_employees")
                 er.uninstall_pack.return_value = (True, "employee pack uninstalled")
@@ -1280,9 +1323,7 @@ class TestUninstallMod:
             reg = MagicMock()
             reg.get_mod_metadata.return_value = None
             gr.return_value = reg
-            with patch(
-                "app.infrastructure.mods.employee_registry.get_employee_registry"
-            ) as ge:
+            with patch("app.infrastructure.mods.employee_registry.get_employee_registry") as ge:
                 er = MagicMock()
                 er._root.return_value = str(mods_root / "_employees")
                 ge.return_value = er
@@ -1371,17 +1412,22 @@ class TestUpdateMod:
         extract_dir.mkdir()
         (extract_dir / "manifest.json").write_text(json.dumps({"id": "up-mod", "version": "2.0.0"}))
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.ModPackage") as MP, \
-             patch.object(mm, "unload_mod") as ul, \
-             patch.object(mm, "load_mod", return_value=True) as lm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.ModPackage") as MP,
+            patch.object(mm, "unload_mod") as ul,
+            patch.object(mm, "load_mod", return_value=True) as lm,
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = cur_meta
             gr.return_value = reg
             pkg = MagicMock()
             pkg.manifest = {"id": "up-mod", "version": "2.0.0"}
             MP.return_value = pkg
-            MP.extract_package.return_value = (str(extract_dir), {"id": "up-mod", "version": "2.0.0"})
+            MP.extract_package.return_value = (
+                str(extract_dir),
+                {"id": "up-mod", "version": "2.0.0"},
+            )
             ok, msg, meta = mm.update_mod("up-mod", "/pkg.xcmod")
             assert ok is True
             assert "更新成功" in msg
@@ -1399,10 +1445,12 @@ class TestUpdateMod:
         mm._loaded_mods.append("fail-mod")
         cur_meta = ModMetadata(id="fail-mod", name="Fail", version="1.0.0")
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.ModPackage") as MP, \
-             patch.object(mm, "unload_mod"), \
-             patch.object(mm, "load_mod", return_value=True) as lm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.ModPackage") as MP,
+            patch.object(mm, "unload_mod"),
+            patch.object(mm, "load_mod", return_value=True) as lm,
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = cur_meta
             gr.return_value = reg
@@ -1420,26 +1468,35 @@ class TestUpdateMod:
         mods_root.mkdir()
         mod_dir = mods_root / "reload-fail"
         mod_dir.mkdir()
-        (mod_dir / "manifest.json").write_text(json.dumps({"id": "reload-fail", "version": "1.0.0"}))
+        (mod_dir / "manifest.json").write_text(
+            json.dumps({"id": "reload-fail", "version": "1.0.0"})
+        )
 
         mm = ModManager(mods_root=str(mods_root))
         mm._loaded_mods.append("reload-fail")
         cur_meta = ModMetadata(id="reload-fail", name="RF", version="1.0.0")
         extract_dir = tmp_path / "extract"
         extract_dir.mkdir()
-        (extract_dir / "manifest.json").write_text(json.dumps({"id": "reload-fail", "version": "2.0.0"}))
+        (extract_dir / "manifest.json").write_text(
+            json.dumps({"id": "reload-fail", "version": "2.0.0"})
+        )
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.ModPackage") as MP, \
-             patch.object(mm, "unload_mod"), \
-             patch.object(mm, "load_mod", return_value=False):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.ModPackage") as MP,
+            patch.object(mm, "unload_mod"),
+            patch.object(mm, "load_mod", return_value=False),
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = cur_meta
             gr.return_value = reg
             pkg = MagicMock()
             pkg.manifest = {"id": "reload-fail", "version": "2.0.0"}
             MP.return_value = pkg
-            MP.extract_package.return_value = (str(extract_dir), {"id": "reload-fail", "version": "2.0.0"})
+            MP.extract_package.return_value = (
+                str(extract_dir),
+                {"id": "reload-fail", "version": "2.0.0"},
+            )
             ok, msg, meta = mm.update_mod("reload-fail", "/pkg.xcmod")
             assert ok is False
             assert "加载失败" in msg
@@ -1457,16 +1514,21 @@ class TestUpdateMod:
         extract_dir.mkdir()
         (extract_dir / "manifest.json").write_text(json.dumps({"id": "nl-mod", "version": "2.0.0"}))
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.ModPackage") as MP, \
-             patch.object(mm, "load_mod") as lm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.ModPackage") as MP,
+            patch.object(mm, "load_mod") as lm,
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = cur_meta
             gr.return_value = reg
             pkg = MagicMock()
             pkg.manifest = {"id": "nl-mod", "version": "2.0.0"}
             MP.return_value = pkg
-            MP.extract_package.return_value = (str(extract_dir), {"id": "nl-mod", "version": "2.0.0"})
+            MP.extract_package.return_value = (
+                str(extract_dir),
+                {"id": "nl-mod", "version": "2.0.0"},
+            )
             ok, msg, meta = mm.update_mod("nl-mod", "/pkg.xcmod")
             assert ok is True
             assert "更新成功" in msg
@@ -1509,9 +1571,13 @@ class TestValidateModPackage:
     def test_missing_id_returns_false(self, tmp_path: Path) -> None:
         pkg = tmp_path / "noid.xcmod"
         pkg.write_bytes(b"fake zip content")
-        with patch("zipfile.is_zipfile", return_value=True), \
-             patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   return_value=(str(tmp_path), {"version": "1.0.0"})):  # 无 id
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(str(tmp_path), {"version": "1.0.0"}),
+            ),
+        ):  # 无 id
             mm = ModManager(mods_root=str(tmp_path))
             ok, msg, info = mm.validate_mod_package(str(pkg))
             assert ok is False
@@ -1522,9 +1588,13 @@ class TestValidateModPackage:
         pkg.write_bytes(b"fake zip content")
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
-        with patch("zipfile.is_zipfile", return_value=True), \
-             patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   return_value=(str(extract_dir), {"id": "x", "version": "1.0.0"})):  # 缺 name
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(str(extract_dir), {"id": "x", "version": "1.0.0"}),
+            ),
+        ):  # 缺 name
             mm = ModManager(mods_root=str(tmp_path))
             ok, msg, info = mm.validate_mod_package(str(pkg))
             assert ok is False
@@ -1537,11 +1607,15 @@ class TestValidateModPackage:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
         manifest = {"id": "b", "name": "B", "version": "1.0.0", "artifact": "bundle"}
-        with patch("zipfile.is_zipfile", return_value=True), \
-             patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   return_value=(str(extract_dir), manifest)), \
-             patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="bundle"), \
-             patch("app.infrastructure.mods.mod_manager.validate_bundle_manifest", return_value=[]):
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(str(extract_dir), manifest),
+            ),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="bundle"),
+            patch("app.infrastructure.mods.mod_manager.validate_bundle_manifest", return_value=[]),
+        ):
             mm = ModManager(mods_root=str(tmp_path))
             ok, msg, info = mm.validate_mod_package(str(pkg))
             assert ok is True
@@ -1553,11 +1627,21 @@ class TestValidateModPackage:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
         manifest = {"id": "e", "name": "E", "version": "1.0.0", "artifact": "employee_pack"}
-        with patch("zipfile.is_zipfile", return_value=True), \
-             patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   return_value=(str(extract_dir), manifest)), \
-             patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="employee_pack"), \
-             patch("app.infrastructure.mods.mod_manager.validate_employee_pack_manifest", return_value=[]):
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(str(extract_dir), manifest),
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager.normalize_artifact",
+                return_value="employee_pack",
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager.validate_employee_pack_manifest",
+                return_value=[],
+            ),
+        ):
             mm = ModManager(mods_root=str(tmp_path))
             ok, msg, info = mm.validate_mod_package(str(pkg))
             assert ok is True
@@ -1575,10 +1659,14 @@ class TestValidateModPackage:
             "version": "1.0.0",
             "backend": {"entry": "missing_entry"},
         }
-        with patch("zipfile.is_zipfile", return_value=True), \
-             patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   return_value=(str(extract_dir), manifest)), \
-             patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"):
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(str(extract_dir), manifest),
+            ),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"),
+        ):
             mm = ModManager(mods_root=str(tmp_path))
             ok, msg, info = mm.validate_mod_package(str(pkg))
             assert ok is False
@@ -1596,10 +1684,14 @@ class TestValidateModPackage:
             "version": "1.0.0",
             "frontend": {"routes": "missing_routes"},
         }
-        with patch("zipfile.is_zipfile", return_value=True), \
-             patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   return_value=(str(extract_dir), manifest)), \
-             patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"):
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                return_value=(str(extract_dir), manifest),
+            ),
+            patch("app.infrastructure.mods.mod_manager.normalize_artifact", return_value="mod"),
+        ):
             mm = ModManager(mods_root=str(tmp_path))
             ok, msg, info = mm.validate_mod_package(str(pkg))
             assert ok is False
@@ -1608,9 +1700,13 @@ class TestValidateModPackage:
     def test_mod_package_error_returns_false(self, tmp_path: Path) -> None:
         pkg = tmp_path / "bad.xcmod"
         pkg.write_bytes(b"fake zip content")
-        with patch("zipfile.is_zipfile", return_value=True), \
-             patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   side_effect=ModPackageError("bad pkg")):
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                side_effect=ModPackageError("bad pkg"),
+            ),
+        ):
             mm = ModManager(mods_root=str(tmp_path))
             ok, msg, info = mm.validate_mod_package(str(pkg))
             assert ok is False
@@ -1619,9 +1715,13 @@ class TestValidateModPackage:
     def test_recoverable_error_returns_false(self, tmp_path: Path) -> None:
         pkg = tmp_path / "boom.xcmod"
         pkg.write_bytes(b"fake zip content")
-        with patch("zipfile.is_zipfile", return_value=True), \
-             patch("app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                   side_effect=OSError("boom")):
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch(
+                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
+                side_effect=OSError("boom"),
+            ),
+        ):
             mm = ModManager(mods_root=str(tmp_path))
             ok, msg, info = mm.validate_mod_package(str(pkg))
             assert ok is False
@@ -1638,25 +1738,27 @@ class TestListAllModsBranches:
 
     def test_employee_registry_error_swallowed(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "scan_mods", return_value=[]), \
-             patch(
-                 "app.infrastructure.mods.employee_registry.get_employee_registry",
-                 side_effect=OSError("boom"),
-             ):
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "scan_mods", return_value=[]),
+            patch(
+                "app.infrastructure.mods.employee_registry.get_employee_registry",
+                side_effect=OSError("boom"),
+            ),
+        ):
             result = mm.list_all_mods()
             assert result == []
 
     def test_enterprise_filter_error_swallowed(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(id="m", name="M", version="1.0.0")
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.infrastructure.mods.employee_registry.get_employee_registry"
-             ) as ge:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch("app.infrastructure.mods.employee_registry.get_employee_registry") as ge,
+        ):
             er = MagicMock()
             er.list_for_mods_api.return_value = []
             ge.return_value = er
@@ -1673,62 +1775,62 @@ class TestGetRoutesBranches:
 
     def test_enterprise_filter_error_swallowed(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        meta = ModMetadata(
-            id="m", name="M", version="1.0.0", frontend_routes="routes.js"
-        )
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 side_effect=RuntimeError("boom"),
-             ):
+        meta = ModMetadata(id="m", name="M", version="1.0.0", frontend_routes="routes.js")
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                side_effect=RuntimeError("boom"),
+            ),
+        ):
             result = mm.get_routes()
             assert len(result) == 1
             assert result[0]["mod_id"] == "m"
 
     def test_mod_not_visible_skipped(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        meta = ModMetadata(
-            id="hidden", name="Hidden", version="1.0.0", frontend_routes="routes.js"
-        )
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 return_value=False,
-             ):
+        meta = ModMetadata(id="hidden", name="Hidden", version="1.0.0", frontend_routes="routes.js")
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=False,
+            ),
+        ):
             result = mm.get_routes()
             assert result == []
 
     def test_empty_routes_skipped(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        meta = ModMetadata(
-            id="m", name="M", version="1.0.0", frontend_routes=""
-        )
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 return_value=True,
-             ):
+        meta = ModMetadata(id="m", name="M", version="1.0.0", frontend_routes="")
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+            ),
+        ):
             result = mm.get_routes()
             assert result == []
 
     def test_routes_returned(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        meta = ModMetadata(
-            id="m", name="M", version="1.0.0", frontend_routes="routes.js"
-        )
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch.object(mm, "_refresh_mods_root_if_needed"), \
-             patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 return_value=True,
-             ):
+        meta = ModMetadata(id="m", name="M", version="1.0.0", frontend_routes="routes.js")
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "_refresh_mods_root_if_needed"),
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+            ),
+        ):
             result = mm.get_routes()
             assert len(result) == 1
             assert result[0]["routes_path"] == "routes.js"
@@ -1740,27 +1842,30 @@ class TestLoadAllModsBranches:
     def test_enterprise_skip(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(id="hidden", name="Hidden", version="1.0.0")
-        with patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 return_value=False,
-             ):
+        with (
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=False,
+            ),
+        ):
             result = mm.load_all_mods()
             assert result == []
 
     def test_dependencies_not_satisfied_skipped(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
-        meta = ModMetadata(
-            id="dep-mod", name="Dep", version="1.0.0", dependencies={"other": "*"}
-        )
-        with patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 return_value=True,
-             ), patch(
-                 "app.infrastructure.mods.mod_manager.validate_dependencies",
-                 return_value=False,
-             ):
+        meta = ModMetadata(id="dep-mod", name="Dep", version="1.0.0", dependencies={"other": "*"})
+        with (
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager.validate_dependencies",
+                return_value=False,
+            ),
+        ):
             result = mm.load_all_mods()
             assert result == []
             failures = mm.get_recent_load_failures()
@@ -1769,11 +1874,14 @@ class TestLoadAllModsBranches:
     def test_load_mod_failure_skipped(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(id="fail-mod", name="Fail", version="1.0.0")
-        with patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 return_value=True,
-             ), patch.object(mm, "load_mod", return_value=False):
+        with (
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+            ),
+            patch.object(mm, "load_mod", return_value=False),
+        ):
             result = mm.load_all_mods()
             assert result == []
 
@@ -1781,11 +1889,14 @@ class TestLoadAllModsBranches:
         mm = ModManager(mods_root=str(tmp_path))
         meta1 = ModMetadata(id="mod1", name="M1", version="1.0.0", primary=True)
         meta2 = ModMetadata(id="mod2", name="M2", version="1.0.0")
-        with patch.object(mm, "scan_mods", return_value=[meta2, meta1]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 return_value=True,
-             ), patch.object(mm, "load_mod", return_value=True) as lm:
+        with (
+            patch.object(mm, "scan_mods", return_value=[meta2, meta1]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+            ),
+            patch.object(mm, "load_mod", return_value=True) as lm,
+        ):
             result = mm.load_all_mods()
             assert result == ["mod1", "mod2"]  # primary 先加载
             # 验证 primary 排序
@@ -1795,11 +1906,14 @@ class TestLoadAllModsBranches:
         """enterprise filter 抛异常 → 不跳过，继续尝试加载。"""
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(id="m", name="M", version="1.0.0")
-        with patch.object(mm, "scan_mods", return_value=[meta]), \
-             patch(
-                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                 side_effect=RuntimeError("boom"),
-             ), patch.object(mm, "load_mod", return_value=True):
+        with (
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch.object(mm, "load_mod", return_value=True),
+        ):
             result = mm.load_all_mods()
             assert result == ["m"]
 
@@ -1866,13 +1980,13 @@ class TestRegisterEmployeePackRoutes:
         pack_dir = mods_root / "_employees" / "p"
         pack_dir.mkdir(parents=True)
         (pack_dir / "manifest.json").write_text(
-            json.dumps(
-                {"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}}
-            )
+            json.dumps({"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}})
         )
         mm = ModManager(mods_root=str(mods_root))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch("app.infrastructure.mods.mod_manager._employee_pack_routes_registered", {"p"}):
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch("app.infrastructure.mods.mod_manager._employee_pack_routes_registered", {"p"}),
+        ):
             # 已注册且 force=False → 返回 True
             assert register_employee_pack_routes(app=None, mod_manager=mm, pack_id="p") is True
 
@@ -1884,16 +1998,16 @@ class TestRegisterEmployeePackRoutes:
         pack_dir = mods_root / "_employees" / "p"
         pack_dir.mkdir(parents=True)
         (pack_dir / "manifest.json").write_text(
-            json.dumps(
-                {"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}}
-            )
+            json.dumps({"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}})
         )
         mm = ModManager(mods_root=str(mods_root))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch(
-                 "app.infrastructure.mods.mod_manager.import_mod_backend_py",
-                 side_effect=OSError("import boom"),
-             ):
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager.import_mod_backend_py",
+                side_effect=OSError("import boom"),
+            ),
+        ):
             with caplog.at_level("ERROR"):
                 assert register_employee_pack_routes(app=None, mod_manager=mm, pack_id="p") is False
             failures = mm.get_blueprint_failures()
@@ -1905,9 +2019,7 @@ class TestRegisterEmployeePackRoutes:
         pack_dir = mods_root / "_employees" / "p"
         pack_dir.mkdir(parents=True)
         (pack_dir / "manifest.json").write_text(
-            json.dumps(
-                {"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}}
-            )
+            json.dumps({"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}})
         )
         # 创建 entry.py 但无 register_fastapi_routes
         (pack_dir / "backend").mkdir()
@@ -1922,9 +2034,7 @@ class TestRegisterEmployeePackRoutes:
         pack_dir = mods_root / "_employees" / "p"
         pack_dir.mkdir(parents=True)
         (pack_dir / "manifest.json").write_text(
-            json.dumps(
-                {"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}}
-            )
+            json.dumps({"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}})
         )
         # 创建带 register_fastapi_routes 的 entry.py
         (pack_dir / "backend").mkdir()
@@ -1942,17 +2052,17 @@ class TestRegisterEmployeePackRoutes:
         pack_dir = mods_root / "_employees" / "p"
         pack_dir.mkdir(parents=True)
         (pack_dir / "manifest.json").write_text(
-            json.dumps(
-                {"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}}
-            )
+            json.dumps({"id": "p", "artifact": "employee_pack", "backend": {"entry": "entry"}})
         )
         (pack_dir / "backend").mkdir()
         (pack_dir / "backend" / "entry.py").write_text(
             "def register_fastapi_routes(app, mod_id):\n    pass\n"
         )
         mm = ModManager(mods_root=str(mods_root))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch("app.infrastructure.mods.mod_manager._employee_pack_routes_registered", {"p"}):
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch("app.infrastructure.mods.mod_manager._employee_pack_routes_registered", {"p"}),
+        ):
             # force=True → 重新注册
             result = register_employee_pack_routes(
                 app="myapp", mod_manager=mm, pack_id="p", force=True
@@ -1987,8 +2097,10 @@ class TestLoadEmployeePackRoutes:
         emp_root.mkdir()
         (emp_root / "file.txt").write_text("not a dir")
         mm = ModManager(mods_root=str(mods_root))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg,
+        ):
             load_employee_pack_routes(app=None, mod_manager=mm)
             reg.assert_not_called()
 
@@ -1999,8 +2111,10 @@ class TestLoadEmployeePackRoutes:
         emp_root.mkdir()
         (emp_root / "no-manifest").mkdir()
         mm = ModManager(mods_root=str(mods_root))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg,
+        ):
             load_employee_pack_routes(app=None, mod_manager=mm)
             reg.assert_not_called()
 
@@ -2013,8 +2127,10 @@ class TestLoadEmployeePackRoutes:
         pack_dir.mkdir()
         (pack_dir / "manifest.json").write_text("not json {{{")
         mm = ModManager(mods_root=str(mods_root))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg,
+        ):
             load_employee_pack_routes(app=None, mod_manager=mm)
             reg.assert_not_called()
 
@@ -2027,8 +2143,10 @@ class TestLoadEmployeePackRoutes:
         pack_dir.mkdir()
         (pack_dir / "manifest.json").write_text(json.dumps({"id": "mod-pack", "artifact": "mod"}))
         mm = ModManager(mods_root=str(mods_root))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg,
+        ):
             load_employee_pack_routes(app=None, mod_manager=mm)
             reg.assert_not_called()
 
@@ -2043,8 +2161,10 @@ class TestLoadEmployeePackRoutes:
             json.dumps({"id": "valid", "artifact": "employee_pack"})
         )
         mm = ModManager(mods_root=str(mods_root))
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch("app.infrastructure.mods.mod_manager.register_employee_pack_routes") as reg,
+        ):
             load_employee_pack_routes(app="myapp", mod_manager=mm)
             reg.assert_called_once()
 
@@ -2146,8 +2266,10 @@ class TestRegisterSingleModHttpRoutes:
         module = MagicMock()
         module.register_fastapi_routes = MagicMock()
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=module):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=module),
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = meta
             gr.return_value = reg
@@ -2166,8 +2288,10 @@ class TestRegisterSingleModHttpRoutes:
         module.register_fastapi_routes = MagicMock()
         module.register_websocket_routes = MagicMock(return_value=True)
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=module):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=module),
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = meta
             gr.return_value = reg
@@ -2186,8 +2310,10 @@ class TestRegisterSingleModHttpRoutes:
         module.register_fastapi_routes = MagicMock()
         module.register_websocket_routes = MagicMock(return_value=False)
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=module):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=module),
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = meta
             gr.return_value = reg
@@ -2203,8 +2329,10 @@ class TestRegisterSingleModHttpRoutes:
         )
         module = MagicMock(spec=[])  # 无任何属性
 
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=module):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.import_mod_backend_py", return_value=module),
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = meta
             gr.return_value = reg
@@ -2218,11 +2346,13 @@ class TestRegisterSingleModHttpRoutes:
         meta = ModMetadata(
             id="m", name="M", version="1.0.0", backend_entry="entry", mod_path="/mods/m"
         )
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch(
-                 "app.infrastructure.mods.mod_manager.import_mod_backend_py",
-                 side_effect=OSError("boom"),
-             ):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch(
+                "app.infrastructure.mods.mod_manager.import_mod_backend_py",
+                side_effect=OSError("boom"),
+            ),
+        ):
             reg = MagicMock()
             reg.get_mod_metadata.return_value = meta
             gr.return_value = reg
@@ -2255,45 +2385,51 @@ class TestRestoreEntitlementsFromSessionId:
             _restore_entitlements_from_session_id("sid-123")
 
     def test_cached_empty_skips_set(self) -> None:
-        with patch(
-            "app.enterprise.mod_entitlements.restore_entitlements_from_session_row"
-        ), patch(
-            "app.enterprise.mod_entitlements._session_username_for_entitlements",
-            return_value="user",
-        ), patch(
-            "app.enterprise.mod_entitlements.get_cached_market_identity",
-            return_value=("uid", "uname"),
-        ), patch(
-            "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
-            return_value=set(),
-        ), patch(
-            "app.enterprise.mod_entitlements._augment_entitled_for_username",
-            return_value=set(),  # 空 → 不调用 set_session_entitlements
-        ) as aug, patch(
-            "app.enterprise.mod_entitlements.set_session_entitlements"
-        ) as sse:
+        with (
+            patch("app.enterprise.mod_entitlements.restore_entitlements_from_session_row"),
+            patch(
+                "app.enterprise.mod_entitlements._session_username_for_entitlements",
+                return_value="user",
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_market_identity",
+                return_value=("uid", "uname"),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value=set(),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements._augment_entitled_for_username",
+                return_value=set(),  # 空 → 不调用 set_session_entitlements
+            ) as aug,
+            patch("app.enterprise.mod_entitlements.set_session_entitlements") as sse,
+        ):
             _restore_entitlements_from_session_id("sid-123")
             aug.assert_called_once()
             sse.assert_not_called()
 
     def test_cached_set_calls_set_session(self) -> None:
-        with patch(
-            "app.enterprise.mod_entitlements.restore_entitlements_from_session_row"
-        ), patch(
-            "app.enterprise.mod_entitlements._session_username_for_entitlements",
-            return_value="user",
-        ), patch(
-            "app.enterprise.mod_entitlements.get_cached_market_identity",
-            return_value=("uid", "uname"),
-        ), patch(
-            "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
-            return_value={"mod1"},
-        ), patch(
-            "app.enterprise.mod_entitlements._augment_entitled_for_username",
-            return_value={"mod1", "mod2"},
-        ), patch(
-            "app.enterprise.mod_entitlements.set_session_entitlements"
-        ) as sse:
+        with (
+            patch("app.enterprise.mod_entitlements.restore_entitlements_from_session_row"),
+            patch(
+                "app.enterprise.mod_entitlements._session_username_for_entitlements",
+                return_value="user",
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_market_identity",
+                return_value=("uid", "uname"),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value={"mod1"},
+            ),
+            patch(
+                "app.enterprise.mod_entitlements._augment_entitled_for_username",
+                return_value={"mod1", "mod2"},
+            ),
+            patch("app.enterprise.mod_entitlements.set_session_entitlements") as sse,
+        ):
             _restore_entitlements_from_session_id("sid-123")
             sse.assert_called_once()
             kwargs = sse.call_args.kwargs
@@ -2319,23 +2455,27 @@ class TestEnsureModApiReady:
             assert ensure_mod_api_ready("m") is False
 
     def test_not_allowed_returns_false(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch(
-                 "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
-                 return_value=False,
-             ):
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
+                return_value=False,
+            ),
+        ):
             assert ensure_mod_api_ready("m") is False
 
     def test_load_mod_failure_returns_false(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch(
-                 "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
-                 return_value=True,
-             ), patch(
-                 "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
-             ), patch(
-                 "app.infrastructure.mods.mod_manager.get_mod_manager"
-             ) as gmm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
+                return_value=True,
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
+            ),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm,
+        ):
             mm = MagicMock()
             mm._loaded_mods = []
             mm.load_mod.return_value = False
@@ -2343,15 +2483,17 @@ class TestEnsureModApiReady:
             assert ensure_mod_api_ready("m") is False
 
     def test_already_registered_returns_true(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch(
-                 "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
-                 return_value=True,
-             ), patch(
-                 "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
-             ), patch(
-                 "app.infrastructure.mods.mod_manager.get_mod_manager"
-             ) as gmm:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
+                return_value=True,
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
+            ),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm,
+        ):
             mm = MagicMock()
             mm._loaded_mods = ["m"]
             mm._http_routes_registered = {"m"}
@@ -2359,18 +2501,21 @@ class TestEnsureModApiReady:
             assert ensure_mod_api_ready("m") is True
 
     def test_get_app_failure_returns_false(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch(
-                 "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
-                 return_value=True,
-             ), patch(
-                 "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
-             ), patch(
-                 "app.infrastructure.mods.mod_manager.get_mod_manager"
-             ) as gmm, patch(
-                 "app.fastapi_app.get_fastapi_app",
-                 side_effect=OSError("app boom"),
-             ):
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
+                return_value=True,
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
+            ),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm,
+            patch(
+                "app.fastapi_app.get_fastapi_app",
+                side_effect=OSError("app boom"),
+            ),
+        ):
             mm = MagicMock()
             mm._loaded_mods = ["m"]
             mm._http_routes_registered = set()
@@ -2378,20 +2523,25 @@ class TestEnsureModApiReady:
             assert ensure_mod_api_ready("m") is False
 
     def test_register_routes_success(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False), \
-             patch(
-                 "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
-                 return_value=True,
-             ), patch(
-                 "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
-             ), patch(
-                 "app.infrastructure.mods.mod_manager.get_mod_manager"
-             ) as gmm, patch(
-                 "app.fastapi_app.get_fastapi_app", return_value="myapp",
-             ), patch(
-                 "app.infrastructure.mods.mod_manager._register_single_mod_http_routes",
-                 return_value=True,
-             ) as reg:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
+                return_value=True,
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
+            ),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm,
+            patch(
+                "app.fastapi_app.get_fastapi_app",
+                return_value="myapp",
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager._register_single_mod_http_routes",
+                return_value=True,
+            ) as reg,
+        ):
             mm = MagicMock()
             mm._loaded_mods = ["m"]
             mm._http_routes_registered = set()
@@ -2409,11 +2559,13 @@ class TestLoadModRoutes:
     """load_mod_routes 分支覆盖。"""
 
     def test_mod_manager_none_uses_default(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm, \
-             patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"), \
-             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"), \
-             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm,
+            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
+            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
+        ):
             mm = MagicMock()
             mm._loaded_mods = []
             mm._blueprint_failures = []
@@ -2425,13 +2577,13 @@ class TestLoadModRoutes:
             gmm.assert_called_once()
 
     def test_registers_routable_mods(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"), \
-             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch(
-                 "app.infrastructure.mods.mod_manager._register_single_mod_http_routes"
-             ) as reg, \
-             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"), \
-             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager._register_single_mod_http_routes") as reg,
+            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
+            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
+        ):
             mm = ModManager(mods_root="/tmp")
             mm._loaded_mods = ["mod1", "mod2"]
             meta1 = ModMetadata(id="mod1", name="M1", version="1.0.0", backend_entry="entry")
@@ -2443,13 +2595,13 @@ class TestLoadModRoutes:
             assert reg.call_count == 2
 
     def test_skips_mods_without_backend_entry(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"), \
-             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch(
-                 "app.infrastructure.mods.mod_manager._register_single_mod_http_routes"
-             ) as reg, \
-             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"), \
-             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager._register_single_mod_http_routes") as reg,
+            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
+            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
+        ):
             mm = ModManager(mods_root="/tmp")
             mm._loaded_mods = []
             meta1 = ModMetadata(id="mod1", name="M1", version="1.0.0", backend_entry="")
@@ -2460,13 +2612,13 @@ class TestLoadModRoutes:
             reg.assert_not_called()
 
     def test_dedupes_mod_ids(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"), \
-             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch(
-                 "app.infrastructure.mods.mod_manager._register_single_mod_http_routes"
-             ) as reg, \
-             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"), \
-             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager._register_single_mod_http_routes") as reg,
+            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
+            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
+        ):
             mm = ModManager(mods_root="/tmp")
             mm._loaded_mods = ["mod1"]
             meta1 = ModMetadata(id="mod1", name="M1", version="1.0.0", backend_entry="entry")
@@ -2478,13 +2630,13 @@ class TestLoadModRoutes:
             assert reg.call_count == 1  # 去重
 
     def test_loads_employee_pack_routes(self) -> None:
-        with patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"), \
-             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr, \
-             patch("app.infrastructure.mods.mod_manager._register_single_mod_http_routes"), \
-             patch(
-                 "app.infrastructure.mods.mod_manager.load_employee_pack_routes"
-             ) as lepr, \
-             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"):
+        with (
+            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
+            patch("app.infrastructure.mods.mod_manager._register_single_mod_http_routes"),
+            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes") as lepr,
+            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
+        ):
             mm = ModManager(mods_root="/tmp")
             mm._loaded_mods = []
             reg_mock = MagicMock()

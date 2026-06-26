@@ -304,7 +304,9 @@ class TestBuildAuthorizeUrl:
         oidc_provider._discovery_cache.clear()
         # Cache a non-empty dict without authorization_endpoint so fallback path is taken.
         # (An empty dict is falsy and would trigger a real network fetch.)
-        oidc_provider._discovery_cache["https://idp.example.com"] = {"issuer": "https://idp.example.com"}
+        oidc_provider._discovery_cache["https://idp.example.com"] = {
+            "issuer": "https://idp.example.com"
+        }
         url = await oidc_provider.build_authorize_url(state="st")
         assert "https://idp.example.com/protocol/openid-connect/auth" in url
 

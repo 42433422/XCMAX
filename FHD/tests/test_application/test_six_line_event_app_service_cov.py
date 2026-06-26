@@ -50,9 +50,7 @@ def cs_dir(tmp_path):
 
 @pytest.fixture
 def svc(cfg_dir, cs_dir, monkeypatch):
-    monkeypatch.setattr(
-        loader, "_config_path", lambda: cfg_dir / "six_line_event_routes.json"
-    )
+    monkeypatch.setattr(loader, "_config_path", lambda: cfg_dir / "six_line_event_routes.json")
     monkeypatch.setattr(loader, "_customer_service_dir", lambda: cs_dir)
     return SixLineEventAppService()
 
@@ -65,7 +63,9 @@ def svc(cfg_dir, cs_dir, monkeypatch):
 class TestConfig:
     def test_config_loaded_once(self, svc):
         """Config should be loaded only once and cached."""
-        with patch.object(loader, "load_routes_config", wraps=loader.load_routes_config) as mock_load:
+        with patch.object(
+            loader, "load_routes_config", wraps=loader.load_routes_config
+        ) as mock_load:
             cfg1 = svc._config()
             cfg2 = svc._config()
             assert cfg1 is cfg2
@@ -101,9 +101,7 @@ class TestAllRoutes:
         cs = tmp_path / "customer_service"
         cs.mkdir()
 
-        monkeypatch.setattr(
-            loader, "_config_path", lambda: cfg_dir / "six_line_event_routes.json"
-        )
+        monkeypatch.setattr(loader, "_config_path", lambda: cfg_dir / "six_line_event_routes.json")
         monkeypatch.setattr(loader, "_customer_service_dir", lambda: cs)
 
         svc = SixLineEventAppService()
@@ -130,9 +128,7 @@ class TestAllRoutes:
         cs = tmp_path / "customer_service"
         cs.mkdir()
 
-        monkeypatch.setattr(
-            loader, "_config_path", lambda: cfg_dir / "six_line_event_routes.json"
-        )
+        monkeypatch.setattr(loader, "_config_path", lambda: cfg_dir / "six_line_event_routes.json")
         monkeypatch.setattr(loader, "_customer_service_dir", lambda: cs)
 
         svc = SixLineEventAppService()
@@ -159,9 +155,7 @@ class TestAllRoutes:
         cs = tmp_path / "customer_service"
         cs.mkdir()
 
-        monkeypatch.setattr(
-            loader, "_config_path", lambda: cfg_dir / "six_line_event_routes.json"
-        )
+        monkeypatch.setattr(loader, "_config_path", lambda: cfg_dir / "six_line_event_routes.json")
         monkeypatch.setattr(loader, "_customer_service_dir", lambda: cs)
 
         svc = SixLineEventAppService()
@@ -221,7 +215,9 @@ class TestMatchRoute:
         """When event_type matches but step_id doesn't match the route,
         should continue looking."""
         # event_type matches but step_id is different
-        result = svc.match_route(step_id="NONEXISTENT", status="progress", event_type="payment.anomaly")
+        result = svc.match_route(
+            step_id="NONEXISTENT", status="progress", event_type="payment.anomaly"
+        )
         # Should match via event_type since step_id doesn't match
         # but the route for payment.anomaly might not match NONEXISTENT step
         # So it falls through to step_id matching which also fails
@@ -256,17 +252,13 @@ class TestDispatch:
 
     def test_event_type_empty_after_strip_becomes_none(self, svc, cs_dir):
         """event_type that's only whitespace should become None."""
-        result = svc.dispatch(
-            {"step_id": "O7", "status": "progress", "event_type": "   "}
-        )
+        result = svc.dispatch({"step_id": "O7", "status": "progress", "event_type": "   "})
         # event_type becomes None, so matching is by step_id only
         assert result["matched"] is True
 
     def test_payload_not_dict_uses_empty_dict(self, svc, cs_dir):
         """When payload.get('payload') is not a dict, body should be {}."""
-        result = svc.dispatch(
-            {"step_id": "O7", "status": "completed", "payload": "not a dict"}
-        )
+        result = svc.dispatch({"step_id": "O7", "status": "completed", "payload": "not a dict"})
         assert result["matched"] is True
         # The dispatch should still work with empty body
 
@@ -330,9 +322,7 @@ class TestDispatch:
             mock_resp = MagicMock()
             mock_resp.is_success = True
             mock_post.return_value = mock_resp
-            svc.dispatch(
-                {"step_id": "O4", "status": "anomaly", "event_type": "payment.anomaly"}
-            )
+            svc.dispatch({"step_id": "O4", "status": "anomaly", "event_type": "payment.anomaly"})
 
         mock_post.assert_called_once()
         _, kwargs = mock_post.call_args
@@ -547,9 +537,7 @@ class TestListBacklogForDigest:
             {"route_id": "r1", "step_id": "O7"},
             {"route_id": "r2", "step_id": "O8"},
         ]
-        backlog.write_text(
-            "\n".join(json.dumps(e) for e in entries), encoding="utf-8"
-        )
+        backlog.write_text("\n".join(json.dumps(e) for e in entries), encoding="utf-8")
         result = svc.list_backlog_for_digest()
         assert len(result) == 2
         assert result[0]["route_id"] == "r1"
@@ -569,9 +557,7 @@ class TestListBacklogForDigest:
     def test_limit_applied(self, svc, cs_dir):
         backlog = cs_dir / "six_line_digest_backlog.jsonl"
         entries = [{"id": i} for i in range(10)]
-        backlog.write_text(
-            "\n".join(json.dumps(e) for e in entries), encoding="utf-8"
-        )
+        backlog.write_text("\n".join(json.dumps(e) for e in entries), encoding="utf-8")
         result = svc.list_backlog_for_digest(limit=3)
         assert len(result) == 3
         # Should return the last 3 entries
