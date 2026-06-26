@@ -312,6 +312,76 @@ class MobileRelayService:
             )
             return self._public_desktop(data)
 
+    def bind_mobile_by_account(
+        self,
+        *,
+        user_id: int,
+        username: str,
+        relay_id: str = "",
+    ) -> dict[str, Any] | None:
+        """Bind a desktop relay to the authenticated mobile account.
+
+        The phone obtains ``relay_id`` from the LAN pairing exchange. Cloud
+        binding is then authorized by the logged-in mobile account instead of a
+        QR/short-code secret, which prevents stale QR relay IDs from becoming
+        the source of truth.
+        """
+        clean_relay_id = relay_id.strip()
+        if not clean_relay_id:
+            return None
+        now = _utc_now()
+        with get_db() as db:
+            self.ensure_tables(db)
+            row = (
+                db.execute(
+                    text(
+                        """
+                        SELECT * FROM mobile_relay_desktops
+                        WHERE relay_id = :relay_id
+                          AND status IN ('pending', 'paired')
+                        """
+                    ),
+                    {"relay_id": clean_relay_id},
+                )
+                .mappings()
+                .first()
+            )
+            if not row:
+                return None
+            data = _row_dict(row)
+            if data.get("status") == "pending" and str(data.get("expires_at") or "") < now:
+                return None
+            owner_id = int(data.get("mobile_user_id") or 0)
+            if owner_id > 0 and owner_id != int(user_id):
+                return None
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_desktops
+                    SET status = 'paired',
+                        mobile_user_id = :user_id,
+                        mobile_username = :username,
+                        updated_at = :updated_at
+                    WHERE relay_id = :relay_id
+                    """
+                ),
+                {
+                    "relay_id": clean_relay_id,
+                    "user_id": int(user_id),
+                    "username": username.strip()[:200],
+                    "updated_at": now,
+                },
+            )
+            data.update(
+                {
+                    "status": "paired",
+                    "mobile_user_id": int(user_id),
+                    "mobile_username": username.strip()[:200],
+                    "updated_at": now,
+                }
+            )
+            return self._public_desktop(data)
+
     def list_desktops(self, *, user_id: int) -> list[dict[str, Any]]:
         with get_db() as db:
             self.ensure_tables(db)

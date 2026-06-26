@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "revision": "2026-06-26.profile-hot-v2",
+  "hero_variant": "glass",
+  "headline": "个人资料 · 软件内更新",
+  "subtitle": "账号、员工体系、工作台与执行端状态统一管理",
+  "status_ready": "资料、头像和工作台状态已同步",
+  "status_syncing": "正在同步资料与工作台状态",
+  "primary_chip": "",
+  "secondary_chip": "",
+  "accent": "violet"
+}

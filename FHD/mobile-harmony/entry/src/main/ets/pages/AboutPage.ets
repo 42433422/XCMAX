@@ -14,9 +14,11 @@ export struct AboutPage {
   @State appName: string = 'XCAGI 企业版';
   @State appVersion: string = 'v10.0.0';
   @State buildNumber: string = '20260620';
+  @State companyName: string = '成都修茈科技有限公司';
   @State officialUrl: string = 'https://xiu-ci.com';
   @State supportEmail: string = 'support@xiu-ci.com';
-  @State icpRecord: string = '蜀ICP备2025xxxxxx号';
+  @State websiteIcp: string = '蜀ICP备2026014056号-3A';
+  @State appFilingNumber: string = '蜀ICP备2026014056号-3A';
 
   onBack: () => void = () => {};
   onCheckUpdate: () => void = () => {};
@@ -141,7 +143,7 @@ export struct AboutPage {
 
   @Builder
   ComplianceFooter() {
-    Text(this.icpRecord)
+    Text(`${this.companyName} · ${this.appFilingNumber}`)
       .fontSize(12)
       .fontColor('#9CA3AF')
       .textAlign(TextAlign.Center)
@@ -151,11 +153,14 @@ export struct AboutPage {
 
   private infoItems(): AboutInfoItem[] {
     const items: AboutInfoItem[] = [
+      { label: '应用名称', value: this.appName },
+      { label: '开发者', value: this.companyName },
       { label: '版本', value: this.appVersion },
       { label: '构建号', value: this.buildNumber },
       { label: '官方网址', value: this.officialUrl },
       { label: '客服邮箱', value: this.supportEmail },
-      { label: '备案号', value: this.icpRecord }
+      { label: 'APP备案', value: this.appFilingNumber },
+      { label: '网站备案', value: this.websiteIcp }
     ];
     return items;
   }

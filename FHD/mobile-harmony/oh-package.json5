@@ -2,9 +2,9 @@
   "modelVersion": "5.0.0",
   "name": "xcagi-enterprise-harmony",
   "version": "10.0.0",
-  "description": "XCAGI Enterprise HarmonyOS mobile client",
+  "description": "XCAGI 企业版 HarmonyOS mobile client",
   "main": "",
-  "author": "Xiuci",
+  "author": "成都修茈科技有限公司",
   "license": "UNLICENSED",
   "dependencies": {},
   "devDependencies": {

@@ -179,7 +179,31 @@ describe('AiGroupChatView', () => {
     await wrapper.find('.aigc-input').setValue('你好')
     await wrapper.find('.aigc-send').trigger('click')
     await flushPromises()
-    expect(postAiGroupMessage).toHaveBeenCalledWith('g1', '你好', [], 'admin')
+    expect(postAiGroupMessage).toHaveBeenCalledWith('g1', '你好', [], 'admin', { dispatch: false })
+  })
+
+  it('sends message in dispatch mode when dispatch toggle is active', async () => {
+    fetchAiGroups.mockResolvedValue([sampleGroup])
+    fetchAiGroupMessages.mockResolvedValue([])
+    postAiGroupMessage.mockResolvedValue({
+      messages: [
+        {
+          ...sampleMessage,
+          id: 'work-1',
+          kind: 'work_report',
+          body: '【AI助手A 执行汇报】\n状态：完成',
+        },
+      ],
+      group: sampleGroup,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.find('.aigc-mode').trigger('click')
+    await wrapper.find('.aigc-input').setValue('整理客户数据')
+    await wrapper.find('.aigc-send').trigger('click')
+    await flushPromises()
+    expect(postAiGroupMessage).toHaveBeenCalledWith('g1', '整理客户数据', [], 'admin', { dispatch: true })
+    expect(wrapper.text()).toContain('执行汇报')
   })
 
   it('shows typing indicator while sending', async () => {

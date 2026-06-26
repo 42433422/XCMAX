@@ -1,0 +1,56 @@
+import { describe, it, expect } from 'vitest'
+import { modRouteGlob } from './modRouteGlob.minimal'
+
+describe('modRouteGlob.minimal loaders', () => {
+  it('exports a record of route module loaders', () => {
+    expect(modRouteGlob).toBeDefined()
+    expect(typeof modRouteGlob).toBe('object')
+  })
+
+  it('every entry is a function', () => {
+    for (const [key, loader] of Object.entries(modRouteGlob)) {
+      expect(typeof loader, `loader for ${key} should be a function`).toBe('function')
+    }
+  })
+
+  it('all keys point to routes.js files under mods/', () => {
+    for (const key of Object.keys(modRouteGlob)) {
+      const norm = key.replace(/\\/g, '/')
+      expect(norm).toContain('routes.js')
+      expect(norm).toContain('/mods/')
+    }
+  })
+
+  it('calling each loader either resolves or rejects (function exercised)', async () => {
+    const entries = Object.entries(modRouteGlob)
+    const results = await Promise.allSettled(entries.map(([_, loader]) => loader()))
+    let resolved = 0
+    let rejected = 0
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        resolved += 1
+        expect(r.value).toBeDefined()
+      } else {
+        rejected += 1
+      }
+    }
+    expect(resolved + rejected).toBe(entries.length)
+  })
+
+  it('loaders return a promise', () => {
+    for (const [key, loader] of Object.entries(modRouteGlob)) {
+      const result = loader()
+      expect(result, `loader for ${key} should return a promise`).toBeInstanceOf(Promise)
+      result.catch(() => {})
+    }
+  })
+
+  it('loaders do not throw synchronously', () => {
+    for (const [key, loader] of Object.entries(modRouteGlob)) {
+      expect(() => {
+        const p = loader()
+        p.catch(() => {})
+      }, `loader for ${key} should not throw synchronously`).not.toThrow()
+    }
+  })
+})

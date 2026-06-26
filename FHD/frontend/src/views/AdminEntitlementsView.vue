@@ -362,7 +362,7 @@ const ACCOUNT_TIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'max', label: 'Max' },
   { value: 'ultra', label: 'Ultra' },
 ];
-const BUDGET_RANGE_OPTIONS = ['5 万以内', '5–20 万', '20–50 万', '50 万以上'];
+const BUDGET_RANGE_OPTIONS = ['1–5 万', '5–10 万', '10–50 万', '50–100 万'];
 
 function resolveTier(u: AdminUser): string {
   return u.tier || (u.is_admin ? 'admin' : u.is_enterprise ? 'enterprise' : 'personal');

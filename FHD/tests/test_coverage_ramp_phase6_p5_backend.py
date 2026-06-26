@@ -299,21 +299,19 @@ class TestModEmployeeComplete:
         会走直连路径导致 mock 不生效。autouse fixture 先清空所有 LLM key，
         测试体内再按需 setenv。
         """
-        for _key in (
-            "XCAGI_LLM_PROVIDER",
-            "LLM_PROVIDER",
-            "XCAUTO_API_KEY",
-            "XCAUTO_PAT",
-            "XIUCI_API_KEY",
-            "OPENAI_API_KEY",
-            "OPENAI_BASE_URL",
-            "OPENAI_MODEL",
-            "DEEPSEEK_API_KEY",
-            "DEEPSEEK_BASE_URL",
-            "DEEPSEEK_MODEL",
-            "XCAGI_EMPLOYEE_LLM_MODEL",
-        ):
+        for _key in ("XCAGI_LLM_PROVIDER", "LLM_PROVIDER", "LLM_MODEL", "XCAGI_EMPLOYEE_LLM_MODEL"):
             monkeypatch.delenv(_key, raising=False)
+        for _provider in ("MIMO", "OPENAI", "DEEPSEEK", "QWEN", "MOONSHOT", "XCAUTO", "XIUCI"):
+            for _suffix in (
+                "API_KEY",
+                "PAT",
+                "BASE_URL",
+                "API_BASE",
+                "API_URL",
+                "CHAT_COMPLETIONS_URL",
+                "MODEL",
+            ):
+                monkeypatch.delenv(f"{_provider}_{_suffix}", raising=False)
 
     @pytest.mark.asyncio
     async def test_empty_messages_returns_error(self, monkeypatch: pytest.MonkeyPatch) -> None:

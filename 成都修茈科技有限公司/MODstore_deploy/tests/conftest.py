@@ -94,29 +94,16 @@ def auth_headers(client, monkeypatch):
     """注册临时用户（固定邮箱验证码）并返回 Bearer，供需登录的 /api/mods 等接口使用。"""
     import uuid
 
-    # market_routes.py is registered first in app_factory and imports these
-    # directly from email_service, so we must patch the market_routes namespace.
-    monkeypatch.setattr(
-        "modstore_server.api.market_routes.generate_verification_code", lambda: "999999"
-    )
-    monkeypatch.setattr(
-        "modstore_server.api.market_routes.assert_email_outbound_configured", lambda: None
-    )
-    monkeypatch.setattr(
-        "modstore_server.api.market_routes.send_verification_email",
-        lambda *args, **kwargs: None,
-    )
-    # Also patch market_auth_api in case its router is hit on some paths.
-    monkeypatch.setattr(
-        "modstore_server.market_auth_api.generate_verification_code", lambda: "999999"
-    )
-    monkeypatch.setattr(
-        "modstore_server.market_auth_api.assert_email_outbound_configured", lambda: None
-    )
-    monkeypatch.setattr(
-        "modstore_server.market_auth_api.send_verification_email",
-        lambda *args, **kwargs: None,
-    )
+    for module_name in (
+        "modstore_server.market_api",
+        "modstore_server.api.market_routes",
+    ):
+        monkeypatch.setattr(f"{module_name}.assert_email_outbound_configured", lambda: None)
+        monkeypatch.setattr(f"{module_name}.generate_verification_code", lambda: "999999")
+        monkeypatch.setattr(
+            f"{module_name}.send_verification_email",
+            lambda *args, **kwargs: None,
+        )
 
     username = f"pytest_{uuid.uuid4().hex[:16]}"
     email = f"u{uuid.uuid4().hex[:10]}@pytest.local"

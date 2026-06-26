@@ -7,7 +7,7 @@ import type { ApiResponse } from '@/types/api';
 export type AccountKind = 'personal' | 'enterprise' | 'admin';
 // 账号体系：等级（仅企业有意义）/ 预算区间 / 修茈市场会员等级
 export type AccountTier = 'normal' | 'pro' | 'max' | 'ultra';
-export type BudgetRange = '5 万以内' | '5–20 万' | '20–50 万' | '50 万以上';
+export type BudgetRange = '1–5 万' | '5–10 万' | '10–50 万' | '50–100 万';
 export type MarketMembershipTier = string; // free | vip | vip_plus | svip1..svip8
 
 export interface LoginRequest {
