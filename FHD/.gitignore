@@ -248,3 +248,7 @@ migration_status_report.txt
 # mutmut 3.x 变异测试沙箱与缓存（运行时生成约80M，勿提交）
 mutants/
 .mutmut-cache
+
+# 稳定设备标识运行时文件（device_identity.get_stable_device_id 写入 app data dir；
+# dev 模式回落到仓库根，勿提交）
+device_id
