@@ -12,16 +12,9 @@ name: FHD Alembic SSOT
 
 on:
   pull_request:
-    paths:
-      - 'FHD/alembic/**'
-      - 'FHD/app/db/**'
-      - 'scripts/guard_alembic_single_head.py'
-      - '.github/workflows/fhd-alembic-ssot.yml'
+    branches: [main, develop]
   push:
     branches: [main, develop]
-    paths:
-      - 'FHD/alembic/**'
-      - 'FHD/app/db/**'
 
 jobs:
   single-head:
