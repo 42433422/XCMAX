@@ -10,7 +10,7 @@ name: FHD Alembic SSOT
 # NOTE: This is a standalone workflow. No corresponding FHD/.github/workflows/
 # source exists; it lives directly in .github/workflows/ and is not regenerated.
 
-on:
+"on":
   pull_request:
     branches: [main, develop]
   push:
