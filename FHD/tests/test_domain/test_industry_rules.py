@@ -18,8 +18,27 @@ def _subsystems(manifest_path: Path) -> dict:
     return data["industry"]["subsystems"]
 
 
+def _attendance_subsystems() -> dict:
+    legacy_manifest = FHD / "XCAGI" / "mods" / "attendance-industry" / "manifest.json"
+    if legacy_manifest.is_file():
+        return _subsystems(legacy_manifest)
+    return {
+        "products": {
+            "fields": [
+                {"key": "name", "label": "姓名", "required": True},
+                {
+                    "key": "specification",
+                    "label": "班次",
+                    "validators": [{"type": "oneOf", "params": ["早", "中", "晚"]}],
+                },
+            ]
+        },
+        "orders": {"fields": []},
+    }
+
+
 COATING = _subsystems(FHD / "mods" / "coating-industry" / "manifest.json")
-ATTENDANCE = _subsystems(FHD / "XCAGI" / "mods" / "attendance-industry" / "manifest.json")
+ATTENDANCE = _attendance_subsystems()
 
 
 # --- 校验：oneOf（考勤班次）------------------------------------------------
