@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """index.html 仅用 no-cache，避免旧 index + immutable 长期缓存导致 chunk 404。"""
+
 from __future__ import annotations
 
 from pathlib import Path

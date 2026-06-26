@@ -20,12 +20,12 @@ def get_url() -> str:
     url = os.environ.get("MODSTORE_DATABASE_URL", "").strip()
     if url:
         if url.startswith("postgres://"):
-            url = "postgresql://" + url[len("postgres://"):]
+            url = "postgresql://" + url[len("postgres://") :]
         return url
     url = os.environ.get("DATABASE_URL", "").strip()
     if url:
         if url.startswith("postgres://"):
-            url = "postgresql://" + url[len("postgres://"):]
+            url = "postgresql://" + url[len("postgres://") :]
         return url
     return "postgresql+psycopg://modstore:modstore@localhost:5432/modstore"
 

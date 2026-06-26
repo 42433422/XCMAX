@@ -67,7 +67,9 @@ def _build_pack(spec: dict) -> tuple[Path, bytes, dict, dict]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--publish", action="store_true", help="Write to catalog_store + catalog_items")
+    parser.add_argument(
+        "--publish", action="store_true", help="Write to catalog_store + catalog_items"
+    )
     parser.add_argument("--public", action="store_true", help="Set is_public=true on catalog rows")
     args = parser.parse_args()
 

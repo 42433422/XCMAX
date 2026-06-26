@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """日更闭环冒烟：备份 / DR 探针 / 归档 / 按需快照 / 可选 digest。"""
+
 from __future__ import annotations
 
 import argparse

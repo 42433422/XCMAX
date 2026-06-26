@@ -127,11 +127,17 @@ _PROFILE_PAGE_DEFAULTS: Dict[str, Any] = {
     "hero_variant": os.environ.get("XCAGI_PROFILE_PAGE_HERO_VARIANT", "glass").strip() or "glass",
     "headline": os.environ.get("XCAGI_PROFILE_PAGE_HEADLINE", "XCAGI 企业工作身份").strip()
     or "XCAGI 企业工作身份",
-    "subtitle": os.environ.get("XCAGI_PROFILE_PAGE_SUBTITLE", "账号、工作台与执行端状态统一管理").strip()
+    "subtitle": os.environ.get(
+        "XCAGI_PROFILE_PAGE_SUBTITLE", "账号、工作台与执行端状态统一管理"
+    ).strip()
     or "账号、工作台与执行端状态统一管理",
-    "status_ready": os.environ.get("XCAGI_PROFILE_PAGE_STATUS_READY", "资料、头像和工作台状态已同步").strip()
+    "status_ready": os.environ.get(
+        "XCAGI_PROFILE_PAGE_STATUS_READY", "资料、头像和工作台状态已同步"
+    ).strip()
     or "资料、头像和工作台状态已同步",
-    "status_syncing": os.environ.get("XCAGI_PROFILE_PAGE_STATUS_SYNCING", "正在同步资料与工作台状态").strip()
+    "status_syncing": os.environ.get(
+        "XCAGI_PROFILE_PAGE_STATUS_SYNCING", "正在同步资料与工作台状态"
+    ).strip()
     or "正在同步资料与工作台状态",
     "primary_chip": os.environ.get("XCAGI_PROFILE_PAGE_PRIMARY_CHIP", "").strip(),
     "secondary_chip": os.environ.get("XCAGI_PROFILE_PAGE_SECONDARY_CHIP", "").strip(),

@@ -6,6 +6,7 @@ text = src.read_text(encoding="utf-8")
 tmpl = re.search(r"<template>(.*?)</template>", text, re.S).group(1)
 lines = tmpl.splitlines()
 
+
 # line numbers in file (1-based) -> index in lines (template starts line 2 in file = index 1 in lines after split)
 # template line 1 is empty after split from <template>\n
 # File line 42 = section guide -> find in lines
@@ -17,6 +18,7 @@ def slice_section(start_file_line: int, end_file_line: int) -> str:
     # strip outer section wrapper comment if needed
     return "\n".join(chunk).strip() + "\n"
 
+
 sections = {
     "ExpertTabGuide": (42, 327),
     "ExpertTabManifest": (328, 341),
@@ -27,7 +29,7 @@ sections = {
 }
 modals = slice_section(480, 565)
 
-wrapper = '''<script setup lang="ts">
+wrapper = """<script setup lang="ts">
 import { useModAuthoringContext } from '../composables/useModAuthoringContext'
 
 const ctx = useModAuthoringContext()
@@ -39,7 +41,7 @@ const {
 <template>
 {body}
 </template>
-'''
+"""
 
 # common bindings - use spread via toRefs alternative: destructure all used in guide
 guide_bindings = """  tab,

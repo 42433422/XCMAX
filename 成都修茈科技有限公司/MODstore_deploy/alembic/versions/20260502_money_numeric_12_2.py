@@ -61,4 +61,8 @@ def downgrade() -> None:
         ("llm_call_logs", "charge_amount", "double precision"),
     ]
     for table, col, typ in rev:
-        op.execute(sa.text(f"ALTER TABLE {table} ALTER COLUMN {col} TYPE {typ} USING {col}::double precision"))
+        op.execute(
+            sa.text(
+                f"ALTER TABLE {table} ALTER COLUMN {col} TYPE {typ} USING {col}::double precision"
+            )
+        )

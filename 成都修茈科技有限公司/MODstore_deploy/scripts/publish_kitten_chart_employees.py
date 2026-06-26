@@ -1,4 +1,5 @@
 """将 chart-*-employee 可视化员工发布到 catalog 并设为 AI 市场公开展示。"""
+
 from __future__ import annotations
 
 import json

@@ -32,9 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 YUANGON_DIR = REPO_ROOT / "yuangon"
 PROCESS_LOG_DIR = REPO_ROOT / "MODstore_deploy" / "var" / "yuangon_resync"
 MODSTORE_ROOT = REPO_ROOT / "MODstore_deploy"
-EVENT_OUTBOX = (
-    REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "event_outbox.jsonl"
-)
+EVENT_OUTBOX = REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "event_outbox.jsonl"
 
 
 def _git_diff_paths(base_ref: str) -> list[str]:
@@ -64,7 +62,9 @@ def _changed_pkg_ids(paths: list[str]) -> list[str]:
     return sorted(ids)
 
 
-def _emit_event_fallback_jsonl(name: str, payload: dict, producer: str = "push-update-context-officer") -> None:
+def _emit_event_fallback_jsonl(
+    name: str, payload: dict, producer: str = "push-update-context-officer"
+) -> None:
     EVENT_OUTBOX.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "event_id": f"{name}:{datetime.now(timezone.utc).isoformat()}",
@@ -149,7 +149,10 @@ def main() -> int:
 
     if args.apply:
         rc2 = subprocess.call(
-            [sys.executable, str(REPO_ROOT / "MODstore_deploy" / "scripts" / "build_routing_table.py")],
+            [
+                sys.executable,
+                str(REPO_ROOT / "MODstore_deploy" / "scripts" / "build_routing_table.py"),
+            ],
             cwd=str(cwd),
         )
         if rc2 != 0:

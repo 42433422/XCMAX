@@ -20,9 +20,7 @@ def _table_exists(name: str) -> bool:
         ).fetchone()
         return row is not None
     row = bind.execute(
-        sa.text(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = :n"
-        ),
+        sa.text("SELECT 1 FROM information_schema.tables WHERE table_name = :n"),
         {"n": name},
     ).fetchone()
     return row is not None

@@ -1,5 +1,6 @@
 """临时：用 library/<pack>/manifest.json 覆盖 catalog_data/files/<pack>-<ver>.xcemp 内的 manifest，
 让 employee_runtime.load_employee_pack 看到我们的修改。可删。"""
+
 from __future__ import annotations
 
 import hashlib

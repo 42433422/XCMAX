@@ -16,11 +16,13 @@ def _alipay_sandbox_mode() -> bool:
     v = (os.environ.get("ALIPAY_DEBUG") or "0").strip().lower()
     return v in ("1", "true", "yes", "on")
 
+
 _root = Path(__file__).resolve().parent
 try:
     os.chdir(_root)
 except OSError:
     pass
+
 
 def _load_dotenv_merge(path: Path) -> None:
     """覆盖同名键，但文件中的空值不抹掉已在 .env 里加载的非空变量（避免 .env.local 留空 ALIPAY_APP_ID= 盖掉 .env）。"""
@@ -57,7 +59,9 @@ def _maybe_fill_keys_from_files() -> None:
     if priv.is_file():
         os.environ["ALIPAY_APP_PRIVATE_KEY"] = priv.read_text(encoding="utf-8")
     pub = _root / "keys" / "alipay_public_key.pem"
-    if not os.environ.get("ALIPAY_ALIPAY_PUBLIC_KEY") and not os.environ.get("ALIPAY_ALIPAY_PUBLIC_KEY_PATH"):
+    if not os.environ.get("ALIPAY_ALIPAY_PUBLIC_KEY") and not os.environ.get(
+        "ALIPAY_ALIPAY_PUBLIC_KEY_PATH"
+    ):
         if pub.is_file():
             os.environ["ALIPAY_ALIPAY_PUBLIC_KEY"] = pub.read_text(encoding="utf-8")
 
@@ -80,9 +84,7 @@ if not (os.environ.get("ALIPAY_DEBUG") or "").strip():
 _notify = (os.environ.get("ALIPAY_NOTIFY_URL") or "").strip()
 if not _notify:
     if _alipay_sandbox_mode():
-        os.environ["ALIPAY_NOTIFY_URL"] = (
-            "http://127.0.0.1:8765/api/payment/notify/alipay"
-        )
+        os.environ["ALIPAY_NOTIFY_URL"] = "http://127.0.0.1:8765/api/payment/notify/alipay"
     else:
         print(
             "正式收款须设置公网可访问的 ALIPAY_NOTIFY_URL（HTTPS，与线上一致），"

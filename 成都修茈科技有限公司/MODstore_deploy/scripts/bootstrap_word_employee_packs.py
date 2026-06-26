@@ -1,4 +1,5 @@
 """Bootstrap Word 全量读取 / Word 生成员工包到 library（内置 direct_python runtime）。"""
+
 from __future__ import annotations
 
 import json
@@ -92,7 +93,17 @@ def _bootstrap_one(*, brief: str, extra_files: dict | None = None) -> Path:
         dest = import_zip(tmp_path, lib, replace=True)
     finally:
         tmp_path.unlink(missing_ok=True)
-    print(json.dumps({"ok": True, "pack_id": dest.name, "path": str(dest), "runtime_kind": rule_spec.get("runtime_kind")}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "pack_id": dest.name,
+                "path": str(dest),
+                "runtime_kind": rule_spec.get("runtime_kind"),
+            },
+            ensure_ascii=False,
+        )
+    )
     return dest
 
 

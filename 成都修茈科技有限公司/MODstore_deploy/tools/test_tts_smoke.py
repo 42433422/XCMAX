@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """TTS smoke test with JWT (run inside API container: python -m tools.test_tts_smoke)."""
+
 import json
 import sys
 import time

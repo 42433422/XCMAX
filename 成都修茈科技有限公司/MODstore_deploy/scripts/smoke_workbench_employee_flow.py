@@ -8,7 +8,6 @@ from pathlib import Path
 
 import requests
 
-
 BASE_URL = (os.environ.get("SMOKE_BASE_URL") or "http://127.0.0.1:8000").rstrip("/")
 USERNAME = os.environ.get("SMOKE_USERNAME") or "admin"
 PASSWORD = os.environ.get("SMOKE_PASSWORD") or "admin123"
@@ -88,9 +87,17 @@ def _assert_employee_session(final: dict) -> list[str]:
             errs.append("quality_report.critical_failed=true")
         if qr.get("runnable") is False:
             errs.append("quality_report.runnable=false")
-        if SMOKE_CASE == "word" and qr.get("pipeline_label") and qr.get("pipeline_label") != "word_full_extract":
+        if (
+            SMOKE_CASE == "word"
+            and qr.get("pipeline_label")
+            and qr.get("pipeline_label") != "word_full_extract"
+        ):
             errs.append(f"unexpected pipeline_label={qr.get('pipeline_label')}")
-        if SMOKE_CASE == "word_gen" and qr.get("pipeline_label") and qr.get("pipeline_label") != "word_generate":
+        if (
+            SMOKE_CASE == "word_gen"
+            and qr.get("pipeline_label")
+            and qr.get("pipeline_label") != "word_generate"
+        ):
             errs.append(f"unexpected pipeline_label={qr.get('pipeline_label')}")
     return errs
 
@@ -153,9 +160,21 @@ def main() -> int:
         files = (template, src)
 
     sess = requests.Session()
-    login = sess.post(f"{BASE_URL}/api/auth/login", json={"username": USERNAME, "password": PASSWORD}, timeout=30)
+    login = sess.post(
+        f"{BASE_URL}/api/auth/login", json={"username": USERNAME, "password": PASSWORD}, timeout=30
+    )
     if login.status_code >= 400:
-        print(json.dumps({"ok": False, "stage": "login", "status": login.status_code, "text": login.text[:1000]}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "stage": "login",
+                    "status": login.status_code,
+                    "text": login.text[:1000],
+                },
+                ensure_ascii=False,
+            )
+        )
         return 2
     token = login.json().get("access_token")
     sess.headers.update({"Authorization": f"Bearer {token}"})
@@ -169,7 +188,14 @@ def main() -> int:
                     data={"metadata": json.dumps(metadata, ensure_ascii=False)},
                     files=[
                         ("files", (json_path.name, jf, "application/json")),
-                        ("files", (tpl_path.name, tf, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")),
+                        (
+                            "files",
+                            (
+                                tpl_path.name,
+                                tf,
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            ),
+                        ),
                     ],
                     timeout=60,
                 )
@@ -180,8 +206,22 @@ def main() -> int:
                     f"{BASE_URL}/api/workbench/sessions",
                     data={"metadata": json.dumps(metadata, ensure_ascii=False)},
                     files=[
-                        ("files", (template.name, tf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                        ("files", (src.name, sf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                        (
+                            "files",
+                            (
+                                template.name,
+                                tf,
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            ),
+                        ),
+                        (
+                            "files",
+                            (
+                                src.name,
+                                sf,
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            ),
+                        ),
                     ],
                     timeout=60,
                 )
@@ -192,7 +232,12 @@ def main() -> int:
             timeout=60,
         )
     if res.status_code >= 400:
-        print(json.dumps({"ok": False, "stage": "start", "status": res.status_code, "text": res.text[:2000]}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"ok": False, "stage": "start", "status": res.status_code, "text": res.text[:2000]},
+                ensure_ascii=False,
+            )
+        )
         return 1
     sid = res.json().get("session_id")
     final = None
@@ -200,7 +245,17 @@ def main() -> int:
     while time.time() < deadline:
         poll = sess.get(f"{BASE_URL}/api/workbench/sessions/{sid}", timeout=30)
         if poll.status_code >= 400:
-            print(json.dumps({"ok": False, "stage": "poll", "status": poll.status_code, "text": poll.text[:1000]}, ensure_ascii=False))
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "stage": "poll",
+                        "status": poll.status_code,
+                        "text": poll.text[:1000],
+                    },
+                    ensure_ascii=False,
+                )
+            )
             return 1
         final = poll.json()
         if final.get("status") in {"done", "error"}:
