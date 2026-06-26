@@ -385,6 +385,13 @@ def _analyze_employee_capability(
 def _topo_sort(
     nodes: Iterable[str], deps_map: Mapping[str, Sequence[str]]
 ) -> Tuple[List[str], List[str]]:
+    """Kahn's algorithm with cycle-breaking.
+
+    Returns (topological_order, broken_cycle_nodes). When a cycle is
+    detected, the remaining nodes are appended in sorted order so the caller
+    can proceed instead of hard-failing. ``broken_cycle_nodes`` lists the
+    nodes that were part of a cycle (non-empty only when a cycle existed).
+    """
     node_set = set(nodes)
     indeg: Dict[str, int] = {n: 0 for n in node_set}
     children: Dict[str, List[str]] = {n: [] for n in node_set}
@@ -407,7 +414,12 @@ def _topo_sort(
                 queue.sort()
     if len(out) == len(node_set):
         return out, []
+    # Cycle detected: append remaining nodes in deterministic order so the
+    # duty graph can still execute. Real mutual dependencies (e.g. A↔B) are
+    # broken by ignoring the back-edge; the surviving order is the alphabetically
+    # sorted cycle nodes, which gives a stable, reproducible schedule.
     cycle_nodes = sorted(n for n, deg in indeg.items() if deg > 0)
+    out.extend(cycle_nodes)
     return out, cycle_nodes
 
 
@@ -680,7 +692,16 @@ def execute_duty_graph_programmatic(
 
         order, cycle_nodes = _topo_sort(selected, deps_map)
         if cycle_nodes:
-            return {"ok": False, "error": f"依赖图存在循环：{', '.join(cycle_nodes)}"}
+            # Cycle detected but not fatal: _topo_sort already broke the cycle
+            # by appending the remaining nodes in deterministic order. Log a
+            # warning so operators know the dependency graph has a mutual edge
+            # that should be cleaned up in the employee manifests, but proceed
+            # with execution rather than blocking the entire duty graph.
+            logger.warning(
+                "duty graph cycle detected and broken: %s — proceeding with order %s",
+                ", ".join(cycle_nodes),
+                order,
+            )
 
         run = DutyGraphRun(
             created_by_user_id=int(created_by_user_id),
@@ -726,8 +747,14 @@ def execute_duty_graph_programmatic(
                 else deps_map.get(eid, [])
             )
             relevant = [x for x in (d or []) if x in selected]
+            # When _topo_sort broke a cycle, a node's dependency may appear
+            # later in `order` (back-edge of the broken cycle), so its
+            # layer_index entry doesn't exist yet. Use .get(x, -1) to tolerate
+            # those back-edges instead of raising KeyError.
             layer_index[eid] = (
-                (max((layer_index[x] for x in relevant), default=-1) + 1) if relevant else 0
+                (max((layer_index.get(x, -1) for x in relevant), default=-1) + 1)
+                if relevant
+                else 0
             )
         layers: Dict[int, List[str]] = {}
         for eid, lvl in layer_index.items():

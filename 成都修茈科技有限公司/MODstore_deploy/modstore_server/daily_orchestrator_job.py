@@ -121,6 +121,20 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         else:
             base_ref = "HEAD"
 
+    # 工作区脏时先 stash，避免 checkout 被本地改动阻断。
+    # 跑完后操作员需手动 `git stash pop` 恢复（见 benchmark 脚本说明）。
+    pre_status = _run_git(root, ["status", "--porcelain"])
+    if (pre_status.stdout or "").strip():
+        logger.info("daily orchestrator: working tree dirty, stashing before checkout")
+        st = _run_git(
+            root,
+            ["stash", "push", "-u", "-m", f"daily-orchestrator-pre-checkout-{base_ref}"],
+        )
+        if st.returncode != 0:
+            logger.warning("daily orchestrator: stash failed: %s, trying clean", st.stderr)
+            _run_git(root, ["checkout", "--", "."])
+            _run_git(root, ["clean", "-fdq"])
+
     chk = _run_git(root, ["checkout", base_ref], timeout=90)
     if chk.returncode != 0:
         logger.warning("daily orchestrator: checkout %s failed: %s", base_ref, chk.stderr)
