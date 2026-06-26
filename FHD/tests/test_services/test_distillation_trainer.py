@@ -429,7 +429,7 @@ class TestDistillationTrainerTrainEpoch:
         # Mock model
         mock_model = MagicMock()
         mock_output = MagicMock()
-        mock_output.loss = torch.tensor(0.5)
+        mock_output.loss = torch.tensor(0.5, requires_grad=True)
         mock_output.logits = torch.tensor([[0.8, 0.2]])
         mock_model.return_value = mock_output
         mock_model.parameters.return_value = []
@@ -648,6 +648,9 @@ class TestDistillationTrainerTrainFull:
 
         trainer.load_data = MagicMock(return_value=(["a"] * 15, [0] * 15))
         trainer.prepare_data = MagicMock()
+        trainer.model = MagicMock()
+        trainer.model.parameters.return_value = []
+        trainer.train_loader = [object()]
         trainer.train_epoch = MagicMock(return_value=(0.5, 0.8))
         trainer.evaluate = MagicMock(
             return_value={"val_loss": 0.4, "val_accuracy": 0.9, "preds": [0], "labels": [0]}
@@ -697,7 +700,7 @@ class TestDistillationTrainerSaveCheckpointConfig:
         assert config["model_name"] == "test-model"
         assert config["epoch"] == 3
         assert config["best"] is False
-        assert config["id2label"] == ID_TO_LABEL
+        assert config["id2label"] == {str(k): v for k, v in ID_TO_LABEL.items()}
         assert config["label2id"] == LABEL_TO_ID
         assert config["max_length"] == 64
 

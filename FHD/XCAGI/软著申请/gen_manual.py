@@ -38,7 +38,7 @@ def _find_cn_font():
     return None
 
 
-def generate_manual_pdf(output_file: str, software_name: str, version: str = "V9.0",
+def generate_manual_pdf(output_file: str, software_name: str, version: str = "V10.0.0",
                         copyright_holder: str = "李佳泷",
                         develop_finish_date: str = ""):
     """生成软件说明书 PDF"""
@@ -2242,7 +2242,7 @@ def generate_manual_pdf(output_file: str, software_name: str, version: str = "V9
 if __name__ == '__main__':
     software_name = "XCAGI 企业 AI 员工平台"
     software_short_name = "XCAGI 平台"
-    version = "V9.0"
+    version = "V10.0.0"
     copyright_holder = "李佳泷"
     develop_finish_date = "2026 年 5 月"
     output_file = f"软件说明书_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"

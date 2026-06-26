@@ -1,6 +1,5 @@
 package com.xiuci.xcagi.mobile.navigation
 
-import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -38,8 +37,6 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.LocalPrintshop
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.TravelExplore
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -97,7 +94,6 @@ import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
 import com.xiuci.xcagi.mobile.feature.web.DesktopToolWebView
 import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
-import com.xiuci.xcagi.mobile.ui.UpdateDownload
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeDialog
 import com.xiuci.xcagi.mobile.ui.components.mobile.SnackData
@@ -124,6 +120,7 @@ import com.xiuci.xcagi.mobile.feature.finance.LongTailScreen
 import com.xiuci.xcagi.mobile.feature.list.ListScreen
 import com.xiuci.xcagi.mobile.feature.market.MarketListScreen
 import com.xiuci.xcagi.mobile.feature.ocr.OcrScreen
+import com.xiuci.xcagi.mobile.feature.onboarding.MobileOnboardingScreen
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -147,6 +144,7 @@ fun XcagiNavHost(
     val navReady by vm.navReady.collectAsState()
     val startRoute by vm.startRoute.collectAsState()
     val updatePrompt by vm.updatePrompt.collectAsState()
+    val updateInstallState by vm.updateInstallState.collectAsState()
     val ctx = LocalContext.current
     val networkMonitor =
             androidx.compose.runtime.remember(ctx) {
@@ -168,82 +166,26 @@ fun XcagiNavHost(
     }
 
     updatePrompt?.let { prompt ->
-        val download by vm.updateDownload.collectAsState()
-        // 下载中=「取消」；失败=回退「浏览器下载」；非强更=「稍后」；强更默认无次按钮
-        val dismissAction: (@Composable () -> Unit)? =
-                when {
-                    download is UpdateDownload.Downloading -> {
-                        { TextButton({ vm.cancelUpdateDownload() }) { Text("取消") } }
+        val updateMessage =
+                buildString {
+                    append("最新版本 ${prompt.versionName}，将下载完整安装包并交给系统安装器安装。")
+                    val status = updateInstallState.message.trim()
+                    if (status.isNotBlank()) {
+                        append("\n")
+                        append(status)
                     }
-                    download is UpdateDownload.Failed -> {
-                        {
-                            TextButton({
-                                ctx.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(prompt.downloadUrl))
-                                )
-                            }) { Text("浏览器下载") }
-                        }
-                    }
-                    !prompt.force -> {
-                        { TextButton({ vm.dismissUpdatePrompt() }) { Text("稍后") } }
-                    }
-                    else -> null
                 }
-        AlertDialog(
-                onDismissRequest = {
-                    if (!prompt.force && download !is UpdateDownload.Downloading) {
-                        vm.dismissUpdatePrompt()
+        WeDialog(
+                onDismiss = { if (!prompt.force) vm.dismissUpdatePrompt() },
+                title = if (prompt.force) "需要更新" else "发现新版本",
+                message = updateMessage,
+                confirmText = if (updateInstallState.downloading) "下载中" else "去更新",
+                dismissText = if (prompt.force) null else "稍后",
+                onConfirm = {
+                    if (!updateInstallState.downloading) {
+                        vm.startPackageUpdate(prompt)
                     }
                 },
-                title = { Text(if (prompt.force) "需要更新" else "发现新版本") },
-                text = {
-                    Column {
-                        Text("最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。")
-                        when (val d = download) {
-                            is UpdateDownload.Downloading -> {
-                                Spacer(Modifier.height(12.dp))
-                                LinearProgressIndicator(
-                                        progress = { d.percent / 100f },
-                                        modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                        "正在下载更新包… ${d.percent}%",
-                                        style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                            is UpdateDownload.Ready -> {
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                        "下载完成，点击「立即安装」继续。",
-                                        style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                            is UpdateDownload.Failed -> {
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                        "下载失败：${d.reason}",
-                                        color = MaterialTheme.colorScheme.error,
-                                        style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                            else -> {}
-                        }
-                    }
-                },
-                confirmButton = {
-                    when (download) {
-                        is UpdateDownload.Downloading ->
-                                TextButton(onClick = {}, enabled = false) { Text("下载中…") }
-                        is UpdateDownload.Ready ->
-                                TextButton({ vm.installDownloadedUpdate() }) { Text("立即安装") }
-                        is UpdateDownload.Failed ->
-                                TextButton({ vm.startInAppUpdate(prompt.downloadUrl) }) { Text("重试") }
-                        else ->
-                                TextButton({ vm.startInAppUpdate(prompt.downloadUrl) }) { Text("立即更新") }
-                    }
-                },
-                dismissButton = dismissAction,
         )
     }
 
@@ -278,8 +220,8 @@ fun XcagiNavHost(
     LaunchedEffect(loggedIn) {
         if (loggedIn) {
             val r = nav.currentDestination?.route
-            if (r == Routes.AUTH || r == Routes.REGISTER) {
-                nav.navigate(Routes.CHAT) {
+            if (r == Routes.AUTH || r == Routes.AUTH_AUTO_LOGIN || r == Routes.REGISTER) {
+                nav.navigate(Routes.ONBOARDING) {
                     popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
                 }
             }
@@ -405,7 +347,7 @@ fun XcagiNavHost(
                     AuthScreen(
                             vm,
                             { nav.navigate(Routes.REGISTER) },
-                            { nav.navigate(Routes.CHAT) },
+                            { nav.navigate(Routes.ONBOARDING) },
                             { nav.navigate(Routes.SCAN_QR) },
                     )
                 }
@@ -414,12 +356,37 @@ fun XcagiNavHost(
                     AuthScreen(
                             vm,
                             { nav.navigate(Routes.REGISTER) },
-                            { nav.navigate(Routes.CHAT) },
+                            { nav.navigate(Routes.ONBOARDING) },
                             { nav.navigate(Routes.SCAN_QR) },
                     )
                     LaunchedEffect(Unit) { vm.tryAutoLogin() }
                 }
-                composable(Routes.REGISTER) { RegisterScreen(vm) { nav.popBackStack() } }
+                composable(Routes.REGISTER) {
+                    RegisterScreen(
+                            onOpenWebForm = {
+                                val url =
+                                        vm.desktopPageUrl(
+                                                "/login/register?redirect=%2Fapp%2Fmobile-register-complete"
+                                        )
+                                nav.navigate(Routes.webView(url, "注册"))
+                            },
+                            onLogin = { nav.popBackStack() },
+                    )
+                }
+                composable(Routes.ONBOARDING) {
+                    val finishOnboarding = {
+                        vm.completeSetup()
+                        nav.navigate(Routes.CHAT) {
+                            popUpTo(Routes.ONBOARDING) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                    MobileOnboardingScreen(
+                            vm,
+                            onFinish = finishOnboarding,
+                            onBack = finishOnboarding,
+                    )
+                }
                 composable(Routes.HOME_HUB) {
                     LaunchedEffect(Unit) {
                         nav.navigate(Routes.CHAT) {
@@ -816,7 +783,28 @@ fun XcagiNavHost(
                         bearer = vm.bearerToken()
                     }
                     if (url.isNotBlank()) {
-                        DesktopToolWebView(url, title, bearer, access, refresh, fhdAccess) {
+                        val isRegisterFlow = url.contains("/login/register")
+                        DesktopToolWebView(
+                                url,
+                                title,
+                                bearer,
+                                access,
+                                refresh,
+                                fhdAccess,
+                                onUrlOverride = { nextUrl ->
+                                    val path = runCatching { Uri.parse(nextUrl).path.orEmpty() }.getOrDefault("")
+                                    if (isRegisterFlow && path == "/app/mobile-register-complete") {
+                                        vm.snack("注册完成，请使用新账号登录")
+                                        nav.navigate(Routes.AUTH) {
+                                            popUpTo(Routes.AUTH) { inclusive = false }
+                                            launchSingleTop = true
+                                        }
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                        ) {
                             nav.popBackStack()
                         }
                     }

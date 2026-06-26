@@ -168,11 +168,11 @@ class TestNeuroReliabilityWanted:
         with patch.dict(os.environ, {"FHD_ENV": "staging"}):
             assert _neuro_reliability_wanted("XCAGI_TEST_REL_MISSING", staging_default=True) is True
 
-    def test_staging_default_false_outside_staging(self) -> None:
+    def test_production_default_true_outside_staging(self) -> None:
         os.environ.pop("XCAGI_TEST_REL_MISSING2", None)
         with patch.dict(os.environ, {"FHD_ENV": "production"}):
             assert (
-                _neuro_reliability_wanted("XCAGI_TEST_REL_MISSING2", staging_default=True) is False
+                _neuro_reliability_wanted("XCAGI_TEST_REL_MISSING2", staging_default=True) is True
             )
 
 

@@ -1,13 +1,24 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import importlib.util
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 
+def _load_mobile_relay_service_module():
+    path = Path(__file__).resolve().parents[1] / "app" / "services" / "mobile_relay_service.py"
+    spec = importlib.util.spec_from_file_location("mobile_relay_service_under_test", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_mobile_relay_pair_dispatch_complete_round_trip(monkeypatch, tmp_path):
-    from app.services import mobile_relay_service as relay
+    relay = _load_mobile_relay_service_module()
 
     engine = create_engine(f"sqlite:///{tmp_path / 'relay.db'}")
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
@@ -70,3 +81,48 @@ def test_mobile_relay_pair_dispatch_complete_round_trip(monkeypatch, tmp_path):
     assert completed is not None
     assert completed["status"] == "completed"
     assert completed["result"]["codex"]["assistant_message"]["body"] == "完成"
+
+
+def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
+    relay = _load_mobile_relay_service_module()
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'relay-account.db'}")
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+
+    @contextmanager
+    def test_db():
+        db = session_factory()
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    monkeypatch.setattr(relay, "get_db", test_db)
+    service = relay.MobileRelayService()
+
+    registered = service.register_desktop(
+        label="账号绑定电脑",
+        device_id="mac-account-1",
+        relay_base_url="https://relay.example.test/api",
+        capabilities={"codex": True, "host": "192.168.1.9", "port": 42422},
+    )
+    bound = service.bind_mobile_by_account(
+        user_id=9,
+        username="account-user",
+        relay_id=registered["relay_id"],
+    )
+    assert bound is not None
+    assert bound["status"] == "paired"
+    assert bound["relay_id"] == registered["relay_id"]
+    assert bound["local_base_url"] == "http://192.168.1.9:42422"
+
+    hijack = service.bind_mobile_by_account(
+        user_id=10,
+        username="other-user",
+        relay_id=registered["relay_id"],
+    )
+    assert hijack is None

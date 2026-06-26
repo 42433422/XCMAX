@@ -95,7 +95,10 @@ async function doLogin() {
   loading.value = true
   try {
     const res = await api.loginWithCode(email.value, code.value)
-    localStorage.setItem('modstore_token', res.token)
+    // P0-4：存储 web_tokens（access + refresh），session 认证由 httpOnly cookie 管理
+    const wt = (res as any).web_tokens || {}
+    localStorage.setItem('modstore_token', wt.access_token || res.token || '')
+    if (wt.refresh_token) localStorage.setItem('modstore_refresh_token', wt.refresh_token)
     window.location.href = '/'
   } catch (e) {
     err.value = e.message

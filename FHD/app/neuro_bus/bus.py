@@ -41,6 +41,11 @@ def _deployment_is_staging() -> bool:
     return os.environ.get("FHD_ENV", "").strip().lower() == "staging"
 
 
+def _deployment_is_production() -> bool:
+    """k8s/CI：设置 FHD_ENV=production；生产环境安全优先，可靠性机制默认全开。"""
+    return os.environ.get("FHD_ENV", "").strip().lower() == "production"
+
+
 def _neuro_trace_sample_rate() -> float:
     """生产 trace 采样率，避免洪泛。XCAGI_NEURO_BUS_TRACE_SAMPLE_RATE 默认 0.1。"""
     raw = os.environ.get("XCAGI_NEURO_BUS_TRACE_SAMPLE_RATE", "0.1").strip()
@@ -63,15 +68,20 @@ def _should_trace_event() -> bool:
     return random.random() < rate
 
 
-def _neuro_reliability_wanted(env_name: str, *, staging_default: bool) -> bool:
+def _neuro_reliability_wanted(
+    env_name: str, *, staging_default: bool, production_default: bool = True
+) -> bool:
     """
-    可靠性层开关：显式设置环境变量时以变量为准；未设置时在 staging 采用默认值（默认可关）。
+    可靠性层开关：显式设置环境变量时以变量为准；未设置时在 staging/production
+    采用默认值（生产安全优先，production_default 默认 True）。
     """
     raw = os.environ.get(env_name)
     if raw is not None and str(raw).strip() != "":
         return _neuro_env_flag(env_name)
     if _deployment_is_staging():
         return staging_default
+    if _deployment_is_production():
+        return production_default
     return False
 
 
@@ -253,13 +263,14 @@ class NeuroBus:
         self._event_buffer: list[dict[str, Any]] = []
         self._enable_persistence = False
 
-        # 可选可靠性层：未设环境变量时，FHD_ENV=staging 默认开启 DEDUP+CIRCUIT；其余见 .env.example
+        # 可选可靠性层：未设环境变量时，FHD_ENV=staging/production 默认开启（生产安全优先）。
+        # 显式设置 env 时以变量为准；开发环境默认关闭。详见 .env.example。
         self._rel_dedup = None
         self._rel_rate = None
         self._rel_circuit = None
         self._rel_lifeline = None
         self._rel_tracer = None
-        self._rel_sla_log = _neuro_env_flag("XCAGI_NEURO_BUS_SLA_LOG")
+        self._rel_sla_log = _neuro_reliability_wanted("XCAGI_NEURO_BUS_SLA_LOG", staging_default=False)
         self._rel_sla_controller = None
         if self._rel_sla_log:
             from app.neuro_bus.sla_controller import SLAController

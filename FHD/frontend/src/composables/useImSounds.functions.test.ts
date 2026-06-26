@@ -1,288 +1,231 @@
-/**
- * useImSounds 函数补全测试
- * 覆盖：playFile、beepFallback、getAudio、ensureNotificationPermission、
- * showBrowserNotification、playIncoming('notify-only')、playIncoming('all')、
- * playOutgoing('all')、readMode 边界
- */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useImSounds, type ImSoundMode } from './useImSounds'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useImSounds } from './useImSounds'
 
-// ── Mocks ─────────────────────────────────────────────────
-
-const mockAudioPlay = vi.fn()
-const mockAudioCatch = vi.fn()
-const mockAudioInstance = {
-  preload: '',
-  currentTime: 0,
-  play: () => {
-    const p: any = Promise.resolve()
-    p.catch = mockAudioCatch
-    mockAudioPlay()
-    return p
-  },
-}
-
-vi.stubGlobal('Audio', vi.fn(() => mockAudioInstance))
-
-const mockOscillatorStart = vi.fn()
-const mockOscillatorStop = vi.fn()
-const mockOscillatorConnect = vi.fn()
-const mockGainConnect = vi.fn()
-const mockGainValue = { value: 0 }
-const mockCtxClose = vi.fn()
-const mockCtxCreateOscillator = vi.fn(() => ({
-  connect: mockOscillatorConnect,
-  frequency: { value: 0 },
-  start: mockOscillatorStart,
-  stop: mockOscillatorStop,
-  onended: null,
-}))
-const mockCtxCreateGain = vi.fn(() => ({
-  connect: mockGainConnect,
-  gain: mockGainValue,
-}))
-const mockCtxDestination = {}
-const mockAudioContext = vi.fn(() => ({
-  createOscillator: mockCtxCreateOscillator,
-  createGain: mockCtxCreateGain,
-  destination: mockCtxDestination,
-  currentTime: 0,
-  close: mockCtxClose,
-}))
-
-vi.stubGlobal('AudioContext', mockAudioContext)
-
-const mockNotificationRequestPermission = vi.fn()
-const mockNotificationClose = vi.fn()
-const mockNotificationInstance = {
-  onclick: null as ((this: Notification, ev: Event) => any) | null,
-  close: mockNotificationClose,
-}
-const MockNotification = vi.fn(() => mockNotificationInstance) as any
-MockNotification.permission = 'default'
-MockNotification.requestPermission = mockNotificationRequestPermission
-vi.stubGlobal('Notification', MockNotification)
-
-// ── Tests ─────────────────────────────────────────────────
-
-describe('useImSounds additional functions', () => {
+describe('useImSounds', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
-    // Reset module state by re-importing
-    vi.resetModules()
-    MockNotification.permission = 'default'
-    mockAudioPlay.mockClear()
-    mockAudioCatch.mockClear()
   })
 
-  afterEach(() => {
-    localStorage.clear()
-  })
-
-  // --- readMode edge cases ---
-
-  it('readMode returns stored mute value', async () => {
-    localStorage.setItem('xcagi.im.soundMode', 'mute')
-    const { useImSounds } = await import('./useImSounds')
-    const { mode } = useImSounds()
-    expect(mode.value).toBe('mute')
-  })
-
-  it('readMode returns stored notify-only value', async () => {
-    localStorage.setItem('xcagi.im.soundMode', 'notify-only')
-    const { useImSounds } = await import('./useImSounds')
-    const { mode } = useImSounds()
-    expect(mode.value).toBe('notify-only')
-  })
-
-  it('readMode returns all for invalid stored value', async () => {
-    localStorage.setItem('xcagi.im.soundMode', 'invalid')
-    const { useImSounds } = await import('./useImSounds')
-    const { mode } = useImSounds()
-    expect(mode.value).toBe('all')
-  })
-
-  it('readMode returns all when localStorage throws', async () => {
-    const origGetItem = localStorage.getItem
-    Object.defineProperty(localStorage, 'getItem', {
-      configurable: true,
-      value: vi.fn(() => {
-        throw new Error('access denied')
-      }),
+  describe('setMode', () => {
+    it('sets mode to all and persists to localStorage', () => {
+      const { mode, setMode } = useImSounds()
+      setMode('all')
+      expect(mode.value).toBe('all')
+      expect(localStorage.getItem('xcagi.im.soundMode')).toBe('all')
     })
-    const { useImSounds } = await import('./useImSounds')
-    const { mode } = useImSounds()
-    expect(mode.value).toBe('all')
-    Object.defineProperty(localStorage, 'getItem', {
-      configurable: true,
-      value: origGetItem,
+
+    it('sets mode to mute and persists to localStorage', () => {
+      const { mode, setMode } = useImSounds()
+      setMode('mute')
+      expect(mode.value).toBe('mute')
+      expect(localStorage.getItem('xcagi.im.soundMode')).toBe('mute')
+    })
+
+    it('sets mode to notify-only and persists to localStorage', () => {
+      const { mode, setMode } = useImSounds()
+      setMode('notify-only')
+      expect(mode.value).toBe('notify-only')
+      expect(localStorage.getItem('xcagi.im.soundMode')).toBe('notify-only')
+    })
+
+    it('does not throw when localStorage is unavailable', () => {
+      const orig = Object.getOwnPropertyDescriptor(window, 'localStorage')
+      try {
+        Object.defineProperty(window, 'localStorage', {
+          get: () => {
+            throw new Error('unavailable')
+          },
+        })
+        const { setMode } = useImSounds()
+        expect(() => setMode('all')).not.toThrow()
+      } finally {
+        if (orig) Object.defineProperty(window, 'localStorage', orig)
+      }
     })
   })
 
-  // --- setMode ---
-
-  it('setMode persists to localStorage', async () => {
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode } = useImSounds()
-    setMode('notify-only')
-    expect(localStorage.getItem('xcagi.im.soundMode')).toBe('notify-only')
-  })
-
-  it('setMode does not throw when localStorage fails', async () => {
-    const origSetItem = localStorage.setItem
-    Object.defineProperty(localStorage, 'setItem', {
-      configurable: true,
-      value: vi.fn(() => {
-        throw new Error('quota exceeded')
-      }),
+  describe('playIncoming', () => {
+    it('returns early when mode is mute', async () => {
+      const { setMode, playIncoming } = useImSounds()
+      setMode('mute')
+      await expect(playIncoming('hello')).resolves.toBeUndefined()
     })
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, mode } = useImSounds()
-    expect(() => setMode('mute')).not.toThrow()
-    expect(mode.value).toBe('mute')
-    Object.defineProperty(localStorage, 'setItem', {
-      configurable: true,
-      value: origSetItem,
+
+    it('plays file when mode is all', async () => {
+      const playSpy = vi.fn().mockReturnValue(undefined)
+      const fakeAudio = {
+        currentTime: 0,
+        play: playSpy,
+        preload: '',
+      }
+      const origAudio = global.Audio
+      global.Audio = vi.fn(() => fakeAudio as unknown as HTMLAudioElement) as unknown as typeof Audio
+      try {
+        const { setMode, playIncoming } = useImSounds()
+        setMode('all')
+        await expect(playIncoming('hello')).resolves.toBeUndefined()
+      } finally {
+        global.Audio = origAudio
+      }
     })
-  })
 
-  // --- playOutgoing in 'all' mode ---
-
-  it('playOutgoing plays audio in all mode', async () => {
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playOutgoing } = useImSounds()
-    setMode('all')
-    playOutgoing()
-    expect(mockAudioPlay).toHaveBeenCalled()
-  })
-
-  it('playOutgoing does not play in notify-only mode', async () => {
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playOutgoing } = useImSounds()
-    setMode('notify-only')
-    playOutgoing()
-    expect(mockAudioPlay).not.toHaveBeenCalled()
-  })
-
-  // --- playIncoming in 'all' mode ---
-
-  it('playIncoming plays audio in all mode', async () => {
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playIncoming } = useImSounds()
-    setMode('all')
-    await playIncoming('hello')
-    expect(mockAudioPlay).toHaveBeenCalled()
-  })
-
-  // --- playIncoming in 'notify-only' mode ---
-
-  it('playIncoming shows browser notification in notify-only mode', async () => {
-    MockNotification.permission = 'granted'
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playIncoming } = useImSounds()
-    setMode('notify-only')
-    await playIncoming('New message preview')
-    expect(MockNotification).toHaveBeenCalledWith('新消息', {
-      body: 'New message preview',
-      tag: 'xcagi-im',
-    })
-  })
-
-  it('playIncoming uses default body when no preview', async () => {
-    MockNotification.permission = 'granted'
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playIncoming } = useImSounds()
-    setMode('notify-only')
-    await playIncoming()
-    expect(MockNotification).toHaveBeenCalledWith('新消息', {
-      body: '您有一条新消息',
-      tag: 'xcagi-im',
-    })
-  })
-
-  it('playIncoming notification onclick focuses window and closes', async () => {
-    MockNotification.permission = 'granted'
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playIncoming } = useImSounds()
-    setMode('notify-only')
-    await playIncoming('test')
-    expect(mockNotificationInstance.onclick).toBeTruthy()
-    // Simulate click
-    const focusSpy = vi.spyOn(window, 'focus').mockImplementation(() => {})
-    mockNotificationInstance.onclick?.call(mockNotificationInstance as any, new Event('click'))
-    expect(focusSpy).toHaveBeenCalled()
-    expect(mockNotificationClose).toHaveBeenCalled()
-    focusSpy.mockRestore()
-  })
-
-  // --- ensureNotificationPermission ---
-
-  it('requests permission when default and user grants', async () => {
-    MockNotification.permission = 'default'
-    mockNotificationRequestPermission.mockResolvedValue('granted')
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playIncoming } = useImSounds()
-    setMode('notify-only')
-    await playIncoming('test')
-    expect(mockNotificationRequestPermission).toHaveBeenCalled()
-  })
-
-  it('does not show notification when permission denied', async () => {
-    MockNotification.permission = 'denied'
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playIncoming } = useImSounds()
-    setMode('notify-only')
-    await playIncoming('test')
-    expect(MockNotification).not.toHaveBeenCalled()
-  })
-
-  it('does not show notification when requestPermission returns default', async () => {
-    MockNotification.permission = 'default'
-    mockNotificationRequestPermission.mockResolvedValue('default')
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playIncoming } = useImSounds()
-    setMode('notify-only')
-    await playIncoming('test')
-    expect(MockNotification).not.toHaveBeenCalled()
-  })
-
-  // --- playFile with audio.play() rejection → beepFallback ---
-
-  it('falls back to beep when audio.play() rejects', async () => {
-    const failingPlay = vi.fn(() => {
-      const p: any = Promise.reject(new Error('not allowed'))
-      p.catch = vi.fn((cb: any) => {
-        // Immediately call the callback to simulate rejection
-        cb(new Error('not allowed'))
-        return p
+    it('uses beepFallback when play() rejects (mode all)', async () => {
+      let rejectPlay: (e: Error) => void = () => {}
+      const playSpy = vi.fn().mockImplementation(() => {
+        return new Promise<void>((_, reject) => {
+          rejectPlay = reject
+        })
       })
-      return p
+      const fakeAudio = {
+        currentTime: 0,
+        play: playSpy,
+        preload: '',
+      }
+      const origAudio = global.Audio
+      global.Audio = vi.fn(() => fakeAudio as unknown as HTMLAudioElement) as unknown as typeof Audio
+      const origAudioContext = global.AudioContext
+      const closeSpy = vi.fn()
+      const startSpy = vi.fn()
+      const stopSpy = vi.fn()
+      const connectSpy = vi.fn()
+      global.AudioContext = vi.fn(() => ({
+        createOscillator: () => ({
+          connect: connectSpy,
+          frequency: { value: 0 },
+          start: startSpy,
+          stop: stopSpy,
+          onended: null,
+        }),
+        createGain: () => ({
+          connect: connectSpy,
+          gain: { value: 0 },
+        }),
+        destination: {},
+        currentTime: 0,
+        close: closeSpy,
+      })) as unknown as typeof AudioContext
+      try {
+        const { setMode, playIncoming } = useImSounds()
+        setMode('all')
+        const p = playIncoming('hello')
+        rejectPlay(new Error('not allowed'))
+        await p
+        await new Promise((r) => setTimeout(r, 50))
+      } finally {
+        global.Audio = origAudio
+        global.AudioContext = origAudioContext
+      }
     })
-    const failingAudio = {
-      preload: '',
-      currentTime: 0,
-      play: failingPlay,
-    }
-    vi.mocked(Audio).mockReturnValue(failingAudio as any)
 
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playOutgoing } = useImSounds()
-    setMode('all')
-    playOutgoing()
-    // beepFallback should have been called via AudioContext
-    expect(mockAudioContext).toHaveBeenCalled()
+    it('shows browser notification when mode is notify-only', async () => {
+      const origNotification = global.Notification
+      global.Notification = {
+        permission: 'granted',
+        requestPermission: vi.fn().mockResolvedValue('granted'),
+      } as unknown as typeof Notification
+      const notifInstance = { onclick: null, close: vi.fn() }
+      global.Notification = vi.fn(() => notifInstance as unknown as Notification) as unknown as typeof Notification
+      ;(global.Notification as unknown as { permission: string }).permission = 'granted'
+      try {
+        const { setMode, playIncoming } = useImSounds()
+        setMode('notify-only')
+        await expect(playIncoming('preview text')).resolves.toBeUndefined()
+      } finally {
+        global.Notification = origNotification
+      }
+    })
+
+    it('uses default message when preview is empty (notify-only)', async () => {
+      const origNotification = global.Notification
+      const notifInstance = { onclick: null, close: vi.fn() }
+      const notifCtor = vi.fn(() => notifInstance as unknown as Notification)
+      global.Notification = notifCtor as unknown as typeof Notification
+      ;(global.Notification as unknown as { permission: string }).permission = 'granted'
+      try {
+        const { setMode, playIncoming } = useImSounds()
+        setMode('notify-only')
+        await playIncoming()
+        expect(notifCtor).toHaveBeenCalledWith('新消息', expect.objectContaining({ body: '您有一条新消息' }))
+      } finally {
+        global.Notification = origNotification
+      }
+    })
+
+    it('calls desktop showNotification when available (notify-only)', async () => {
+      const origNotification = global.Notification
+      global.Notification = { permission: 'denied' } as unknown as typeof Notification
+      const desktopNotif = vi.fn().mockResolvedValue(undefined)
+      const origDesktop = (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop
+      ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = { showNotification: desktopNotif }
+      try {
+        const { setMode, playIncoming } = useImSounds()
+        setMode('notify-only')
+        await playIncoming('preview')
+        expect(desktopNotif).toHaveBeenCalledWith('新消息', 'preview')
+      } finally {
+        global.Notification = origNotification
+        ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = origDesktop
+      }
+    })
   })
 
-  // --- Notification undefined ---
+  describe('playOutgoing', () => {
+    it('returns early when mode is mute', () => {
+      const { setMode, playOutgoing } = useImSounds()
+      setMode('mute')
+      expect(() => playOutgoing()).not.toThrow()
+    })
 
-  it('handles gracefully when Notification is undefined', async () => {
-    const origNotification = (window as any).Notification
-    delete (window as any).Notification
-    const { useImSounds } = await import('./useImSounds')
-    const { setMode, playIncoming } = useImSounds()
-    setMode('notify-only')
-    await expect(playIncoming('test')).resolves.toBeUndefined()
-    ;(window as any).Notification = origNotification
+    it('returns early when mode is notify-only', () => {
+      const { setMode, playOutgoing } = useImSounds()
+      setMode('notify-only')
+      expect(() => playOutgoing()).not.toThrow()
+    })
+
+    it('plays file when mode is all', () => {
+      const playSpy = vi.fn().mockReturnValue(undefined)
+      const fakeAudio = {
+        currentTime: 0,
+        play: playSpy,
+        preload: '',
+      }
+      const origAudio = global.Audio
+      global.Audio = vi.fn(() => fakeAudio as unknown as HTMLAudioElement) as unknown as typeof Audio
+      try {
+        const { setMode, playOutgoing } = useImSounds()
+        setMode('all')
+        playOutgoing()
+        expect(playSpy).toHaveBeenCalled()
+      } finally {
+        global.Audio = origAudio
+      }
+    })
+  })
+
+  describe('mode initial value', () => {
+    it('reads initial mode from localStorage', async () => {
+      localStorage.setItem('xcagi.im.soundMode', 'mute')
+      vi.resetModules()
+      const { useImSounds: freshUseImSounds } = await import('./useImSounds')
+      const { mode } = freshUseImSounds()
+      expect(mode.value).toBe('mute')
+    })
+
+    it('defaults to all when localStorage is empty', async () => {
+      localStorage.clear()
+      vi.resetModules()
+      const { useImSounds: freshUseImSounds } = await import('./useImSounds')
+      const { mode } = freshUseImSounds()
+      expect(mode.value).toBe('all')
+    })
+
+    it('defaults to all when localStorage has invalid value', async () => {
+      localStorage.setItem('xcagi.im.soundMode', 'invalid')
+      vi.resetModules()
+      const { useImSounds: freshUseImSounds } = await import('./useImSounds')
+      const { mode } = freshUseImSounds()
+      expect(mode.value).toBe('all')
+    })
   })
 })

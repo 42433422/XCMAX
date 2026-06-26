@@ -137,7 +137,7 @@ class TestDistillationTrainerTrainEpoch:
 
         # Mock model output
         mock_output = MagicMock()
-        mock_output.loss = torch.tensor(0.5)
+        mock_output.loss = torch.tensor(0.5, requires_grad=True)
         logits = torch.tensor([[0.9, 0.1], [0.1, 0.9]])
         mock_output.logits = logits
 
@@ -258,7 +258,7 @@ class TestDistillationTrainerTrainFullFlow:
 
         # Mock model outputs
         mock_train_output = MagicMock()
-        mock_train_output.loss = torch.tensor(0.5)
+        mock_train_output.loss = torch.tensor(0.5, requires_grad=True)
         mock_train_output.logits = torch.tensor([[0.9, 0.1], [0.1, 0.9]])
 
         mock_eval_output = MagicMock()

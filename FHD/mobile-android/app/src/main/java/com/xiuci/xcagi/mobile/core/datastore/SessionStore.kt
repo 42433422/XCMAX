@@ -303,6 +303,10 @@ constructor(
         }
     }
 
+    suspend fun clearInflightRelayTasks() {
+        context.dataStore.edit { it.remove(inflightRelayTasksKey) }
+    }
+
     suspend fun inflightRelayTask(conversationId: String): String =
             try {
                 org.json

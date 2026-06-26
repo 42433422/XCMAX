@@ -1,6 +1,10 @@
 package com.xiuci.xcagi.mobile.feature.web
 
 import android.annotation.SuppressLint
+import android.os.Handler
+import android.os.Looper
+import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
@@ -26,6 +30,7 @@ fun DesktopToolWebView(
     marketAccess: String = "",
     marketRefresh: String = "",
     fhdAccess: String = "",
+    onUrlOverride: ((String) -> Boolean)? = null,
     onBack: () -> Unit = {},
 ) {
     val injectMarket = shouldInjectMarketTokens(url) && marketAccess.isNotBlank()
@@ -40,8 +45,28 @@ fun DesktopToolWebView(
                 WebView(ctx).apply {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    if (onUrlOverride != null) {
+                        addJavascriptInterface(WebLocationBridge(onUrlOverride), "XcagiAndroid")
+                    }
                     webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                        ): Boolean {
+                            val nextUrl = request?.url?.toString() ?: return false
+                            return onUrlOverride?.invoke(nextUrl) == true
+                        }
+
+                        @Deprecated("Deprecated in Android API")
+                        override fun shouldOverrideUrlLoading(view: WebView?, nextUrl: String?): Boolean {
+                            if (nextUrl.isNullOrBlank()) return false
+                            return onUrlOverride?.invoke(nextUrl) == true
+                        }
+
                         override fun onPageFinished(view: WebView?, finishedUrl: String?) {
+                            if (onUrlOverride != null) {
+                                view?.evaluateJavascript(webLocationBridgeScript(), null)
+                            }
                             if (injectScript) {
                                 view?.evaluateJavascript(
                                     buildTokenInjectScript(
@@ -66,3 +91,41 @@ fun DesktopToolWebView(
         )
     }
 }
+
+private class WebLocationBridge(
+    private val onUrlOverride: (String) -> Boolean,
+) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @JavascriptInterface
+    fun onLocationChanged(url: String?) {
+        val nextUrl = url?.takeIf { it.isNotBlank() } ?: return
+        mainHandler.post { onUrlOverride(nextUrl) }
+    }
+}
+
+private fun webLocationBridgeScript(): String =
+    """
+    (function(){
+      if (window.__xcagiAndroidLocationBridgeInstalled) return;
+      window.__xcagiAndroidLocationBridgeInstalled = true;
+      function notify(){
+        try {
+          if (window.XcagiAndroid && window.XcagiAndroid.onLocationChanged) {
+            window.XcagiAndroid.onLocationChanged(String(window.location.href || ""));
+          }
+        } catch(e) {}
+      }
+      ["pushState","replaceState"].forEach(function(name){
+        var original = window.history && window.history[name];
+        if (!original) return;
+        window.history[name] = function(){
+          var result = original.apply(this, arguments);
+          notify();
+          return result;
+        };
+      });
+      window.addEventListener("popstate", notify);
+      notify();
+    })();
+    """.trimIndent()
