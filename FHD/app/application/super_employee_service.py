@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -35,12 +36,23 @@ from app.application.execution_scope import (
     CapabilityGrant,
 )
 from app.application.workspaces import WorkspaceError, get_workspace_registry
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_utils import get_app_data_dir, get_desktop_state_dir
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PARA_API_URL = "http://127.0.0.1:3001"
 DISPATCHER_MESSAGE_KIND = "dispatcher"
+
+# 持久复用 worktree 的串行锁（按 worktree 路径隔离）。中继真仓库模式下，同一工具复用一个
+# worktree（620M 只建一次），并发任务必须排队使用，避免 git 状态相互踩踏。
+_RELAY_WT_LOCKS: dict[str, threading.Lock] = {}
+_RELAY_WT_LOCKS_GUARD = threading.Lock()
+
+
+def _relay_wt_lock(key: str) -> threading.Lock:
+    with _RELAY_WT_LOCKS_GUARD:
+        return _RELAY_WT_LOCKS.setdefault(key, threading.Lock())
+
 
 # Para guest-token 模块级缓存。devfleet 对 /api/auth/guest 限 15min 30 次
 # (authLimiter)，原来每次 invoke 都新登 → 用户连发几十条消息就触发
@@ -149,17 +161,32 @@ def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str)
         .strip()
         .lower()
     )
-    cmd = [
-        cli_path,
-        "agent",
-        "--print",
-        "--output-format",
-        "stream-json",
-    ]
+    cmd = [cli_path]
+    # 独立的 cursor-agent 二进制本身就是 agent，不再接 "agent" 子命令；
+    # 旧的 cursor 二进制才用 `cursor agent --print`。trae-cn 沿用同构建器也无 agent 子命令。
+    if os.path.basename(cli_path) not in {"cursor-agent", "trae-cn"}:
+        cmd.append("agent")
+    cmd += ["--print", "--output-format", "stream-json"]
     if trust_raw not in {"0", "false", "off", "disabled"}:
         cmd.append("--trust")
     if force_raw not in {"0", "false", "off", "disabled"}:
         cmd.append("--force")
+    cmd.append(prompt)
+    return cmd
+
+
+def _trae_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    # Trae 企业版 trae-cli 无头 agent（与 cursor-agent 同族）：
+    # ``trae-cli --print --output-format stream-json [-y] <prompt>``。
+    # -y/--yolo 绕过工具权限确认，让它能在 cwd 内真改文件（对应 cursor 的 --force）。
+    cmd = [cli_path, "--print", "--output-format", "stream-json"]
+    yolo = (
+        (os.environ.get("DEVFLEET_TRAE_YOLO") or os.environ.get("XCMAX_TRAE_YOLO") or "1")
+        .strip()
+        .lower()
+    )
+    if yolo not in {"0", "false", "off", "disabled"}:
+        cmd.append("--yolo")
     cmd.append(prompt)
     return cmd
 
@@ -261,12 +288,13 @@ CURSOR_PROFILE = SuperEmployeeToolProfile(
     direct_kind="cursor_direct",
     env_super_prefix="XCMAX_CURSOR_SUPER_EMPLOYEE",
     env_tool_prefix="XCMAX_CURSOR",
-    cli_binary="cursor",
+    cli_binary="cursor-agent",
     cli_extra_candidates=(
+        os.path.expanduser("~/.local/bin/cursor-agent"),
+        "/opt/homebrew/bin/cursor-agent",
+        "/usr/local/bin/cursor-agent",
         "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
         os.path.expanduser("~/.local/bin/cursor"),
-        "/opt/homebrew/bin/cursor",
-        "/usr/local/bin/cursor",
     ),
     cli_reads_output_file=False,
     cli_stream_json=True,
@@ -286,17 +314,17 @@ TRAE_PROFILE = SuperEmployeeToolProfile(
     direct_kind="trae_direct",
     env_super_prefix="XCMAX_TRAE_SUPER_EMPLOYEE",
     env_tool_prefix="XCMAX_TRAE",
-    cli_binary="trae-cn",
+    cli_binary="trae-cli",
     cli_extra_candidates=(
-        "/Applications/Trae CN.app/Contents/Resources/app/bin/trae-cn",
-        "/Applications/Trae.app/Contents/Resources/app/bin/trae",
-        os.path.expanduser("~/.local/bin/trae-cn"),
-        "/opt/homebrew/bin/trae-cn",
-        "/usr/local/bin/trae-cn",
+        os.path.expanduser("~/.local/bin/trae-cli"),
+        os.path.expanduser("~/.local/bin/trae-agent"),
+        os.path.expanduser("~/.local/bin/traecli"),
+        "/opt/homebrew/bin/trae-cli",
+        "/usr/local/bin/trae-cli",
     ),
     cli_reads_output_file=False,
-    cli_stream_json=False,
-    cli_command_builder=_cursor_cli_command,
+    cli_stream_json=True,
+    cli_command_builder=_trae_cli_command,
     avatar_key="trae",
     avatar_path="/brand/trae-app-icon.png",
 )
@@ -355,6 +383,10 @@ class SuperEmployeeService:
         # 解析执行授权（deny-by-default：缺/错平台令牌即产品域），随后立即把令牌抹出 context，
         # 确保它绝不流入 dispatch 请求 / messages.jsonl / Para 载荷 / 日志。
         self._grant = CapabilityGrant.resolve(ctx)
+        # 中继工单(force_cli_direct)是操作者自己桌面派给超级员工的开发任务 → 本地全权限,
+        # CLI 不该被产品域限制(否则 Claude 的 --disallowedTools 把 prompt 也吞了、还禁写,
+        # 根本干不了活)。这与"在真实仓库交付"配套。仅影响 CLI 工具面,不动工作区/派工的安全分流。
+        self._relay_cli_trusted = ctx.get("force_cli_direct") is True
         token_attempt = bool(str(ctx.get(CONTEXT_TOKEN_KEY) or "").strip())
         ctx.pop(CONTEXT_TOKEN_KEY, None)
         # 审计留痕（信任决策咽喉点）：工厂派工记 who/which-workspace；带令牌却被降级=可疑越权。
@@ -1227,6 +1259,11 @@ class SuperEmployeeService:
         )
         if force_direct in {"1", "true", "yes", "on"}:
             return True
+        # 桌面云中继本身就是执行端：它派来的任务必须在本地 CLI 真跑，绝不能再转发 Para
+        # 多设备（Para 在执行端不可用 → 任务一律 blocked）。中继在 context 打这个标记，
+        # 与 mode 解耦——这样既能本地 CLI 执行，又能让 _is_task_intent 按 mode=code 判为开发任务。
+        if context.get("force_cli_direct") is True:
+            return True
         raw_mode = str(context.get("mode") or "").strip().lower()
         if raw_mode in {"chat", "qa", "direct", f"{self._p.tool_name}_cli"}:
             return True
@@ -1252,10 +1289,14 @@ class SuperEmployeeService:
             return ""
         # 口袋 Claude Code：claude 生产路径走"持久会话续接 + 隔离工作区"——有上下文、能动手、
         # 体验接近直接和 Claude Code 交互。codex / 测试注入仍走原"闲聊 or dev-loop"逻辑。
+        # 但中继工单(force_cli_direct)要的是"真交付"：必须走 dev-loop(用各工具自己的命令
+        # 构造器 → 真改文件→提交→推分支)，绝不能落进 claude 式 --resume 会话(对 cursor/trae
+        # 命令不对、且不产出分支)。这是 Trae/Cursor 也能真执行的关键。
         if (
             self._p.cli_stream_json
             and self._cli_runner is subprocess.run
             and self._conversation_mode_enabled()
+            and not context.get("force_cli_direct")
         ):
             return self._run_conversation_turn(cli_path, text, context)
         base_cwd = self._cli_workspace(context)
@@ -1381,20 +1422,22 @@ class SuperEmployeeService:
         ).strip() or "acceptEdits"
 
     def _apply_scope_to_cmd(self, cmd: list[str]) -> list[str]:
-        """按授权域调整 CLI 工具面（信任墙第 4 层，纵深防御）。
+        """信任墙第 4 层（纵深防御）：产品域收紧 claude 的工具面。
 
-        - **工厂/管理域**（平台操作者派工自己的开发任务）：升档到「工作区内全权限」，
-          让超级员工真正能改文件 / 跑命令 / git——claude → ``bypassPermissions``、
-          codex → ``--sandbox workspace-write``（写/执行限定在 ``-C cwd`` 工作区，不放整机）。
-          可用 env 进一步调档。
-        - **产品/客户域**：claude ``--permission-mode`` 降到 ``default`` 并禁用写/执行类工具，
-          即便被诱导喊 git/shell 也压根没注册 → 硬失败而非软拒绝；codex 仍 ``read-only``。
+        把 ``--permission-mode`` 降到 ``default`` 并显式禁用写/执行类工具，使被注入的产品域
+        会话即便被诱导喊 git/shell，那些工具也压根没注册 → 硬失败而非软拒绝。工厂域不动；
+        codex 命令构造默认已是 ``--sandbox workspace-write``，此处不改。
         """
         if not cmd:
             return cmd
-        if self._grant.is_factory:
-            return self._elevate_factory_cmd(cmd)
-        if self._p.cli_binary != "claude":
+        # 工厂域 / 中继工单(操作者自己派工，force_cli_direct)/ 非 claude 工具 → 不收紧工具面。
+        # 中继工单是操作者本人在自己机器上派给本机 CLI 的活，等同工厂域信任：放开全权限，
+        # 否则 --disallowedTools 这种变长参数会把末位的 prompt 也吞掉(Claude 报权限拒绝)。
+        if (
+            self._grant.is_factory
+            or getattr(self, "_relay_cli_trusted", False)
+            or self._p.cli_binary != "claude"
+        ):
             return cmd
         out: list[str] = []
         i = 0
@@ -1409,47 +1452,6 @@ class SuperEmployeeService:
             prompt = out.pop()  # prompt 恒为末位参数
             out += ["--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit", prompt]
         return out
-
-    def _elevate_factory_cmd(self, cmd: list[str]) -> list[str]:
-        """工厂/管理域放开到「工作区内全权限」。产品/客户域永不经过此函数。
-
-        约束靠 ``-C cwd``（codex）/ 工作目录（claude）落在指定 workspace；env 可调档：
-        ``DEVFLEET_CLAUDE_FACTORY_PERMISSION_MODE`` / ``DEVFLEET_CODEX_FACTORY_SANDBOX``
-        （想收回到只读，设为 ``acceptEdits`` / ``read-only`` 即可）。
-        """
-        binary = self._p.cli_binary
-        if binary == "claude":
-            mode = (
-                os.environ.get("DEVFLEET_CLAUDE_FACTORY_PERMISSION_MODE")
-                or "bypassPermissions"
-            ).strip() or "bypassPermissions"
-            out: list[str] = []
-            i = 0
-            replaced = False
-            while i < len(cmd):
-                if cmd[i] == "--permission-mode" and i + 1 < len(cmd):
-                    out += ["--permission-mode", mode]
-                    i += 2
-                    replaced = True
-                    continue
-                out.append(cmd[i])
-                i += 1
-            if not replaced:
-                prompt = out.pop()  # prompt 恒为末位参数
-                out += ["--permission-mode", mode, prompt]
-            return out
-        if binary == "codex":
-            sandbox = (
-                os.environ.get("DEVFLEET_CODEX_FACTORY_SANDBOX") or "workspace-write"
-            ).strip() or "workspace-write"
-            out = list(cmd)
-            for i in range(len(out) - 1):
-                if out[i] == "--sandbox":
-                    out[i + 1] = sandbox
-                    break
-            return out
-        # cursor：--force 已默认开启 cwd 内写权限，无需额外升档。
-        return cmd
 
     def _conversation_cmd(
         self, cli_path: str, prompt: str, resume_session_id: str | None
@@ -1609,7 +1611,35 @@ class SuperEmployeeService:
                 return str(reg.checkout(ws, task_id=str(context.get("request_id") or "task")))
             except WorkspaceError:
                 return str(get_workspace_registry().get(None).root)
+        # 中继工单（操作者自己桌面派给超级员工的开发任务）允许在**真实仓库**里跑 dev-loop，
+        # 真改文件→提交→推分支，产出可合并的真东西（而非临时区里建完即被 GC 的占位文件）。
+        # 仅在操作者**显式**配置 XCMAX_RELAY_WORKSPACE_ROOT 指向真 git 仓库、且来源是中继时生效；
+        # 路径取自操作者 env 而非请求体，不破坏产品域「不采信客户提供宿主路径」的安全约束。
+        relay_repo = self._relay_real_workspace(context)
+        if relay_repo:
+            return relay_repo
         return self._product_ephemeral_workspace()
+
+    def _relay_real_workspace(self, context: dict[str, Any]) -> str:
+        ctx = context if isinstance(context, dict) else {}
+        source = str(ctx.get("source") or "").strip().lower()
+        is_relay = ctx.get("force_cli_direct") is True or source == "mobile_relay"
+        if not is_relay:
+            return ""
+        root = str(
+            os.environ.get("XCMAX_RELAY_WORKSPACE_ROOT")
+            or os.environ.get("DEVFLEET_WORKSPACE_ROOT")
+            or ""
+        ).strip()
+        if not root:
+            return ""
+        path = Path(root).expanduser()
+        try:
+            if (path / ".git").exists():
+                return str(path)
+        except OSError:
+            return ""
+        return ""
 
     def _factory_workspace_root(self) -> str:
         """工厂派工请求里写给远端设备的工作区根路径（不含 worktree 隔离，远端自理）。"""
@@ -1664,7 +1694,7 @@ class SuperEmployeeService:
         工厂域且无代理：返回 None（继承当前环境，与历史行为一致，零回归）。
         """
         proxy = str(os.environ.get("XCMAX_CLI_PROXY") or "").strip()
-        product = not self._grant.is_factory
+        product = not (self._grant.is_factory or getattr(self, "_relay_cli_trusted", False))
         if not proxy and not product:
             return None
         env = os.environ.copy()
@@ -1910,6 +1940,11 @@ class SuperEmployeeService:
         uniq = f"{os.getpid()}-{int.from_bytes(os.urandom(3), 'big'):x}"
         selected_branch = self._safe_branch_name(branch_hint)
         branch = selected_branch or f"super-employee/{self._p.tool_name}/{slug}-{uniq}"
+        # 持久复用：中继真仓库模式下，自动新建分支的工单复用同一个 worktree（620M 只建一次），
+        # 每任务仍开新分支真推送。选定既有分支的写回任务走每任务新建（语义更清晰）。
+        persistent = self._relay_persistent_worktree_path()
+        if persistent and not selected_branch:
+            return self._prepare_persistent_worktree(base_cwd, persistent, branch)
         wt_path = str(Path(tempfile.gettempdir()) / f"xcagi-wt-{self._p.tool_name}-{uniq}")
         try:
             if selected_branch:
@@ -1938,10 +1973,64 @@ class SuperEmployeeService:
             return None
 
     def _remove_worktree(self, base_cwd: str, wt_path: str) -> None:
+        persistent = self._relay_persistent_worktree_path()
+        if persistent and os.path.realpath(wt_path) == os.path.realpath(persistent):
+            return  # 持久复用 worktree：保留以供下个任务复用，不删（下次 prepare 时重置为干净基线）。
         try:
             self._git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=60)
         except Exception:  # noqa: BLE001
             logger.warning("worktree remove 失败 %s", wt_path, exc_info=True)
+
+    def _relay_persistent_worktree_path(self) -> str:
+        """持久复用 worktree 的稳定路径；空串=不启用（走每任务新建+用完即删）。
+
+        仅在操作者配了 XCMAX_RELAY_WORKSPACE_ROOT（真仓库交付）且未显式关闭时启用。落在
+        稳定桌面态目录（非 $TMPDIR，避免被 GC 当瞬态清掉；非源码树，规避 get_app_data_dir 回落陷阱）。
+        """
+        if not (
+            os.environ.get("XCMAX_RELAY_WORKSPACE_ROOT")
+            or os.environ.get("DEVFLEET_WORKSPACE_ROOT")
+        ):
+            return ""
+        if str(os.environ.get("XCMAX_RELAY_PERSISTENT_WORKTREE") or "1").strip().lower() in {
+            "0",
+            "false",
+            "off",
+            "no",
+        }:
+            return ""
+        return str(Path(get_desktop_state_dir()) / "relay_worktrees" / self._p.tool_name)
+
+    def _prepare_persistent_worktree(
+        self, base_cwd: str, wt_path: str, branch: str
+    ) -> tuple[str, str] | None:
+        """复用同一个 worktree：重置为 base 干净基线 + 开新任务分支；不存在则建一次。"""
+        try:
+            head = self._git(base_cwd, "rev-parse", "HEAD", timeout=15)
+            base_ref = (head.stdout or "").strip() or "HEAD"
+            wt = Path(wt_path)
+            if (wt / ".git").exists():
+                # 复用：丢弃上个任务的改动、清干净未跟踪、从 base 重开任务分支。
+                self._git(wt_path, "reset", "--hard", base_ref, timeout=120)
+                self._git(wt_path, "clean", "-fdx", timeout=300)
+                r = self._git(wt_path, "checkout", "-B", branch, base_ref, timeout=120)
+                if r.returncode != 0:
+                    # worktree 损坏 → 拆掉重建。
+                    self._git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=120)
+                    shutil.rmtree(wt_path, ignore_errors=True)
+            if not (wt / ".git").exists():
+                wt.parent.mkdir(parents=True, exist_ok=True)
+                self._git(base_cwd, "worktree", "prune", timeout=30)
+                r = self._git(
+                    base_cwd, "worktree", "add", "-b", branch, wt_path, base_ref, timeout=300
+                )
+                if r.returncode != 0:
+                    logger.warning("持久 worktree 创建失败: %s", (r.stderr or r.stdout)[:300])
+                    return None
+            return wt_path, branch
+        except Exception:  # noqa: BLE001
+            logger.warning("持久 worktree 准备异常", exc_info=True)
+            return None
 
     def _verify_workspace(self, cwd: str) -> tuple[bool, str]:
         """view 阶段：验证改动可编译。优先 XCMAX_CLAUDE_VERIFY_CMD；否则对改动的 .py 做语法编译。"""
@@ -2038,6 +2127,20 @@ class SuperEmployeeService:
         context: dict[str, Any] | None = None,
     ) -> str:
         """开发任务全闭环：隔离 worktree → coding → view(验证,失败修一次) → push → 清理。"""
+        # 持久复用模式下，同一 worktree 必须串行使用（并发任务排队），避免 git 状态相互踩踏。
+        persistent = self._relay_persistent_worktree_path()
+        if persistent:
+            with _relay_wt_lock(persistent):
+                return self._run_dev_task_loop_locked(cli_path, text, base_cwd, context)
+        return self._run_dev_task_loop_locked(cli_path, text, base_cwd, context)
+
+    def _run_dev_task_loop_locked(
+        self,
+        cli_path: str,
+        text: str,
+        base_cwd: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
         branch_hint = self._safe_context_branch(context)
         prepared = self._prepare_worktree(base_cwd, text, branch_hint)
         if not prepared:
@@ -2052,7 +2155,15 @@ class SuperEmployeeService:
         try:
             body = self._run_cli_once(cli_path, self._cli_work_prompt(text, wt_path), wt_path)
             ok, vmsg = self._verify_workspace(wt_path)
-            if not ok:
+            # 迭代修复：验证未过则让 CLI 再修，最多 N 轮（env 可调），而非『只修一次』即放弃，
+            # 显著提升 dev-loop 通过率，少落 blocked。
+            try:
+                max_fix = max(1, int(os.environ.get("XCMAX_DEV_LOOP_MAX_FIX") or "3"))
+            except (TypeError, ValueError):
+                max_fix = 3
+            attempt = 0
+            while not ok and attempt < max_fix:
+                attempt += 1
                 self._run_cli_once(cli_path, self._cli_fix_prompt(vmsg, wt_path), wt_path)
                 ok, vmsg = self._verify_workspace(wt_path)
             pushed, pmsg = self._commit_and_push(wt_path, branch, text)

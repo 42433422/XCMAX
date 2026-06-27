@@ -64,7 +64,8 @@ def test_super_employee_profiles_bind_to_distinct_cli_tools() -> None:
 
     assert CURSOR_PROFILE.tool_name == "cursor_agent"
     assert CURSOR_PROFILE.capability_key == "cursor_cli"
-    assert CURSOR_PROFILE.cli_binary == "cursor"
+    # Cursor 的无头 CLI 二进制是 `cursor-agent`（独立 agent 二进制），不是 IDE 的 `cursor`。
+    assert CURSOR_PROFILE.cli_binary == "cursor-agent"
     assert CURSOR_PROFILE.storage_subdir == "cursor_super_employee"
     assert CURSOR_PROFILE.result_kind == "cursor_result"
     assert CURSOR_PROFILE.cli_command_builder("cursor", "hello", Path("out"), "/tmp")[:3] == [
