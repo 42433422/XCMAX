@@ -116,6 +116,26 @@ def test_real_executor_features_can_converge_after_closed_loop_proof(tmp_path: P
     workflow = project / ".github" / "workflows"
     workflow.mkdir(parents=True)
     (workflow / "retort-engine.yml").write_text("name: retort\n", encoding="utf-8")
+    run_dir = project / ".retort" / "real_absorption_runs"
+    run_dir.mkdir(parents=True)
+    (run_dir / "a-source.json").write_text(json.dumps({"source": "https://github.com/example/first"}), encoding="utf-8")
+    (run_dir / "aa-source.json").write_text(json.dumps({"source": "https://github.com/example/second"}), encoding="utf-8")
+    for index, source in enumerate(("https://github.com/a/one", "https://github.com/b/two", "https://github.com/c/three"), start=1):
+        (run_dir / f"behavior-run-{index}.json").write_text(
+            json.dumps(
+                {
+                    "source": source,
+                    "changed_files": [str(project / "engine.py"), str(tests / "test_engine.py")],
+                }
+            ),
+            encoding="utf-8",
+        )
+    result_dir = project / ".retort" / "employee_results"
+    result_dir.mkdir(parents=True)
+    (result_dir / "behavior-run.json").write_text(
+        json.dumps({"execution_mode": "employee_runtime", "results": [{"task_id": "retort-absorb-depth", "status": "applied"}]}),
+        encoding="utf-8",
+    )
     record_closed_loop_proof(
         str(project),
         {
@@ -279,7 +299,11 @@ def test_paibi_prompt_keeps_closed_loop_score_cap(tmp_path: Path) -> None:
     assert "排比 Para/Codex" in prompt
     assert "不得超过 82" in prompt
     assert "严格 JSON" in prompt
-    assert "规则评分已经转成" in prompt
+    assert "证据闭环" in prompt
+    assert "能力吸收" in prompt
+    assert "本地规则分：故意不提供" in prompt
+    assert "capability_absorption_score" in prompt
+    assert "吸收 diff 只改报告/日志/absorbed_patterns 时" in prompt
     assert '"scores"' in prompt
 
 
@@ -351,6 +375,6 @@ def test_service_assess_uses_llm_scores_when_wait_returns_json(tmp_path: Path, m
 
     scores = {item["dimension"]: item["value"] for item in result["scores"]}
     assert result["metadata"]["score_source"] == "paibi_llm"
-    assert result["metadata"]["fallback_rule_scores"]
+    assert "fallback_rule_scores" not in result["metadata"]
     assert scores["calibrated_overall"] == 79
     assert scores["employee_execution_integration"] == 70

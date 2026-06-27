@@ -14,6 +14,7 @@ from typing import Any
 DEFAULT_PAIBI_API_URL = "http://127.0.0.1:3001"
 SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json"}
 SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"}
+GENERATED_EVIDENCE_FILES = {"retort_external_review_report.json", "retort_absorption_log.md", "absorbed_external_patterns.py", "retort_absorbed_patterns.py"}
 RETORT_SCORE_DIMENSIONS = (
     "product_level",
     "architecture_depth",
@@ -30,9 +31,11 @@ RETORT_SCORE_DIMENSIONS = (
     "safety_license_gate",
     "branch_absorption_workflow",
     "retort_product_maturity",
+    "evidence_loop_score",
+    "capability_absorption_score",
     "calibrated_overall",
 )
-RETORT_LLM_SCORING_RUBRIC = """旧的规则评分已经转成以下评分提示词，只作为 LLM 的裁判标准，不再作为最终分数：
+RETORT_LLM_SCORING_RUBRIC = """Retort LLM 评分必须区分“证据闭环”和“能力吸收”，不能把证据文件完整度当成产品能力：
 - 你必须直接给每个维度 0-100 分，并给出可验证理由。
 - 重点评估深度，不用功能数量堆高分。
 - UI、按钮、关键词、文件存在只能证明“有入口”，不能证明“闭环完成”。
@@ -41,6 +44,10 @@ RETORT_LLM_SCORING_RUBRIC = """旧的规则评分已经转成以下评分提示�
 - 没有员工真实执行证据时，employee_execution_integration 不得超过 78。
 - 没有吸收后复评和反馈回灌证据时，feedback_loop_closure 不得超过 82。
 - 没有真实外部项目吸收、分支落地、合并或回滚证据时，product_level 和 retort_product_maturity 不得超过 84。
+- 如果吸收 diff 主要是报告、日志、absorbed_patterns 快照，而没有改动核心行为代码或行为测试，则 capability_absorption_score 不得超过 84，calibrated_overall 不得超过 84。
+- 如果员工执行结果由 Retort 本地 CLI 同进程生成，而不是独立 employee_runtime/agent_loop 完成，则 employee_execution_integration 不得超过 88。
+- 如果只验证了一个外部项目，external_ingestion 可以高，但 retort_product_maturity 不得超过 88，除非还有跨项目复现证据。
+- evidence_loop_score 用于评价五证闭环完整度；capability_absorption_score 用于评价吸收后 Retort 核心能力是否真的变强。calibrated_overall 必须更接近 capability_absorption_score，而不是 evidence_loop_score。
 - 如果本地证据与项目摘要冲突，以更保守的证据解释为准。
 """
 
@@ -107,10 +114,9 @@ def build_retort_paibi_prompt(
     evidence: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> str:
-    score_lines = "\n".join(f"- {item.get('dimension')}: {item.get('value')} ({item.get('reason', '')})" for item in scores or []) or "- no local fallback scores supplied"
     task_lines = "\n".join(f"- {item.get('task_id')}: {item.get('title')} [{item.get('dimension')}]" for item in tasks or []) or "- no tasks supplied"
     evidence_lines = "\n".join(f"- {item}" for item in evidence or []) or "- no evidence supplied"
-    metadata_json = json.dumps(metadata or {}, ensure_ascii=False, indent=2, sort_keys=True)[:5000]
+    scoring_audit_json = json.dumps(_scoring_audit(metadata or {}), ensure_ascii=False, indent=2, sort_keys=True)[:5000]
     own = _project_digest(project)
     external_digest = _project_digest(Path(external_path)) if external_path and Path(external_path).is_dir() else "external project not materialized"
     return f"""MODSTORE_REPORT_ONLY=1
@@ -129,8 +135,7 @@ report_only=true
 评分提示词：
 {RETORT_LLM_SCORING_RUBRIC}
 
-本地 fallback 规则分，仅供参考，不是最终分：
-{score_lines}
+本地规则分：故意不提供，避免锚定。你只能按证据、diff、本提示词评分。
 
 当前 Retort 任务：
 {task_lines}
@@ -138,8 +143,8 @@ report_only=true
 本地证据：
 {evidence_lines}
 
-本地元数据：
-{metadata_json}
+评分审计摘要：
+{scoring_audit_json}
 
 主项目摘要：
 {own}
@@ -167,6 +172,8 @@ report_only=true
     {{"dimension": "safety_license_gate", "value": 0-100, "reason": "≤18字"}},
     {{"dimension": "branch_absorption_workflow", "value": 0-100, "reason": "≤18字"}},
     {{"dimension": "retort_product_maturity", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "evidence_loop_score", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "capability_absorption_score", "value": 0-100, "reason": "≤18字"}},
     {{"dimension": "calibrated_overall", "value": 0-100, "reason": "≤18字"}}
   ],
   "do_not_raise_score_without_proof": true,
@@ -183,7 +190,9 @@ report_only=true
 - 直接在最终输出里打印严格 JSON，不要 markdown 代码块。
 - 输出必须少于 3200 字符，不能输出逐条长证据。
 - 不允许因为已有按钮、关键词或 UI 就给 90+。
+- 不允许因为 evidence_loop_score 高就自动给 calibrated_overall 90+。
 - 没有 branch diff、员工执行结果、post-absorption tests、merge、外部优势复评五类证据时，总分建议不得超过 82。
+- 吸收 diff 只改报告/日志/absorbed_patterns 时，总分建议不得超过 84。
 - 重点评估深度，不评估广度。
 - scores 必须覆盖这些维度：{", ".join(RETORT_SCORE_DIMENSIONS)}。
 """
@@ -315,7 +324,7 @@ def _project_digest(root: Path) -> str:
     snippets: list[str] = []
     for path in files[:400]:
         suffix_counts[path.suffix.lower() or "<none>"] = suffix_counts.get(path.suffix.lower() or "<none>", 0) + 1
-        if len(snippets) >= 18 or path.suffix.lower() not in SOURCE_SUFFIXES:
+        if len(snippets) >= 18 or path.suffix.lower() not in SOURCE_SUFFIXES or path.name in GENERATED_EVIDENCE_FILES:
             continue
         text = _read(path)
         if not text.strip():
@@ -323,6 +332,17 @@ def _project_digest(root: Path) -> str:
         rel = path.relative_to(root)
         snippets.append(f"## {rel}\n{_compact(text)[:900]}")
     return json.dumps({"file_count": len(files), "suffix_counts": suffix_counts, "snippets": snippets}, ensure_ascii=False, indent=2)
+
+
+def _scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:
+    proof = metadata.get("closed_loop_proof") if isinstance(metadata.get("closed_loop_proof"), dict) else {}
+    audit = metadata.get("capability_absorption_audit") if isinstance(metadata.get("capability_absorption_audit"), dict) else {}
+    return {
+        "git_tracking_state": metadata.get("git_tracking_state"),
+        "closed_loop_verified": proof.get("verified"),
+        "closed_loop_missing": proof.get("missing"),
+        "capability_absorption_audit": audit,
+    }
 
 
 def _read(path: Path) -> str:
