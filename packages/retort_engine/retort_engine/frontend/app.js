@@ -11,9 +11,12 @@ const state = {
   llmSyncAttempts: 0,
   absorption: null,
   absorbedProjects: {count: 0, sources: [], latestSource: "", updatedAt: 0},
+  absorbedProjectHits: [],
+  selectedAbsorbedProject: null,
   events: [],
   progress: {timer: 0, active: false, started: 0, duration: 0, percent: 0, phase: "evidence", title: "等待深评"}
 };
+window.retortBlackholeState = state;
 const DEEP_REVIEW_WAIT_SECONDS = 240;
 const progressPlan = [
   {key: "evidence", title: "证据采集", detail: "读取项目与门禁证据"},
@@ -375,6 +378,14 @@ function sourceName(source) {
   return text.split("/").filter(Boolean).slice(-2).join("/") || "外部项目";
 }
 
+function compactSource(source, limit = 56) {
+  const text = String(source || "");
+  if (text.length <= limit) return text;
+  const head = Math.ceil((limit - 3) * .58);
+  const tail = Math.floor((limit - 3) * .42);
+  return `${text.slice(0, head)}...${text.slice(-tail)}`;
+}
+
 function hashText(text) {
   let hash = 2166136261;
   for (let i = 0; i < text.length; i++) {
@@ -397,6 +408,11 @@ function syncAbsorbedProjects(count, sources, latestSource = "") {
   };
   canvas.dataset.absorbedProjectCount = String(safeCount);
   canvas.dataset.absorbedProjectSources = filledSources.slice(0, 24).join("|");
+  if (state.selectedAbsorbedProject && !filledSources.includes(state.selectedAbsorbedProject.source)) {
+    state.selectedAbsorbedProject = null;
+    canvas.dataset.selectedAbsorbedProject = "";
+    canvas.dataset.selectedAbsorbedProjectName = "";
+  }
 }
 
 function syncAbsorbedProjectsFromAssessment(assessment, latestSource = "") {
@@ -1329,16 +1345,15 @@ function drawAbsorptionPlanet(scene, cy, r, h, t, dpr) {
   drawSceneLabel(scene.cx, scene.cy + r * .19 * scene.scale, `主项目 ${scene.ownScore == null ? "" : Math.round(scene.ownScore)}`, dpr, scene.pull);
 }
 
-function drawAbsorbedProjectLights(scene, r, t, dpr) {
+function absorbedProjectLightModels(scene, r, t, dpr) {
   const absorbed = state.absorbedProjects || {};
   const count = Math.max(0, Math.floor(Number(absorbed.count) || 0));
-  if (!count) return;
+  if (!count) return [];
   const sources = absorbed.sources?.length ? absorbed.sources : Array.from({length: count}, (_, i) => `absorbed-project-${i + 1}`);
   const visibleCount = Math.min(count, 80);
   const latest = String(absorbed.latestSource || "");
   const appear = absorbed.updatedAt ? ease(clamp((performance.now() - absorbed.updatedAt) / 1200, 0, 1)) : 1;
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
+  const lights = [];
   for (let i = 0; i < visibleCount; i++) {
     const source = sources[i] || `absorbed-project-${i + 1}`;
     const hash = hashText(source);
@@ -1353,6 +1368,39 @@ function drawAbsorbedProjectLights(scene, r, t, dpr) {
     const pulse = .55 + .45 * Math.sin(t * (1.6 + band * .22) + bucket * 11);
     const size = (isLatest ? 3.2 : 1.6 + (hash % 4) * .32) * dpr;
     const alpha = (.34 + pulse * .42 + scene.boost * .08) * appear;
+    lights.push({
+      index: i,
+      source,
+      name: sourceName(source),
+      x,
+      y,
+      size,
+      alpha,
+      isLatest,
+      hitRadius: Math.max(15 * dpr, size * (isLatest ? 8 : 6.5)),
+    });
+  }
+  return lights;
+}
+
+function drawAbsorbedProjectLights(scene, r, t, dpr) {
+  const absorbed = state.absorbedProjects || {};
+  const count = Math.max(0, Math.floor(Number(absorbed.count) || 0));
+  const lights = absorbedProjectLightModels(scene, r, t, dpr);
+  state.absorbedProjectHits = lights.map(light => ({
+    index: light.index,
+    source: light.source,
+    name: light.name,
+    x: light.x,
+    y: light.y,
+    hitRadius: light.hitRadius,
+  }));
+  if (!count) return;
+  const appear = absorbed.updatedAt ? ease(clamp((performance.now() - absorbed.updatedAt) / 1200, 0, 1)) : 1;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const light of lights) {
+    const {source, x, y, size, alpha, isLatest} = light;
     const glow = ctx.createRadialGradient(x, y, 0, x, y, size * (isLatest ? 5.2 : 3.7));
     glow.addColorStop(0, `rgba(255,255,255,${Math.min(.96, alpha + .22)})`);
     glow.addColorStop(.22, `rgba(235,247,255,${alpha * .62})`);
@@ -1372,11 +1420,60 @@ function drawAbsorbedProjectLights(scene, r, t, dpr) {
       ctx.arc(x, y, size * 3.1, 0, Math.PI * 2);
       ctx.stroke();
     }
+    if (state.selectedAbsorbedProject?.source === source) {
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(255,255,255,${.78 * appear})`;
+      ctx.lineWidth = 1.4 * dpr;
+      ctx.arc(x, y, size * 4.8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
-  if (count > visibleCount) {
-    drawSceneLabel(scene.cx + r * .34, scene.cy - r * .19, `+${count - visibleCount}`, dpr, .86 * appear);
+  if (count > lights.length) {
+    drawSceneLabel(scene.cx + r * .34, scene.cy - r * .19, `+${count - lights.length}`, dpr, .86 * appear);
   }
   drawSceneLabel(scene.cx - r * .38, scene.cy - r * .24, `已吸收 ${count} 项目`, dpr, .84 * appear);
+  ctx.restore();
+  drawSelectedAbsorbedProject(lights, dpr, appear);
+}
+
+function drawSelectedAbsorbedProject(lights, dpr, appear) {
+  const selected = state.selectedAbsorbedProject;
+  if (!selected) return;
+  const light = lights.find(item => item.source === selected.source);
+  if (!light) return;
+  const title = light.name || "外部项目";
+  const detail = compactSource(light.source, 62);
+  const padding = 12 * dpr;
+  const titleWidth = ctx.measureText(title).width;
+  const detailWidth = ctx.measureText(detail).width;
+  const cardW = Math.min(canvas.width - 24 * dpr, Math.max(220 * dpr, titleWidth + padding * 2, detailWidth + padding * 2));
+  const cardH = 78 * dpr;
+  const x = clamp(light.x + 20 * dpr, 12 * dpr, canvas.width - cardW - 12 * dpr);
+  const y = clamp(light.y - cardH - 20 * dpr, 12 * dpr, canvas.height - cardH - 12 * dpr);
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = .96 * appear;
+  ctx.strokeStyle = "rgba(149,244,255,.42)";
+  ctx.fillStyle = "rgba(4,10,18,.88)";
+  roundRect(x, y, cardW, cardH, 8 * dpr);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.strokeStyle = "rgba(149,244,255,.3)";
+  ctx.moveTo(light.x, light.y);
+  ctx.lineTo(clamp(light.x, x + 12 * dpr, x + cardW - 12 * dpr), y + cardH);
+  ctx.stroke();
+  ctx.fillStyle = "#8ee8ff";
+  ctx.font = `${11 * dpr}px system-ui, sans-serif`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("吸收项目", x + padding, y + 10 * dpr);
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = `700 ${14 * dpr}px system-ui, sans-serif`;
+  ctx.fillText(title, x + padding, y + 29 * dpr);
+  ctx.fillStyle = "#aebdcc";
+  ctx.font = `${11 * dpr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  ctx.fillText(detail, x + padding, y + 52 * dpr);
   ctx.restore();
 }
 
@@ -1472,6 +1569,59 @@ function draw() {
   ctx.restore();
   requestAnimationFrame(draw);
 }
+
+function canvasPoint(event) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / Math.max(1, rect.width);
+  const scaleY = canvas.height / Math.max(1, rect.height);
+  return {
+    x: (event.clientX - rect.left) * scaleX,
+    y: (event.clientY - rect.top) * scaleY,
+  };
+}
+
+function nearestAbsorbedProjectHit(point) {
+  let best = null;
+  for (const hit of state.absorbedProjectHits || []) {
+    const dx = point.x - hit.x;
+    const dy = point.y - hit.y;
+    const dist2 = dx * dx + dy * dy;
+    const radius = Number(hit.hitRadius || 0);
+    if (dist2 > radius * radius) continue;
+    if (!best || dist2 < best.dist2) best = {...hit, dist2};
+  }
+  return best;
+}
+
+function selectAbsorbedProject(hit) {
+  if (!hit) return;
+  state.selectedAbsorbedProject = {
+    index: hit.index,
+    source: hit.source,
+    name: hit.name,
+    selectedAt: performance.now(),
+  };
+  canvas.dataset.selectedAbsorbedProject = hit.source;
+  canvas.dataset.selectedAbsorbedProjectName = hit.name;
+  $("statusText").textContent = `吸收项目：${hit.name}`;
+  pushEvent("查看吸收项目", compactSource(hit.source, 42), "ok");
+}
+
+function handleAbsorbedProjectClick(event) {
+  const hit = nearestAbsorbedProjectHit(canvasPoint(event));
+  if (hit) selectAbsorbedProject(hit);
+}
+
+function handleAbsorbedProjectPointerMove(event) {
+  const hit = nearestAbsorbedProjectHit(canvasPoint(event));
+  canvas.style.cursor = hit ? "pointer" : "";
+}
+
+canvas.addEventListener("click", handleAbsorbedProjectClick);
+canvas.addEventListener("pointermove", handleAbsorbedProjectPointerMove);
+canvas.addEventListener("mouseleave", () => {
+  canvas.style.cursor = "";
+});
 
 $("sourceGithub").onclick = () => setMode("github");
 $("sourceFolder").onclick = () => setMode("folder");
