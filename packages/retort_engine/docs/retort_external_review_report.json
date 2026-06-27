@@ -20,7 +20,7 @@
       "<none>": 5
     }
   },
-  "generated_at": "2026-06-27T13:10:26Z",
+  "generated_at": "2026-06-27T13:12:01Z",
   "license_review": {
     "detected_license": "The MIT License (MIT)",
     "message": "Allowed license detected: The MIT License (MIT)",
@@ -41,7 +41,7 @@
         "component": "plugin_surface",
         "external_files": 6,
         "file_gap": -6,
-        "marker_gap": 96,
+        "marker_gap": 92,
         "own_files": 12,
         "representative_external_files": [
           "README.md",
@@ -55,7 +55,7 @@
         "component": "provider_surface",
         "external_files": 8,
         "file_gap": -4,
-        "marker_gap": 78,
+        "marker_gap": 77,
         "own_files": 12,
         "representative_external_files": [
           "README.md",
@@ -171,7 +171,7 @@
           "tests/test_retort_engine.py",
           "tests/test_self_evolution.py"
         ],
-        "marker_hits": 178
+        "marker_hits": 180
       },
       "diff_hunk_review": {
         "files": [
@@ -197,7 +197,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 37
+        "marker_hits": 38
       },
       "plugin_surface": {
         "files": [
@@ -214,7 +214,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 126
+        "marker_hits": 130
       },
       "provider_surface": {
         "files": [
@@ -231,7 +231,7 @@
           "retort_engine/semantic_reviewer.py",
           "retort_engine/absorbed_external_patterns.py"
         ],
-        "marker_hits": 100
+        "marker_hits": 101
       },
       "review_pipeline": {
         "files": [
@@ -248,7 +248,7 @@
           "retort_engine/ui_server.py",
           "retort_engine/absorbed_external_patterns.py"
         ],
-        "marker_hits": 653
+        "marker_hits": 660
       },
       "safety_policy": {
         "files": [
@@ -282,7 +282,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/cli.py"
         ],
-        "marker_hits": 1024
+        "marker_hits": 1026
       }
     },
     "pipeline_stages": [
@@ -321,7 +321,7 @@
       }
     ]
   },
-  "run_id": "20260627131026-4307b75ba4",
+  "run_id": "20260627131201-4307b75ba4",
   "semantic_review": {
     "external": {
       "classes": 17,
@@ -338,7 +338,7 @@
       "functions": 445,
       "source_files": 46,
       "test_markers": 139,
-      "workflow_markers": 837
+      "workflow_markers": 847
     }
   },
   "signal_evidence": {
