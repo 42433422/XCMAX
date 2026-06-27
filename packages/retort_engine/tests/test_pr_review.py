@@ -232,6 +232,31 @@ diff --git a/docs/review.md b/docs/review.md
     assert validate_contract("pr_review_result", result)["valid"] is True
 
 
+def test_review_diff_balances_contexts_for_large_diffs() -> None:
+    sections = [
+        _single_add_diff("app/auth.py", 'API_TOKEN = "live-secret-value"'),
+        _single_add_diff("tests/test_auth.py", "# TODO: assert auth behavior"),
+        _single_add_diff(".github/workflows/ci.yml", 'DEPLOY_TOKEN: "live-secret-value"'),
+        _single_add_diff("settings/runtime.yaml", 'SERVICE_TOKEN: "live-secret-value"'),
+        _single_add_diff("app/runtime_1.py", "# TODO: runtime follow-up 1"),
+        _single_add_diff("app/runtime_2.py", "# TODO: runtime follow-up 2"),
+        _single_add_diff("app/runtime_3.py", "# TODO: runtime follow-up 3"),
+        _single_add_diff("app/runtime_4.py", "# TODO: runtime follow-up 4"),
+        _single_add_diff("docs/release.md", "# TODO: document release"),
+    ]
+
+    result = review_diff("".join(sections), max_comments=4)
+    contexts = [comment["review_context"] for comment in result["comments"]]
+
+    assert result["summary"]["large_diff_chunking"] is True
+    assert result["summary"]["large_diff_context_balancing"] is True
+    assert result["summary"]["large_diff_chunk_count"] >= 5
+    assert len(result["comments"]) == 4
+    assert {"security", "tests", "ci_config", "config"}.issubset(set(contexts))
+    assert contexts[0] == "security"
+    assert all(comment["publishable"] is True for comment in result["comments"])
+
+
 def test_review_context_helpers_classify_common_project_files() -> None:
     assert review_context_for_file("app/auth.py") == "security"
     assert review_context_for_file("tests/test_auth.py") == "tests"
@@ -247,6 +272,10 @@ def test_parse_unified_diff_keeps_new_line_numbers() -> None:
 
     assert files[0]["path"] == "app.py"
     assert [change["line"] for change in added] == [2, 3]
+
+
+def _single_add_diff(path: str, line: str) -> str:
+    return f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n"
 
 
 def test_review_diff_cli_outputs_contract(tmp_path: Path) -> None:
