@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>反问 Retort 黑洞</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="rail">
+        <h1>反问 Retort 黑洞</h1>
+        <label>主项目文件夹<input id="ownProjectFolder" value="/Users/a4243342/Desktop/XCMAX/packages/retort_engine" /></label>
+        <div class="mode"><button id="sourceGithub" class="active">GitHub</button><button id="sourceFolder">文件夹</button></div>
+        <label id="githubRow">吸收 GitHub 项目<input id="githubUrl" placeholder="https://github.com/owner/repo" /></label>
+        <label id="folderRow" class="hidden">吸收本地项目文件夹<input id="externalProjectFolder" placeholder="/path/to/project" /></label>
+        <div class="checks"><label><input id="branchWorkflow" type="checkbox" checked /> 分支</label><label><input id="mergeAfter" type="checkbox" /> 合并</label><label><input id="runGates" type="checkbox" /> 门禁</label><label><input id="useLlm" type="checkbox" /> 排比 LLM</label></div>
+        <button id="assessBtn">评估</button>
+        <button id="absorbBtn" class="primary">吸收</button>
+        <button id="evolveBtn">反问进化</button>
+        <button id="llmReviewBtn">排比评审</button>
+        <button id="llmStatusBtn">同步评审</button>
+      </section>
+      <section class="stage"><canvas id="blackholeCanvas" data-visual="blackhole-accretion-field"></canvas><div class="readout"><span id="statusText">待命</span><strong id="coreScore">--</strong><small>核心分</small></div></section>
+      <section class="rail"><article><h2>评分场</h2><div id="scoreGrid"></div></article><article><h2>排比 LLM</h2><div id="llmState">尚未请求排比评审</div></article><article><h2>分支</h2><div id="branchState">尚未运行分支流程</div></article><article><h2>吸收任务</h2><div id="taskList"></div></article></section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
