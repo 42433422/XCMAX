@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const canvas = $("blackholeCanvas");
 const ctx = canvas.getContext("2d");
-const state = {mode: "github", running: false, tasks: [], llmTaskId: "", absorption: null};
+const state = {mode: "github", running: false, tasks: [], llmTaskId: "", llmParallel: false, absorption: null, events: []};
 
 const dimensionText = {
   product_level: "项目水平",
@@ -19,6 +19,8 @@ const dimensionText = {
   safety_license_gate: "安全许可",
   branch_absorption_workflow: "分支吸收",
   retort_product_maturity: "Retort 成熟度",
+  evidence_loop_score: "证据闭环",
+  capability_absorption_score: "能力吸收",
   calibrated_overall: "校准总分"
 };
 const statusText = {
@@ -59,11 +61,45 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const ease = v => v < .5 ? 2 * v * v : 1 - Math.pow(-2 * v + 2, 2) / 2;
 const labelOf = v => dimensionText[v] || statusText[v] || taskText[v] || String(v || "");
+const shortPath = value => String(value || "").replace(/^.*\/packages\/retort_engine\//, "").replace(/^.*\/XCMAX\//, "");
 const titleOf = v => {
   const text = String(v || "");
   const match = text.match(/^Raise (.+) above (\d+)$/);
   return match ? `将${labelOf(match[1])}提升到 ${match[2]} 以上` : labelOf(text);
 };
+
+function setRunning(running, text) {
+  state.running = running;
+  if (text) $("statusText").textContent = text;
+  for (const id of ["assessBtn", "absorbBtn", "evolveBtn", "llmReviewBtn", "llmParallelBtn", "llmStatusBtn"]) {
+    const el = $(id);
+    if (el) el.disabled = running;
+  }
+}
+
+function pushEvent(title, detail = "", level = "info") {
+  state.events.unshift({title, detail, level, at: new Date().toLocaleTimeString("zh-CN", {hour12: false})});
+  state.events = state.events.slice(0, 8);
+  renderEvents();
+}
+
+function renderEvents() {
+  const target = $("eventList");
+  if (!target) return;
+  target.textContent = "";
+  for (const item of state.events) {
+    const row = document.createElement("div");
+    row.className = `event ${item.level}`;
+    const time = document.createElement("span");
+    time.textContent = item.at;
+    const body = document.createElement("b");
+    body.textContent = item.title;
+    const detail = document.createElement("em");
+    detail.textContent = item.detail;
+    row.append(time, body, detail);
+    target.appendChild(row);
+  }
+}
 
 function setMode(mode) {
   state.mode = mode;
@@ -183,6 +219,41 @@ function scores(list) {
   $("coreScore").textContent = rows[0] ? Math.round(rows[0].value) : "--";
 }
 
+function capabilityAudit(assessment) {
+  const audit = assessment?.metadata?.capability_absorption_audit;
+  const target = $("capabilityState");
+  if (!target) return;
+  target.textContent = "";
+  if (!audit) {
+    target.textContent = "未评估";
+    return;
+  }
+  const rows = [
+    ["能力分", Math.round(Number(audit.score || 0))],
+    ["总分上限", Math.round(Number(audit.overall_cap || 0))],
+    ["外部项目", Number(audit.external_project_count || 0)],
+    ["员工模式", audit.employee_execution_mode || "无"],
+    ["原因", labelOf(audit.reason) || audit.reason || ""]
+  ];
+  for (const [k, v] of rows) {
+    const row = document.createElement("div");
+    row.className = "kv";
+    row.append(Object.assign(document.createElement("span"), {textContent: k}), Object.assign(document.createElement("b"), {textContent: String(v)}));
+    target.appendChild(row);
+  }
+  const behavior = [...(audit.behavior_source_files || []), ...(audit.behavior_test_files || [])].slice(0, 5);
+  if (behavior.length) {
+    const list = document.createElement("div");
+    list.className = "filelist";
+    for (const file of behavior) {
+      const item = document.createElement("code");
+      item.textContent = shortPath(file);
+      list.appendChild(item);
+    }
+    target.appendChild(list);
+  }
+}
+
 function externalScores(assessment, visual) {
   const grid = $("externalScoreGrid");
   if (!grid) return;
@@ -195,6 +266,38 @@ function externalScores(assessment, visual) {
   meta.className = "mini";
   meta.textContent = `文件 ${visual?.external?.file_count ?? fileCountFrom(assessment)} · 核心分 ${Math.round(scoreValue(assessment, 0))}`;
   grid.appendChild(meta);
+}
+
+function evidence(result) {
+  const target = $("evidenceState");
+  if (!target) return;
+  target.textContent = "";
+  const execution = result?.execution || {};
+  const files = execution.changed_files || [];
+  const gates = execution.gates || [];
+  const lines = [
+    ["外部来源", sourceName(result?.external_ref?.source || "")],
+    ["吸收任务", String((result?.tasks || []).length)],
+    ["改动文件", String(files.length)],
+    ["门禁通过", gates.length ? `${gates.filter(gate => gate.ok).length}/${gates.length}` : "0/0"],
+    ["运行耗时", execution.duration_sec == null ? "未知" : `${execution.duration_sec}s`],
+  ];
+  for (const [k, v] of lines) {
+    const row = document.createElement("div");
+    row.className = "kv";
+    row.append(Object.assign(document.createElement("span"), {textContent: k}), Object.assign(document.createElement("b"), {textContent: v}));
+    target.appendChild(row);
+  }
+  if (files.length) {
+    const fileList = document.createElement("div");
+    fileList.className = "filelist";
+    for (const file of files.slice(0, 8)) {
+      const code = document.createElement("code");
+      code.textContent = shortPath(file);
+      fileList.appendChild(code);
+    }
+    target.appendChild(fileList);
+  }
 }
 
 function tasks(list) {
@@ -214,84 +317,113 @@ function llm(review) {
   }
   const d = review.dispatch || review;
   if (d.task_id) state.llmTaskId = d.task_id;
-  $("llmState").textContent = d.status === "accepted" ? `已派发排比任务：${d.task_id || "等待任务 ID"}` : `已写入排比待发箱：${d.reason || d.status || "等待调度"}`;
+  state.llmParallel = Boolean(review.parallel);
+  const prefix = state.llmParallel ? `已派发并发排比 ${d.subtask_count || review.panels?.length || 0} 个面板` : "已派发排比任务";
+  $("llmState").textContent = d.status === "accepted" ? `${prefix}：${d.task_id || "等待任务 ID"}` : `已写入排比待发箱：${d.reason || d.status || "等待调度"}`;
+  pushEvent("排比任务", d.task_id || d.reason || d.status || "已记录", d.status === "accepted" ? "ok" : "warn");
 }
 
 function executionState(execution) {
   const target = $("executionState");
   if (!target) return;
   if (!execution) {
-    target.textContent = "等待 CLI 执行";
+    target.textContent = "未运行";
     return;
   }
   const files = execution.changed_files || [];
   const gates = execution.gates || [];
   const gateText = gates.length ? `${gates.filter(gate => gate.ok).length}/${gates.length}` : "未运行";
-  target.innerHTML = `<b>${labelOf(execution.status) || execution.status}</b><div>耗时 ${execution.duration_sec || 0}s · 改动 ${files.length} 个文件 · 门禁 ${gateText}</div>`;
+  target.textContent = "";
+  const title = document.createElement("b");
+  title.textContent = labelOf(execution.status) || execution.status;
+  const meta = document.createElement("div");
+  meta.textContent = `耗时 ${execution.duration_sec || 0}s · 改动 ${files.length} 个文件 · 门禁 ${gateText}`;
+  target.append(title, meta);
+  if (gates.length) {
+    const list = document.createElement("div");
+    list.className = "gates";
+    for (const gate of gates) {
+      const row = document.createElement("span");
+      row.className = gate.ok ? "ok" : "bad";
+      row.textContent = `${gate.ok ? "通过" : "失败"} ${gate.command?.slice(-3).join(" ") || ""}`;
+      list.appendChild(row);
+    }
+    target.appendChild(list);
+  }
 }
 
 async function assess() {
-  state.running = true;
-  $("statusText").textContent = "评估中";
+  setRunning(true, "评估中");
+  pushEvent("开始评估", shortPath($("ownProjectFolder").value.trim()));
   try {
     const r = await api("/api/assess", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, use_llm: $("useLlm").checked});
     scores(r.scores);
+    capabilityAudit(r);
     llm(r.llm_review);
     $("statusText").textContent = "已评估";
+    pushEvent("评估完成", `核心分 ${Math.round(scoreValue(r, 0))}`, "ok");
   } catch (e) {
     $("statusText").textContent = "已阻断";
     $("branchState").textContent = `错误：${e.message}`;
+    pushEvent("评估失败", e.message, "bad");
   } finally {
-    state.running = false;
+    setRunning(false);
   }
 }
 
 async function absorb() {
-  state.running = true;
-  $("statusText").textContent = "评估双方项目";
+  setRunning(true, "评估双方项目");
   const payload = body();
+  pushEvent("开始吸收", sourceName(payload.github_url || payload.external_path || ""), "info");
   beginAbsorption(payload);
   try {
     const r = await api("/api/absorb", payload);
     updateAbsorption(r);
     scores(r.own_assessment.scores);
+    capabilityAudit(r.own_assessment);
     externalScores(r.external_assessment, r.absorption_visual);
     executionState(r.execution);
+    evidence(r);
     tasks(r.tasks || []);
     llm(r.llm_review);
     $("branchState").textContent = labelOf(r.branch_workflow?.status) || "尚未运行分支流程";
     $("statusText").textContent = labelOf(r.status);
+    pushEvent("吸收完成", `${labelOf(r.status)} · 改动 ${(r.execution?.changed_files || []).length} 个文件`, r.execution?.gates_passed ? "ok" : "warn");
     await finishAbsorption();
   } catch (e) {
     cancelAbsorption();
     $("statusText").textContent = "已阻断";
     $("branchState").textContent = `错误：${e.message}`;
+    pushEvent("吸收失败", e.message, "bad");
   } finally {
-    state.running = false;
+    setRunning(false);
   }
 }
 
 async function evolve() {
-  state.running = true;
-  $("statusText").textContent = "反问中";
+  setRunning(true, "反问中");
+  pushEvent("开始反问", "无限反问评分弱项");
   try {
     const r = await api("/api/self-evolve", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, max_rounds: 8, use_llm: $("useLlm").checked});
     scores(r.final_assessment.scores);
+    capabilityAudit(r.final_assessment);
     tasks(r.tasks || []);
     llm(r.final_assessment?.llm_review || r.llm_review);
     $("branchState").textContent = `${labelOf(r.status)}：${labelOf(r.stop_reason)}`;
     $("statusText").textContent = "已反问";
+    pushEvent("反问完成", `${labelOf(r.status)} · ${labelOf(r.stop_reason)}`, r.status === "converged" ? "ok" : "warn");
   } catch (e) {
     $("statusText").textContent = "已阻断";
     $("branchState").textContent = `错误：${e.message}`;
+    pushEvent("反问失败", e.message, "bad");
   } finally {
-    state.running = false;
+    setRunning(false);
   }
 }
 
 async function llmReview() {
-  state.running = true;
-  $("statusText").textContent = "排比评审中";
+  setRunning(true, "排比评审中");
+  pushEvent("请求排比评审", "单评审员");
   try {
     const payload = body();
     const r = await api("/api/llm-review", {project: payload.project, mode: "manual", github_url: payload.github_url || "", external_path: payload.external_path || "", run_local_gates: payload.run_local_gates});
@@ -300,8 +432,26 @@ async function llmReview() {
   } catch (e) {
     $("statusText").textContent = "已阻断";
     $("llmState").textContent = `错误：${e.message}`;
+    pushEvent("排比失败", e.message, "bad");
   } finally {
-    state.running = false;
+    setRunning(false);
+  }
+}
+
+async function llmParallelReview() {
+  setRunning(true, "并发排比中");
+  pushEvent("请求并发排比", "证据/能力/阻塞三面板");
+  try {
+    const payload = body();
+    const r = await api("/api/llm-review-parallel", {project: payload.project, mode: "parallel_assess", github_url: payload.github_url || "", external_path: payload.external_path || "", run_local_gates: payload.run_local_gates, max_parallel: 3});
+    llm(r);
+    $("statusText").textContent = "已请求并发排比";
+  } catch (e) {
+    $("statusText").textContent = "已阻断";
+    $("llmState").textContent = `错误：${e.message}`;
+    pushEvent("并发排比失败", e.message, "bad");
+  } finally {
+    setRunning(false);
   }
 }
 
@@ -310,18 +460,20 @@ async function llmStatus() {
     $("llmState").textContent = "没有可同步的排比任务";
     return;
   }
-  state.running = true;
-  $("statusText").textContent = "同步排比中";
+  setRunning(true, "同步排比中");
   try {
-    const r = await api("/api/llm-review-status", {task_id: state.llmTaskId});
+    const r = await api(state.llmParallel ? "/api/llm-review-group-status" : "/api/llm-review-status", {task_id: state.llmTaskId});
     const json = r.json_result ? ` · JSON ${r.json_result.level || "已返回"}` : "";
-    $("llmState").textContent = `排比任务 ${r.status || "unknown"} · 子任务 ${r.subtasks?.map(s => s.status).join("/") || "无"}${json}`;
+    const blockers = r.unblock_tasks?.length ? ` · 解阻 ${r.unblock_tasks.length}` : "";
+    $("llmState").textContent = `排比任务 ${r.status || "unknown"} · 子任务 ${r.subtasks?.map(s => s.status).join("/") || "无"}${json}${blockers}`;
     $("statusText").textContent = "已同步排比";
+    pushEvent("排比同步", `${r.status || "unknown"}${blockers}`, r.unblock_tasks?.length ? "warn" : "ok");
   } catch (e) {
     $("statusText").textContent = "已阻断";
     $("llmState").textContent = `错误：${e.message}`;
+    pushEvent("同步失败", e.message, "bad");
   } finally {
-    state.running = false;
+    setRunning(false);
   }
 }
 
@@ -570,6 +722,7 @@ $("assessBtn").onclick = assess;
 $("absorbBtn").onclick = absorb;
 $("evolveBtn").onclick = evolve;
 $("llmReviewBtn").onclick = llmReview;
+$("llmParallelBtn").onclick = llmParallelReview;
 $("llmStatusBtn").onclick = llmStatus;
 externalScores(null);
 draw();

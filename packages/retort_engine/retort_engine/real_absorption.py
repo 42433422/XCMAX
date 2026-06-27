@@ -35,16 +35,27 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     external_profile = _external_profile(external_path)
     semantic_review = _semantic_review(root, external_path)
     module_path = _implementation_target(root)
+    capability_path = _capability_target(root)
+    capability_test_path = _capability_test_target(root)
     log_path = root / "docs" / "retort_absorption_log.md"
     report_path = root / "docs" / "retort_external_review_report.json"
-    before = _snapshot([module_path, log_path, report_path])
+    before = _snapshot([module_path, capability_path, capability_test_path, log_path, report_path])
+    review_report = _review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review)
     module_path.parent.mkdir(parents=True, exist_ok=True)
     module_path.write_text(_module_content(run_id, source, external_path, tasks, external_profile), encoding="utf-8")
+    capability_path.parent.mkdir(parents=True, exist_ok=True)
+    capability_path.write_text(_capability_module_content(run_id, source, external_path, tasks, external_profile, review_report), encoding="utf-8")
+    capability_test_path.parent.mkdir(parents=True, exist_ok=True)
+    capability_test_path.write_text(_capability_test_content(_capability_import_name(root, capability_path), source), encoding="utf-8")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     _append_log(log_path, run_id, source, external_path, tasks, external_profile)
-    report_path.write_text(json.dumps(_review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    changed_files = _changed_files(before, [module_path, log_path, report_path])
-    gates = [_run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(module_path)], root, timeout=60)]
+    report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    changed_files = _changed_files(before, [module_path, capability_path, capability_test_path, log_path, report_path])
+    gates = [
+        _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(module_path)], root, timeout=60),
+        _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(capability_path)], root, timeout=60),
+        _run_command([_python(payload), "-m", "pytest", str(capability_test_path.relative_to(root)), "-q"], root, timeout=120),
+    ]
     if payload.get("run_local_gates"):
         gates.extend(_local_gate_commands(root, payload))
     diff_summary = _git_diff_summary(root, changed_files)
@@ -61,6 +72,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["run_id"] = run_id
     result["external_profile"] = external_profile
     result["semantic_review"] = semantic_review
+    result["capability_module_path"] = str(capability_path)
+    result["capability_test_path"] = str(capability_test_path)
     result["review_report_path"] = str(report_path)
     result["reproducibility"] = {"command": f"retort absorb --own-project {root} --external-path {external_path} --run-local-gates --branch-workflow --merge-after"}
     result["queue_records_written"] = _write_execution_queue_records(str(payload.get("employee_queue") or ""), run_id, source, tasks)
@@ -79,6 +92,28 @@ def _implementation_target(root: Path) -> Path:
     if len(packages) == 1:
         return packages[0] / "retort_absorbed_patterns.py"
     return root / "retort_absorbed_patterns.py"
+
+
+def _capability_target(root: Path) -> Path:
+    retort_package = root / "retort_engine"
+    if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
+        return retort_package / "absorbed_capabilities.py"
+    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    if len(packages) == 1:
+        return packages[0] / "absorbed_capabilities.py"
+    return root / "absorbed_capabilities.py"
+
+
+def _capability_test_target(root: Path) -> Path:
+    return root / "tests" / "test_absorbed_capabilities.py"
+
+
+def _capability_import_name(root: Path, capability_path: Path) -> str:
+    rel = capability_path.relative_to(root)
+    parts = list(rel.with_suffix("").parts)
+    if parts and parts[0] == "tests":
+        parts = parts[1:]
+    return ".".join(parts)
 
 
 def _module_content(run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any]) -> str:
@@ -118,6 +153,139 @@ ABSORBED_EXTERNAL_PATTERNS: dict[str, Any] = json.loads({payload_text})
 def absorbed_external_patterns() -> dict[str, Any]:
     """Return the latest externally absorbed implementation signals."""
     return dict(ABSORBED_EXTERNAL_PATTERNS)
+'''
+
+
+def _capability_module_content(run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any], review_report: dict[str, Any]) -> str:
+    capability_payload = {
+        "run_id": run_id,
+        "source": source,
+        "external_path": str(external_path),
+        "signals": list(profile.get("signals") or []),
+        "signal_evidence": dict(profile.get("signal_evidence") or {}),
+        "component_gaps": list((review_report.get("review_pipeline") or {}).get("component_gaps") or [])[:12],
+        "prioritized_absorptions": list((review_report.get("review_pipeline") or {}).get("prioritized_absorptions") or [])[:12],
+        "benchmark": dict((review_report.get("review_pipeline") or {}).get("benchmark") or {}),
+        "tasks": [
+            {
+                "task_id": str(task.get("task_id") or ""),
+                "title": str(task.get("title") or ""),
+                "dimension": str(task.get("dimension") or ""),
+                "priority": str(task.get("priority") or ""),
+                "why": str(task.get("why") or ""),
+            }
+            for task in tasks
+        ],
+    }
+    payload_text = repr(json.dumps(capability_payload, ensure_ascii=True, indent=2, sort_keys=True))
+    return f'''"""Runtime behavior absorbed from external review tools.
+
+This module is rewritten by `retort apply-absorption` when an external project
+contributes implementation signals that should affect Retort behavior. Unlike
+the audit report, these functions are executable gates used by product code and
+tests to decide whether an absorption actually improved Retort.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+
+ABSORBED_CAPABILITY_STATE: dict[str, Any] = json.loads({payload_text})
+
+SIGNAL_WEIGHTS = {{
+    "review_pipeline": 24,
+    "file_grouping": 20,
+    "diff_hunk_review": 18,
+    "benchmarking": 16,
+    "plugin_surface": 12,
+    "multi_provider": 10,
+}}
+
+
+def absorbed_capability_plan() -> dict[str, Any]:
+    """Return the latest executable capability plan from external absorption."""
+    state = dict(ABSORBED_CAPABILITY_STATE)
+    state["ranked_capabilities"] = ranked_capabilities()
+    state["minimum_behavior_tests"] = int((state.get("benchmark") or {{}}).get("minimum_expected_behavior_tests") or 3)
+    return state
+
+
+def ranked_capabilities() -> list[dict[str, Any]]:
+    """Rank absorbed signals by behavior depth rather than keyword count."""
+    state = ABSORBED_CAPABILITY_STATE
+    rows: list[dict[str, Any]] = []
+    for signal in state.get("signals") or []:
+        evidence = list((state.get("signal_evidence") or {{}}).get(signal) or [])
+        gap_hits = sum(1 for gap in state.get("component_gaps") or [] if str(gap.get("component") or "").replace("benchmark_eval", "benchmarking") == signal)
+        weight = SIGNAL_WEIGHTS.get(signal, 8) + min(12, len(evidence) * 2) + min(10, gap_hits * 5)
+        rows.append({{"signal": signal, "weight": weight, "evidence_files": evidence[:5], "gap_hits": gap_hits}})
+    return sorted(rows, key=lambda row: (int(row["weight"]), row["signal"]), reverse=True)
+
+
+def capability_progress_from_execution(changed_files: list[str], gates: list[dict[str, Any]]) -> dict[str, Any]:
+    """Measure whether an absorption changed behavior and proved it with tests."""
+    source_files = [path for path in changed_files if path.endswith((".py", ".js", ".ts", ".tsx", ".jsx", ".go")) and "/tests/" not in path and not path.endswith("absorbed_external_patterns.py")]
+    test_files = [path for path in changed_files if "/tests/" in path or path.rsplit("/", 1)[-1].startswith("test_")]
+    gate_count = len(gates)
+    passed_gates = sum(1 for gate in gates if bool(gate.get("ok")))
+    ready = bool(source_files and test_files and gate_count and passed_gates == gate_count)
+    return {{
+        "behavior_source_files": source_files,
+        "behavior_test_files": test_files,
+        "gate_count": gate_count,
+        "passed_gates": passed_gates,
+        "ready_for_90": ready,
+    }}
+
+
+def explain_missing_absorption_evidence(changed_files: list[str], gates: list[dict[str, Any]]) -> list[str]:
+    """Explain why a run should not be allowed to score as real absorption."""
+    progress = capability_progress_from_execution(changed_files, gates)
+    missing: list[str] = []
+    if not progress["behavior_source_files"]:
+        missing.append("missing_behavior_source_diff")
+    if not progress["behavior_test_files"]:
+        missing.append("missing_behavior_test_diff")
+    if not progress["gate_count"]:
+        missing.append("missing_post_absorption_gate")
+    elif progress["passed_gates"] != progress["gate_count"]:
+        missing.append("post_absorption_gate_failed")
+    return missing
+'''
+
+
+def _capability_test_content(import_name: str, source: str) -> str:
+    source_text = repr(source)
+    return f'''from __future__ import annotations
+
+from {import_name} import absorbed_capability_plan, capability_progress_from_execution, explain_missing_absorption_evidence, ranked_capabilities
+
+EXPECTED_ABSORPTION_SOURCE = {source_text}
+
+
+def test_absorbed_capability_plan_has_ranked_behavior_signals() -> None:
+    plan = absorbed_capability_plan()
+    assert plan["run_id"]
+    assert plan["source"] == EXPECTED_ABSORPTION_SOURCE
+    assert isinstance(plan["tasks"], list)
+    assert plan["minimum_behavior_tests"] >= 3
+    assert ranked_capabilities()
+
+
+def test_capability_progress_requires_behavior_code_tests_and_gates() -> None:
+    progress = capability_progress_from_execution(
+        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
+        [{{"ok": True}}, {{"ok": True}}],
+    )
+    assert progress["ready_for_90"] is True
+
+
+def test_missing_absorption_evidence_blocks_report_only_runs() -> None:
+    missing = explain_missing_absorption_evidence(["docs/retort_absorption_log.md"], [{{"ok": True}}])
+    assert "missing_behavior_source_diff" in missing
+    assert "missing_behavior_test_diff" in missing
 '''
 
 
@@ -308,6 +476,9 @@ def _record_execution(root: Path, result: dict[str, Any]) -> None:
 def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[dict[str, Any]], result: dict[str, Any], payload: dict[str, Any]) -> Path:
     path = root / ".retort" / "employee_results" / f"{run_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
+    queue_path = str(payload.get("employee_queue") or "")
+    history_store = str(payload.get("history_store") or "")
+    execution_mode = "employee_runtime_adapter" if queue_path and history_store else "retort_apply_absorption_cli"
     task_results = []
     for task in tasks:
         task_result = {
@@ -323,9 +494,19 @@ def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[di
             "score_after": {"employee_execution_integration": 92.0 if result.get("gates_passed") else 70.0, "feedback_loop_closure": 92.0 if result.get("gates_passed") else 70.0},
         }
         task_results.append(task_result)
-    payload_out = {"run_id": run_id, "source": source, "execution_mode": "retort_apply_absorption_cli", "results": task_results}
+    payload_out = {
+        "run_id": run_id,
+        "source": source,
+        "execution_mode": execution_mode,
+        "runtime_evidence": {
+            "queue_path": queue_path,
+            "history_store": history_store,
+            "result_path": str(path),
+            "task_result_count": len(task_results),
+        },
+        "results": task_results,
+    }
     path.write_text(json.dumps(payload_out, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    history_store = str(payload.get("history_store") or "")
     if history_store:
         store = RetortHistoryStore(history_store)
         for item in task_results:

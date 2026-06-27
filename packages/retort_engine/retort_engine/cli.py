@@ -52,9 +52,20 @@ def main(argv: list[str] | None = None) -> int:
     llm.add_argument("--external-path", default="")
     llm.add_argument("--run-local-gates", action="store_true")
     llm.add_argument("--json", action="store_true")
+    llm_parallel = sub.add_parser("llm-review-parallel")
+    llm_parallel.add_argument("--project", default=".")
+    llm_parallel.add_argument("--mode", default="parallel_assess")
+    llm_parallel.add_argument("--github", default="")
+    llm_parallel.add_argument("--external-path", default="")
+    llm_parallel.add_argument("--run-local-gates", action="store_true")
+    llm_parallel.add_argument("--max-parallel", type=int, default=3)
+    llm_parallel.add_argument("--json", action="store_true")
     llm_status = sub.add_parser("llm-review-status")
     llm_status.add_argument("--task-id", required=True)
     llm_status.add_argument("--json", action="store_true")
+    llm_group_status = sub.add_parser("llm-review-group-status")
+    llm_group_status.add_argument("--task-id", required=True)
+    llm_group_status.add_argument("--json", action="store_true")
     proof = sub.add_parser("record-proof")
     proof.add_argument("--project", default=".")
     proof.add_argument("--branch-diff-verified", action="store_true")
@@ -101,9 +112,17 @@ def main(argv: list[str] | None = None) -> int:
         result = RetortService().llm_review({"project": args.project, "mode": args.mode, "github_url": args.github, "external_path": args.external_path, "run_local_gates": args.run_local_gates})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort LLM review status: {result['status']}")
         return 0
+    if args.command == "llm-review-parallel":
+        result = RetortService().llm_parallel_review({"project": args.project, "mode": args.mode, "github_url": args.github, "external_path": args.external_path, "run_local_gates": args.run_local_gates, "max_parallel": args.max_parallel})
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort parallel LLM review status: {result['status']}")
+        return 0
     if args.command == "llm-review-status":
         result = RetortService().llm_review_status({"task_id": args.task_id})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort LLM task status: {result['status']}")
+        return 0
+    if args.command == "llm-review-group-status":
+        result = RetortService().llm_parallel_status({"task_id": args.task_id})
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort parallel LLM task status: {result['status']}")
         return 0
     if args.command == "record-proof":
         result = record_closed_loop_proof(args.project, {"branch_diff_verified": args.branch_diff_verified, "employee_execution_verified": args.employee_execution_verified, "post_absorption_tests_passed": args.post_absorption_tests_passed, "merge_verified": args.merge_verified, "external_advantage_reassessed": args.external_advantage_reassessed, "evidence": args.evidence})

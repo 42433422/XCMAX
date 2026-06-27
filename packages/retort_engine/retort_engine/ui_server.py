@@ -50,6 +50,10 @@ class RetortUIServer:
                         self._json(outer.service.llm_review(payload))
                     elif self.path == "/api/llm-review-status":
                         self._json(outer.service.llm_review_status(payload))
+                    elif self.path == "/api/llm-review-parallel":
+                        self._json(outer.service.llm_parallel_review(payload))
+                    elif self.path == "/api/llm-review-group-status":
+                        self._json(outer.service.llm_parallel_status(payload))
                     else:
                         self.send_error(404)
                 except Exception as exc:
