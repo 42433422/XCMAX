@@ -37,4 +37,7 @@ def test_planet_renderer_uses_absorbed_visual_layers() -> None:
     assert "translucent_clouds" in text
     assert "terminator_shadow" in text
     assert "atmospheric_rim" in text
+    assert "day_night_terminator" in text
+    assert "fresnel_glow" in text
+    assert "city_lights" in text
     assert "rgbaHex(palette.rim" in text
