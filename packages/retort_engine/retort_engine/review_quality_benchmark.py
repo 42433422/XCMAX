@@ -7,7 +7,7 @@ from typing import Any
 from retort_engine.pr_review import review_diff
 
 
-def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 30, negative_sample_count: int = 0) -> dict[str, Any]:
+def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 80, negative_sample_count: int = 0) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     samples = _golden_samples(max(1, sample_count)) + _negative_samples(max(0, negative_sample_count))
     sample_results = []
@@ -71,6 +71,7 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
         "project": str(root),
         "summary": {
             "sample_count": len(sample_results),
+            "target_positive_sample_count": sample_count,
             "positive_sample_count": sample_count,
             "negative_sample_count": negative_sample_count,
             "curated_expected_conclusion_count": len(sample_results),
@@ -107,7 +108,7 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
         "evidence": {
             "engine": "retort_engine.pr_review.review_diff",
             "golden_set": "repo_curated_pr_review_expectations",
-            "minimum_expected_samples": 30,
+            "minimum_expected_samples": 80,
             "aggregation": "lm_eval_style_task_category_macro_average",
             "baseline": "pre_absorption_rules_without_context_ranking_or_incremental_skip",
             "post_absorption_replay": "same_samples_reviewed_with_ranked_context_and_publishable_anchors",
