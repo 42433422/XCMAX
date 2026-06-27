@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from retort_engine.contracts import validate_contract
-from retort_engine.pr_publish import build_publish_dry_run
+from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 
 
 def test_build_publish_dry_run_converts_review_comments(tmp_path: Path) -> None:
@@ -34,3 +34,26 @@ def test_build_publish_dry_run_converts_review_comments(tmp_path: Path) -> None:
     assert result["comments"][0]["path"] == "app.py"
     assert result["rollback"]["strategy"] == "delete_created_review_comments"
     assert validate_contract("pr_publish_dry_run_result", result)["valid"] is True
+
+
+def test_run_publish_sandbox_creates_and_rolls_back_receipts(tmp_path: Path) -> None:
+    dry_run_file = tmp_path / "publish.json"
+    dry_run_file.write_text(
+        json.dumps(
+            {
+                "pr_url": "https://github.com/acme/repo/pull/1",
+                "summary": {"idempotency_key": "key-1"},
+                "comments": [{"path": "app.py", "line": 3, "body": "Fix token handling."}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_publish_sandbox(dry_run_file)
+
+    assert result["status"] == "sandbox_rolled_back"
+    assert result["summary"]["created_comment_count"] == 1
+    assert result["summary"]["rollback_verified"] is True
+    assert result["rollback_receipts"][0]["deleted"] is True
+    assert validate_contract("pr_publish_sandbox_result", result)["valid"] is True
