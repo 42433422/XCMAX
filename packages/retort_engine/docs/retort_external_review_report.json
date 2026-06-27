@@ -5,56 +5,44 @@
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/SWE-agent/SWE-agent",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/continuedev/continue",
   "external_snapshot": {
-    "file_count": 408,
-    "git_revision": "abd7d69724d1413b30fea43d4724bb5b463906b4",
+    "file_count": 3057,
+    "git_revision": "d0a3c0b626b5bebc3bef4742eec05a0242be0bab",
     "suffix_counts": {
-      ".c": 2,
-      ".cfg": 1,
-      ".conf": 1,
-      ".cpp": 2,
-      ".css": 6,
-      ".example": 1,
-      ".gif": 2,
-      ".html": 4,
-      ".ico": 2,
-      ".js": 2,
-      ".json": 15,
-      ".jsonl": 1,
-      ".log": 1,
-      ".md": 69,
-      ".mdc": 2,
-      ".patch": 1,
-      ".pcap": 1,
-      ".pl": 3,
-      ".png": 17,
-      ".py": 100,
-      ".sh": 17,
-      ".svg": 15,
-      ".toml": 1,
-      ".traj": 22,
-      ".txt": 4,
-      ".yaml": 51,
-      ".yml": 10,
-      ".zip": 1,
-      "<none>": 54
+      ".css": 2,
+      ".diff": 4,
+      ".go": 1,
+      ".ico": 1,
+      ".js": 5,
+      ".json": 12,
+      ".md": 10,
+      ".mjs": 3,
+      ".php": 1,
+      ".png": 2,
+      ".py": 5,
+      ".sh": 1,
+      ".ts": 512,
+      ".tsx": 23,
+      ".txt": 6,
+      ".yaml": 1,
+      "<none>": 11
     }
   },
-  "generated_at": "2026-06-27T17:24:33Z",
+  "generated_at": "2026-06-27T17:25:27Z",
   "license_review": {
-    "detected_license": "MIT License",
-    "message": "Allowed license detected: MIT License",
+    "detected_license": "Apache License",
+    "message": "Allowed license detected: Apache License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/SWE-agent/SWE-agent --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/continuedev/continue --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 2,
-      "minimum_expected_behavior_tests": 6,
-      "prioritized_component_count": 2,
+      "component_gap_count": 6,
+      "minimum_expected_behavior_tests": 10,
+      "prioritized_component_count": 6,
       "task_dimension_count": 4
     },
     "component_gaps": [
@@ -62,28 +50,84 @@
         "component": "workflow_ci",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 3790,
+        "marker_gap": 24296,
         "own_files": 12,
         "representative_external_files": [
-          "mkdocs.yml",
-          ".pre-commit-config.yaml",
-          "pyproject.toml",
-          "README.md",
-          "CONTRIBUTING.md"
+          "CODE_OF_CONDUCT.md",
+          "worktree-config.yaml",
+          "TESTING.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json"
         ]
       },
       {
         "component": "provider_surface",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 902,
+        "marker_gap": 22947,
         "own_files": 12,
         "representative_external_files": [
-          "mkdocs.yml",
-          "pyproject.toml",
+          "TESTING.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json",
+          "CONTRIBUTING.md",
+          "docs-site/app/layout.tsx"
+        ]
+      },
+      {
+        "component": "safety_policy",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 13895,
+        "own_files": 12,
+        "representative_external_files": [
+          "CODE_OF_CONDUCT.md",
           "README.md",
-          "mlc_config.json",
-          "tools/review_on_submit_m/config.yaml"
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json",
+          "CLA.md"
+        ]
+      },
+      {
+        "component": "plugin_surface",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 2513,
+        "own_files": 12,
+        "representative_external_files": [
+          "worktree-config.yaml",
+          "TESTING.md",
+          "README.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json"
+        ]
+      },
+      {
+        "component": "benchmark_eval",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 255,
+        "own_files": 12,
+        "representative_external_files": [
+          "core/core.ts",
+          "core/index.d.ts",
+          "core/nextEdit/NextEditProvider.ts",
+          "core/nextEdit/constants.ts",
+          "core/nextEdit/context/autocompleteContextFetching.ts"
+        ]
+      },
+      {
+        "component": "diff_hunk_review",
+        "external_files": 12,
+        "file_gap": 5,
+        "marker_gap": 3,
+        "own_files": 7,
+        "representative_external_files": [
+          "core/nextEdit/context/aggregateEdits.ts",
+          "core/nextEdit/context/diffFormatting.ts",
+          "core/autocomplete/classification/shouldCompleteMultiline.ts",
+          "core/autocomplete/constants/AutocompleteLanguageInfo.ts",
+          "core/edit/searchAndReplace/findSearchMatch.vitest.ts"
         ]
       }
     ],
@@ -94,11 +138,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "mkdocs.yml",
-            "pyproject.toml",
-            "README.md",
-            "mlc_config.json",
-            "tools/review_on_submit_m/config.yaml"
+            "TESTING.md",
+            "BUILD_DEPENDENCIES.md",
+            "package-lock.json",
+            "CONTRIBUTING.md",
+            "docs-site/app/layout.tsx"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -107,11 +151,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "mkdocs.yml",
-            "pyproject.toml",
-            "tests/test_data/data_sources/swe-bench-lite-test.json",
-            "tests/test_data/data_sources/swe-bench-dev-easy.json",
-            ".devcontainer/devcontainer.json"
+            "worktree-config.yaml",
+            "TESTING.md",
+            "README.md",
+            "BUILD_DEPENDENCIES.md",
+            "package-lock.json"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -132,6 +176,33 @@
           "title": "Deepen review_pipeline"
         },
         {
+          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-file-grouping",
+          "title": "Deepen file_grouping"
+        },
+        {
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-diff-hunk-review",
+          "title": "Deepen diff_hunk_review"
+        },
+        {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "dimension": "feedback_loop_closure",
           "evidence_required": [
@@ -146,19 +217,6 @@
           "title": "Deepen benchmark_eval"
         },
         {
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-safety-policy",
-          "title": "Deepen safety_policy"
-        },
-        {
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "dimension": "operational_readiness",
           "evidence_required": [
@@ -170,6 +228,19 @@
           "priority": "P1",
           "task_id": "retort-depth-workflow-ci",
           "title": "Deepen workflow_ci"
+        },
+        {
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-safety-policy",
+          "title": "Deepen safety_policy"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -199,23 +270,95 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 138,
-          "own_marker_hits": 1842,
+          "external_marker_hits": 828,
+          "own_marker_hits": 1838,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "tools/review_on_submit_m/README.md",
-            "config/default_mm_with_images.yaml",
-            "config/default_backticks.yaml",
-            "config/default_mm_no_images.yaml",
-            "config/default.yaml"
+            "CODE_OF_CONDUCT.md",
+            "BUILD_DEPENDENCIES.md",
+            "CONTRIBUTING.md",
+            "core/promptFiles/initPrompt.ts",
+            "core/nextEdit/constants.ts"
+          ]
+        },
+        {
+          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
+          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "component": "file_grouping",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-file-grouping",
+            "title": "Deepen file_grouping"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 19,
+          "own_marker_hits": 54,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "core/indexing/CodebaseIndexer.test.ts",
+            ".continue/checks/update-agents-md.md",
+            ".continue/agents/error-message-quality.md",
+            ".continue/rules/github-pr-documentation-updater.md",
+            "extensions/cli/spec/tty-less-support.md"
+          ]
+        },
+        {
+          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "component": "diff_hunk_review",
+          "depth_gap": 3,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "review JSON with stages and comments"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-diff-hunk-review",
+            "title": "Deepen diff_hunk_review"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "external_marker_hits": 25,
+          "own_marker_hits": 22,
+          "priority": "P0",
+          "similarity_score": 98,
+          "source_files": [
+            "core/nextEdit/context/aggregateEdits.ts",
+            "core/nextEdit/context/diffFormatting.ts",
+            "core/autocomplete/classification/shouldCompleteMultiline.ts",
+            "core/autocomplete/constants/AutocompleteLanguageInfo.ts",
+            "core/edit/searchAndReplace/findSearchMatch.vitest.ts"
           ]
         },
         {
           "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "component": "benchmark_eval",
-          "depth_gap": 0,
+          "depth_gap": 255,
           "employee_task": {
             "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
             "dimension": "feedback_loop_closure",
@@ -236,58 +379,23 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 148,
-          "own_marker_hits": 549,
+          "external_marker_hits": 828,
+          "own_marker_hits": 573,
           "priority": "P0",
-          "similarity_score": 100,
+          "similarity_score": 95,
           "source_files": [
-            "README.md",
-            "tools/web_browser/lib/browser_manager.py",
-            "config/bash_only.yaml",
-            "config/coding_challenge.yaml",
-            "config/benchmarks/250526_anthropic_filemap_simple_review_sbl.yaml"
-          ]
-        },
-        {
-          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "component": "safety_policy",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-safety-policy",
-            "title": "Deepen safety_policy"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 44,
-          "own_marker_hits": 377,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "pyproject.toml",
-            "README.md",
-            "SECURITY.md",
-            "docs/index.md",
-            "docs/background/index.md"
+            "core/core.ts",
+            "core/index.d.ts",
+            "core/nextEdit/NextEditProvider.ts",
+            "core/nextEdit/constants.ts",
+            "core/nextEdit/context/autocompleteContextFetching.ts"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 3790,
+          "depth_gap": 24296,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -306,16 +414,51 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 6317,
-          "own_marker_hits": 2527,
+          "external_marker_hits": 26840,
+          "own_marker_hits": 2544,
           "priority": "P0",
-          "similarity_score": 91,
+          "similarity_score": 86,
           "source_files": [
-            "mkdocs.yml",
-            ".pre-commit-config.yaml",
-            "pyproject.toml",
+            "CODE_OF_CONDUCT.md",
+            "worktree-config.yaml",
+            "TESTING.md",
+            "BUILD_DEPENDENCIES.md",
+            "package-lock.json"
+          ]
+        },
+        {
+          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "component": "safety_policy",
+          "depth_gap": 13895,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-safety-policy",
+            "title": "Deepen safety_policy"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 14250,
+          "own_marker_hits": 355,
+          "priority": "P0",
+          "similarity_score": 85,
+          "source_files": [
+            "CODE_OF_CONDUCT.md",
             "README.md",
-            "CONTRIBUTING.md"
+            "BUILD_DEPENDENCIES.md",
+            "package-lock.json",
+            "CLA.md"
           ]
         }
       ],
@@ -324,7 +467,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 4,
+        "focused_component_count": 6,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -335,26 +478,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 1210,
+          "external_marker_hits": 23237,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "mkdocs.yml",
-            "pyproject.toml",
-            "README.md",
-            "mlc_config.json",
-            "tools/review_on_submit_m/config.yaml"
+            "TESTING.md",
+            "BUILD_DEPENDENCIES.md",
+            "package-lock.json",
+            "CONTRIBUTING.md",
+            "docs-site/app/layout.tsx"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 29,
+          "external_marker_hits": 2973,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "mkdocs.yml",
-            "pyproject.toml",
-            "tests/test_data/data_sources/swe-bench-lite-test.json",
-            "tests/test_data/data_sources/swe-bench-dev-easy.json",
-            ".devcontainer/devcontainer.json"
+            "worktree-config.yaml",
+            "TESTING.md",
+            "README.md",
+            "BUILD_DEPENDENCIES.md",
+            "package-lock.json"
           ]
         }
       ]
@@ -362,105 +505,137 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "README.md",
-          "tools/web_browser/lib/browser_manager.py",
-          "config/bash_only.yaml",
-          "config/coding_challenge.yaml",
-          "config/benchmarks/250526_anthropic_filemap_simple_review_sbl.yaml",
-          "config/benchmarks/250522_anthropic_filemap_simple_review.yaml",
-          "config/benchmarks/250212_sweagent_heavy_sbl.yaml",
-          "config/benchmarks/anthropic_filemap_multilingual.yaml",
-          "config/benchmarks/250225_anthropic_filemap_simple_review.yaml",
-          "config/sweagent_0_7/07_from_url.yaml",
-          "tests/test_batch_instance.py",
-          "tests/test_data/data_sources/swe-bench-lite-test.json"
+          "core/core.ts",
+          "core/index.d.ts",
+          "core/nextEdit/NextEditProvider.ts",
+          "core/nextEdit/constants.ts",
+          "core/nextEdit/context/autocompleteContextFetching.ts",
+          "core/tools/index.ts",
+          "core/tools/systemMessageTools/toolCodeblocks/buildSystemMessage.vitest.ts",
+          "core/tools/policies/fileAccess.ts",
+          "core/tools/implementations/codebaseTool.ts",
+          "core/tools/implementations/runTerminalCommand.vitest.ts",
+          "core/tools/definitions/readFileRange.ts",
+          "core/tools/definitions/readFile.ts"
         ],
-        "marker_hits": 148
+        "marker_hits": 828
+      },
+      "diff_hunk_review": {
+        "files": [
+          "core/nextEdit/context/aggregateEdits.ts",
+          "core/nextEdit/context/diffFormatting.ts",
+          "core/autocomplete/classification/shouldCompleteMultiline.ts",
+          "core/autocomplete/constants/AutocompleteLanguageInfo.ts",
+          "core/edit/searchAndReplace/findSearchMatch.vitest.ts",
+          "core/edit/lazy/unifiedDiffApply.ts",
+          ".continue/checks/stale-comments.md",
+          "extensions/cli/src/commands/review/reviewWorker.ts",
+          "extensions/vscode/textmate-syntaxes/go.json",
+          "extensions/vscode/textmate-syntaxes/rust.json",
+          "packages/config-yaml/CHANGELOG.md",
+          "gui/src/components/StyledMarkdownPreview/utils/commandExtractor.test.ts"
+        ],
+        "marker_hits": 25
+      },
+      "file_grouping": {
+        "files": [
+          "core/indexing/CodebaseIndexer.test.ts",
+          ".continue/checks/update-agents-md.md",
+          ".continue/agents/error-message-quality.md",
+          ".continue/rules/github-pr-documentation-updater.md",
+          "extensions/cli/spec/tty-less-support.md",
+          "extensions/cli/docs/artifact-uploads.md",
+          "extensions/cli/src/commands/review/reviewWorker.ts",
+          ".github/workflows/pr-checks.yaml",
+          ".github/actions/check-llm-changes/action.yml",
+          "skills/cn-check/SKILL.md"
+        ],
+        "marker_hits": 19
       },
       "plugin_surface": {
         "files": [
-          "mkdocs.yml",
-          "pyproject.toml",
-          "tests/test_data/data_sources/swe-bench-lite-test.json",
-          "tests/test_data/data_sources/swe-bench-dev-easy.json",
-          ".devcontainer/devcontainer.json",
-          "sweagent/types.py",
-          "sweagent/tools/tools.py",
-          "sweagent/utils/files.py",
-          "sweagent/agent/agents.py",
-          "sweagent/environment/repo.py",
-          "sweagent/run/batch_instances.py",
-          "sweagent/run/run_replay.py"
+          "worktree-config.yaml",
+          "TESTING.md",
+          "README.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json",
+          "package.json",
+          "CONTRIBUTING.md",
+          ".eslintrc.shared.json",
+          "docs-site/next.config.js",
+          "docs-site/tailwind.config.ts",
+          "docs-site/package-lock.json",
+          "docs-site/tsconfig.json"
         ],
-        "marker_hits": 29
+        "marker_hits": 2973
       },
       "provider_surface": {
         "files": [
-          "mkdocs.yml",
-          "pyproject.toml",
-          "README.md",
-          "mlc_config.json",
-          "tools/review_on_submit_m/config.yaml",
-          "tools/edit_anthropic/config.yaml",
-          "config/bash_only.yaml",
-          "config/default_mm_with_images.yaml",
-          "config/default_backticks.yaml",
-          "config/README.md",
-          "config/default_mm_no_images.yaml",
-          "config/default.yaml"
+          "TESTING.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json",
+          "CONTRIBUTING.md",
+          "docs-site/app/layout.tsx",
+          "docs-site/components/docs/mdx/index.tsx",
+          "docs-site/components/docs/mdx/ModelRecommendations.tsx",
+          "core/core.ts",
+          "core/package-lock.json",
+          "core/package.json",
+          "core/index.d.ts",
+          "core/promptFiles/createNewPromptFile.ts"
         ],
-        "marker_hits": 1210
+        "marker_hits": 23237
       },
       "review_pipeline": {
         "files": [
-          "tools/review_on_submit_m/README.md",
-          "config/default_mm_with_images.yaml",
-          "config/default_backticks.yaml",
-          "config/default_mm_no_images.yaml",
-          "config/default.yaml",
-          "config/demo/no_instructions.yaml",
-          "config/demo/default.yaml",
-          "config/benchmarks/250526_anthropic_filemap_simple_review_sbl.yaml",
-          "config/benchmarks/250522_anthropic_filemap_simple_review.yaml",
-          "config/benchmarks/250212_sweagent_heavy_sbl.yaml",
-          "config/benchmarks/anthropic_filemap_multilingual.yaml",
-          "config/benchmarks/250225_anthropic_filemap_simple_review.yaml"
+          "CODE_OF_CONDUCT.md",
+          "BUILD_DEPENDENCIES.md",
+          "CONTRIBUTING.md",
+          "core/promptFiles/initPrompt.ts",
+          "core/nextEdit/constants.ts",
+          "core/llm/toolSupport.test.ts",
+          "core/llm/toolSupport.ts",
+          "core/llm/autodetect.vitest.ts",
+          "core/llm/llm.test.ts",
+          "core/llm/llms/Nebius.ts",
+          "core/llm/llms/OpenAI.ts",
+          "core/llm/llms/Groq.ts"
         ],
-        "marker_hits": 138
+        "marker_hits": 828
       },
       "safety_policy": {
         "files": [
-          "pyproject.toml",
+          "CODE_OF_CONDUCT.md",
           "README.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json",
+          "CLA.md",
+          "CONTRIBUTING.md",
           "SECURITY.md",
-          "docs/index.md",
-          "docs/background/index.md",
-          "docs/usage/competitive_runs.md",
-          "docs/usage/hello_world.md",
-          "docs/usage/batch_mode.md",
-          "docs/installation/tips.md",
-          "sweagent/exceptions.py",
-          "sweagent/agent/models.py",
-          "sweagent/agent/agents.py"
+          "docs-site/package-lock.json",
+          "docs-site/lib/docs.ts",
+          "core/core.ts",
+          "core/package-lock.json",
+          "core/package.json"
         ],
-        "marker_hits": 44
+        "marker_hits": 14250
       },
       "workflow_ci": {
         "files": [
-          "mkdocs.yml",
-          ".pre-commit-config.yaml",
-          "pyproject.toml",
-          "README.md",
+          "CODE_OF_CONDUCT.md",
+          "worktree-config.yaml",
+          "TESTING.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json",
+          "package.json",
+          "CLA.md",
           "CONTRIBUTING.md",
-          "tools/windowed/lib/windowed_file.py",
-          "tools/web_browser/config.yaml",
-          "tools/web_browser/lib/web_browser_utils.py",
-          "tools/web_browser/lib/browser_manager.py",
-          "tools/edit_anthropic/config.yaml",
-          "tools/windowed_edit_replace/config.yaml",
-          "config/bash_only.yaml"
+          ".eslintrc.shared.json",
+          "SECURITY.md",
+          "docs-site/package-lock.json",
+          "docs-site/package.json"
         ],
-        "marker_hits": 6317
+        "marker_hits": 26840
       }
     },
     "own_file_groups": {
@@ -479,7 +654,7 @@
           "retort_engine/cli.py",
           "retort_engine/contracts.py"
         ],
-        "marker_hits": 549
+        "marker_hits": 573
       },
       "diff_hunk_review": {
         "files": [
@@ -500,15 +675,13 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
           "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 62
+        "marker_hits": 54
       },
       "plugin_surface": {
         "files": [
@@ -525,7 +698,7 @@
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js"
         ],
-        "marker_hits": 447
+        "marker_hits": 460
       },
       "provider_surface": {
         "files": [
@@ -542,7 +715,7 @@
           "retort_engine/architecture_memory.py",
           "retort_engine/review_context_bias.py"
         ],
-        "marker_hits": 308
+        "marker_hits": 290
       },
       "review_pipeline": {
         "files": [
@@ -559,7 +732,7 @@
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py"
         ],
-        "marker_hits": 1842
+        "marker_hits": 1838
       },
       "safety_policy": {
         "files": [
@@ -576,7 +749,7 @@
           "retort_engine/core.py",
           "retort_engine/architecture_memory.py"
         ],
-        "marker_hits": 377
+        "marker_hits": 355
       },
       "workflow_ci": {
         "files": [
@@ -593,7 +766,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/architecture_refactor.py"
         ],
-        "marker_hits": 2527
+        "marker_hits": 2544
       }
     },
     "pipeline_stages": [
@@ -611,11 +784,11 @@
         "component": "workflow_ci",
         "priority": "P0",
         "source_files": [
-          "mkdocs.yml",
-          ".pre-commit-config.yaml",
-          "pyproject.toml",
-          "README.md",
-          "CONTRIBUTING.md"
+          "CODE_OF_CONDUCT.md",
+          "worktree-config.yaml",
+          "TESTING.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json"
         ]
       },
       {
@@ -623,40 +796,88 @@
         "component": "provider_surface",
         "priority": "P0",
         "source_files": [
-          "mkdocs.yml",
-          "pyproject.toml",
+          "TESTING.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json",
+          "CONTRIBUTING.md",
+          "docs-site/app/layout.tsx"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
+        "component": "safety_policy",
+        "priority": "P0",
+        "source_files": [
+          "CODE_OF_CONDUCT.md",
           "README.md",
-          "mlc_config.json",
-          "tools/review_on_submit_m/config.yaml"
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json",
+          "CLA.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
+        "component": "plugin_surface",
+        "priority": "P0",
+        "source_files": [
+          "worktree-config.yaml",
+          "TESTING.md",
+          "README.md",
+          "BUILD_DEPENDENCIES.md",
+          "package-lock.json"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested benchmark_eval behavior, not only a recorded signal.",
+        "component": "benchmark_eval",
+        "priority": "P0",
+        "source_files": [
+          "core/core.ts",
+          "core/index.d.ts",
+          "core/nextEdit/NextEditProvider.ts",
+          "core/nextEdit/constants.ts",
+          "core/nextEdit/context/autocompleteContextFetching.ts"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
+        "component": "diff_hunk_review",
+        "priority": "P1",
+        "source_files": [
+          "core/nextEdit/context/aggregateEdits.ts",
+          "core/nextEdit/context/diffFormatting.ts",
+          "core/autocomplete/classification/shouldCompleteMultiline.ts",
+          "core/autocomplete/constants/AutocompleteLanguageInfo.ts",
+          "core/edit/searchAndReplace/findSearchMatch.vitest.ts"
         ]
       }
     ]
   },
-  "run_id": "20260627172432-c09c7479ad",
+  "run_id": "20260627172525-c3d6b79c6a",
   "semantic_review": {
     "external": {
-      "classes": 309,
-      "cli_markers": 2,
-      "functions": 1108,
-      "source_files": 258,
-      "test_markers": 319,
-      "workflow_markers": 151
+      "classes": 2470,
+      "cli_markers": 17,
+      "functions": 1721,
+      "source_files": 722,
+      "test_markers": 2312,
+      "workflow_markers": 1625
     },
     "gaps": [
       {
-        "external_advantage": 263,
+        "external_advantage": 2424,
         "metric": "classes"
       },
       {
-        "external_advantage": 345,
+        "external_advantage": 958,
         "metric": "functions"
       },
       {
-        "external_advantage": 169,
+        "external_advantage": 633,
         "metric": "source_files"
       },
       {
-        "external_advantage": 72,
+        "external_advantage": 2065,
         "metric": "test_markers"
       }
     ],
@@ -666,39 +887,37 @@
       "functions": 763,
       "source_files": 89,
       "test_markers": 247,
-      "workflow_markers": 2361
+      "workflow_markers": 2365
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "README.md",
-      "tools/web_browser/lib/browser_manager.py",
-      "config/bash_only.yaml",
-      "config/coding_challenge.yaml",
-      "config/benchmarks/250526_anthropic_filemap_simple_review_sbl.yaml"
+      "core/nextEdit/NextEditProvider.ts",
+      "core/nextEdit/constants.ts",
+      "core/nextEdit/context/autocompleteContextFetching.ts",
+      "core/tools/index.ts",
+      "core/tools/systemMessageTools/toolCodeblocks/buildSystemMessage.vitest.ts"
     ],
     "multi_provider": [
-      "mkdocs.yml",
-      "pyproject.toml",
-      "README.md",
-      "mlc_config.json",
-      "tools/review_on_submit_m/config.yaml"
+      "TESTING.md",
+      "BUILD_DEPENDENCIES.md",
+      "package-lock.json",
+      "CONTRIBUTING.md",
+      "docs-site/app/layout.tsx"
     ],
     "plugin_surface": [
-      "mkdocs.yml",
-      "pyproject.toml",
+      "TESTING.md",
       "README.md",
-      "tools/web_browser/config.yaml",
-      "tools/web_browser/lib/web_browser_config.py"
+      "BUILD_DEPENDENCIES.md",
+      "package-lock.json",
+      "package.json"
     ],
     "review_pipeline": [
-      "tests/test_data/data_sources/debug_20240322.json",
-      "sweagent/types.py",
-      "sweagent/agent/agents.py",
-      "sweagent/agent/reviewer.py"
+      "CONTRIBUTING.md",
+      "core/util/sanitization.ts"
     ]
   },
-  "source": "https://github.com/SWE-agent/SWE-agent",
+  "source": "https://github.com/continuedev/continue",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -706,7 +925,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/SWE-agent/SWE-agent."
+      "why": "Compare implementation patterns from https://github.com/continuedev/continue."
     },
     {
       "dimension": "product_operability",
@@ -714,7 +933,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/SWE-agent/SWE-agent."
+      "why": "Extract usable UX improvements from https://github.com/continuedev/continue."
     },
     {
       "dimension": "operational_readiness",
@@ -722,7 +941,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/SWE-agent/SWE-agent."
+      "why": "Adapt CI and release checks from https://github.com/continuedev/continue."
     },
     {
       "dimension": "comparative_analysis_depth",
