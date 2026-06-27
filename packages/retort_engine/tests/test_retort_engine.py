@@ -55,6 +55,12 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "progressFill" in (root / "index.html").read_text(encoding="utf-8")
     index_text = (root / "index.html").read_text(encoding="utf-8")
     app_text = (root / "app.js").read_text(encoding="utf-8")
+    style_text = (root / "styles.css").read_text(encoding="utf-8")
+    assert 'class="rail flow-panel"' in index_text
+    assert 'data-step="01"' in index_text
+    assert 'data-step="09"' in index_text
+    assert "flow-step::before" in style_text
+    assert "flow-step::after" in style_text
     assert "llmReviewBtn" not in index_text
     assert "llmParallelBtn" not in index_text
     assert "llmStatusBtn" not in index_text
