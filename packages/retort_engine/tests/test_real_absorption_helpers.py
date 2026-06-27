@@ -185,6 +185,29 @@ def test_capability_model_is_only_written_for_review_depth_signals() -> None:
     assert real._should_absorb_capability_model({"signals": ["plugin_surface"]}) is True
 
 
+def test_frontend_visual_absorption_requires_frontend_visual_evidence() -> None:
+    benchmark_profile = {
+        "signals": ["benchmarking", "atmosphere_shader", "procedural_surface", "webgl_scene"],
+        "signal_evidence": {
+            "atmosphere_shader": ["README.md", "benchmarks/swebench/README.md"],
+            "procedural_surface": ["tests/test_programbench.py"],
+            "webgl_scene": ["tests/test_programbench.py"],
+        },
+    }
+    planet_profile = {
+        "signals": ["planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"],
+        "signal_evidence": {
+            "planet_frontend": ["index.html", "scripts/main.js"],
+            "atmosphere_shader": ["scripts/main.js"],
+            "procedural_surface": ["scripts/terrain.js"],
+            "webgl_scene": ["scripts/main.js"],
+        },
+    }
+
+    assert real._should_absorb_frontend_visual(benchmark_profile) is False
+    assert real._should_absorb_frontend_visual(planet_profile) is True
+
+
 def test_frontend_visual_profile_rewrite_and_generated_test_are_executable(tmp_path: Path) -> None:
     app = tmp_path / "retort_engine" / "frontend" / "app.js"
     write(
