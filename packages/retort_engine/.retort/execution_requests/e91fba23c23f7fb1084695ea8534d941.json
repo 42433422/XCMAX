@@ -1,0 +1,231 @@
+{
+  "employee_queue": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_queue.jsonl",
+  "external_assessment": {
+    "evidence": [
+      "source_files=490",
+      "test_functions=476",
+      "git_tracking_state=tracked_clean",
+      "lint=False",
+      "test=False",
+      "closed_loop_verified=False",
+      "closed_loop_missing=branch_diff_verified,employee_execution_verified,post_absorption_tests_passed,merge_verified,external_advantage_reassessed",
+      "absorption_active=False",
+      "absorption_status=empty",
+      "core_refactor_execution_status=blocked",
+      "core_refactor_implemented_tasks=0/0",
+      "blackhole_ui=False",
+      "folder_project_picker=False",
+      "github_or_folder_source=False",
+      "branch_workflow=False",
+      "employee_queue=False",
+      "license_gate=True",
+      "license_boundary_tests=False",
+      "service_api=False",
+      "self_evolution=False",
+      "real_absorption_cli=False",
+      "execution_proof_recorder=False",
+      "component_review_pipeline=False",
+      "api_contract_schemas=False",
+      "feedback_audit=False",
+      "diff_hunk_review=False",
+      "pr_review_runtime=False",
+      "pr_review_api=False",
+      "incremental_pr_review=False",
+      "pr_dry_run=False",
+      "pr_publish_dry_run=False",
+      "pr_publish_sandbox=False",
+      "pr_live_publish_probe=False",
+      "cross_project_replay=False",
+      "complex_pr_replay=False",
+      "task_prioritization=False",
+      "task_dispatch_plan=False",
+      "review_quality_benchmark=False",
+      "employee_scheduler_stress=False",
+      "real_github_case=False"
+    ],
+    "metadata": {
+      "absorption_state": {
+        "active": false,
+        "status": "empty"
+      },
+      "blackhole_ui_structure": {
+        "app_exists": false,
+        "canvas_visual": "",
+        "frontend_root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/OpenHands/benchmarks/frontend",
+        "has_animation_loop": false,
+        "has_app_script": false,
+        "has_canvas_context": false,
+        "index_exists": false,
+        "missing_functions": [
+          "beginAbsorption",
+          "draw",
+          "drawAbsorptionPlanet",
+          "drawAbsorptionScene",
+          "renderDevourSession"
+        ],
+        "missing_ids": [
+          "blackholeCanvas",
+          "deepProgress",
+          "eventList",
+          "progressFill",
+          "progressSteps",
+          "proofPanel",
+          "sessionState"
+        ],
+        "required_functions_present": [],
+        "required_ids_present": []
+      },
+      "capability_absorption_audit": {
+        "behavior_source_files": [],
+        "behavior_test_files": [],
+        "blockers": [
+          "insufficient_cross_project_reproduction",
+          "no_real_absorption_run"
+        ],
+        "changed_files": [],
+        "external_project_count": 0,
+        "external_projects": [],
+        "generated_evidence_files": [],
+        "local_score_removed": true,
+        "reason": "no_real_absorption_run",
+        "risk_level": "medium",
+        "self_assessment_risk_checks": {
+          "checks": [],
+          "failed": []
+        },
+        "source_file_count": 269,
+        "source_line_count": 43087,
+        "status": "needs_llm_project_level_review",
+        "test_file_count": 48,
+        "test_line_count": 10874,
+        "test_to_source_ratio": 0.252
+      },
+      "closed_loop_proof": {
+        "evidence": [],
+        "flags": {
+          "branch_diff_verified": false,
+          "employee_execution_verified": false,
+          "external_advantage_reassessed": false,
+          "merge_verified": false,
+          "post_absorption_tests_passed": false
+        },
+        "missing": [
+          "branch_diff_verified",
+          "employee_execution_verified",
+          "post_absorption_tests_passed",
+          "merge_verified",
+          "external_advantage_reassessed"
+        ],
+        "verified": false
+      },
+      "core_refactor_execution": {
+        "components": [],
+        "implemented_task_count": 0,
+        "missing": [],
+        "status": "blocked",
+        "task_count": 0
+      },
+      "features": {
+        "api_contract_schemas": false,
+        "blackhole_ui": false,
+        "branch_workflow": false,
+        "complex_pr_replay": false,
+        "component_review_pipeline": false,
+        "cross_project_replay": false,
+        "diff_hunk_review": false,
+        "employee_queue": false,
+        "employee_scheduler_stress": false,
+        "execution_proof_recorder": false,
+        "feedback_audit": false,
+        "folder_project_picker": false,
+        "github_or_folder_source": false,
+        "incremental_pr_review": false,
+        "license_boundary_tests": false,
+        "license_gate": true,
+        "pr_dry_run": false,
+        "pr_live_publish_probe": false,
+        "pr_publish_dry_run": false,
+        "pr_publish_sandbox": false,
+        "pr_review_api": false,
+        "pr_review_runtime": false,
+        "real_absorption_cli": false,
+        "real_github_case": false,
+        "review_quality_benchmark": false,
+        "self_evolution": false,
+        "service_api": false,
+        "task_dispatch_plan": false,
+        "task_prioritization": false
+      },
+      "git_tracking_state": "tracked_clean",
+      "local_scores_removed": true,
+      "score_authority": "paibi_llm_prompt_only",
+      "score_source": "external_evidence_only"
+    },
+    "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/OpenHands/benchmarks",
+    "scores": []
+  },
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/OpenHands/benchmarks",
+  "history_store": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/retort_history.sqlite",
+  "own_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "python": "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+  "run_local_gates": true,
+  "source": "https://github.com/OpenHands/benchmarks",
+  "tasks": [
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-depth",
+      "title": "Absorb stronger implementation depth",
+      "why": "Compare implementation patterns from https://github.com/OpenHands/benchmarks."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P1",
+      "task_id": "retort-absorb-ux",
+      "title": "Absorb better user experience",
+      "why": "Extract usable UX improvements from https://github.com/OpenHands/benchmarks."
+    },
+    {
+      "dimension": "operational_readiness",
+      "owner_hint": "deploy-release-officer",
+      "priority": "P2",
+      "task_id": "retort-absorb-ops",
+      "title": "Absorb better operational gates",
+      "why": "Adapt CI and release checks from https://github.com/OpenHands/benchmarks."
+    },
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-review-pipeline",
+      "title": "Adopt deterministic review pipeline stages",
+      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P2",
+      "task_id": "retort-absorb-plugin-surface",
+      "title": "Expose Retort absorption through plugin friendly commands",
+      "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P1",
+      "task_id": "retort-absorb-planet-visual",
+      "title": "Absorb better blackhole planet visual system",
+      "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
+    }
+  ]
+}

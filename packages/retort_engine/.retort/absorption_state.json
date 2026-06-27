@@ -4,33 +4,33 @@
     "branch_diff_verified": true,
     "employee_execution_verified": true,
     "evidence": [
-      "merge_commit=b84a53a87",
-      "evidence_commit=0fd263d16",
-      "source=https://github.com/dgreenheck/threejs-procedural-planets",
-      "gates=188-passed-plus-ruff",
-      "merge_cross_check=True; merge_commit=b84a53a87",
-      "pytest_gate_cross_check=True"
+      "retort_cli_status=applied",
+      "duration_sec=17.094",
+      "changed_files=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/frontend/app.js,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_frontend_visual_absorption.py",
+      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  15 + |  .../docs/retort_architecture_memory.json           | 448 ++++++++++++--- |  .../docs/retort_core_refactor_plan.json            |  24 +- |  .../docs/retort_external_review_report.json        | 611 +++++++++++++++++---- |  .../retort_engine/absorbed_capabilities.py         |   2 +- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../retort_engine/retort_engine/frontend/app.js    |   7 +- |  .../retort_engine/review_context_bias.py           |   2 +- |  .../tests/test_absorbed_capabilities.py            |   2 +- |  .../tests/test_frontend_visual_absorption.py       |   2 +- |  .../tests/test_review_context_bias.py              |   2 +- |  11 files changed, 914 insertions(+), 203 deletions(-)",
+      "gates_passed=True",
+      "review_report=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+      "employee_results=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627191156-142d39dda9.json",
+      "commit=fab89e435",
+      "merge_commit=0b189fa42",
+      "rollback_rehearsal=True",
+      "feedback_audit_closed=True",
+      "history_result_count=55",
+      "queue_records_written=7",
+      "result_tasks_have_queue_records=True"
     ],
     "external_advantage_reassessed": true,
     "merge_verified": true,
-    "post_absorption_tests_passed": true,
-    "validation": {
-      "evidence": [
-        "merge_cross_check=True; merge_commit=b84a53a87",
-        "pytest_gate_cross_check=True"
-      ],
-      "merge_commit": "b84a53a87",
-      "merge_commit_verified": true,
-      "pytest_gates_verified": true
-    }
+    "post_absorption_tests_passed": true
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/dgreenheck/threejs-procedural-planets",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/OpenHands/benchmarks",
   "pending_dimensions": [
     "comparative_analysis_depth",
+    "feedback_loop_closure",
     "operational_readiness",
     "product_operability"
   ],
-  "source": "https://github.com/dgreenheck/threejs-procedural-planets",
+  "source": "https://github.com/OpenHands/benchmarks",
   "status": "closed_loop_verified",
   "tasks": [
     {
@@ -39,7 +39,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/dgreenheck/threejs-procedural-planets."
+      "why": "Compare implementation patterns from https://github.com/OpenHands/benchmarks."
     },
     {
       "dimension": "product_operability",
@@ -47,7 +47,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/dgreenheck/threejs-procedural-planets."
+      "why": "Extract usable UX improvements from https://github.com/OpenHands/benchmarks."
     },
     {
       "dimension": "operational_readiness",
@@ -55,7 +55,31 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/dgreenheck/threejs-procedural-planets."
+      "why": "Adapt CI and release checks from https://github.com/OpenHands/benchmarks."
+    },
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-review-pipeline",
+      "title": "Adopt deterministic review pipeline stages",
+      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P2",
+      "task_id": "retort-absorb-plugin-surface",
+      "title": "Expose Retort absorption through plugin friendly commands",
+      "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
     },
     {
       "dimension": "product_operability",
