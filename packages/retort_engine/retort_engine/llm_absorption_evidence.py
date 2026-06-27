@@ -150,8 +150,12 @@ def _report_evidence(project: Path) -> list[str]:
     dispatch_summary = dispatch_report.get("summary") if isinstance(dispatch_report.get("summary"), dict) else {}
     benchmark_report = read_json(project / "docs" / "retort_review_quality_benchmark.json")
     benchmark_summary = benchmark_report.get("summary") if isinstance(benchmark_report.get("summary"), dict) else {}
+    adjudication_report = read_json(project / "docs" / "retort_review_adjudication_calibration.json")
+    adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
     stress_report = read_json(project / "docs" / "retort_employee_scheduler_stress.json")
     stress_summary = stress_report.get("summary") if isinstance(stress_report.get("summary"), dict) else {}
+    patch_report = read_json(project / "docs" / "retort_employee_patch_closure.json")
+    patch_summary = patch_report.get("summary") if isinstance(patch_report.get("summary"), dict) else {}
     return [
         f"pr_publish_dry_run_status={publish_report.get('status', '')}",
         f"pr_publish_dry_run_comment_count={publish_summary.get('would_post_comment_count', '')}",
@@ -238,6 +242,12 @@ def _report_evidence(project: Path) -> list[str]:
         f"review_quality_benchmark_cross_project_case_count={benchmark_summary.get('cross_project_case_count', '')}",
         f"review_quality_benchmark_cross_project_family_count={benchmark_summary.get('cross_project_family_count', '')}",
         f"review_quality_benchmark_cross_project_pass_rate={benchmark_summary.get('cross_project_pass_rate', '')}",
+        f"review_adjudication_calibration_status={adjudication_report.get('status', '')}",
+        f"review_adjudication_human_label_count={adjudication_summary.get('human_label_count', '')}",
+        f"review_adjudication_pass_rate={adjudication_summary.get('pass_rate', '')}",
+        f"review_adjudication_false_positive_count={adjudication_summary.get('false_positive_count', '')}",
+        f"review_adjudication_false_negative_count={adjudication_summary.get('false_negative_count', '')}",
+        f"review_adjudication_context_count={adjudication_summary.get('context_count', '')}",
         f"employee_scheduler_stress_status={stress_report.get('status', '')}",
         f"employee_scheduler_stress_round_count={stress_summary.get('round_count', '')}",
         f"employee_scheduler_stress_workers_per_round={stress_summary.get('workers_per_round', '')}",
@@ -250,6 +260,14 @@ def _report_evidence(project: Path) -> list[str]:
         f"employee_scheduler_stress_consistent={stress_summary.get('queue_result_history_consistent', '')}",
         f"employee_scheduler_stress_independent_process={stress_summary.get('independent_process_verified', '')}",
         f"employee_scheduler_stress_concurrent_workers_verified={stress_summary.get('concurrent_workers_verified', '')}",
+        f"employee_patch_closure_status={patch_report.get('status', '')}",
+        f"employee_patch_closure_case_count={patch_summary.get('case_count', '')}",
+        f"employee_patch_closure_patch_generated_count={patch_summary.get('patch_generated_count', '')}",
+        f"employee_patch_closure_patch_applied_count={patch_summary.get('patch_applied_count', '')}",
+        f"employee_patch_closure_gate_passed_count={patch_summary.get('gate_passed_count', '')}",
+        f"employee_patch_closure_rollback_verified_count={patch_summary.get('rollback_verified_count', '')}",
+        f"employee_patch_closure_success_case_verified={patch_summary.get('success_case_verified', '')}",
+        f"employee_patch_closure_failure_case_rolled_back={patch_summary.get('failure_case_rolled_back', '')}",
     ]
 
 
@@ -280,10 +298,13 @@ def _employee_result_evidence(project: Path) -> list[str]:
     payload = read_json(latest)
     runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
     review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
+    patch = runtime.get("employee_patch_closure") if isinstance(runtime.get("employee_patch_closure"), dict) else {}
+    patch_summary = patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
     return [
         f"employee_results_file={latest}",
         f"employee_result_count={len(payload.get('results') or [])}; execution_mode={payload.get('execution_mode', '')}",
         f"employee_runtime_worker_review={review.get('status', '')}; comments={review.get('comment_count', '')}; artifact={review.get('artifact', '')}",
+        f"employee_runtime_patch_closure={patch.get('status', '')}; success_case={patch_summary.get('success_case_verified', '')}; rollback_case={patch_summary.get('failure_case_rolled_back', '')}",
     ]
 
 

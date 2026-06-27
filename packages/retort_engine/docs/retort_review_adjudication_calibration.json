@@ -1,0 +1,1528 @@
+{
+  "cases": [
+    {
+      "case_id": "security-secret-01",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-01",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-01",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-02",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-02",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-02",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-03",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-03",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-03",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-04",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-04",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-04",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-05",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-05",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-05",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-06",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-06",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-06",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-07",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-07",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-07",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-08",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-08",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-08",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-09",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-09",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-09",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "security-secret-10",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "security",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "security"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Security secret literal"
+    },
+    {
+      "case_id": "test-todo-10",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "tests",
+        "expected_severity": "medium"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "medium"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Behavior test placeholder"
+    },
+    {
+      "case_id": "ci-secret-10",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "ci_config",
+        "expected_severity": "high"
+      },
+      "observed": {
+        "actionable_count": 1,
+        "comment_count": 1,
+        "contexts": [
+          "ci_config"
+        ],
+        "severities": [
+          "high"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "CI secret literal"
+    },
+    {
+      "case_id": "safe-doc-secret-01",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "docs"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Documented example token"
+    },
+    {
+      "case_id": "safe-test-fake-01",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Test fake token"
+    },
+    {
+      "case_id": "safe-doc-secret-02",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "docs"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Documented example token"
+    },
+    {
+      "case_id": "safe-test-fake-02",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Test fake token"
+    },
+    {
+      "case_id": "safe-doc-secret-03",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "docs"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Documented example token"
+    },
+    {
+      "case_id": "safe-test-fake-03",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Test fake token"
+    },
+    {
+      "case_id": "safe-doc-secret-04",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "docs"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Documented example token"
+    },
+    {
+      "case_id": "safe-test-fake-04",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Test fake token"
+    },
+    {
+      "case_id": "safe-doc-secret-05",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "docs"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Documented example token"
+    },
+    {
+      "case_id": "safe-test-fake-05",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Test fake token"
+    },
+    {
+      "case_id": "safe-doc-secret-06",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "docs"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Documented example token"
+    },
+    {
+      "case_id": "safe-test-fake-06",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Test fake token"
+    },
+    {
+      "case_id": "safe-doc-secret-07",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "docs"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Documented example token"
+    },
+    {
+      "case_id": "safe-test-fake-07",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "tests"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Test fake token"
+    },
+    {
+      "case_id": "runtime-print-01",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "runtime",
+        "expected_severity": "low"
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "runtime"
+        ],
+        "severities": [
+          "low"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Runtime debug output"
+    },
+    {
+      "case_id": "safe-config-redacted-01",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "config"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Redacted config token"
+    },
+    {
+      "case_id": "runtime-print-02",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "runtime",
+        "expected_severity": "low"
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "runtime"
+        ],
+        "severities": [
+          "low"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Runtime debug output"
+    },
+    {
+      "case_id": "safe-config-redacted-02",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "config"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Redacted config token"
+    },
+    {
+      "case_id": "runtime-print-03",
+      "expectation": {
+        "expected_blocker": true,
+        "expected_context": "runtime",
+        "expected_severity": "low"
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "runtime"
+        ],
+        "severities": [
+          "low"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Runtime debug output"
+    },
+    {
+      "case_id": "safe-config-redacted-03",
+      "expectation": {
+        "expected_blocker": false,
+        "expected_context": "",
+        "expected_severity": ""
+      },
+      "observed": {
+        "actionable_count": 0,
+        "comment_count": 1,
+        "contexts": [
+          "config"
+        ],
+        "severities": [
+          "info"
+        ]
+      },
+      "passed": true,
+      "review_summary": {
+        "comment_count": 1,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "file_count": 1,
+        "hunk_count": 1,
+        "large_diff_chunking": false,
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+        "publishable_comment_count": 1,
+        "ready_for_employee_tasking": true
+      },
+      "title": "Redacted config token"
+    }
+  ],
+  "evidence": {
+    "label_source": "retort_internal_review_oracle_v1",
+    "reviewer": "retort_engine.pr_review.review_diff",
+    "style": "curated_human_adjudication_labels"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "context_count": 4,
+    "contexts": [
+      "ci_config",
+      "runtime",
+      "security",
+      "tests"
+    ],
+    "false_negative_count": 0,
+    "false_positive_count": 0,
+    "human_label_count": 50,
+    "negative_case_count": 17,
+    "pass_rate": 1.0,
+    "passed_count": 50,
+    "positive_case_count": 33,
+    "publishable_comment_count": 50
+  }
+}

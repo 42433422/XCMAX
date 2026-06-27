@@ -207,13 +207,39 @@ def project_digest(root: Path) -> str:
 def scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:
     proof = metadata.get("closed_loop_proof") if isinstance(metadata.get("closed_loop_proof"), dict) else {}
     audit = metadata.get("capability_absorption_audit") if isinstance(metadata.get("capability_absorption_audit"), dict) else {}
-    audit = {key: value for key, value in audit.items() if key not in {"score", "overall_cap", "employee_execution_cap"}}
-    audit["local_score_removed"] = True
+    patch = audit.get("employee_patch_closure") if isinstance(audit.get("employee_patch_closure"), dict) else {}
+    review_runtime = audit.get("pr_review_runtime") if isinstance(audit.get("pr_review_runtime"), dict) else {}
+    hardening = audit.get("post_absorption_hardening") if isinstance(audit.get("post_absorption_hardening"), dict) else {}
+    compact_audit = {
+        "local_score_removed": True,
+        "status": audit.get("status"),
+        "risk_level": audit.get("risk_level"),
+        "blockers": audit.get("blockers"),
+        "reason": audit.get("reason"),
+        "latest_behavior_source_count": len(audit.get("behavior_source_files") or []),
+        "latest_behavior_test_count": len(audit.get("behavior_test_files") or []),
+        "support_behavior_source_count": len(audit.get("support_behavior_source_files") or []),
+        "support_behavior_test_count": len(audit.get("support_behavior_test_files") or []),
+        "post_absorption_hardening_source_count": len(hardening.get("behavior_source_files") or []),
+        "post_absorption_hardening_test_count": len(hardening.get("behavior_test_files") or []),
+        "external_project_count": audit.get("external_project_count"),
+        "test_to_source_ratio": audit.get("test_to_source_ratio"),
+        "employee_execution_mode": audit.get("employee_execution_mode"),
+        "employee_worker_review": audit.get("employee_worker_review"),
+        "employee_patch_closure": patch,
+        "review_adjudication_calibration": {
+            "status": review_runtime.get("adjudication_status"),
+            "human_label_count": review_runtime.get("adjudication_human_label_count"),
+            "pass_rate": review_runtime.get("adjudication_pass_rate"),
+            "false_positive_count": review_runtime.get("adjudication_false_positive_count"),
+            "false_negative_count": review_runtime.get("adjudication_false_negative_count"),
+        },
+    }
     return {
         "git_tracking_state": metadata.get("git_tracking_state"),
         "closed_loop_verified": proof.get("verified"),
         "closed_loop_missing": proof.get("missing"),
-        "capability_absorption_audit": audit,
+        "capability_absorption_audit": compact_audit,
     }
 
 

@@ -8,6 +8,7 @@ from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
 from retort_engine.core import RetortService as LLMRetortService
+from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.evolution_map import build_evolution_map
 from retort_engine.absorption import run_absorption
@@ -16,6 +17,7 @@ from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
@@ -114,12 +116,18 @@ class RetortService:
             negative_sample_count=int(payload.get("negative_sample_count") or 0),
         )
 
+    def review_adjudication_calibration(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_review_adjudication_calibration(str(payload.get("project") or payload.get("project_path") or "."))
+
     def employee_scheduler_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_employee_scheduler_stress(
             str(payload.get("project") or payload.get("project_path") or "."),
             round_count=int(payload.get("round_count") or payload.get("rounds") or 10),
             tasks_per_round=int(payload.get("tasks_per_round") or 3),
         )
+
+    def employee_patch_closure(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_employee_patch_closure_suite(str(payload.get("project") or payload.get("project_path") or "."))
 
     def codebase_graph_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_codebase_graph(
@@ -217,9 +225,17 @@ def create_app() -> Any:
     def review_quality_benchmark_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.review_quality_benchmark(payload)
 
+    @app.post("/review-adjudication-calibration")
+    def review_adjudication_calibration_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.review_adjudication_calibration(payload)
+
     @app.post("/employee-scheduler-stress")
     def employee_scheduler_stress_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.employee_scheduler_stress(payload)
+
+    @app.post("/employee-patch-closure")
+    def employee_patch_closure_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.employee_patch_closure(payload)
 
     @app.post("/codebase-graph-report")
     def codebase_graph_report_route(payload: dict[str, Any]) -> dict[str, Any]:

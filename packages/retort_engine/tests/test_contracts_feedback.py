@@ -22,9 +22,11 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "task_prioritization_result" in contract_names()
     assert "task_dispatch_plan_result" in contract_names()
     assert "review_quality_benchmark_result" in contract_names()
+    assert "review_adjudication_calibration_result" in contract_names()
     assert "codebase_graph_result" in contract_names()
     assert "architecture_contract_result" in contract_names()
     assert "employee_scheduler_stress_result" in contract_names()
+    assert "employee_patch_closure_result" in contract_names()
     valid = validate_contract("execution_result", {"status": "applied", "changed_files": [], "gates": [], "gates_passed": True, "review_report_path": "report.json", "employee_results_path": "result.json"})
     review_valid = validate_contract("pr_review_result", {"status": "reviewed", "summary": {}, "files": [], "comments": [], "task_groups": [], "incremental": {}})
     dry_run_valid = validate_contract("pr_dry_run_result", {"status": "reviewed", "pr_url": "u", "diff_url": "d", "summary": {}, "review": {}})
@@ -36,10 +38,12 @@ def test_contract_schemas_validate_required_outputs() -> None:
     task_valid = validate_contract("task_prioritization_result", {"status": "ready", "project": "p", "summary": {}, "priorities": [], "evidence": {}})
     dispatch_valid = validate_contract("task_dispatch_plan_result", {"status": "ready", "project": "p", "summary": {}, "tasks": [], "evidence": {}})
     benchmark_valid = validate_contract("review_quality_benchmark_result", {"status": "ready", "project": "p", "summary": {}, "samples": [], "evidence": {}})
+    adjudication_valid = validate_contract("review_adjudication_calibration_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     issue_patch_valid = validate_contract("issue_patch_benchmark_result", {"status": "ready", "summary": {}, "cases": [], "evidence": {}})
     codebase_graph_valid = validate_contract("codebase_graph_result", {"status": "ready", "project": "p", "summary": {}, "nodes": [], "edges": [], "hotspots": [], "evidence": {}})
     architecture_contract_valid = validate_contract("architecture_contract_result", {"status": "passed", "project": "p", "summary": {}, "contracts": [], "violations": [], "evidence": {}})
     stress_valid = validate_contract("employee_scheduler_stress_result", {"status": "ready", "project": "p", "summary": {}, "rounds": [], "evidence": {}})
+    patch_closure_valid = validate_contract("employee_patch_closure_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     invalid = validate_contract("review_report", {"run_id": "run"})
 
     assert valid["valid"] is True
@@ -53,10 +57,12 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert task_valid["valid"] is True
     assert dispatch_valid["valid"] is True
     assert benchmark_valid["valid"] is True
+    assert adjudication_valid["valid"] is True
     assert issue_patch_valid["valid"] is True
     assert codebase_graph_valid["valid"] is True
     assert architecture_contract_valid["valid"] is True
     assert stress_valid["valid"] is True
+    assert patch_closure_valid["valid"] is True
     assert invalid["valid"] is False
     assert "license_review" in invalid["missing"]
 

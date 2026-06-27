@@ -60,6 +60,7 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
     post_hardening = post_absorption_hardening_files(root)
     employee_mode = latest_employee_execution_mode(root)
     employee_worker_review = latest_employee_worker_review(root)
+    employee_patch_closure = employee_patch_closure_evidence(root)
     generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
     if generated_only:
         reason = "latest_absorption_changed_only_reports_logs_or_capability_registry"
@@ -102,6 +103,7 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
         "external_projects": external_projects,
         "employee_execution_mode": employee_mode,
         "employee_worker_review": employee_worker_review,
+        "employee_patch_closure": employee_patch_closure,
         "pr_review_runtime": pr_review,
         **health,
         "self_assessment_risk_checks": static_risks,
@@ -120,6 +122,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     dispatch_source = root / "retort_engine" / "task_dispatch_plan.py"
     benchmark_source = root / "retort_engine" / "review_quality_benchmark.py"
     stress_source = root / "retort_engine" / "employee_scheduler_stress.py"
+    patch_closure_source = root / "retort_engine" / "employee_patch_closure.py"
+    adjudication_source = root / "retort_engine" / "review_adjudication_calibration.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
@@ -131,6 +135,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     dispatch_test = root / "tests" / "test_task_dispatch_plan.py"
     benchmark_test = root / "tests" / "test_review_quality_benchmark.py"
     stress_test = root / "tests" / "test_employee_scheduler_stress.py"
+    patch_closure_test = root / "tests" / "test_employee_patch_closure.py"
+    adjudication_test = root / "tests" / "test_review_adjudication_calibration.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -169,6 +175,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     core_large_diff_context_balancing = False
     employee_feedback_changes_ranking = False
     employee_feedback_rank_context = ""
+    adjudication_status = ""
+    adjudication_human_label_count = 0
+    adjudication_pass_rate = 0.0
+    adjudication_false_positive_count = 0
+    adjudication_false_negative_count = 0
     if source.is_file():
         try:
             from retort_engine.pr_review import review_diff
@@ -226,6 +237,13 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             after_context = str(((feedback_after.get("comments") or [{}])[0] or {}).get("review_context") or "")
             employee_feedback_changes_ranking = bool(before_context and after_context and before_context != after_context)
             employee_feedback_rank_context = after_context
+            adjudication_report = read_json(root / "docs" / "retort_review_adjudication_calibration.json")
+            adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
+            adjudication_status = str(adjudication_report.get("status") or "")
+            adjudication_human_label_count = int(adjudication_summary.get("human_label_count") or 0)
+            adjudication_pass_rate = float(adjudication_summary.get("pass_rate") or 0.0)
+            adjudication_false_positive_count = int(adjudication_summary.get("false_positive_count") or 0)
+            adjudication_false_negative_count = int(adjudication_summary.get("false_negative_count") or 0)
         except Exception:
             sample_comment_count = 0
     return {
@@ -263,6 +281,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "core_large_diff_context_balancing": core_large_diff_context_balancing,
         "employee_feedback_changes_ranking": employee_feedback_changes_ranking,
         "employee_feedback_rank_context": employee_feedback_rank_context,
+        "adjudication_status": adjudication_status,
+        "adjudication_human_label_count": adjudication_human_label_count,
+        "adjudication_pass_rate": adjudication_pass_rate,
+        "adjudication_false_positive_count": adjudication_false_positive_count,
+        "adjudication_false_negative_count": adjudication_false_negative_count,
         "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
         "dry_run_cli": "review-pr" in read_text(cli),
         "dry_run_api": "/api/review-pr" in read_text(ui_server),
@@ -286,6 +309,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/task_dispatch_plan.py", dispatch_source.is_file()),
                 ("retort_engine/review_quality_benchmark.py", benchmark_source.is_file()),
                 ("retort_engine/employee_scheduler_stress.py", stress_source.is_file()),
+                ("retort_engine/employee_patch_closure.py", patch_closure_source.is_file()),
+                ("retort_engine/review_adjudication_calibration.py", adjudication_source.is_file()),
             )
             if exists
         ],
@@ -303,6 +328,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_task_dispatch_plan.py", dispatch_test.is_file()),
                 ("tests/test_review_quality_benchmark.py", benchmark_test.is_file()),
                 ("tests/test_employee_scheduler_stress.py", stress_test.is_file()),
+                ("tests/test_employee_patch_closure.py", patch_closure_test.is_file()),
+                ("tests/test_review_adjudication_calibration.py", adjudication_test.is_file()),
             )
             if exists
         ],
@@ -420,6 +447,35 @@ def latest_employee_worker_review(root: Path) -> dict[str, Any]:
                 "artifact_exists": bool(artifact_text) and Path(artifact_text).is_file(),
             }
     return {}
+
+
+def employee_patch_closure_evidence(root: Path) -> dict[str, Any]:
+    report = read_json(root / "docs" / "retort_employee_patch_closure.json")
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    latest_runtime_patch: dict[str, Any] = {}
+    for path in reversed(employee_result_files(root)):
+        payload = read_json(path)
+        runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
+        patch = runtime.get("employee_patch_closure") if isinstance(runtime.get("employee_patch_closure"), dict) else {}
+        if patch:
+            patch_summary = patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
+            latest_runtime_patch = {
+                "status": patch.get("status", ""),
+                "success_case_verified": patch_summary.get("success_case_verified", ""),
+                "failure_case_rolled_back": patch_summary.get("failure_case_rolled_back", ""),
+            }
+            break
+    return {
+        "report_status": report.get("status", ""),
+        "case_count": summary.get("case_count", ""),
+        "patch_generated_count": summary.get("patch_generated_count", ""),
+        "patch_applied_count": summary.get("patch_applied_count", ""),
+        "gate_passed_count": summary.get("gate_passed_count", ""),
+        "rollback_verified_count": summary.get("rollback_verified_count", ""),
+        "success_case_verified": summary.get("success_case_verified", ""),
+        "failure_case_rolled_back": summary.get("failure_case_rolled_back", ""),
+        "latest_runtime_patch": latest_runtime_patch,
+    }
 
 
 def employee_result_files(root: Path) -> list[Path]:
