@@ -33,11 +33,424 @@
       "<none>": 7
     }
   },
-  "generated_at": "2026-06-27T08:04:15Z",
+  "generated_at": "2026-06-27T08:08:20Z",
   "replay": {
     "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/alibaba/open-code-review --run-local-gates --branch-workflow --merge-after"
   },
-  "run_id": "20260627080415-f7cfdfd7bc",
+  "review_pipeline": {
+    "benchmark": {
+      "component_gap_count": 6,
+      "minimum_expected_behavior_tests": 11,
+      "prioritized_component_count": 6,
+      "task_dimension_count": 5
+    },
+    "component_gaps": [
+      {
+        "component": "provider_surface",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 6149,
+        "own_files": 12,
+        "representative_external_files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md"
+        ]
+      },
+      {
+        "component": "workflow_ci",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 3677,
+        "own_files": 12,
+        "representative_external_files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md"
+        ]
+      },
+      {
+        "component": "review_pipeline",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 2848,
+        "own_files": 12,
+        "representative_external_files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md"
+        ]
+      },
+      {
+        "component": "plugin_surface",
+        "external_files": 12,
+        "file_gap": 1,
+        "marker_gap": 300,
+        "own_files": 11,
+        "representative_external_files": [
+          "README.ru-RU.md",
+          "README.ja-JP.md",
+          "GOVERNANCE.md",
+          "README.md",
+          "ROADMAP.md"
+        ]
+      },
+      {
+        "component": "benchmark_eval",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 101,
+        "own_files": 12,
+        "representative_external_files": [
+          "README.ru-RU.md",
+          "README.ja-JP.md",
+          "README.md",
+          "ROADMAP.md",
+          "README.zh-CN.md"
+        ]
+      },
+      {
+        "component": "safety_policy",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 53,
+        "own_files": 12,
+        "representative_external_files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md"
+        ]
+      }
+    ],
+    "external_file_groups": {
+      "benchmark_eval": {
+        "files": [
+          "README.ru-RU.md",
+          "README.ja-JP.md",
+          "README.md",
+          "ROADMAP.md",
+          "README.zh-CN.md",
+          "README.ko-KR.md",
+          "plugins/open-code-review/commands/review.md",
+          "internal/pathutil/path_test.go",
+          "internal/pathutil/path.go",
+          "internal/config/template/prompts/review_filter_task_user.md",
+          "internal/config/rules/rule_docs/kotlin.md",
+          "internal/config/rules/rule_docs/mapper_dao_xml.md"
+        ],
+        "marker_hits": 230
+      },
+      "file_grouping": {
+        "files": [
+          "README.md",
+          "internal/config/toolsconfig/tools.json",
+          "internal/agent/agent.go",
+          "internal/scan/agent.go",
+          "internal/viewer/store_load_test.go",
+          "internal/tool/code_search_test.go",
+          "internal/tool/code_search.go",
+          "extensions/vscode/README.md",
+          "extensions/vscode/src/shared/i18n.ts",
+          ".claude-plugin/marketplace.json"
+        ],
+        "marker_hits": 20
+      },
+      "plugin_surface": {
+        "files": [
+          "README.ru-RU.md",
+          "README.ja-JP.md",
+          "GOVERNANCE.md",
+          "README.md",
+          "ROADMAP.md",
+          "README.zh-CN.md",
+          "ASSURANCE_CASE.md",
+          "README.ko-KR.md",
+          "SECURITY.md",
+          "plugins/open-code-review/CODEX.ko-KR.md",
+          "plugins/open-code-review/skills/open-code-review/SKILL.md",
+          "plugins/open-code-review/.codex-plugin/plugin.json"
+        ],
+        "marker_hits": 370
+      },
+      "provider_surface": {
+        "files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md",
+          "GOVERNANCE.md",
+          "README.md",
+          "ROADMAP.md",
+          "CONTRIBUTING.ko-KR.md",
+          "CONTRIBUTING.md",
+          "README.zh-CN.md",
+          "CONTRIBUTING.zh-CN.md"
+        ],
+        "marker_hits": 6220
+      },
+      "review_pipeline": {
+        "files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md",
+          "GOVERNANCE.md",
+          "README.md",
+          "ROADMAP.md",
+          "package.json",
+          "CONTRIBUTING.ko-KR.md",
+          "CONTRIBUTING.md",
+          "README.zh-CN.md"
+        ],
+        "marker_hits": 3073
+      },
+      "safety_policy": {
+        "files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md",
+          "GOVERNANCE.md",
+          "README.md",
+          "ROADMAP.md",
+          "package.json",
+          "CONTRIBUTING.ko-KR.md",
+          "CONTRIBUTING.md",
+          "README.zh-CN.md"
+        ],
+        "marker_hits": 162
+      },
+      "workflow_ci": {
+        "files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md",
+          "GOVERNANCE.md",
+          "README.md",
+          "ROADMAP.md",
+          "package.json",
+          "CONTRIBUTING.ko-KR.md",
+          "CONTRIBUTING.md",
+          "README.zh-CN.md"
+        ],
+        "marker_hits": 4337
+      }
+    },
+    "own_file_groups": {
+      "benchmark_eval": {
+        "files": [
+          "retort_engine/absorption.py",
+          "retort_engine/service.py",
+          "retort_engine/review_pipeline.py",
+          "retort_engine/core.py",
+          "retort_engine/prompts.py",
+          "retort_engine/self_evolution.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/evaluators.py",
+          "retort_engine/frontend/app.js",
+          "tests/test_retort_engine.py",
+          "tests/test_self_evolution.py"
+        ],
+        "marker_hits": 129
+      },
+      "file_grouping": {
+        "files": [
+          "README.md",
+          "retort_engine/review_pipeline.py",
+          "retort_engine/core.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/frontend/app.js",
+          "tests/test_retort_engine.py",
+          "tests/test_review_pipeline.py",
+          "docs/retort_absorption_log.md",
+          "docs/retort_external_review_report.json"
+        ],
+        "marker_hits": 28
+      },
+      "plugin_surface": {
+        "files": [
+          "retort_engine/review_pipeline.py",
+          "retort_engine/paibi_llm.py",
+          "retort_engine/core.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/frontend/app.js",
+          "tests/test_retort_engine.py",
+          "tests/test_review_pipeline.py",
+          "tests/test_absorption.py",
+          "docs/retort_absorption_log.md",
+          "docs/retort_external_review_report.json"
+        ],
+        "marker_hits": 70
+      },
+      "provider_surface": {
+        "files": [
+          "retort_engine/absorption.py",
+          "retort_engine/employee_queue.py",
+          "retort_engine/review_pipeline.py",
+          "retort_engine/feedback.py",
+          "retort_engine/paibi_llm.py",
+          "retort_engine/core.py",
+          "retort_engine/runtime_adapter.py",
+          "retort_engine/sources.py",
+          "retort_engine/self_evolution.py",
+          "retort_engine/semantic_reviewer.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/real_absorption.py"
+        ],
+        "marker_hits": 71
+      },
+      "review_pipeline": {
+        "files": [
+          "README.md",
+          "retort_engine/absorption.py",
+          "retort_engine/review_pipeline.py",
+          "retort_engine/paibi_llm.py",
+          "retort_engine/core.py",
+          "retort_engine/cli.py",
+          "retort_engine/ui_server.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/evaluators.py",
+          "retort_engine/frontend/app.js",
+          "tests/test_retort_engine.py"
+        ],
+        "marker_hits": 225
+      },
+      "safety_policy": {
+        "files": [
+          "retort_engine/absorption.py",
+          "retort_engine/service.py",
+          "retort_engine/review_pipeline.py",
+          "retort_engine/paibi_llm.py",
+          "retort_engine/core.py",
+          "retort_engine/self_evolution.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/license_gate.py",
+          "retort_engine/evaluators.py",
+          "retort_engine/frontend/app.js",
+          "tests/test_retort_engine.py"
+        ],
+        "marker_hits": 109
+      },
+      "workflow_ci": {
+        "files": [
+          "README.md",
+          "retort_engine/absorption.py",
+          "retort_engine/service.py",
+          "retort_engine/employee_queue.py",
+          "retort_engine/models.py",
+          "retort_engine/review_pipeline.py",
+          "retort_engine/paibi_llm.py",
+          "retort_engine/core.py",
+          "retort_engine/runtime_adapter.py",
+          "retort_engine/cli.py",
+          "retort_engine/branching.py",
+          "retort_engine/self_evolution.py"
+        ],
+        "marker_hits": 660
+      }
+    },
+    "pipeline_stages": [
+      "materialize_external_snapshot",
+      "group_related_files",
+      "extract_review_signals",
+      "compare_component_gaps",
+      "rank_absorption_tasks",
+      "verify_feedback_loop"
+    ],
+    "prioritized_absorptions": [
+      {
+        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
+        "component": "provider_surface",
+        "priority": "P0",
+        "source_files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
+        "component": "workflow_ci",
+        "priority": "P0",
+        "source_files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested review_pipeline behavior, not only a recorded signal.",
+        "component": "review_pipeline",
+        "priority": "P0",
+        "source_files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
+        "component": "plugin_surface",
+        "priority": "P0",
+        "source_files": [
+          "README.ru-RU.md",
+          "README.ja-JP.md",
+          "GOVERNANCE.md",
+          "README.md",
+          "ROADMAP.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested benchmark_eval behavior, not only a recorded signal.",
+        "component": "benchmark_eval",
+        "priority": "P0",
+        "source_files": [
+          "README.ru-RU.md",
+          "README.ja-JP.md",
+          "README.md",
+          "ROADMAP.md",
+          "README.zh-CN.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
+        "component": "safety_policy",
+        "priority": "P0",
+        "source_files": [
+          "CODE_OF_CONDUCT.md",
+          "README.ru-RU.md",
+          "CONTRIBUTING.ja-JP.md",
+          "CONTRIBUTING.ru-RU.md",
+          "README.ja-JP.md"
+        ]
+      }
+    ]
+  },
+  "run_id": "20260627080820-f7cfdfd7bc",
   "semantic_review": {
     "external": {
       "classes": 218,
@@ -53,29 +466,29 @@
         "metric": "classes"
       },
       {
-        "external_advantage": 1481,
+        "external_advantage": 1471,
         "metric": "functions"
       },
       {
-        "external_advantage": 301,
+        "external_advantage": 298,
         "metric": "source_files"
       },
       {
-        "external_advantage": 150,
+        "external_advantage": 149,
         "metric": "test_markers"
       },
       {
-        "external_advantage": 2760,
+        "external_advantage": 2668,
         "metric": "workflow_markers"
       }
     ],
     "own": {
       "classes": 48,
       "cli_markers": 13,
-      "functions": 318,
-      "source_files": 35,
-      "test_markers": 83,
-      "workflow_markers": 274
+      "functions": 328,
+      "source_files": 38,
+      "test_markers": 84,
+      "workflow_markers": 366
     }
   },
   "signal_evidence": {
