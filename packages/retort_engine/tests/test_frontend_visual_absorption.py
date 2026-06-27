@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 
-EXPECTED_VISUAL_SOURCE = 'https://github.com/dgreenheck/threejs-procedural-planets'
+EXPECTED_VISUAL_SOURCE = 'https://github.com/bobbyroe/threejs-earth'
 
 
 def _app_text() -> str:

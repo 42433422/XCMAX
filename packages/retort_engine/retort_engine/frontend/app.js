@@ -29,32 +29,45 @@ const progressPlan = [
 const ABSORBED_PLANET_VISUAL_PROFILE = {
   "absorbed_signals": [
     "atmosphere_shader",
+    "cloud_texture_layer",
+    "day_night_textures",
+    "elevation_bump_map",
+    "fresnel_atmosphere",
     "planet_frontend",
     "procedural_surface",
+    "specular_ocean",
     "webgl_scene"
   ],
   "enabled": true,
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/dgreenheck/threejs-procedural-planets",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/bobbyroe/threejs-earth",
   "layers": {
     "atmospheric_rim": true,
+    "city_lights": true,
+    "cloud_shadow_layer": true,
+    "day_night_terminator": true,
+    "fresnel_glow": true,
+    "ocean_specular": true,
     "orbital_rings": true,
     "procedural_landmasses": true,
     "terminator_shadow": true,
+    "terrain_relief": true,
     "translucent_clouds": true
   },
   "license_boundary": "visual principles only; no external source or texture copied",
   "palette": {
-    "cloud": "#f7fbff",
-    "highland": "#fff0bd",
-    "land": "#cda96b",
-    "night": "#02050d",
-    "ocean": "#102c5f",
-    "rim": "#95f4ff",
-    "ring": "#f4ca78",
-    "shallow": "#37d6cf"
+    "city": "#ffd36a",
+    "cloud": "#ffffff",
+    "highland": "#d8c58a",
+    "land": "#5e9f62",
+    "night": "#010713",
+    "ocean": "#071b3d",
+    "rim": "#58c8ff",
+    "ring": "#86d9ff",
+    "shallow": "#159ec7",
+    "sun": "#fff0b8"
   },
-  "run_id": "20260627185357-29365e9367",
-  "source": "https://github.com/dgreenheck/threejs-procedural-planets",
+  "run_id": "20260627192522-0723009b1b",
+  "source": "https://github.com/bobbyroe/threejs-earth",
   "visual_family": "absorbed-procedural-planet"
 };
 
