@@ -205,7 +205,11 @@ def build_absorption_saturation_report(
             }
         )
     recent = enriched[-recent_limit:]
-    consecutive_no_new = sum(1 for item in reversed(enriched) if item["new_core_signal_count"] == 0)
+    consecutive_no_new = 0
+    for item in reversed(enriched):
+        if item["new_core_signal_count"] != 0:
+            break
+        consecutive_no_new += 1
     remaining_count = 0 if remaining_candidates is None else len(remaining_candidates)
     strong_remaining = [item for item in remaining_candidates or [] if _is_open_depth_candidate(item, min_score=min_score)]
     strong_remaining_count = len(strong_remaining)
