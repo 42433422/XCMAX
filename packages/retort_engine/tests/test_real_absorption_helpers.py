@@ -1,0 +1,338 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+from types import ModuleType
+
+from retort_engine import real_absorption as real
+
+
+def write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def load_module(path: Path, name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def git(repo: Path, *args: str) -> str:
+    result = subprocess.run(["git", *args], cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def init_repo(repo: Path) -> None:
+    repo.mkdir(parents=True, exist_ok=True)
+    git(repo, "init")
+    git(repo, "config", "user.email", "retort@example.com")
+    git(repo, "config", "user.name", "Retort Test")
+    write(repo / "README.md", "# repo\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "init")
+
+
+def test_external_profile_detects_signals_suffix_counts_and_git_revision(tmp_path: Path) -> None:
+    external = tmp_path / "external"
+    init_repo(external)
+    write(external / "review" / "pipeline.py", "code review pipeline reviewer reflection localization\n")
+    write(external / "review" / "grouping.ts", "file group group files changed files diff hunk patch set\n")
+    write(external / "eval" / "bench.md", "benchmark precision recall evaluation eval\n")
+    write(external / "plugins" / "action.yml", "plugin cli github action codex\n")
+    write(external / "providers" / "models.py", "provider model openai anthropic ollama\n")
+    git(external, "add", ".")
+    git(external, "commit", "-m", "signals")
+
+    profile = real._external_profile(external)
+
+    assert profile["file_count"] >= 6
+    assert profile["suffix_counts"][".py"] >= 2
+    assert profile["git_revision"]
+    assert set(profile["signals"]) >= {
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider",
+    }
+    assert profile["signal_evidence"]["review_pipeline"] == ["review/pipeline.py"]
+    assert profile["signal_evidence"]["file_grouping"] == ["review/grouping.ts"]
+    assert profile["signal_evidence"]["benchmarking"] == ["eval/bench.md"]
+    assert profile["signal_evidence"]["plugin_surface"] == ["plugins/action.yml"]
+    assert profile["signal_evidence"]["multi_provider"] == ["providers/models.py"]
+
+
+def test_external_profile_ignores_runtime_and_dependency_directories(tmp_path: Path) -> None:
+    external = tmp_path / "external"
+    write(external / ".retort" / "state.json", "review pipeline plugin\n")
+    write(external / "node_modules" / "pkg" / "index.js", "benchmark provider\n")
+    write(external / "__pycache__" / "x.py", "file group\n")
+    write(external / "src" / "tool.py", "code review pipeline\n")
+
+    profile = real._external_profile(external)
+
+    assert profile["file_count"] == 1
+    assert profile["signals"] == ["review_pipeline"]
+    assert profile["signal_evidence"] == {"review_pipeline": ["src/tool.py"]}
+
+
+def test_semantic_review_reports_external_advantages(tmp_path: Path) -> None:
+    own = tmp_path / "own"
+    external = tmp_path / "external"
+    write(own / "retort_engine" / "core.py", "def absorb():\n    return True\n")
+    write(
+        external / "src" / "tool.py",
+        "class Reviewer:\n    pass\n\ndef review():\n    pass\n\ndef test_marker():\n    pass\n# workflow pipeline review\n",
+    )
+
+    review = real._semantic_review(own, external)
+
+    assert review["own"]["source_files"] == 1
+    assert review["external"]["classes"] >= 1
+    metrics = {gap["metric"] for gap in review["gaps"]}
+    assert {"classes", "functions", "workflow_markers"} <= metrics
+
+
+def test_project_files_filters_suffixes_and_skip_parts(tmp_path: Path) -> None:
+    write(tmp_path / "keep.py", "def ok(): pass\n")
+    write(tmp_path / "keep.md", "review\n")
+    write(tmp_path / "skip.txt", "not source\n")
+    write(tmp_path / ".pytest_cache" / "README.md", "cache\n")
+    write(tmp_path / "dist" / "bundle.js", "review pipeline\n")
+    write(tmp_path / "node_modules" / "pkg" / "index.js", "provider\n")
+
+    files = real._project_files(tmp_path)
+
+    rels = {path.relative_to(tmp_path).as_posix() for path in files}
+    assert rels == {"keep.py", "keep.md", "skip.txt"}
+    assert not any(path.startswith(".pytest_cache/") or path.startswith("dist/") or path.startswith("node_modules/") for path in rels)
+
+
+def test_context_focus_from_signals_is_ordered_and_deduplicated() -> None:
+    focus = real._context_focus_from_signals(
+        [
+            "safety_policy",
+            "file_grouping",
+            "review_pipeline",
+            "benchmarking",
+            "plugin_surface",
+            "multi_provider",
+        ]
+    )
+
+    assert focus == ["security", "runtime", "tests", "ci_config", "config", "docs"]
+
+
+def test_review_context_bias_generation_is_executable(tmp_path: Path) -> None:
+    content = real._review_context_bias_content(
+        "run-1",
+        "https://github.com/example/reviewer",
+        tmp_path / "external",
+        {
+            "signals": ["review_pipeline", "file_grouping", "benchmarking"],
+            "signal_evidence": {"review_pipeline": ["README.md"]},
+        },
+    )
+    module_path = tmp_path / "review_context_bias.py"
+    write(module_path, content)
+
+    module = load_module(module_path, "generated_review_context_bias")
+
+    assert module.review_context_bias()["source"] == "https://github.com/example/reviewer"
+    assert module.file_grouping_enabled() is True
+    assert module.context_signal_strength() == 60
+
+
+def test_review_context_bias_is_only_written_for_context_signals() -> None:
+    assert real._should_absorb_review_context_bias({"signals": ["benchmarking"]}) is False
+    assert real._should_absorb_review_context_bias({"signals": ["plugin_surface"]}) is False
+    assert real._should_absorb_review_context_bias({"signals": ["review_pipeline"]}) is True
+    assert real._should_absorb_review_context_bias({"signals": ["file_grouping"]}) is True
+    assert real._should_absorb_review_context_bias({"signals": ["diff_hunk_review"]}) is True
+
+
+def test_module_content_round_trips_absorbed_external_patterns(tmp_path: Path) -> None:
+    content = real._module_content(
+        "run-2",
+        "https://github.com/example/reviewer",
+        tmp_path / "external",
+        [{"task_id": "t1", "title": "Deepen review", "dimension": "comparative_analysis_depth", "priority": "P0", "why": "depth"}],
+        {"signals": ["review_pipeline"], "signal_evidence": {"review_pipeline": ["README.md"]}},
+    )
+    module_path = tmp_path / "absorbed_external_patterns.py"
+    write(module_path, content)
+
+    module = load_module(module_path, "generated_absorbed_external_patterns")
+    payload = module.absorbed_external_patterns()
+
+    assert payload["run_id"] == "run-2"
+    assert payload["source"] == "https://github.com/example/reviewer"
+    assert payload["tasks"][0]["task_id"] == "t1"
+    assert payload["external_profile"]["signals"] == ["review_pipeline"]
+
+
+def test_capability_module_content_exposes_depth_gate_and_mapping(tmp_path: Path) -> None:
+    review_report = {
+        "review_pipeline": {
+            "component_gaps": [{"component": "review_pipeline"}, {"component": "diff_hunk_review"}],
+            "prioritized_absorptions": [{"component": "review_pipeline", "priority": "P0"}],
+            "depth_absorption_workflow": {
+                "focus_mode": "similar_function_depth_only",
+                "focused_components": [
+                    {"component": "review_pipeline", "priority": "P0", "similarity_score": 90, "depth_gap": 10},
+                    {"component": "diff_hunk_review", "priority": "P1", "similarity_score": 70, "depth_gap": 3},
+                ],
+                "rejected_breadth_components": [{"component": "plugin_surface", "reason": "breadth_only_for_current_phase"}],
+                "deferred_breadth_components": [{"component": "plugin_surface", "status": "closed_until_similarity_saturation"}],
+                "marketplace_candidates": [],
+                "marketplace_candidates_enabled": False,
+                "employee_tasks": [{"task_id": "retort-depth-review-pipeline", "acceptance": "ok", "evidence_required": ["source diff"]}],
+                "quality_gate": {"passed": True},
+            },
+            "benchmark": {"minimum_expected_behavior_tests": 3},
+        }
+    }
+    content = real._capability_module_content(
+        "run-3",
+        "https://github.com/example/reviewer",
+        tmp_path / "external",
+        [{"task_id": "t1", "title": "Deepen review", "dimension": "comparative_analysis_depth", "priority": "P0", "why": "depth"}],
+        {
+            "signals": ["review_pipeline", "diff_hunk_review", "file_grouping"],
+            "signal_evidence": {"review_pipeline": ["README.md"], "diff_hunk_review": ["review.py"]},
+        },
+        review_report,
+    )
+    module_path = tmp_path / "absorbed_capabilities.py"
+    write(module_path, content)
+
+    module = load_module(module_path, "generated_absorbed_capabilities")
+    plan = module.absorbed_capability_plan()
+    depth = module.depth_absorption_plan()
+    gate = module.absorption_quality_gate(
+        ["retort_engine/pr_review.py", "tests/test_pr_review.py"],
+        [{"ok": True, "command": ["pytest", "tests/test_pr_review.py"], "stdout_tail": "6 passed"}],
+        minimum_behavior_tests=3,
+    )
+
+    assert plan["source"] == "https://github.com/example/reviewer"
+    assert plan["minimum_behavior_tests"] == 3
+    assert depth["focus_mode"] == "similar_function_depth_only"
+    assert [item["component"] for item in depth["ranked_focus_components"]][:1] == ["review_pipeline"]
+    assert module.marketplace_candidate_queue() == []
+    assert module.deferred_breadth_queue()[0]["component"] == "plugin_surface"
+    assert module.depth_first_task_queue()[0]["task_id"] == "retort-depth-review-pipeline"
+    assert module.ranked_capabilities()[0]["signal"] in {"review_pipeline", "diff_hunk_review", "file_grouping"}
+    assert module.review_strategy_for_file("src/review.py")["strategy"] == "diff_hunk_review"
+    assert module.multi_project_reproduction_index(["a", "b", "a"])["ready_for_product_score"] is False
+    assert gate["passed"] is True
+
+
+def test_capability_test_content_targets_generated_module_source() -> None:
+    content = real._capability_test_content("retort_engine.absorbed_capabilities", "https://github.com/example/reviewer")
+
+    assert "EXPECTED_ABSORPTION_SOURCE = 'https://github.com/example/reviewer'" in content
+    assert "test_absorbed_capability_plan_has_ranked_behavior_signals" in content
+    assert "test_absorption_quality_gate_passes_with_behavior_depth" in content
+
+
+def test_capability_import_name_handles_package_and_root_modules(tmp_path: Path) -> None:
+    package = tmp_path / "retort_engine"
+    package.mkdir()
+    write(package / "__init__.py", "")
+    assert real._capability_import_name(tmp_path, package / "absorbed_capabilities.py") == "retort_engine.absorbed_capabilities"
+    assert real._capability_import_name(tmp_path, tmp_path / "tests" / "test_absorbed_capabilities.py") == "test_absorbed_capabilities"
+    assert real._capability_import_name(tmp_path, tmp_path / "absorbed_capabilities.py") == "absorbed_capabilities"
+
+
+def test_snapshot_changed_files_and_synthetic_diff(tmp_path: Path) -> None:
+    first = tmp_path / "first.py"
+    second = tmp_path / "second.py"
+    write(first, "VALUE = 1\n")
+    before = real._snapshot([first, second])
+    write(first, "VALUE = 2\n")
+    write(second, "VALUE = 3\n")
+
+    changed = real._changed_files(before, [first, second])
+    diff_text = real._synthetic_file_diff(tmp_path, second)
+
+    assert changed == [str(first), str(second)]
+    assert "diff --git a/second.py b/second.py" in diff_text
+    assert "+VALUE = 3" in diff_text
+
+
+def test_execution_result_and_run_id_are_stable_shape(tmp_path: Path) -> None:
+    started = real.time.monotonic()
+    result = real._execution_result(
+        "applied",
+        tmp_path,
+        "https://github.com/example/reviewer",
+        started,
+        [str(tmp_path / "feature.py")],
+        [{"ok": True, "command": ["pytest"], "stdout_tail": "1 passed"}],
+        ["feature.py | 1 +"],
+        "done",
+    )
+    run_id = real._run_id("https://github.com/example/reviewer")
+
+    assert result["status"] == "applied"
+    assert result["gates_passed"] is True
+    assert result["commands"] == [["pytest"]]
+    assert result["git_diff_summary"] == ["feature.py | 1 +"]
+    assert run_id.endswith("-" + real.hashlib.sha1(b"https://github.com/example/reviewer").hexdigest()[:10])
+
+
+def test_run_command_captures_success_failure_and_tail(tmp_path: Path) -> None:
+    success = real._run_command([sys.executable, "-c", "print('ok')"], tmp_path, timeout=30)
+    failure = real._run_command([sys.executable, "-c", "import sys; print('bad'); sys.exit(7)"], tmp_path, timeout=30)
+
+    assert success["ok"] is True
+    assert success["exit_code"] == 0
+    assert "ok" in success["stdout_tail"]
+    assert failure["ok"] is False
+    assert failure["exit_code"] == 7
+    assert "bad" in failure["stdout_tail"]
+
+
+def test_write_execution_queue_records_appends_json_lines(tmp_path: Path) -> None:
+    queue = tmp_path / "queue.jsonl"
+    count = real._write_execution_queue_records(
+        str(queue),
+        "run-4",
+        "https://github.com/example/reviewer",
+        [{"task_id": "t1"}, {"task_id": "t2"}],
+    )
+
+    rows = [json.loads(line) for line in queue.read_text(encoding="utf-8").splitlines()]
+    assert count == 2
+    assert [row["task"]["task_id"] for row in rows] == ["t1", "t2"]
+    assert all(row["status"] == "executing" for row in rows)
+    assert all(row["run_id"] == "run-4" for row in rows)
+
+
+def test_git_diff_summary_falls_back_to_line_counts_for_unstaged_new_file(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    new_file = tmp_path / "feature.py"
+    write(new_file, "VALUE = 1\nVALUE = 2\n")
+
+    summary = real._git_diff_summary(tmp_path, [str(new_file)])
+
+    assert summary == ["feature.py | 2 lines"]
+
+
+def test_record_execution_writes_replayable_json(tmp_path: Path) -> None:
+    result = {"run_id": "run-5", "status": "applied", "changed_files": ["feature.py"]}
+
+    real._record_execution(tmp_path, result)
+
+    path = tmp_path / ".retort" / "real_absorption_runs" / "run-5.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == result
