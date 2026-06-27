@@ -161,13 +161,12 @@ def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str)
         .strip()
         .lower()
     )
-    cmd = [
-        cli_path,
-        "agent",
-        "--print",
-        "--output-format",
-        "stream-json",
-    ]
+    cmd = [cli_path]
+    # 独立的 cursor-agent 二进制本身就是 agent，不再接 "agent" 子命令；
+    # 旧的 cursor 二进制才用 `cursor agent --print`。trae-cn 沿用同构建器也无 agent 子命令。
+    if os.path.basename(cli_path) not in {"cursor-agent", "trae-cn"}:
+        cmd.append("agent")
+    cmd += ["--print", "--output-format", "stream-json"]
     if trust_raw not in {"0", "false", "off", "disabled"}:
         cmd.append("--trust")
     if force_raw not in {"0", "false", "off", "disabled"}:
@@ -273,12 +272,13 @@ CURSOR_PROFILE = SuperEmployeeToolProfile(
     direct_kind="cursor_direct",
     env_super_prefix="XCMAX_CURSOR_SUPER_EMPLOYEE",
     env_tool_prefix="XCMAX_CURSOR",
-    cli_binary="cursor",
+    cli_binary="cursor-agent",
     cli_extra_candidates=(
+        os.path.expanduser("~/.local/bin/cursor-agent"),
+        "/opt/homebrew/bin/cursor-agent",
+        "/usr/local/bin/cursor-agent",
         "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
         os.path.expanduser("~/.local/bin/cursor"),
-        "/opt/homebrew/bin/cursor",
-        "/usr/local/bin/cursor",
     ),
     cli_reads_output_file=False,
     cli_stream_json=True,

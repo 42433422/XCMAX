@@ -223,3 +223,19 @@ class _Dummy:
     returncode = 0
     stdout = ""
     stderr = ""
+
+
+def test_cursor_agent_command_has_no_extra_agent_subcommand():
+    """cursor-agent 是独立 agent 二进制：命令应是 `cursor-agent --print ...`，不再接 agent 子命令。"""
+    from pathlib import Path
+
+    from app.application.super_employee_service import CURSOR_PROFILE, _cursor_cli_command
+
+    assert CURSOR_PROFILE.cli_binary == "cursor-agent"
+    cmd = _cursor_cli_command("/usr/local/bin/cursor-agent", "hi", Path("/tmp/o"), "/tmp")
+    assert cmd[0].endswith("cursor-agent")
+    assert "agent" not in cmd[1:3]  # 紧跟的不是 agent 子命令
+    assert "--print" in cmd
+    # 旧 cursor 二进制仍保留 agent 子命令（兼容）。
+    legacy = _cursor_cli_command("/usr/local/bin/cursor", "hi", Path("/tmp/o"), "/tmp")
+    assert legacy[1] == "agent"
