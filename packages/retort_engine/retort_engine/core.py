@@ -247,6 +247,18 @@ class RetortService:
         llm_payload["use_llm"] = True
         return _attach_llm_scoring(llm_payload, assessment, Path(project).expanduser().resolve(), "assess", "", "", [])
 
+    def absorption_lights(self, payload: dict[str, Any]) -> dict[str, Any]:
+        project = str(payload.get("project") or payload.get("project_path") or ".")
+        assessment = assess_project(project, run_local_gates=False).to_dict()
+        audit = assessment.get("metadata", {}).get("capability_absorption_audit", {})
+        sources = [str(item) for item in audit.get("external_projects") or [] if str(item).strip()]
+        return {
+            "status": "ready",
+            "project": project,
+            "count": int(audit.get("external_project_count") or len(sources)),
+            "sources": sources,
+        }
+
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
         return absorb(payload)
 

@@ -8,7 +8,10 @@ def test_blackhole_light_points_are_bound_to_absorbed_project_count() -> None:
     text = app.read_text(encoding="utf-8")
 
     assert "absorbedProjects: {count: 0" in text
+    assert "function syncAbsorbedProjects(count, sources" in text
     assert "function syncAbsorbedProjectsFromAssessment" in text
+    assert "function refreshAbsorptionLights" in text
+    assert 'api("/api/absorption-lights"' in text
     assert "audit.external_project_count" in text
     assert "audit.external_projects" in text
     assert "canvas.dataset.absorbedProjectCount" in text
