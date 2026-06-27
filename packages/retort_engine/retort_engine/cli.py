@@ -157,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     scheduler_stress.add_argument("--project", default=".")
     scheduler_stress.add_argument("--rounds", type=int, default=10)
     scheduler_stress.add_argument("--tasks-per-round", type=int, default=3)
+    scheduler_stress.add_argument("--workers-per-round", type=int, default=1)
     scheduler_stress.add_argument("--output", default="")
     scheduler_stress.add_argument("--json", action="store_true")
     codebase_graph = sub.add_parser("codebase-graph-report")
@@ -364,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Created: {result['summary']['created_comment_count']}")
             print(f"Rolled back: {result['summary']['rolled_back_comment_count']}")
             print(f"Output: {output}")
-        return 0 if result["status"] == "live_rolled_back" else 1
+        return 0 if result["status"] in {"live_rolled_back", "permission_denied_degraded"} else 1
     if args.command == "cross-project-replay":
         result = build_cross_project_replay(args.project)
         if args.output:
@@ -436,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "employee-scheduler-stress":
-        result = run_employee_scheduler_stress(args.project, round_count=args.rounds, tasks_per_round=args.tasks_per_round)
+        result = run_employee_scheduler_stress(args.project, round_count=args.rounds, tasks_per_round=args.tasks_per_round, workers_per_round=args.workers_per_round)
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)

@@ -154,6 +154,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     benchmark_sample_count = 0
     benchmark_baseline_score = 0
     benchmark_publishable_comment_count = 0
+    benchmark_cross_project_case_count = 0
+    benchmark_cross_project_family_count = 0
+    benchmark_cross_project_pass_rate = 0.0
     diff_pipeline_status = ""
     diff_pipeline_depth_score = 0
     diff_pipeline_context_group_count = 0
@@ -189,6 +192,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             benchmark_baseline_score = int(benchmark_summary.get("baseline_aggregate_score") or 0)
             benchmark_delta = int(benchmark_summary.get("post_absorption_score_delta") or 0)
             benchmark_publishable_comment_count = int(benchmark_summary.get("publishable_comment_count") or 0)
+            benchmark_cross_project_case_count = int(benchmark_summary.get("cross_project_case_count") or 0)
+            benchmark_cross_project_family_count = int(benchmark_summary.get("cross_project_family_count") or 0)
+            benchmark_cross_project_pass_rate = float(benchmark_summary.get("cross_project_pass_rate") or 0.0)
             diff_pipeline = build_diff_pipeline_replay(
                 "diff --git a/app/auth.py b/app/auth.py\n--- a/app/auth.py\n+++ b/app/auth.py\n@@ -1 +1,3 @@\n def login():\n+    token = \"secret\"\n+    return True\n"
                 "diff --git a/tests/test_auth.py b/tests/test_auth.py\n--- a/tests/test_auth.py\n+++ b/tests/test_auth.py\n@@ -1 +1,2 @@\n def test_login():\n+    assert True\n"
@@ -226,6 +232,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "benchmark_baseline_aggregate_score": benchmark_baseline_score,
         "benchmark_post_absorption_delta": benchmark_delta,
         "benchmark_publishable_comment_count": benchmark_publishable_comment_count,
+        "benchmark_cross_project_case_count": benchmark_cross_project_case_count,
+        "benchmark_cross_project_family_count": benchmark_cross_project_family_count,
+        "benchmark_cross_project_pass_rate": benchmark_cross_project_pass_rate,
         "diff_pipeline_status": diff_pipeline_status,
         "diff_pipeline_depth_score": diff_pipeline_depth_score,
         "diff_pipeline_context_group_count": diff_pipeline_context_group_count,

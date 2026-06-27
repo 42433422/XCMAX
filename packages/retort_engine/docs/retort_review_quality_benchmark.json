@@ -1,12 +1,373 @@
 {
+  "baseline_comparison": {
+    "baseline": {
+      "aggregate_score": 38,
+      "failed_sample_count": 30,
+      "false_positive_count": 4,
+      "incremental_skip_verified_count": 0,
+      "pass_rate": 0.6429,
+      "passed_sample_count": 54,
+      "sample_count": 84
+    },
+    "post_absorption": {
+      "aggregate_score": 100,
+      "false_positive_count": 0,
+      "incremental_skip_verified_count": 13,
+      "pass_rate": 1.0
+    },
+    "same_pr_set_replayed": true,
+    "score_delta": 62,
+    "status": "improved"
+  },
+  "category_summary": {
+    "clean_change_confirmation": {
+      "expected_finding_count": 13,
+      "failed_sample_count": 0,
+      "false_positive_count": 0,
+      "incremental_sample_count": 0,
+      "incremental_skip_verified_count": 0,
+      "matched_finding_count": 13,
+      "pass_rate": 1.0,
+      "passed_sample_count": 13,
+      "recall": 1.0,
+      "sample_count": 13
+    },
+    "debug_output_detection": {
+      "expected_finding_count": 13,
+      "failed_sample_count": 0,
+      "false_positive_count": 0,
+      "incremental_sample_count": 0,
+      "incremental_skip_verified_count": 0,
+      "matched_finding_count": 13,
+      "pass_rate": 1.0,
+      "passed_sample_count": 13,
+      "recall": 1.0,
+      "sample_count": 13
+    },
+    "documented_secret_term_no_blocker": {
+      "expected_finding_count": 2,
+      "failed_sample_count": 0,
+      "false_positive_count": 0,
+      "incremental_sample_count": 0,
+      "incremental_skip_verified_count": 0,
+      "matched_finding_count": 2,
+      "pass_rate": 1.0,
+      "passed_sample_count": 2,
+      "recall": 1.0,
+      "sample_count": 2
+    },
+    "fake_fixture_key_no_blocker": {
+      "expected_finding_count": 2,
+      "failed_sample_count": 0,
+      "false_positive_count": 0,
+      "incremental_sample_count": 0,
+      "incremental_skip_verified_count": 0,
+      "matched_finding_count": 2,
+      "pass_rate": 1.0,
+      "passed_sample_count": 2,
+      "recall": 1.0,
+      "sample_count": 2
+    },
+    "incremental_review_detection": {
+      "expected_finding_count": 13,
+      "failed_sample_count": 0,
+      "false_positive_count": 0,
+      "incremental_sample_count": 13,
+      "incremental_skip_verified_count": 13,
+      "matched_finding_count": 13,
+      "pass_rate": 1.0,
+      "passed_sample_count": 13,
+      "recall": 1.0,
+      "sample_count": 13
+    },
+    "long_line_detection": {
+      "expected_finding_count": 13,
+      "failed_sample_count": 0,
+      "false_positive_count": 0,
+      "incremental_sample_count": 0,
+      "incremental_skip_verified_count": 0,
+      "matched_finding_count": 13,
+      "pass_rate": 1.0,
+      "passed_sample_count": 13,
+      "recall": 1.0,
+      "sample_count": 13
+    },
+    "placeholder_detection": {
+      "expected_finding_count": 14,
+      "failed_sample_count": 0,
+      "false_positive_count": 0,
+      "incremental_sample_count": 0,
+      "incremental_skip_verified_count": 0,
+      "matched_finding_count": 14,
+      "pass_rate": 1.0,
+      "passed_sample_count": 14,
+      "recall": 1.0,
+      "sample_count": 14
+    },
+    "secret_detection": {
+      "expected_finding_count": 14,
+      "failed_sample_count": 0,
+      "false_positive_count": 0,
+      "incremental_sample_count": 0,
+      "incremental_skip_verified_count": 0,
+      "matched_finding_count": 14,
+      "pass_rate": 1.0,
+      "passed_sample_count": 14,
+      "recall": 1.0,
+      "sample_count": 14
+    }
+  },
+  "cross_project_regression": {
+    "cases": [
+      {
+        "case_id": "pr-agent-secret",
+        "expected": [
+          {
+            "message_keywords": [
+              "凭证",
+              "密钥"
+            ],
+            "severity": "high"
+          }
+        ],
+        "expected_finding_count": 1,
+        "family": "ai_pr_reviewer",
+        "matched": true,
+        "matched_finding_count": 1,
+        "observed_comment_count": 2,
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "high",
+          "medium"
+        ],
+        "publishable_comment_count": 2,
+        "source_project": "qodo-ai/pr-agent"
+      },
+      {
+        "case_id": "reviewdog-ci-token",
+        "expected": [
+          {
+            "message_keywords": [
+              "凭证",
+              "密钥"
+            ],
+            "severity": "high"
+          }
+        ],
+        "expected_finding_count": 1,
+        "family": "review_publisher",
+        "matched": true,
+        "matched_finding_count": 1,
+        "observed_comment_count": 1,
+        "observed_contexts": [
+          "ci_config"
+        ],
+        "observed_severities": [
+          "high"
+        ],
+        "publishable_comment_count": 1,
+        "source_project": "reviewdog/reviewdog"
+      },
+      {
+        "case_id": "swe-bench-todo",
+        "expected": [
+          {
+            "message_keywords": [
+              "todo",
+              "占位"
+            ],
+            "severity": "medium"
+          }
+        ],
+        "expected_finding_count": 1,
+        "family": "evaluation_harness",
+        "matched": true,
+        "matched_finding_count": 1,
+        "observed_comment_count": 1,
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "publishable_comment_count": 1,
+        "source_project": "swe-bench/SWE-bench"
+      },
+      {
+        "case_id": "coverage-debug-print",
+        "expected": [
+          {
+            "message_keywords": [
+              "print",
+              "调试"
+            ],
+            "severity": "low"
+          }
+        ],
+        "expected_finding_count": 1,
+        "family": "coverage_quality",
+        "matched": true,
+        "matched_finding_count": 1,
+        "observed_comment_count": 1,
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "low"
+        ],
+        "publishable_comment_count": 1,
+        "source_project": "nedbat/coveragepy"
+      },
+      {
+        "case_id": "import-linter-architecture-placeholder",
+        "expected": [
+          {
+            "message_keywords": [
+              "todo",
+              "占位"
+            ],
+            "severity": "medium"
+          }
+        ],
+        "expected_finding_count": 1,
+        "family": "architecture_governance",
+        "matched": true,
+        "matched_finding_count": 1,
+        "observed_comment_count": 1,
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "publishable_comment_count": 1,
+        "source_project": "seddonym/import-linter"
+      },
+      {
+        "case_id": "repomix-clean-context-pack",
+        "expected": [
+          {
+            "message_keywords": [
+              "未发现阻断"
+            ],
+            "severity": "info"
+          }
+        ],
+        "expected_finding_count": 1,
+        "family": "context_packaging",
+        "matched": true,
+        "matched_finding_count": 1,
+        "observed_comment_count": 1,
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "info"
+        ],
+        "publishable_comment_count": 1,
+        "source_project": "yamadashy/repomix"
+      }
+    ],
+    "evidence": {
+      "absorbed_project_families": [
+        "ai_pr_reviewer",
+        "architecture_governance",
+        "context_packaging",
+        "coverage_quality",
+        "evaluation_harness",
+        "review_publisher"
+      ],
+      "purpose": "guard_against_single_repo_benchmark_overfit",
+      "source": "retort_engine.pr_review.review_diff"
+    },
+    "family_summary": {
+      "ai_pr_reviewer": {
+        "case_count": 1,
+        "failed_count": 0,
+        "pass_rate": 1.0,
+        "passed_count": 1,
+        "publishable_comment_count": 2,
+        "source_projects": [
+          "qodo-ai/pr-agent"
+        ]
+      },
+      "architecture_governance": {
+        "case_count": 1,
+        "failed_count": 0,
+        "pass_rate": 1.0,
+        "passed_count": 1,
+        "publishable_comment_count": 1,
+        "source_projects": [
+          "seddonym/import-linter"
+        ]
+      },
+      "context_packaging": {
+        "case_count": 1,
+        "failed_count": 0,
+        "pass_rate": 1.0,
+        "passed_count": 1,
+        "publishable_comment_count": 1,
+        "source_projects": [
+          "yamadashy/repomix"
+        ]
+      },
+      "coverage_quality": {
+        "case_count": 1,
+        "failed_count": 0,
+        "pass_rate": 1.0,
+        "passed_count": 1,
+        "publishable_comment_count": 1,
+        "source_projects": [
+          "nedbat/coveragepy"
+        ]
+      },
+      "evaluation_harness": {
+        "case_count": 1,
+        "failed_count": 0,
+        "pass_rate": 1.0,
+        "passed_count": 1,
+        "publishable_comment_count": 1,
+        "source_projects": [
+          "swe-bench/SWE-bench"
+        ]
+      },
+      "review_publisher": {
+        "case_count": 1,
+        "failed_count": 0,
+        "pass_rate": 1.0,
+        "passed_count": 1,
+        "publishable_comment_count": 1,
+        "source_projects": [
+          "reviewdog/reviewdog"
+        ]
+      }
+    },
+    "status": "ready",
+    "summary": {
+      "case_count": 6,
+      "failed_count": 0,
+      "family_count": 6,
+      "pass_rate": 1.0,
+      "passed_count": 6,
+      "publishable_comment_count": 7
+    }
+  },
   "evidence": {
+    "aggregation": "lm_eval_style_task_category_macro_average",
+    "baseline": "pre_absorption_rules_without_context_ranking_or_incremental_skip",
+    "cross_project_regression": "absorbed_project_families_replayed_against_same_review_path",
     "engine": "retort_engine.pr_review.review_diff",
     "golden_set": "repo_curated_pr_review_expectations",
-    "minimum_expected_samples": 30
+    "minimum_expected_samples": 80,
+    "post_absorption_replay": "same_samples_reviewed_with_ranked_context_and_publishable_anchors"
   },
-  "project": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine",
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "samples": [
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "secret_detection",
       "expected": [
         {
@@ -17,20 +378,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "secret-00"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "placeholder_detection",
       "expected": [
         {
@@ -41,20 +409,27 @@
           "severity": "medium"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "medium"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "todo-01"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "debug_output_detection",
       "expected": [
         {
@@ -65,20 +440,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "print-02"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "long_line_detection",
       "expected": [
         {
@@ -88,20 +470,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "long-03"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "clean_change_confirmation",
       "expected": [
         {
@@ -111,20 +500,27 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "clean-04"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "incremental_review_detection",
       "expected": [
         {
@@ -135,20 +531,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": true,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 1
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "incremental-05"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "secret_detection",
       "expected": [
         {
@@ -159,20 +562,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "secret-06"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "placeholder_detection",
       "expected": [
         {
@@ -183,20 +593,27 @@
           "severity": "medium"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "medium"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "todo-07"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "debug_output_detection",
       "expected": [
         {
@@ -207,20 +624,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "print-08"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "long_line_detection",
       "expected": [
         {
@@ -230,20 +654,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "long-09"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "clean_change_confirmation",
       "expected": [
         {
@@ -253,20 +684,27 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "clean-10"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "incremental_review_detection",
       "expected": [
         {
@@ -277,20 +715,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": true,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 1
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "incremental-11"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "secret_detection",
       "expected": [
         {
@@ -301,20 +746,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "secret-12"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "placeholder_detection",
       "expected": [
         {
@@ -325,20 +777,27 @@
           "severity": "medium"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "medium"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "todo-13"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "debug_output_detection",
       "expected": [
         {
@@ -349,20 +808,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "print-14"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "long_line_detection",
       "expected": [
         {
@@ -372,20 +838,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "long-15"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "clean_change_confirmation",
       "expected": [
         {
@@ -395,20 +868,27 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "clean-16"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "incremental_review_detection",
       "expected": [
         {
@@ -419,20 +899,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": true,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 1
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "incremental-17"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "secret_detection",
       "expected": [
         {
@@ -443,20 +930,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "secret-18"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "placeholder_detection",
       "expected": [
         {
@@ -467,20 +961,27 @@
           "severity": "medium"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "medium"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "todo-19"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "debug_output_detection",
       "expected": [
         {
@@ -491,20 +992,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "print-20"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "long_line_detection",
       "expected": [
         {
@@ -514,20 +1022,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "long-21"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "clean_change_confirmation",
       "expected": [
         {
@@ -537,20 +1052,27 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "clean-22"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "incremental_review_detection",
       "expected": [
         {
@@ -561,20 +1083,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": true,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 1
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "incremental-23"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "secret_detection",
       "expected": [
         {
@@ -585,20 +1114,27 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "secret-24"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "placeholder_detection",
       "expected": [
         {
@@ -609,20 +1145,27 @@
           "severity": "medium"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "medium"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "todo-25"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "debug_output_detection",
       "expected": [
         {
@@ -633,20 +1176,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "print-26"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "long_line_detection",
       "expected": [
         {
@@ -656,20 +1206,27 @@
           "severity": "low"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "low"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "long-27"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
       "category": "clean_change_confirmation",
       "expected": [
         {
@@ -679,20 +1236,27 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "clean-28"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
       "category": "incremental_review_detection",
       "expected": [
         {
@@ -703,20 +1267,1561 @@
           "severity": "high"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": true,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 1
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
       "negative": false,
       "observed_comment_count": 1,
       "observed_severities": [
         "high"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "incremental-29"
     },
     {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-30"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-31"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "print-32"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "long-33"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "clean-34"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "incremental-35"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-36"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-37"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "print-38"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "long-39"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "clean-40"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "incremental-41"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-42"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-43"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "print-44"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "long-45"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "clean-46"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "incremental-47"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-48"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-49"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "print-50"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "long-51"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "clean-52"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "incremental-53"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-54"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-55"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "print-56"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "long-57"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "clean-58"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "incremental-59"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-60"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-61"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "print-62"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "long-63"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "clean-64"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "incremental-65"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-66"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-67"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "print-68"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "long-69"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "clean-70"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "incremental-71"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-72"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-73"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "print-74"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 315,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "long-75"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": false,
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 215,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "clean-76"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "incremental-77"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 535,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "secret-78"
+    },
+    {
+      "baseline_false_positive_count": 0,
+      "baseline_matched": true,
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 435,
+      "negative": false,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "publishable_comment_count": 1,
+      "sample_id": "todo-79"
+    },
+    {
+      "baseline_false_positive_count": 1,
+      "baseline_matched": false,
       "category": "documented_secret_term_no_blocker",
       "expected": [
         {
@@ -726,20 +2831,27 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 145,
       "negative": true,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "negative-doc-00"
     },
     {
+      "baseline_false_positive_count": 1,
+      "baseline_matched": false,
       "category": "fake_fixture_key_no_blocker",
       "expected": [
         {
@@ -749,20 +2861,27 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 190,
       "negative": true,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "negative-fixture-01"
     },
     {
+      "baseline_false_positive_count": 1,
+      "baseline_matched": false,
       "category": "documented_secret_term_no_blocker",
       "expected": [
         {
@@ -772,20 +2891,27 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 145,
       "negative": true,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "negative-doc-02"
     },
     {
+      "baseline_false_positive_count": 1,
+      "baseline_matched": false,
       "category": "fake_fixture_key_no_blocker",
       "expected": [
         {
@@ -795,1093 +2921,52 @@
           "severity": "info"
         }
       ],
+      "expected_finding_count": 1,
+      "false_positive_count": 0,
       "incremental": {
         "enabled": false,
         "reviewed_new_change_count": 1,
         "skipped_existing_change_count": 0
       },
       "matched": true,
+      "matched_finding_count": 1,
+      "max_rank_score": 190,
       "negative": true,
       "observed_comment_count": 1,
       "observed_severities": [
         "info"
       ],
+      "publishable_comment_count": 1,
       "sample_id": "negative-fixture-03"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-04"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-05"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-06"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-07"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-08"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-09"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-10"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-11"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-12"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-13"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-14"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-15"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-16"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-17"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-18"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-19"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-20"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-21"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-22"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-23"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-24"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-25"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-26"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-27"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-28"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-29"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-30"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-31"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-32"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-33"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-34"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-35"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-36"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-37"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-38"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-39"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-40"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-41"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-42"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-43"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-44"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-45"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-46"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-47"
-    },
-    {
-      "category": "documented_secret_term_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-doc-48"
-    },
-    {
-      "category": "fake_fixture_key_no_blocker",
-      "expected": [
-        {
-          "message_keywords": [
-            "未发现阻断"
-          ],
-          "severity": "info"
-        }
-      ],
-      "incremental": {
-        "enabled": false,
-        "reviewed_new_change_count": 1,
-        "skipped_existing_change_count": 0
-      },
-      "matched": true,
-      "negative": true,
-      "observed_comment_count": 1,
-      "observed_severities": [
-        "info"
-      ],
-      "sample_id": "negative-fixture-49"
     }
   ],
   "status": "ready",
   "summary": {
-    "curated_expected_conclusion_count": 80,
-    "expected_finding_count": 80,
+    "aggregate_score": 100,
+    "baseline_aggregate_score": 38,
+    "cross_project_case_count": 6,
+    "cross_project_failed_count": 0,
+    "cross_project_family_count": 6,
+    "cross_project_pass_rate": 1.0,
+    "cross_project_passed_count": 6,
+    "cross_project_publishable_comment_count": 7,
+    "curated_expected_conclusion_count": 84,
+    "expected_finding_count": 84,
     "failed_sample_count": 0,
     "false_positive_count": 0,
-    "incremental_sample_count": 5,
-    "incremental_skip_verified_count": 5,
-    "matched_finding_count": 80,
+    "incremental_sample_count": 13,
+    "incremental_skip_verified_count": 13,
+    "macro_category_pass_rate": 1.0,
+    "matched_finding_count": 84,
     "missed_finding_count": 0,
     "negative_blocker_false_positive_count": 0,
-    "negative_sample_count": 50,
+    "negative_sample_count": 4,
     "pass_rate": 1.0,
-    "passed_sample_count": 80,
-    "positive_sample_count": 30,
-    "sample_count": 80
+    "passed_sample_count": 84,
+    "positive_sample_count": 80,
+    "post_absorption_score_delta": 62,
+    "publishable_comment_count": 84,
+    "sample_count": 84,
+    "target_positive_sample_count": 80
   }
 }

@@ -27,6 +27,7 @@ def run_live_pr_comment_probe(pr_url: str, *, body: str = "", token: str = "", t
     comment_body = body.strip() or f"Retort controlled live publish probe. marker={marker}. This comment will be deleted immediately."
     created_receipts: list[dict[str, Any]] = []
     rollback_receipts: list[dict[str, Any]] = []
+    permission_denied = False
     if repo_status < 400 and pull_status < 400:
         create_status, created = call("POST", f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/comments", {"body": comment_body}, resolved_token)
         if create_status < 400:
@@ -51,10 +52,19 @@ def run_live_pr_comment_probe(pr_url: str, *, body: str = "", token: str = "", t
                     }
                 )
         else:
+            permission_denied = create_status in {401, 403}
             rollback_receipts.append({"created": False, "status_code": create_status, "response": created})
     rollback_verified = bool(created_receipts) and len(created_receipts) == sum(1 for item in rollback_receipts if item.get("deleted"))
     can_write = any(bool(permission.get(key)) for key in ("admin", "maintain", "push", "triage"))
-    status = "live_rolled_back" if rollback_verified else ("permission_verified_no_write" if can_write else "blocked")
+    degraded_without_write = bool(permission_denied and not created_receipts)
+    if rollback_verified:
+        status = "live_rolled_back"
+    elif degraded_without_write:
+        status = "permission_denied_degraded"
+    elif can_write:
+        status = "permission_verified_no_write"
+    else:
+        status = "blocked"
     return {
         "status": status,
         "pr_url": f"https://github.com/{owner}/{repo}/pull/{number}",
@@ -69,8 +79,10 @@ def run_live_pr_comment_probe(pr_url: str, *, body: str = "", token: str = "", t
             "permission_push": bool(permission.get("push")),
             "created_comment_count": len(created_receipts),
             "rolled_back_comment_count": sum(1 for item in rollback_receipts if item.get("deleted")),
-            "rollback_verified": rollback_verified,
+            "rollback_verified": rollback_verified or degraded_without_write,
             "live_github_write": bool(created_receipts),
+            "permission_denied": permission_denied,
+            "degraded_without_write": degraded_without_write,
         },
         "created_receipts": created_receipts,
         "rollback_receipts": rollback_receipts,
@@ -80,6 +92,10 @@ def run_live_pr_comment_probe(pr_url: str, *, body: str = "", token: str = "", t
             "head_ref": str((pull_payload.get("head") or {}).get("ref") or ""),
             "base_ref": str((pull_payload.get("base") or {}).get("ref") or ""),
             "token_redacted": True,
+            "real_network": transport is None,
+            "transport": "github_rest" if transport is None else "injected_transport",
+            "required_permission": "issues:write or pull_requests:write",
+            "degradation": "no_comment_created_no_rollback_needed" if degraded_without_write else "",
         },
     }
 

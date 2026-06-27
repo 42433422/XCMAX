@@ -23,7 +23,7 @@ DEFAULT_DIMENSIONS = (
 )
 
 
-def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10, tasks_per_round: int = 3) -> dict[str, Any]:
+def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10, tasks_per_round: int = 3, workers_per_round: int = 1) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     run_id = datetime.now(timezone.utc).strftime("scheduler-stress-%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
     queue_path = root / ".retort" / "employee_queue.jsonl"
@@ -37,39 +37,56 @@ def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10,
     failed_process_count = 0
     process_invocation_count = 0
     expected_task_ids: list[str] = []
+    worker_count = max(1, workers_per_round)
+    worker_runs: list[dict[str, Any]] = []
     for round_index in range(1, max(1, round_count) + 1):
         tasks = [_stress_task(run_id, round_index, task_index) for task_index in range(1, max(1, tasks_per_round) + 1)]
         for task in tasks:
             expected_task_ids.append(str(task["task_id"]))
             _append_queue_record(queue_path, run_id, task)
             store.record_employee_task(_employee_task_record(run_id, task))
-        payload_path = request_dir / f"{run_id}-round-{round_index:02d}.json"
-        result_path = result_dir / f"{run_id}-round-{round_index:02d}.json"
-        payload = {
-            "run_id": f"{run_id}-round-{round_index:02d}",
-            "source": "employee_scheduler_stress",
-            "tasks": tasks,
-            "gates_passed": True,
-            "changed_files": ["retort_engine/pr_review.py", "retort_engine/task_prioritization.py", "retort_engine/employee_scheduler_stress.py"],
-            "review_report_path": str(root / "docs" / "retort_task_prioritization_report.json"),
-            "diff_text": _stress_diff(round_index),
-            "queue_path": str(queue_path),
-            "history_store": str(history_path),
-            "output_path": str(result_path),
-        }
-        payload_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        process = _run_worker(root, payload_path)
-        process_invocation_count += 1
-        if process["returncode"] != 0 or not result_path.is_file():
-            failed_process_count += 1
+        payloads = []
+        for worker_index, task_batch in enumerate(_split_tasks(tasks, worker_count), start=1):
+            payload_path = request_dir / f"{run_id}-round-{round_index:02d}-worker-{worker_index:02d}.json"
+            result_path = result_dir / f"{run_id}-round-{round_index:02d}-worker-{worker_index:02d}.json"
+            payload = {
+                "run_id": f"{run_id}-round-{round_index:02d}-worker-{worker_index:02d}",
+                "source": "employee_scheduler_stress",
+                "tasks": task_batch,
+                "gates_passed": True,
+                "changed_files": ["retort_engine/pr_review.py", "retort_engine/task_prioritization.py", "retort_engine/employee_scheduler_stress.py"],
+                "review_report_path": str(root / "docs" / "retort_task_prioritization_report.json"),
+                "diff_text": _stress_diff(round_index, worker_index),
+                "queue_path": str(queue_path),
+                "history_store": str(history_path),
+                "output_path": str(result_path),
+            }
+            payload_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            payloads.append({"worker_index": worker_index, "task_count": len(task_batch), "payload_path": payload_path, "result_path": result_path})
+        processes = _run_workers(root, [Path(item["payload_path"]) for item in payloads])
+        process_invocation_count += len(processes)
+        payload_results = []
+        for payload_info, process in zip(payloads, processes, strict=True):
+            result_path = Path(payload_info["result_path"])
+            worker_run = {
+                "round_index": round_index,
+                "worker_index": payload_info["worker_index"],
+                "task_count": payload_info["task_count"],
+                "payload_path": str(payload_info["payload_path"]),
+                "result_path": str(result_path),
+                "process": process,
+                "result_exists": result_path.is_file(),
+            }
+            worker_runs.append(worker_run)
+            payload_results.append(worker_run)
+        failed_process_count += sum(1 for item in payload_results if item["process"]["returncode"] != 0 or not item["result_exists"])
         rounds.append(
             {
                 "round_index": round_index,
                 "task_count": len(tasks),
-                "payload_path": str(payload_path),
-                "result_path": str(result_path),
-                "process": process,
-                "result_exists": result_path.is_file(),
+                "worker_count": len(payload_results),
+                "workers": payload_results,
+                "round_completed": all(item["result_exists"] for item in payload_results),
             }
         )
     result_task_ids = _result_task_ids(result_dir, run_id)
@@ -80,6 +97,7 @@ def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10,
         "run_id": run_id,
         "round_count": len(rounds),
         "tasks_per_round": max(1, tasks_per_round),
+        "workers_per_round": worker_count,
         "queued_task_count": len(expected_task_ids),
         "completed_result_count": len(set(result_task_ids) & set(expected_task_ids)),
         "history_task_result_count": len(set(history_task_ids) & set(expected_task_ids)),
@@ -88,11 +106,20 @@ def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10,
         "missing_result_count": len(missing_result_ids),
         "missing_history_count": len(missing_history_ids),
         "unique_task_id_count": len(set(expected_task_ids)),
-        "all_rounds_completed": all(item["result_exists"] for item in rounds),
-        "independent_process_verified": process_invocation_count == len(rounds) and all("-c" in (item["process"].get("command") or []) for item in rounds),
+        "all_rounds_completed": all(item["round_completed"] for item in rounds),
+        "independent_process_verified": process_invocation_count == len(worker_runs) and all("-c" in (item["process"].get("command") or []) for item in worker_runs),
+        "concurrent_workers_verified": worker_count > 1 and process_invocation_count == len(worker_runs) and all(item["result_exists"] for item in worker_runs),
         "queue_result_history_consistent": not missing_result_ids and not missing_history_ids,
     }
-    status = "ready" if summary["round_count"] >= 10 and summary["queued_task_count"] >= 30 and summary["failed_process_count"] == 0 and summary["queue_result_history_consistent"] else "needs_more_evidence"
+    status = (
+        "ready"
+        if summary["round_count"] >= 10
+        and summary["queued_task_count"] >= 30
+        and summary["failed_process_count"] == 0
+        and summary["queue_result_history_consistent"]
+        and (worker_count == 1 or summary["concurrent_workers_verified"])
+        else "needs_more_evidence"
+    )
     return {
         "status": status,
         "project": str(root),
@@ -105,6 +132,7 @@ def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10,
             "history_store": str(history_path),
             "employee_results_dir": str(result_dir),
             "worker": "retort_engine.employee_runtime_worker",
+            "launch_mode": "concurrent_popen" if worker_count > 1 else "single_process_per_round",
         },
     }
 
@@ -145,12 +173,38 @@ def _append_queue_record(queue_path: Path, run_id: str, task: dict[str, Any]) ->
         handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
 
 
+def _split_tasks(tasks: list[dict[str, Any]], worker_count: int) -> list[list[dict[str, Any]]]:
+    batches = [[] for _ in range(max(1, min(worker_count, len(tasks) or 1)))]
+    for index, task in enumerate(tasks):
+        batches[index % len(batches)].append(task)
+    return [batch for batch in batches if batch]
+
+
+def _run_workers(root: Path, payload_paths: list[Path]) -> list[dict[str, Any]]:
+    if len(payload_paths) <= 1:
+        return [_run_worker(root, payload_paths[0])] if payload_paths else []
+    package_root, env = _worker_runtime_env()
+    processes = []
+    for payload_path in payload_paths:
+        command = _worker_command(package_root, payload_path)
+        processes.append({"payload_path": payload_path, "command": command, "process": subprocess.Popen(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)})
+    results = []
+    for item in processes:
+        process = item["process"]
+        try:
+            stdout, stderr = process.communicate(timeout=120)
+            returncode = int(process.returncode)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            returncode = 124
+        results.append({"command": item["command"], "returncode": returncode, "stdout": (stdout or "")[-2000:], "stderr": (stderr or "")[-2000:]})
+    return results
+
+
 def _run_worker(root: Path, payload_path: Path) -> dict[str, Any]:
-    package_root = str(Path(__file__).resolve().parents[1])
-    worker_code = f"import sys; sys.path.insert(0, {package_root!r}); from retort_engine.employee_runtime_worker import main; raise SystemExit(main())"
-    command = [sys.executable, "-c", worker_code, "--payload-file", str(payload_path)]
-    env = dict(os.environ)
-    env["PYTHONPATH"] = package_root + os.pathsep + env.get("PYTHONPATH", "")
+    package_root, env = _worker_runtime_env()
+    command = _worker_command(package_root, payload_path)
     try:
         completed = subprocess.run(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120, check=False)
     except subprocess.TimeoutExpired as exc:
@@ -158,16 +212,28 @@ def _run_worker(root: Path, payload_path: Path) -> dict[str, Any]:
     return {"command": command, "returncode": completed.returncode, "stdout": completed.stdout[-2000:], "stderr": completed.stderr[-2000:]}
 
 
-def _stress_diff(round_index: int) -> str:
-    path = f"stress/round_{round_index:02d}.py"
+def _worker_runtime_env() -> tuple[str, dict[str, str]]:
+    package_root = str(Path(__file__).resolve().parents[1])
+    env = dict(os.environ)
+    env["PYTHONPATH"] = package_root + os.pathsep + env.get("PYTHONPATH", "")
+    return package_root, env
+
+
+def _worker_command(package_root: str, payload_path: Path) -> list[str]:
+    worker_code = f"import sys; sys.path.insert(0, {package_root!r}); from retort_engine.employee_runtime_worker import main; raise SystemExit(main())"
+    return [sys.executable, "-c", worker_code, "--payload-file", str(payload_path)]
+
+
+def _stress_diff(round_index: int, worker_index: int = 1) -> str:
+    path = f"stress/round_{round_index:02d}_worker_{worker_index:02d}.py"
     return (
         f"diff --git a/{path} b/{path}\n"
         f"--- a/{path}\n"
         f"+++ b/{path}\n"
         "@@ -0,0 +1,3 @@\n"
-        f"+# TODO: verify employee stress round {round_index}\n"
-        f"+ROUND_TOKEN_{round_index} = \"redacted-in-test\"\n"
-        f"+print(\"stress round {round_index}\")\n"
+        f"+# TODO: verify employee stress round {round_index} worker {worker_index}\n"
+        f"+ROUND_TOKEN_{round_index}_{worker_index} = \"redacted-in-test\"\n"
+        f"+print(\"stress round {round_index} worker {worker_index}\")\n"
     )
 
 

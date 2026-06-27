@@ -39,6 +39,58 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     )
     docs = tmp_path / "docs"
     docs.mkdir()
+    (docs / "retort_pr_live_publish_probe.json").write_text(
+        json.dumps(
+            {
+                "status": "permission_denied_degraded",
+                "pr_url": "https://github.com/owner/repo/pull/7",
+                "summary": {
+                    "target_repo": "owner/repo",
+                    "created_comment_count": 0,
+                    "rollback_verified": True,
+                    "permission_admin": False,
+                    "permission_maintain": False,
+                    "permission_push": False,
+                    "live_github_write": False,
+                    "permission_denied": True,
+                    "degraded_without_write": True,
+                },
+                "evidence": {
+                    "real_network": False,
+                    "transport": "injected_transport",
+                    "required_permission": "issues:write or pull_requests:write",
+                    "degradation": "no_comment_created_no_rollback_needed",
+                },
+                "created_receipts": [],
+                "rollback_receipts": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_pr_low_permission_probe.json").write_text(
+        json.dumps(
+            {
+                "status": "permission_denied_degraded",
+                "pr_url": "https://github.com/python/cpython/pull/1",
+                "summary": {
+                    "created_comment_count": 0,
+                    "rollback_verified": True,
+                    "live_github_write": False,
+                    "permission_denied": True,
+                    "degraded_without_write": True,
+                },
+                "evidence": {
+                    "real_network": False,
+                    "transport": "injected_transport",
+                    "required_permission": "issues:write or pull_requests:write",
+                    "degradation": "no_comment_created_no_rollback_needed",
+                },
+                "created_receipts": [],
+                "rollback_receipts": [],
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_external_review_report.json").write_text(
         json.dumps(
             {
@@ -84,6 +136,19 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_result_count=1; execution_mode=employee_runtime_worker" in evidence
     assert "employee_runtime_worker_review=reviewed; comments=2; artifact=review.json" in evidence
     assert "merge_cross_check=True" in evidence
+    assert "pr_live_publish_probe_status=permission_denied_degraded" in evidence
+    assert "pr_live_publish_probe_permission_denied=True" in evidence
+    assert "pr_live_publish_probe_degraded_without_write=True" in evidence
+    assert "pr_live_publish_probe_real_network=False" in evidence
+    assert "pr_live_publish_probe_transport=injected_transport" in evidence
+    assert "pr_live_publish_probe_required_permission=issues:write or pull_requests:write" in evidence
+    assert "pr_live_publish_probe_degradation=no_comment_created_no_rollback_needed" in evidence
+    assert "pr_low_permission_probe_status=permission_denied_degraded" in evidence
+    assert "pr_low_permission_probe_live_write=False" in evidence
+    assert "pr_low_permission_probe_permission_denied=True" in evidence
+    assert "pr_low_permission_probe_degraded_without_write=True" in evidence
+    assert "pr_low_permission_probe_real_network=False" in evidence
+    assert "pr_low_permission_probe_transport=injected_transport" in evidence
 
 
 def test_llm_absorption_evidence_read_json_fails_closed(tmp_path: Path) -> None:

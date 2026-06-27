@@ -110,6 +110,9 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_benchmark_aggregate_score={pr_review.get('benchmark_aggregate_score')}",
         f"pr_review_benchmark_post_absorption_delta={pr_review.get('benchmark_post_absorption_delta')}",
         f"pr_review_benchmark_publishable_comment_count={pr_review.get('benchmark_publishable_comment_count')}",
+        f"pr_review_benchmark_cross_project_case_count={pr_review.get('benchmark_cross_project_case_count')}",
+        f"pr_review_benchmark_cross_project_family_count={pr_review.get('benchmark_cross_project_family_count')}",
+        f"pr_review_benchmark_cross_project_pass_rate={pr_review.get('benchmark_cross_project_pass_rate')}",
         f"review_pipeline_diff_replay_status={pr_review.get('diff_pipeline_status')}",
         f"review_pipeline_diff_replay_depth_score={pr_review.get('diff_pipeline_depth_score')}",
         f"review_pipeline_diff_replay_context_groups={pr_review.get('diff_pipeline_context_group_count')}",
@@ -127,6 +130,8 @@ def _report_evidence(project: Path) -> list[str]:
     sandbox_summary = sandbox_report.get("summary") if isinstance(sandbox_report.get("summary"), dict) else {}
     live_probe = read_json(project / "docs" / "retort_pr_live_publish_probe.json")
     live_summary = live_probe.get("summary") if isinstance(live_probe.get("summary"), dict) else {}
+    low_permission_probe = read_json(project / "docs" / "retort_pr_low_permission_probe.json")
+    low_permission_summary = low_permission_probe.get("summary") if isinstance(low_permission_probe.get("summary"), dict) else {}
     replay_report = read_json(project / "docs" / "retort_cross_project_replay.json")
     replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
     replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
@@ -159,6 +164,23 @@ def _report_evidence(project: Path) -> list[str]:
         f"pr_live_publish_probe_permission_maintain={live_summary.get('permission_maintain', '')}",
         f"pr_live_publish_probe_permission_push={live_summary.get('permission_push', '')}",
         f"pr_live_publish_probe_live_write={live_summary.get('live_github_write', '')}",
+        f"pr_live_publish_probe_permission_denied={live_summary.get('permission_denied', '')}",
+        f"pr_live_publish_probe_degraded_without_write={live_summary.get('degraded_without_write', '')}",
+        f"pr_live_publish_probe_real_network={(live_probe.get('evidence') or {}).get('real_network', '') if isinstance(live_probe.get('evidence'), dict) else ''}",
+        f"pr_live_publish_probe_transport={(live_probe.get('evidence') or {}).get('transport', '') if isinstance(live_probe.get('evidence'), dict) else ''}",
+        f"pr_live_publish_probe_required_permission={(live_probe.get('evidence') or {}).get('required_permission', '') if isinstance(live_probe.get('evidence'), dict) else ''}",
+        f"pr_live_publish_probe_degradation={(live_probe.get('evidence') or {}).get('degradation', '') if isinstance(live_probe.get('evidence'), dict) else ''}",
+        f"pr_low_permission_probe_status={low_permission_probe.get('status', '')}",
+        f"pr_low_permission_probe_pr_url={low_permission_probe.get('pr_url', '')}",
+        f"pr_low_permission_probe_created_count={low_permission_summary.get('created_comment_count', '')}",
+        f"pr_low_permission_probe_rollback_verified={low_permission_summary.get('rollback_verified', '')}",
+        f"pr_low_permission_probe_live_write={low_permission_summary.get('live_github_write', '')}",
+        f"pr_low_permission_probe_permission_denied={low_permission_summary.get('permission_denied', '')}",
+        f"pr_low_permission_probe_degraded_without_write={low_permission_summary.get('degraded_without_write', '')}",
+        f"pr_low_permission_probe_real_network={(low_permission_probe.get('evidence') or {}).get('real_network', '') if isinstance(low_permission_probe.get('evidence'), dict) else ''}",
+        f"pr_low_permission_probe_transport={(low_permission_probe.get('evidence') or {}).get('transport', '') if isinstance(low_permission_probe.get('evidence'), dict) else ''}",
+        f"pr_low_permission_probe_required_permission={(low_permission_probe.get('evidence') or {}).get('required_permission', '') if isinstance(low_permission_probe.get('evidence'), dict) else ''}",
+        f"pr_low_permission_probe_degradation={(low_permission_probe.get('evidence') or {}).get('degradation', '') if isinstance(low_permission_probe.get('evidence'), dict) else ''}",
         f"cross_project_replay_status={replay_report.get('status', '')}",
         f"cross_project_replay_external_project_count={replay_summary.get('external_project_count', '')}",
         f"cross_project_replay_distinct_signal_count={replay_summary.get('distinct_signal_count', '')}",
@@ -207,8 +229,12 @@ def _report_evidence(project: Path) -> list[str]:
         f"review_quality_benchmark_baseline_score={benchmark_summary.get('baseline_aggregate_score', '')}",
         f"review_quality_benchmark_post_absorption_delta={benchmark_summary.get('post_absorption_score_delta', '')}",
         f"review_quality_benchmark_publishable_comment_count={benchmark_summary.get('publishable_comment_count', '')}",
+        f"review_quality_benchmark_cross_project_case_count={benchmark_summary.get('cross_project_case_count', '')}",
+        f"review_quality_benchmark_cross_project_family_count={benchmark_summary.get('cross_project_family_count', '')}",
+        f"review_quality_benchmark_cross_project_pass_rate={benchmark_summary.get('cross_project_pass_rate', '')}",
         f"employee_scheduler_stress_status={stress_report.get('status', '')}",
         f"employee_scheduler_stress_round_count={stress_summary.get('round_count', '')}",
+        f"employee_scheduler_stress_workers_per_round={stress_summary.get('workers_per_round', '')}",
         f"employee_scheduler_stress_process_invocation_count={stress_summary.get('process_invocation_count', '')}",
         f"employee_scheduler_stress_queued_task_count={stress_summary.get('queued_task_count', '')}",
         f"employee_scheduler_stress_completed_result_count={stress_summary.get('completed_result_count', '')}",
@@ -217,6 +243,7 @@ def _report_evidence(project: Path) -> list[str]:
         f"employee_scheduler_stress_failed_process_count={stress_summary.get('failed_process_count', '')}",
         f"employee_scheduler_stress_consistent={stress_summary.get('queue_result_history_consistent', '')}",
         f"employee_scheduler_stress_independent_process={stress_summary.get('independent_process_verified', '')}",
+        f"employee_scheduler_stress_concurrent_workers_verified={stress_summary.get('concurrent_workers_verified', '')}",
     ]
 
 
