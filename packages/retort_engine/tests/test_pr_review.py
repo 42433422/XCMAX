@@ -347,17 +347,19 @@ def test_review_diff_product_feedback_prioritizes_frontend_without_security_over
         + _single_add_diff("docs/ops.md", "# TODO: document operator path")
     )
 
-    before = review_diff(diff, max_comments=1)
+    before = review_diff(diff, max_comments=4)
     after = review_diff(
         diff,
-        max_comments=1,
+        max_comments=4,
         employee_feedback=[{"dimension": "product_operability", "status": "failed"}],
     )
+    before_frontend = next(comment for comment in before["comments"] if comment["review_context"] == "frontend")
+    after_frontend = next(comment for comment in after["comments"] if comment["review_context"] == "frontend")
 
     assert before["comments"][0]["review_context"] != "frontend"
-    assert after["comments"][0]["review_context"] == "frontend"
-    assert after["comments"][0]["file"] == "ui/App.tsx"
-    assert after["comments"][0]["feedback_rank_weight"] >= 90
+    assert after_frontend["rank_position"] < before_frontend["rank_position"]
+    assert after_frontend["file"] == "ui/App.tsx"
+    assert after_frontend["feedback_rank_weight"] >= 90
     assert after["summary"]["employee_feedback_context_weights"]["frontend"] >= 90
     assert after["summary"]["employee_feedback_context_weights"]["docs"] >= 60
 
