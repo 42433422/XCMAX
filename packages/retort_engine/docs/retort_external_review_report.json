@@ -1,68 +1,63 @@
 {
   "absorbed_signals": [
-    "file_grouping",
     "benchmarking",
     "plugin_surface",
-    "multi_provider",
-    "procedural_surface",
-    "webgl_scene",
-    "elevation_bump_map"
+    "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/sunerpy/codegraph-rust",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/seddonym/import-linter",
   "external_snapshot": {
-    "file_count": 285,
-    "git_revision": "3389bf7ed46c54f1ad24947b53fedb2671c22874",
+    "file_count": 210,
+    "git_revision": "ad48a961231620656267ee895bbbcb525a492d47",
     "suffix_counts": {
-      ".astro": 1,
-      ".db": 1,
-      ".dfm": 1,
-      ".gd": 1,
-      ".godot": 1,
-      ".json": 26,
-      ".kt": 1,
-      ".liquid": 1,
+      ".cfg": 1,
+      ".css": 2,
+      ".html": 1,
+      ".ini": 20,
+      ".js": 2,
       ".lock": 1,
-      ".md": 15,
-      ".properties": 1,
-      ".ps1": 1,
-      ".py": 2,
-      ".razor": 1,
-      ".rs": 186,
-      ".sh": 2,
-      ".sql": 2,
-      ".stdout": 2,
-      ".svelte": 1,
-      ".swift": 1,
-      ".toml": 16,
-      ".tres": 3,
-      ".ts": 2,
-      ".tscn": 1,
-      ".twig": 1,
-      ".txt": 1,
-      ".vue": 1,
-      ".xml": 1,
-      ".yaml": 1,
-      ".yml": 4,
-      "<none>": 6
+      ".md": 19,
+      ".png": 10,
+      ".py": 133,
+      ".svg": 4,
+      ".toml": 5,
+      ".typed": 1,
+      ".yaml": 3,
+      ".yml": 3,
+      "<none>": 5
     }
   },
-  "generated_at": "2026-06-27T19:50:02Z",
+  "generated_at": "2026-06-27T19:59:33Z",
   "license_review": {
-    "detected_license": "",
-    "message": "license-incompatible risk: no LICENSE file detected",
-    "status": "blocked"
+    "detected_license": "BSD 2-Clause License",
+    "message": "Allowed license detected: BSD 2-Clause License",
+    "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/sunerpy/codegraph-rust --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/seddonym/import-linter --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 0,
+      "component_gap_count": 1,
       "minimum_expected_behavior_tests": 5,
-      "prioritized_component_count": 0,
-      "task_dimension_count": 5
+      "prioritized_component_count": 1,
+      "task_dimension_count": 4
     },
-    "component_gaps": [],
+    "component_gaps": [
+      {
+        "component": "workflow_ci",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 4571,
+        "own_files": 12,
+        "representative_external_files": [
+          ".pre-commit-config.yaml",
+          "pyproject.toml",
+          "README.md",
+          "noxfile.py",
+          ".readthedocs.yaml"
+        ]
+      }
+    ],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -70,11 +65,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "README.md",
-            "AGENTS.md",
-            "docs/architecture.md",
-            "docs/cli.md",
-            "docs/embedded-extraction.md"
+            "tests/unit/contracts/test_protected.py",
+            "docs/ui.md",
+            "docs/contract_types/forbidden.md",
+            "docs/contract_types/protected.md",
+            "src/importlinter/cli.py"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -83,28 +78,29 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "README.md",
-            "AGENTS.md",
-            "docs/mcp.md",
-            "docs/cli.md",
-            "docs/languages.md"
+            "mkdocs.yml",
+            "pyproject.toml",
+            ".readthedocs.yaml",
+            "docs/get_started/run.md",
+            "src/importlinter/ui/server.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
       ],
       "employee_tasks": [
         {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
           "dimension": "comparative_analysis_depth",
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "review JSON with stages and comments"
           ],
           "owner_hint": "fhd-core-maintainer",
           "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
+          "task_id": "retort-depth-review-pipeline",
+          "title": "Deepen review_pipeline"
         },
         {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
@@ -150,34 +146,36 @@
       "focus_mode": "similar_function_depth_only",
       "focused_components": [
         {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
+          "absorption_goal": "turn external review stages into Retort discovery, localization, reflection, and task dispatch",
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+          "component": "review_pipeline",
           "depth_gap": 0,
           "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+            "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
             "dimension": "comparative_analysis_depth",
             "evidence_required": [
               "source diff",
               "behavior test",
-              "gate output"
+              "gate output",
+              "review JSON with stages and comments"
             ],
             "owner_hint": "fhd-core-maintainer",
             "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
+            "task_id": "retort-depth-review-pipeline",
+            "title": "Deepen review_pipeline"
           },
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "review JSON with stages and comments"
           ],
           "external_marker_hits": 1,
-          "own_marker_hits": 72,
+          "own_marker_hits": 2219,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "docs/cli.md"
+            "docs/contributing.md"
           ]
         },
         {
@@ -210,11 +208,8 @@
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "Cargo.toml",
-            "audit.toml",
-            "AGENTS.md",
-            "docs/architecture.md",
-            "docs/cli.md"
+            "tests/unit/domain/test_fields.py",
+            "src/importlinter/domain/fields.py"
           ]
         },
         {
@@ -240,23 +235,22 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 34,
+          "external_marker_hits": 11,
           "own_marker_hits": 421,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "Cargo.toml",
+            "pyproject.toml",
             "README.md",
-            "cliff.toml",
-            "AGENTS.md",
-            "crates/codegraph-watch/Cargo.toml"
+            "docs/index.md",
+            ".github/workflows/release.yml"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 0,
+          "depth_gap": 4571,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -275,16 +269,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 245,
-          "own_marker_hits": 3865,
+          "external_marker_hits": 8356,
+          "own_marker_hits": 3785,
           "priority": "P0",
-          "similarity_score": 100,
+          "similarity_score": 91,
           "source_files": [
-            "Cargo.toml",
-            "rustfmt.toml",
+            ".pre-commit-config.yaml",
+            "pyproject.toml",
             "README.md",
-            "cliff.toml",
-            "AGENTS.md"
+            "noxfile.py",
+            ".readthedocs.yaml"
           ]
         }
       ],
@@ -304,26 +298,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 27,
+          "external_marker_hits": 66,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "README.md",
-            "AGENTS.md",
-            "docs/architecture.md",
-            "docs/cli.md",
-            "docs/embedded-extraction.md"
+            "tests/unit/contracts/test_protected.py",
+            "docs/ui.md",
+            "docs/contract_types/forbidden.md",
+            "docs/contract_types/protected.md",
+            "src/importlinter/cli.py"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 48,
+          "external_marker_hits": 16,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "README.md",
-            "AGENTS.md",
-            "docs/mcp.md",
-            "docs/cli.md",
-            "docs/languages.md"
+            "mkdocs.yml",
+            "pyproject.toml",
+            ".readthedocs.yaml",
+            "docs/get_started/run.md",
+            "src/importlinter/ui/server.py"
           ]
         }
       ]
@@ -331,83 +325,67 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "Cargo.toml",
-          "audit.toml",
-          "AGENTS.md",
-          "docs/architecture.md",
-          "docs/cli.md",
-          "docs/readme/README.zh-CN.md"
+          "tests/unit/domain/test_fields.py",
+          "src/importlinter/domain/fields.py"
         ],
         "marker_hits": 7
       },
-      "file_grouping": {
-        "files": [
-          "docs/cli.md"
-        ],
-        "marker_hits": 1
-      },
       "plugin_surface": {
         "files": [
-          "README.md",
-          "AGENTS.md",
-          "docs/mcp.md",
-          "docs/cli.md",
-          "docs/languages.md",
-          "docs/godot.md",
-          "docs/grammar-manifest.md",
-          "docs/readme/README.zh-CN.md",
-          "skills/codegraph/SKILL.md"
+          "mkdocs.yml",
+          "pyproject.toml",
+          ".readthedocs.yaml",
+          "docs/get_started/run.md",
+          "src/importlinter/ui/server.py",
+          "src/importlinter/ui/static/viz-standalone.js",
+          "src/importlinter/contracts/independence.py",
+          "src/importlinter/contracts/_common.py",
+          "src/importlinter/contracts/layers.py",
+          "src/importlinter/application/use_cases.py"
         ],
-        "marker_hits": 48
+        "marker_hits": 16
       },
       "provider_surface": {
         "files": [
-          "README.md",
-          "AGENTS.md",
-          "docs/architecture.md",
-          "docs/cli.md",
-          "docs/embedded-extraction.md",
-          "docs/data-model.md",
-          "docs/readme/README.zh-CN.md",
-          "examples/llm_orchestration.py",
-          "skills/codegraph/SKILL.md",
-          ".aws/pipeline.json"
+          "tests/unit/contracts/test_protected.py",
+          "docs/ui.md",
+          "docs/contract_types/forbidden.md",
+          "docs/contract_types/protected.md",
+          "src/importlinter/cli.py"
         ],
-        "marker_hits": 27
+        "marker_hits": 66
+      },
+      "review_pipeline": {
+        "files": [
+          "docs/contributing.md"
+        ],
+        "marker_hits": 1
       },
       "safety_policy": {
         "files": [
-          "Cargo.toml",
+          "pyproject.toml",
           "README.md",
-          "cliff.toml",
-          "AGENTS.md",
-          "crates/codegraph-watch/Cargo.toml",
-          "crates/codegraph-cli/Cargo.toml",
-          "crates/codegraph-mcp/Cargo.toml",
-          "crates/codegraph-store/Cargo.toml",
-          "crates/codegraph-extract/Cargo.toml",
-          "crates/codegraph-resolve/Cargo.toml",
-          "crates/codegraph-core/Cargo.toml",
-          "crates/codegraph-bench/Cargo.toml"
+          "docs/index.md",
+          ".github/workflows/release.yml"
         ],
-        "marker_hits": 34
+        "marker_hits": 11
       },
       "workflow_ci": {
         "files": [
-          "Cargo.toml",
-          "rustfmt.toml",
+          ".pre-commit-config.yaml",
+          "pyproject.toml",
           "README.md",
-          "cliff.toml",
-          "AGENTS.md",
-          "crates/codegraph-watch/Cargo.toml",
-          "crates/codegraph-cli/Cargo.toml",
-          "crates/codegraph-mcp/Cargo.toml",
-          "crates/codegraph-mcp/src/tools_list.json",
-          "crates/codegraph-store/Cargo.toml",
-          "crates/codegraph-extract/Cargo.toml",
-          "crates/codegraph-resolve/Cargo.toml"
+          "noxfile.py",
+          ".readthedocs.yaml",
+          "tests/unit/ui/test_server.py",
+          "tests/unit/contracts/test_forbidden.py",
+          "tests/unit/contracts/test_layers.py",
+          "tests/unit/contracts/test_acyclic_siblings.py",
+          "tests/unit/contracts/test_independence.py",
+          "tests/unit/contracts/test_protected.py",
+          "tests/unit/adapters/test_timing.py"
         ],
-        "marker_hits": 245
+        "marker_hits": 8356
       }
     },
     "own_file_groups": {
@@ -451,14 +429,14 @@
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
           "retort_engine/external_sources.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
-          "tests/test_external_sources.py",
-          "tests/test_review_pipeline.py",
-          "tests/test_real_absorption_helpers.py"
+          "tests/test_external_sources.py"
         ],
-        "marker_hits": 72
+        "marker_hits": 81
       },
       "plugin_surface": {
         "files": [
@@ -475,7 +453,7 @@
           "retort_engine/external_sources.py",
           "retort_engine/devour_session.py"
         ],
-        "marker_hits": 598
+        "marker_hits": 609
       },
       "provider_surface": {
         "files": [
@@ -492,7 +470,7 @@
           "retort_engine/project_assessment.py",
           "retort_engine/core.py"
         ],
-        "marker_hits": 416
+        "marker_hits": 427
       },
       "review_pipeline": {
         "files": [
@@ -509,7 +487,7 @@
           "retort_engine/complex_pr_replay.py",
           "retort_engine/employee_scheduler_stress.py"
         ],
-        "marker_hits": 2270
+        "marker_hits": 2219
       },
       "safety_policy": {
         "files": [
@@ -543,7 +521,7 @@
           "retort_engine/swe_bench_oracle.py",
           "retort_engine/pr_publish.py"
         ],
-        "marker_hits": 3865
+        "marker_hits": 3785
       }
     },
     "pipeline_stages": [
@@ -555,73 +533,71 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": []
+    "prioritized_absorptions": [
+      {
+        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
+        "component": "workflow_ci",
+        "priority": "P0",
+        "source_files": [
+          ".pre-commit-config.yaml",
+          "pyproject.toml",
+          "README.md",
+          "noxfile.py",
+          ".readthedocs.yaml"
+        ]
+      }
+    ]
   },
-  "run_id": "20260627195002-b40d2378d6",
+  "run_id": "20260627195932-112b065375",
   "semantic_review": {
     "external": {
-      "classes": 18,
+      "classes": 217,
       "cli_markers": 0,
-      "functions": 20,
-      "source_files": 66,
-      "test_markers": 2,
-      "workflow_markers": 23
+      "functions": 535,
+      "source_files": 168,
+      "test_markers": 224,
+      "workflow_markers": 8
     },
-    "gaps": [],
+    "gaps": [
+      {
+        "external_advantage": 167,
+        "metric": "classes"
+      },
+      {
+        "external_advantage": 53,
+        "metric": "source_files"
+      }
+    ],
     "own": {
       "classes": 50,
-      "cli_markers": 29,
-      "functions": 975,
-      "source_files": 113,
-      "test_markers": 357,
-      "workflow_markers": 3055
+      "cli_markers": 30,
+      "functions": 1001,
+      "source_files": 115,
+      "test_markers": 369,
+      "workflow_markers": 2983
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "Cargo.toml",
-      "audit.toml",
-      "AGENTS.md",
-      "docs/architecture.md",
-      "docs/readme/README.zh-CN.md"
-    ],
-    "elevation_bump_map": [
-      "cliff.toml",
-      "AGENTS.md",
-      "release-please-config.json",
-      "changelog/CHANGELOG-v0.x.md",
-      "changelog/README.md"
-    ],
-    "file_grouping": [
-      "docs/cli.md"
+      "tests/unit/domain/test_fields.py",
+      "src/importlinter/domain/fields.py"
     ],
     "multi_provider": [
-      "README.md",
-      "AGENTS.md",
-      "docs/architecture.md",
-      "docs/embedded-extraction.md",
-      "docs/data-model.md"
+      "tests/unit/contracts/test_protected.py",
+      "docs/ui.md",
+      "docs/contract_types/forbidden.md",
+      "docs/contract_types/protected.md",
+      "src/importlinter/cli.py"
     ],
     "plugin_surface": [
-      "Cargo.toml",
-      "README.md",
-      "cliff.toml",
-      "AGENTS.md",
-      "crates/codegraph-cli/Cargo.toml"
-    ],
-    "procedural_surface": [
-      "docs/cli.md",
-      "docs/godot.md"
-    ],
-    "webgl_scene": [
-      "changelog/CHANGELOG-v0.x.md",
-      "docs/cli.md",
-      "docs/languages.md",
-      "docs/godot.md",
-      "reference/golden/mcp/initialize.json"
+      "mkdocs.yml",
+      "pyproject.toml",
+      ".readthedocs.yaml",
+      "tests/unit/ui/test_server.py",
+      "tests/unit/contracts/test_acyclic_siblings.py"
     ]
   },
-  "source": "https://github.com/sunerpy/codegraph-rust",
+  "source": "https://github.com/seddonym/import-linter",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -629,7 +605,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/sunerpy/codegraph-rust."
+      "why": "Compare implementation patterns from https://github.com/seddonym/import-linter."
     },
     {
       "dimension": "product_operability",
@@ -637,7 +613,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/sunerpy/codegraph-rust."
+      "why": "Extract usable UX improvements from https://github.com/seddonym/import-linter."
     },
     {
       "dimension": "operational_readiness",
@@ -645,15 +621,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/sunerpy/codegraph-rust."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+      "why": "Adapt CI and release checks from https://github.com/seddonym/import-linter."
     },
     {
       "dimension": "feedback_loop_closure",
@@ -670,14 +638,6 @@
       "task_id": "retort-absorb-plugin-surface",
       "title": "Expose Retort absorption through plugin friendly commands",
       "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
-    },
-    {
-      "dimension": "product_operability",
-      "owner_hint": "market-frontend-dev",
-      "priority": "P1",
-      "task_id": "retort-absorb-planet-visual",
-      "title": "Absorb better blackhole planet visual system",
-      "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
     }
   ]
 }
