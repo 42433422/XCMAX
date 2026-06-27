@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """真实行为测试：app/mod_sdk/desktop_deliverable.ensure_deliverable_runtime。
 
 覆盖未覆盖行：早退分支、seed 成功/失败、load 跳过/成功/失败、status

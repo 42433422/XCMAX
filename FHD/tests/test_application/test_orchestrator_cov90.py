@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Behavior tests for app.application.employee_runtime.orchestrator.
 
 Targets previously-uncovered lines in EmployeeOrchestrator + helpers:

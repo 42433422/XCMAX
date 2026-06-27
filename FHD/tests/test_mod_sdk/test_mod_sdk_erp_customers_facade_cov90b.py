@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Behaviour/branch-coverage tests for app.mod_sdk.erp_customers_facade.
 
 Targets the previously-uncovered helper branches and the CRUD entry points

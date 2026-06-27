@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """contract_lifecycle 纯函数 + webhook/到期通知行为契约测试。
 
 覆盖此前未测的：transition_contract / start_esign_flow / handle_esign_webhook /
