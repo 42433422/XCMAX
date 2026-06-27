@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>反问 Retort 黑洞</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="rail">
+        <h1>反问 Retort 黑洞</h1>
+        <label>主项目文件夹<input id="ownProjectFolder" value="/Users/a4243342/Desktop/XCMAX/packages/retort_engine" /></label>
+        <div class="mode"><button id="sourceGithub" class="active">GitHub</button><button id="sourceFolder">文件夹</button></div>
+        <label id="githubRow">吸收 GitHub 项目<input id="githubUrl" placeholder="https://github.com/owner/repo" /></label>
+        <label id="folderRow" class="hidden">吸收本地项目文件夹<input id="externalProjectFolder" placeholder="/path/to/project" /></label>
+        <div class="checks"><label><input id="branchWorkflow" type="checkbox" checked /> 分支</label><label><input id="mergeAfter" type="checkbox" checked /> 合并</label><label><input id="runGates" type="checkbox" checked /> 证据门禁</label><label><input id="useLlm" type="checkbox" checked disabled /> 排比 LLM 深评</label></div>
+        <button id="assessBtn">深评</button>
+        <button id="absorbBtn" class="primary">吸收</button>
+        <button id="evolveBtn">反问进化</button>
+        <button id="llmReviewBtn">排比评审</button>
+        <button id="llmParallelBtn">并发排比</button>
+        <button id="llmStatusBtn">同步评审</button>
+      </section>
+      <section class="stage"><canvas id="blackholeCanvas" data-visual="blackhole-accretion-field"></canvas><div class="readout"><span id="statusText">待命</span><strong id="coreScore">--</strong><small>核心分</small><div id="deepProgress" class="deep-progress idle" aria-live="polite"><div class="progress-head"><b id="progressTitle">等待深评</b><strong id="progressPercent">0%</strong></div><div class="progress-track"><i id="progressFill"></i></div><div id="progressSteps" class="progress-steps"><span data-step="evidence">证据</span><span data-step="dispatch">派发</span><span data-step="reasoning">推理</span><span data-step="scoring">评分</span><span data-step="record">记录</span></div><div class="progress-meta"><span id="progressElapsed">耗时 0s</span><span id="progressEta">点击深评后开始</span></div></div></div><div id="eventList" class="timeline"></div></section>
+      <section class="rail"><article><h2>主项目评分</h2><div id="scoreGrid"></div></article><article><h2>能力审计</h2><div id="capabilityState" class="evidence">未运行</div></article><article><h2>外部项目评分</h2><div id="externalScoreGrid"><div class="empty">未运行</div></div></article><article><h2>真实吸收</h2><div id="executionState" class="evidence">未运行</div></article><article><h2>吸收证据</h2><div id="evidenceState" class="evidence">未运行</div></article><article><h2>排比 LLM</h2><div id="llmState" class="evidence">未请求</div></article><article><h2>分支</h2><div id="branchState" class="evidence">未运行</div></article><article><h2>吸收任务</h2><div id="taskList"></div></article></section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
