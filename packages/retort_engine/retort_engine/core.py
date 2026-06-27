@@ -234,16 +234,20 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("merge_after") and branch_state.get("enabled") and branch_state.get("created"):
         try:
             execution["commit"] = _commit_absorption_execution(own, str(external), execution)
-            result_branch = merge_absorption_branch(own, BranchWorkflowState.from_dict(branch_state)).to_dict()
-            root = _git_root(own)
-            if root is not None:
-                merge_commit = _git(root, "rev-parse", "--short", "HEAD").strip()
-                result_branch["merge_commit"] = merge_commit
-                execution["merge_commit"] = merge_commit
-                execution["rollback_rehearsal"] = _rollback_rehearsal(root, merge_commit)
-            branch_state = result_branch
-            if execution.get("status") in {"applied", "noop"}:
+            if execution.get("status") in {"applied", "noop"} and not execution.get("gates_passed"):
+                branch_state = _block_merge_after_failed_gates(own, branch_state)
                 _record_execution_proof(own, execution, branch_state)
+            else:
+                result_branch = merge_absorption_branch(own, BranchWorkflowState.from_dict(branch_state)).to_dict()
+                root = _git_root(own)
+                if root is not None:
+                    merge_commit = _git(root, "rev-parse", "--short", "HEAD").strip()
+                    result_branch["merge_commit"] = merge_commit
+                    execution["merge_commit"] = merge_commit
+                    execution["rollback_rehearsal"] = _rollback_rehearsal(root, merge_commit)
+                branch_state = result_branch
+                if execution.get("status") in {"applied", "noop"}:
+                    _record_execution_proof(own, execution, branch_state)
         except RuntimeError as exc:
             branch_state = {**branch_state, "status": "merge_blocked", "error": str(exc)}
     own_assessment = assess_project(str(own), run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
@@ -579,6 +583,24 @@ def _commit_absorption_execution(own: Path, source: str, execution: dict[str, An
     _git(root, "commit", "-m", f"Retort absorb {source[:80]}")
     commit = _git(root, "rev-parse", "--short", "HEAD").strip()
     return {"status": "committed", "commit": commit, "files": rels}
+
+
+def _block_merge_after_failed_gates(own: Path, branch_state: dict[str, Any]) -> dict[str, Any]:
+    root = _git_root(own)
+    updated = {
+        **branch_state,
+        "merged": False,
+        "status": "merge_blocked_by_gates",
+        "error": "Absorption gates failed; refusing to merge absorption branch into the main project.",
+    }
+    base = str(branch_state.get("base_branch") or "")
+    if root is None or not base:
+        return updated
+    try:
+        _git(root, "checkout", base)
+        return {**updated, "returned_to_base_branch": True}
+    except RuntimeError as exc:
+        return {**updated, "returned_to_base_branch": False, "return_error": str(exc)}
 
 
 def _rollback_rehearsal(root: Path, merge_commit: str) -> dict[str, Any]:
