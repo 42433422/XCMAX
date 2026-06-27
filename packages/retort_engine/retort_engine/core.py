@@ -18,6 +18,7 @@ from retort_engine.contracts import contract_names
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.pr_dry_run import review_pr_url
+from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
@@ -96,6 +97,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "pr_dry_run": "review-pr" in text and "review_pr_url" in text and "/api/review-pr" in text,
         "pr_publish_dry_run": "publish-pr-dry-run" in text and "build_publish_dry_run" in text and "/api/publish-pr-dry-run" in text,
         "pr_publish_sandbox": "publish-pr-sandbox" in text and "run_publish_sandbox" in text and "/api/publish-pr-sandbox" in text,
+        "pr_live_publish_probe": "publish-pr-live-probe" in text and "run_live_pr_comment_probe" in text and "/api/publish-pr-live-probe" in text,
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
         "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
         "review_quality_benchmark": "quality-benchmark-report" in text and "build_review_quality_benchmark" in text,
@@ -362,6 +364,9 @@ class RetortService:
 
     def publish_pr_sandbox(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_publish_sandbox(str(payload.get("dry_run_file") or payload.get("publish_dry_run") or ""))
+
+    def publish_pr_live_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_live_pr_comment_probe(str(payload.get("pr_url") or payload.get("url") or ""), body=str(payload.get("body") or ""))
 
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_project_replay(str(payload.get("project") or payload.get("project_path") or "."))
@@ -791,6 +796,17 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"pr_publish_sandbox_status={sandbox_report.get('status', '')}")
     evidence.append(f"pr_publish_sandbox_created_count={sandbox_summary.get('created_comment_count', '')}")
     evidence.append(f"pr_publish_sandbox_rollback_verified={sandbox_summary.get('rollback_verified', '')}")
+    live_probe = _read_json(project / "docs" / "retort_pr_live_publish_probe.json")
+    live_summary = live_probe.get("summary") if isinstance(live_probe.get("summary"), dict) else {}
+    evidence.append(f"pr_live_publish_probe_status={live_probe.get('status', '')}")
+    evidence.append(f"pr_live_publish_probe_pr_url={live_probe.get('pr_url', '')}")
+    evidence.append(f"pr_live_publish_probe_target_repo={live_summary.get('target_repo', '')}")
+    evidence.append(f"pr_live_publish_probe_created_count={live_summary.get('created_comment_count', '')}")
+    evidence.append(f"pr_live_publish_probe_rollback_verified={live_summary.get('rollback_verified', '')}")
+    evidence.append(f"pr_live_publish_probe_permission_admin={live_summary.get('permission_admin', '')}")
+    evidence.append(f"pr_live_publish_probe_permission_maintain={live_summary.get('permission_maintain', '')}")
+    evidence.append(f"pr_live_publish_probe_permission_push={live_summary.get('permission_push', '')}")
+    evidence.append(f"pr_live_publish_probe_live_write={live_summary.get('live_github_write', '')}")
     replay_report = _read_json(project / "docs" / "retort_cross_project_replay.json")
     replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
     replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
@@ -964,6 +980,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     source = root / "retort_engine" / "pr_review.py"
     dry_source = root / "retort_engine" / "pr_dry_run.py"
     publish_source = root / "retort_engine" / "pr_publish.py"
+    live_probe_source = root / "retort_engine" / "pr_live_probe.py"
     replay_source = root / "retort_engine" / "comparative_replay.py"
     task_source = root / "retort_engine" / "task_prioritization.py"
     benchmark_source = root / "retort_engine" / "review_quality_benchmark.py"
@@ -971,6 +988,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
+    live_probe_test = root / "tests" / "test_pr_live_probe.py"
     replay_test = root / "tests" / "test_comparative_replay.py"
     task_test = root / "tests" / "test_task_prioritization.py"
     benchmark_test = root / "tests" / "test_review_quality_benchmark.py"
@@ -1027,6 +1045,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/pr_review.py", source.is_file()),
                 ("retort_engine/pr_dry_run.py", dry_source.is_file()),
                 ("retort_engine/pr_publish.py", publish_source.is_file()),
+                ("retort_engine/pr_live_probe.py", live_probe_source.is_file()),
                 ("retort_engine/comparative_replay.py", replay_source.is_file()),
                 ("retort_engine/task_prioritization.py", task_source.is_file()),
                 ("retort_engine/review_quality_benchmark.py", benchmark_source.is_file()),
@@ -1040,6 +1059,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_pr_review.py", test.is_file()),
                 ("tests/test_pr_dry_run.py", dry_test.is_file()),
                 ("tests/test_pr_publish.py", publish_test.is_file()),
+                ("tests/test_pr_live_probe.py", live_probe_test.is_file()),
                 ("tests/test_comparative_replay.py", replay_test.is_file()),
                 ("tests/test_task_prioritization.py", task_test.is_file()),
                 ("tests/test_review_quality_benchmark.py", benchmark_test.is_file()),
