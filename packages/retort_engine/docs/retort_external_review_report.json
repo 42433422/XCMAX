@@ -2,110 +2,284 @@
   "absorbed_signals": [
     "review_pipeline",
     "file_grouping",
+    "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/hevinbryant/ai-pr-reviewer",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/The-PR-Agent/pr-agent",
   "external_snapshot": {
-    "file_count": 9,
-    "git_revision": "e9ab653a156c3792534df9e2f8d49d4bb88a4407",
+    "file_count": 284,
+    "git_revision": "bd09b6cf89c6d6f3d16b159fa7603fa0e7768cf2",
     "suffix_counts": {
-      ".md": 1,
-      ".py": 5,
-      ".txt": 1,
-      ".yml": 1,
-      "<none>": 1
+      ".css": 1,
+      ".github_action": 1,
+      ".github_action_dockerhub": 1,
+      ".html": 3,
+      ".ico": 1,
+      ".in": 1,
+      ".json": 3,
+      ".lambda": 1,
+      ".md": 47,
+      ".png": 2,
+      ".py": 168,
+      ".sh": 1,
+      ".svg": 2,
+      ".toml": 23,
+      ".txt": 2,
+      ".yaml": 9,
+      ".yml": 13,
+      "<none>": 5
     }
   },
-  "generated_at": "2026-06-27T13:41:00Z",
+  "generated_at": "2026-06-27T14:41:44Z",
   "license_review": {
-    "detected_license": "MIT License",
-    "message": "Allowed license detected: MIT License",
+    "detected_license": "Apache License",
+    "message": "Allowed license detected: Apache License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/hevinbryant/ai-pr-reviewer --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/The-PR-Agent/pr-agent --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 0,
-      "minimum_expected_behavior_tests": 4,
-      "prioritized_component_count": 0,
-      "task_dimension_count": 4
+      "component_gap_count": 6,
+      "minimum_expected_behavior_tests": 11,
+      "prioritized_component_count": 6,
+      "task_dimension_count": 5
     },
-    "component_gaps": [],
+    "component_gaps": [
+      {
+        "component": "provider_surface",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 4206,
+        "own_files": 12,
+        "representative_external_files": [
+          "CHANGELOG.md",
+          "README.md",
+          "RELEASE_NOTES.md",
+          "AGENTS.md",
+          "SECURITY.md"
+        ]
+      },
+      {
+        "component": "workflow_ci",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 1836,
+        "own_files": 12,
+        "representative_external_files": [
+          "CODE_OF_CONDUCT.md",
+          "CHANGELOG.md",
+          "pyproject.toml",
+          "README.md",
+          "setup.py"
+        ]
+      },
+      {
+        "component": "review_pipeline",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 87,
+        "own_files": 12,
+        "representative_external_files": [
+          "CODE_OF_CONDUCT.md",
+          "action.yaml",
+          "pyproject.toml",
+          "README.md",
+          "CONTRIBUTING.md"
+        ]
+      },
+      {
+        "component": "safety_policy",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 38,
+        "own_files": 12,
+        "representative_external_files": [
+          "CODE_OF_CONDUCT.md",
+          "pyproject.toml",
+          "README.md",
+          "AGENTS.md",
+          "SECURITY.md"
+        ]
+      },
+      {
+        "component": "diff_hunk_review",
+        "external_files": 12,
+        "file_gap": 7,
+        "marker_gap": 26,
+        "own_files": 5,
+        "representative_external_files": [
+          "CHANGELOG.md",
+          "pr_agent/settings/pr_custom_labels.toml",
+          "pr_agent/settings/pr_information_from_user_prompts.toml",
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/settings/pr_line_questions_prompts.toml"
+        ]
+      },
+      {
+        "component": "plugin_surface",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 2,
+        "own_files": 12,
+        "representative_external_files": [
+          "README.md",
+          "RELEASE_NOTES.md",
+          "AGENTS.md",
+          "SECURITY.md",
+          "docker/mosaico/README.md"
+        ]
+      }
+    ],
     "external_file_groups": {
+      "benchmark_eval": {
+        "files": [
+          "CHANGELOG.md",
+          "pr_agent/settings/pr_evaluate_prompt_response.toml",
+          "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+          "pr_agent/tools/pr_help_message.py",
+          "pr_agent/algo/token_handler.py",
+          "pr_agent/servers/bitbucket_server_webhook.py",
+          "tests/unittest/test_pr_update_changelog.py",
+          "tests/unittest/test_litellm_imds.py",
+          "tests/unittest/test_fetching_sub_issues.py",
+          "docs/mkdocs.yml",
+          "docs/docs/tools/similar_issues.md",
+          "docs/docs/faq/index.md"
+        ],
+        "marker_hits": 35
+      },
+      "diff_hunk_review": {
+        "files": [
+          "CHANGELOG.md",
+          "pr_agent/settings/pr_custom_labels.toml",
+          "pr_agent/settings/pr_information_from_user_prompts.toml",
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/settings/pr_line_questions_prompts.toml",
+          "pr_agent/settings/pr_description_prompts.toml",
+          "pr_agent/settings/pr_questions_prompts.toml",
+          "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+          "pr_agent/mosaico/diff_provider.py",
+          "pr_agent/git_providers/codecommit_provider.py",
+          "pr_agent/git_providers/github_provider.py",
+          "pr_agent/git_providers/gitea_provider.py"
+        ],
+        "marker_hits": 44
+      },
       "file_grouping": {
         "files": [
-          "README.md",
-          "action.yml",
-          "src/reviewer.py",
-          "src/main.py",
-          "src/github_client.py"
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/git_providers/gitea_provider.py",
+          "pr_agent/git_providers/local_git_provider.py",
+          "pr_agent/git_providers/gerrit_provider.py"
         ],
-        "marker_hits": 6
+        "marker_hits": 5
       },
       "plugin_surface": {
         "files": [
           "README.md",
-          "src/main.py"
+          "RELEASE_NOTES.md",
+          "AGENTS.md",
+          "SECURITY.md",
+          "docker/mosaico/README.md",
+          "pr_agent/config_loader.py",
+          "pr_agent/settings/configuration.toml",
+          "pr_agent/settings/language_extensions.toml",
+          "pr_agent/mosaico/dispatch.py",
+          "pr_agent/mosaico/observability.py",
+          "pr_agent/mosaico/card.py",
+          "pr_agent/tools/pr_code_suggestions.py"
         ],
-        "marker_hits": 3
+        "marker_hits": 296
       },
       "provider_surface": {
         "files": [
+          "CHANGELOG.md",
           "README.md",
-          "action.yml",
-          "src/reviewer.py",
-          "src/main.py"
+          "RELEASE_NOTES.md",
+          "AGENTS.md",
+          "SECURITY.md",
+          "docker/mosaico/docker-compose.pr-agent.yml",
+          "docker/mosaico/README.md",
+          "pr_agent/config_loader.py",
+          "pr_agent/cli_pip.py",
+          "pr_agent/secret_providers/aws_secrets_manager_provider.py",
+          "pr_agent/secret_providers/google_cloud_storage_secret_provider.py",
+          "pr_agent/secret_providers/secret_provider.py"
         ],
-        "marker_hits": 108
+        "marker_hits": 4331
       },
       "review_pipeline": {
         "files": [
+          "CODE_OF_CONDUCT.md",
+          "action.yaml",
+          "pyproject.toml",
           "README.md",
-          "action.yml",
-          "src/__init__.py",
-          "src/reviewer.py",
-          "src/main.py",
-          "src/github_client.py"
+          "CONTRIBUTING.md",
+          "RELEASE_NOTES.md",
+          ".pr_agent.toml",
+          "AGENTS.md",
+          "SECURITY.md",
+          "docker/mosaico/pr-agent-solution-agent.json",
+          "docker/mosaico/README.md",
+          "pr_agent/config_loader.py"
         ],
-        "marker_hits": 73
+        "marker_hits": 1282
       },
       "safety_policy": {
         "files": [
+          "CODE_OF_CONDUCT.md",
+          "pyproject.toml",
           "README.md",
-          "src/reviewer.py"
+          "AGENTS.md",
+          "SECURITY.md",
+          "docker/mosaico/pr-agent-solution-agent.json",
+          "pr_agent/config_loader.py",
+          "pr_agent/custom_merge_loader.py",
+          "pr_agent/settings/configuration.toml",
+          "pr_agent/settings/language_extensions.toml",
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml"
         ],
-        "marker_hits": 8
+        "marker_hits": 267
       },
       "workflow_ci": {
         "files": [
+          "CODE_OF_CONDUCT.md",
+          "CHANGELOG.md",
+          "pyproject.toml",
           "README.md",
-          "action.yml",
-          "src/reviewer.py",
-          "src/github_client.py"
+          "setup.py",
+          "CONTRIBUTING.md",
+          "RELEASE_NOTES.md",
+          "AGENTS.md",
+          "pr_compliance_checklist.yaml",
+          "SECURITY.md",
+          "docker/mosaico/docker-compose.pr-agent.yml",
+          "docker/mosaico/pr-agent-solution-agent.json"
         ],
-        "marker_hits": 9
+        "marker_hits": 3081
       }
     },
     "own_file_groups": {
       "benchmark_eval": {
         "files": [
           "retort_engine/absorption.py",
+          "retort_engine/service.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/core.py",
           "retort_engine/prompts.py",
+          "retort_engine/cli.py",
+          "retort_engine/contracts.py",
           "retort_engine/self_evolution.py",
+          "retort_engine/task_dispatch_plan.py",
+          "retort_engine/ui_server.py",
           "retort_engine/absorbed_capabilities.py",
-          "retort_engine/real_absorption.py",
-          "retort_engine/evaluators.py",
-          "retort_engine/frontend/app.js",
-          "tests/test_retort_engine.py",
-          "tests/test_self_evolution.py",
-          "tests/test_evidence_evaluator.py"
+          "retort_engine/review_quality_benchmark.py"
         ],
-        "marker_hits": 168
+        "marker_hits": 243
       },
       "diff_hunk_review": {
         "files": [
@@ -122,17 +296,21 @@
           "README.md",
           "retort_engine/review_pipeline.py",
           "retort_engine/core.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md"
+          "docs/retort_absorption_log.md",
+          "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 36
+        "marker_hits": 43
       },
       "plugin_surface": {
         "files": [
           "retort_engine/review_pipeline.py",
+          "retort_engine/complex_pr_replay.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
           "retort_engine/absorbed_external_patterns.py",
@@ -141,11 +319,10 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "tests/test_absorption.py",
-          "docs/retort_absorption_log.md",
-          "docs/retort_external_review_report.json"
+          "tests/test_complex_pr_replay.py",
+          "tests/test_absorption.py"
         ],
-        "marker_hits": 150
+        "marker_hits": 294
       },
       "provider_surface": {
         "files": [
@@ -153,16 +330,16 @@
           "retort_engine/employee_queue.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/feedback.py",
+          "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
           "retort_engine/runtime_adapter.py",
           "retort_engine/sources.py",
           "retort_engine/self_evolution.py",
-          "retort_engine/semantic_reviewer.py",
-          "retort_engine/absorbed_external_patterns.py"
+          "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 117
+        "marker_hits": 125
       },
       "review_pipeline": {
         "files": [
@@ -172,31 +349,31 @@
           "retort_engine/comparative_replay.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/pr_publish.py",
+          "retort_engine/complex_pr_replay.py",
+          "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py",
-          "retort_engine/core.py",
-          "retort_engine/cli.py",
-          "retort_engine/contracts.py"
+          "retort_engine/core.py"
         ],
-        "marker_hits": 872
+        "marker_hits": 1195
       },
       "safety_policy": {
         "files": [
+          "README.md",
           "retort_engine/absorption.py",
           "retort_engine/service.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/pr_publish.py",
+          "retort_engine/pr_live_probe.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
+          "retort_engine/cli.py",
           "retort_engine/contracts.py",
           "retort_engine/self_evolution.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py",
-          "retort_engine/real_absorption.py",
-          "retort_engine/license_gate.py"
+          "retort_engine/ui_server.py"
         ],
-        "marker_hits": 153
+        "marker_hits": 229
       },
       "workflow_ci": {
         "files": [
@@ -208,12 +385,12 @@
           "retort_engine/models.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/pr_publish.py",
+          "retort_engine/pr_live_probe.py",
+          "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py",
-          "retort_engine/paibi_llm.py",
-          "retort_engine/pr_review.py",
-          "retort_engine/core.py"
+          "retort_engine/paibi_llm.py"
         ],
-        "marker_hits": 1119
+        "marker_hits": 1245
       }
     },
     "pipeline_stages": [
@@ -225,57 +402,155 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": []
+    "prioritized_absorptions": [
+      {
+        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
+        "component": "provider_surface",
+        "priority": "P0",
+        "source_files": [
+          "CHANGELOG.md",
+          "README.md",
+          "RELEASE_NOTES.md",
+          "AGENTS.md",
+          "SECURITY.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
+        "component": "workflow_ci",
+        "priority": "P0",
+        "source_files": [
+          "CODE_OF_CONDUCT.md",
+          "CHANGELOG.md",
+          "pyproject.toml",
+          "README.md",
+          "setup.py"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested review_pipeline behavior, not only a recorded signal.",
+        "component": "review_pipeline",
+        "priority": "P0",
+        "source_files": [
+          "CODE_OF_CONDUCT.md",
+          "action.yaml",
+          "pyproject.toml",
+          "README.md",
+          "CONTRIBUTING.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
+        "component": "safety_policy",
+        "priority": "P0",
+        "source_files": [
+          "CODE_OF_CONDUCT.md",
+          "pyproject.toml",
+          "README.md",
+          "AGENTS.md",
+          "SECURITY.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
+        "component": "diff_hunk_review",
+        "priority": "P0",
+        "source_files": [
+          "CHANGELOG.md",
+          "pr_agent/settings/pr_custom_labels.toml",
+          "pr_agent/settings/pr_information_from_user_prompts.toml",
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/settings/pr_line_questions_prompts.toml"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
+        "component": "plugin_surface",
+        "priority": "P1",
+        "source_files": [
+          "README.md",
+          "RELEASE_NOTES.md",
+          "AGENTS.md",
+          "SECURITY.md",
+          "docker/mosaico/README.md"
+        ]
+      }
+    ]
   },
-  "run_id": "20260627134100-02cbea1e01",
+  "run_id": "20260627144144-dbc443423e",
   "semantic_review": {
     "external": {
-      "classes": 3,
+      "classes": 518,
       "cli_markers": 0,
-      "functions": 15,
-      "source_files": 7,
-      "test_markers": 2,
-      "workflow_markers": 71
+      "functions": 2279,
+      "source_files": 267,
+      "test_markers": 1039,
+      "workflow_markers": 1304
     },
-    "gaps": [],
+    "gaps": [
+      {
+        "external_advantage": 472,
+        "metric": "classes"
+      },
+      {
+        "external_advantage": 1717,
+        "metric": "functions"
+      },
+      {
+        "external_advantage": 193,
+        "metric": "source_files"
+      },
+      {
+        "external_advantage": 874,
+        "metric": "test_markers"
+      }
+    ],
     "own": {
       "classes": 46,
-      "cli_markers": 19,
-      "functions": 484,
-      "source_files": 55,
-      "test_markers": 144,
-      "workflow_markers": 1085
+      "cli_markers": 26,
+      "functions": 562,
+      "source_files": 74,
+      "test_markers": 165,
+      "workflow_markers": 1417
     }
   },
   "signal_evidence": {
+    "benchmarking": [
+      "CHANGELOG.md",
+      "pr_agent/settings/pr_evaluate_prompt_response.toml",
+      "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+      "pr_agent/tools/pr_help_message.py",
+      "pr_agent/algo/token_handler.py"
+    ],
     "file_grouping": [
-      "README.md",
-      "action.yml",
-      "src/reviewer.py",
-      "src/main.py",
-      "src/github_client.py"
+      "pr_agent/settings/pr_reviewer_prompts.toml",
+      "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+      "pr_agent/git_providers/local_git_provider.py",
+      "pr_agent/git_providers/gerrit_provider.py"
     ],
     "multi_provider": [
+      "CHANGELOG.md",
       "README.md",
-      "action.yml",
-      "src/reviewer.py",
-      "src/main.py"
+      "RELEASE_NOTES.md",
+      "AGENTS.md",
+      "SECURITY.md"
     ],
     "plugin_surface": [
+      "pyproject.toml",
       "README.md",
-      "src/reviewer.py",
-      "src/main.py",
-      "src/github_client.py"
+      "RELEASE_NOTES.md",
+      "AGENTS.md",
+      "SECURITY.md"
     ],
     "review_pipeline": [
+      "pyproject.toml",
       "README.md",
-      "action.yml",
-      "src/__init__.py",
-      "src/reviewer.py",
-      "src/main.py"
+      ".pr_agent.toml",
+      "AGENTS.md",
+      "docker/mosaico/pr-agent-solution-agent.json"
     ]
   },
-  "source": "https://github.com/hevinbryant/ai-pr-reviewer",
+  "source": "https://github.com/The-PR-Agent/pr-agent",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -283,7 +558,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/hevinbryant/ai-pr-reviewer."
+      "why": "Compare implementation patterns from https://github.com/The-PR-Agent/pr-agent."
     },
     {
       "dimension": "product_operability",
@@ -291,7 +566,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/hevinbryant/ai-pr-reviewer."
+      "why": "Extract usable UX improvements from https://github.com/The-PR-Agent/pr-agent."
     },
     {
       "dimension": "operational_readiness",
@@ -299,7 +574,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/hevinbryant/ai-pr-reviewer."
+      "why": "Adapt CI and release checks from https://github.com/The-PR-Agent/pr-agent."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -316,6 +591,14 @@
       "task_id": "retort-absorb-file-grouping",
       "title": "Add external file grouping before deep comparison",
       "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+    },
+    {
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
     },
     {
       "dimension": "product_operability",
