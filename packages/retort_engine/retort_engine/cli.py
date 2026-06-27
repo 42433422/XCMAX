@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from retort_engine.comparative_replay import build_cross_project_replay
+from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
@@ -114,6 +115,13 @@ def main(argv: list[str] | None = None) -> int:
     replay.add_argument("--project", default=".")
     replay.add_argument("--output", default="")
     replay.add_argument("--json", action="store_true")
+    complex_replay = sub.add_parser("complex-pr-replay")
+    complex_replay.add_argument("--project", default=".")
+    complex_replay.add_argument("--pr-url", action="append", default=[])
+    complex_replay.add_argument("--max-comments", type=int, default=20)
+    complex_replay.add_argument("--max-bytes", type=int, default=800000)
+    complex_replay.add_argument("--output", default="")
+    complex_replay.add_argument("--json", action="store_true")
     task_report = sub.add_parser("task-prioritization-report")
     task_report.add_argument("--project", default=".")
     task_report.add_argument("--output", default="")
@@ -121,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
     quality_benchmark = sub.add_parser("quality-benchmark-report")
     quality_benchmark.add_argument("--project", default=".")
     quality_benchmark.add_argument("--sample-count", type=int, default=30)
+    quality_benchmark.add_argument("--negative-sample-count", type=int, default=0)
     quality_benchmark.add_argument("--output", default="")
     quality_benchmark.add_argument("--json", action="store_true")
     scheduler_stress = sub.add_parser("employee-scheduler-stress")
@@ -262,6 +271,20 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
+    if args.command == "complex-pr-replay":
+        result = build_complex_pr_replay_report(args.project, pr_urls=args.pr_url or None, max_comments=args.max_comments, max_bytes=args.max_bytes)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort complex PR replay status: {result['status']}")
+            print(f"Complex PRs: {result['summary']['complex_pr_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "task-prioritization-report":
         result = build_task_prioritization_report(args.project)
         if args.output:
@@ -277,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "quality-benchmark-report":
-        result = build_review_quality_benchmark(args.project, sample_count=args.sample_count)
+        result = build_review_quality_benchmark(args.project, sample_count=args.sample_count, negative_sample_count=args.negative_sample_count)
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
