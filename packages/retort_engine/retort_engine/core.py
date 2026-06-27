@@ -166,6 +166,12 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         try:
             execution["commit"] = _commit_absorption_execution(own, str(external), execution)
             result_branch = merge_absorption_branch(own, BranchWorkflowState.from_dict(branch_state)).to_dict()
+            root = _git_root(own)
+            if root is not None:
+                merge_commit = _git(root, "rev-parse", "--short", "HEAD").strip()
+                result_branch["merge_commit"] = merge_commit
+                execution["merge_commit"] = merge_commit
+                execution["rollback_rehearsal"] = _rollback_rehearsal(root, merge_commit)
             branch_state = result_branch
             if execution.get("status") in {"applied", "noop"}:
                 _record_execution_proof(own, execution, branch_state)
@@ -306,6 +312,7 @@ def _run_real_absorption_cli(own: Path, source: str, external_path: Path | None,
         "tasks": tasks,
         "external_assessment": external_assessment,
         "run_local_gates": bool(payload.get("run_local_gates")),
+        "history_store": str(payload.get("history_store") or ""),
         "python": _python(),
     }
     request_path.write_text(json.dumps(request_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -386,7 +393,13 @@ def _record_execution_proof(own: Path, execution: dict[str, Any], branch_state: 
             f"retort_cli_status={execution.get('status')}",
             f"duration_sec={execution.get('duration_sec')}",
             f"changed_files={','.join(changed_files)}",
+            f"git_diff_summary={' | '.join(str(item) for item in execution.get('git_diff_summary') or [])}",
             f"gates_passed={execution.get('gates_passed')}",
+            f"review_report={execution.get('review_report_path', '')}",
+            f"employee_results={execution.get('employee_results_path', '')}",
+            f"commit={((execution.get('commit') or {}) if isinstance(execution.get('commit'), dict) else {}).get('commit', '')}",
+            f"merge_commit={execution.get('merge_commit', '')}",
+            f"rollback_rehearsal={bool((execution.get('rollback_rehearsal') or {}).get('verified'))}",
         ],
     }
     state = _load_absorption_state(own)
@@ -415,6 +428,16 @@ def _commit_absorption_execution(own: Path, source: str, execution: dict[str, An
     _git(root, "commit", "-m", f"Retort absorb {source[:80]}")
     commit = _git(root, "rev-parse", "--short", "HEAD").strip()
     return {"status": "committed", "commit": commit, "files": rels}
+
+
+def _rollback_rehearsal(root: Path, merge_commit: str) -> dict[str, Any]:
+    parents = _git(root, "show", "--no-patch", "--format=%P", merge_commit).strip().split()
+    return {
+        "verified": len(parents) >= 2,
+        "merge_commit": merge_commit,
+        "parent_count": len(parents),
+        "rollback_command": f"git revert -m 1 {merge_commit}",
+    }
 
 
 def _absorption_status(tasks: list[dict[str, str]], execution: dict[str, Any]) -> str:
@@ -522,6 +545,10 @@ def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], pro
         metadata = assessment.setdefault("metadata", {})
         metadata["score_source"] = "local_fallback_rules"
         return assessment
+    metadata = assessment.get("metadata", {}) if isinstance(assessment.get("metadata"), dict) else {}
+    external_source, external_path = _llm_external_reference(metadata, external_source, external_path)
+    evidence = list(assessment.get("evidence", []))
+    evidence.extend(_llm_absorption_evidence(project))
     review = _maybe_request_llm_review(
         payload,
         project,
@@ -530,8 +557,8 @@ def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], pro
         external_path,
         assessment.get("scores", []),
         tasks,
-        evidence=assessment.get("evidence", []),
-        metadata=assessment.get("metadata", {}),
+        evidence=evidence,
+        metadata=metadata,
     )
     assessment["llm_review"] = review
     metadata = assessment.setdefault("metadata", {})
@@ -551,6 +578,48 @@ def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], pro
             metadata["score_source"] = "paibi_llm"
             metadata["llm_task_id"] = status.get("task_id")
     return assessment
+
+
+def _llm_external_reference(metadata: dict[str, Any], external_source: str, external_path: str) -> tuple[str, str]:
+    state = metadata.get("absorption_state") if isinstance(metadata.get("absorption_state"), dict) else {}
+    if not external_source:
+        external_source = str(state.get("source") or "")
+    if not external_path:
+        external_path = str(state.get("external_path") or "")
+    return external_source, external_path
+
+
+def _llm_absorption_evidence(project: Path) -> list[str]:
+    evidence: list[str] = []
+    state = _load_absorption_state(project)
+    proof = _closed_loop_proof(project)
+    if state.get("source"):
+        evidence.append(f"absorption_source={state.get('source')}")
+    if state.get("external_path"):
+        evidence.append(f"external_materialized_path={state.get('external_path')}; exists={Path(str(state.get('external_path'))).is_dir()}")
+    if proof.get("verified"):
+        evidence.append("closed_loop_five_proofs_verified=True")
+    evidence.extend(proof.get("evidence") or [])
+    report = project / "docs" / "retort_external_review_report.json"
+    if report.is_file():
+        try:
+            payload = json.loads(report.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        evidence.append(f"external_review_report={report}")
+        evidence.append(f"external_snapshot_revision={(payload.get('external_snapshot') or {}).get('git_revision', '')}")
+        evidence.append(f"absorbed_signals={','.join(str(item) for item in payload.get('absorbed_signals') or [])}")
+        evidence.append(f"semantic_gap_count={len((payload.get('semantic_review') or {}).get('gaps') or [])}")
+    employee_results = sorted((project / ".retort" / "employee_results").glob("*.json"))
+    if employee_results:
+        latest = employee_results[-1]
+        evidence.append(f"employee_results_file={latest}")
+        try:
+            payload = json.loads(latest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        evidence.append(f"employee_result_count={len(payload.get('results') or [])}; execution_mode={payload.get('execution_mode', '')}")
+    return evidence
 
 
 def _maybe_request_llm_review(
@@ -856,9 +925,19 @@ def _tracking_state(path: Path) -> str:
     except ValueError:
         rel = "."
     status = subprocess.run(["git", "status", "--short", "--", rel], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=5, check=False).stdout
-    if "??" in status:
+    runtime_prefixes = _runtime_status_prefixes(root, path)
+    blocking_lines = []
+    for line in status.splitlines():
+        changed_path = line[3:].strip().strip('"')
+        if " -> " in changed_path:
+            changed_path = changed_path.split(" -> ", 1)[1].strip().strip('"')
+        if any(changed_path == prefix.removesuffix("/") or changed_path.startswith(prefix) for prefix in runtime_prefixes):
+            continue
+        blocking_lines.append(line)
+    blocking_status = "\n".join(blocking_lines)
+    if "??" in blocking_status:
         return "untracked"
-    return "dirty" if status.strip() else "tracked_clean"
+    return "dirty" if blocking_status.strip() else "tracked_clean"
 
 
 def _has_retort_ci(root: Path) -> bool:
