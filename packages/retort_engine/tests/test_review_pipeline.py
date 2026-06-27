@@ -23,6 +23,8 @@ def test_review_pipeline_groups_external_advantages(tmp_path: Path) -> None:
 
     assert "review_pipeline" in groups
     assert "provider_surface" in groups
+    assert "diff_hunk_review" in groups
     assert report["component_gaps"]
+    assert "map_diff_hunk_context" in report["pipeline_stages"]
     assert report["prioritized_absorptions"][0]["source_files"]
     assert report["benchmark"]["minimum_expected_behavior_tests"] >= 3

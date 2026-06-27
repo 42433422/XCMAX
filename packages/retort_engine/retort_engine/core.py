@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from retort_engine.contracts import contract_names
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, request_paibi_llm_review, wait_for_paibi_llm_review
 
 
@@ -78,6 +79,9 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "real_absorption_cli": "apply_real_absorption" in text and "apply-absorption" in text and "execution_requests" in text,
         "execution_proof_recorder": "_record_execution_proof" in text and "closed_loop_proof" in text and "gates_passed" in text,
         "component_review_pipeline": "build_absorption_review_report" in text and "compare_component_gaps" in text and "group_review_files" in text,
+        "api_contract_schemas": "RETORT_CONTRACT_SCHEMAS" in text and "validate_contract" in text,
+        "feedback_audit": "audit_feedback_closure" in text and "history_result_count" in text,
+        "diff_hunk_review": "diff hunk" in text.lower() and "patch set" in text.lower(),
         "real_github_case": "https://github.com/openai/codex" in text,
         "conservative_scoring": "calibrated_overall" in text and "not_automatic_100" in text,
     }
@@ -314,6 +318,7 @@ def _run_real_absorption_cli(own: Path, source: str, external_path: Path | None,
         "tasks": tasks,
         "external_assessment": external_assessment,
         "run_local_gates": bool(payload.get("run_local_gates")),
+        "employee_queue": str(payload.get("employee_queue") or ""),
         "history_store": str(payload.get("history_store") or ""),
         "python": _python(),
     }
@@ -402,6 +407,8 @@ def _record_execution_proof(own: Path, execution: dict[str, Any], branch_state: 
             f"commit={((execution.get('commit') or {}) if isinstance(execution.get('commit'), dict) else {}).get('commit', '')}",
             f"merge_commit={execution.get('merge_commit', '')}",
             f"rollback_rehearsal={bool((execution.get('rollback_rehearsal') or {}).get('verified'))}",
+            f"feedback_audit_closed={bool((execution.get('feedback_audit') or {}).get('closed'))}",
+            f"history_result_count={(execution.get('feedback_audit') or {}).get('history_result_count', '')}",
         ],
     }
     state = _load_absorption_state(own)
@@ -601,6 +608,7 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
         evidence.append(f"external_materialized_path={state.get('external_path')}; exists={Path(str(state.get('external_path'))).is_dir()}")
     if proof.get("verified"):
         evidence.append("closed_loop_five_proofs_verified=True")
+    evidence.append(f"contract_schema_count={len(contract_names())}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
@@ -655,14 +663,14 @@ def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok:
         "product_level": 72 + 3 * features["blackhole_ui"] + 3 * features["service_api"] + 2 * features["branch_workflow"] + 2 * features["github_or_folder_source"] + 2 * test_ok + 12 * verified,
         "architecture_depth": 78 + 3 * features["branch_workflow"] + 3 * features["self_evolution"] + 2 * features["license_gate"] + 2 * features["employee_queue"] + 2 * features["real_absorption_cli"] + 2 * features["component_review_pipeline"] + 2 * test_ok,
         "test_gate_evidence": 70 + min(8, test_functions * 0.4) + 8 * test_ok + 6 * lint_ok + 3 * has_ci,
-        "api_contract_quality": 76 + 4 * features["service_api"] + 3 * features["github_or_folder_source"] + 3 * features["branch_workflow"] + 2 * features["folder_project_picker"] + 8 * verified,
+        "api_contract_quality": 76 + 4 * features["service_api"] + 3 * features["github_or_folder_source"] + 3 * features["branch_workflow"] + 2 * features["folder_project_picker"] + 3 * features["api_contract_schemas"] + 8 * verified,
         "operational_readiness": 72 + 6 * lint_ok + 6 * test_ok + 4 * has_ci + 2 * features["branch_workflow"] + 8 * verified,
         "evolution_readiness": 68 + 5 * features["self_evolution"] + 4 * features["real_github_case"] + 4 * features["employee_queue"] + 14 * verified,
         "external_ingestion": 70 + 5 * features["github_or_folder_source"] + 4 * features["folder_project_picker"] + 4 * features["real_github_case"] + 10 * verified,
-        "comparative_analysis_depth": 68 + 4 * features["real_github_case"] + 4 * features["github_or_folder_source"] + 4 * features["branch_workflow"] + 4 * features["component_review_pipeline"] + 12 * verified,
+        "comparative_analysis_depth": 68 + 4 * features["real_github_case"] + 4 * features["github_or_folder_source"] + 4 * features["branch_workflow"] + 4 * features["component_review_pipeline"] + 3 * features["diff_hunk_review"] + 12 * verified,
         "absorption_tasking": 72 + 5 * features["employee_queue"] + 4 * features["github_or_folder_source"] + 3 * features["branch_workflow"] + 3 * features["component_review_pipeline"] + 9 * verified,
         "employee_execution_integration": 66 + 6 * features["employee_queue"] + 16 * verified + 5 * (features["real_absorption_cli"] and verified) + 4 * (features["execution_proof_recorder"] and verified),
-        "feedback_loop_closure": 68 + 5 * features["self_evolution"] + 4 * features["employee_queue"] + 15 * verified,
+        "feedback_loop_closure": 68 + 5 * features["self_evolution"] + 4 * features["employee_queue"] + 4 * features["feedback_audit"] + 15 * verified,
         "product_operability": 74 + 4 * features["blackhole_ui"] + 4 * features["service_api"] + 3 * features["folder_project_picker"] + 3 * features["branch_workflow"] + 8 * verified,
         "safety_license_gate": 76 + 6 * features["license_gate"] + 3 * features["license_boundary_tests"] + 3 * (context_policy == "isolated") + 6 * verified,
         "branch_absorption_workflow": 74 + 5 * features["branch_workflow"] + 4 * features["folder_project_picker"] + 3 * features["blackhole_ui"] + 8 * verified,

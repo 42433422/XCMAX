@@ -9,6 +9,7 @@ SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytes
 PIPELINE_STAGES = (
     "materialize_external_snapshot",
     "group_related_files",
+    "map_diff_hunk_context",
     "extract_review_signals",
     "compare_component_gaps",
     "rank_absorption_tasks",
@@ -17,6 +18,7 @@ PIPELINE_STAGES = (
 COMPONENT_MARKERS = {
     "review_pipeline": ("review", "reflection", "localization", "diff hunk", "patch set", "code review"),
     "file_grouping": ("file group", "group files", "changed files", "related files", "pathspec"),
+    "diff_hunk_review": ("diff hunk", "patch set", "line comment", "comment range", "changed lines"),
     "benchmark_eval": ("benchmark", "precision", "recall", "evaluation", "eval"),
     "provider_surface": ("provider", "model", "openai", "anthropic", "ollama", "multi-provider"),
     "plugin_surface": ("plugin", "extension", "github action", "codex", "vsix"),
