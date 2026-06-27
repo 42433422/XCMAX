@@ -26,19 +26,19 @@
         "AGENTS.md",
         "BUILD_DEPENDENCIES.md",
         "CONTRIBUTING.md",
+        "Cargo.toml",
         "HISTORY.md",
         "README.md",
         "README_swebench.md",
         "RELEASE_NOTES.md",
         "SECURITY.md",
         "TESTING.md",
-        "agentless/test/run_tests.py",
-        "agentless/util/api_requests.py"
+        "agentless/test/run_tests.py"
       ],
-      "gate_pass_count": 14,
-      "gate_pass_rate": 0.933,
+      "gate_pass_count": 15,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 15,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -54,9 +54,10 @@
         "20260627183621-6e1352f61e",
         "20260627191156-142d39dda9",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 14,
+      "source_count": 15,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -71,6 +72,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -81,6 +83,7 @@
         "AGENTS.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
+        "Cargo.toml",
         "HISTORY.md",
         "README.md",
         "README_swebench.md",
@@ -88,13 +91,12 @@
         "__tests__/reviewer.test.ts",
         "agentless/test/run_reproduction_tests.py",
         "agentless/test/run_tests.py",
-        "benchmark/benchmark.py",
-        "benchmark/over_time.py"
+        "audit.toml"
       ],
-      "gate_pass_count": 14,
-      "gate_pass_rate": 0.933,
+      "gate_pass_count": 15,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 15,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -110,9 +112,10 @@
         "20260627183621-6e1352f61e",
         "20260627191156-142d39dda9",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 14,
+      "source_count": 15,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -127,6 +130,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -138,19 +142,19 @@
         "AGENTS.md",
         "BUILD_DEPENDENCIES.md",
         "CONTRIBUTING.md",
+        "Cargo.toml",
         "HISTORY.md",
         "README.md",
         "README_swebench.md",
         "RELEASE_NOTES.md",
         "SECURITY.md",
         "TESTING.md",
-        "agentless/test/run_tests.py",
-        "agentless/util/api_requests.py"
+        "agentless/test/run_tests.py"
       ],
-      "gate_pass_count": 14,
-      "gate_pass_rate": 0.933,
+      "gate_pass_count": 15,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 15,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -166,9 +170,10 @@
         "20260627183621-6e1352f61e",
         "20260627191156-142d39dda9",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 14,
+      "source_count": 15,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -183,6 +188,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -252,31 +258,33 @@
         "README.md",
         "__tests__/prompts.test.ts",
         "action.yml",
+        "docs/cli.md",
         "openhands-sdk/openhands/sdk/git/git_changes.py",
         "pr_agent/git_providers/gerrit_provider.py",
         "pr_agent/git_providers/local_git_provider.py",
-        "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
-        "pr_agent/settings/pr_reviewer_prompts.toml"
+        "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml"
       ],
-      "gate_pass_count": 6,
+      "gate_pass_count": 7,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 6,
+      "run_count": 7,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
         "20260627173057-8f77226be1",
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e"
+        "20260627183621-6e1352f61e",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 5,
+      "source_count": 6,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/mopemope/pr-ai-review-bot",
         "https://github.com/nedbat/coveragepy",
-        "https://github.com/qodo-ai/pr-agent"
+        "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust"
       ]
     },
     "diff_hunk_review": {
@@ -338,31 +346,33 @@
         "README.md",
         "__tests__/prompts.test.ts",
         "action.yml",
+        "docs/cli.md",
         "openhands-sdk/openhands/sdk/git/git_changes.py",
         "pr_agent/git_providers/gerrit_provider.py",
         "pr_agent/git_providers/local_git_provider.py",
-        "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
-        "pr_agent/settings/pr_reviewer_prompts.toml"
+        "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml"
       ],
-      "gate_pass_count": 6,
+      "gate_pass_count": 7,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 6,
+      "run_count": 7,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
         "20260627173057-8f77226be1",
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e"
+        "20260627183621-6e1352f61e",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 5,
+      "source_count": 6,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/mopemope/pr-ai-review-bot",
         "https://github.com/nedbat/coveragepy",
-        "https://github.com/qodo-ai/pr-agent"
+        "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust"
       ]
     },
     "edit_planning_loop": {
@@ -388,6 +398,7 @@
         "AGENTS.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
+        "Cargo.toml",
         "HISTORY.md",
         "README.md",
         "README_swebench.md",
@@ -395,13 +406,12 @@
         "__tests__/reviewer.test.ts",
         "agentless/test/run_reproduction_tests.py",
         "agentless/test/run_tests.py",
-        "benchmark/benchmark.py",
-        "benchmark/over_time.py"
+        "audit.toml"
       ],
-      "gate_pass_count": 14,
-      "gate_pass_rate": 0.933,
+      "gate_pass_count": 15,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 15,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -417,9 +427,10 @@
         "20260627183621-6e1352f61e",
         "20260627191156-142d39dda9",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 14,
+      "source_count": 15,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -434,6 +445,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -454,10 +466,10 @@
         "aider/website/docs/usage.md",
         "core/indexing/CodebaseIndexer.test.ts"
       ],
-      "gate_pass_count": 8,
-      "gate_pass_rate": 0.889,
+      "gate_pass_count": 9,
+      "gate_pass_rate": 0.9,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -467,9 +479,10 @@
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
         "20260627183621-6e1352f61e",
-        "20260627193421-af1df6ee7c"
+        "20260627193421-af1df6ee7c",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -478,6 +491,7 @@
         "https://github.com/mopemope/pr-ai-review-bot",
         "https://github.com/nedbat/coveragepy",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -514,10 +528,10 @@
         "TESTING.md",
         "action.yml"
       ],
-      "gate_pass_count": 15,
-      "gate_pass_rate": 0.833,
+      "gate_pass_count": 16,
+      "gate_pass_rate": 0.842,
       "ready_for_deep_refactor": true,
-      "run_count": 18,
+      "run_count": 19,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -536,9 +550,10 @@
         "20260627192206-0723009b1b",
         "20260627192522-0723009b1b",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 16,
+      "source_count": 17,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -555,6 +570,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -591,10 +607,10 @@
         "TESTING.md",
         "action.yml"
       ],
-      "gate_pass_count": 15,
-      "gate_pass_rate": 0.833,
+      "gate_pass_count": 16,
+      "gate_pass_rate": 0.842,
       "ready_for_deep_refactor": true,
-      "run_count": 18,
+      "run_count": 19,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -613,9 +629,10 @@
         "20260627192206-0723009b1b",
         "20260627192522-0723009b1b",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 16,
+      "source_count": 17,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -632,6 +649,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -642,6 +660,7 @@
         "AGENTS.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
+        "Cargo.toml",
         "HISTORY.md",
         "README.md",
         "README_swebench.md",
@@ -649,13 +668,12 @@
         "__tests__/reviewer.test.ts",
         "agentless/test/run_reproduction_tests.py",
         "agentless/test/run_tests.py",
-        "benchmark/benchmark.py",
-        "benchmark/over_time.py"
+        "audit.toml"
       ],
-      "gate_pass_count": 14,
-      "gate_pass_rate": 0.933,
+      "gate_pass_count": 15,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 15,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -671,9 +689,10 @@
         "20260627183621-6e1352f61e",
         "20260627191156-142d39dda9",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 14,
+      "source_count": 15,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -688,6 +707,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -781,14 +801,14 @@
         "CLA.md",
         "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
+        "Cargo.toml",
         "HISTORY.md",
-        "README.md",
-        "SECURITY.md"
+        "README.md"
       ],
-      "gate_pass_count": 15,
-      "gate_pass_rate": 0.938,
+      "gate_pass_count": 16,
+      "gate_pass_rate": 0.941,
       "ready_for_deep_refactor": true,
-      "run_count": 16,
+      "run_count": 17,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -805,9 +825,10 @@
         "20260627185357-29365e9367",
         "20260627191156-142d39dda9",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 15,
+      "source_count": 16,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -823,6 +844,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     },
@@ -856,15 +878,15 @@
         "CHANGELOG.md",
         "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
+        "Cargo.toml",
         "HISTORY.md",
         "README.md",
-        "README_swebench.md",
-        "TESTING.md"
+        "README_swebench.md"
       ],
-      "gate_pass_count": 15,
-      "gate_pass_rate": 0.833,
+      "gate_pass_count": 16,
+      "gate_pass_rate": 0.842,
       "ready_for_deep_refactor": true,
-      "run_count": 18,
+      "run_count": 19,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -883,9 +905,10 @@
         "20260627192206-0723009b1b",
         "20260627192522-0723009b1b",
         "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd"
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6"
       ],
-      "source_count": 16,
+      "source_count": 17,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -902,6 +925,7 @@
         "https://github.com/nedbat/coveragepy",
         "https://github.com/openautocoder/agentless",
         "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench"
       ]
     }
@@ -917,9 +941,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.833,
+      "gate_pass_rate": 0.842,
       "priority": "P0",
-      "supporting_source_count": 16,
+      "supporting_source_count": 17,
       "task_id": "retort-architecture-model-adapter",
       "title": "Implement cumulative architecture pattern: model_adapter"
     },
@@ -933,11 +957,27 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.833,
+      "gate_pass_rate": 0.842,
       "priority": "P0",
-      "supporting_source_count": 16,
+      "supporting_source_count": 17,
       "task_id": "retort-architecture-provider-boundary",
       "title": "Implement cumulative architecture pattern: provider_boundary"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 0.842,
+      "priority": "P0",
+      "supporting_source_count": 17,
+      "task_id": "retort-architecture-workflow-ci",
+      "title": "Implement cumulative architecture pattern: workflow_ci"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -965,11 +1005,11 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.833,
+      "gate_pass_rate": 0.941,
       "priority": "P0",
       "supporting_source_count": 16,
-      "task_id": "retort-architecture-workflow-ci",
-      "title": "Implement cumulative architecture pattern: workflow_ci"
+      "task_id": "retort-architecture-safety-policy",
+      "title": "Implement cumulative architecture pattern: safety_policy"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -984,22 +1024,6 @@
       "gate_pass_rate": 0.938,
       "priority": "P0",
       "supporting_source_count": 15,
-      "task_id": "retort-architecture-safety-policy",
-      "title": "Implement cumulative architecture pattern: safety_policy"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 0.933,
-      "priority": "P0",
-      "supporting_source_count": 14,
       "task_id": "retort-architecture-automation-surface",
       "title": "Implement cumulative architecture pattern: automation_surface"
     },
@@ -1013,9 +1037,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.933,
+      "gate_pass_rate": 0.938,
       "priority": "P0",
-      "supporting_source_count": 14,
+      "supporting_source_count": 15,
       "task_id": "retort-architecture-benchmark-eval",
       "title": "Implement cumulative architecture pattern: benchmark_eval"
     },
@@ -1029,9 +1053,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.933,
+      "gate_pass_rate": 0.938,
       "priority": "P0",
-      "supporting_source_count": 14,
+      "supporting_source_count": 15,
       "task_id": "retort-architecture-command-contract",
       "title": "Implement cumulative architecture pattern: command_contract"
     },
@@ -1045,9 +1069,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.933,
+      "gate_pass_rate": 0.938,
       "priority": "P0",
-      "supporting_source_count": 14,
+      "supporting_source_count": 15,
       "task_id": "retort-architecture-evaluation-loop",
       "title": "Implement cumulative architecture pattern: evaluation_loop"
     },
@@ -1061,9 +1085,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.933,
+      "gate_pass_rate": 0.938,
       "priority": "P0",
-      "supporting_source_count": 14,
+      "supporting_source_count": 15,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
     },
@@ -1109,9 +1133,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.889,
+      "gate_pass_rate": 0.9,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-file-grouping",
       "title": "Implement cumulative architecture pattern: file_grouping"
     },
@@ -1127,7 +1151,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 5,
+      "supporting_source_count": 6,
       "task_id": "retort-architecture-context-partitioning",
       "title": "Implement cumulative architecture pattern: context_partitioning"
     },
@@ -1143,7 +1167,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 5,
+      "supporting_source_count": 6,
       "task_id": "retort-architecture-diff-locality",
       "title": "Implement cumulative architecture pattern: diff_locality"
     },
@@ -4683,12 +4707,207 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py"
+      ],
+      "components": [
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "Cargo.toml",
+            "README.md",
+            "cliff.toml",
+            "rustfmt.toml"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "Cargo.toml",
+            "README.md",
+            "cliff.toml",
+            "crates/codegraph-watch/Cargo.toml"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "Cargo.toml",
+            "audit.toml",
+            "docs/architecture.md",
+            "docs/readme/README.zh-CN.md"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "docs/architecture.md",
+            "docs/data-model.md",
+            "docs/embedded-extraction.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "docs/architecture.md",
+            "docs/data-model.md",
+            "docs/embedded-extraction.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "Cargo.toml",
+            "audit.toml",
+            "docs/architecture.md",
+            "docs/readme/README.zh-CN.md"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "Cargo.toml",
+            "README.md",
+            "cliff.toml",
+            "crates/codegraph-cli/Cargo.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "Cargo.toml",
+            "audit.toml",
+            "docs/architecture.md",
+            "docs/cli.md"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "Cargo.toml",
+            "README.md",
+            "cliff.toml",
+            "crates/codegraph-cli/Cargo.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "file_grouping",
+          "depth_score": 46,
+          "evidence_files": [
+            "docs/cli.md"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "diff_locality",
+          "depth_score": 46,
+          "evidence_files": [
+            "docs/cli.md"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "context_partitioning",
+          "depth_score": 46,
+          "evidence_files": [
+            "docs/cli.md"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T19:50:14Z",
+      "external_file_count": 285,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/sunerpy/codegraph-rust",
+      "gate_count": 7,
+      "gates_passed": true,
+      "git_revision": "3389bf7ed46c54f1ad24947b53fedb2671c22874",
+      "run_id": "20260627195002-b40d2378d6",
+      "schema_version": 1,
+      "signals": [
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider",
+        "procedural_surface",
+        "webgl_scene",
+        "elevation_bump_map"
+      ],
+      "source": "https://github.com/sunerpy/codegraph-rust",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "external_ingestion",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 21,
-    "gate_passed_run_count": 15,
+    "gate_passed_run_count": 16,
     "ready_component_count": 15,
     "ready_components": [
       "workflow_ci",
@@ -4701,7 +4920,7 @@
       "evaluation_loop"
     ],
     "repeated_component_count": 17,
-    "run_count": 18,
-    "source_count": 16
+    "run_count": 19,
+    "source_count": 17
   }
 }
