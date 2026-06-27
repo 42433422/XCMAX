@@ -35,3 +35,6 @@ def test_review_pipeline_groups_external_advantages(tmp_path: Path) -> None:
     assert all(item["component"] not in {"provider_surface", "plugin_surface"} for item in workflow["focused_components"])
     assert {item["component"] for item in workflow["rejected_breadth_components"]} & {"provider_surface", "plugin_surface"}
     assert all(task["acceptance"] and task["evidence_required"] for task in workflow["employee_tasks"])
+    assert workflow["quality_gate"]["marketplace_candidate_count"] == len(workflow["marketplace_candidates"])
+    assert {item["component"] for item in workflow["marketplace_candidates"]} & {"provider_surface", "plugin_surface"}
+    assert all(item["route"] == "ai_employee_marketplace" for item in workflow["marketplace_candidates"])

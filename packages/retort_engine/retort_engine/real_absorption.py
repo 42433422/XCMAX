@@ -231,6 +231,12 @@ def depth_first_task_queue() -> list[dict[str, Any]]:
     return [dict(task) for task in workflow.get("employee_tasks") or []]
 
 
+def marketplace_candidate_queue() -> list[dict[str, Any]]:
+    """Expose broad-but-useful external capabilities for AI employee marketplace packaging."""
+    workflow = depth_absorption_plan()
+    return [dict(candidate) for candidate in workflow.get("marketplace_candidates") or []]
+
+
 def ranked_capabilities() -> list[dict[str, Any]]:
     """Rank absorbed signals by behavior depth rather than keyword count."""
     state = ABSORBED_CAPABILITY_STATE
@@ -327,7 +333,7 @@ def _capability_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
     return f'''from __future__ import annotations
 
-from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
+from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, marketplace_candidate_queue, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
 
 EXPECTED_ABSORPTION_SOURCE = {source_text}
 
@@ -350,6 +356,14 @@ def test_depth_absorption_plan_keeps_depth_before_breadth() -> None:
     assert not (focused_components & {{"provider_surface", "plugin_surface"}})
     assert workflow["breadth_rejected"]
     assert all(task["acceptance"] and task["evidence_required"] for task in depth_first_task_queue())
+
+
+def test_breadth_candidates_are_routed_to_ai_employee_marketplace() -> None:
+    candidates = marketplace_candidate_queue()
+    assert candidates
+    assert all(item["route"] == "ai_employee_marketplace" for item in candidates)
+    assert all(item["core_absorption"] == "blocked_for_early_phase_depth_only" for item in candidates)
+    assert all(item["acceptance"] and item["evidence_required"] for item in candidates)
 
 
 def test_capability_progress_requires_behavior_code_tests_and_gates() -> None:
