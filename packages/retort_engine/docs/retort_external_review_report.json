@@ -4,79 +4,105 @@
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/villesau/ai-codereviewer",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-90/XCMAX/packages/retort_engine/.retort/cache/github/go1com/openai-review",
   "external_snapshot": {
-    "file_count": 9,
-    "git_revision": "a9a064dfa1db8c83f40ef63f6e247fa09c935ed6",
+    "file_count": 21,
+    "git_revision": "332fd5d40509a1da4a1a3daa61474a2ef76b9eb1",
     "suffix_counts": {
-      ".json": 2,
-      ".lock": 1,
+      ".js": 1,
+      ".json": 4,
       ".md": 1,
-      ".ts": 1,
-      ".yml": 2,
-      "<none>": 2
+      ".png": 2,
+      ".ts": 8,
+      ".yml": 1,
+      "<none>": 4
     }
   },
-  "generated_at": "2026-06-27T08:58:37Z",
+  "generated_at": "2026-06-27T09:05:45Z",
   "license_review": {
-    "detected_license": "MIT",
-    "message": "Allowed license detected: MIT",
+    "detected_license": "MIT License",
+    "message": "Allowed license detected: MIT License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/villesau/ai-codereviewer --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-90/XCMAX/packages/retort_engine/.retort/cache/github/go1com/openai-review --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 0,
-      "minimum_expected_behavior_tests": 4,
-      "prioritized_component_count": 0,
+      "component_gap_count": 1,
+      "minimum_expected_behavior_tests": 5,
+      "prioritized_component_count": 1,
       "task_dimension_count": 4
     },
-    "component_gaps": [],
+    "component_gaps": [
+      {
+        "component": "plugin_surface",
+        "external_files": 4,
+        "file_gap": -8,
+        "marker_gap": 15,
+        "own_files": 12,
+        "representative_external_files": [
+          "package-lock.json",
+          "package.json",
+          ".eslintrc.js",
+          ".devcontainer/devcontainer.json"
+        ]
+      }
+    ],
     "external_file_groups": {
       "plugin_surface": {
         "files": [
-          "README.md"
+          "package-lock.json",
+          "package.json",
+          ".eslintrc.js",
+          ".devcontainer/devcontainer.json"
         ],
-        "marker_hits": 3
+        "marker_hits": 111
       },
       "provider_surface": {
         "files": [
           "README.md",
+          "package-lock.json",
           "package.json",
           "action.yml",
-          ".github/workflows/code_review.yml",
-          "src/main.ts"
+          "src/azure-openai.ts",
+          "src/helpers/comments.ts",
+          "src/helpers/pull-request.ts"
         ],
-        "marker_hits": 43
+        "marker_hits": 72
       },
       "review_pipeline": {
         "files": [
           "README.md",
+          "package-lock.json",
           "package.json",
           "action.yml",
-          ".github/workflows/code_review.yml",
-          "src/main.ts"
+          "src/main.ts",
+          "src/helpers/comments.ts",
+          "src/helpers/reviewers.ts"
         ],
-        "marker_hits": 51
+        "marker_hits": 52
       },
       "safety_policy": {
         "files": [
           "README.md",
+          "package-lock.json",
           "package.json",
-          ".github/workflows/code_review.yml"
+          "src/helpers/comments.ts"
         ],
-        "marker_hits": 11
+        "marker_hits": 7
       },
       "workflow_ci": {
         "files": [
           "README.md",
+          "package-lock.json",
           "package.json",
+          ".eslintrc.js",
           "tsconfig.json",
-          ".github/workflows/code_review.yml"
+          "src/helpers/comments.ts",
+          "src/helpers/pull-request.ts"
         ],
-        "marker_hits": 9
+        "marker_hits": 420
       }
     },
     "own_file_groups": {
@@ -95,7 +121,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 172
+        "marker_hits": 166
       },
       "diff_hunk_review": {
         "files": [
@@ -112,16 +138,13 @@
           "README.md",
           "retort_engine/review_pipeline.py",
           "retort_engine/core.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md",
-          "docs/retort_external_review_report.json"
+          "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 35
+        "marker_hits": 29
       },
       "plugin_surface": {
         "files": [
@@ -138,7 +161,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 99
+        "marker_hits": 96
       },
       "provider_surface": {
         "files": [
@@ -155,7 +178,7 @@
           "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py"
         ],
-        "marker_hits": 91
+        "marker_hits": 86
       },
       "review_pipeline": {
         "files": [
@@ -172,7 +195,7 @@
           "retort_engine/real_absorption.py",
           "retort_engine/evaluators.py"
         ],
-        "marker_hits": 368
+        "marker_hits": 375
       },
       "safety_policy": {
         "files": [
@@ -189,7 +212,7 @@
           "retort_engine/evaluators.py",
           "retort_engine/frontend/app.js"
         ],
-        "marker_hits": 157
+        "marker_hits": 155
       },
       "workflow_ci": {
         "files": [
@@ -206,7 +229,7 @@
           "retort_engine/contracts.py",
           "retort_engine/branching.py"
         ],
-        "marker_hits": 942
+        "marker_hits": 946
       }
     },
     "pipeline_stages": [
@@ -218,17 +241,29 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": []
+    "prioritized_absorptions": [
+      {
+        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
+        "component": "plugin_surface",
+        "priority": "P1",
+        "source_files": [
+          "package-lock.json",
+          "package.json",
+          ".eslintrc.js",
+          ".devcontainer/devcontainer.json"
+        ]
+      }
+    ]
   },
-  "run_id": "20260627085837-f05fa6c2b2",
+  "run_id": "20260627090545-93f1f5971d",
   "semantic_review": {
     "external": {
-      "classes": 0,
+      "classes": 2,
       "cli_markers": 0,
-      "functions": 8,
-      "source_files": 6,
-      "test_markers": 3,
-      "workflow_markers": 40
+      "functions": 0,
+      "source_files": 15,
+      "test_markers": 1,
+      "workflow_markers": 56
     },
     "gaps": [],
     "own": {
@@ -237,28 +272,32 @@
       "functions": 396,
       "source_files": 43,
       "test_markers": 113,
-      "workflow_markers": 553
+      "workflow_markers": 573
     }
   },
   "signal_evidence": {
     "multi_provider": [
       "README.md",
+      "package-lock.json",
       "package.json",
       "action.yml",
-      ".github/workflows/code_review.yml",
-      "src/main.ts"
+      "src/azure-openai.ts"
     ],
     "plugin_surface": [
-      "README.md"
+      "package-lock.json",
+      "package.json",
+      ".eslintrc.js",
+      "src/main.ts",
+      "src/azure-openai.ts"
     ],
     "review_pipeline": [
       "README.md",
-      "package.json",
-      "action.yml",
-      ".github/workflows/code_review.yml"
+      "src/main.ts",
+      "src/helpers/comments.ts",
+      "src/helpers/reviewers.ts"
     ]
   },
-  "source": "https://github.com/villesau/ai-codereviewer",
+  "source": "https://github.com/go1com/openai-review",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -266,7 +305,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/villesau/ai-codereviewer."
+      "why": "Compare implementation patterns from https://github.com/go1com/openai-review."
     },
     {
       "dimension": "product_operability",
@@ -274,7 +313,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/villesau/ai-codereviewer."
+      "why": "Extract usable UX improvements from https://github.com/go1com/openai-review."
     },
     {
       "dimension": "operational_readiness",
@@ -282,7 +321,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/villesau/ai-codereviewer."
+      "why": "Adapt CI and release checks from https://github.com/go1com/openai-review."
     },
     {
       "dimension": "comparative_analysis_depth",
