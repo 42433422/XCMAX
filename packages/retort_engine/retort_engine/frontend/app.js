@@ -725,5 +725,17 @@ $("evolveBtn").onclick = evolve;
 $("llmReviewBtn").onclick = llmReview;
 $("llmParallelBtn").onclick = llmParallelReview;
 $("llmStatusBtn").onclick = llmStatus;
+
+async function loadDefaultProject() {
+  try {
+    const r = await fetch("/api/default-project");
+    const j = await r.json();
+    if (j.project) $("ownProjectFolder").value = j.project;
+  } catch (_) {
+    return;
+  }
+}
+
 externalScores(null);
+loadDefaultProject();
 draw();
