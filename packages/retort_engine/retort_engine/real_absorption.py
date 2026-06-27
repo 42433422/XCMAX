@@ -163,6 +163,7 @@ def _capability_module_content(run_id: str, source: str, external_path: Path, ta
         "signal_evidence": dict(profile.get("signal_evidence") or {}),
         "component_gaps": list((review_report.get("review_pipeline") or {}).get("component_gaps") or [])[:12],
         "prioritized_absorptions": list((review_report.get("review_pipeline") or {}).get("prioritized_absorptions") or [])[:12],
+        "depth_absorption_workflow": dict((review_report.get("review_pipeline") or {}).get("depth_absorption_workflow") or {}),
         "benchmark": dict((review_report.get("review_pipeline") or {}).get("benchmark") or {}),
         "tasks": [
             {
@@ -206,8 +207,28 @@ def absorbed_capability_plan() -> dict[str, Any]:
     """Return the latest executable capability plan from external absorption."""
     state = dict(ABSORBED_CAPABILITY_STATE)
     state["ranked_capabilities"] = ranked_capabilities()
+    state["depth_absorption_plan"] = depth_absorption_plan()
     state["minimum_behavior_tests"] = int((state.get("benchmark") or {{}}).get("minimum_expected_behavior_tests") or 3)
     return state
+
+
+def depth_absorption_plan() -> dict[str, Any]:
+    """Return the depth-only plan that decides what Retort should actually absorb."""
+    workflow = dict(ABSORBED_CAPABILITY_STATE.get("depth_absorption_workflow") or {{}})
+    focused = list(workflow.get("focused_components") or [])
+    workflow["ranked_focus_components"] = sorted(
+        focused,
+        key=lambda item: (str(item.get("priority") or "P9") == "P0", int(item.get("similarity_score") or 0), int(item.get("depth_gap") or 0)),
+        reverse=True,
+    )
+    workflow["breadth_rejected"] = [item for item in workflow.get("rejected_breadth_components") or [] if item.get("reason") == "breadth_only_for_current_phase"]
+    return workflow
+
+
+def depth_first_task_queue() -> list[dict[str, Any]]:
+    """Expose employee tasks that deepen overlapping behavior before broadening scope."""
+    workflow = depth_absorption_plan()
+    return [dict(task) for task in workflow.get("employee_tasks") or []]
 
 
 def ranked_capabilities() -> list[dict[str, Any]]:
@@ -269,6 +290,9 @@ def absorption_quality_gate(changed_files: list[str], gates: list[dict[str, Any]
     plan = absorbed_capability_plan()
     minimum = int(minimum_behavior_tests or plan.get("minimum_behavior_tests") or 3)
     missing = explain_missing_absorption_evidence(changed_files, gates)
+    depth_gate = (depth_absorption_plan().get("quality_gate") or {{}})
+    if depth_gate and not depth_gate.get("passed"):
+        missing.append("depth_absorption_gate_failed")
     test_gate = next((gate for gate in gates if "test_absorbed_capabilities.py" in " ".join(str(part) for part in gate.get("command") or [])), {{}})
     stdout = str(test_gate.get("stdout_tail") or "")
     passed_count = 0
@@ -303,7 +327,7 @@ def _capability_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
     return f'''from __future__ import annotations
 
-from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, explain_missing_absorption_evidence, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
+from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
 
 EXPECTED_ABSORPTION_SOURCE = {source_text}
 
@@ -315,6 +339,17 @@ def test_absorbed_capability_plan_has_ranked_behavior_signals() -> None:
     assert isinstance(plan["tasks"], list)
     assert plan["minimum_behavior_tests"] >= 3
     assert ranked_capabilities()
+    assert plan["depth_absorption_plan"]["focus_mode"] == "similar_function_depth_only"
+
+
+def test_depth_absorption_plan_keeps_depth_before_breadth() -> None:
+    workflow = depth_absorption_plan()
+    focused_components = {{item["component"] for item in workflow["focused_components"]}}
+    assert workflow["quality_gate"]["passed"] is True
+    assert focused_components
+    assert not (focused_components & {{"provider_surface", "plugin_surface"}})
+    assert workflow["breadth_rejected"]
+    assert all(task["acceptance"] and task["evidence_required"] for task in depth_first_task_queue())
 
 
 def test_capability_progress_requires_behavior_code_tests_and_gates() -> None:

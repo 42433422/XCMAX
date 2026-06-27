@@ -51,6 +51,13 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["ready_for_employee_tasking"] is True
     assert {"high", "medium"}.issubset(severities)
     assert result["task_groups"]
+    assert result["summary"]["deep_review_pipeline"] is True
+    assert result["summary"]["stage_count"] >= 5
+    assert result["summary"]["risk_counts"]["high"] >= 1
+    assert result["file_summaries"][0]["stages"]
+    assert result["comments"][0]["review_stage"]
+    assert result["comments"][0]["employee_actionable"] is True
+    assert result["task_groups"][0]["risk_counts"]
     assert result["incremental"]["enabled"] is False
     assert validate_contract("pr_review_result", result)["valid"] is True
 

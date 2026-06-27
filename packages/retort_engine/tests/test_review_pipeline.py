@@ -28,3 +28,10 @@ def test_review_pipeline_groups_external_advantages(tmp_path: Path) -> None:
     assert "map_diff_hunk_context" in report["pipeline_stages"]
     assert report["prioritized_absorptions"][0]["source_files"]
     assert report["benchmark"]["minimum_expected_behavior_tests"] >= 3
+    workflow = report["depth_absorption_workflow"]
+    assert workflow["focus_mode"] == "similar_function_depth_only"
+    assert workflow["quality_gate"]["passed"] is True
+    assert workflow["employee_tasks"]
+    assert all(item["component"] not in {"provider_surface", "plugin_surface"} for item in workflow["focused_components"])
+    assert {item["component"] for item in workflow["rejected_breadth_components"]} & {"provider_surface", "plugin_surface"}
+    assert all(task["acceptance"] and task["evidence_required"] for task in workflow["employee_tasks"])
