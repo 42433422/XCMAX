@@ -6,30 +6,39 @@
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
   "external_snapshot": {
-    "file_count": 65,
-    "git_revision": "21626acb6797bdd3d7e1017fcdb7022feaf84884",
+    "file_count": 284,
+    "git_revision": "bd09b6cf89c6d6f3d16b159fa7603fa0e7768cf2",
     "suffix_counts": {
-      ".example": 1,
-      ".js": 1,
-      ".json": 7,
-      ".md": 3,
-      ".mjs": 1,
+      ".css": 1,
+      ".github_action": 1,
+      ".github_action_dockerhub": 1,
+      ".html": 3,
+      ".ico": 1,
+      ".in": 1,
+      ".json": 3,
+      ".lambda": 1,
+      ".md": 47,
+      ".png": 2,
+      ".py": 168,
+      ".sh": 1,
       ".svg": 2,
-      ".ts": 24,
-      ".yml": 19,
-      "<none>": 7
+      ".toml": 23,
+      ".txt": 2,
+      ".yaml": 9,
+      ".yml": 13,
+      "<none>": 5
     }
   },
-  "generated_at": "2026-06-27T18:34:18Z",
+  "generated_at": "2026-06-27T18:36:21Z",
   "license_review": {
-    "detected_license": "MIT License",
-    "message": "Allowed license detected: MIT License",
+    "detected_license": "Apache License",
+    "message": "Allowed license detected: Apache License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
@@ -40,31 +49,31 @@
     },
     "component_gaps": [
       {
-        "component": "safety_policy",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 475,
-        "own_files": 12,
-        "representative_external_files": [
-          "README.md",
-          ".licensed.yml",
-          "package-lock.json",
-          "package.json",
-          "AGENTS.md"
-        ]
-      },
-      {
         "component": "provider_surface",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 33,
+        "marker_gap": 3992,
         "own_files": 12,
         "representative_external_files": [
+          "CHANGELOG.md",
           "README.md",
-          "package-lock.json",
-          "package.json",
+          "RELEASE_NOTES.md",
           "AGENTS.md",
-          "action.yml"
+          "SECURITY.md"
+        ]
+      },
+      {
+        "component": "diff_hunk_review",
+        "external_files": 12,
+        "file_gap": 2,
+        "marker_gap": 14,
+        "own_files": 10,
+        "representative_external_files": [
+          "CHANGELOG.md",
+          "pr_agent/settings/pr_custom_labels.toml",
+          "pr_agent/settings/pr_information_from_user_prompts.toml",
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/settings/pr_line_questions_prompts.toml"
         ]
       }
     ],
@@ -75,11 +84,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
+            "CHANGELOG.md",
             "README.md",
-            "package-lock.json",
-            "package.json",
+            "RELEASE_NOTES.md",
             "AGENTS.md",
-            "action.yml"
+            "SECURITY.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -88,11 +97,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "rollup.config.ts",
-            "jest.config.js",
             "README.md",
-            ".licensed.yml",
-            "package-lock.json"
+            "RELEASE_NOTES.md",
+            "AGENTS.md",
+            "SECURITY.md",
+            "docker/mosaico/README.md"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -126,20 +135,6 @@
           "title": "Deepen file_grouping"
         },
         {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "dimension": "feedback_loop_closure",
           "evidence_required": [
@@ -152,6 +147,19 @@
           "priority": "P1",
           "task_id": "retort-depth-benchmark-eval",
           "title": "Deepen benchmark_eval"
+        },
+        {
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-safety-policy",
+          "title": "Deepen safety_policy"
         },
         {
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
@@ -167,17 +175,18 @@
           "title": "Deepen workflow_ci"
         },
         {
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "review JSON with stages and comments"
           ],
           "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-safety-policy",
-          "title": "Deepen safety_policy"
+          "priority": "P0",
+          "task_id": "retort-depth-diff-hunk-review",
+          "title": "Deepen diff_hunk_review"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -207,16 +216,16 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 392,
-          "own_marker_hits": 2204,
+          "external_marker_hits": 1282,
+          "own_marker_hits": 2240,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
+            "CODE_OF_CONDUCT.md",
+            "action.yaml",
+            "pyproject.toml",
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "AGENTS.md",
-            "action.yml"
+            "CONTRIBUTING.md"
           ]
         },
         {
@@ -242,50 +251,15 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 3,
-          "own_marker_hits": 78,
+          "external_marker_hits": 5,
+          "own_marker_hits": 79,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "src/main.ts",
-            "src/commenter.ts"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 8,
-          "own_marker_hits": 30,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "README.md",
-            "action.yml",
-            "__tests__/reviewer.test.ts",
-            "__tests__/prompts.test.ts",
-            "src/prompts.ts"
+            "pr_agent/settings/pr_reviewer_prompts.toml",
+            "pr_agent/git_providers/gitea_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/git_providers/gerrit_provider.py"
           ]
         },
         {
@@ -314,14 +288,50 @@
             "precision or false-positive benchmark counters"
           ],
           "external_marker_hits": 35,
-          "own_marker_hits": 712,
+          "own_marker_hits": 700,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "__tests__/reviewer.test.ts",
-            "__tests__/prompts.test.ts",
-            "src/prompts.ts",
-            "src/option.ts"
+            "CHANGELOG.md",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/tools/pr_help_message.py",
+            "pr_agent/algo/token_handler.py"
+          ]
+        },
+        {
+          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "component": "safety_policy",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-safety-policy",
+            "title": "Deepen safety_policy"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 267,
+          "own_marker_hits": 426,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "CODE_OF_CONDUCT.md",
+            "pyproject.toml",
+            "README.md",
+            "AGENTS.md",
+            "SECURITY.md"
           ]
         },
         {
@@ -347,51 +357,53 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 998,
-          "own_marker_hits": 3337,
+          "external_marker_hits": 3081,
+          "own_marker_hits": 3444,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "tsconfig.base.json",
-            "jest.config.js",
+            "CODE_OF_CONDUCT.md",
+            "CHANGELOG.md",
+            "pyproject.toml",
             "README.md",
-            "tsconfig.eslint.json",
-            ".prettierrc.yml"
+            "setup.py"
           ]
         },
         {
-          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "component": "safety_policy",
-          "depth_gap": 475,
+          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "component": "diff_hunk_review",
+          "depth_gap": 14,
           "employee_task": {
-            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
+            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
             "evidence_required": [
               "source diff",
               "behavior test",
-              "gate output"
+              "gate output",
+              "review JSON with stages and comments"
             ],
             "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-safety-policy",
-            "title": "Deepen safety_policy"
+            "priority": "P0",
+            "task_id": "retort-depth-diff-hunk-review",
+            "title": "Deepen diff_hunk_review"
           },
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "review JSON with stages and comments"
           ],
-          "external_marker_hits": 870,
-          "own_marker_hits": 395,
+          "external_marker_hits": 44,
+          "own_marker_hits": 30,
           "priority": "P0",
-          "similarity_score": 91,
+          "similarity_score": 95,
           "source_files": [
-            "README.md",
-            ".licensed.yml",
-            "package-lock.json",
-            "package.json",
-            "AGENTS.md"
+            "CHANGELOG.md",
+            "pr_agent/settings/pr_custom_labels.toml",
+            "pr_agent/settings/pr_information_from_user_prompts.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml",
+            "pr_agent/settings/pr_line_questions_prompts.toml"
           ]
         }
       ],
@@ -411,26 +423,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 362,
+          "external_marker_hits": 4331,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
+            "CHANGELOG.md",
             "README.md",
-            "package-lock.json",
-            "package.json",
+            "RELEASE_NOTES.md",
             "AGENTS.md",
-            "action.yml"
+            "SECURITY.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 238,
+          "external_marker_hits": 296,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "rollup.config.ts",
-            "jest.config.js",
             "README.md",
-            ".licensed.yml",
-            "package-lock.json"
+            "RELEASE_NOTES.md",
+            "AGENTS.md",
+            "SECURITY.md",
+            "docker/mosaico/README.md"
           ]
         }
       ]
@@ -438,115 +450,131 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "__tests__/reviewer.test.ts",
-          "__tests__/prompts.test.ts",
-          "src/prompts.ts",
-          "src/option.ts"
+          "CHANGELOG.md",
+          "pr_agent/settings/pr_evaluate_prompt_response.toml",
+          "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+          "pr_agent/tools/pr_help_message.py",
+          "pr_agent/algo/token_handler.py",
+          "pr_agent/servers/bitbucket_server_webhook.py",
+          "tests/unittest/test_pr_update_changelog.py",
+          "tests/unittest/test_litellm_imds.py",
+          "tests/unittest/test_fetching_sub_issues.py",
+          "docs/mkdocs.yml",
+          "docs/docs/tools/similar_issues.md",
+          "docs/docs/faq/index.md"
         ],
         "marker_hits": 35
       },
       "diff_hunk_review": {
         "files": [
-          "README.md",
-          "action.yml",
-          "__tests__/reviewer.test.ts",
-          "__tests__/prompts.test.ts",
-          "src/prompts.ts",
-          "src/commenter.ts"
+          "CHANGELOG.md",
+          "pr_agent/settings/pr_custom_labels.toml",
+          "pr_agent/settings/pr_information_from_user_prompts.toml",
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/settings/pr_line_questions_prompts.toml",
+          "pr_agent/settings/pr_description_prompts.toml",
+          "pr_agent/settings/pr_questions_prompts.toml",
+          "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+          "pr_agent/mosaico/diff_provider.py",
+          "pr_agent/git_providers/codecommit_provider.py",
+          "pr_agent/git_providers/github_provider.py",
+          "pr_agent/git_providers/gitea_provider.py"
         ],
-        "marker_hits": 8
+        "marker_hits": 44
       },
       "file_grouping": {
         "files": [
-          "src/main.ts",
-          "src/commenter.ts"
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/git_providers/gitea_provider.py",
+          "pr_agent/git_providers/local_git_provider.py",
+          "pr_agent/git_providers/gerrit_provider.py"
         ],
-        "marker_hits": 3
+        "marker_hits": 5
       },
       "plugin_surface": {
         "files": [
-          "rollup.config.ts",
-          "jest.config.js",
           "README.md",
-          ".licensed.yml",
-          "package-lock.json",
-          "package.json",
+          "RELEASE_NOTES.md",
           "AGENTS.md",
-          ".devcontainer/devcontainer.json",
-          "__tests__/option.test.ts",
-          ".github/workflows/ci.yml",
-          "src/main.ts",
-          "src/option.ts"
+          "SECURITY.md",
+          "docker/mosaico/README.md",
+          "pr_agent/config_loader.py",
+          "pr_agent/settings/configuration.toml",
+          "pr_agent/settings/language_extensions.toml",
+          "pr_agent/mosaico/dispatch.py",
+          "pr_agent/mosaico/observability.py",
+          "pr_agent/mosaico/card.py",
+          "pr_agent/tools/pr_code_suggestions.py"
         ],
-        "marker_hits": 238
+        "marker_hits": 296
       },
       "provider_surface": {
         "files": [
+          "CHANGELOG.md",
           "README.md",
-          "package-lock.json",
-          "package.json",
+          "RELEASE_NOTES.md",
           "AGENTS.md",
-          "action.yml",
-          "__tests__/chatbot.test.ts",
-          "__tests__/prompts.test.ts",
-          "__tests__/patchParser.test.ts",
-          "__tests__/option.test.ts",
-          "__tests__/chatbot/index.test.ts",
-          ".github/workflows/ai-review.yml",
-          ".github/workflows/ci.yml"
+          "SECURITY.md",
+          "docker/mosaico/docker-compose.pr-agent.yml",
+          "docker/mosaico/README.md",
+          "pr_agent/config_loader.py",
+          "pr_agent/cli_pip.py",
+          "pr_agent/secret_providers/aws_secrets_manager_provider.py",
+          "pr_agent/secret_providers/google_cloud_storage_secret_provider.py",
+          "pr_agent/secret_providers/secret_provider.py"
         ],
-        "marker_hits": 362
+        "marker_hits": 4331
       },
       "review_pipeline": {
         "files": [
+          "CODE_OF_CONDUCT.md",
+          "action.yaml",
+          "pyproject.toml",
           "README.md",
-          "package-lock.json",
-          "package.json",
+          "CONTRIBUTING.md",
+          "RELEASE_NOTES.md",
+          ".pr_agent.toml",
           "AGENTS.md",
-          "action.yml",
-          ".devcontainer/devcontainer.json",
-          "__tests__/reviewer.test.ts",
-          "__tests__/commenter.test.ts",
-          "__tests__/prompts.test.ts",
-          "__tests__/patchParser.test.ts",
-          "__tests__/option.test.ts",
-          "__tests__/chatbot/index.test.ts"
+          "SECURITY.md",
+          "docker/mosaico/pr-agent-solution-agent.json",
+          "docker/mosaico/README.md",
+          "pr_agent/config_loader.py"
         ],
-        "marker_hits": 392
+        "marker_hits": 1282
       },
       "safety_policy": {
         "files": [
+          "CODE_OF_CONDUCT.md",
+          "pyproject.toml",
           "README.md",
-          ".licensed.yml",
-          "package-lock.json",
-          "package.json",
           "AGENTS.md",
-          ".yaml-lint.yml",
-          "action.yml",
-          ".licenses/npm/tunnel.dep.yml",
-          ".licenses/npm/undici.dep.yml",
-          ".licenses/npm/@actions/exec.dep.yml",
-          ".licenses/npm/@actions/core.dep.yml",
-          ".licenses/npm/@actions/http-client.dep.yml"
+          "SECURITY.md",
+          "docker/mosaico/pr-agent-solution-agent.json",
+          "pr_agent/config_loader.py",
+          "pr_agent/custom_merge_loader.py",
+          "pr_agent/settings/configuration.toml",
+          "pr_agent/settings/language_extensions.toml",
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml"
         ],
-        "marker_hits": 870
+        "marker_hits": 267
       },
       "workflow_ci": {
         "files": [
-          "tsconfig.base.json",
-          "jest.config.js",
+          "CODE_OF_CONDUCT.md",
+          "CHANGELOG.md",
+          "pyproject.toml",
           "README.md",
-          "tsconfig.eslint.json",
-          ".prettierrc.yml",
-          "package-lock.json",
-          "package.json",
-          "tsconfig.json",
+          "setup.py",
+          "CONTRIBUTING.md",
+          "RELEASE_NOTES.md",
           "AGENTS.md",
-          "biome.json",
-          "action.yml",
-          ".licenses/npm/tunnel.dep.yml"
+          "pr_compliance_checklist.yaml",
+          "SECURITY.md",
+          "docker/mosaico/docker-compose.pr-agent.yml",
+          "docker/mosaico/pr-agent-solution-agent.json"
         ],
-        "marker_hits": 998
+        "marker_hits": 3081
       }
     },
     "own_file_groups": {
@@ -565,7 +593,7 @@
           "retort_engine/architecture_memory.py",
           "retort_engine/review_context_bias.py"
         ],
-        "marker_hits": 712
+        "marker_hits": 700
       },
       "diff_hunk_review": {
         "files": [
@@ -597,7 +625,7 @@
           "tests/test_retort_engine.py",
           "tests/test_external_sources.py"
         ],
-        "marker_hits": 78
+        "marker_hits": 79
       },
       "plugin_surface": {
         "files": [
@@ -614,7 +642,7 @@
           "retort_engine/external_sources.py",
           "retort_engine/devour_session.py"
         ],
-        "marker_hits": 588
+        "marker_hits": 576
       },
       "provider_surface": {
         "files": [
@@ -631,7 +659,7 @@
           "retort_engine/project_assessment.py",
           "retort_engine/core.py"
         ],
-        "marker_hits": 329
+        "marker_hits": 339
       },
       "review_pipeline": {
         "files": [
@@ -648,7 +676,7 @@
           "retort_engine/complex_pr_replay.py",
           "retort_engine/employee_scheduler_stress.py"
         ],
-        "marker_hits": 2204
+        "marker_hits": 2240
       },
       "safety_policy": {
         "files": [
@@ -665,7 +693,7 @@
           "retort_engine/project_assessment.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 395
+        "marker_hits": 426
       },
       "workflow_ci": {
         "files": [
@@ -682,7 +710,7 @@
           "retort_engine/pr_publish.py",
           "retort_engine/llm_absorption_evidence.py"
         ],
-        "marker_hits": 3337
+        "marker_hits": 3444
       }
     },
     "pipeline_stages": [
@@ -696,45 +724,57 @@
     ],
     "prioritized_absorptions": [
       {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
-        "source_files": [
-          "README.md",
-          ".licensed.yml",
-          "package-lock.json",
-          "package.json",
-          "AGENTS.md"
-        ]
-      },
-      {
         "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
         "component": "provider_surface",
         "priority": "P0",
         "source_files": [
+          "CHANGELOG.md",
           "README.md",
-          "package-lock.json",
-          "package.json",
+          "RELEASE_NOTES.md",
           "AGENTS.md",
-          "action.yml"
+          "SECURITY.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
+        "component": "diff_hunk_review",
+        "priority": "P1",
+        "source_files": [
+          "CHANGELOG.md",
+          "pr_agent/settings/pr_custom_labels.toml",
+          "pr_agent/settings/pr_information_from_user_prompts.toml",
+          "pr_agent/settings/pr_reviewer_prompts.toml",
+          "pr_agent/settings/pr_line_questions_prompts.toml"
         ]
       }
     ]
   },
-  "run_id": "20260627183417-fe4938a18b",
+  "run_id": "20260627183621-6e1352f61e",
   "semantic_review": {
     "external": {
-      "classes": 133,
-      "cli_markers": 4,
-      "functions": 44,
-      "source_files": 54,
-      "test_markers": 132,
-      "workflow_markers": 397
+      "classes": 518,
+      "cli_markers": 0,
+      "functions": 2279,
+      "source_files": 267,
+      "test_markers": 1039,
+      "workflow_markers": 1304
     },
     "gaps": [
       {
-        "external_advantage": 83,
+        "external_advantage": 468,
         "metric": "classes"
+      },
+      {
+        "external_advantage": 1382,
+        "metric": "functions"
+      },
+      {
+        "external_advantage": 158,
+        "metric": "source_files"
+      },
+      {
+        "external_advantage": 715,
+        "metric": "test_markers"
       }
     ],
     "own": {
@@ -743,46 +783,46 @@
       "functions": 897,
       "source_files": 109,
       "test_markers": 324,
-      "workflow_markers": 2941
+      "workflow_markers": 2969
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "__tests__/reviewer.test.ts",
-      "__tests__/prompts.test.ts",
-      "src/prompts.ts",
-      "src/option.ts"
+      "CHANGELOG.md",
+      "pr_agent/settings/pr_evaluate_prompt_response.toml",
+      "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+      "pr_agent/tools/pr_help_message.py",
+      "pr_agent/algo/token_handler.py"
     ],
     "file_grouping": [
-      "README.md",
-      "action.yml",
-      "__tests__/prompts.test.ts",
-      "src/main.ts",
-      "src/commenter.ts"
+      "pr_agent/settings/pr_reviewer_prompts.toml",
+      "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+      "pr_agent/git_providers/local_git_provider.py",
+      "pr_agent/git_providers/gerrit_provider.py"
     ],
     "multi_provider": [
+      "CHANGELOG.md",
       "README.md",
-      "package-lock.json",
-      "package.json",
+      "RELEASE_NOTES.md",
       "AGENTS.md",
-      "action.yml"
+      "SECURITY.md"
     ],
     "plugin_surface": [
-      "rollup.config.ts",
+      "pyproject.toml",
       "README.md",
-      ".licensed.yml",
-      "package-lock.json",
-      "package.json"
+      "RELEASE_NOTES.md",
+      "AGENTS.md",
+      "SECURITY.md"
     ],
     "review_pipeline": [
+      "pyproject.toml",
       "README.md",
-      "package-lock.json",
-      "package.json",
+      ".pr_agent.toml",
       "AGENTS.md",
-      "action.yml"
+      "docker/mosaico/pr-agent-solution-agent.json"
     ]
   },
-  "source": "https://github.com/mopemope/pr-ai-review-bot",
+  "source": "https://github.com/qodo-ai/pr-agent",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -790,7 +830,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/mopemope/pr-ai-review-bot."
+      "why": "Compare implementation patterns from https://github.com/qodo-ai/pr-agent."
     },
     {
       "dimension": "product_operability",
@@ -798,7 +838,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/mopemope/pr-ai-review-bot."
+      "why": "Extract usable UX improvements from https://github.com/qodo-ai/pr-agent."
     },
     {
       "dimension": "operational_readiness",
@@ -806,7 +846,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/mopemope/pr-ai-review-bot."
+      "why": "Adapt CI and release checks from https://github.com/qodo-ai/pr-agent."
     },
     {
       "dimension": "comparative_analysis_depth",
