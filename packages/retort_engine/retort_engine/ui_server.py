@@ -54,6 +54,10 @@ class RetortUIServer:
                         self._json(outer.service.review_diff(payload))
                     elif self.path == "/api/review-pr":
                         self._json(outer.service.review_pr(payload))
+                    elif self.path == "/api/publish-pr-dry-run":
+                        self._json(outer.service.publish_pr_dry_run(payload))
+                    elif self.path == "/api/cross-project-replay":
+                        self._json(outer.service.cross_project_replay(payload))
                     elif self.path == "/api/llm-review":
                         self._json(outer.service.llm_review(payload))
                     elif self.path == "/api/llm-review-status":
