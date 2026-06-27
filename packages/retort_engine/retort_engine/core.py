@@ -38,6 +38,7 @@ from retort_engine.devour_session import assessment_file_count as _devour_assess
 from retort_engine.devour_session import assessment_score as _devour_assessment_score
 from retort_engine.devour_session import build_devour_session as _devour_build_devour_session
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
+from retort_engine.evolution_map import build_evolution_map
 from retort_engine.external_sources import external_project_profile as _sources_external_project_profile
 from retort_engine.external_sources import materialize_external_source as _sources_materialize_external_source
 from retort_engine.external_sources import parse_github_url as _sources_parse_github_url
@@ -345,6 +346,12 @@ class RetortService:
             str(payload.get("project") or payload.get("project_path") or "."),
             include_tests=bool(payload.get("include_tests")),
             max_files=int(payload.get("max_files") or 400),
+        )
+
+    def evolution_map(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_evolution_map(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            max_files=int(payload.get("max_files") or 140),
         )
 
     def architecture_contract_report(self, payload: dict[str, Any]) -> dict[str, Any]:

@@ -54,6 +54,9 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "beginProgress" in (root / "app.js").read_text(encoding="utf-8")
     assert "deepProgress" in (root / "index.html").read_text(encoding="utf-8")
     assert "progressFill" in (root / "index.html").read_text(encoding="utf-8")
+    assert "codeGraphFocusPanel" in (root / "index.html").read_text(encoding="utf-8")
+    assert "codeGraphProofPanel" in (root / "index.html").read_text(encoding="utf-8")
+    assert "refactorPriorityPanel" in (root / "index.html").read_text(encoding="utf-8")
     index_text = (root / "index.html").read_text(encoding="utf-8")
     app_text = (root / "app.js").read_text(encoding="utf-8")
     style_text = (root / "styles.css").read_text(encoding="utf-8")
@@ -70,11 +73,16 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "function llmParallelReview" not in app_text
     assert "function llmStatus" not in app_text
     assert "function syncLlmStatus" in app_text
+    assert "function refreshEvolutionMap" in app_text
+    assert "function renderCodeGraphFocusPanel" in app_text
+    assert "function renderCodeGraphProofPanel" in app_text
+    assert "function renderRefactorPriorityPanel" in app_text
     assert "排比 LLM 自动同步" in app_text
     assert "use_llm: true" in app_text
     assert "require_deep_review: true" in app_text
     assert "/api/absorption-lights" in ui_server_text
     assert "/api/codebase-graph-report" in ui_server_text
+    assert "/api/evolution-map" in ui_server_text
     assert "/api/architecture-contract-report" in ui_server_text
     assert blackhole_ui_detected(root.parents[1]) is True
     assert structure["missing_ids"] == []

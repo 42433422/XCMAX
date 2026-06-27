@@ -95,6 +95,21 @@ def test_service_exposes_codebase_graph_report(tmp_path: Path) -> None:
     assert CoreRetortService().codebase_graph_report({"project": str(project)})["status"] == "ready"
 
 
+def test_service_exposes_evolution_map(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    package = project / "retort_engine"
+    package.mkdir(parents=True)
+    write_file(package / "__init__.py", "")
+    write_file(package / "codebase_graph.py", "def graph():\n    return 'code graph'\n")
+
+    wrapped = RetortService().evolution_map({"project": str(project)})
+    core = CoreRetortService().evolution_map({"project": str(project)})
+
+    assert wrapped["status"] == "ready"
+    assert wrapped["code_graph"]["summary"]["file_count"] == 2
+    assert core["status"] == "ready"
+
+
 def test_service_exposes_architecture_contract_report(tmp_path: Path) -> None:
     project = tmp_path / "project"
     package = project / "retort_engine"

@@ -10,6 +10,7 @@ const state = {
   llmSyncTimer: 0,
   llmSyncAttempts: 0,
   absorption: null,
+  evolutionMap: null,
   absorbedProjects: {count: 0, sources: [], latestSource: "", updatedAt: 0},
   absorbedProjectHits: [],
   absorbedProjectHitDatasetAt: 0,
@@ -151,7 +152,10 @@ const statusText = {
   employee_execution_verified: "员工执行",
   post_absorption_tests_passed: "吸收后测试",
   merge_verified: "合并",
-  external_advantage_reassessed: "外部优势复评"
+  external_advantage_reassessed: "外部优势复评",
+  proved_by_closed_loop_evidence: "闭环证据证明",
+  not_available: "暂无证据",
+  code_graph_focus_not_proved: "未命中代码图定位"
 };
 const taskText = {
   "Absorb stronger implementation depth": "吸收更强实现深度",
@@ -657,6 +661,108 @@ function appendLabeledChips(target, label, items, limit = 8) {
   appendChips(target, values, "filelist compact", limit);
 }
 
+function hotspotPath(item) {
+  const raw = String(item?.path || item?.id || item || "");
+  return raw.split(":", 1)[0];
+}
+
+function renderCodeGraphFocusPanel(focus, codeGraph = null) {
+  const target = $("codeGraphFocusPanel");
+  if (!target) return;
+  target.textContent = "";
+  const ownFocus = focus?.own_focus_files || [];
+  const externalFocus = focus?.external_focus_files || [];
+  const ownHotspots = (focus?.own_hotspots || codeGraph?.hotspots || []).map(hotspotPath).filter(Boolean);
+  const summary = focus?.own_summary || codeGraph?.summary || {};
+  if (!focus && !codeGraph) {
+    target.textContent = "等待图谱";
+    return;
+  }
+  renderKV(target, [
+    ["状态", labelOf(focus?.status || codeGraph?.status || "ready")],
+    ["文件", summary.file_count ?? 0],
+    ["节点", summary.node_count ?? 0],
+    ["边", summary.edge_count ?? 0],
+  ]);
+  appendLabeledChips(target, ownFocus.length ? "主项目定位" : "当前热点", ownFocus.length ? ownFocus : ownHotspots, 6);
+  appendLabeledChips(target, "外部定位", externalFocus, 6);
+  if ((focus?.focus_terms || []).length) appendLabeledChips(target, "定位词", focus.focus_terms, 8);
+}
+
+function renderCodeGraphProofPanel(proof) {
+  const target = $("codeGraphProofPanel");
+  if (!target) return;
+  target.textContent = "";
+  if (!proof || !Object.keys(proof).length) {
+    target.textContent = "未运行";
+    return;
+  }
+  const summary = proof.summary || {};
+  renderKV(target, [
+    ["状态", proof.passed ? "已命中" : labelOf(proof.status) || "待证明"],
+    ["行为文件", summary.changed_behavior_file_count ?? 0],
+    ["热点命中", summary.changed_hotspot_count ?? (proof.changed_hotspots || []).length],
+    ["定位命中", summary.changed_focus_file_count ?? (proof.changed_focus_files || []).length],
+  ]);
+  if (summary.graph_smoke) {
+    appendLabeledChips(target, "闭环图谱", [summary.graph_smoke], 1);
+  }
+  appendLabeledChips(target, "命中热点", proof.changed_hotspots || [], 6);
+  appendLabeledChips(target, "命中定位", proof.changed_focus_files || [], 6);
+  appendLabeledChips(target, "图谱热点", proof.hotspot_files || [], 6);
+}
+
+function renderRefactorPriorityPanel(plan) {
+  const target = $("refactorPriorityPanel");
+  if (!target) return;
+  target.textContent = "";
+  const tasks = plan?.tasks || [];
+  if (!tasks.length) {
+    target.textContent = "暂无可拆分任务";
+    return;
+  }
+  const summary = plan.summary || {};
+  renderKV(target, [
+    ["任务", summary.task_count ?? tasks.length],
+    ["就绪", summary.ready_task_count ?? 0],
+    ["热点任务", summary.code_graph_hotspot_task_count ?? 0],
+    ["状态", labelOf(plan.gate?.status) || ""],
+  ]);
+  const list = document.createElement("div");
+  list.className = "refactor-list";
+  for (const task of tasks.slice(0, 5)) {
+    const row = document.createElement("div");
+    row.className = "refactor-row";
+    const title = document.createElement("b");
+    title.textContent = `${task.component} · ${task.priority}`;
+    const detail = document.createElement("span");
+    detail.textContent = `热点 ${task.code_graph_hotspot_score || 0} · 来源 ${task.supporting_source_count || 0}`;
+    row.append(title, detail);
+    const hotspots = (task.code_graph_hotspots || []).map(hotspotPath).filter(Boolean);
+    if (hotspots.length) appendChips(row, hotspots, "filelist compact", 3);
+    list.appendChild(row);
+  }
+  target.appendChild(list);
+}
+
+function renderEvolutionMap(map) {
+  state.evolutionMap = map || null;
+  renderCodeGraphFocusPanel(map?.latest_absorption?.pre_absorption_focus, map?.code_graph);
+  renderCodeGraphProofPanel(map?.latest_absorption?.code_graph_proof);
+  renderRefactorPriorityPanel(map?.core_refactor_plan);
+}
+
+async function refreshEvolutionMap() {
+  const project = $("ownProjectFolder").value.trim();
+  if (!project) return;
+  try {
+    const map = await api("/api/evolution-map", {project, max_files: 140});
+    renderEvolutionMap(map);
+  } catch (e) {
+    pushEvent("图谱刷新失败", e.message, "warn");
+  }
+}
+
 function compactScore(value) {
   return value == null || Number.isNaN(Number(value)) ? "--" : String(Math.round(Number(value)));
 }
@@ -1001,12 +1107,16 @@ async function absorb() {
     externalScores(r.external_assessment, r.absorption_visual);
     executionState(r.execution);
     evidence(r);
+    renderCodeGraphFocusPanel(r.execution?.pre_absorption_focus, state.evolutionMap?.code_graph);
+    renderCodeGraphProofPanel(r.execution?.code_graph_proof || state.evolutionMap?.latest_absorption?.code_graph_proof);
+    renderRefactorPriorityPanel(r.execution?.core_refactor_plan_preview || state.evolutionMap?.core_refactor_plan);
     tasks(r.tasks || []);
     llm(r.llm_review);
     $("branchState").textContent = labelOf(r.branch_workflow?.status) || "尚未运行分支流程";
     $("statusText").textContent = labelOf(r.status);
     pushEvent("吸收完成", `${labelOf(r.status)} · 改动 ${(r.execution?.changed_files || []).length} 个文件`, r.execution?.gates_passed ? "ok" : "warn");
     await finishAbsorption();
+    await refreshEvolutionMap();
   } catch (e) {
     cancelAbsorption();
     $("statusText").textContent = "已阻断";
@@ -1716,6 +1826,7 @@ async function loadDefaultProject() {
     const j = await r.json();
     if (j.project) $("ownProjectFolder").value = j.project;
     await refreshAbsorptionLights();
+    await refreshEvolutionMap();
   } catch (_) {
     return;
   }

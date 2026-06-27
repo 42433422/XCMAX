@@ -551,6 +551,27 @@ article {
   font-size: 11px;
 }
 
+.refactor-list {
+  display: grid;
+  gap: 7px;
+}
+
+.refactor-row {
+  display: grid;
+  gap: 5px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(244, 184, 96, .46);
+}
+
+.refactor-row b {
+  font-size: 12px;
+}
+
+.refactor-row span {
+  color: #9aa8b7;
+  font-size: 11px;
+}
+
 .proof-flags,
 .score-mini {
   display: flex;
