@@ -1,15 +1,18 @@
 {
   "absorbed_signals": [
+    "review_pipeline",
+    "file_grouping",
     "benchmarking",
     "codebase_graph",
     "plugin_surface",
     "multi_provider",
     "safety_policy",
     "static_analysis",
+    "context_packaging",
     "semantic_index",
     "atmosphere_shader",
     "procedural_surface",
-    "elevation_bump_map"
+    "cloud_texture_layer"
   ],
   "code_graph_proof": {
     "changed_behavior_files": [
@@ -59,21 +62,21 @@
     "evidence": {
       "max_files": 400,
       "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
-      "run_id": "20260627212518-4985a95789",
+      "run_id": "20260627212946-168c95fefd",
       "scope": "per_real_absorption_run",
       "style": "deterministic_post_absorption_code_graph"
     },
     "focus_files": [
       "retort_engine/absorbed_capabilities.py",
-      "retort_engine/architecture_refactor.py",
-      "retort_engine/cli.py",
       "retort_engine/codebase_graph.py",
       "retort_engine/core.py",
+      "retort_engine/pr_review.py",
       "retort_engine/real_absorption.py",
+      "retort_engine/review_pipeline.py",
       "tests/test_absorption_quality.py",
-      "tests/test_codebase_graph.py",
       "tests/test_real_absorption_helpers.py",
-      "tests/test_retort_engine.py"
+      "tests/test_retort_engine.py",
+      "tests/test_review_pipeline.py"
     ],
     "hotspot_files": [
       "retort_engine/cli.py",
@@ -90,7 +93,7 @@
     ],
     "passed": true,
     "per_run_required": true,
-    "run_id": "20260627212518-4985a95789",
+    "run_id": "20260627212946-168c95fefd",
     "status": "proved",
     "summary": {
       "changed_behavior_file_count": 3,
@@ -102,240 +105,70 @@
       "graph_status": "ready"
     }
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/semgrep/semgrep",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/yamadashy/repomix",
   "external_snapshot": {
-    "file_count": 9943,
-    "git_revision": "3ab755186921d9bf30e7741d9618c971e9597de2",
+    "file_count": 1132,
+    "git_revision": "5f94efc87852dce44731ca9461e2e38847006375",
     "suffix_counts": {
-      ".c": 8,
-      ".example": 1,
-      ".go": 99,
-      ".ini": 2,
-      ".java": 2,
-      ".jpg": 7,
-      ".js": 6,
-      ".json": 10,
-      ".jsonnet": 9,
-      ".list": 2,
+      ".cjs": 1,
+      ".css": 2,
+      ".json": 42,
       ".lock": 1,
-      ".md": 11,
-      ".mk": 1,
-      ".ml": 42,
-      ".nix": 4,
-      ".opam": 1,
-      ".php": 1,
-      ".py": 116,
-      ".sgrep": 209,
-      ".svg": 3,
-      ".template": 1,
-      ".tf": 14,
-      ".todo": 17,
-      ".ts": 2,
+      ".md": 412,
+      ".mdc": 1,
+      ".mjs": 2,
+      ".nix": 1,
+      ".png": 12,
+      ".svg": 2,
+      ".toml": 1,
+      ".ts": 77,
       ".txt": 1,
-      ".yaml": 11,
-      ".yml": 2,
-      "<none>": 17
+      ".vue": 19,
+      ".yaml": 5,
+      ".yml": 3,
+      "<none>": 18
     }
   },
-  "generated_at": "2026-06-27T21:25:26Z",
+  "generated_at": "2026-06-27T21:29:48Z",
   "license_review": {
-    "detected_license": "GNU LESSER GENERAL PUBLIC LICENSE",
-    "message": "license-incompatible risk: blocked license detected: GNU LESSER GENERAL PUBLIC LICENSE",
+    "detected_license": "Copyright 2024 Kazuki Yamada",
+    "message": "license-incompatible risk: Copyright 2024 Kazuki Yamada",
     "status": "blocked"
   },
   "pre_absorption_focus": {
     "evidence": {
-      "external_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/semgrep/semgrep",
+      "external_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/yamadashy/repomix",
       "max_files": 400,
       "own_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
       "style": "deterministic_pre_absorption_code_graph"
     },
-    "external_focus": [
-      {
-        "graph_degree": 0,
-        "path": "cli/tests/default/e2e-other/test_ssc.py",
-        "score": 2900,
-        "term_hits": 290
-      },
-      {
-        "graph_degree": 170,
-        "path": "cli/src/semgrep/run_scan.py",
-        "score": 2370,
-        "term_hits": 220
-      },
-      {
-        "graph_degree": 0,
-        "path": "cli/src/semgrep/resolve_dependency_source.py",
-        "score": 1640,
-        "term_hits": 164
-      },
-      {
-        "graph_degree": 99,
-        "path": "cli/src/semgrep/commands/scan.py",
-        "score": 1479,
-        "term_hits": 138
-      },
-      {
-        "graph_degree": 0,
-        "path": "cli/src/semgrep/commands/ci.py",
-        "score": 1330,
-        "term_hits": 133
-      },
-      {
-        "graph_degree": 121,
-        "path": "cli/src/semgrep/config_resolver.py",
-        "score": 1171,
-        "term_hits": 105
-      },
-      {
-        "graph_degree": 0,
-        "path": "cli/src/semgrep/dependency_aware_rule.py",
-        "score": 1110,
-        "term_hits": 111
-      },
-      {
-        "graph_degree": 0,
-        "path": "cli/src/semgrep/resolve_subprojects.py",
-        "score": 1060,
-        "term_hits": 106
-      },
-      {
-        "graph_degree": 105,
-        "path": "cli/src/semgrep/core_runner.py",
-        "score": 1035,
-        "term_hits": 93
-      },
-      {
-        "graph_degree": 133,
-        "path": "cli/src/semgrep/semgrep_interfaces/semgrep_output_v1.py",
-        "score": 1003,
-        "term_hits": 87
-      }
-    ],
-    "external_focus_files": [
-      "cli/tests/default/e2e-other/test_ssc.py",
-      "cli/src/semgrep/run_scan.py",
-      "cli/src/semgrep/resolve_dependency_source.py",
-      "cli/src/semgrep/commands/scan.py",
-      "cli/src/semgrep/commands/ci.py",
-      "cli/src/semgrep/config_resolver.py",
-      "cli/src/semgrep/dependency_aware_rule.py",
-      "cli/src/semgrep/resolve_subprojects.py",
-      "cli/src/semgrep/core_runner.py",
-      "cli/src/semgrep/semgrep_interfaces/semgrep_output_v1.py"
-    ],
-    "external_hotspots": [
-      {
-        "degree": 594,
-        "id": "cli/src/semgrep/semgrep_interfaces/semgrep_output_v1.py",
-        "incoming": 98,
-        "kind": "file",
-        "outgoing": 496,
-        "path": "cli/src/semgrep/semgrep_interfaces/semgrep_output_v1.py"
-      },
-      {
-        "degree": 191,
-        "id": "cli/src/semgrep/semgrep_interfaces/semgrep_output_v1.py:_atd_bad_json",
-        "incoming": 191,
-        "kind": "function",
-        "outgoing": 0,
-        "path": "cli/src/semgrep/semgrep_interfaces/semgrep_output_v1.py"
-      },
-      {
-        "degree": 170,
-        "id": "cli/src/semgrep/run_scan.py",
-        "incoming": 9,
-        "kind": "file",
-        "outgoing": 161,
-        "path": "cli/src/semgrep/run_scan.py"
-      },
-      {
-        "degree": 138,
-        "id": "cli/tests/default/e2e-other/test_ci.py",
-        "incoming": 0,
-        "kind": "file",
-        "outgoing": 138,
-        "path": "cli/tests/default/e2e-other/test_ci.py"
-      },
-      {
-        "degree": 133,
-        "id": "cli/src/semgrep/semgrep_interfaces/semgrep_output_v1.py:_atd_missing_json_field",
-        "incoming": 133,
-        "kind": "function",
-        "outgoing": 0,
-        "path": "cli/src/semgrep/semgrep_interfaces/semgrep_output_v1.py"
-      },
-      {
-        "degree": 121,
-        "id": "cli/src/semgrep/config_resolver.py",
-        "incoming": 15,
-        "kind": "file",
-        "outgoing": 106,
-        "path": "cli/src/semgrep/config_resolver.py"
-      },
-      {
-        "degree": 113,
-        "id": "cli/src/semgrep/mcp/server.py",
-        "incoming": 10,
-        "kind": "file",
-        "outgoing": 103,
-        "path": "cli/src/semgrep/mcp/server.py"
-      },
-      {
-        "degree": 105,
-        "id": "cli/src/semgrep/core_runner.py",
-        "incoming": 4,
-        "kind": "file",
-        "outgoing": 101,
-        "path": "cli/src/semgrep/core_runner.py"
-      },
-      {
-        "degree": 101,
-        "id": "cli/src/semgrep/target_manager.py",
-        "incoming": 15,
-        "kind": "file",
-        "outgoing": 86,
-        "path": "cli/src/semgrep/target_manager.py"
-      },
-      {
-        "degree": 99,
-        "id": "cli/src/semgrep/commands/scan.py",
-        "incoming": 2,
-        "kind": "file",
-        "outgoing": 97,
-        "path": "cli/src/semgrep/commands/scan.py"
-      },
-      {
-        "degree": 97,
-        "id": "cli/tests/conftest.py",
-        "incoming": 28,
-        "kind": "file",
-        "outgoing": 69,
-        "path": "cli/tests/conftest.py"
-      },
-      {
-        "degree": 97,
-        "id": "cli/src/semgrep/output.py",
-        "incoming": 4,
-        "kind": "file",
-        "outgoing": 93,
-        "path": "cli/src/semgrep/output.py"
-      }
-    ],
+    "external_focus": [],
+    "external_focus_files": [],
+    "external_hotspots": [],
     "external_summary": {
-      "call_edge_count": 7246,
-      "define_edge_count": 2286,
-      "dependency_cycle_count": 10,
-      "edge_count": 14110,
-      "file_count": 400,
-      "hotspot_count": 12,
-      "import_edge_count": 3533,
+      "call_edge_count": 0,
+      "define_edge_count": 0,
+      "dependency_cycle_count": 0,
+      "edge_count": 0,
+      "file_count": 0,
+      "hotspot_count": 0,
+      "import_edge_count": 0,
       "include_tests": true,
-      "local_dependency_edge_count": 1045,
-      "node_count": 2689,
-      "parse_error_count": 2
+      "local_dependency_edge_count": 0,
+      "node_count": 0,
+      "parse_error_count": 0
     },
     "focus_terms": [
+      "review",
+      "pipeline",
+      "comment",
+      "localization",
+      "reflection",
+      "group",
+      "context",
+      "related",
+      "changed",
+      "files",
       "benchmark",
       "eval",
       "precision",
@@ -357,90 +190,80 @@
       "permission",
       "rollback",
       "secret",
-      "static_analysis",
-      "static analysis",
-      "semantic_index",
-      "semantic index",
-      "atmosphere_shader",
-      "atmosphere shader",
-      "procedural_surface",
-      "procedural surface",
-      "elevation_bump_map",
-      "elevation bump map",
-      "retort"
+      "static_analysis"
     ],
     "own_focus": [
       {
-        "graph_degree": 0,
-        "path": "retort_engine/absorbed_capabilities.py",
-        "score": 2490,
-        "term_hits": 249
-      },
-      {
         "graph_degree": 49,
         "path": "retort_engine/real_absorption.py",
-        "score": 2089,
-        "term_hits": 204
+        "score": 3929,
+        "term_hits": 388
       },
       {
-        "graph_degree": 164,
-        "path": "retort_engine/core.py",
-        "score": 1954,
-        "term_hits": 179
+        "graph_degree": 39,
+        "path": "retort_engine/pr_review.py",
+        "score": 3209,
+        "term_hits": 317
+      },
+      {
+        "graph_degree": 0,
+        "path": "retort_engine/absorbed_capabilities.py",
+        "score": 3110,
+        "term_hits": 311
       },
       {
         "graph_degree": 35,
         "path": "retort_engine/codebase_graph.py",
-        "score": 1785,
-        "term_hits": 175
-      },
-      {
-        "graph_degree": 69,
-        "path": "tests/test_retort_engine.py",
-        "score": 1689,
-        "term_hits": 162
-      },
-      {
-        "graph_degree": 0,
-        "path": "tests/test_codebase_graph.py",
-        "score": 1510,
-        "term_hits": 151
-      },
-      {
-        "graph_degree": 0,
-        "path": "retort_engine/architecture_refactor.py",
-        "score": 1440,
-        "term_hits": 144
+        "score": 2955,
+        "term_hits": 292
       },
       {
         "graph_degree": 38,
         "path": "tests/test_real_absorption_helpers.py",
-        "score": 1428,
-        "term_hits": 139
+        "score": 2748,
+        "term_hits": 271
       },
       {
-        "graph_degree": 45,
-        "path": "retort_engine/cli.py",
-        "score": 1285,
-        "term_hits": 124
+        "graph_degree": 0,
+        "path": "tests/test_review_pipeline.py",
+        "score": 2530,
+        "term_hits": 253
+      },
+      {
+        "graph_degree": 0,
+        "path": "retort_engine/review_pipeline.py",
+        "score": 2370,
+        "term_hits": 237
+      },
+      {
+        "graph_degree": 69,
+        "path": "tests/test_retort_engine.py",
+        "score": 2259,
+        "term_hits": 219
+      },
+      {
+        "graph_degree": 164,
+        "path": "retort_engine/core.py",
+        "score": 2224,
+        "term_hits": 206
       },
       {
         "graph_degree": 0,
         "path": "tests/test_absorption_quality.py",
-        "score": 1020,
-        "term_hits": 102
+        "score": 1720,
+        "term_hits": 172
       }
     ],
     "own_focus_files": [
-      "retort_engine/absorbed_capabilities.py",
       "retort_engine/real_absorption.py",
-      "retort_engine/core.py",
+      "retort_engine/pr_review.py",
+      "retort_engine/absorbed_capabilities.py",
       "retort_engine/codebase_graph.py",
-      "tests/test_retort_engine.py",
-      "tests/test_codebase_graph.py",
-      "retort_engine/architecture_refactor.py",
       "tests/test_real_absorption_helpers.py",
-      "retort_engine/cli.py",
+      "tests/test_review_pipeline.py",
+      "retort_engine/review_pipeline.py",
+      "tests/test_retort_engine.py",
+      "retort_engine/core.py",
       "tests/test_absorption_quality.py"
     ],
     "own_hotspots": [
@@ -485,6 +308,14 @@
         "path": "retort_engine/cli.py"
       },
       {
+        "degree": 39,
+        "id": "retort_engine/pr_review.py",
+        "incoming": 8,
+        "kind": "file",
+        "outgoing": 31,
+        "path": "retort_engine/pr_review.py"
+      },
+      {
         "degree": 38,
         "id": "retort_engine/service.py",
         "incoming": 1,
@@ -525,14 +356,6 @@
         "path": "retort_engine/codebase_graph.py"
       },
       {
-        "degree": 35,
-        "id": "retort_engine/pr_review.py",
-        "incoming": 7,
-        "kind": "file",
-        "outgoing": 28,
-        "path": "retort_engine/pr_review.py"
-      },
-      {
         "degree": 34,
         "id": "retort_engine/paibi_llm.py",
         "incoming": 2,
@@ -542,22 +365,22 @@
       }
     ],
     "own_summary": {
-      "call_edge_count": 1404,
-      "define_edge_count": 753,
+      "call_edge_count": 1415,
+      "define_edge_count": 760,
       "dependency_cycle_count": 0,
-      "edge_count": 3146,
-      "file_count": 105,
+      "edge_count": 3173,
+      "file_count": 107,
       "hotspot_count": 12,
-      "import_edge_count": 794,
+      "import_edge_count": 800,
       "include_tests": true,
-      "local_dependency_edge_count": 195,
-      "node_count": 858,
+      "local_dependency_edge_count": 198,
+      "node_count": 867,
       "parse_error_count": 0
     },
-    "status": "ready"
+    "status": "empty"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/semgrep/semgrep --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/yamadashy/repomix --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
@@ -571,98 +394,98 @@
         "component": "workflow_ci",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 10473,
+        "marker_gap": 4326,
         "own_files": 12,
         "representative_external_files": [
           "CODE_OF_CONDUCT.md",
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          ".pre-commit-hooks.yaml",
-          "semgrep.yml"
+          "repomix-instruction.md",
+          ".oxlintrc.json",
+          ".pinact.yaml",
+          "llms-install.md"
         ]
       },
       {
         "component": "safety_policy",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 2573,
+        "marker_gap": 2888,
         "own_files": 12,
         "representative_external_files": [
           "CODE_OF_CONDUCT.md",
-          "CHANGELOG.md",
-          ".pre-commit-hooks.yaml",
+          "repomix-instruction.md",
+          "llms-install.md",
           "README.md",
-          "setup.py"
-        ]
-      },
-      {
-        "component": "static_analysis",
-        "external_files": 12,
-        "file_gap": 7,
-        "marker_gap": 2304,
-        "own_files": 5,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "metrics.md",
-          "AGENTS.md",
-          "SECURITY.md"
-        ]
-      },
-      {
-        "component": "semantic_index",
-        "external_files": 12,
-        "file_gap": 1,
-        "marker_gap": 1040,
-        "own_files": 11,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          "README.md",
-          "CONTRIBUTING.md",
-          "metrics.md"
-        ]
-      },
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 512,
-        "own_files": 12,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "metrics.md",
-          "tests/patterns/python/metavar_kwd_arg.py",
-          "tests/patterns/python/misc_regression1.py"
-        ]
-      },
-      {
-        "component": "benchmark_eval",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 223,
-        "own_files": 12,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "metrics.md",
-          "release_changes.md",
-          "tests/README.md",
-          "tests/misc/il/container.py"
+          "package-lock.json"
         ]
       },
       {
         "component": "plugin_surface",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 204,
+        "marker_gap": 1061,
         "own_files": 12,
         "representative_external_files": [
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          ".pre-commit-hooks.yaml",
-          "semgrep.yml",
-          "README.md"
+          "typos.toml",
+          "repomix-instruction.md",
+          "llms-install.md",
+          "README.md",
+          "package-lock.json"
+        ]
+      },
+      {
+        "component": "semantic_index",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 893,
+        "own_files": 12,
+        "representative_external_files": [
+          "README.md",
+          "package-lock.json",
+          "AGENTS.md",
+          "CLAUDE.md",
+          "website/server/package-lock.json"
+        ]
+      },
+      {
+        "component": "diff_hunk_review",
+        "external_files": 12,
+        "file_gap": 1,
+        "marker_gap": 59,
+        "own_files": 11,
+        "representative_external_files": [
+          "website/client/src/en/guide/comment-removal.md",
+          "website/client/src/tr/guide/comment-removal.md",
+          "tests/core/treeSitter/parseFile.go.test.ts",
+          "tests/core/treeSitter/parseFile.python.test.ts",
+          "tests/core/treeSitter/parseFile.ruby.test.ts"
+        ]
+      },
+      {
+        "component": "context_packaging",
+        "external_files": 9,
+        "file_gap": 5,
+        "marker_gap": -11,
+        "own_files": 4,
+        "representative_external_files": [
+          "README.md",
+          "website/client/src/hi/guide/faq.md",
+          "website/client/src/en/index.md",
+          "website/client/src/en/guide/faq.md",
+          "website/client/src/en/guide/index.md"
+        ]
+      },
+      {
+        "component": "static_analysis",
+        "external_files": 12,
+        "file_gap": 3,
+        "marker_gap": -37,
+        "own_files": 9,
+        "representative_external_files": [
+          "README.md",
+          "SECURITY.md",
+          "website/server/src/domains/pack/processZipFile.ts",
+          "website/server/src/domains/pack/utils/fileUtils.ts",
+          "website/client/src/en/guide/claude-code-plugins.md"
         ]
       }
     ],
@@ -673,11 +496,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "CHANGELOG.md",
             "README.md",
-            "metrics.md",
-            "tests/patterns/python/metavar_kwd_arg.py",
-            "tests/patterns/python/misc_regression1.py"
+            "package-lock.json",
+            "package.json",
+            "website/server/package-lock.json",
+            "website/client/package-lock.json"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -686,11 +509,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "CHANGELOG.md",
-            ".pre-commit-config.yaml",
-            ".pre-commit-hooks.yaml",
-            "semgrep.yml",
-            "README.md"
+            "typos.toml",
+            "repomix-instruction.md",
+            "llms-install.md",
+            "README.md",
+            "package-lock.json"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -724,20 +547,6 @@
           "title": "Deepen file_grouping"
         },
         {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "dimension": "feedback_loop_closure",
           "evidence_required": [
@@ -763,6 +572,20 @@
           "priority": "P1",
           "task_id": "retort-depth-workflow-ci",
           "title": "Deepen workflow_ci"
+        },
+        {
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-diff-hunk-review",
+          "title": "Deepen diff_hunk_review"
         },
         {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
@@ -792,6 +615,19 @@
           "title": "Deepen semantic_index"
         },
         {
+          "acceptance": "Retort has executable, tested codebase_graph behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-codebase-graph",
+          "title": "Deepen codebase_graph"
+        },
+        {
           "acceptance": "Retort has executable, tested static_analysis behavior in the absorption or PR-review path.",
           "dimension": "product_operability",
           "evidence_required": [
@@ -806,17 +642,18 @@
           "title": "Deepen static_analysis"
         },
         {
-          "acceptance": "Retort has executable, tested codebase_graph behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
+          "acceptance": "Retort has executable, tested context_packaging behavior in the absorption or PR-review path.",
+          "dimension": "product_operability",
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "bounded context manifest"
           ],
           "owner_hint": "fhd-core-maintainer",
           "priority": "P0",
-          "task_id": "retort-depth-codebase-graph",
-          "title": "Deepen codebase_graph"
+          "task_id": "retort-depth-context-packaging",
+          "title": "Deepen context_packaging"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -846,16 +683,16 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 81,
-          "own_marker_hits": 2564,
+          "external_marker_hits": 452,
+          "own_marker_hits": 2595,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "CODE_OF_CONDUCT.md",
-            "CHANGELOG.md",
-            "metrics.md",
-            "tests/rules/misc_php_new_taint.yaml",
-            "tests/perf/l10000.js"
+            "llms-install.md",
+            "README.md",
+            "package-lock.json",
+            "package.json"
           ]
         },
         {
@@ -881,55 +718,23 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 1,
-          "own_marker_hits": 84,
+          "external_marker_hits": 8,
+          "own_marker_hits": 78,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "cli/src/semgrep/target_manager.py"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 6,
-          "own_marker_hits": 31,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "CHANGELOG.md",
-            "cli/tests/default/e2e/snapshots/test_misc/test_multiline/results.json",
-            "cli/tests/default/e2e/rules/multiline.yaml",
-            "cli/src/semgrep/test.py"
+            "README.md",
+            "website/client/src/en/guide/command-line-options.md",
+            ".claude/plugins/repomix-explorer/agents/explorer.md",
+            ".github/releases/v1.x/v1.14.1.md",
+            "src/cli/cliRun.ts"
           ]
         },
         {
           "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "component": "benchmark_eval",
-          "depth_gap": 223,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
             "dimension": "feedback_loop_closure",
@@ -950,23 +755,23 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 1256,
-          "own_marker_hits": 1033,
+          "external_marker_hits": 169,
+          "own_marker_hits": 1062,
           "priority": "P0",
-          "similarity_score": 97,
+          "similarity_score": 100,
           "source_files": [
-            "CHANGELOG.md",
-            "metrics.md",
-            "release_changes.md",
-            "tests/README.md",
-            "tests/misc/il/container.py"
+            "repomix-instruction.md",
+            "llms-install.md",
+            "README.md",
+            "website/server/src/domains/pack/remoteRepo.ts",
+            "website/server/src/actions/packRequestSchema.ts"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 10473,
+          "depth_gap": 4326,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -985,23 +790,60 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 15234,
-          "own_marker_hits": 4761,
+          "external_marker_hits": 9189,
+          "own_marker_hits": 4863,
           "priority": "P0",
-          "similarity_score": 89,
+          "similarity_score": 92,
           "source_files": [
             "CODE_OF_CONDUCT.md",
-            "CHANGELOG.md",
-            ".pre-commit-config.yaml",
-            ".pre-commit-hooks.yaml",
-            "semgrep.yml"
+            "repomix-instruction.md",
+            ".oxlintrc.json",
+            ".pinact.yaml",
+            "llms-install.md"
+          ]
+        },
+        {
+          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "component": "diff_hunk_review",
+          "depth_gap": 59,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "review JSON with stages and comments"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-diff-hunk-review",
+            "title": "Deepen diff_hunk_review"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "external_marker_hits": 90,
+          "own_marker_hits": 31,
+          "priority": "P0",
+          "similarity_score": 90,
+          "source_files": [
+            "website/client/src/en/guide/comment-removal.md",
+            "website/client/src/tr/guide/comment-removal.md",
+            "tests/core/treeSitter/parseFile.go.test.ts",
+            "tests/core/treeSitter/parseFile.python.test.ts",
+            "tests/core/treeSitter/parseFile.ruby.test.ts"
           ]
         },
         {
           "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "component": "safety_policy",
-          "depth_gap": 2573,
+          "depth_gap": 2888,
           "employee_task": {
             "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -1020,23 +862,23 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 3063,
-          "own_marker_hits": 490,
+          "external_marker_hits": 3416,
+          "own_marker_hits": 528,
           "priority": "P0",
           "similarity_score": 87,
           "source_files": [
             "CODE_OF_CONDUCT.md",
-            "CHANGELOG.md",
-            ".pre-commit-hooks.yaml",
+            "repomix-instruction.md",
+            "llms-install.md",
             "README.md",
-            "setup.py"
+            "package-lock.json"
           ]
         },
         {
           "absorption_goal": "resolve symbols, definitions, and references before deciding impact and absorption priority",
           "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
           "component": "semantic_index",
-          "depth_gap": 1040,
+          "depth_gap": 893,
           "employee_task": {
             "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
             "dimension": "product_operability",
@@ -1057,53 +899,16 @@
             "gate output",
             "machine-readable findings"
           ],
-          "external_marker_hits": 1115,
-          "own_marker_hits": 75,
+          "external_marker_hits": 974,
+          "own_marker_hits": 81,
           "priority": "P0",
           "similarity_score": 61,
           "source_files": [
-            "CHANGELOG.md",
-            ".pre-commit-config.yaml",
             "README.md",
-            "CONTRIBUTING.md",
-            "metrics.md"
-          ]
-        },
-        {
-          "absorption_goal": "scan absorbed diffs for rule-based security and correctness risks before LLM review",
-          "acceptance": "Retort has executable, tested static_analysis behavior in the absorption or PR-review path.",
-          "component": "static_analysis",
-          "depth_gap": 2304,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested static_analysis behavior in the absorption or PR-review path.",
-            "dimension": "product_operability",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "machine-readable findings"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-static-analysis",
-            "title": "Deepen static_analysis"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "machine-readable findings"
-          ],
-          "external_marker_hits": 2332,
-          "own_marker_hits": 28,
-          "priority": "P0",
-          "similarity_score": 60,
-          "source_files": [
-            "CHANGELOG.md",
-            "README.md",
-            "metrics.md",
+            "package-lock.json",
             "AGENTS.md",
-            "SECURITY.md"
+            "CLAUDE.md",
+            "website/server/package-lock.json"
           ]
         },
         {
@@ -1129,16 +934,90 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 119,
-          "own_marker_hits": 208,
+          "external_marker_hits": 55,
+          "own_marker_hits": 211,
           "priority": "P1",
           "similarity_score": 75,
           "source_files": [
-            "CHANGELOG.md",
-            ".pre-commit-config.yaml",
+            "biome.json",
+            "website/.claude/skills/website-maintainer/SKILL.md",
+            "website/server/tests/packEventSchema.test.ts",
+            "website/client/tsconfig.node.json",
+            "website/client/package-lock.json"
+          ]
+        },
+        {
+          "absorption_goal": "scan absorbed diffs for rule-based security and correctness risks before LLM review",
+          "acceptance": "Retort has executable, tested static_analysis behavior in the absorption or PR-review path.",
+          "component": "static_analysis",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested static_analysis behavior in the absorption or PR-review path.",
+            "dimension": "product_operability",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "machine-readable findings"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-static-analysis",
+            "title": "Deepen static_analysis"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "machine-readable findings"
+          ],
+          "external_marker_hits": 18,
+          "own_marker_hits": 55,
+          "priority": "P1",
+          "similarity_score": 75,
+          "source_files": [
             "README.md",
-            "tests/patterns/python/scoped_wildcard.py",
-            "tests/patterns/python/imports.py"
+            "SECURITY.md",
+            "website/server/src/domains/pack/processZipFile.ts",
+            "website/server/src/domains/pack/utils/fileUtils.ts",
+            "website/client/src/en/guide/claude-code-plugins.md"
+          ]
+        },
+        {
+          "absorption_goal": "pack only the highest-value repository context for deep review and employee tasks",
+          "acceptance": "Retort has executable, tested context_packaging behavior in the absorption or PR-review path.",
+          "component": "context_packaging",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested context_packaging behavior in the absorption or PR-review path.",
+            "dimension": "product_operability",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "bounded context manifest"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-context-packaging",
+            "title": "Deepen context_packaging"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "bounded context manifest"
+          ],
+          "external_marker_hits": 16,
+          "own_marker_hits": 27,
+          "priority": "P1",
+          "similarity_score": 75,
+          "source_files": [
+            "README.md",
+            "website/client/src/hi/guide/faq.md",
+            "website/client/src/en/index.md",
+            "website/client/src/en/guide/faq.md",
+            "website/client/src/en/guide/index.md"
           ]
         }
       ],
@@ -1147,7 +1026,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 9,
+        "focused_component_count": 10,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -1158,26 +1037,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 981,
+          "external_marker_hits": 478,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "CHANGELOG.md",
             "README.md",
-            "metrics.md",
-            "tests/patterns/python/metavar_kwd_arg.py",
-            "tests/patterns/python/misc_regression1.py"
+            "package-lock.json",
+            "package.json",
+            "website/server/package-lock.json",
+            "website/client/package-lock.json"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 950,
+          "external_marker_hits": 1753,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "CHANGELOG.md",
-            ".pre-commit-config.yaml",
-            ".pre-commit-hooks.yaml",
-            "semgrep.yml",
-            "README.md"
+            "typos.toml",
+            "repomix-instruction.md",
+            "llms-install.md",
+            "README.md",
+            "package-lock.json"
           ]
         }
       ]
@@ -1185,171 +1064,197 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "CHANGELOG.md",
-          "metrics.md",
-          "release_changes.md",
-          "tests/README.md",
-          "tests/misc/il/container.py",
-          "tests/misc/il/foreach.py",
-          "tests/misc/il/while.py",
-          "tests/misc/il/dowhile.js",
-          "tests/misc/controlflow/while.py",
-          "tests/misc/tainting/tainting2.py",
-          "tests/patterns/go/dots_stmts.go",
-          "tests/patterns/python/dots_stmts.py"
+          "repomix-instruction.md",
+          "llms-install.md",
+          "README.md",
+          "website/server/src/domains/pack/remoteRepo.ts",
+          "website/server/src/actions/packRequestSchema.ts",
+          "website/client/package-lock.json",
+          "website/client/composables/usePackRequest.ts",
+          "website/client/components/utils/validation.ts",
+          "website/client/components/utils/cliCommand.ts",
+          "website/client/src/it/guide/output.md",
+          "website/client/src/de/guide/prompt-examples.md",
+          "website/client/src/es/guide/prompt-examples.md"
         ],
-        "marker_hits": 1256
+        "marker_hits": 169
       },
       "codebase_graph": {
         "files": [
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          "README.md",
-          "tests/patterns/python/scoped_wildcard.py",
-          "tests/patterns/python/imports.py",
-          "tests/patterns/python/any_qualified_with_wildcard.py",
-          "tests/patterns/python/wildcard_qualified_mvar.py",
-          "tests/perf/swagger-ui-bundle.js",
-          "cli/README.md",
-          "cli/tests/fixtures.py",
-          "cli/tests/default/e2e-other/test_ssc.py",
-          "cli/tests/default/e2e/targets/spacegrep/markdown.md"
+          "biome.json",
+          "website/.claude/skills/website-maintainer/SKILL.md",
+          "website/server/tests/packEventSchema.test.ts",
+          "website/client/tsconfig.node.json",
+          "website/client/package-lock.json",
+          "website/client/src/vi/guide/code-compress.md",
+          "website/client/src/vi/guide/faq.md",
+          "website/client/src/ja/guide/code-compress.md",
+          "website/client/src/ru/guide/code-compress.md",
+          "website/client/src/ru/guide/faq.md",
+          "website/client/src/zh-cn/guide/code-compress.md",
+          "website/client/src/zh-tw/guide/code-compress.md"
         ],
-        "marker_hits": 119
+        "marker_hits": 55
+      },
+      "context_packaging": {
+        "files": [
+          "README.md",
+          "website/client/src/hi/guide/faq.md",
+          "website/client/src/en/index.md",
+          "website/client/src/en/guide/faq.md",
+          "website/client/src/en/guide/index.md",
+          "website/client/src/en/guide/configuration.md",
+          "website/client/src/en/guide/use-cases.md",
+          "tests/mcp/tools/mcpToolRuntime.test.ts",
+          ".agents/clawhub/SKILL.md"
+        ],
+        "marker_hits": 16
       },
       "diff_hunk_review": {
         "files": [
-          "CHANGELOG.md",
-          "cli/tests/default/e2e/snapshots/test_misc/test_multiline/results.json",
-          "cli/tests/default/e2e/rules/multiline.yaml",
-          "cli/src/semgrep/test.py"
+          "website/client/src/en/guide/comment-removal.md",
+          "website/client/src/tr/guide/comment-removal.md",
+          "tests/core/treeSitter/parseFile.go.test.ts",
+          "tests/core/treeSitter/parseFile.python.test.ts",
+          "tests/core/treeSitter/parseFile.ruby.test.ts",
+          "tests/core/treeSitter/parseFile.javascript.test.ts",
+          "tests/core/treeSitter/parseFile.css.test.ts",
+          "tests/core/treeSitter/parseFile.comments.test.ts",
+          "tests/core/file/fileManipulate.test.ts",
+          ".agents/agents/reviewer-conventions.md",
+          ".agents/commands/code/codex-review-loop.md",
+          ".agents/commands/code/review-loop.md"
         ],
-        "marker_hits": 6
+        "marker_hits": 90
       },
       "file_grouping": {
         "files": [
-          "cli/src/semgrep/target_manager.py"
+          "README.md",
+          "website/client/src/en/guide/command-line-options.md",
+          ".claude/plugins/repomix-explorer/agents/explorer.md",
+          ".github/releases/v1.x/v1.14.1.md",
+          "src/cli/cliRun.ts"
         ],
-        "marker_hits": 1
+        "marker_hits": 8
       },
       "plugin_surface": {
         "files": [
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          ".pre-commit-hooks.yaml",
-          "semgrep.yml",
+          "typos.toml",
+          "repomix-instruction.md",
+          "llms-install.md",
           "README.md",
-          "metrics.md",
-          "tests/README.md",
-          "tests/precommit_dogfooding/bandit.yml",
-          "tests/precommit_dogfooding/python.yml",
-          "tests/rules/rule_extensions.yaml",
-          "tests/rules/taint_field_sensitive1.js",
-          "tests/rules/option_xml_children_ordered.yaml"
+          "package-lock.json",
+          "AGENTS.md",
+          "CLAUDE.md",
+          "website/server/package-lock.json",
+          "website/server/package.json",
+          "website/server/src/domains/pack/processZipFile.ts",
+          "website/server/src/domains/pack/utils/fileUtils.ts",
+          "website/client/package-lock.json"
         ],
-        "marker_hits": 950
+        "marker_hits": 1753
       },
       "provider_surface": {
         "files": [
-          "CHANGELOG.md",
           "README.md",
-          "metrics.md",
-          "tests/patterns/python/metavar_kwd_arg.py",
-          "tests/patterns/python/misc_regression1.py",
-          "tests/patterns/python/misc_regression2.py",
-          "tests/patterns/js/cp_incrdecr.js",
-          "tests/patterns/ts/misc_decorator_export.ts",
-          "tests/precommit_dogfooding/python.yml",
-          "tests/naming/python/regression1.py",
-          "tests/rules/taint_assign_record1.ts",
-          "tests/rules/tainted-filename.yaml"
+          "package-lock.json",
+          "package.json",
+          "website/server/package-lock.json",
+          "website/client/package-lock.json",
+          "website/client/.vitepress/config/configShard.ts",
+          "website/client/src/vi/index.md",
+          "website/client/src/vi/guide/command-line-options.md",
+          "website/client/src/vi/guide/output.md",
+          "website/client/src/vi/guide/faq.md",
+          "website/client/src/vi/guide/mcp-server.md",
+          "website/client/src/vi/guide/agent-skills-generation.md"
         ],
-        "marker_hits": 981
+        "marker_hits": 478
       },
       "review_pipeline": {
         "files": [
           "CODE_OF_CONDUCT.md",
-          "CHANGELOG.md",
-          "metrics.md",
-          "tests/rules/misc_php_new_taint.yaml",
-          "tests/perf/l10000.js",
-          "tests/perf/three.js",
-          "tests/perf/swagger-ui-bundle.js",
-          "tests/perf/l1000.js",
-          "tests/perf/bloom/l10000.js",
-          "cli/tests/default/e2e/test_output.py",
-          "cli/tests/default/e2e/targets/dependency_aware/poetry_comments/pyproject.toml",
-          "cli/tests/default/e2e/targets/dependency_aware/nuget/packages.lock.json"
+          "llms-install.md",
+          "README.md",
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md",
+          ".coderabbit.yaml",
+          "CLAUDE.md",
+          "website/server/package-lock.json",
+          "website/server/package.json",
+          "website/server/src/middlewares/turnstile.ts",
+          "website/client/package-lock.json"
         ],
-        "marker_hits": 81
+        "marker_hits": 452
       },
       "safety_policy": {
         "files": [
           "CODE_OF_CONDUCT.md",
-          "CHANGELOG.md",
-          ".pre-commit-hooks.yaml",
+          "repomix-instruction.md",
+          "llms-install.md",
           "README.md",
-          "setup.py",
-          "metrics.md",
+          "package-lock.json",
+          "package.json",
+          "repomix.config.json",
           "AGENTS.md",
+          "CLAUDE.md",
           "SECURITY.md",
-          "tests/misc/tainting/tainting2.py",
-          "tests/semgrep_output/cli_output/dependency_aware.json",
-          "tests/patterns/go/misc_ref_new.go",
-          "tests/patterns/json/dots_dict.json"
+          "website/server/package-lock.json",
+          "website/server/src/domains/pack/remoteRepo.ts"
         ],
-        "marker_hits": 3063
+        "marker_hits": 3416
       },
       "semantic_index": {
         "files": [
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
           "README.md",
-          "CONTRIBUTING.md",
-          "metrics.md",
+          "package-lock.json",
           "AGENTS.md",
-          "tests/semgrep_output/cli_output/dependency_aware.json",
-          "tests/patterns/go/shortassign.go",
-          "tests/patterns/python/imports.py",
-          "tests/patterns/python/misc_naming_bug2.py",
-          "tests/patterns/python/misc_naming_bug.py",
-          "tests/patterns/js/equivalence_import_variations2.js"
+          "CLAUDE.md",
+          "website/server/package-lock.json",
+          "website/server/monitoring/README.md",
+          "website/server/src/utils/errorHandler.ts",
+          "website/server/src/utils/logger.ts",
+          "website/server/src/actions/packEventSchema.ts",
+          "website/client/package-lock.json",
+          "website/client/composables/usePackRequest.ts",
+          "website/client/.vitepress/config/configShard.ts"
         ],
-        "marker_hits": 1115
+        "marker_hits": 974
       },
       "static_analysis": {
         "files": [
-          "CHANGELOG.md",
           "README.md",
-          "metrics.md",
-          "AGENTS.md",
           "SECURITY.md",
-          "tests/explanations/explain_taint.yaml",
-          "tests/patterns/python/metavar_kwd_arg.py",
-          "tests/rules_v2/new_syntax_taint_no_mode.py",
-          "tests/rules_v2/new_syntax_taint.yaml",
-          "tests/rules_v2/new_syntax_taint_no_mode.yaml",
-          "tests/rules_v2/new_syntax_taint.py",
-          "tests/irrelevant_rules/taint-general-sink.yaml"
+          "website/server/src/domains/pack/processZipFile.ts",
+          "website/server/src/domains/pack/utils/fileUtils.ts",
+          "website/client/src/en/guide/claude-code-plugins.md",
+          "website/client/src/en/guide/use-cases.md",
+          "website/client/src/en/guide/security.md",
+          "tests/core/security/securityScanSpec.test.ts",
+          "tests/core/packager/multiRootSpec.test.ts",
+          ".agents/agents/reviewer-security.md",
+          ".agents/agents/reviewer-test-coverage.md",
+          ".agents/agents/reviewer-holistic.md"
         ],
-        "marker_hits": 2332
+        "marker_hits": 18
       },
       "workflow_ci": {
         "files": [
           "CODE_OF_CONDUCT.md",
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          ".pre-commit-hooks.yaml",
-          "semgrep.yml",
+          "repomix-instruction.md",
+          ".oxlintrc.json",
+          ".pinact.yaml",
+          "llms-install.md",
           "README.md",
+          "package-lock.json",
+          "package.json",
           "CONTRIBUTING.md",
-          "metrics.md",
-          "release_changes.md",
-          "AGENTS.md",
-          "SECURITY.md",
-          "tests/README.md"
+          "tsconfig.json",
+          "repomix.config.json",
+          "AGENTS.md"
         ],
-        "marker_hits": 15234
+        "marker_hits": 9189
       }
     },
     "own_file_groups": {
@@ -1363,12 +1268,12 @@
           "retort_engine/review_pipeline.py",
           "retort_engine/capability_audit.py",
           "retort_engine/swe_bench_oracle.py",
+          "retort_engine/static_analysis_gate.py",
           "retort_engine/llm_absorption_evidence.py",
           "retort_engine/architecture_refactor.py",
-          "retort_engine/project_assessment.py",
-          "retort_engine/core.py"
+          "retort_engine/project_assessment.py"
         ],
-        "marker_hits": 1033
+        "marker_hits": 1062
       },
       "codebase_graph": {
         "files": [
@@ -1385,7 +1290,7 @@
           "retort_engine/proof.py",
           "retort_engine/absorbed_capabilities.py"
         ],
-        "marker_hits": 208
+        "marker_hits": 211
       },
       "context_packaging": {
         "files": [
@@ -1420,14 +1325,14 @@
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
           "retort_engine/external_sources.py",
-          "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
-          "tests/test_real_absorption_run_proof.py"
+          "tests/test_real_absorption_run_proof.py",
+          "tests/test_external_sources.py"
         ],
-        "marker_hits": 84
+        "marker_hits": 78
       },
       "plugin_surface": {
         "files": [
@@ -1444,7 +1349,7 @@
           "retort_engine/external_sources.py",
           "retort_engine/devour_session.py"
         ],
-        "marker_hits": 746
+        "marker_hits": 692
       },
       "provider_surface": {
         "files": [
@@ -1461,7 +1366,7 @@
           "retort_engine/project_assessment.py",
           "retort_engine/architecture_memory.py"
         ],
-        "marker_hits": 469
+        "marker_hits": 481
       },
       "review_pipeline": {
         "files": [
@@ -1474,11 +1379,11 @@
           "retort_engine/review_pipeline.py",
           "retort_engine/capability_audit.py",
           "retort_engine/pr_publish.py",
+          "retort_engine/static_analysis_gate.py",
           "retort_engine/llm_absorption_evidence.py",
-          "retort_engine/complex_pr_replay.py",
-          "retort_engine/employee_scheduler_stress.py"
+          "retort_engine/complex_pr_replay.py"
         ],
-        "marker_hits": 2564
+        "marker_hits": 2595
       },
       "safety_policy": {
         "files": [
@@ -1489,13 +1394,13 @@
           "retort_engine/core_refactor_execution.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/pr_publish.py",
+          "retort_engine/static_analysis_gate.py",
           "retort_engine/llm_absorption_evidence.py",
           "retort_engine/pr_live_probe.py",
           "retort_engine/architecture_refactor.py",
-          "retort_engine/project_assessment.py",
-          "retort_engine/pr_review.py"
+          "retort_engine/project_assessment.py"
         ],
-        "marker_hits": 490
+        "marker_hits": 528
       },
       "semantic_index": {
         "files": [
@@ -1504,24 +1409,29 @@
           "retort_engine/core.py",
           "retort_engine/architecture_memory.py",
           "retort_engine/llm_scoring.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/evaluators.py",
           "tests/test_codebase_graph.py",
           "tests/test_real_absorption_helpers.py",
           "tests/test_frontend_visual_absorption.py",
-          "docs/retort_architecture_memory.json"
+          "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 75
+        "marker_hits": 81
       },
       "static_analysis": {
         "files": [
           "retort_engine/similar_project_loop.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/review_context_bias.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "tests/test_real_absorption_helpers.py",
+          "docs/retort_external_review_report.json",
           "docs/retort_architecture_memory.json"
         ],
-        "marker_hits": 28
+        "marker_hits": 55
       },
       "workflow_ci": {
         "files": [
@@ -1538,7 +1448,7 @@
           "retort_engine/capability_audit.py",
           "retort_engine/swe_bench_oracle.py"
         ],
-        "marker_hits": 4761
+        "marker_hits": 4863
       }
     },
     "pipeline_stages": [
@@ -1557,10 +1467,10 @@
         "priority": "P0",
         "source_files": [
           "CODE_OF_CONDUCT.md",
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          ".pre-commit-hooks.yaml",
-          "semgrep.yml"
+          "repomix-instruction.md",
+          ".oxlintrc.json",
+          ".pinact.yaml",
+          "llms-install.md"
         ]
       },
       {
@@ -1569,58 +1479,10 @@
         "priority": "P0",
         "source_files": [
           "CODE_OF_CONDUCT.md",
-          "CHANGELOG.md",
-          ".pre-commit-hooks.yaml",
+          "repomix-instruction.md",
+          "llms-install.md",
           "README.md",
-          "setup.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested static_analysis behavior, not only a recorded signal.",
-        "component": "static_analysis",
-        "priority": "P0",
-        "source_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "metrics.md",
-          "AGENTS.md",
-          "SECURITY.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested semantic_index behavior, not only a recorded signal.",
-        "component": "semantic_index",
-        "priority": "P0",
-        "source_files": [
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          "README.md",
-          "CONTRIBUTING.md",
-          "metrics.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "metrics.md",
-          "tests/patterns/python/metavar_kwd_arg.py",
-          "tests/patterns/python/misc_regression1.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested benchmark_eval behavior, not only a recorded signal.",
-        "component": "benchmark_eval",
-        "priority": "P0",
-        "source_files": [
-          "CHANGELOG.md",
-          "metrics.md",
-          "release_changes.md",
-          "tests/README.md",
-          "tests/misc/il/container.py"
+          "package-lock.json"
         ]
       },
       {
@@ -1628,103 +1490,182 @@
         "component": "plugin_surface",
         "priority": "P0",
         "source_files": [
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
-          ".pre-commit-hooks.yaml",
-          "semgrep.yml",
-          "README.md"
+          "typos.toml",
+          "repomix-instruction.md",
+          "llms-install.md",
+          "README.md",
+          "package-lock.json"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested semantic_index behavior, not only a recorded signal.",
+        "component": "semantic_index",
+        "priority": "P0",
+        "source_files": [
+          "README.md",
+          "package-lock.json",
+          "AGENTS.md",
+          "CLAUDE.md",
+          "website/server/package-lock.json"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
+        "component": "diff_hunk_review",
+        "priority": "P0",
+        "source_files": [
+          "website/client/src/en/guide/comment-removal.md",
+          "website/client/src/tr/guide/comment-removal.md",
+          "tests/core/treeSitter/parseFile.go.test.ts",
+          "tests/core/treeSitter/parseFile.python.test.ts",
+          "tests/core/treeSitter/parseFile.ruby.test.ts"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested context_packaging behavior, not only a recorded signal.",
+        "component": "context_packaging",
+        "priority": "P1",
+        "source_files": [
+          "README.md",
+          "website/client/src/hi/guide/faq.md",
+          "website/client/src/en/index.md",
+          "website/client/src/en/guide/faq.md",
+          "website/client/src/en/guide/index.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested static_analysis behavior, not only a recorded signal.",
+        "component": "static_analysis",
+        "priority": "P1",
+        "source_files": [
+          "README.md",
+          "SECURITY.md",
+          "website/server/src/domains/pack/processZipFile.ts",
+          "website/server/src/domains/pack/utils/fileUtils.ts",
+          "website/client/src/en/guide/claude-code-plugins.md"
         ]
       }
     ]
   },
-  "run_id": "20260627212518-4985a95789",
+  "run_id": "20260627212946-168c95fefd",
   "semantic_review": {
     "external": {
-      "classes": 241,
-      "cli_markers": 0,
-      "functions": 505,
-      "source_files": 362,
-      "test_markers": 6,
-      "workflow_markers": 20
+      "classes": 521,
+      "cli_markers": 14,
+      "functions": 457,
+      "source_files": 730,
+      "test_markers": 992,
+      "workflow_markers": 672
     },
     "gaps": [
       {
-        "external_advantage": 191,
+        "external_advantage": 471,
         "metric": "classes"
       },
       {
-        "external_advantage": 237,
+        "external_advantage": 603,
         "metric": "source_files"
+      },
+      {
+        "external_advantage": 581,
+        "metric": "test_markers"
       }
     ],
     "own": {
       "classes": 50,
       "cli_markers": 31,
-      "functions": 1110,
-      "source_files": 125,
-      "test_markers": 407,
-      "workflow_markers": 3434
+      "functions": 1117,
+      "source_files": 127,
+      "test_markers": 411,
+      "workflow_markers": 3456
     }
   },
   "signal_evidence": {
     "atmosphere_shader": [
-      "CHANGELOG.md",
-      "metrics.md"
+      "website/compose.bundle.yml",
+      "website/server/cloudbuild.yaml",
+      "website/server/package.json",
+      "website/server/tests/turnstile.test.ts",
+      "website/server/monitoring/README.md"
     ],
     "benchmarking": [
-      "CHANGELOG.md",
-      "release_changes.md",
-      "tests/README.md",
-      "tests/misc/il/container.py",
-      "tests/misc/il/foreach.py"
+      "repomix-instruction.md",
+      "llms-install.md",
+      "README.md",
+      "website/server/src/domains/pack/remoteRepo.ts",
+      "website/server/src/actions/packRequestSchema.ts"
+    ],
+    "cloud_texture_layer": [
+      "website/server/cloudbuild.yaml"
     ],
     "codebase_graph": [
-      "CHANGELOG.md",
-      ".pre-commit-config.yaml",
-      "tests/patterns/python/scoped_wildcard.py"
+      "biome.json",
+      "website/.claude/skills/website-maintainer/SKILL.md",
+      "website/server/tests/packEventSchema.test.ts",
+      "website/client/tsconfig.node.json",
+      "website/client/package-lock.json"
     ],
-    "elevation_bump_map": [
-      "CHANGELOG.md",
-      ".pre-commit-config.yaml"
+    "context_packaging": [
+      "website/client/src/hi/guide/faq.md",
+      "website/client/src/en/index.md",
+      "website/client/src/en/guide/faq.md",
+      "website/client/src/en/guide/index.md",
+      "website/client/src/en/guide/configuration.md"
+    ],
+    "file_grouping": [
+      "website/client/src/en/guide/command-line-options.md"
     ],
     "multi_provider": [
       "README.md",
-      "metrics.md",
-      "tests/patterns/python/metavar_kwd_arg.py"
+      "package-lock.json",
+      "package.json",
+      "website/server/package-lock.json",
+      "website/client/package-lock.json"
     ],
     "plugin_surface": [
-      "CHANGELOG.md",
-      ".pre-commit-config.yaml",
-      "semgrep.yml",
+      "typos.toml",
+      "repomix-instruction.md",
+      "llms-install.md",
       "README.md",
-      "setup.py"
+      "package-lock.json"
     ],
     "procedural_surface": [
-      "README.md"
+      "website/client/src/hi/guide/comment-removal.md",
+      "website/client/src/id/guide/configuration.md",
+      "website/client/src/id/guide/comment-removal.md",
+      "website/client/src/en/guide/configuration.md",
+      "website/client/src/en/guide/comment-removal.md"
+    ],
+    "review_pipeline": [
+      "README.md",
+      "website/client/src/vi/index.md",
+      "website/client/src/vi/guide/prompt-examples.md",
+      "website/client/src/vi/guide/github-actions.md",
+      "website/client/src/vi/guide/use-cases.md"
     ],
     "safety_policy": [
+      ".secretlintrc.json",
       "CODE_OF_CONDUCT.md",
-      "CHANGELOG.md",
-      ".pre-commit-hooks.yaml",
-      "README.md",
-      "setup.py"
+      "repomix-instruction.md",
+      "llms-install.md",
+      "README.md"
     ],
     "semantic_index": [
-      "CHANGELOG.md",
-      ".pre-commit-config.yaml",
-      "README.md",
-      "CONTRIBUTING.md",
-      "metrics.md"
+      "AGENTS.md",
+      "CLAUDE.md",
+      "website/server/monitoring/README.md",
+      "website/server/src/utils/errorHandler.ts",
+      "website/server/src/utils/logger.ts"
     ],
     "static_analysis": [
-      "CHANGELOG.md",
-      "README.md",
-      "AGENTS.md",
       "SECURITY.md",
-      "tests/explanations/explain_taint.yaml"
+      "website/server/src/domains/pack/processZipFile.ts",
+      "website/server/src/domains/pack/utils/fileUtils.ts",
+      "website/client/src/en/guide/claude-code-plugins.md",
+      "website/client/src/en/guide/use-cases.md"
     ]
   },
-  "source": "https://github.com/semgrep/semgrep",
+  "source": "https://github.com/yamadashy/repomix",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -1732,7 +1673,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/semgrep/semgrep."
+      "why": "Compare implementation patterns from https://github.com/yamadashy/repomix."
     },
     {
       "dimension": "product_operability",
@@ -1740,7 +1681,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/semgrep/semgrep."
+      "why": "Extract usable UX improvements from https://github.com/yamadashy/repomix."
     },
     {
       "dimension": "operational_readiness",
@@ -1748,7 +1689,15 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/semgrep/semgrep."
+      "why": "Adapt CI and release checks from https://github.com/yamadashy/repomix."
+    },
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-review-pipeline",
+      "title": "Adopt deterministic review pipeline stages",
+      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
     },
     {
       "dimension": "feedback_loop_closure",

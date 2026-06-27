@@ -95,6 +95,24 @@ def test_service_exposes_codebase_graph_report(tmp_path: Path) -> None:
     assert CoreRetortService().codebase_graph_report({"project": str(project)})["status"] == "ready"
 
 
+def test_service_exposes_context_pack_report(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    package = project / "retort_engine"
+    package.mkdir(parents=True)
+    write_file(package / "review.py", "def review():\n    return 'absorb context graph review review'\n")
+
+    report = RetortService().context_pack_report(
+        {"project": str(project), "focus_terms": ["review", "context"], "max_files": 2, "max_chars": 200}
+    )
+    core_report = CoreRetortService().context_pack_report(
+        {"project": str(project), "focus_terms": ["review", "context"], "max_files": 2, "max_chars": 200}
+    )
+
+    assert report["status"] == "ready"
+    assert report["files"][0]["path"] == "retort_engine/review.py"
+    assert core_report["status"] == "ready"
+
+
 def test_service_exposes_evolution_map(tmp_path: Path) -> None:
     project = tmp_path / "project"
     package = project / "retort_engine"

@@ -9,6 +9,7 @@ from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.context_packager import build_context_pack
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
@@ -152,6 +153,13 @@ def main(argv: list[str] | None = None) -> int:
     codebase_graph.add_argument("--max-files", type=int, default=400)
     codebase_graph.add_argument("--output", default="")
     codebase_graph.add_argument("--json", action="store_true")
+    context_pack = sub.add_parser("context-pack-report")
+    context_pack.add_argument("--project", default=".")
+    context_pack.add_argument("--focus-term", action="append", default=[])
+    context_pack.add_argument("--max-files", type=int, default=24)
+    context_pack.add_argument("--max-chars", type=int, default=24000)
+    context_pack.add_argument("--output", default="")
+    context_pack.add_argument("--json", action="store_true")
     architecture_contract = sub.add_parser("architecture-contract-report")
     architecture_contract.add_argument("--project", default=".")
     architecture_contract.add_argument("--contract-file", default="")
@@ -400,6 +408,26 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] in {"ready", "partial"} else 1
+    if args.command == "context-pack-report":
+        result = build_context_pack(
+            args.project,
+            focus_terms=args.focus_term or None,
+            max_files=args.max_files,
+            max_chars=args.max_chars,
+        )
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort context pack status: {result['status']}")
+            print(f"Files: {result['summary']['selected_file_count']}")
+            print(f"Chars: {result['summary']['used_chars']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "architecture-contract-report":
         contracts = load_architecture_contracts(args.contract_file) if args.contract_file else None
         result = evaluate_architecture_contracts(args.project, contracts=contracts, include_tests=args.include_tests, max_files=args.max_files)

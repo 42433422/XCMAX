@@ -6,6 +6,7 @@ from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.context_packager import build_context_pack
 from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.evolution_map import build_evolution_map
@@ -109,6 +110,15 @@ class RetortService:
             max_files=int(payload.get("max_files") or 400),
         )
 
+    def context_pack_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        focus_terms = [str(item) for item in payload.get("focus_terms") or [] if str(item).strip()]
+        return build_context_pack(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            focus_terms=focus_terms or None,
+            max_files=int(payload.get("max_files") or 24),
+            max_chars=int(payload.get("max_chars") or 24000),
+        )
+
     def evolution_map(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_evolution_map(
             str(payload.get("project") or payload.get("project_path") or "."),
@@ -196,6 +206,10 @@ def create_app() -> Any:
     @app.post("/codebase-graph-report")
     def codebase_graph_report_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.codebase_graph_report(payload)
+
+    @app.post("/context-pack-report")
+    def context_pack_report_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.context_pack_report(payload)
 
     @app.post("/evolution-map")
     def evolution_map_route(payload: dict[str, Any]) -> dict[str, Any]:

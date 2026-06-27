@@ -34,6 +34,7 @@ from retort_engine.capability_audit import pr_review_runtime_evidence as _audit_
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.context_packager import build_context_pack
 from retort_engine.devour_session import assessment_file_count as _devour_assessment_file_count
 from retort_engine.devour_session import assessment_score as _devour_assessment_score
 from retort_engine.devour_session import build_devour_session as _devour_build_devour_session
@@ -351,6 +352,15 @@ class RetortService:
             str(payload.get("project") or payload.get("project_path") or "."),
             include_tests=bool(payload.get("include_tests")),
             max_files=int(payload.get("max_files") or 400),
+        )
+
+    def context_pack_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        focus_terms = [str(item) for item in payload.get("focus_terms") or [] if str(item).strip()]
+        return build_context_pack(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            focus_terms=focus_terms or None,
+            max_files=int(payload.get("max_files") or 24),
+            max_chars=int(payload.get("max_chars") or 24000),
         )
 
     def evolution_map(self, payload: dict[str, Any]) -> dict[str, Any]:
