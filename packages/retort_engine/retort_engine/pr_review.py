@@ -9,6 +9,8 @@ from retort_engine.absorbed_capabilities import ranked_capabilities, review_stra
 
 
 SECRET_MARKERS = ("api_key", "apikey", "secret", "password", "token", "private_key")
+REVIEW_STAGES = ("group_related_files", "localize_changed_hunks", "classify_risk", "reflect_before_publish", "dispatch_employee_task")
+SEVERITIES = ("high", "medium", "low", "info")
 
 
 def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: str = "") -> dict[str, Any]:
@@ -29,12 +31,15 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
     capabilities = [str(item.get("signal") or "") for item in ranked_capabilities()]
     comments: list[dict[str, Any]] = []
     task_groups: dict[str, dict[str, Any]] = {}
+    file_summaries: list[dict[str, Any]] = []
+    risk_counts = {severity: 0 for severity in SEVERITIES}
     hunk_count = 0
     for file_review in files:
         file_path = str(file_review["path"])
         strategy = review_strategy_for_file(file_path)
-        group = task_groups.setdefault(str(strategy["strategy"]), {"files": [], "comment_count": 0})
+        group = task_groups.setdefault(str(strategy["strategy"]), {"files": [], "comment_count": 0, "stages": list(REVIEW_STAGES), "risk_counts": {severity: 0 for severity in SEVERITIES}})
         group["files"].append(file_path)
+        file_comments_before = len(comments)
         for hunk in file_review["hunks"]:
             hunk_count += 1
             hunk_comments = _review_hunk(file_path, hunk, strategy, capabilities)
@@ -44,12 +49,22 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
                 if not _remaining(max_comments, comments):
                     break
                 comments.append(comment)
+                severity = str(comment.get("severity") or "info")
+                if severity in risk_counts:
+                    risk_counts[severity] += 1
+                    group["risk_counts"][severity] = int(group["risk_counts"][severity]) + 1
                 group["comment_count"] = int(group["comment_count"]) + 1
+        file_comments = comments[file_comments_before:]
+        file_summaries.append(_file_summary(file_path, strategy, file_review, file_comments))
     summary = {
         "file_count": len(files),
         "hunk_count": hunk_count,
         "comment_count": len(comments),
         "capabilities": capabilities[:5],
+        "stage_count": len(REVIEW_STAGES),
+        "file_summary_count": len(file_summaries),
+        "risk_counts": risk_counts,
+        "deep_review_pipeline": True,
         "ready_for_employee_tasking": bool(files and comments),
         "incremental": bool(incremental.get("enabled")),
         "skipped_existing_change_count": int(incremental.get("skipped_existing_change_count") or 0),
@@ -60,6 +75,7 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
         "status": status,
         "summary": summary,
         "files": files,
+        "file_summaries": file_summaries,
         "comments": comments,
         "task_groups": [{"strategy": key, **value} for key, value in sorted(task_groups.items())],
         "incremental": incremental,
@@ -110,20 +126,20 @@ def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any],
         lowered = text.lower()
         line = int(change.get("line") or 0)
         if _looks_like_secret_leak(text, lowered):
-            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities))
+            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities, "classify_risk"))
         elif "todo" in lowered or "fixme" in lowered:
-            comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities))
+            comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities, "reflect_before_publish"))
         elif Path(file_path).suffix == ".py" and "print(" in lowered:
-            comments.append(_comment(file_path, line, "low", "新增 print 调试输出需要换成结构化结果或日志门禁，避免产品路径噪声。", strategy, capabilities))
+            comments.append(_comment(file_path, line, "low", "新增 print 调试输出需要换成结构化结果或日志门禁，避免产品路径噪声。", strategy, capabilities, "localize_changed_hunks"))
         elif len(text) > 120:
-            comments.append(_comment(file_path, line, "low", "新增行过长，建议拆分为可审阅的局部表达式。", strategy, capabilities))
+            comments.append(_comment(file_path, line, "low", "新增行过长，建议拆分为可审阅的局部表达式。", strategy, capabilities, "localize_changed_hunks"))
     return comments
 
 
 def _info_comment(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str]) -> dict[str, Any]:
     first_add = next((change for change in hunk.get("changes") or [] if change.get("type") == "add"), {})
     line = int(first_add.get("line") or 1)
-    return _comment(file_path, line, "info", "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。", strategy, capabilities)
+    return _comment(file_path, line, "info", "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。", strategy, capabilities, "reflect_before_publish")
 
 
 def _looks_like_secret_leak(text: str, lowered: str) -> bool:
@@ -151,7 +167,7 @@ def _looks_like_secret_leak(text: str, lowered: str) -> bool:
     return bool(assignment or authorization)
 
 
-def _comment(file_path: str, line: int, severity: str, message: str, strategy: dict[str, Any], capabilities: list[str]) -> dict[str, Any]:
+def _comment(file_path: str, line: int, severity: str, message: str, strategy: dict[str, Any], capabilities: list[str], stage: str) -> dict[str, Any]:
     return {
         "file": file_path,
         "line": line,
@@ -159,6 +175,21 @@ def _comment(file_path: str, line: int, severity: str, message: str, strategy: d
         "message": message,
         "strategy": strategy.get("strategy", "semantic_review"),
         "capability": (capabilities or ["review_pipeline"])[0],
+        "review_stage": stage,
+        "employee_actionable": severity in {"high", "medium"},
+    }
+
+
+def _file_summary(file_path: str, strategy: dict[str, Any], file_review: dict[str, Any], comments: list[dict[str, Any]]) -> dict[str, Any]:
+    severity_counts = {severity: sum(1 for item in comments if item.get("severity") == severity) for severity in SEVERITIES}
+    return {
+        "file": file_path,
+        "strategy": strategy.get("strategy", "semantic_review"),
+        "hunk_count": len(file_review.get("hunks") or []),
+        "comment_count": len(comments),
+        "risk_counts": severity_counts,
+        "stages": [{"name": stage, "status": "completed"} for stage in REVIEW_STAGES],
+        "ready_for_employee_task": bool(severity_counts["high"] or severity_counts["medium"]),
     }
 
 
