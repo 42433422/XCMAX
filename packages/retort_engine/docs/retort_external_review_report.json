@@ -18,7 +18,7 @@
       "<none>": 4
     }
   },
-  "generated_at": "2026-06-27T09:05:45Z",
+  "generated_at": "2026-06-27T09:14:08Z",
   "license_review": {
     "detected_license": "MIT License",
     "message": "Allowed license detected: MIT License",
@@ -39,7 +39,7 @@
         "component": "plugin_surface",
         "external_files": 4,
         "file_gap": -8,
-        "marker_gap": 15,
+        "marker_gap": 1,
         "own_files": 12,
         "representative_external_files": [
           "package-lock.json",
@@ -121,7 +121,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 166
+        "marker_hits": 168
       },
       "diff_hunk_review": {
         "files": [
@@ -161,7 +161,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 96
+        "marker_hits": 110
       },
       "provider_surface": {
         "files": [
@@ -169,22 +169,23 @@
           "retort_engine/employee_queue.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/feedback.py",
+          "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
           "retort_engine/runtime_adapter.py",
           "retort_engine/sources.py",
           "retort_engine/self_evolution.py",
           "retort_engine/semantic_reviewer.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py"
+          "retort_engine/absorbed_external_patterns.py"
         ],
-        "marker_hits": 86
+        "marker_hits": 113
       },
       "review_pipeline": {
         "files": [
           "README.md",
           "retort_engine/absorption.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
           "retort_engine/cli.py",
@@ -192,10 +193,9 @@
           "retort_engine/ui_server.py",
           "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
-          "retort_engine/real_absorption.py",
-          "retort_engine/evaluators.py"
+          "retort_engine/real_absorption.py"
         ],
-        "marker_hits": 375
+        "marker_hits": 387
       },
       "safety_policy": {
         "files": [
@@ -212,7 +212,7 @@
           "retort_engine/evaluators.py",
           "retort_engine/frontend/app.js"
         ],
-        "marker_hits": 155
+        "marker_hits": 158
       },
       "workflow_ci": {
         "files": [
@@ -222,14 +222,14 @@
           "retort_engine/employee_queue.py",
           "retort_engine/models.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
           "retort_engine/runtime_adapter.py",
           "retort_engine/cli.py",
-          "retort_engine/contracts.py",
-          "retort_engine/branching.py"
+          "retort_engine/contracts.py"
         ],
-        "marker_hits": 946
+        "marker_hits": 1011
       }
     },
     "pipeline_stages": [
@@ -255,7 +255,7 @@
       }
     ]
   },
-  "run_id": "20260627090545-93f1f5971d",
+  "run_id": "20260627091408-93f1f5971d",
   "semantic_review": {
     "external": {
       "classes": 2,
@@ -269,10 +269,10 @@
     "own": {
       "classes": 48,
       "cli_markers": 15,
-      "functions": 396,
-      "source_files": 43,
-      "test_markers": 113,
-      "workflow_markers": 573
+      "functions": 408,
+      "source_files": 44,
+      "test_markers": 123,
+      "workflow_markers": 578
     }
   },
   "signal_evidence": {
