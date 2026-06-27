@@ -2,157 +2,91 @@
   "absorbed_signals": [
     "review_pipeline",
     "file_grouping",
-    "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/sourcefuse/ai-pr-reviewer",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/hevinbryant/ai-pr-reviewer",
   "external_snapshot": {
-    "file_count": 37,
-    "git_revision": "e2e7227428ac47b83686356b7ac3e595f7e4c6a5",
+    "file_count": 9,
+    "git_revision": "e9ab653a156c3792534df9e2f8d49d4bb88a4407",
     "suffix_counts": {
-      ".js": 1,
-      ".json": 6,
       ".md": 1,
-      ".png": 11,
-      ".ts": 12,
+      ".py": 5,
+      ".txt": 1,
       ".yml": 1,
-      "<none>": 5
+      "<none>": 1
     }
   },
-  "generated_at": "2026-06-27T13:12:01Z",
+  "generated_at": "2026-06-27T13:41:00Z",
   "license_review": {
-    "detected_license": "The MIT License (MIT)",
-    "message": "Allowed license detected: The MIT License (MIT)",
+    "detected_license": "MIT License",
+    "message": "Allowed license detected: MIT License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/sourcefuse/ai-pr-reviewer --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/hevinbryant/ai-pr-reviewer --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 2,
-      "minimum_expected_behavior_tests": 7,
-      "prioritized_component_count": 2,
-      "task_dimension_count": 5
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 4,
+      "prioritized_component_count": 0,
+      "task_dimension_count": 4
     },
-    "component_gaps": [
-      {
-        "component": "plugin_surface",
-        "external_files": 6,
-        "file_gap": -6,
-        "marker_gap": 92,
-        "own_files": 12,
-        "representative_external_files": [
-          "README.md",
-          "jest.config.json",
-          "package-lock.json",
-          "package.json",
-          ".eslintrc.json"
-        ]
-      },
-      {
-        "component": "provider_surface",
-        "external_files": 8,
-        "file_gap": -4,
-        "marker_gap": 77,
-        "own_files": 12,
-        "representative_external_files": [
-          "README.md",
-          "package-lock.json",
-          "action.yml",
-          "src/main.ts",
-          "src/bot.ts"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "external_file_groups": {
-      "benchmark_eval": {
-        "files": [
-          "src/prompts.ts"
-        ],
-        "marker_hits": 1
-      },
-      "diff_hunk_review": {
-        "files": [
-          "src/prompts.ts"
-        ],
-        "marker_hits": 2
-      },
       "file_grouping": {
         "files": [
           "README.md",
-          "action.yml"
+          "action.yml",
+          "src/reviewer.py",
+          "src/main.py",
+          "src/github_client.py"
         ],
-        "marker_hits": 2
+        "marker_hits": 6
       },
       "plugin_surface": {
         "files": [
           "README.md",
-          "jest.config.json",
-          "package-lock.json",
-          "package.json",
-          ".eslintrc.json",
-          "src/octokit.ts"
+          "src/main.py"
         ],
-        "marker_hits": 222
+        "marker_hits": 3
       },
       "provider_surface": {
         "files": [
           "README.md",
-          "package-lock.json",
           "action.yml",
-          "src/main.ts",
-          "src/bot.ts",
-          "src/review.ts",
-          "src/limits.ts",
-          "src/options.ts"
+          "src/reviewer.py",
+          "src/main.py"
         ],
-        "marker_hits": 178
+        "marker_hits": 108
       },
       "review_pipeline": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
           "action.yml",
-          "__tests__/main.test.ts",
-          "src/main.ts",
-          "src/octokit.ts",
-          "src/review.ts",
-          "src/prompts.ts",
-          "src/commenter.ts",
-          "src/review-comment.ts",
-          "src/options.ts"
+          "src/__init__.py",
+          "src/reviewer.py",
+          "src/main.py",
+          "src/github_client.py"
         ],
-        "marker_hits": 341
+        "marker_hits": 73
       },
       "safety_policy": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "action.yml",
-          "src/prompts.ts"
+          "src/reviewer.py"
         ],
-        "marker_hits": 21
+        "marker_hits": 8
       },
       "workflow_ci": {
         "files": [
           "README.md",
-          "jest.config.json",
-          ".prettierrc.json",
-          "package-lock.json",
-          "package.json",
-          "tsconfig.json",
-          ".eslintrc.json",
           "action.yml",
-          "__tests__/main.test.ts",
-          "src/review.ts",
-          "src/prompts.ts",
-          "src/commenter.ts"
+          "src/reviewer.py",
+          "src/github_client.py"
         ],
-        "marker_hits": 816
+        "marker_hits": 9
       }
     },
     "own_file_groups": {
@@ -163,15 +97,15 @@
           "retort_engine/core.py",
           "retort_engine/prompts.py",
           "retort_engine/self_evolution.py",
-          "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/evaluators.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
-          "tests/test_self_evolution.py"
+          "tests/test_self_evolution.py",
+          "tests/test_evidence_evaluator.py"
         ],
-        "marker_hits": 180
+        "marker_hits": 168
       },
       "diff_hunk_review": {
         "files": [
@@ -188,16 +122,13 @@
           "README.md",
           "retort_engine/review_pipeline.py",
           "retort_engine/core.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md",
-          "docs/retort_external_review_report.json"
+          "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 38
+        "marker_hits": 36
       },
       "plugin_surface": {
         "files": [
@@ -214,7 +145,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 130
+        "marker_hits": 150
       },
       "provider_surface": {
         "files": [
@@ -231,30 +162,31 @@
           "retort_engine/semantic_reviewer.py",
           "retort_engine/absorbed_external_patterns.py"
         ],
-        "marker_hits": 101
+        "marker_hits": 117
       },
       "review_pipeline": {
         "files": [
           "README.md",
           "retort_engine/absorption.py",
           "retort_engine/service.py",
+          "retort_engine/comparative_replay.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/pr_publish.py",
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/cli.py",
-          "retort_engine/contracts.py",
-          "retort_engine/ui_server.py",
-          "retort_engine/absorbed_external_patterns.py"
+          "retort_engine/contracts.py"
         ],
-        "marker_hits": 660
+        "marker_hits": 872
       },
       "safety_policy": {
         "files": [
           "retort_engine/absorption.py",
           "retort_engine/service.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/pr_publish.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
           "retort_engine/contracts.py",
@@ -262,10 +194,9 @@
           "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
-          "retort_engine/license_gate.py",
-          "retort_engine/evaluators.py"
+          "retort_engine/license_gate.py"
         ],
-        "marker_hits": 136
+        "marker_hits": 153
       },
       "workflow_ci": {
         "files": [
@@ -273,16 +204,16 @@
           "retort_engine/absorption.py",
           "retort_engine/service.py",
           "retort_engine/employee_queue.py",
+          "retort_engine/comparative_replay.py",
           "retort_engine/models.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/pr_publish.py",
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py",
-          "retort_engine/core.py",
-          "retort_engine/runtime_adapter.py",
-          "retort_engine/cli.py"
+          "retort_engine/core.py"
         ],
-        "marker_hits": 1026
+        "marker_hits": 1119
       }
     },
     "pipeline_stages": [
@@ -294,85 +225,57 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
-        "component": "plugin_surface",
-        "priority": "P0",
-        "source_files": [
-          "README.md",
-          "jest.config.json",
-          "package-lock.json",
-          "package.json",
-          ".eslintrc.json"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "README.md",
-          "package-lock.json",
-          "action.yml",
-          "src/main.ts",
-          "src/bot.ts"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260627131201-4307b75ba4",
+  "run_id": "20260627134100-02cbea1e01",
   "semantic_review": {
     "external": {
-      "classes": 17,
+      "classes": 3,
       "cli_markers": 0,
-      "functions": 14,
-      "source_files": 21,
-      "test_markers": 11,
-      "workflow_markers": 341
+      "functions": 15,
+      "source_files": 7,
+      "test_markers": 2,
+      "workflow_markers": 71
     },
     "gaps": [],
     "own": {
       "classes": 46,
-      "cli_markers": 16,
-      "functions": 445,
-      "source_files": 46,
-      "test_markers": 139,
-      "workflow_markers": 847
+      "cli_markers": 19,
+      "functions": 484,
+      "source_files": 55,
+      "test_markers": 144,
+      "workflow_markers": 1085
     }
   },
   "signal_evidence": {
-    "benchmarking": [
-      "src/prompts.ts"
-    ],
     "file_grouping": [
       "README.md",
       "action.yml",
-      "src/prompts.ts"
+      "src/reviewer.py",
+      "src/main.py",
+      "src/github_client.py"
     ],
     "multi_provider": [
       "README.md",
-      "package-lock.json",
       "action.yml",
-      "src/main.ts",
-      "src/bot.ts"
+      "src/reviewer.py",
+      "src/main.py"
     ],
     "plugin_surface": [
       "README.md",
-      "package-lock.json",
-      "package.json",
-      ".eslintrc.json",
-      "src/octokit.ts"
+      "src/reviewer.py",
+      "src/main.py",
+      "src/github_client.py"
     ],
     "review_pipeline": [
       "README.md",
-      "package-lock.json",
-      "package.json",
       "action.yml",
-      "src/review.ts"
+      "src/__init__.py",
+      "src/reviewer.py",
+      "src/main.py"
     ]
   },
-  "source": "https://github.com/sourcefuse/ai-pr-reviewer",
+  "source": "https://github.com/hevinbryant/ai-pr-reviewer",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -380,7 +283,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/sourcefuse/ai-pr-reviewer."
+      "why": "Compare implementation patterns from https://github.com/hevinbryant/ai-pr-reviewer."
     },
     {
       "dimension": "product_operability",
@@ -388,7 +291,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/sourcefuse/ai-pr-reviewer."
+      "why": "Extract usable UX improvements from https://github.com/hevinbryant/ai-pr-reviewer."
     },
     {
       "dimension": "operational_readiness",
@@ -396,7 +299,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/sourcefuse/ai-pr-reviewer."
+      "why": "Adapt CI and release checks from https://github.com/hevinbryant/ai-pr-reviewer."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -413,14 +316,6 @@
       "task_id": "retort-absorb-file-grouping",
       "title": "Add external file grouping before deep comparison",
       "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
-    },
-    {
-      "dimension": "feedback_loop_closure",
-      "owner_hint": "test-qa-runner",
-      "priority": "P2",
-      "task_id": "retort-absorb-benchmarking",
-      "title": "Add absorption quality benchmark counters",
-      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
     },
     {
       "dimension": "product_operability",
