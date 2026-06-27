@@ -55,10 +55,13 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["stage_count"] >= 5
     assert result["summary"]["review_context_group_count"] == 1
     assert result["summary"]["absorbed_file_grouping"] is True
+    assert result["summary"]["absorbed_context_rank_weights"]["runtime"] >= 20
     assert result["summary"]["risk_counts"]["high"] >= 1
     assert result["summary"]["comment_ranking_model"] == "severity_context_publishability_v1"
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
     assert result["comments"][0]["rank_score"] >= result["comments"][1]["rank_score"]
+    assert result["comments"][0]["absorbed_context_rank_weight"] >= 20
+    assert "bias=" in result["comments"][0]["rank_reason"]
     assert result["comments"][0]["publish_payload"]["side"] == "RIGHT"
     assert result["comments"][0]["comment_anchor"]["line"] == result["comments"][0]["line"]
     assert result["file_summaries"][0]["stages"]

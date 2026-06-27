@@ -7,7 +7,7 @@ from typing import Any
 
 from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file
 from retort_engine.intent_alignment import assess_change_intent_alignment
-from retort_engine.review_context_bias import context_signal_strength, file_grouping_enabled, review_context_bias
+from retort_engine.review_context_bias import context_rank_weight, context_rank_weights, context_signal_strength, file_grouping_enabled, review_context_bias
 from retort_engine.static_analysis_gate import scan_static_analysis_findings
 
 
@@ -92,6 +92,7 @@ def review_diff(
         "primary_review_contexts": [str(group["context"]) for group in context_groups[:5]],
         "absorbed_file_grouping": file_grouping_enabled(),
         "absorbed_context_signal_strength": context_signal_strength(),
+        "absorbed_context_rank_weights": context_rank_weights(),
         "absorbed_review_source": str(context_bias.get("source") or ""),
         "risk_counts": risk_counts,
         "static_analysis": static_analysis["summary"],
@@ -352,6 +353,7 @@ def _rank_review_comments(comments: list[dict[str, Any]], *, max_comments: int) 
         seen.add(key)
         scored = dict(comment)
         scored["_original_order"] = index
+        scored["absorbed_context_rank_weight"] = context_rank_weight(str(scored.get("review_context") or "other"))
         scored["rank_score"] = _comment_rank_score(scored)
         scored["rank_reason"] = _rank_reason(scored)
         deduped.append(scored)
@@ -376,13 +378,14 @@ def _comment_rank_score(comment: dict[str, Any]) -> int:
         "other": 10,
     }.get(str(comment.get("review_context") or "other"), 10)
     capability_weight = {"static_analysis": 45, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
+    absorbed_context_weight = int(comment.get("absorbed_context_rank_weight") or 0)
     action_weight = 20 if comment.get("employee_actionable") else 0
     publish_weight = 5 if comment.get("publishable") else -20
-    return severity_weight + context_weight + capability_weight + action_weight + publish_weight
+    return severity_weight + context_weight + capability_weight + absorbed_context_weight + action_weight + publish_weight
 
 
 def _rank_reason(comment: dict[str, Any]) -> str:
-    return f"{comment.get('severity')}:{comment.get('review_context')}:{comment.get('capability')}"
+    return f"{comment.get('severity')}:{comment.get('review_context')}:{comment.get('capability')}:bias={comment.get('absorbed_context_rank_weight', 0)}"
 
 
 def _risk_counts(comments: list[dict[str, Any]]) -> dict[str, int]:
