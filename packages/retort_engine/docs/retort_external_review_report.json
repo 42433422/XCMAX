@@ -1,38 +1,44 @@
 {
   "absorbed_signals": [
     "review_pipeline",
+    "file_grouping",
     "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/kamilstanuch/codebase-digest",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/vercel-labs/openreview",
   "external_snapshot": {
-    "file_count": 81,
-    "git_revision": "77efab57528cbc825129a94adc521492ac0e65fa",
+    "file_count": 180,
+    "git_revision": "672deb21e70e471e0536d5ad7a67c14b8359e97e",
     "suffix_counts": {
-      ".gif": 1,
-      ".in": 1,
-      ".md": 71,
-      ".py": 4,
-      ".txt": 2,
-      "<none>": 2
+      ".css": 1,
+      ".ico": 1,
+      ".json": 6,
+      ".jsonc": 1,
+      ".lock": 1,
+      ".md": 136,
+      ".mjs": 1,
+      ".png": 1,
+      ".ts": 28,
+      ".tsx": 3,
+      "<none>": 1
     }
   },
-  "generated_at": "2026-06-27T17:04:00Z",
+  "generated_at": "2026-06-27T17:04:35Z",
   "license_review": {
     "detected_license": "",
     "message": "license-incompatible risk: no LICENSE file detected",
     "status": "blocked"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/kamilstanuch/codebase-digest --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/vercel-labs/openreview --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
       "component_gap_count": 0,
-      "minimum_expected_behavior_tests": 4,
+      "minimum_expected_behavior_tests": 5,
       "prioritized_component_count": 0,
-      "task_dimension_count": 4
+      "task_dimension_count": 5
     },
     "component_gaps": [],
     "depth_absorption_workflow": {
@@ -43,10 +49,10 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "README.md",
-            "prompt_library/architecture_layer_identification.md",
-            "prompt_library/business_model_canvas_analysis.md",
-            "prompt_library/kano_model_analysis.md",
-            "prompt_library/architecture_api_conformance_check.md"
+            ".agents/skills/next-best-practices/rsc-boundaries.md",
+            ".agents/skills/next-best-practices/debug-tricks.md",
+            ".agents/skills/vercel-react-best-practices/AGENTS.md",
+            ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -55,9 +61,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "README.md",
-            "prompt_library/ansoff_matrix_analysis.md",
-            "codebase_digest/app.py"
+            "tsconfig.json",
+            "app/components/readme.tsx",
+            ".agents/skills/vercel-react-native-skills/README.md",
+            ".agents/skills/vercel-react-native-skills/SKILL.md",
+            ".agents/skills/vercel-react-native-skills/AGENTS.md"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -76,6 +84,19 @@
           "priority": "P0",
           "task_id": "retort-depth-review-pipeline",
           "title": "Deepen review_pipeline"
+        },
+        {
+          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-file-grouping",
+          "title": "Deepen file_grouping"
         },
         {
           "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
@@ -159,16 +180,47 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 74,
-          "own_marker_hits": 1644,
+          "external_marker_hits": 90,
+          "own_marker_hits": 1647,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            "prompt_library/learning_frontend_code_analysis.md",
-            "prompt_library/evolution_technical_debt_estimation.md",
-            "prompt_library/business_model_canvas_analysis.md",
-            "prompt_library/swot_analysis.md"
+            "package.json",
+            "app/layout.tsx",
+            ".agents/skills/web-design-guidelines/SKILL.md",
+            ".agents/skills/next-best-practices/functions.md"
+          ]
+        },
+        {
+          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
+          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "component": "file_grouping",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-file-grouping",
+            "title": "Deepen file_grouping"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 1,
+          "own_marker_hits": 50,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "lib/agent.ts"
           ]
         },
         {
@@ -196,12 +248,13 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 1,
+          "external_marker_hits": 3,
           "own_marker_hits": 22,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "prompt_library/quality_code_documentation_coverage_analysis.md"
+            "README.md",
+            "lib/agent.ts"
           ]
         },
         {
@@ -229,16 +282,16 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 58,
-          "own_marker_hits": 404,
+          "external_marker_hits": 54,
+          "own_marker_hits": 375,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md",
-            "prompt_library/architecture_coupling_cohesion_analysis.md",
-            "prompt_library/swot_analysis.md",
-            "prompt_library/blue_ocean_strategy_analysis.md",
-            "prompt_library/performance_scalability_analysis.md"
+            ".agents/skills/vercel-react-native-skills/AGENTS.md",
+            ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
+            ".agents/skills/next-best-practices/self-hosting.md",
+            ".agents/skills/next-best-practices/data-patterns.md",
+            ".agents/skills/vercel-react-best-practices/README.md"
           ]
         },
         {
@@ -264,16 +317,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 27,
-          "own_marker_hits": 318,
+          "external_marker_hits": 210,
+          "own_marker_hits": 314,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            "setup.py",
-            "prompt_library/swot_analysis.md",
-            "prompt_library/security_vulnerability_analysis.md",
-            "prompt_library/learning_code_review_checklist.md"
+            "package.json",
+            ".agents/skills/vercel-react-native-skills/SKILL.md",
+            ".agents/skills/vercel-react-native-skills/AGENTS.md",
+            ".agents/skills/vercel-react-native-skills/rules/ui-expo-image.md"
           ]
         },
         {
@@ -299,16 +352,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 296,
-          "own_marker_hits": 1963,
+          "external_marker_hits": 514,
+          "own_marker_hits": 1928,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "update_package.py",
+            ".oxlintrc.json",
             "README.md",
-            "setup.py",
-            "prompt_library/learning_code_analogies_metaphors.md",
-            "prompt_library/learning_frontend_code_analysis.md"
+            "package.json",
+            "components.json",
+            "tsconfig.json"
           ]
         }
       ],
@@ -317,7 +370,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 5,
+        "focused_component_count": 6,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -328,24 +381,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 33,
+          "external_marker_hits": 153,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "README.md",
-            "prompt_library/architecture_layer_identification.md",
-            "prompt_library/business_model_canvas_analysis.md",
-            "prompt_library/kano_model_analysis.md",
-            "prompt_library/architecture_api_conformance_check.md"
+            ".agents/skills/next-best-practices/rsc-boundaries.md",
+            ".agents/skills/next-best-practices/debug-tricks.md",
+            ".agents/skills/vercel-react-best-practices/AGENTS.md",
+            ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 10,
+          "external_marker_hits": 20,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "README.md",
-            "prompt_library/ansoff_matrix_analysis.md",
-            "codebase_digest/app.py"
+            "tsconfig.json",
+            "app/components/readme.tsx",
+            ".agents/skills/vercel-react-native-skills/README.md",
+            ".agents/skills/vercel-react-native-skills/SKILL.md",
+            ".agents/skills/vercel-react-native-skills/AGENTS.md"
           ]
         }
       ]
@@ -353,93 +408,112 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "README.md",
-          "prompt_library/architecture_coupling_cohesion_analysis.md",
-          "prompt_library/swot_analysis.md",
-          "prompt_library/blue_ocean_strategy_analysis.md",
-          "prompt_library/performance_scalability_analysis.md",
-          "prompt_library/okr_analysis.md",
-          "prompt_library/lean_canvas_analysis.md",
-          "prompt_library/learning_code_style_readability_analysis.md",
-          "prompt_library/ansoff_matrix_analysis.md",
-          "prompt_library/mckinsey_7s_analysis.md",
-          "prompt_library/porters_five_forces_analysis.md",
-          "prompt_library/value_chain_analysis.md"
+          ".agents/skills/vercel-react-native-skills/AGENTS.md",
+          ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
+          ".agents/skills/next-best-practices/self-hosting.md",
+          ".agents/skills/next-best-practices/data-patterns.md",
+          ".agents/skills/vercel-react-best-practices/README.md",
+          ".agents/skills/vercel-react-best-practices/SKILL.md",
+          ".agents/skills/vercel-react-best-practices/AGENTS.md",
+          ".agents/skills/vercel-react-best-practices/rules/client-swr-dedup.md",
+          ".agents/skills/vercel-react-best-practices/rules/rendering-svg-precision.md",
+          ".agents/skills/next-cache-components/SKILL.md",
+          ".claude/CLAUDE.md"
         ],
-        "marker_hits": 58
+        "marker_hits": 54
       },
       "diff_hunk_review": {
         "files": [
-          "prompt_library/quality_code_documentation_coverage_analysis.md"
+          "README.md",
+          "lib/agent.ts"
+        ],
+        "marker_hits": 3
+      },
+      "file_grouping": {
+        "files": [
+          "lib/agent.ts"
         ],
         "marker_hits": 1
       },
       "plugin_surface": {
         "files": [
-          "README.md",
-          "prompt_library/ansoff_matrix_analysis.md",
-          "codebase_digest/app.py"
+          "tsconfig.json",
+          "app/components/readme.tsx",
+          ".agents/skills/vercel-react-native-skills/README.md",
+          ".agents/skills/vercel-react-native-skills/SKILL.md",
+          ".agents/skills/vercel-react-native-skills/AGENTS.md",
+          ".agents/skills/vercel-react-native-skills/rules/rendering-no-falsy-and.md",
+          ".agents/skills/vercel-react-native-skills/rules/fonts-config-plugin.md"
         ],
-        "marker_hits": 10
+        "marker_hits": 20
       },
       "provider_surface": {
         "files": [
           "README.md",
-          "prompt_library/architecture_layer_identification.md",
-          "prompt_library/business_model_canvas_analysis.md",
-          "prompt_library/kano_model_analysis.md",
-          "prompt_library/architecture_api_conformance_check.md",
-          "prompt_library/lean_canvas_analysis.md",
-          "prompt_library/porters_five_forces_analysis.md",
-          "prompt_library/tech_adoption_lifecycle_analysis.md",
-          "prompt_library/architecture_api_client_code_generation.md"
+          ".agents/skills/next-best-practices/rsc-boundaries.md",
+          ".agents/skills/next-best-practices/debug-tricks.md",
+          ".agents/skills/vercel-react-best-practices/AGENTS.md",
+          ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md",
+          ".agents/skills/vercel-react-best-practices/rules/rerender-move-effect-to-event.md",
+          ".agents/skills/vercel-react-best-practices/rules/js-tosorted-immutable.md",
+          ".agents/skills/vercel-composition-patterns/README.md",
+          ".agents/skills/vercel-composition-patterns/SKILL.md",
+          ".agents/skills/vercel-composition-patterns/AGENTS.md",
+          ".agents/skills/vercel-composition-patterns/rules/state-context-interface.md",
+          ".agents/skills/vercel-composition-patterns/rules/state-decouple-implementation.md"
         ],
-        "marker_hits": 33
+        "marker_hits": 153
       },
       "review_pipeline": {
         "files": [
           "README.md",
-          "prompt_library/learning_frontend_code_analysis.md",
-          "prompt_library/evolution_technical_debt_estimation.md",
-          "prompt_library/business_model_canvas_analysis.md",
-          "prompt_library/swot_analysis.md",
-          "prompt_library/blue_ocean_strategy_analysis.md",
-          "prompt_library/kano_model_analysis.md",
-          "prompt_library/okr_analysis.md",
-          "prompt_library/learning_backend_code_analysis.md",
-          "prompt_library/lean_canvas_analysis.md",
-          "prompt_library/learning_code_style_readability_analysis.md",
-          "prompt_library/ansoff_matrix_analysis.md"
+          "package.json",
+          "app/layout.tsx",
+          ".agents/skills/web-design-guidelines/SKILL.md",
+          ".agents/skills/next-best-practices/functions.md",
+          ".agents/skills/next-best-practices/SKILL.md",
+          ".agents/skills/next-upgrade/SKILL.md",
+          ".agents/skills/vercel-react-best-practices/SKILL.md",
+          ".agents/skills/vercel-composition-patterns/SKILL.md",
+          ".agents/skills/vercel-composition-patterns/AGENTS.md",
+          ".agents/skills/vercel-composition-patterns/rules/state-context-interface.md",
+          ".agents/skills/vercel-composition-patterns/rules/state-lift-state.md"
         ],
-        "marker_hits": 74
+        "marker_hits": 90
       },
       "safety_policy": {
         "files": [
           "README.md",
-          "setup.py",
-          "prompt_library/swot_analysis.md",
-          "prompt_library/security_vulnerability_analysis.md",
-          "prompt_library/learning_code_review_checklist.md",
-          "codebase_digest/app.py"
+          "package.json",
+          ".agents/skills/vercel-react-native-skills/SKILL.md",
+          ".agents/skills/vercel-react-native-skills/AGENTS.md",
+          ".agents/skills/vercel-react-native-skills/rules/ui-expo-image.md",
+          ".agents/skills/vercel-react-best-practices/SKILL.md",
+          ".agents/skills/vercel-react-best-practices/AGENTS.md",
+          ".agents/skills/vercel-react-best-practices/rules/async-defer-await.md",
+          ".agents/skills/vercel-react-best-practices/rules/server-auth-actions.md",
+          ".agents/skills/vercel-composition-patterns/SKILL.md",
+          ".claude/CLAUDE.md",
+          "workflow/index.ts"
         ],
-        "marker_hits": 27
+        "marker_hits": 210
       },
       "workflow_ci": {
         "files": [
-          "update_package.py",
+          ".oxlintrc.json",
           "README.md",
-          "setup.py",
-          "prompt_library/learning_code_analogies_metaphors.md",
-          "prompt_library/learning_frontend_code_analysis.md",
-          "prompt_library/learning_mini_lesson_generation.md",
-          "prompt_library/architecture_database_schema_documentation.md",
-          "prompt_library/stakeholder_persona_generation.md",
-          "prompt_library/architecture_layer_identification.md",
-          "prompt_library/evolution_technical_debt_estimation.md",
-          "prompt_library/architecture_coupling_cohesion_analysis.md",
-          "prompt_library/business_model_canvas_analysis.md"
+          "package.json",
+          "components.json",
+          "tsconfig.json",
+          "next.config.ts",
+          ".agents/skills/vercel-react-native-skills/README.md",
+          ".agents/skills/vercel-react-native-skills/SKILL.md",
+          ".agents/skills/vercel-react-native-skills/AGENTS.md",
+          ".agents/skills/vercel-react-native-skills/rules/ui-styling.md",
+          ".agents/skills/vercel-react-native-skills/rules/ui-pressable.md",
+          ".agents/skills/vercel-react-native-skills/rules/rendering-no-falsy-and.md"
         ],
-        "marker_hits": 296
+        "marker_hits": 514
       }
     },
     "own_file_groups": {
@@ -458,7 +532,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 404
+        "marker_hits": 375
       },
       "diff_hunk_review": {
         "files": [
@@ -479,15 +553,13 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
-          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md",
-          "docs/retort_external_review_report.json"
+          "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 52
+        "marker_hits": 50
       },
       "plugin_surface": {
         "files": [
@@ -504,7 +576,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 360
+        "marker_hits": 364
       },
       "provider_surface": {
         "files": [
@@ -521,7 +593,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 170
+        "marker_hits": 186
       },
       "review_pipeline": {
         "files": [
@@ -538,7 +610,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 1644
+        "marker_hits": 1647
       },
       "safety_policy": {
         "files": [
@@ -555,7 +627,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 318
+        "marker_hits": 314
       },
       "workflow_ci": {
         "files": [
@@ -572,7 +644,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 1963
+        "marker_hits": 1928
       }
     },
     "pipeline_stages": [
@@ -586,56 +658,67 @@
     ],
     "prioritized_absorptions": []
   },
-  "run_id": "20260627170400-762694f28f",
+  "run_id": "20260627170435-5782efe19c",
   "semantic_review": {
     "external": {
-      "classes": 9,
+      "classes": 67,
       "cli_markers": 0,
-      "functions": 33,
-      "source_files": 75,
-      "test_markers": 21,
-      "workflow_markers": 61
+      "functions": 668,
+      "source_files": 174,
+      "test_markers": 36,
+      "workflow_markers": 122
     },
-    "gaps": [],
+    "gaps": [
+      {
+        "external_advantage": 21,
+        "metric": "classes"
+      },
+      {
+        "external_advantage": 91,
+        "metric": "source_files"
+      }
+    ],
     "own": {
       "classes": 46,
       "cli_markers": 29,
       "functions": 735,
       "source_files": 83,
       "test_markers": 238,
-      "workflow_markers": 2049
+      "workflow_markers": 2048
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "README.md",
-      "prompt_library/architecture_coupling_cohesion_analysis.md",
-      "prompt_library/swot_analysis.md",
-      "prompt_library/blue_ocean_strategy_analysis.md",
-      "prompt_library/performance_scalability_analysis.md"
+      ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
+      ".agents/skills/next-best-practices/self-hosting.md",
+      ".agents/skills/next-best-practices/data-patterns.md",
+      ".agents/skills/vercel-react-best-practices/README.md",
+      ".agents/skills/vercel-react-best-practices/SKILL.md"
+    ],
+    "file_grouping": [
+      "lib/agent.ts"
     ],
     "multi_provider": [
       "README.md",
-      "prompt_library/architecture_layer_identification.md",
-      "prompt_library/business_model_canvas_analysis.md",
-      "prompt_library/kano_model_analysis.md",
-      "prompt_library/architecture_api_conformance_check.md"
+      ".agents/skills/next-best-practices/rsc-boundaries.md",
+      ".agents/skills/next-best-practices/debug-tricks.md",
+      ".agents/skills/vercel-react-best-practices/AGENTS.md",
+      ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
     ],
     "plugin_surface": [
       "README.md",
-      "prompt_library/architecture_layer_identification.md",
-      "prompt_library/architecture_api_client_code_generation.md",
-      "codebase_digest/app.py"
+      "tsconfig.json",
+      "app/components/readme.tsx",
+      ".agents/skills/vercel-react-native-skills/README.md",
+      ".agents/skills/vercel-react-native-skills/SKILL.md"
     ],
     "review_pipeline": [
       "README.md",
-      "prompt_library/evolution_technical_debt_estimation.md",
-      "prompt_library/quality_code_style_consistency_analysis.md",
-      "prompt_library/learning_socratic_dialogue_code_review.md",
-      "prompt_library/learning_code_review_checklist.md"
+      "app/layout.tsx",
+      "lib/agent.ts"
     ]
   },
-  "source": "https://github.com/kamilstanuch/codebase-digest",
+  "source": "https://github.com/vercel-labs/openreview",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -643,7 +726,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/kamilstanuch/codebase-digest."
+      "why": "Compare implementation patterns from https://github.com/vercel-labs/openreview."
     },
     {
       "dimension": "product_operability",
@@ -651,7 +734,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/kamilstanuch/codebase-digest."
+      "why": "Extract usable UX improvements from https://github.com/vercel-labs/openreview."
     },
     {
       "dimension": "operational_readiness",
@@ -659,7 +742,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/kamilstanuch/codebase-digest."
+      "why": "Adapt CI and release checks from https://github.com/vercel-labs/openreview."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -668,6 +751,14 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "external_ingestion",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-file-grouping",
+      "title": "Add external file grouping before deep comparison",
+      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
     },
     {
       "dimension": "feedback_loop_closure",
