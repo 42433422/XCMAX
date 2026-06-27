@@ -31,6 +31,7 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
             false_positive_count += sample_false_positives
             if sample.get("negative"):
                 negative_false_positive_count += sample_false_positives
+        matched_count = sum(1 for item in matches if item)
         sample_results.append(
             {
                 "sample_id": sample["sample_id"],
@@ -38,6 +39,9 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
                 "negative": bool(sample.get("negative")),
                 "expected": expected,
                 "matched": all(matches) if expected else True,
+                "expected_finding_count": len(expected),
+                "matched_finding_count": matched_count,
+                "false_positive_count": sample_false_positives if sample.get("expected_severity") == "info" else 0,
                 "observed_severities": [str(item.get("severity") or "") for item in comments],
                 "observed_comment_count": len(comments),
                 "incremental": {
@@ -49,7 +53,10 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
         )
     passed_samples = sum(1 for item in sample_results if item["matched"])
     pass_rate = passed_samples / len(sample_results) if sample_results else 0.0
-    status = "ready" if len(sample_results) >= 30 and pass_rate >= 0.95 and false_positive_count == 0 and incremental_verified >= 5 else "needs_more_evidence"
+    category_summary = _category_summary(sample_results)
+    macro_pass_rate = sum(float(item["pass_rate"]) for item in category_summary.values()) / len(category_summary) if category_summary else 0.0
+    aggregate_score = _aggregate_score(pass_rate=pass_rate, macro_pass_rate=macro_pass_rate, false_positive_count=false_positive_count, incremental_verified=incremental_verified)
+    status = "ready" if len(sample_results) >= 30 and aggregate_score >= 95 and false_positive_count == 0 and incremental_verified >= 5 else "needs_more_evidence"
     return {
         "status": status,
         "project": str(root),
@@ -68,12 +75,16 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
             "negative_blocker_false_positive_count": negative_false_positive_count,
             "incremental_sample_count": sum(1 for item in samples if item.get("requires_incremental_skip")),
             "incremental_skip_verified_count": incremental_verified,
+            "macro_category_pass_rate": round(macro_pass_rate, 4),
+            "aggregate_score": aggregate_score,
         },
+        "category_summary": category_summary,
         "samples": sample_results,
         "evidence": {
             "engine": "retort_engine.pr_review.review_diff",
             "golden_set": "repo_curated_pr_review_expectations",
             "minimum_expected_samples": 30,
+            "aggregation": "lm_eval_style_task_category_macro_average",
         },
     }
 
@@ -88,6 +99,44 @@ def _finding_matched(comments: list[dict[str, Any]], expected: dict[str, Any]) -
         if all(keyword.lower() in message for keyword in keywords):
             return True
     return False
+
+
+def _category_summary(sample_results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    for sample in sample_results:
+        category = str(sample.get("category") or "uncategorized")
+        row = rows.setdefault(
+            category,
+            {
+                "sample_count": 0,
+                "passed_sample_count": 0,
+                "failed_sample_count": 0,
+                "expected_finding_count": 0,
+                "matched_finding_count": 0,
+                "false_positive_count": 0,
+                "incremental_sample_count": 0,
+                "incremental_skip_verified_count": 0,
+            },
+        )
+        row["sample_count"] += 1
+        row["passed_sample_count"] += 1 if sample.get("matched") else 0
+        row["expected_finding_count"] += int(sample.get("expected_finding_count") or 0)
+        row["matched_finding_count"] += int(sample.get("matched_finding_count") or 0)
+        row["false_positive_count"] += int(sample.get("false_positive_count") or 0)
+        incremental = sample.get("incremental") if isinstance(sample.get("incremental"), dict) else {}
+        if incremental.get("enabled") and int(incremental.get("skipped_existing_change_count") or 0) > 0:
+            row["incremental_sample_count"] += 1
+            row["incremental_skip_verified_count"] += 1
+    for row in rows.values():
+        row["failed_sample_count"] = int(row["sample_count"]) - int(row["passed_sample_count"])
+        row["pass_rate"] = round(int(row["passed_sample_count"]) / int(row["sample_count"]), 4) if row["sample_count"] else 0.0
+        row["recall"] = round(int(row["matched_finding_count"]) / int(row["expected_finding_count"]), 4) if row["expected_finding_count"] else 1.0
+    return dict(sorted(rows.items()))
+
+
+def _aggregate_score(*, pass_rate: float, macro_pass_rate: float, false_positive_count: int, incremental_verified: int) -> int:
+    score = round(((pass_rate * 0.55) + (macro_pass_rate * 0.35) + (min(incremental_verified, 5) / 5 * 0.10)) * 100)
+    return max(0, min(100, score - min(false_positive_count * 5, 50)))
 
 
 def _golden_samples(sample_count: int) -> list[dict[str, Any]]:

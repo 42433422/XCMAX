@@ -21,7 +21,7 @@
     },
     "automation_surface": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 5,
+      "code_graph_proof_count": 6,
       "component": "automation_surface",
       "evidence_files": [
         ".config/binstaller.yml",
@@ -37,10 +37,10 @@
         "README.md",
         "README.zh-TW.md"
       ],
-      "gate_pass_count": 20,
-      "gate_pass_rate": 0.909,
+      "gate_pass_count": 21,
+      "gate_pass_rate": 0.913,
       "ready_for_deep_refactor": true,
-      "run_count": 22,
+      "run_count": 23,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -63,11 +63,13 @@
         "20260627205735-8afcde3e86",
         "20260627205851-4436ac66e6",
         "20260627210037-4436ac66e6",
-        "20260627210337-356907943f"
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 20,
+      "source_count": 21,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -91,9 +93,10 @@
     },
     "benchmark_eval": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 4,
+      "code_graph_proof_count": 5,
       "component": "benchmark_eval",
       "evidence_files": [
+        ".pre-commit-config.yaml",
         "AGENTS.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
@@ -104,110 +107,7 @@
         "__tests__/prompts.test.ts",
         "__tests__/reviewer.test.ts",
         "action/encoder.json",
-        "action/github-action.js",
-        "agentless/test/run_reproduction_tests.py"
-      ],
-      "gate_pass_count": 19,
-      "gate_pass_rate": 0.905,
-      "ready_for_deep_refactor": true,
-      "run_count": 21,
-      "run_ids": [
-        "20260627171538-da950c021d",
-        "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f",
-        "20260627172352-6e1352f61e",
-        "20260627172432-c09c7479ad",
-        "20260627172525-c3d6b79c6a",
-        "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1",
-        "20260627173253-72548897e8",
-        "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e",
-        "20260627191156-142d39dda9",
-        "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd",
-        "20260627195002-b40d2378d6",
-        "20260627195932-112b065375",
-        "20260627204837-5df07f797f",
-        "20260627205735-8afcde3e86",
-        "20260627205851-4436ac66e6",
-        "20260627210037-4436ac66e6"
-      ],
-      "source_count": 19,
-      "sources": [
-        "/private/tmp/retort-depth-source-zULAcN",
-        "https://github.com/HypothesisWorks/hypothesis",
-        "https://github.com/OpenHands/benchmarks",
-        "https://github.com/OpenHands/software-agent-sdk",
-        "https://github.com/SWE-agent/SWE-agent",
-        "https://github.com/TNG/ArchUnit",
-        "https://github.com/aider-ai/aider",
-        "https://github.com/anc95/ChatGPT-CodeReview",
-        "https://github.com/continuedev/continue",
-        "https://github.com/kamilstanuch/codebase-digest",
-        "https://github.com/mopemope/pr-ai-review-bot",
-        "https://github.com/nedbat/coveragepy",
-        "https://github.com/openautocoder/agentless",
-        "https://github.com/qodo-ai/pr-agent",
-        "https://github.com/reviewdog/reviewdog",
-        "https://github.com/seddonym/import-linter",
-        "https://github.com/sunerpy/codegraph-rust",
-        "https://github.com/swe-bench/SWE-bench",
-        "https://github.com/thebjorn/pydeps"
-      ]
-    },
-    "codebase_graph": {
-      "architecture_depth_score": 100,
-      "code_graph_proof_count": 3,
-      "component": "codebase_graph",
-      "evidence_files": [
-        "CHANGELOG.md",
-        "README.md",
-        "action/encoder.json",
-        "action/worker1.js",
-        "docs/module-finder-archive/mf_35.py",
-        "lib/graph.js",
-        "package-lock.json",
-        "rollup.config.ts",
-        "setup.py",
-        "test/flow.js",
-        "test/typescript.js",
-        "tests/test_externals.py"
-      ],
-      "gate_pass_count": 3,
-      "gate_pass_rate": 1.0,
-      "ready_for_deep_refactor": true,
-      "run_count": 3,
-      "run_ids": [
-        "20260627204837-5df07f797f",
-        "20260627205735-8afcde3e86",
-        "20260627210337-356907943f"
-      ],
-      "source_count": 3,
-      "sources": [
-        "https://github.com/anc95/ChatGPT-CodeReview",
-        "https://github.com/pahen/madge",
-        "https://github.com/thebjorn/pydeps"
-      ]
-    },
-    "command_contract": {
-      "architecture_depth_score": 100,
-      "code_graph_proof_count": 5,
-      "component": "command_contract",
-      "evidence_files": [
-        ".config/binstaller.yml",
-        ".licensed.yml",
-        ".readthedocs.yaml",
-        "AGENTS.md",
-        "BUILD_DEPENDENCIES.md",
-        "CHANGELOG.md",
-        "CONTRIBUTING.md",
-        "Cargo.toml",
-        "HISTORY.md",
-        "README.ja.md",
-        "README.md",
-        "README.zh-TW.md"
+        "action/github-action.js"
       ],
       "gate_pass_count": 20,
       "gate_pass_rate": 0.909,
@@ -235,11 +135,119 @@
         "20260627205735-8afcde3e86",
         "20260627205851-4436ac66e6",
         "20260627210037-4436ac66e6",
-        "20260627210337-356907943f"
+        "20260627211605-408a94776e"
       ],
       "source_count": 20,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
+        "https://github.com/HypothesisWorks/hypothesis",
+        "https://github.com/OpenHands/benchmarks",
+        "https://github.com/OpenHands/software-agent-sdk",
+        "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
+        "https://github.com/aider-ai/aider",
+        "https://github.com/anc95/ChatGPT-CodeReview",
+        "https://github.com/continuedev/continue",
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/mopemope/pr-ai-review-bot",
+        "https://github.com/nedbat/coveragepy",
+        "https://github.com/openautocoder/agentless",
+        "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/reviewdog/reviewdog",
+        "https://github.com/seddonym/import-linter",
+        "https://github.com/sunerpy/codegraph-rust",
+        "https://github.com/swe-bench/SWE-bench",
+        "https://github.com/thebjorn/pydeps"
+      ]
+    },
+    "codebase_graph": {
+      "architecture_depth_score": 100,
+      "code_graph_proof_count": 4,
+      "component": "codebase_graph",
+      "evidence_files": [
+        "CHANGELOG.md",
+        "README.md",
+        "action/encoder.json",
+        "action/worker1.js",
+        "docs/module-finder-archive/mf_35.py",
+        "lib/graph.js",
+        "lm_eval/tasks/_yaml_loader.py",
+        "lm_eval/tasks/mmlu/flan_cot_fewshot/_cot_prompts.json",
+        "lm_eval/tasks/mmlu/flan_cot_fewshot/mmlu_high_school_macroeconomics.yaml",
+        "package-lock.json",
+        "pyproject.toml",
+        "rollup.config.ts"
+      ],
+      "gate_pass_count": 4,
+      "gate_pass_rate": 1.0,
+      "ready_for_deep_refactor": true,
+      "run_count": 4,
+      "run_ids": [
+        "20260627204837-5df07f797f",
+        "20260627205735-8afcde3e86",
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
+      ],
+      "source_count": 4,
+      "sources": [
+        "https://github.com/EleutherAI/lm-evaluation-harness",
+        "https://github.com/anc95/ChatGPT-CodeReview",
+        "https://github.com/pahen/madge",
+        "https://github.com/thebjorn/pydeps"
+      ]
+    },
+    "command_contract": {
+      "architecture_depth_score": 100,
+      "code_graph_proof_count": 6,
+      "component": "command_contract",
+      "evidence_files": [
+        ".config/binstaller.yml",
+        ".licensed.yml",
+        ".readthedocs.yaml",
+        "AGENTS.md",
+        "BUILD_DEPENDENCIES.md",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        "Cargo.toml",
+        "HISTORY.md",
+        "README.ja.md",
+        "README.md",
+        "README.zh-TW.md"
+      ],
+      "gate_pass_count": 21,
+      "gate_pass_rate": 0.913,
+      "ready_for_deep_refactor": true,
+      "run_count": 23,
+      "run_ids": [
+        "20260627171538-da950c021d",
+        "20260627171611-61b3c3e350",
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e",
+        "20260627172432-c09c7479ad",
+        "20260627172525-c3d6b79c6a",
+        "20260627173018-28c1843a1a",
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f",
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e",
+        "20260627191156-142d39dda9",
+        "20260627193421-af1df6ee7c",
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6",
+        "20260627195932-112b065375",
+        "20260627204837-5df07f797f",
+        "20260627205735-8afcde3e86",
+        "20260627205851-4436ac66e6",
+        "20260627210037-4436ac66e6",
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
+      ],
+      "source_count": 21,
+      "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -263,7 +271,7 @@
     },
     "context_localization": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 5,
+      "code_graph_proof_count": 6,
       "component": "context_localization",
       "evidence_files": [
         ".goreleaser.yml",
@@ -279,10 +287,10 @@
         "action.yml",
         "action/worker1.js"
       ],
-      "gate_pass_count": 17,
-      "gate_pass_rate": 0.85,
+      "gate_pass_count": 18,
+      "gate_pass_rate": 0.857,
       "ready_for_deep_refactor": true,
-      "run_count": 20,
+      "run_count": 21,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -303,11 +311,13 @@
         "20260627205735-8afcde3e86",
         "20260627205851-4436ac66e6",
         "20260627210037-4436ac66e6",
-        "20260627210337-356907943f"
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 17,
+      "source_count": 18,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -489,9 +499,10 @@
     },
     "evaluation_loop": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 3,
+      "code_graph_proof_count": 4,
       "component": "evaluation_loop",
       "evidence_files": [
+        ".pre-commit-config.yaml",
         "AGENTS.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
@@ -502,13 +513,12 @@
         "__tests__/prompts.test.ts",
         "__tests__/reviewer.test.ts",
         "agentless/test/run_reproduction_tests.py",
-        "agentless/test/run_tests.py",
-        "audit.toml"
+        "agentless/test/run_tests.py"
       ],
-      "gate_pass_count": 18,
-      "gate_pass_rate": 0.9,
+      "gate_pass_count": 19,
+      "gate_pass_rate": 0.905,
       "ready_for_deep_refactor": true,
-      "run_count": 20,
+      "run_count": 21,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -529,11 +539,13 @@
         "20260627195932-112b065375",
         "20260627205735-8afcde3e86",
         "20260627205851-4436ac66e6",
-        "20260627210037-4436ac66e6"
+        "20260627210037-4436ac66e6",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 18,
+      "source_count": 19,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -555,7 +567,7 @@
     },
     "file_grouping": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 3,
+      "code_graph_proof_count": 4,
       "component": "file_grouping",
       "evidence_files": [
         ".continue/agents/error-message-quality.md",
@@ -571,10 +583,10 @@
         "aider/watch.py",
         "aider/website/docs/usage.md"
       ],
-      "gate_pass_count": 11,
-      "gate_pass_rate": 0.846,
+      "gate_pass_count": 12,
+      "gate_pass_rate": 0.857,
       "ready_for_deep_refactor": true,
-      "run_count": 13,
+      "run_count": 14,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -588,11 +600,13 @@
         "20260627195002-b40d2378d6",
         "20260627204837-5df07f797f",
         "20260627205851-4436ac66e6",
-        "20260627210037-4436ac66e6"
+        "20260627210037-4436ac66e6",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 11,
+      "source_count": 12,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
         "https://github.com/anc95/ChatGPT-CodeReview",
@@ -624,7 +638,7 @@
     },
     "model_adapter": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 4,
+      "code_graph_proof_count": 5,
       "component": "model_adapter",
       "evidence_files": [
         ".llm_config/example.json",
@@ -640,10 +654,10 @@
         "RELEASE_NOTES.md",
         "SECURITY.md"
       ],
-      "gate_pass_count": 20,
-      "gate_pass_rate": 0.833,
+      "gate_pass_count": 21,
+      "gate_pass_rate": 0.84,
       "ready_for_deep_refactor": true,
-      "run_count": 24,
+      "run_count": 25,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -668,11 +682,13 @@
         "20260627204837-5df07f797f",
         "20260627205851-4436ac66e6",
         "20260627210037-4436ac66e6",
-        "20260627210337-356907943f"
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 21,
+      "source_count": 22,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -714,7 +730,7 @@
     },
     "provider_boundary": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 4,
+      "code_graph_proof_count": 5,
       "component": "provider_boundary",
       "evidence_files": [
         ".llm_config/example.json",
@@ -730,10 +746,10 @@
         "RELEASE_NOTES.md",
         "SECURITY.md"
       ],
-      "gate_pass_count": 20,
-      "gate_pass_rate": 0.833,
+      "gate_pass_count": 21,
+      "gate_pass_rate": 0.84,
       "ready_for_deep_refactor": true,
-      "run_count": 24,
+      "run_count": 25,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -758,11 +774,13 @@
         "20260627204837-5df07f797f",
         "20260627205851-4436ac66e6",
         "20260627210037-4436ac66e6",
-        "20260627210337-356907943f"
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 21,
+      "source_count": 22,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -787,9 +805,10 @@
     },
     "regression_oracle": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 3,
+      "code_graph_proof_count": 4,
       "component": "regression_oracle",
       "evidence_files": [
+        ".pre-commit-config.yaml",
         "AGENTS.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
@@ -800,13 +819,12 @@
         "__tests__/prompts.test.ts",
         "__tests__/reviewer.test.ts",
         "agentless/test/run_reproduction_tests.py",
-        "agentless/test/run_tests.py",
-        "audit.toml"
+        "agentless/test/run_tests.py"
       ],
-      "gate_pass_count": 18,
-      "gate_pass_rate": 0.9,
+      "gate_pass_count": 19,
+      "gate_pass_rate": 0.905,
       "ready_for_deep_refactor": true,
-      "run_count": 20,
+      "run_count": 21,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -827,11 +845,13 @@
         "20260627195932-112b065375",
         "20260627205735-8afcde3e86",
         "20260627205851-4436ac66e6",
-        "20260627210037-4436ac66e6"
+        "20260627210037-4436ac66e6",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 18,
+      "source_count": 19,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -870,7 +890,7 @@
     },
     "review_pipeline": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 5,
+      "code_graph_proof_count": 6,
       "component": "review_pipeline",
       "evidence_files": [
         ".devcontainer/devcontainer.json",
@@ -886,10 +906,10 @@
         "CONTRIBUTING.md",
         "HISTORY.md"
       ],
-      "gate_pass_count": 20,
-      "gate_pass_rate": 0.833,
+      "gate_pass_count": 21,
+      "gate_pass_rate": 0.84,
       "ready_for_deep_refactor": true,
-      "run_count": 24,
+      "run_count": 25,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -914,11 +934,13 @@
         "20260627205735-8afcde3e86",
         "20260627205851-4436ac66e6",
         "20260627210037-4436ac66e6",
-        "20260627210337-356907943f"
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 21,
+      "source_count": 22,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -943,7 +965,7 @@
     },
     "safety_policy": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 5,
+      "code_graph_proof_count": 6,
       "component": "safety_policy",
       "evidence_files": [
         ".github/codeql/codeql-config.yml",
@@ -959,10 +981,10 @@
         "CLA.md",
         "CODE_OF_CONDUCT.md"
       ],
-      "gate_pass_count": 21,
-      "gate_pass_rate": 0.913,
+      "gate_pass_count": 22,
+      "gate_pass_rate": 0.917,
       "ready_for_deep_refactor": true,
-      "run_count": 23,
+      "run_count": 24,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -986,11 +1008,13 @@
         "20260627205735-8afcde3e86",
         "20260627205851-4436ac66e6",
         "20260627210037-4436ac66e6",
-        "20260627210337-356907943f"
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 21,
+      "source_count": 22,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -1034,7 +1058,7 @@
     },
     "workflow_ci": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 5,
+      "code_graph_proof_count": 6,
       "component": "workflow_ci",
       "evidence_files": [
         ".github/workflows/static.yml",
@@ -1050,10 +1074,10 @@
         "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md"
       ],
-      "gate_pass_count": 21,
-      "gate_pass_rate": 0.84,
+      "gate_pass_count": 22,
+      "gate_pass_rate": 0.846,
       "ready_for_deep_refactor": true,
-      "run_count": 25,
+      "run_count": 26,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -1079,11 +1103,13 @@
         "20260627205735-8afcde3e86",
         "20260627205851-4436ac66e6",
         "20260627210037-4436ac66e6",
-        "20260627210337-356907943f"
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e"
       ],
-      "source_count": 22,
+      "source_count": 23,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
@@ -1119,9 +1145,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.84,
+      "gate_pass_rate": 0.846,
       "priority": "P0",
-      "supporting_source_count": 22,
+      "supporting_source_count": 23,
       "task_id": "retort-architecture-workflow-ci",
       "title": "Implement cumulative architecture pattern: workflow_ci"
     },
@@ -1135,9 +1161,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.833,
+      "gate_pass_rate": 0.84,
       "priority": "P0",
-      "supporting_source_count": 21,
+      "supporting_source_count": 22,
       "task_id": "retort-architecture-model-adapter",
       "title": "Implement cumulative architecture pattern: model_adapter"
     },
@@ -1151,9 +1177,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.833,
+      "gate_pass_rate": 0.84,
       "priority": "P0",
-      "supporting_source_count": 21,
+      "supporting_source_count": 22,
       "task_id": "retort-architecture-provider-boundary",
       "title": "Implement cumulative architecture pattern: provider_boundary"
     },
@@ -1167,11 +1193,27 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.833,
+      "gate_pass_rate": 0.84,
       "priority": "P0",
-      "supporting_source_count": 21,
+      "supporting_source_count": 22,
       "task_id": "retort-architecture-review-pipeline",
       "title": "Implement cumulative architecture pattern: review_pipeline"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 0.917,
+      "priority": "P0",
+      "supporting_source_count": 22,
+      "task_id": "retort-architecture-safety-policy",
+      "title": "Implement cumulative architecture pattern: safety_policy"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -1186,22 +1228,6 @@
       "gate_pass_rate": 0.913,
       "priority": "P0",
       "supporting_source_count": 21,
-      "task_id": "retort-architecture-safety-policy",
-      "title": "Implement cumulative architecture pattern: safety_policy"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 0.909,
-      "priority": "P0",
-      "supporting_source_count": 20,
       "task_id": "retort-architecture-automation-surface",
       "title": "Implement cumulative architecture pattern: automation_surface"
     },
@@ -1215,11 +1241,27 @@
         "merge commit",
         "rollback rehearsal"
       ],
+      "gate_pass_rate": 0.913,
+      "priority": "P0",
+      "supporting_source_count": 21,
+      "task_id": "retort-architecture-command-contract",
+      "title": "Implement cumulative architecture pattern: command_contract"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
       "gate_pass_rate": 0.909,
       "priority": "P0",
       "supporting_source_count": 20,
-      "task_id": "retort-architecture-command-contract",
-      "title": "Implement cumulative architecture pattern: command_contract"
+      "task_id": "retort-architecture-benchmark-eval",
+      "title": "Implement cumulative architecture pattern: benchmark_eval"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -1234,22 +1276,6 @@
       "gate_pass_rate": 0.905,
       "priority": "P0",
       "supporting_source_count": 19,
-      "task_id": "retort-architecture-benchmark-eval",
-      "title": "Implement cumulative architecture pattern: benchmark_eval"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 0.9,
-      "priority": "P0",
-      "supporting_source_count": 18,
       "task_id": "retort-architecture-evaluation-loop",
       "title": "Implement cumulative architecture pattern: evaluation_loop"
     },
@@ -1263,9 +1289,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.9,
+      "gate_pass_rate": 0.905,
       "priority": "P0",
-      "supporting_source_count": 18,
+      "supporting_source_count": 19,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
     },
@@ -1279,11 +1305,27 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.85,
+      "gate_pass_rate": 0.857,
       "priority": "P0",
-      "supporting_source_count": 17,
+      "supporting_source_count": 18,
       "task_id": "retort-architecture-context-localization",
       "title": "Implement cumulative architecture pattern: context_localization"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 0.857,
+      "priority": "P0",
+      "supporting_source_count": 12,
+      "task_id": "retort-architecture-file-grouping",
+      "title": "Implement cumulative architecture pattern: file_grouping"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -1300,22 +1342,6 @@
       "supporting_source_count": 11,
       "task_id": "retort-architecture-diff-hunk-review",
       "title": "Implement cumulative architecture pattern: diff_hunk_review"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 0.846,
-      "priority": "P0",
-      "supporting_source_count": 11,
-      "task_id": "retort-architecture-file-grouping",
-      "title": "Implement cumulative architecture pattern: file_grouping"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -1361,7 +1387,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-codebase-graph",
       "title": "Implement cumulative architecture pattern: codebase_graph"
     },
@@ -6468,12 +6494,305 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py"
+      ],
+      "code_graph_proof": {
+        "changed_behavior_files": [
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/absorbed_external_patterns.py"
+        ],
+        "changed_focus_files": [
+          "retort_engine/absorbed_capabilities.py"
+        ],
+        "changed_hotspots": [],
+        "dependency_impact": {
+          "changed_files": [
+            "retort_engine/absorbed_capabilities.py",
+            "retort_engine/absorbed_external_patterns.py"
+          ],
+          "direct_dependencies": {
+            "retort_engine/absorbed_capabilities.py": [
+              "retort_engine/absorption_quality.py"
+            ],
+            "retort_engine/absorbed_external_patterns.py": []
+          },
+          "direct_dependents": {
+            "retort_engine/absorbed_capabilities.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_capabilities.py"
+            ],
+            "retort_engine/absorbed_external_patterns.py": []
+          },
+          "impacted_files": [
+            "retort_engine/absorbed_capabilities.py",
+            "retort_engine/absorbed_external_patterns.py",
+            "retort_engine/absorption_quality.py",
+            "retort_engine/pr_review.py",
+            "tests/test_absorbed_capabilities.py"
+          ],
+          "touched_cycles": []
+        },
+        "evidence": {
+          "max_files": 400,
+          "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+          "run_id": "20260627211605-408a94776e",
+          "scope": "per_real_absorption_run",
+          "style": "deterministic_post_absorption_code_graph"
+        },
+        "focus_files": [
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/architecture_refactor.py",
+          "retort_engine/cli.py",
+          "retort_engine/codebase_graph.py",
+          "retort_engine/core.py",
+          "retort_engine/real_absorption.py",
+          "tests/test_absorption_quality.py",
+          "tests/test_codebase_graph.py",
+          "tests/test_real_absorption_helpers.py",
+          "tests/test_retort_engine.py"
+        ],
+        "hotspot_files": [
+          "retort_engine/cli.py",
+          "retort_engine/codebase_graph.py",
+          "retort_engine/core.py",
+          "retort_engine/evaluators.py",
+          "retort_engine/paibi_llm.py",
+          "retort_engine/pr_review.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/service.py",
+          "tests/test_real_absorption_helpers.py",
+          "tests/test_retort_engine.py",
+          "tests/test_runtime_integrations.py"
+        ],
+        "passed": true,
+        "per_run_required": true,
+        "run_id": "20260627211605-408a94776e",
+        "status": "proved",
+        "summary": {
+          "changed_behavior_file_count": 2,
+          "changed_file_count": 5,
+          "changed_focus_file_count": 1,
+          "changed_hotspot_count": 0,
+          "dependency_cycle_touch_count": 0,
+          "dependency_impact_file_count": 5,
+          "graph_status": "ready"
+        }
+      },
+      "code_graph_proved": true,
+      "components": [
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            ".pre-commit-config.yaml",
+            "LICENSE.md",
+            "README.md",
+            "lm_eval/evaluator_utils.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 58,
+          "evidence_files": [
+            "LICENSE.md",
+            "lm_eval/tasks/README.md",
+            "lm_eval/tasks/llama3/instruct/mmlu_de/mmlu_de_security_studies.yaml",
+            "lm_eval/tasks/llama3/instruct/mmlu_de/utils.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 58,
+          "evidence_files": [
+            "lm_eval/tasks/glue/README.md",
+            "lm_eval/tasks/ifeval/instructions_util.py",
+            "lm_eval/tasks/longbench2/README.md",
+            "lm_eval/tasks/mmlu_prox/README.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 58,
+          "evidence_files": [
+            ".pre-commit-config.yaml",
+            "README.md",
+            "lm_eval/__init__.py",
+            "lm_eval/evaluator_utils.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.md",
+            "lm_eval/evaluator.py",
+            "lm_eval/result_schema.py",
+            "lm_eval/utils.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.md",
+            "lm_eval/evaluator.py",
+            "lm_eval/result_schema.py",
+            "lm_eval/utils.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 58,
+          "evidence_files": [
+            ".pre-commit-config.yaml",
+            "README.md",
+            "lm_eval/__init__.py",
+            "lm_eval/evaluator_utils.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.md",
+            "lm_eval/__init__.py",
+            "lm_eval/__main__.py",
+            "lm_eval/evaluator.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "codebase_graph",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.md",
+            "lm_eval/tasks/_yaml_loader.py",
+            "lm_eval/tasks/mmlu/flan_cot_fewshot/_cot_prompts.json",
+            "lm_eval/tasks/mmlu/flan_cot_fewshot/mmlu_high_school_macroeconomics.yaml",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "codebase_graph"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 58,
+          "evidence_files": [
+            ".pre-commit-config.yaml",
+            "README.md",
+            "lm_eval/__init__.py",
+            "lm_eval/evaluator_utils.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.md",
+            "lm_eval/__init__.py",
+            "lm_eval/__main__.py",
+            "lm_eval/evaluator.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "context_localization",
+          "depth_score": 52,
+          "evidence_files": [
+            "README.md",
+            "lm_eval/tasks/_yaml_loader.py",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "codebase_graph"
+          ]
+        },
+        {
+          "component": "file_grouping",
+          "depth_score": 46,
+          "evidence_files": [
+            "tests/utils.py"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T21:16:25Z",
+      "external_file_count": 16230,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/EleutherAI/lm-evaluation-harness",
+      "gate_count": 6,
+      "gates_passed": true,
+      "git_revision": "97a5e2c710e2b56b9dd48f367bb6fe87bbb2c176",
+      "run_id": "20260627211605-408a94776e",
+      "schema_version": 1,
+      "signals": [
+        "benchmarking",
+        "codebase_graph",
+        "plugin_surface",
+        "multi_provider",
+        "atmosphere_shader"
+      ],
+      "source": "https://github.com/EleutherAI/lm-evaluation-harness",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 22,
-    "gate_passed_run_count": 21,
+    "gate_passed_run_count": 22,
     "ready_component_count": 16,
     "ready_components": [
       "workflow_ci",
@@ -6486,7 +6805,7 @@
       "evaluation_loop"
     ],
     "repeated_component_count": 18,
-    "run_count": 25,
-    "source_count": 22
+    "run_count": 26,
+    "source_count": 23
   }
 }
