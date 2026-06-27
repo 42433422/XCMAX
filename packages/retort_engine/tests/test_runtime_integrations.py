@@ -48,7 +48,23 @@ def test_license_gate_and_semantic_compare(tmp_path: Path) -> None:
     create_focused_tool_package(external)
     assert license_gate(licensed).passed
     assert license_gate(missing).status == "warning"
+    assert license_gate(missing, enforce=True).status == "blocked"
     assert semantic_compare(own, external)
+
+
+def test_license_gate_blocks_incompatible_and_reads_metadata(tmp_path: Path) -> None:
+    gpl = tmp_path / "gpl"
+    package = tmp_path / "package"
+    gpl.mkdir()
+    package.mkdir()
+    write_file(gpl / "LICENSE", "GNU Affero General Public License v3.0\n")
+    write_file(package / "package.json", json.dumps({"license": "Apache-2.0"}))
+
+    assert license_gate(gpl).status == "blocked"
+    assert license_gate(gpl, enforce=True).status == "blocked"
+    metadata_result = license_gate(package, enforce=True)
+    assert metadata_result.status == "passed"
+    assert metadata_result.detected_license == "Apache-2.0"
 
 
 def test_product_service_and_blackhole_ui_surface(tmp_path: Path) -> None:

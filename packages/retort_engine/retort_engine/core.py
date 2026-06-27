@@ -72,6 +72,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "branch_workflow": "begin_absorption_branch" in text and "merge_absorption_branch" in text,
         "employee_queue": "employee_queue" in text and "RetortHistory" in text,
         "license_gate": "license" in text.lower() and "incompatible" in text.lower(),
+        "license_boundary_tests": "DEFAULT_BLOCKED_LICENSES" in text and "AGPL" in text and "enforce=True" in text,
         "service_api": "RetortService" in text and "RetortUIServer" in text,
         "self_evolution": "RetortSelfEvolutionRunner" in text and "scores_repeated_without_convergence" in text,
         "real_absorption_cli": "apply_real_absorption" in text and "apply-absorption" in text and "execution_requests" in text,
@@ -611,6 +612,8 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
         evidence.append(f"external_snapshot_revision={(payload.get('external_snapshot') or {}).get('git_revision', '')}")
         evidence.append(f"absorbed_signals={','.join(str(item) for item in payload.get('absorbed_signals') or [])}")
         evidence.append(f"semantic_gap_count={len((payload.get('semantic_review') or {}).get('gaps') or [])}")
+        license_review = payload.get("license_review") if isinstance(payload.get("license_review"), dict) else {}
+        evidence.append(f"license_review_status={license_review.get('status', '')}; detected={license_review.get('detected_license', '')}")
         pipeline = payload.get("review_pipeline") if isinstance(payload.get("review_pipeline"), dict) else {}
         evidence.append(f"component_gap_count={len(pipeline.get('component_gaps') or [])}")
         evidence.append(f"prioritized_absorption_count={len(pipeline.get('prioritized_absorptions') or [])}")
@@ -661,7 +664,7 @@ def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok:
         "employee_execution_integration": 66 + 6 * features["employee_queue"] + 16 * verified + 5 * (features["real_absorption_cli"] and verified) + 4 * (features["execution_proof_recorder"] and verified),
         "feedback_loop_closure": 68 + 5 * features["self_evolution"] + 4 * features["employee_queue"] + 15 * verified,
         "product_operability": 74 + 4 * features["blackhole_ui"] + 4 * features["service_api"] + 3 * features["folder_project_picker"] + 3 * features["branch_workflow"] + 8 * verified,
-        "safety_license_gate": 76 + 6 * features["license_gate"] + 3 * (context_policy == "isolated") + 6 * verified,
+        "safety_license_gate": 76 + 6 * features["license_gate"] + 3 * features["license_boundary_tests"] + 3 * (context_policy == "isolated") + 6 * verified,
         "branch_absorption_workflow": 74 + 5 * features["branch_workflow"] + 4 * features["folder_project_picker"] + 3 * features["blackhole_ui"] + 8 * verified,
         "retort_product_maturity": 72 + 3 * features["blackhole_ui"] + 3 * features["branch_workflow"] + 2 * features["github_or_folder_source"] + 2 * features["service_api"] + 2 * test_ok + 2 * lint_ok + 12 * verified - 3 * (tracked == "untracked"),
     }
