@@ -34,7 +34,7 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     _append_log(log_path, run_id, source, external_path, tasks, external_profile)
     changed_files = _changed_files(before, [module_path, log_path])
-    gates = [_run_command([_python(payload), "-m", "py_compile", str(module_path)], root, timeout=60)]
+    gates = [_run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(module_path)], root, timeout=60)]
     if payload.get("run_local_gates"):
         gates.extend(_local_gate_commands(root, payload))
     diff_summary = _git_diff_summary(root, changed_files)
