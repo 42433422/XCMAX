@@ -45,6 +45,22 @@ VISUAL_FRONTEND_SIGNALS = {
     "specular_ocean",
 }
 VISUAL_FRONTEND_SUFFIXES = {".css", ".glsl", ".html", ".js", ".jsx", ".ts", ".tsx", ".wgsl"}
+VISUAL_FRONTEND_PATH_MARKERS = (
+    "atmosphere",
+    "bump",
+    "cloud",
+    "earth",
+    "fresnel",
+    "globe",
+    "height",
+    "ocean",
+    "planet",
+    "shader",
+    "terrain",
+    "texture",
+    "three",
+    "webgl",
+)
 
 
 def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
@@ -354,19 +370,25 @@ def _should_absorb_frontend_visual(profile: dict[str, Any]) -> bool:
     if not visual_signals:
         return False
     signal_evidence = profile.get("signal_evidence") or {}
-    frontend_evidence_count = sum(
+    strong_frontend_evidence_count = sum(
         1
         for signal in visual_signals
-        if _has_frontend_visual_evidence(signal_evidence.get(signal) or [])
+        if _has_frontend_visual_evidence(signal, signal_evidence.get(signal) or [])
     )
-    return frontend_evidence_count >= 1 and ("planet_frontend" in visual_signals or frontend_evidence_count >= 2)
+    return strong_frontend_evidence_count >= 1 and (
+        "planet_frontend" in visual_signals
+        or "webgl_scene" in visual_signals
+        or strong_frontend_evidence_count >= 2
+    )
 
 
-def _has_frontend_visual_evidence(paths: list[Any]) -> bool:
+def _has_frontend_visual_evidence(signal: str, paths: list[Any]) -> bool:
     for path in paths:
         rel = str(path).lower()
         suffix = Path(rel).suffix
-        if suffix in VISUAL_FRONTEND_SUFFIXES:
+        if suffix not in VISUAL_FRONTEND_SUFFIXES:
+            continue
+        if signal == "planet_frontend" or any(marker in rel for marker in VISUAL_FRONTEND_PATH_MARKERS):
             return True
     return False
 

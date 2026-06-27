@@ -92,6 +92,8 @@ def main(argv: list[str] | None = None) -> int:
     review = sub.add_parser("review-diff")
     review.add_argument("--diff-file", required=True)
     review.add_argument("--previous-diff-file", default="")
+    review.add_argument("--issue-context-file", default="")
+    review.add_argument("--pr-body-file", default="")
     review.add_argument("--max-comments", type=int, default=20)
     review.add_argument("--json", action="store_true")
     review_pr = sub.add_parser("review-pr")
@@ -243,7 +245,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.previous_diff_file:
             with open(args.previous_diff_file, encoding="utf-8") as handle:
                 previous_diff_text = handle.read()
-        result = review_diff(diff_text, max_comments=args.max_comments, previous_diff_text=previous_diff_text)
+        issue_context = ""
+        if args.issue_context_file:
+            with open(args.issue_context_file, encoding="utf-8") as handle:
+                issue_context = handle.read()
+        pr_body = ""
+        if args.pr_body_file:
+            with open(args.pr_body_file, encoding="utf-8") as handle:
+                pr_body = handle.read()
+        result = review_diff(
+            diff_text,
+            max_comments=args.max_comments,
+            previous_diff_text=previous_diff_text,
+            issue_context=issue_context,
+            pr_body=pr_body,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:

@@ -114,6 +114,23 @@ def test_review_diff_surfaces_static_analysis_findings() -> None:
     assert {comment["line"] for comment in result["comments"] if comment["capability"] == "static_analysis"} == {1, 2}
 
 
+def test_review_diff_surfaces_issue_intent_mismatch() -> None:
+    diff = """diff --git a/app/theme.css b/app/theme.css
+--- a/app/theme.css
++++ b/app/theme.css
+@@ -0,0 +1,2 @@
++.hero { color: blue; }
++.card { border-radius: 8px; }
+"""
+
+    result = review_diff(diff, issue_context="Fix password reset token expiry in auth flow", pr_body="Refresh dashboard colors")
+
+    assert result["intent_alignment"]["status"] == "misaligned"
+    assert result["summary"]["intent_alignment"]["aligned"] is False
+    assert any(comment["capability"] == "intent_alignment" for comment in result["comments"])
+    assert validate_contract("pr_review_result", result)["valid"] is True
+
+
 def test_review_diff_groups_related_files_by_review_context() -> None:
     diff = """diff --git a/app/auth.py b/app/auth.py
 --- a/app/auth.py
