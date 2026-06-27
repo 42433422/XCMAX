@@ -41,13 +41,8 @@ DOMAIN_SPECS: list[tuple[str, str]] = [
     ("app.neuro_bus.domains.wechat_domain_handlers", "register_wechat_domain_handlers"),
     ("app.neuro_bus.domains.print_domain_handlers", "register_print_domain_handlers"),
     ("app.neuro_bus.domains.ai_domain_handlers", "register_ai_domain_handlers"),
-    ("app.neuro_bus.domains.auth_domain_handlers", "register_auth_domain_handlers"),
-    ("app.neuro_bus.domains.material_domain_handlers", "register_material_domain_handlers"),
-    (
-        "app.neuro_bus.domains.conversation_domain_handlers",
-        "register_conversation_domain_handlers",
-    ),
 ]
+# 注：auth/material/conversation 三个死域已于主干删除(927ad6fd2)，不再注册。
 
 APP_CONSUMERS_MOD = "app.neuro_bus.domains.application_event_consumers"
 APP_CONSUMERS_FN = "register_application_event_consumers"
@@ -80,8 +75,9 @@ class TestAllDomainsSuccessPath:
         with patch.dict(sys.modules, fakes):
             await register_domain_handlers_only(mock_bus)
 
-        # 13 个领域 + 1 个消费者，全部恰好被调用一次，且参数是同一个 bus
-        assert len(registers) == 14
+        # 10 个领域 + 1 个消费者，全部恰好被调用一次，且参数是同一个 bus
+        # （auth/material/conversation 死域已于主干 927ad6fd2 删除）
+        assert len(registers) == len(DOMAIN_SPECS) + 1
         for fn_name, reg in registers.items():
             reg.assert_called_once_with(mock_bus)
 
@@ -130,9 +126,6 @@ class TestDomainRecoverableErrorBranches:
             "register_wechat_domain_handlers",
             "register_print_domain_handlers",
             "register_ai_domain_handlers",
-            "register_auth_domain_handlers",
-            "register_material_domain_handlers",
-            "register_conversation_domain_handlers",
         ],
     )
     async def test_recoverable_error_is_swallowed_and_others_continue(self, failing_fn):
@@ -187,13 +180,8 @@ class TestDomainImportErrorBranches:
             ("app.neuro_bus.domains.ocr_domain_handlers", "register_wechat_domain_handlers"),
             ("app.neuro_bus.domains.wechat_domain_handlers", "register_print_domain_handlers"),
             ("app.neuro_bus.domains.print_domain_handlers", "register_ai_domain_handlers"),
-            ("app.neuro_bus.domains.ai_domain_handlers", "register_auth_domain_handlers"),
-            ("app.neuro_bus.domains.auth_domain_handlers", "register_material_domain_handlers"),
-            (
-                "app.neuro_bus.domains.material_domain_handlers",
-                "register_conversation_domain_handlers",
-            ),
-            ("app.neuro_bus.domains.conversation_domain_handlers", APP_CONSUMERS_FN),
+            # ai 是最后一个领域，其后是应用消费者注册（auth/material/conversation 已删）
+            ("app.neuro_bus.domains.ai_domain_handlers", APP_CONSUMERS_FN),
         ],
     )
     async def test_missing_module_skips_and_continues(self, mod_path, later_fn):

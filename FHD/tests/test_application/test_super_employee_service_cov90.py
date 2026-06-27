@@ -498,10 +498,13 @@ class TestCliWorkspace:
         assert ws.endswith("claude_super_employee")  # = CLAUDE_PROFILE.storage_subdir
         assert Path(ws).exists()
 
-    def test_product_domain_honors_caller_path_when_not_server_repo(self, tmp_path):
-        # 客户显式提供的本机路径(存在且非服务端 repo)被采纳。
+    def test_product_domain_ignores_caller_workspace_root(self, tmp_path):
+        # 信任墙：产品域绝不采信客户提供的宿主路径(防 path-injection/越权读盘)，
+        # 即便 context 里塞了存在的 workspace_root，也一律落隔离临时区。
         svc = _make_svc(tmp_path)
-        assert svc._cli_workspace({"workspace_root": str(tmp_path)}) == str(tmp_path)
+        ws = svc._cli_workspace({"workspace_root": str(tmp_path)})
+        assert ws != str(tmp_path)
+        assert "xcmax_product_scratch" in ws
 
     def test_fallback_resolves_to_existing_dir(self, tmp_path, monkeypatch):
         monkeypatch.delenv("XCMAX_CLAUDE_WORKSPACE_ROOT", raising=False)
