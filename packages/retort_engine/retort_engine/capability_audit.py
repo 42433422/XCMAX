@@ -124,6 +124,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     stress_source = root / "retort_engine" / "employee_scheduler_stress.py"
     patch_closure_source = root / "retort_engine" / "employee_patch_closure.py"
     adjudication_source = root / "retort_engine" / "review_adjudication_calibration.py"
+    review_policy_source = root / "retort_engine" / "absorbed_review_policy.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
@@ -137,6 +138,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     stress_test = root / "tests" / "test_employee_scheduler_stress.py"
     patch_closure_test = root / "tests" / "test_employee_patch_closure.py"
     adjudication_test = root / "tests" / "test_review_adjudication_calibration.py"
+    review_policy_test = root / "tests" / "test_absorbed_review_policy.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -311,6 +313,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/employee_scheduler_stress.py", stress_source.is_file()),
                 ("retort_engine/employee_patch_closure.py", patch_closure_source.is_file()),
                 ("retort_engine/review_adjudication_calibration.py", adjudication_source.is_file()),
+                ("retort_engine/absorbed_review_policy.py", review_policy_source.is_file()),
             )
             if exists
         ],
@@ -330,6 +333,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_employee_scheduler_stress.py", stress_test.is_file()),
                 ("tests/test_employee_patch_closure.py", patch_closure_test.is_file()),
                 ("tests/test_review_adjudication_calibration.py", adjudication_test.is_file()),
+                ("tests/test_absorbed_review_policy.py", review_policy_test.is_file()),
             )
             if exists
         ],

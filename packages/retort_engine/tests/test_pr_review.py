@@ -56,12 +56,15 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["review_context_group_count"] == 1
     assert result["summary"]["absorbed_file_grouping"] is True
     assert result["summary"]["absorbed_context_rank_weights"]["runtime"] >= 20
+    assert "absorbed_policy_rank_weights" in result["summary"]
+    assert "absorbed_review_policy" in result["summary"]
     assert result["summary"]["risk_counts"]["high"] >= 1
     assert result["summary"]["comment_ranking_model"] == "severity_context_publishability_v1"
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
     assert result["comments"][0]["rank_score"] >= result["comments"][1]["rank_score"]
     assert result["comments"][0]["absorbed_context_rank_weight"] >= 20
     assert "bias=" in result["comments"][0]["rank_reason"]
+    assert "policy=" in result["comments"][0]["rank_reason"]
     assert result["comments"][0]["publish_payload"]["side"] == "RIGHT"
     assert result["comments"][0]["comment_anchor"]["line"] == result["comments"][0]["line"]
     assert result["file_summaries"][0]["stages"]
@@ -279,6 +282,121 @@ def test_review_context_helpers_classify_common_project_files() -> None:
     assert review_context_for_file("docs/review.md") == "docs"
     groups = group_related_files_for_review(["app/auth.py", "tests/test_auth.py"])
     assert [group["context"] for group in groups] == ["security", "tests"]
+
+
+def test_review_diff_employee_feedback_changes_ranking_across_core_dimensions() -> None:
+    diff = (
+        _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior")
+        + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
+        + _single_add_diff(".github/workflows/ci.yml", "# TODO: prove release gate")
+        + _single_add_diff("app/security.py", "# TODO: verify auth boundary")
+    )
+
+    cases = [
+        {
+            "dimension": "test_gate_evidence",
+            "expected_context": "tests",
+            "expected_file": "tests/test_runtime.py",
+            "expected_weight": 120,
+        },
+        {
+            "dimension": "operational_readiness",
+            "expected_context": "ci_config",
+            "expected_file": ".github/workflows/ci.yml",
+            "expected_weight": 100,
+        },
+        {
+            "dimension": "feedback_loop_closure",
+            "expected_context": "runtime",
+            "expected_file": "app/runtime.py",
+            "expected_weight": 80,
+        },
+        {
+            "dimension": "safety_license_gate",
+            "expected_context": "security",
+            "expected_file": "app/security.py",
+            "expected_weight": 110,
+        },
+        {
+            "dimension": "architecture_depth",
+            "expected_context": "runtime",
+            "expected_file": "app/runtime.py",
+            "expected_weight": 70,
+        },
+    ]
+
+    for case in cases:
+        result = review_diff(
+            diff,
+            max_comments=1,
+            employee_feedback=[{"dimension": case["dimension"], "status": "failed"}],
+        )
+        first = result["comments"][0]
+
+        assert first["file"] == case["expected_file"]
+        assert first["review_context"] == case["expected_context"]
+        assert first["feedback_rank_weight"] >= case["expected_weight"]
+        assert result["summary"]["employee_feedback_ranked"] is True
+        assert result["summary"]["employee_feedback_context_weights"][case["expected_context"]] >= case["expected_weight"]
+
+
+def test_review_diff_product_feedback_prioritizes_frontend_without_security_override() -> None:
+    diff = (
+        _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior")
+        + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
+        + _single_add_diff("ui/App.tsx", "# TODO: prove user flow")
+        + _single_add_diff("docs/ops.md", "# TODO: document operator path")
+    )
+
+    before = review_diff(diff, max_comments=1)
+    after = review_diff(
+        diff,
+        max_comments=1,
+        employee_feedback=[{"dimension": "product_operability", "status": "failed"}],
+    )
+
+    assert before["comments"][0]["review_context"] != "frontend"
+    assert after["comments"][0]["review_context"] == "frontend"
+    assert after["comments"][0]["file"] == "ui/App.tsx"
+    assert after["comments"][0]["feedback_rank_weight"] >= 90
+    assert after["summary"]["employee_feedback_context_weights"]["frontend"] >= 90
+    assert after["summary"]["employee_feedback_context_weights"]["docs"] >= 60
+
+
+def test_review_diff_ignores_successful_employee_feedback_for_ranking() -> None:
+    diff = (
+        _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior")
+        + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
+    )
+
+    before = review_diff(diff, max_comments=1)
+    after = review_diff(
+        diff,
+        max_comments=1,
+        employee_feedback=[{"dimension": "test_gate_evidence", "status": "completed"}],
+    )
+
+    assert after["comments"][0]["file"] == before["comments"][0]["file"]
+    assert after["summary"]["employee_feedback_ranked"] is False
+    assert after["summary"]["employee_feedback_context_weights"] == {}
+
+
+def test_review_diff_employee_feedback_accepts_nested_task_dimension() -> None:
+    diff = (
+        _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior")
+        + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
+    )
+
+    result = review_diff(
+        diff,
+        max_comments=1,
+        employee_feedback=[{"task": {"dimension": "test_gate_evidence"}, "status": "blocked"}],
+    )
+
+    assert result["comments"][0]["file"] == "tests/test_runtime.py"
+    assert result["comments"][0]["review_context"] == "tests"
+    assert result["comments"][0]["feedback_rank_weight"] >= 120
+    assert result["summary"]["employee_feedback_ranked"] is True
 
 
 def test_parse_unified_diff_keeps_new_line_numbers() -> None:

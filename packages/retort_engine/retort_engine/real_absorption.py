@@ -85,6 +85,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     capability_test_path = _capability_test_target(root)
     review_context_bias_path = _review_context_bias_target(root)
     review_context_bias_test_path = _review_context_bias_test_target(root)
+    review_policy_path = _review_policy_target(root)
+    review_policy_test_path = _review_policy_test_target(root)
     architecture_memory_path = _architecture_memory_target(root)
     core_refactor_plan_path = _core_refactor_plan_target(root)
     frontend_app_path = _frontend_app_target(root)
@@ -98,6 +100,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         module_path,
         review_context_bias_path,
         review_context_bias_test_path,
+        review_policy_path,
+        review_policy_test_path,
         architecture_memory_path,
         core_refactor_plan_path,
         log_path,
@@ -127,6 +131,10 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         )
         review_context_bias_test_path.parent.mkdir(parents=True, exist_ok=True)
         review_context_bias_test_path.write_text(_review_context_bias_test_content(_capability_import_name(root, review_context_bias_path), source), encoding="utf-8")
+        review_policy_path.parent.mkdir(parents=True, exist_ok=True)
+        review_policy_path.write_text(_review_policy_content(run_id, source, external_path, external_profile), encoding="utf-8")
+        review_policy_test_path.parent.mkdir(parents=True, exist_ok=True)
+        review_policy_test_path.write_text(_review_policy_test_content(_capability_import_name(root, review_policy_path), source), encoding="utf-8")
     if writes_frontend_visual:
         _write_frontend_visual_profile(frontend_app_path, run_id, source, external_path, external_profile)
         frontend_visual_test_path.parent.mkdir(parents=True, exist_ok=True)
@@ -158,6 +166,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
             [
                 _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(review_context_bias_path)], root, timeout=60),
                 _run_command([_python(payload), "-m", "pytest", str(review_context_bias_test_path.relative_to(root)), "-q"], root, timeout=120),
+                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(review_policy_path)], root, timeout=60),
+                _run_command([_python(payload), "-m", "pytest", str(review_policy_test_path.relative_to(root)), "-q"], root, timeout=120),
             ]
         )
     if writes_frontend_visual:
@@ -222,6 +232,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["core_refactor_plan_summary"] = core_refactor_plan.get("summary") or {}
     result["review_context_bias_path"] = str(review_context_bias_path) if writes_review_context_bias else ""
     result["review_context_bias_test_path"] = str(review_context_bias_test_path) if writes_review_context_bias else ""
+    result["review_policy_path"] = str(review_policy_path) if writes_review_context_bias else ""
+    result["review_policy_test_path"] = str(review_policy_test_path) if writes_review_context_bias else ""
     result["frontend_visual_absorption_path"] = str(frontend_app_path) if writes_frontend_visual else ""
     result["frontend_visual_absorption_test_path"] = str(frontend_visual_test_path) if writes_frontend_visual else ""
     result["review_report_path"] = str(report_path)
@@ -300,6 +312,20 @@ def _review_context_bias_target(root: Path) -> Path:
 
 def _review_context_bias_test_target(root: Path) -> Path:
     return root / "tests" / "test_review_context_bias.py"
+
+
+def _review_policy_target(root: Path) -> Path:
+    retort_package = root / "retort_engine"
+    if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
+        return retort_package / "absorbed_review_policy.py"
+    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    if len(packages) == 1:
+        return packages[0] / "absorbed_review_policy.py"
+    return root / "absorbed_review_policy.py"
+
+
+def _review_policy_test_target(root: Path) -> Path:
+    return root / "tests" / "test_absorbed_review_policy.py"
 
 
 def _frontend_app_target(root: Path) -> Path:
@@ -578,6 +604,100 @@ def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
     assert context_signal_strength() >= 20
     assert max(context_rank_weights().values()) >= 20
     assert context_rank_weights()["runtime"] >= 20
+'''
+
+
+def _review_policy_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> str:
+    signals = list(profile.get("signals") or [])
+    payload = {
+        "enabled": bool(signals),
+        "source": source,
+        "run_id": run_id,
+        "external_path": str(external_path),
+        "signals": signals,
+        "context_rank_overrides": _review_policy_context_weights(signals),
+        "reason": "absorbed external review policy affects PR comment ordering",
+    }
+    payload_text = repr(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
+    return f'''from __future__ import annotations
+
+import json
+from typing import Any
+
+
+ABSORBED_REVIEW_POLICY: dict[str, Any] = json.loads({payload_text})
+
+
+def absorbed_review_policy() -> dict[str, Any]:
+    return dict(ABSORBED_REVIEW_POLICY)
+
+
+def policy_context_rank_weight(review_context: str) -> int:
+    policy = absorbed_review_policy()
+    if not policy.get("enabled"):
+        return 0
+    weights = policy.get("context_rank_overrides") if isinstance(policy.get("context_rank_overrides"), dict) else {{}}
+    return int(weights.get(str(review_context or "other"), 0) or 0)
+
+
+def policy_context_rank_weights() -> dict[str, int]:
+    contexts = ("security", "runtime", "tests", "ci_config", "config", "frontend", "docs", "other")
+    return {{context: policy_context_rank_weight(context) for context in contexts}}
+
+
+def policy_summary() -> dict[str, Any]:
+    policy = absorbed_review_policy()
+    weights = policy_context_rank_weights()
+    return {{
+        "enabled": bool(policy.get("enabled")),
+        "source": str(policy.get("source") or ""),
+        "run_id": str(policy.get("run_id") or ""),
+        "signal_count": len(policy.get("signals") or []),
+        "weighted_context_count": sum(1 for value in weights.values() if value > 0),
+        "max_context_weight": max(weights.values() or [0]),
+    }}
+'''
+
+
+def _review_policy_context_weights(signals: list[str]) -> dict[str, int]:
+    signal_set = set(signals)
+    weights = {context: 0 for context in ("security", "runtime", "tests", "ci_config", "config", "frontend", "docs", "other")}
+    if signal_set & {"review_pipeline", "file_grouping", "diff_hunk_review"}:
+        weights["runtime"] += 20
+        weights["tests"] += 20
+        weights["ci_config"] += 15
+    if signal_set & {"benchmarking"}:
+        weights["tests"] += 20
+    if signal_set & {"safety_policy", "static_analysis"}:
+        weights["security"] += 25
+        weights["runtime"] += 10
+    if signal_set & {"context_packaging", "semantic_index"}:
+        weights["docs"] += 15
+        weights["runtime"] += 15
+    if signal_set & {"plugin_surface", "multi_provider"}:
+        weights["config"] += 15
+    return {context: min(60, value) for context, value in weights.items()}
+
+
+def _review_policy_test_content(import_name: str, source: str) -> str:
+    source_text = repr(source)
+    return f'''from __future__ import annotations
+
+from {import_name} import absorbed_review_policy, policy_context_rank_weight, policy_context_rank_weights, policy_summary
+
+EXPECTED_ABSORPTION_SOURCE = {source_text}
+
+
+def test_absorbed_review_policy_changes_ranking_weights() -> None:
+    policy = absorbed_review_policy()
+    weights = policy_context_rank_weights()
+
+    assert policy["enabled"] is True
+    assert policy["source"] == EXPECTED_ABSORPTION_SOURCE
+    assert policy_summary()["weighted_context_count"] >= 3
+    assert policy_summary()["max_context_weight"] >= 15
+    assert max(weights.values()) >= 15
+    assert policy_context_rank_weight("runtime") >= 15
 '''
 
 
