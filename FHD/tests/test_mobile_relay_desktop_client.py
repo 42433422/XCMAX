@@ -322,3 +322,182 @@ def test_execute_task_marks_dispatch_unavailable_as_blocked(monkeypatch):
 
     assert result["_relay_status"] == "blocked"
     assert result["error"] == "para_no_online_codex_device"
+
+
+def _seed_config(path, relay_id: str) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "relay_id": relay_id,
+                "desktop_token": "tok-" + relay_id,
+                "pairing_code": "654321",
+                "relay_base_url": "https://xiu-ci.com/fhd-api/",
+                "exp": int(time.time()) + 86400,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_read_config_migrates_legacy_when_stable_missing(monkeypatch, tmp_path):
+    """源码升级后：稳定路径没配置而旧路径(仓库根回落)有 → 一次性迁移，保住既有配对。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    stable = tmp_path / "stable" / "mobile_relay_desktop.json"
+    legacy = tmp_path / "legacy" / "mobile_relay_desktop.json"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    _seed_config(legacy, "paired-877")
+
+    monkeypatch.setattr(relay, "_CONFIG_FILE", stable)
+    monkeypatch.setattr(relay, "_LEGACY_CONFIG_FILE", legacy)
+    monkeypatch.setattr(relay, "_LEGACY_MIGRATION_DONE", False)
+
+    relay._migrate_legacy_config_once()
+    cfg = relay._read_config()
+    assert cfg.get("relay_id") == "paired-877"
+    assert stable.is_file()  # 已迁移落盘
+
+
+def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_path):
+    """稳定路径已有权威绑定时，绝不能被旧路径(可能是 pending 的污染身份)覆盖。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    stable = tmp_path / "stable" / "mobile_relay_desktop.json"
+    legacy = tmp_path / "legacy" / "mobile_relay_desktop.json"
+    stable.parent.mkdir(parents=True, exist_ok=True)
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    _seed_config(stable, "paired-877")
+    _seed_config(legacy, "pending-29e")
+
+    monkeypatch.setattr(relay, "_CONFIG_FILE", stable)
+    monkeypatch.setattr(relay, "_LEGACY_CONFIG_FILE", legacy)
+    monkeypatch.setattr(relay, "_LEGACY_MIGRATION_DONE", False)
+
+    relay._migrate_legacy_config_once()
+    cfg = relay._read_config()
+    assert cfg.get("relay_id") == "paired-877"
+
+
+class _CaptureCodexService:
+    """记录 invoke 收到的 context，用于断言中继的路由意图。"""
+
+    captured: dict = {}
+
+    def invoke(self, **kwargs):
+        type(self).captured = dict(kwargs.get("context") or {})
+        return {
+            "dispatch": {"request_id": "r", "status": "completed", "accepted": True},
+            "assistant_message": {
+                "role": "assistant",
+                "body": "已新增 RELAY_OK.md。改动文件：RELAY_OK.md",
+            },
+        }
+
+    def list_messages(self, **kwargs):
+        return []
+
+
+def test_execute_task_workorder_forces_local_cli_and_keeps_code_mode(monkeypatch):
+    """群工单：必须本地 CLI 真执行(force_cli_direct)且保持 mode=code(判为开发任务)，不再被当聊天回避执行。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", _CaptureCodexService)
+    relay._execute_task(
+        {
+            "task_id": "wo-1",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {
+                "message": "新增 RELAY_OK.md",
+                "context": {
+                    "client_surface": "ai_group",
+                    "mode": "code",
+                    "work_order_id": "wo-1",
+                },
+            },
+        }
+    )
+    ctx = _CaptureCodexService.captured
+    assert ctx.get("force_cli_direct") is True
+    assert ctx.get("mode") == "code"
+    assert ctx.get("client_surface") == "ai_group"
+
+
+def test_execute_task_freechat_strips_mode_but_still_forces_cli(monkeypatch):
+    """自由聊天面下发 mode=code 仍剥离(交回分类器,避免'你好'被当任务)，但仍强制本地 CLI(不派 Para)。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", _CaptureCodexService)
+    relay._execute_task(
+        {
+            "task_id": "chat-1",
+            "kind": "codex.invoke",
+            "created_by_user_id": 7,
+            "payload": {"message": "你好", "context": {"mode": "code"}},
+        }
+    )
+    ctx = _CaptureCodexService.captured
+    assert ctx.get("force_cli_direct") is True
+    assert "mode" not in ctx
+
+
+def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path):
+    """工作区 GC：超期残留清掉、近期(活跃)保留。"""
+    import time as _t
+
+    from app.services import mobile_relay_desktop_client as relay
+
+    monkeypatch.setattr(relay.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("XCAGI_RELAY_WORKSPACE_GC_MAX_AGE_SEC", "100")
+    stale = tmp_path / "xcagi-wt-stale-1"
+    fresh = tmp_path / "xcagi-wt-fresh-2"
+    stale.mkdir()
+    fresh.mkdir()
+    old = _t.time() - 9999
+    import os as _os
+
+    _os.utime(stale, (old, old))
+
+    removed = relay._gc_orphan_workspaces()
+    assert removed == 1
+    assert not stale.exists()
+    assert fresh.exists()
+
+
+def test_complete_relay_task_writes_elapsed_and_error_code(monkeypatch):
+    """回写 /complete 的 result 带 elapsed_seconds；blocked 结果带 error_code/error_message。"""
+    from app.services import mobile_relay_desktop_client as relay
+
+    posted = {}
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, json=None, **k):
+            posted["url"] = url
+            posted["json"] = json
+            return _Resp()
+
+    monkeypatch.setattr(
+        relay,
+        "_execute_task",
+        lambda task: {"_relay_status": "blocked", "error": "未执行命令，未修改文件。"},
+    )
+    monkeypatch.setattr(relay.httpx, "Client", _Client)
+    relay._complete_relay_task({"task_id": "t-1"}, "relay-1", "tok", "https://xiu-ci.com/fhd-api/")
+    body = posted["json"]
+    assert body["status"] == "blocked"
+    assert "elapsed_seconds" in body["result"]
+    assert body["result"]["error_code"] == "blocked"
+    assert body["result"]["error_message"] == "未执行命令，未修改文件。"

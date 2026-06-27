@@ -50,6 +50,33 @@ def test_factory_cwd_resolves_to_workspace_root(repo_root):
     assert cwd.resolve() == repo_root.resolve()
 
 
+def test_relay_workorder_uses_real_repo_when_env_set(repo_root, monkeypatch):
+    """中继工单(操作者自己派工)+ 显式配真仓库 → 在真仓库跑 dev-loop，产出可推送的真东西。"""
+    svc = _svc()
+    svc._grant = CapabilityGrant.product()
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(repo_root))
+    cwd = Path(svc._cli_workspace({"source": "mobile_relay", "force_cli_direct": True}))
+    assert cwd.resolve() == repo_root.resolve()
+
+
+def test_real_repo_ignored_for_nonrelay_product_request(repo_root, monkeypatch):
+    """安全：非中继的产品请求即便配了 env 也不给真仓库，仍走隔离临时区。"""
+    svc = _svc()
+    svc._grant = CapabilityGrant.product()
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(repo_root))
+    cwd = svc._cli_workspace({"workspace_root": str(repo_root)})
+    assert cwd == svc._product_ephemeral_workspace()
+
+
+def test_relay_real_repo_requires_git_dir(tmp_path, monkeypatch):
+    """env 指向非 git 目录 → 不采信，回隔离临时区。"""
+    svc = _svc()
+    svc._grant = CapabilityGrant.product()
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(tmp_path))
+    cwd = svc._cli_workspace({"source": "mobile_relay", "force_cli_direct": True})
+    assert cwd == svc._product_ephemeral_workspace()
+
+
 # ── 工具面层：产品域禁写/执行类工具，工厂域不限 ──
 
 
@@ -164,3 +191,65 @@ def test_rejected_factory_token_warns(tmp_path, caplog, monkeypatch):
         # 带令牌却不匹配 → 降级产品域 + 警告留痕（可疑越权尝试）。
         svc.invoke(user_id=7, message="hi", context={"_factory_token": "wrong-guess"})
     assert any("token rejected" in r.getMessage() for r in caplog.records)
+
+
+def test_persistent_worktree_path_env_gated(repo_root, monkeypatch, tmp_path):
+    """持久 worktree：仅在配了真仓库 + 未显式关闭时启用，路径在稳定桌面态目录下。"""
+    svc = _svc()
+    monkeypatch.delenv("XCMAX_RELAY_WORKSPACE_ROOT", raising=False)
+    monkeypatch.delenv("DEVFLEET_WORKSPACE_ROOT", raising=False)
+    assert svc._relay_persistent_worktree_path() == ""  # 没配真仓库 → 不启用
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(repo_root))
+    monkeypatch.setenv("XCAGI_DESKTOP_DATA_DIR", str(tmp_path))
+    p = svc._relay_persistent_worktree_path()
+    assert p and "relay_worktrees" in p and p.startswith(str(tmp_path))
+    monkeypatch.setenv("XCMAX_RELAY_PERSISTENT_WORKTREE", "0")
+    assert svc._relay_persistent_worktree_path() == ""  # 显式关闭 → 回每任务新建
+
+
+def test_remove_worktree_keeps_persistent(repo_root, monkeypatch, tmp_path):
+    """_remove_worktree 对持久 worktree 不删（保留复用）。"""
+    svc = _svc()
+    monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(repo_root))
+    monkeypatch.setenv("XCAGI_DESKTOP_DATA_DIR", str(tmp_path))
+    persistent = svc._relay_persistent_worktree_path()
+    calls = []
+    monkeypatch.setattr(svc, "_git", lambda *a, **k: calls.append(a) or _Dummy())
+    svc._remove_worktree(str(repo_root), persistent)
+    assert calls == []  # 持久 worktree 不应触发 git worktree remove
+
+
+class _Dummy:
+    returncode = 0
+    stdout = ""
+    stderr = ""
+
+
+def test_cursor_agent_command_has_no_extra_agent_subcommand():
+    """cursor-agent 是独立 agent 二进制：命令应是 `cursor-agent --print ...`，不再接 agent 子命令。"""
+    from pathlib import Path
+
+    from app.application.super_employee_service import CURSOR_PROFILE, _cursor_cli_command
+
+    assert CURSOR_PROFILE.cli_binary == "cursor-agent"
+    cmd = _cursor_cli_command("/usr/local/bin/cursor-agent", "hi", Path("/tmp/o"), "/tmp")
+    assert cmd[0].endswith("cursor-agent")
+    assert "agent" not in cmd[1:3]  # 紧跟的不是 agent 子命令
+    assert "--print" in cmd
+    # 旧 cursor 二进制仍保留 agent 子命令（兼容）。
+    legacy = _cursor_cli_command("/usr/local/bin/cursor", "hi", Path("/tmp/o"), "/tmp")
+    assert legacy[1] == "agent"
+
+
+def test_trae_cli_uses_headless_agent_command():
+    """Trae 企业版用 trae-cli 无头 agent：trae-cli --print --output-format stream-json --yolo <prompt>。"""
+    from pathlib import Path
+
+    from app.application.super_employee_service import TRAE_PROFILE, _trae_cli_command
+
+    assert TRAE_PROFILE.cli_binary == "trae-cli"
+    assert TRAE_PROFILE.cli_stream_json is True
+    cmd = _trae_cli_command("/x/trae-cli", "做个任务", Path("/tmp/o"), "/tmp")
+    assert cmd[0].endswith("trae-cli")
+    assert "--print" in cmd and "stream-json" in cmd and "--yolo" in cmd
+    assert cmd[-1] == "做个任务"  # prompt 在末位，不会被前面的变长参数吞掉

@@ -308,8 +308,14 @@ async def _init_employee_runtime_async(app: FastAPI):
 async def _init_mobile_relay_desktop_async(app: FastAPI):
     """Resume desktop relay polling when this runtime has a saved cloud binding."""
     try:
-        from app.services.mobile_relay_desktop_client import start_desktop_relay_poller
+        from app.services.mobile_relay_desktop_client import (
+            _migrate_legacy_config_once,
+            start_desktop_relay_poller,
+        )
 
+        # 源码升级后，旧的仓库根回落配置一次性迁移到稳定路径，保住既有配对，
+        # 再恢复轮询（否则桌面会以与手机已配对 relay 不同的身份去 poll，任务卡在「排队中」）。
+        await asyncio.to_thread(_migrate_legacy_config_once)
         running = await asyncio.to_thread(start_desktop_relay_poller)
         app.state.mobile_relay_desktop_running = running
         if running:
