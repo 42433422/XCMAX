@@ -475,10 +475,10 @@
         "benchmark/benchmark.py",
         "benchmark/over_time.py"
       ],
-      "gate_pass_count": 12,
+      "gate_pass_count": 13,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 12,
+      "run_count": 13,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -491,9 +491,10 @@
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e"
+        "20260627183621-6e1352f61e",
+        "20260627185357-29365e9367"
       ],
-      "source_count": 11,
+      "source_count": 12,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -502,6 +503,7 @@
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
+        "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
         "https://github.com/mopemope/pr-ai-review-bot",
         "https://github.com/nedbat/coveragepy",
@@ -541,10 +543,10 @@
         "benchmark/benchmark.py",
         "benchmark/over_time.py"
       ],
-      "gate_pass_count": 12,
+      "gate_pass_count": 13,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 12,
+      "run_count": 13,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -557,9 +559,10 @@
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e"
+        "20260627183621-6e1352f61e",
+        "20260627185357-29365e9367"
       ],
-      "source_count": 11,
+      "source_count": 12,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -568,6 +571,7 @@
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
+        "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
         "https://github.com/mopemope/pr-ai-review-bot",
         "https://github.com/nedbat/coveragepy",
@@ -657,10 +661,10 @@
         "action.yml",
         "aider/coders/base_coder.py"
       ],
-      "gate_pass_count": 12,
+      "gate_pass_count": 13,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 12,
+      "run_count": 13,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -673,9 +677,10 @@
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e"
+        "20260627183621-6e1352f61e",
+        "20260627185357-29365e9367"
       ],
-      "source_count": 11,
+      "source_count": 12,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -684,6 +689,7 @@
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
+        "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
         "https://github.com/mopemope/pr-ai-review-bot",
         "https://github.com/nedbat/coveragepy",
@@ -694,6 +700,7 @@
       "architecture_depth_score": 100,
       "component": "safety_policy",
       "evidence_files": [
+        ".github/workflows/static.yml",
         ".licensed.yml",
         ".readthedocs.yaml",
         "AGENTS.md",
@@ -704,13 +711,12 @@
         "HISTORY.md",
         "README.md",
         "SECURITY.md",
-        "__main__.py",
-        "aider/io.py"
+        "__main__.py"
       ],
-      "gate_pass_count": 12,
+      "gate_pass_count": 13,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 12,
+      "run_count": 13,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -723,9 +729,10 @@
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e"
+        "20260627183621-6e1352f61e",
+        "20260627185357-29365e9367"
       ],
-      "source_count": 11,
+      "source_count": 12,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -734,6 +741,7 @@
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
+        "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
         "https://github.com/mopemope/pr-ai-review-bot",
         "https://github.com/nedbat/coveragepy",
@@ -760,6 +768,7 @@
       "architecture_depth_score": 100,
       "component": "workflow_ci",
       "evidence_files": [
+        ".github/workflows/static.yml",
         ".pre-commit-config.yaml",
         ".prettierrc.yml",
         "AGENTS.md",
@@ -770,13 +779,12 @@
         "HISTORY.md",
         "README.md",
         "TESTING.md",
-        "ci/trigger_action.py",
-        "ci/update_rtfd.py"
+        "ci/trigger_action.py"
       ],
-      "gate_pass_count": 12,
+      "gate_pass_count": 13,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 12,
+      "run_count": 13,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -789,9 +797,10 @@
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e"
+        "20260627183621-6e1352f61e",
+        "20260627185357-29365e9367"
       ],
-      "source_count": 11,
+      "source_count": 12,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -800,6 +809,7 @@
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
+        "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
         "https://github.com/mopemope/pr-ai-review-bot",
         "https://github.com/nedbat/coveragepy",
@@ -808,6 +818,86 @@
     }
   },
   "deep_architecture_tasks": [
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 1.0,
+      "priority": "P0",
+      "supporting_source_count": 12,
+      "task_id": "retort-architecture-model-adapter",
+      "title": "Implement cumulative architecture pattern: model_adapter"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 1.0,
+      "priority": "P0",
+      "supporting_source_count": 12,
+      "task_id": "retort-architecture-provider-boundary",
+      "title": "Implement cumulative architecture pattern: provider_boundary"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 1.0,
+      "priority": "P0",
+      "supporting_source_count": 12,
+      "task_id": "retort-architecture-review-pipeline",
+      "title": "Implement cumulative architecture pattern: review_pipeline"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 1.0,
+      "priority": "P0",
+      "supporting_source_count": 12,
+      "task_id": "retort-architecture-safety-policy",
+      "title": "Implement cumulative architecture pattern: safety_policy"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 1.0,
+      "priority": "P0",
+      "supporting_source_count": 12,
+      "task_id": "retort-architecture-workflow-ci",
+      "title": "Implement cumulative architecture pattern: workflow_ci"
+    },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
       "dimension": "architecture_depth",
@@ -885,88 +975,8 @@
       "gate_pass_rate": 1.0,
       "priority": "P0",
       "supporting_source_count": 11,
-      "task_id": "retort-architecture-model-adapter",
-      "title": "Implement cumulative architecture pattern: model_adapter"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 1.0,
-      "priority": "P0",
-      "supporting_source_count": 11,
-      "task_id": "retort-architecture-provider-boundary",
-      "title": "Implement cumulative architecture pattern: provider_boundary"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 1.0,
-      "priority": "P0",
-      "supporting_source_count": 11,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 1.0,
-      "priority": "P0",
-      "supporting_source_count": 11,
-      "task_id": "retort-architecture-review-pipeline",
-      "title": "Implement cumulative architecture pattern: review_pipeline"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 1.0,
-      "priority": "P0",
-      "supporting_source_count": 11,
-      "task_id": "retort-architecture-safety-policy",
-      "title": "Implement cumulative architecture pattern: safety_policy"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 1.0,
-      "priority": "P0",
-      "supporting_source_count": 11,
-      "task_id": "retort-architecture-workflow-ci",
-      "title": "Implement cumulative architecture pattern: workflow_ci"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -3670,12 +3680,99 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/frontend/app.js",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_frontend_visual_absorption.py"
+      ],
+      "components": [
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            ".github/workflows/static.yml",
+            "package-lock.json",
+            "package.json",
+            "scripts/main.js",
+            "scripts/ui.js"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 46,
+          "evidence_files": [
+            ".github/workflows/static.yml"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 46,
+          "evidence_files": [
+            "package.json"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 46,
+          "evidence_files": [
+            "index.html"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 46,
+          "evidence_files": [
+            "index.html"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T18:54:09Z",
+      "external_file_count": 21,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/dgreenheck/threejs-procedural-planets",
+      "gate_count": 6,
+      "gates_passed": true,
+      "git_revision": "23457d4f8e6bedf22aa266e12c92f850822ff3a4",
+      "run_id": "20260627185357-29365e9367",
+      "schema_version": 1,
+      "signals": [
+        "multi_provider",
+        "planet_frontend",
+        "atmosphere_shader",
+        "procedural_surface",
+        "webgl_scene"
+      ],
+      "source": "https://github.com/dgreenheck/threejs-procedural-planets",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 21,
-    "gate_passed_run_count": 12,
+    "gate_passed_run_count": 13,
     "ready_component_count": 15,
     "ready_components": [
       "workflow_ci",
@@ -3688,7 +3785,7 @@
       "evaluation_loop"
     ],
     "repeated_component_count": 15,
-    "run_count": 12,
-    "source_count": 11
+    "run_count": 13,
+    "source_count": 12
   }
 }
