@@ -860,7 +860,10 @@ def _improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str,
         "missing_closed_loop": [str(item) for item in proof.get("missing") or []],
         "behavior_source_files": [str(item) for item in audit.get("behavior_source_files") or []],
         "behavior_test_files": [str(item) for item in audit.get("behavior_test_files") or []],
+        "support_behavior_source_files": [str(item) for item in audit.get("support_behavior_source_files") or []],
+        "support_behavior_test_files": [str(item) for item in audit.get("support_behavior_test_files") or []],
         "generated_evidence_files": [str(item) for item in audit.get("generated_evidence_files") or []],
+        "generated_only": bool(audit.get("generated_only")),
         "capability_absorption_score": audit.get("score"),
         "capability_absorption_cap": audit.get("overall_cap"),
         "reason": str(audit.get("reason") or ""),
@@ -1176,7 +1179,14 @@ def _maybe_request_llm_review(
     return review
 
 
-GENERATED_ABSORPTION_NAMES = {"retort_absorption_log.md", "retort_external_review_report.json", "absorbed_external_patterns.py", "retort_absorbed_patterns.py"}
+GENERATED_ABSORPTION_NAMES = {
+    "retort_absorption_log.md",
+    "retort_external_review_report.json",
+    "absorbed_external_patterns.py",
+    "retort_absorbed_patterns.py",
+    "absorbed_capabilities.py",
+    "test_absorbed_capabilities.py",
+}
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 
 
@@ -1211,20 +1221,16 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
         else:
             other_files.append(rel)
     pr_review = _pr_review_runtime_evidence(root)
-    for rel in pr_review.get("behavior_source_files") or []:
-        if rel not in behavior_source_files:
-            behavior_source_files.append(str(rel))
-    for rel in pr_review.get("behavior_test_files") or []:
-        if rel not in behavior_test_files:
-            behavior_test_files.append(str(rel))
+    support_behavior_source_files = [str(rel) for rel in pr_review.get("behavior_source_files") or []]
+    support_behavior_test_files = [str(rel) for rel in pr_review.get("behavior_test_files") or []]
     external_project_count = _absorption_external_project_count(root)
     employee_mode = _latest_employee_execution_mode(root)
     employee_worker_review = _latest_employee_worker_review(root)
     generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
     if generated_only:
-        score = 82.0
-        cap = 84.0
-        reason = "latest_absorption_changed_only_reports_logs_or_pattern_snapshot"
+        score = 76.0
+        cap = 82.0
+        reason = "latest_absorption_changed_only_reports_logs_or_capability_registry"
     elif behavior_source_files and behavior_test_files:
         score = 94.0
         cap = 96.0
@@ -1248,6 +1254,8 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
         "changed_files": changed_files,
         "behavior_source_files": behavior_source_files,
         "behavior_test_files": behavior_test_files,
+        "support_behavior_source_files": support_behavior_source_files,
+        "support_behavior_test_files": support_behavior_test_files,
         "generated_evidence_files": generated_evidence_files,
         "other_files": other_files,
         "generated_only": generated_only,

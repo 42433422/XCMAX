@@ -473,6 +473,13 @@ article {
   border-color: rgba(244, 184, 96, .42);
 }
 
+.chip-label {
+  margin-top: 2px;
+  color: #9aa8b7;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .kv {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);

@@ -85,6 +85,11 @@ const statusText = {
   execution_and_gates_verified: "执行与门禁已验证",
   execution_verified_needs_gates_or_merge: "已执行，待门禁或合并",
   pending_execution: "等待执行",
+  latest_absorption_changed_only_reports_logs_or_capability_registry: "仅记录/能力注册，未改核心行为",
+  latest_absorption_changed_only_reports_logs_or_pattern_snapshot: "仅报告/模式快照",
+  latest_absorption_changed_behavior_code_and_tests: "本次改了行为代码和测试",
+  latest_absorption_changed_behavior_code_without_behavior_tests: "本次改了行为代码，缺测试",
+  latest_absorption_has_no_clear_behavior_code_change: "未发现清晰行为改动",
   branch_diff_verified: "分支差异",
   employee_execution_verified: "员工执行",
   post_absorption_tests_passed: "吸收后测试",
@@ -495,6 +500,16 @@ function appendChips(target, items, className = "filelist", limit = 8) {
   if (list.childElementCount) target.appendChild(list);
 }
 
+function appendLabeledChips(target, label, items, limit = 8) {
+  const values = items || [];
+  if (!values.length) return;
+  const title = document.createElement("div");
+  title.className = "chip-label";
+  title.textContent = label;
+  target.appendChild(title);
+  appendChips(target, values, "filelist compact", limit);
+}
+
 function compactScore(value) {
   return value == null || Number.isNaN(Number(value)) ? "--" : String(Math.round(Number(value)));
 }
@@ -613,9 +628,11 @@ function renderProofPanel(proof) {
     flagBox.appendChild(item);
   }
   target.appendChild(flagBox);
-  appendChips(target, proof.behavior_source_files || [], "filelist compact", 5);
-  appendChips(target, proof.behavior_test_files || [], "filelist compact", 5);
-  if (!(proof.behavior_source_files || []).length && (proof.changed_files || []).length) appendChips(target, proof.changed_files, "filelist compact", 5);
+  appendLabeledChips(target, "本次改动", proof.changed_files || [], 6);
+  appendLabeledChips(target, "本次核心行为代码", proof.behavior_source_files || [], 5);
+  appendLabeledChips(target, "本次行为测试", proof.behavior_test_files || [], 5);
+  appendLabeledChips(target, "记录/报告文件", proof.generated_evidence_files || [], 5);
+  appendLabeledChips(target, "已有支撑能力", proof.support_behavior_source_files || [], 5);
 }
 
 function renderFinalReviewPanel(finalReview) {
