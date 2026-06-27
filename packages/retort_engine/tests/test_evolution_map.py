@@ -60,3 +60,26 @@ def test_evolution_map_combines_graph_proof_and_refactor_priority(tmp_path: Path
     assert result["latest_absorption"]["pre_absorption_focus"]["own_focus_files"] == ["retort_engine/codebase_graph.py"]
     assert result["core_refactor_plan"]["tasks"][0]["component"] == "codebase_graph"
     assert result["core_refactor_plan"]["tasks"][0]["code_graph_proof_count"] == 2
+
+
+def test_evolution_map_does_not_treat_closed_loop_smoke_as_per_run_proof(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    package = project / "retort_engine"
+    runs = project / ".retort" / "real_absorption_runs"
+    package.mkdir(parents=True)
+    runs.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "core.py").write_text("def core():\n    return 1\n", encoding="utf-8")
+    (project / ".retort" / "absorption_state.json").write_text(
+        json.dumps({"closed_loop_proof": {"evidence": ["codebase_graph_smoke=ready_1_files_1_nodes_0_edges"]}}),
+        encoding="utf-8",
+    )
+    (runs / "run.json").write_text(json.dumps({"run_id": "run-1", "status": "applied", "source": "source"}), encoding="utf-8")
+
+    result = build_evolution_map(project)
+
+    proof = result["latest_absorption"]["code_graph_proof"]
+    assert proof["passed"] is False
+    assert proof["status"] == "missing_per_run_code_graph_proof"
+    assert proof["evidence"]["style"] == "missing_per_run_code_graph_proof"
+    assert proof["summary"]["graph_smoke"] == "codebase_graph_smoke=ready_1_files_1_nodes_0_edges"

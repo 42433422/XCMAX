@@ -9,9 +9,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from retort_engine.paibi_prompting import RETORT_SCORE_DIMENSIONS
 from retort_engine.paibi_prompting import build_retort_paibi_panel_prompt as _prompting_build_retort_paibi_panel_prompt
 from retort_engine.paibi_prompting import build_retort_paibi_prompt as _prompting_build_retort_paibi_prompt
+from retort_engine.paibi_result_parser import extract_last_json_object as _parser_extract_last_json_object
+from retort_engine.paibi_result_parser import normalize_llm_scores as _parser_normalize_llm_scores
 
 
 DEFAULT_PAIBI_API_URL = "http://127.0.0.1:3001"
@@ -618,64 +619,11 @@ def _unblock_tasks_from_blockers(blockers: list[dict[str, Any]]) -> list[dict[st
 
 
 def _extract_last_json_object(text: str) -> dict[str, Any] | None:
-    decoder = json.JSONDecoder()
-    best: dict[str, Any] | None = None
-    for index, char in enumerate(text):
-        if char != "{":
-            continue
-        try:
-            value, _ = decoder.raw_decode(text[index:])
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            if isinstance(value.get("scores"), list) or "score_suggestion" in value:
-                return value
-            best = value
-    return best
+    return _parser_extract_last_json_object(text)
 
 
 def _normalize_llm_scores(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not isinstance(payload, dict):
-        return []
-    raw_scores = payload.get("scores")
-    scores: list[dict[str, Any]] = []
-    if isinstance(raw_scores, list):
-        for item in raw_scores:
-            if not isinstance(item, dict):
-                continue
-            dimension = str(item.get("dimension") or "").strip()
-            if dimension not in RETORT_SCORE_DIMENSIONS:
-                continue
-            try:
-                value = max(0.0, min(100.0, float(item.get("value"))))
-            except (TypeError, ValueError):
-                continue
-            evidence = item.get("evidence") if isinstance(item.get("evidence"), list) else []
-            scores.append(
-                {
-                    "dimension": dimension,
-                    "value": round(value, 1),
-                    "reason": str(item.get("reason") or "LLM score from Retort scoring prompt."),
-                    "evidence": [str(row) for row in evidence],
-                }
-            )
-    existing = {score["dimension"] for score in scores}
-    if "calibrated_overall" not in existing:
-        suggestion = payload.get("score_suggestion")
-        try:
-            value = max(0.0, min(100.0, float(suggestion)))
-        except (TypeError, ValueError):
-            value = -1.0
-        if value >= 0:
-            scores.append(
-                {
-                    "dimension": "calibrated_overall",
-                    "value": round(value, 1),
-                    "reason": "LLM score_suggestion normalized as calibrated_overall.",
-                    "evidence": [],
-                }
-            )
-    return scores
+    return _parser_normalize_llm_scores(payload)
 
 
 def _env(*names: str) -> str:
