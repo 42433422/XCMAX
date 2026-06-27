@@ -177,6 +177,14 @@ def test_absorption_collects_evidence_then_requires_llm_reassessment(tmp_path: P
 
     result = absorb({"own_project": str(own), "external_path": str(external)})
 
+    session = result["devour_session"]
+    assert session["stage_order"] == ["pre_dual_review", "overlap_comparison", "absorption_execution", "improvement_proof", "final_self_review"]
+    assert [panel["role"] for panel in session["pre_dual_review"]["panels"]] == ["own_before", "external"]
+    assert session["pre_dual_review"]["context_policy"] == "isolated_before_absorption"
+    assert session["overlap_comparison"]["status"] == "depth_overlap_found"
+    assert "comparative_analysis_depth" in session["overlap_comparison"]["overlap_dimensions"]
+    assert session["improvement_proof"]["changed_file_count"] >= 1
+    assert session["final_self_review"]["record_policy"] == "只有排比 LLM 返回结构化分数时，最终评分才保留。"
     assert result["absorption_state"]["active"] is True
     assert result["absorption_state"]["status"] in {"pending_llm_reassessment", "execution_applied_awaiting_merge"}
     assert result["external_assessment"]["project"] == str(external.resolve())

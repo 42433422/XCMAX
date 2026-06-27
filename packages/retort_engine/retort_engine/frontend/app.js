@@ -65,7 +65,31 @@ const statusText = {
   ready: "就绪",
   saturated: "已饱和",
   not_saturated: "未饱和",
-  needs_attention: "需要处理"
+  needs_attention: "需要处理",
+  final_deep_review_scored: "最终深评已评分",
+  absorbed_awaiting_final_llm_score: "已吸收，等待最终 LLM 评分",
+  pre_review_ready: "吞噬前评估就绪",
+  pre_dual_review: "吞噬前双深评",
+  overlap_comparison: "专项对比",
+  absorption_execution: "吸收执行",
+  improvement_proof: "提升证明",
+  final_self_review: "最终深评",
+  depth_overlap_found: "发现重合深度",
+  no_overlap_depth_found: "未发现重合深度",
+  paibi_llm_completed: "排比 LLM 已评分",
+  score_available: "已有评分",
+  external_evidence_collected_needs_llm: "已采证，待 LLM",
+  external_project_unavailable: "外部项目不可用",
+  paibi_llm_required_not_scored: "待排比 LLM 深评",
+  five_proofs_verified: "五证闭环已验证",
+  execution_and_gates_verified: "执行与门禁已验证",
+  execution_verified_needs_gates_or_merge: "已执行，待门禁或合并",
+  pending_execution: "等待执行",
+  branch_diff_verified: "分支差异",
+  employee_execution_verified: "员工执行",
+  post_absorption_tests_passed: "吸收后测试",
+  merge_verified: "合并",
+  external_advantage_reassessed: "外部优势复评"
 };
 const taskText = {
   "Absorb stronger implementation depth": "吸收更强实现深度",
@@ -389,7 +413,16 @@ function externalScores(assessment, visual) {
   const grid = $("externalScoreGrid");
   if (!grid) return;
   if (!assessment?.scores?.length) {
-    grid.innerHTML = "<div class=\"empty\">未运行</div>";
+    if (assessment?.project || assessment?.evidence?.length) {
+      grid.textContent = "";
+      renderKV(grid, [
+        ["状态", labelOf(assessment?.metadata?.score_source === "external_evidence_only" ? "external_evidence_collected_needs_llm" : "paibi_llm_required_not_scored")],
+        ["文件", visual?.external?.file_count ?? fileCountFrom(assessment)],
+        ["来源", sourceName(assessment?.project || "")],
+      ]);
+    } else {
+      grid.innerHTML = "<div class=\"empty\">未运行</div>";
+    }
     return;
   }
   renderRows(grid, assessment.scores, 4);
@@ -448,6 +481,166 @@ function renderKV(target, rows) {
     row.className = "kv";
     row.append(Object.assign(document.createElement("span"), {textContent: k}), Object.assign(document.createElement("b"), {textContent: String(v)}));
     target.appendChild(row);
+  }
+}
+
+function appendChips(target, items, className = "filelist", limit = 8) {
+  const list = document.createElement("div");
+  list.className = className;
+  for (const item of (items || []).slice(0, limit)) {
+    const chip = document.createElement("code");
+    chip.textContent = shortPath(item);
+    list.appendChild(chip);
+  }
+  if (list.childElementCount) target.appendChild(list);
+}
+
+function compactScore(value) {
+  return value == null || Number.isNaN(Number(value)) ? "--" : String(Math.round(Number(value)));
+}
+
+function renderDevourSession(session) {
+  renderSessionState(session);
+  renderDualReview(session?.pre_dual_review);
+  renderComparisonPanel(session?.overlap_comparison);
+  renderProofPanel(session?.improvement_proof);
+  renderFinalReviewPanel(session?.final_self_review);
+}
+
+function renderSessionState(session) {
+  const target = $("sessionState");
+  if (!target) return;
+  target.textContent = "";
+  if (!session) {
+    target.textContent = "等待吸收";
+    return;
+  }
+  const title = document.createElement("b");
+  title.textContent = labelOf(session.status);
+  const source = document.createElement("div");
+  source.className = "mini";
+  source.textContent = sourceName(session.source || "");
+  const steps = document.createElement("div");
+  steps.className = "devour-steps";
+  for (const step of session.stage_order || []) {
+    const item = document.createElement("span");
+    item.textContent = labelOf(step);
+    item.className = "done";
+    steps.appendChild(item);
+  }
+  target.append(title, source, steps);
+}
+
+function renderDualReview(preDual) {
+  const target = $("dualReviewPanel");
+  if (!target) return;
+  target.textContent = "";
+  const panels = preDual?.panels || [];
+  if (!panels.length) {
+    target.innerHTML = "<div class=\"empty\">未运行</div>";
+    return;
+  }
+  for (const panel of panels) {
+    const card = document.createElement("div");
+    card.className = "review-panel";
+    const head = document.createElement("div");
+    head.className = "review-head";
+    const title = document.createElement("b");
+    title.textContent = panel.title || panel.role || "";
+    const score = document.createElement("strong");
+    score.textContent = compactScore(panel.score);
+    head.append(title, score);
+    const meta = document.createElement("div");
+    meta.className = "mini";
+    meta.textContent = `${labelOf(panel.score_status)} · 文件 ${panel.file_count || 0}`;
+    card.append(head, meta);
+    appendChips(card, panel.evidence_highlights || [], "filelist compact", 5);
+    if ((panel.feature_highlights || []).length) appendChips(card, panel.feature_highlights, "filelist compact", 4);
+    target.appendChild(card);
+  }
+}
+
+function renderComparisonPanel(comparison) {
+  const target = $("comparisonPanel");
+  if (!target) return;
+  if (!comparison) {
+    target.textContent = "未运行";
+    return;
+  }
+  renderKV(target, [
+    ["状态", labelOf(comparison.status)],
+    ["策略", comparison.depth_policy || ""],
+    ["重合维度", (comparison.overlap_dimensions || []).map(labelOf).join(" / ") || "无"],
+    ["外部深度", (comparison.external_depth_signals || []).join(" / ") || "待识别"],
+  ]);
+  const targets = document.createElement("div");
+  targets.className = "absorb-targets";
+  for (const item of (comparison.absorb_targets || []).slice(0, 5)) {
+    const row = document.createElement("div");
+    row.className = "target-row";
+    const title = document.createElement("b");
+    title.textContent = titleOf(item.title);
+    const detail = document.createElement("span");
+    detail.textContent = `${labelOf(item.dimension)} · ${item.priority}`;
+    row.append(title, detail);
+    targets.appendChild(row);
+  }
+  if (targets.childElementCount) target.appendChild(targets);
+}
+
+function renderProofPanel(proof) {
+  const target = $("proofPanel");
+  if (!target) return;
+  if (!proof) {
+    target.textContent = "未运行";
+    return;
+  }
+  renderKV(target, [
+    ["状态", labelOf(proof.status)],
+    ["分数变化", proof.score_delta == null ? "待最终深评" : `${compactScore(proof.before_score)} -> ${compactScore(proof.after_score)} (+${proof.score_delta})`],
+    ["改动文件", proof.changed_file_count || 0],
+    ["门禁", `${proof.gate_passed_count || 0}/${proof.gate_count || 0}`],
+    ["能力分", proof.capability_absorption_score == null ? "待评估" : Math.round(Number(proof.capability_absorption_score))],
+    ["原因", labelOf(proof.reason) || proof.reason || ""],
+  ]);
+  const flags = proof.closed_loop_flags || {};
+  const flagBox = document.createElement("div");
+  flagBox.className = "proof-flags";
+  for (const key of ["branch_diff_verified", "employee_execution_verified", "post_absorption_tests_passed", "merge_verified", "external_advantage_reassessed"]) {
+    const item = document.createElement("span");
+    item.className = flags[key] ? "ok" : "bad";
+    item.textContent = `${flags[key] ? "通过" : "待证"} ${labelOf(key)}`;
+    flagBox.appendChild(item);
+  }
+  target.appendChild(flagBox);
+  appendChips(target, proof.behavior_source_files || [], "filelist compact", 5);
+  appendChips(target, proof.behavior_test_files || [], "filelist compact", 5);
+  if (!(proof.behavior_source_files || []).length && (proof.changed_files || []).length) appendChips(target, proof.changed_files, "filelist compact", 5);
+}
+
+function renderFinalReviewPanel(finalReview) {
+  const target = $("finalReviewPanel");
+  if (!target) return;
+  if (!finalReview) {
+    target.textContent = "未运行";
+    return;
+  }
+  renderKV(target, [
+    ["状态", labelOf(finalReview.status)],
+    ["当前分", compactScore(finalReview.score)],
+    ["来源", finalReview.score_source || ""],
+    ["任务", finalReview.llm_task_id || "未返回"],
+    ["保留规则", finalReview.record_policy || ""],
+  ]);
+  if ((finalReview.scores || []).length) {
+    const wrap = document.createElement("div");
+    wrap.className = "score-mini";
+    for (const score of finalReview.scores.slice(0, 5)) {
+      const row = document.createElement("span");
+      row.textContent = `${labelOf(score.dimension)} ${compactScore(score.value)}`;
+      wrap.appendChild(row);
+    }
+    target.appendChild(wrap);
   }
 }
 
@@ -580,10 +773,17 @@ async function absorb() {
   setRunning(true, "评估双方项目");
   const payload = body();
   pushEvent("开始吸收", sourceName(payload.github_url || payload.external_path || ""), "info");
+  renderDevourSession({
+    status: "pre_review_ready",
+    source: payload.github_url || payload.external_path || "",
+    stage_order: ["pre_dual_review", "overlap_comparison", "absorption_execution", "improvement_proof", "final_self_review"],
+    pre_dual_review: {panels: []}
+  });
   beginAbsorption(payload);
   try {
     const r = await api("/api/absorb", payload);
     updateAbsorption(r);
+    renderDevourSession(r.devour_session);
     scores(r.own_assessment.scores);
     capabilityAudit(r.own_assessment);
     externalScores(r.external_assessment, r.absorption_visual);
@@ -1068,5 +1268,6 @@ async function loadDefaultProject() {
 
 resetProgress();
 externalScores(null);
+renderDevourSession(null);
 loadDefaultProject();
 draw();
