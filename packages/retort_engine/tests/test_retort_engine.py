@@ -176,8 +176,10 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     external.mkdir()
     (own / "README.md").write_text("# Own\n", encoding="utf-8")
     (external / "README.md").write_text("code review pipeline changed files benchmark plugin cli\n", encoding="utf-8")
+    queue_path = own / ".retort" / "employee_queue.jsonl"
+    history_path = own / ".retort" / "retort_history.sqlite"
 
-    result = absorb({"own_project": str(own), "external_path": str(external), "execution_timeout_sec": 30})
+    result = absorb({"own_project": str(own), "external_path": str(external), "employee_queue": str(queue_path), "history_store": str(history_path), "execution_timeout_sec": 30})
 
     execution = result["execution"]
     assert result["status"] == "absorption_execution_applied"
@@ -194,6 +196,8 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     assert report["review_pipeline"]["pipeline_stages"]
     assert report["review_pipeline"]["benchmark"]["minimum_expected_behavior_tests"] >= 3
     assert report["license_review"]["status"] in {"passed", "blocked"}
+    assert execution["feedback_audit"]["closed"] is True
+    assert execution["feedback_audit"]["result_tasks_have_queue_records"] is True
     proof = result["absorption_state"]["closed_loop_proof"]["flags"]
     assert proof["branch_diff_verified"] is True
     assert proof["employee_execution_verified"] is True

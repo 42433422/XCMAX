@@ -4,6 +4,7 @@ import hashlib
 import json
 import subprocess
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,7 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["semantic_review"] = semantic_review
     result["review_report_path"] = str(report_path)
     result["reproducibility"] = {"command": f"retort absorb --own-project {root} --external-path {external_path} --run-local-gates --branch-workflow --merge-after"}
+    result["queue_records_written"] = _write_execution_queue_records(str(payload.get("employee_queue") or ""), run_id, source, tasks)
     employee_results_path = _write_employee_results(root, run_id, source, tasks, result, payload)
     result["employee_results_path"] = str(employee_results_path)
     result["feedback_audit"] = audit_feedback_closure(queue_path=str(payload.get("employee_queue") or ""), history_store=str(payload.get("history_store") or ""), employee_results_dir=employee_results_path.parent)
@@ -337,6 +339,19 @@ def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[di
                 )
             )
     return path
+
+
+def _write_execution_queue_records(queue_path: str, run_id: str, source: str, tasks: list[dict[str, Any]]) -> int:
+    if not queue_path:
+        return 0
+    path = Path(queue_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    count = 0
+    with path.open("a", encoding="utf-8") as handle:
+        for task in tasks:
+            handle.write(json.dumps({"queue_id": str(uuid.uuid4()), "run_id": run_id, "source": source, "status": "executing", "task": task}, ensure_ascii=False, sort_keys=True) + "\n")
+            count += 1
+    return count
 
 
 def _execution_result(status: str, root: Path, source: str, started: float, changed_files: list[str], gates: list[dict[str, Any]], diff_summary: list[str], summary: str) -> dict[str, Any]:

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -148,7 +149,25 @@ class RetortHistory:
 
     def record(self, table: str, payload: dict[str, Any]) -> None:
         with sqlite3.connect(self.path) as conn:
-            conn.execute(f"INSERT INTO {table}(payload) VALUES (?)", (json.dumps(payload, ensure_ascii=False),))
+            columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            payload_json = json.dumps(payload, ensure_ascii=False)
+            if "payload" in columns:
+                conn.execute(f"INSERT INTO {table}(payload) VALUES (?)", (payload_json,))
+            elif table == "absorption_runs":
+                conn.execute(
+                    "INSERT INTO absorption_runs(created_at, status, source, payload_json) VALUES (?, ?, ?, ?)",
+                    (_now_iso(), str(payload.get("status") or ""), str((payload.get("external_ref") or {}).get("source") or ""), payload_json),
+                )
+            elif table == "employee_tasks":
+                task = payload.get("task") if isinstance(payload.get("task"), dict) else payload
+                conn.execute(
+                    "INSERT INTO employee_tasks(created_at, queue_id, task_id, owner_hint, status, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
+                    (_now_iso(), str(payload.get("queue_id") or uuid.uuid4()), str(task.get("task_id") or ""), str(task.get("owner_hint") or ""), str(payload.get("status") or "queued"), payload_json),
+                )
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def absorb(payload: dict[str, Any]) -> dict[str, Any]:
@@ -409,6 +428,8 @@ def _record_execution_proof(own: Path, execution: dict[str, Any], branch_state: 
             f"rollback_rehearsal={bool((execution.get('rollback_rehearsal') or {}).get('verified'))}",
             f"feedback_audit_closed={bool((execution.get('feedback_audit') or {}).get('closed'))}",
             f"history_result_count={(execution.get('feedback_audit') or {}).get('history_result_count', '')}",
+            f"queue_records_written={execution.get('queue_records_written', '')}",
+            f"result_tasks_have_queue_records={(execution.get('feedback_audit') or {}).get('result_tasks_have_queue_records', '')}",
         ],
     }
     state = _load_absorption_state(own)
