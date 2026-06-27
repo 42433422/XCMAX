@@ -10,6 +10,8 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "review_report": ("run_id", "source", "external_snapshot", "license_review", "review_pipeline", "replay"),
     "pr_review_result": ("status", "summary", "files", "comments", "task_groups", "incremental"),
     "pr_dry_run_result": ("status", "pr_url", "diff_url", "summary", "review"),
+    "pr_publish_dry_run_result": ("status", "pr_url", "summary", "comments", "rollback"),
+    "cross_project_replay_result": ("status", "project", "summary", "projects", "checks"),
     "llm_score": ("dimension", "value", "reason"),
 }
 
