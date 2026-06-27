@@ -14,6 +14,7 @@ from retort_engine.pr_live_probe import write_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.real_absorption import apply_real_absorption
@@ -144,6 +145,27 @@ def main(argv: list[str] | None = None) -> int:
     scheduler_stress.add_argument("--tasks-per-round", type=int, default=3)
     scheduler_stress.add_argument("--output", default="")
     scheduler_stress.add_argument("--json", action="store_true")
+    radar = sub.add_parser("similar-project-radar")
+    radar.add_argument("--project", default=".")
+    radar.add_argument("--query", default="AI PR reviewer")
+    radar.add_argument("--limit", type=int, default=10)
+    radar.add_argument("--min-score", type=int, default=55)
+    radar.add_argument("--json", action="store_true")
+    loop = sub.add_parser("similar-project-loop")
+    loop.add_argument("--project", default=".")
+    loop.add_argument("--source", action="append", default=[])
+    loop.add_argument("--limit", type=int, default=3)
+    loop.add_argument("--min-score", type=int, default=55)
+    loop.add_argument("--run-local-gates", action="store_true")
+    loop.add_argument("--branch-workflow", action="store_true")
+    loop.add_argument("--merge-after", action="store_true")
+    loop.add_argument("--allow-dirty-branch", action="store_true")
+    loop.add_argument("--dry-run", action="store_true")
+    loop.add_argument("--json", action="store_true")
+    saturation = sub.add_parser("absorption-saturation")
+    saturation.add_argument("--project", default=".")
+    saturation.add_argument("--recent-limit", type=int, default=3)
+    saturation.add_argument("--json", action="store_true")
     ui = sub.add_parser("ui")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8790)
@@ -348,6 +370,40 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
+    if args.command == "similar-project-radar":
+        result = build_similar_project_radar(args.project, query=args.query, limit=args.limit, min_score=args.min_score)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort similar-project radar status: {result['status']}")
+            print(f"Accepted: {result['summary']['accepted_count']}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "similar-project-loop":
+        result = run_similar_project_loop(
+            args.project,
+            sources=args.source,
+            limit=args.limit,
+            min_score=args.min_score,
+            run_local_gates=args.run_local_gates,
+            branch_workflow=args.branch_workflow,
+            merge_after=args.merge_after,
+            allow_dirty_branch=args.allow_dirty_branch,
+            dry_run=args.dry_run,
+        )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort similar-project loop status: {result['status']}")
+            print(f"Selected: {result['summary']['selected_count']}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "absorption-saturation":
+        result = build_absorption_saturation_report(args.project, recent_limit=args.recent_limit)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort absorption saturation status: {result['status']}")
+            print(f"Saturated: {result['summary']['saturated']}")
+        return 0
     if args.command == "ui":
         run_ui_server(args.host, args.port)
         return 0

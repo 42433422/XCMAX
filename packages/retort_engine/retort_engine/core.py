@@ -23,6 +23,7 @@ from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 
@@ -402,6 +403,33 @@ class RetortService:
             str(payload.get("project") or payload.get("project_path") or "."),
             round_count=int(payload.get("round_count") or payload.get("rounds") or 10),
             tasks_per_round=int(payload.get("tasks_per_round") or 3),
+        )
+
+    def similar_project_radar(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_similar_project_radar(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            query=str(payload.get("query") or "AI PR reviewer"),
+            limit=int(payload.get("limit") or 10),
+            min_score=int(payload.get("min_score") or 55),
+        )
+
+    def similar_project_loop(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_similar_project_loop(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            sources=[str(item) for item in payload.get("sources") or [] if str(item).strip()],
+            limit=int(payload.get("limit") or 3),
+            min_score=int(payload.get("min_score") or 55),
+            run_local_gates=bool(payload.get("run_local_gates", True)),
+            branch_workflow=bool(payload.get("branch_workflow", True)),
+            merge_after=bool(payload.get("merge_after", True)),
+            allow_dirty_branch=bool(payload.get("allow_dirty_branch", True)),
+            dry_run=bool(payload.get("dry_run")),
+        )
+
+    def absorption_saturation_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_absorption_saturation_report(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            recent_limit=int(payload.get("recent_limit") or 3),
         )
 
     def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:
