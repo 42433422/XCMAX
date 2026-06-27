@@ -195,7 +195,7 @@ def review_context_for_file(path: str) -> str:
         return "docs"
     if "auth" in normalized or "security" in normalized or any(marker in normalized for marker in SECRET_MARKERS):
         return "security"
-    if suffix in {".json", ".toml", ".yml", ".yaml", ".ini", ".env"}:
+    if suffix in {".json", ".toml", ".yml", ".yaml", ".ini", ".env"} or name == ".env" or name.endswith(".env"):
         return "config"
     if suffix in {".tsx", ".jsx", ".css", ".html"} or "/frontend/" in normalized or "/ui/" in normalized:
         return "frontend"
