@@ -134,11 +134,13 @@ def build_depth_absorption_workflow(own_groups: dict[str, dict[str, Any]], exter
         )
     focused = sorted(focused, key=lambda item: (item["priority"] == "P0", int(item["similarity_score"]), int(item["depth_gap"])), reverse=True)
     employee_tasks = [item["employee_task"] for item in focused]
+    marketplace_candidates = [_marketplace_candidate(item) for item in rejected if item["reason"] == "breadth_only_for_current_phase"]
     quality_gate = {
         "minimum_focused_component_count": 3,
         "focused_component_count": len(focused),
         "rejected_breadth_component_count": len([item for item in rejected if item["reason"] == "breadth_only_for_current_phase"]),
         "kept_breadth_component_count": len([item for item in focused if item["component"] in BREADTH_ONLY_COMPONENTS]),
+        "marketplace_candidate_count": len(marketplace_candidates),
         "all_employee_tasks_have_acceptance": all(bool(task.get("acceptance")) and bool(task.get("evidence_required")) for task in employee_tasks),
     }
     quality_gate["passed"] = bool(
@@ -150,6 +152,7 @@ def build_depth_absorption_workflow(own_groups: dict[str, dict[str, Any]], exter
         "focus_mode": "similar_function_depth_only",
         "focused_components": focused,
         "rejected_breadth_components": rejected,
+        "marketplace_candidates": marketplace_candidates,
         "employee_tasks": employee_tasks,
         "quality_gate": quality_gate,
     }
@@ -243,6 +246,27 @@ def _employee_task_for_component(component: str) -> dict[str, Any]:
         "evidence_required": _evidence_for_component(component),
         "owner_hint": "fhd-core-maintainer",
     }
+
+
+def _marketplace_candidate(rejected_component: dict[str, Any]) -> dict[str, Any]:
+    component = str(rejected_component.get("component") or "")
+    return {
+        "component": component,
+        "route": "ai_employee_marketplace",
+        "marketplace_employee_type": _marketplace_employee_type(component),
+        "core_absorption": "blocked_for_early_phase_depth_only",
+        "source_files": list(rejected_component.get("source_files") or [])[:5],
+        "evidence_required": ["external capability summary", "target user workflow", "sandboxed employee task", "market listing acceptance test"],
+        "acceptance": f"{component} is packaged as an AI employee candidate instead of widening Retort core.",
+    }
+
+
+def _marketplace_employee_type(component: str) -> str:
+    mapping = {
+        "provider_surface": "model-provider-integration-employee",
+        "plugin_surface": "plugin-packaging-employee",
+    }
+    return mapping.get(component, "specialized-capability-employee")
 
 
 def _dimension_for_component(component: str) -> str:
