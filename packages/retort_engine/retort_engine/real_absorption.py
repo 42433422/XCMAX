@@ -234,7 +234,15 @@ def depth_first_task_queue() -> list[dict[str, Any]]:
 def marketplace_candidate_queue() -> list[dict[str, Any]]:
     """Expose broad-but-useful external capabilities for AI employee marketplace packaging."""
     workflow = depth_absorption_plan()
+    if not workflow.get("marketplace_candidates_enabled", False):
+        return []
     return [dict(candidate) for candidate in workflow.get("marketplace_candidates") or []]
+
+
+def deferred_breadth_queue() -> list[dict[str, Any]]:
+    """Record broad capabilities that stay closed until Retort finishes same-direction absorption."""
+    workflow = depth_absorption_plan()
+    return [dict(candidate) for candidate in workflow.get("deferred_breadth_components") or []]
 
 
 def ranked_capabilities() -> list[dict[str, Any]]:
@@ -333,7 +341,7 @@ def _capability_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
     return f'''from __future__ import annotations
 
-from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, marketplace_candidate_queue, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
+from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, deferred_breadth_queue, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, marketplace_candidate_queue, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
 
 EXPECTED_ABSORPTION_SOURCE = {source_text}
 
@@ -358,12 +366,12 @@ def test_depth_absorption_plan_keeps_depth_before_breadth() -> None:
     assert all(task["acceptance"] and task["evidence_required"] for task in depth_first_task_queue())
 
 
-def test_breadth_candidates_are_routed_to_ai_employee_marketplace() -> None:
-    candidates = marketplace_candidate_queue()
-    assert candidates
-    assert all(item["route"] == "ai_employee_marketplace" for item in candidates)
-    assert all(item["core_absorption"] == "blocked_for_early_phase_depth_only" for item in candidates)
-    assert all(item["acceptance"] and item["evidence_required"] for item in candidates)
+def test_breadth_candidates_stay_closed_until_similarity_saturation() -> None:
+    assert marketplace_candidate_queue() == []
+    deferred = deferred_breadth_queue()
+    assert deferred
+    assert all(item["status"] == "closed_until_similarity_saturation" for item in deferred)
+    assert all(item["next_open_condition"] for item in deferred)
 
 
 def test_capability_progress_requires_behavior_code_tests_and_gates() -> None:

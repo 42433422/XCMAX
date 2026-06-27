@@ -27,6 +27,7 @@ COMPONENT_MARKERS = {
 }
 DEPTH_FOCUS_COMPONENTS = ("review_pipeline", "diff_hunk_review", "file_grouping", "benchmark_eval", "safety_policy", "workflow_ci")
 BREADTH_ONLY_COMPONENTS = {"provider_surface", "plugin_surface"}
+MARKETPLACE_CANDIDATES_ENABLED = False
 DIMENSION_COMPONENTS = {
     "comparative_analysis_depth": {"review_pipeline", "diff_hunk_review", "file_grouping", "benchmark_eval"},
     "external_ingestion": {"file_grouping", "review_pipeline"},
@@ -134,13 +135,17 @@ def build_depth_absorption_workflow(own_groups: dict[str, dict[str, Any]], exter
         )
     focused = sorted(focused, key=lambda item: (item["priority"] == "P0", int(item["similarity_score"]), int(item["depth_gap"])), reverse=True)
     employee_tasks = [item["employee_task"] for item in focused]
-    marketplace_candidates = [_marketplace_candidate(item) for item in rejected if item["reason"] == "breadth_only_for_current_phase"]
+    breadth_rejections = [item for item in rejected if item["reason"] == "breadth_only_for_current_phase"]
+    marketplace_candidates = [_marketplace_candidate(item) for item in breadth_rejections] if MARKETPLACE_CANDIDATES_ENABLED else []
+    deferred_breadth = [_deferred_breadth_component(item) for item in breadth_rejections]
     quality_gate = {
         "minimum_focused_component_count": 3,
         "focused_component_count": len(focused),
-        "rejected_breadth_component_count": len([item for item in rejected if item["reason"] == "breadth_only_for_current_phase"]),
+        "rejected_breadth_component_count": len(breadth_rejections),
         "kept_breadth_component_count": len([item for item in focused if item["component"] in BREADTH_ONLY_COMPONENTS]),
+        "marketplace_candidates_enabled": MARKETPLACE_CANDIDATES_ENABLED,
         "marketplace_candidate_count": len(marketplace_candidates),
+        "deferred_breadth_component_count": len(deferred_breadth),
         "all_employee_tasks_have_acceptance": all(bool(task.get("acceptance")) and bool(task.get("evidence_required")) for task in employee_tasks),
     }
     quality_gate["passed"] = bool(
@@ -150,8 +155,10 @@ def build_depth_absorption_workflow(own_groups: dict[str, dict[str, Any]], exter
     )
     return {
         "focus_mode": "similar_function_depth_only",
+        "marketplace_candidates_enabled": MARKETPLACE_CANDIDATES_ENABLED,
         "focused_components": focused,
         "rejected_breadth_components": rejected,
+        "deferred_breadth_components": deferred_breadth,
         "marketplace_candidates": marketplace_candidates,
         "employee_tasks": employee_tasks,
         "quality_gate": quality_gate,
@@ -258,6 +265,17 @@ def _marketplace_candidate(rejected_component: dict[str, Any]) -> dict[str, Any]
         "source_files": list(rejected_component.get("source_files") or [])[:5],
         "evidence_required": ["external capability summary", "target user workflow", "sandboxed employee task", "market listing acceptance test"],
         "acceptance": f"{component} is packaged as an AI employee candidate instead of widening Retort core.",
+    }
+
+
+def _deferred_breadth_component(rejected_component: dict[str, Any]) -> dict[str, Any]:
+    component = str(rejected_component.get("component") or "")
+    return {
+        "component": component,
+        "status": "closed_until_similarity_saturation",
+        "reason": "early_phase_retort_self_deepening_only",
+        "source_files": list(rejected_component.get("source_files") or [])[:5],
+        "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
     }
 
 
