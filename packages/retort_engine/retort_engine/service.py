@@ -5,6 +5,7 @@ from typing import Any
 from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
+from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_review import review_diff
 
 
@@ -45,6 +46,10 @@ class RetortService:
         previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")
         return review_diff(str(payload.get("diff") or ""), max_comments=int(payload.get("max_comments") or 20), previous_diff_text=previous_diff)
 
+    def review_pr(self, payload: dict[str, Any]) -> dict[str, Any]:
+        previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")
+        return review_pr_url(str(payload.get("url") or payload.get("pr_url") or ""), max_comments=int(payload.get("max_comments") or 20), previous_diff_text=previous_diff, max_bytes=int(payload.get("max_bytes") or 500000))
+
 
 def create_app() -> Any:
     service = RetortService()
@@ -73,5 +78,9 @@ def create_app() -> Any:
     @app.post("/review-diff")
     def review_diff_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.review_diff(payload)
+
+    @app.post("/review-pr")
+    def review_pr_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.review_pr(payload)
 
     return app
