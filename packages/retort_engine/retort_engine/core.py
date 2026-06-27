@@ -790,6 +790,8 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"task_prioritization_queued_count={task_summary.get('queued_task_count', '')}")
     evidence.append(f"task_prioritization_completed_count={task_summary.get('completed_result_count', '')}")
     evidence.append(f"task_prioritization_dimension_count={task_summary.get('prioritized_dimension_count', '')}")
+    evidence.append(f"task_prioritization_ready_employee_task_count={task_summary.get('ready_employee_task_count', '')}")
+    evidence.append(f"task_prioritization_all_tasks_have_acceptance={task_summary.get('all_tasks_have_acceptance', '')}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
