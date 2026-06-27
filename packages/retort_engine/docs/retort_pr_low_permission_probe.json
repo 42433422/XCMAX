@@ -1,0 +1,69 @@
+{
+  "contract": {
+    "missing": [],
+    "name": "pr_live_publish_probe_result",
+    "required": [
+      "status",
+      "pr_url",
+      "summary",
+      "created_receipts",
+      "rollback_receipts",
+      "evidence"
+    ],
+    "valid": true
+  },
+  "created_receipts": [],
+  "evidence": {
+    "api": "GitHub REST issues comments",
+    "base_ref": "main",
+    "calls": [
+      {
+        "method": "GET",
+        "url": "https://api.github.com/repos/owner/repo"
+      },
+      {
+        "method": "GET",
+        "url": "https://api.github.com/repos/owner/repo/pulls/7"
+      },
+      {
+        "method": "POST",
+        "url": "https://api.github.com/repos/owner/repo/issues/7/comments"
+      }
+    ],
+    "degradation": "no_comment_created_no_rollback_needed",
+    "head_ref": "feature",
+    "real_network": false,
+    "required_permission": "issues:write or pull_requests:write",
+    "scenario": "controlled_low_permission_403",
+    "target_is_pull_request": true,
+    "token_redacted": true,
+    "transport": "injected_transport"
+  },
+  "pr_url": "https://github.com/owner/repo/pull/7",
+  "rollback_receipts": [
+    {
+      "created": false,
+      "response": {
+        "message": "Resource not accessible by integration"
+      },
+      "status_code": 403
+    }
+  ],
+  "status": "permission_denied_degraded",
+  "summary": {
+    "created_comment_count": 0,
+    "degraded_without_write": true,
+    "live_github_write": false,
+    "permission_admin": false,
+    "permission_denied": true,
+    "permission_maintain": false,
+    "permission_push": false,
+    "pull_number": 7,
+    "pull_status": 200,
+    "repo_status": 200,
+    "rollback_verified": true,
+    "rolled_back_comment_count": 0,
+    "target_repo": "owner/repo",
+    "token_present": true
+  }
+}
