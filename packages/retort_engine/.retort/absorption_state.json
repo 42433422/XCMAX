@@ -1,5 +1,5 @@
 {
-  "active": true,
+  "active": false,
   "closed_loop_proof": {
     "branch_diff_verified": true,
     "employee_execution_verified": true,
@@ -12,20 +12,21 @@
       "tests=194_passed",
       "ruff=passed",
       "node_check=passed",
+      "merge_commit=6f9cd6047",
       "pollution_reverted=21dd15133",
-      "merge_cross_check=False; merge_commit=21dd15133",
+      "merge_cross_check=True; merge_commit=6f9cd6047",
       "pytest_gate_cross_check=True"
     ],
     "external_advantage_reassessed": true,
-    "merge_verified": false,
+    "merge_verified": true,
     "post_absorption_tests_passed": true,
     "validation": {
       "evidence": [
-        "merge_cross_check=False; merge_commit=21dd15133",
+        "merge_cross_check=True; merge_commit=6f9cd6047",
         "pytest_gate_cross_check=True"
       ],
-      "merge_commit": "21dd15133",
-      "merge_commit_verified": false,
+      "merge_commit": "6f9cd6047",
+      "merge_commit_verified": true,
       "pytest_gates_verified": true
     }
   },
@@ -36,7 +37,7 @@
     "product_operability"
   ],
   "source": "https://github.com/bobbyroe/threejs-earth",
-  "status": "awaiting_execution_evidence",
+  "status": "closed_loop_verified",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
