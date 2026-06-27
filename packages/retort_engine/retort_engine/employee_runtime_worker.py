@@ -7,6 +7,7 @@ from typing import Any
 
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskResult
+from retort_engine.pr_review import review_diff
 
 
 def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
@@ -15,6 +16,7 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     tasks = [item for item in payload.get("tasks") or [] if isinstance(item, dict)]
     gates_passed = bool(payload.get("gates_passed"))
+    worker_review = _write_worker_review_artifact(payload, output_path)
     task_results = []
     for task in tasks:
         task_results.append(
@@ -28,6 +30,9 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     f"changed_files={','.join(str(item) for item in payload.get('changed_files') or [])}",
                     f"gates_passed={gates_passed}",
                     f"worker_payload={payload_file}",
+                    f"worker_review_status={worker_review.get('status')}",
+                    f"worker_review_artifact={worker_review.get('artifact', '')}",
+                    f"worker_review_comment_count={worker_review.get('comment_count', 0)}",
                 ],
                 "score_after": {"employee_execution_integration": 94.0 if gates_passed else 70.0, "feedback_loop_closure": 94.0 if gates_passed else 70.0},
             }
@@ -43,6 +48,7 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
             "history_store": str(payload.get("history_store") or ""),
             "result_path": str(output_path),
             "task_result_count": len(task_results),
+            "worker_review": worker_review,
         },
         "results": task_results,
     }
@@ -61,6 +67,22 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                 )
             )
     return result
+
+
+def _write_worker_review_artifact(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:
+    diff_text = str(payload.get("diff_text") or "")
+    if not diff_text.strip():
+        return {"status": "no_diff", "artifact": "", "comment_count": 0, "file_count": 0, "task_group_count": 0}
+    review = review_diff(diff_text, max_comments=12)
+    artifact_path = output_path.with_suffix(".worker_review.json")
+    artifact_path.write_text(json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    return {
+        "status": str(review.get("status") or ""),
+        "artifact": str(artifact_path),
+        "comment_count": int((review.get("summary") or {}).get("comment_count") or 0),
+        "file_count": int((review.get("summary") or {}).get("file_count") or 0),
+        "task_group_count": len(review.get("task_groups") or []),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

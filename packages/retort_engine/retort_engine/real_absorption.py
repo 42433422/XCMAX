@@ -542,6 +542,35 @@ def _git_diff_summary(root: Path, changed_files: list[str]) -> list[str]:
     return fallback
 
 
+def _employee_diff_text(root: Path, changed_files: list[str]) -> str:
+    git_root = _git_root(root)
+    rels: list[str] = []
+    if git_root is not None:
+        for item in changed_files:
+            path = Path(item).resolve()
+            if path.is_relative_to(git_root):
+                rels.append(str(path.relative_to(git_root)))
+        if rels:
+            result = subprocess.run(["git", "diff", "--", *rels], cwd=git_root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=30, check=False)
+            if result.stdout.strip():
+                return result.stdout
+    return "\n".join(filter(None, (_synthetic_file_diff(root, Path(item)) for item in changed_files)))
+
+
+def _synthetic_file_diff(root: Path, path: Path) -> str:
+    if not path.is_file():
+        return ""
+    try:
+        rel = str(path.resolve().relative_to(root.resolve()))
+    except (OSError, ValueError):
+        rel = str(path)
+    lines = _read(path).splitlines()[:240]
+    if not lines:
+        return ""
+    body = "\n".join(f"+{line}" for line in lines)
+    return f"diff --git a/{rel} b/{rel}\n--- /dev/null\n+++ b/{rel}\n@@ -0,0 +1,{len(lines)} @@\n{body}\n"
+
+
 def _git_root(path: Path) -> Path | None:
     result = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=path, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=5, check=False)
     return Path(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
@@ -567,6 +596,7 @@ def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[di
         "gates_passed": bool(result.get("gates_passed")),
         "changed_files": result.get("changed_files") or [],
         "review_report_path": result.get("review_report_path"),
+        "diff_text": _employee_diff_text(root, result.get("changed_files") or []),
         "queue_path": queue_path,
         "history_store": history_store,
         "output_path": str(path),

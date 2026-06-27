@@ -42,7 +42,8 @@ class RetortService:
         return feedback_ingest(history_store=str(payload.get("history_store") or ""), result_file=str(payload.get("result_file") or ""), task_id=str(payload.get("task_id") or ""), status=str(payload.get("status") or ""), summary=str(payload.get("summary") or ""), evidence=tuple(str(item) for item in payload.get("evidence") or ())).to_dict()
 
     def review_diff(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return review_diff(str(payload.get("diff") or ""), max_comments=int(payload.get("max_comments") or 20))
+        previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")
+        return review_diff(str(payload.get("diff") or ""), max_comments=int(payload.get("max_comments") or 20), previous_diff_text=previous_diff)
 
 
 def create_app() -> Any:

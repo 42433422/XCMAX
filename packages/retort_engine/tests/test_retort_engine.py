@@ -394,6 +394,10 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path:
     employee_result = json.loads(Path(result["employee_results_path"]).read_text(encoding="utf-8"))
     assert employee_result["execution_mode"] == "employee_runtime_worker"
     assert employee_result["runtime_evidence"]["independent_process"] is True
+    worker_review = employee_result["runtime_evidence"]["worker_review"]
+    assert worker_review["status"] == "reviewed"
+    assert worker_review["file_count"] >= 1
+    assert Path(worker_review["artifact"]).is_file()
 
 
 def test_paibi_parallel_review_dispatches_independent_subtasks(tmp_path: Path, monkeypatch) -> None:
