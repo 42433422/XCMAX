@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import time
 import uuid
@@ -42,8 +43,11 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     review_context_bias_test_path = _review_context_bias_test_target(root)
     architecture_memory_path = _architecture_memory_target(root)
     core_refactor_plan_path = _core_refactor_plan_target(root)
+    frontend_app_path = _frontend_app_target(root)
+    frontend_visual_test_path = _frontend_visual_test_target(root)
     log_path = root / "docs" / "retort_absorption_log.md"
     report_path = root / "docs" / "retort_external_review_report.json"
+    writes_frontend_visual = _should_absorb_frontend_visual(external_profile)
     tracked_paths = [
         absorption_quality_path,
         module_path,
@@ -56,6 +60,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         log_path,
         report_path,
     ]
+    if writes_frontend_visual:
+        tracked_paths.extend([frontend_app_path, frontend_visual_test_path])
     before = _snapshot(tracked_paths)
     review_report = _review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review)
     _write_absorption_quality_helper(absorption_quality_path)
@@ -71,6 +77,10 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         review_context_bias_path.write_text(_review_context_bias_content(run_id, source, external_path, external_profile), encoding="utf-8")
         review_context_bias_test_path.parent.mkdir(parents=True, exist_ok=True)
         review_context_bias_test_path.write_text(_review_context_bias_test_content(_capability_import_name(root, review_context_bias_path), source), encoding="utf-8")
+    if writes_frontend_visual:
+        _write_frontend_visual_profile(frontend_app_path, run_id, source, external_path, external_profile)
+        frontend_visual_test_path.parent.mkdir(parents=True, exist_ok=True)
+        frontend_visual_test_path.write_text(_frontend_visual_test_content(source), encoding="utf-8")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     _append_log(log_path, run_id, source, external_path, tasks, external_profile)
     report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -88,6 +98,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
                 _run_command([_python(payload), "-m", "pytest", str(review_context_bias_test_path.relative_to(root)), "-q"], root, timeout=120),
             ]
         )
+    if writes_frontend_visual:
+        gates.append(_run_command([_python(payload), "-m", "pytest", str(frontend_visual_test_path.relative_to(root)), "-q"], root, timeout=120))
     if payload.get("run_local_gates"):
         gates.extend(_local_gate_commands(root, payload))
     changed_files = _changed_files(before, tracked_paths)
@@ -140,6 +152,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["core_refactor_plan_summary"] = core_refactor_plan.get("summary") or {}
     result["review_context_bias_path"] = str(review_context_bias_path) if writes_review_context_bias else ""
     result["review_context_bias_test_path"] = str(review_context_bias_test_path) if writes_review_context_bias else ""
+    result["frontend_visual_absorption_path"] = str(frontend_app_path) if writes_frontend_visual else ""
+    result["frontend_visual_absorption_test_path"] = str(frontend_visual_test_path) if writes_frontend_visual else ""
     result["review_report_path"] = str(report_path)
     result["reproducibility"] = {"command": f"retort absorb --own-project {root} --external-path {external_path} --run-local-gates --branch-workflow --merge-after"}
     result["queue_records_written"] = _write_execution_queue_records(str(payload.get("employee_queue") or ""), run_id, source, tasks)
@@ -214,6 +228,14 @@ def _review_context_bias_test_target(root: Path) -> Path:
     return root / "tests" / "test_review_context_bias.py"
 
 
+def _frontend_app_target(root: Path) -> Path:
+    return root / "retort_engine" / "frontend" / "app.js"
+
+
+def _frontend_visual_test_target(root: Path) -> Path:
+    return root / "tests" / "test_frontend_visual_absorption.py"
+
+
 def _capability_import_name(root: Path, capability_path: Path) -> str:
     rel = capability_path.relative_to(root)
     parts = list(rel.with_suffix("").parts)
@@ -265,6 +287,11 @@ def absorbed_external_patterns() -> dict[str, Any]:
 def _should_absorb_review_context_bias(profile: dict[str, Any]) -> bool:
     signals = set(profile.get("signals") or [])
     return bool(signals & {"review_pipeline", "file_grouping", "diff_hunk_review"})
+
+
+def _should_absorb_frontend_visual(profile: dict[str, Any]) -> bool:
+    signals = set(profile.get("signals") or [])
+    return bool(signals & {"planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"})
 
 
 def _review_context_bias_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> str:
@@ -343,6 +370,104 @@ def _context_focus_from_signals(signals: list[str]) -> list[str]:
         focus.append("config")
     focus.append("docs")
     return list(dict.fromkeys(focus))
+
+
+def _write_frontend_visual_profile(app_path: Path, run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> None:
+    if not app_path.is_file():
+        return
+    signals = set(str(item) for item in profile.get("signals") or [])
+    visual_profile = {
+        "source": source,
+        "enabled": True,
+        "visual_family": "absorbed-procedural-planet",
+        "run_id": run_id,
+        "external_path": str(external_path),
+        "absorbed_signals": sorted(signals & {"planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"}),
+        "palette": _planet_palette(signals),
+        "layers": {
+            "atmospheric_rim": "atmosphere_shader" in signals or "planet_frontend" in signals,
+            "procedural_landmasses": "procedural_surface" in signals or "planet_frontend" in signals,
+            "translucent_clouds": "atmosphere_shader" in signals or "webgl_scene" in signals,
+            "orbital_rings": "webgl_scene" in signals or "planet_frontend" in signals,
+            "terminator_shadow": True,
+        },
+        "license_boundary": "visual principles only; no external source or texture copied",
+    }
+    replacement = "const ABSORBED_PLANET_VISUAL_PROFILE = " + json.dumps(visual_profile, ensure_ascii=False, indent=2, sort_keys=True) + ";"
+    text = _read(app_path)
+    updated, count = re.subn(r"const ABSORBED_PLANET_VISUAL_PROFILE = \{.*?\n\};", replacement, text, count=1, flags=re.S)
+    if count != 1:
+        raise RuntimeError("Could not update ABSORBED_PLANET_VISUAL_PROFILE in frontend app.js")
+    app_path.write_text(updated, encoding="utf-8")
+
+
+def _planet_palette(signals: set[str]) -> dict[str, str]:
+    if "atmosphere_shader" in signals and "procedural_surface" in signals:
+        return {
+            "ocean": "#102c5f",
+            "shallow": "#37d6cf",
+            "land": "#cda96b",
+            "highland": "#fff0bd",
+            "cloud": "#f7fbff",
+            "rim": "#95f4ff",
+            "ring": "#f4ca78",
+            "night": "#02050d",
+        }
+    return {
+        "ocean": "#17345c",
+        "shallow": "#56d8db",
+        "land": "#b6c878",
+        "highland": "#fff3c7",
+        "cloud": "#f7fbff",
+        "rim": "#8ee8ff",
+        "ring": "#d8c17a",
+        "night": "#030711",
+    }
+
+
+def _frontend_visual_test_content(source: str) -> str:
+    source_text = repr(source)
+    return f'''from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+
+EXPECTED_VISUAL_SOURCE = {source_text}
+
+
+def _app_text() -> str:
+    return (Path(__file__).resolve().parents[1] / "retort_engine" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+
+def _absorbed_profile() -> dict[str, object]:
+    text = _app_text()
+    match = re.search(r"const ABSORBED_PLANET_VISUAL_PROFILE = (\\{{.*?\\n\\}});", text, re.S)
+    assert match, "absorbed planet visual profile is missing"
+    return json.loads(match.group(1))
+
+
+def test_absorbed_planet_visual_profile_references_external_source() -> None:
+    profile = _absorbed_profile()
+
+    assert profile["enabled"] is True
+    assert profile["source"] == EXPECTED_VISUAL_SOURCE
+    assert profile["visual_family"] == "absorbed-procedural-planet"
+    assert profile["license_boundary"] == "visual principles only; no external source or texture copied"
+    assert set(profile["absorbed_signals"]) & {{"planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"}}
+
+
+def test_planet_renderer_uses_absorbed_visual_layers() -> None:
+    text = _app_text()
+
+    assert "planetVisualProfile()" in text
+    assert "procedural_landmasses" in text
+    assert "translucent_clouds" in text
+    assert "terminator_shadow" in text
+    assert "atmospheric_rim" in text
+    assert "rgbaHex(palette.rim" in text
+'''
 
 
 def _capability_module_content(run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any], review_report: dict[str, Any]) -> str:
@@ -649,6 +774,10 @@ def _external_profile(root: Path) -> dict[str, Any]:
                 "benchmarking": ("benchmark", "precision", "recall", "eval", "evaluation"),
                 "plugin_surface": ("plugin", "cli", "github action", "codex"),
                 "multi_provider": ("provider", "model", "openai", "anthropic", "ollama"),
+                "planet_frontend": ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer"),
+                "atmosphere_shader": ("atmosphere", "fresnel", "rim light", "shader", "cloud"),
+                "procedural_surface": ("noise", "texture", "height map", "landmass", "terrain"),
+                "webgl_scene": ("webgl", "three.js", "threejs", "renderer", "scene", "camera", "orbit"),
             }.items():
                 if any(marker in lowered_file for marker in markers):
                     signal_evidence.setdefault(signal, [])
@@ -661,6 +790,10 @@ def _external_profile(root: Path) -> dict[str, Any]:
         "benchmarking": ("benchmark", "precision", "recall", "eval", "evaluation"),
         "plugin_surface": ("plugin", "cli", "github action", "codex"),
         "multi_provider": ("provider", "model", "openai", "anthropic", "ollama"),
+        "planet_frontend": ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer"),
+        "atmosphere_shader": ("atmosphere", "fresnel", "rim light", "shader", "cloud"),
+        "procedural_surface": ("noise", "texture", "height map", "landmass", "terrain"),
+        "webgl_scene": ("webgl", "three.js", "threejs", "renderer", "scene", "camera", "orbit"),
     }
     signals = [name for name, markers in signal_map.items() if any(marker in lowered for marker in markers)]
     return {"file_count": len(files), "suffix_counts": suffix_counts, "signals": signals, "signal_evidence": signal_evidence, "git_revision": _git_revision(root)}
