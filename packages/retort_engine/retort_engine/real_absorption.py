@@ -221,10 +221,13 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["frontend_visual_absorption_test_path"] = str(frontend_visual_test_path) if writes_frontend_visual else ""
     result["review_report_path"] = str(report_path)
     result["reproducibility"] = {"command": f"retort absorb --own-project {root} --external-path {external_path} --run-local-gates --branch-workflow --merge-after"}
-    result["queue_records_written"] = _write_execution_queue_records(str(payload.get("employee_queue") or ""), run_id, source, tasks)
-    employee_results_path = _write_employee_results(root, run_id, source, tasks, result, payload)
+    employee_queue = _employee_queue_path(root, payload)
+    history_store = _history_store_path(root, payload)
+    worker_payload = {**payload, "employee_queue": employee_queue, "history_store": history_store}
+    result["queue_records_written"] = _write_execution_queue_records(employee_queue, run_id, source, tasks)
+    employee_results_path = _write_employee_results(root, run_id, source, tasks, result, worker_payload)
     result["employee_results_path"] = str(employee_results_path)
-    result["feedback_audit"] = audit_feedback_closure(queue_path=str(payload.get("employee_queue") or ""), history_store=str(payload.get("history_store") or ""), employee_results_dir=employee_results_path.parent)
+    result["feedback_audit"] = audit_feedback_closure(queue_path=employee_queue, history_store=history_store, employee_results_dir=employee_results_path.parent)
     record_path = record_real_absorption_run(root, result)
     result["run_record_path"] = str(record_path)
     return result
@@ -1199,6 +1202,14 @@ def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[di
         }
         path.write_text(json.dumps(fallback, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     return path
+
+
+def _employee_queue_path(root: Path, payload: dict[str, Any]) -> str:
+    return str(payload.get("employee_queue") or root / ".retort" / "employee_queue.jsonl")
+
+
+def _history_store_path(root: Path, payload: dict[str, Any]) -> str:
+    return str(payload.get("history_store") or root / ".retort" / "retort_history.sqlite")
 
 
 def _write_execution_queue_records(queue_path: str, run_id: str, source: str, tasks: list[dict[str, Any]]) -> int:
