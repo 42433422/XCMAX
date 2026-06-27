@@ -800,9 +800,12 @@ def _evidence_highlights(assessment: dict[str, Any], *, limit: int = 8) -> list[
         "test=",
         "closed_loop_verified=",
         "closed_loop_missing=",
-        "capability_absorption_score=",
+        "capability_absorption_local_score_removed=",
+        "capability_absorption_risk_level=",
+        "capability_absorption_blockers=",
         "behavior_source_file_count=",
         "behavior_test_file_count=",
+        "test_to_source_ratio=",
         "employee_execution_mode=",
     )
     picked: list[str] = []
@@ -876,8 +879,11 @@ def _improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str,
         "support_behavior_test_files": [str(item) for item in audit.get("support_behavior_test_files") or []],
         "generated_evidence_files": [str(item) for item in audit.get("generated_evidence_files") or []],
         "generated_only": bool(audit.get("generated_only")),
-        "capability_absorption_score": audit.get("score"),
-        "capability_absorption_cap": audit.get("overall_cap"),
+        "capability_absorption_local_score_removed": bool(audit.get("local_score_removed", True)),
+        "capability_absorption_status": audit.get("status"),
+        "capability_absorption_risk_level": audit.get("risk_level"),
+        "capability_absorption_blockers": [str(item) for item in audit.get("blockers") or []],
+        "test_to_source_ratio": audit.get("test_to_source_ratio"),
         "reason": str(audit.get("reason") or ""),
     }
 
@@ -1109,11 +1115,14 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
         evidence.append("closed_loop_five_proofs_verified=True")
     evidence.append(f"contract_schema_count={len(contract_names())}")
     audit = _capability_absorption_audit(project)
-    evidence.append(f"capability_absorption_score={audit.get('score')}")
-    evidence.append(f"capability_absorption_cap={audit.get('overall_cap')}")
+    evidence.append(f"capability_absorption_local_score_removed={audit.get('local_score_removed', True)}")
+    evidence.append(f"capability_absorption_status={audit.get('status')}")
+    evidence.append(f"capability_absorption_risk_level={audit.get('risk_level')}")
+    evidence.append(f"capability_absorption_blockers={','.join(str(item) for item in audit.get('blockers') or [])}")
     evidence.append(f"capability_absorption_reason={audit.get('reason')}")
     evidence.append(f"behavior_source_file_count={len(audit.get('behavior_source_files') or [])}")
     evidence.append(f"behavior_test_file_count={len(audit.get('behavior_test_files') or [])}")
+    evidence.append(f"test_to_source_ratio={audit.get('test_to_source_ratio', '')}")
     behavior_test = project / "tests" / "test_absorbed_capabilities.py"
     if behavior_test.is_file():
         behavior_test_count = len(re.findall(r"^\s*def\s+test_", _read(behavior_test), re.M))
@@ -1304,18 +1313,24 @@ BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 
 
 def _capability_absorption_audit(root: Path) -> dict[str, Any]:
+    code_health = _test_code_health(root)
+    static_risks = _self_assessment_risk_checks(root)
     latest = _latest_absorption_run(root)
     if not latest:
+        blockers = ["no_real_absorption_run", *static_risks["failed"]]
         return {
-            "score": 50.0,
-            "overall_cap": 82.0,
-            "employee_execution_cap": 78.0,
+            "local_score_removed": True,
+            "status": "needs_llm_project_level_review",
+            "risk_level": _audit_risk_level(blockers),
+            "blockers": blockers,
             "reason": "no_real_absorption_run",
             "changed_files": [],
             "behavior_source_files": [],
             "behavior_test_files": [],
             "generated_evidence_files": [],
             "external_project_count": 0,
+            **code_health,
+            "self_assessment_risk_checks": static_risks,
         }
     changed_files = [str(item) for item in latest.get("changed_files") or []]
     behavior_source_files: list[str] = []
@@ -1341,28 +1356,32 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
     employee_worker_review = _latest_employee_worker_review(root)
     generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
     if generated_only:
-        score = 76.0
-        cap = 82.0
         reason = "latest_absorption_changed_only_reports_logs_or_capability_registry"
     elif behavior_source_files and behavior_test_files:
-        score = 94.0
-        cap = 96.0
         reason = "latest_absorption_changed_behavior_code_and_tests"
     elif behavior_source_files:
-        score = 88.0
-        cap = 89.0
         reason = "latest_absorption_changed_behavior_code_without_behavior_tests"
     else:
-        score = 84.0
-        cap = 86.0
         reason = "latest_absorption_has_no_clear_behavior_code_change"
+    blockers: list[str] = []
+    if generated_only:
+        blockers.append("latest_absorption_report_or_registry_only")
+    if behavior_source_files and not behavior_test_files:
+        blockers.append("latest_behavior_change_missing_tests")
+    if not behavior_source_files:
+        blockers.append("latest_absorption_missing_core_behavior_diff")
+    if code_health["source_line_count"] and code_health["test_to_source_ratio"] < 0.5:
+        blockers.append("low_test_to_source_ratio")
     if external_project_count < 3:
-        cap = min(cap, 88.0 if not generated_only else cap)
-    employee_cap = 88.0 if employee_mode in {"", "retort_apply_absorption_cli"} else (97.0 if employee_worker_review.get("status") == "reviewed" else 96.0)
+        blockers.append("insufficient_cross_project_reproduction")
+    if employee_mode in {"", "retort_apply_absorption_cli"}:
+        blockers.append("employee_execution_not_independent_runtime")
+    blockers.extend(static_risks["failed"])
     return {
-        "score": score,
-        "overall_cap": cap,
-        "employee_execution_cap": employee_cap,
+        "local_score_removed": True,
+        "status": "audit_only_no_local_score",
+        "risk_level": _audit_risk_level(blockers),
+        "blockers": sorted(set(blockers)),
         "reason": reason,
         "changed_files": changed_files,
         "behavior_source_files": behavior_source_files,
@@ -1376,6 +1395,8 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
         "employee_execution_mode": employee_mode,
         "employee_worker_review": employee_worker_review,
         "pr_review_runtime": pr_review,
+        **code_health,
+        "self_assessment_risk_checks": static_risks,
     }
 
 
@@ -1562,6 +1583,114 @@ def _is_generated_absorption_file(rel: str) -> bool:
 def _is_behavior_test_file(rel: str) -> bool:
     path = Path(rel)
     return path.suffix.lower() in BEHAVIOR_SUFFIXES and ("tests" in path.parts or path.name.startswith("test_"))
+
+
+def _is_project_behavior_source_file(rel: str) -> bool:
+    path = Path(rel)
+    return path.suffix.lower() in BEHAVIOR_SUFFIXES and not _is_generated_absorption_file(rel) and not _is_behavior_test_file(rel)
+
+
+def _test_code_health(root: Path) -> dict[str, Any]:
+    files = _project_files(root, {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"})
+    source_lines = 0
+    test_lines = 0
+    source_files = 0
+    test_files = 0
+    for path in files:
+        rel = _project_relative(root, path)
+        if _is_generated_absorption_file(rel):
+            continue
+        if _is_behavior_test_file(rel):
+            test_files += 1
+            test_lines += _code_line_count(path)
+        elif _is_project_behavior_source_file(rel):
+            source_files += 1
+            source_lines += _code_line_count(path)
+    ratio = round(test_lines / source_lines, 3) if source_lines else 0.0
+    return {
+        "source_file_count": source_files,
+        "test_file_count": test_files,
+        "source_line_count": source_lines,
+        "test_line_count": test_lines,
+        "test_to_source_ratio": ratio,
+    }
+
+
+def _code_line_count(path: Path) -> int:
+    lines = 0
+    for line in _read(path).splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and not stripped.startswith("//"):
+            lines += 1
+    return lines
+
+
+def _self_assessment_risk_checks(root: Path) -> dict[str, Any]:
+    core = root / "retort_engine" / "core.py"
+    loop = root / "retort_engine" / "similar_project_loop.py"
+    paibi = root / "retort_engine" / "paibi_llm.py"
+    evolution = root / "retort_engine" / "self_evolution.py"
+    if not any(path.is_file() for path in (core, loop, paibi, evolution)):
+        return {"checks": [], "failed": []}
+    core_text = _read(core)
+    loop_text = _read(loop)
+    paibi_text = _read(paibi)
+    evolution_text = _read(evolution)
+    checks = [
+        {
+            "name": "strict_absorption_stdout_json",
+            "passed": "_is_complete_absorption_stdout_json" in core_text and "required.issubset" in core_text and "candidates[-1]" in core_text,
+        },
+        {
+            "name": "closed_loop_cross_validation",
+            "passed": "_closed_loop_cross_validation" in core_text and "merge_commit_verified" in core_text and "pytest_gates_verified" in core_text,
+        },
+        {
+            "name": "similar_loop_saturation_reachable",
+            "passed": "remaining_strong_depth_candidate_count" in loop_text and "consecutive_no_new_core_depth_count" in loop_text,
+        },
+        {
+            "name": "github_search_failure_explicit",
+            "passed": "search_failed" in loop_text and "search_stderr_tail" in loop_text,
+        },
+        {
+            "name": "batch_absorption_safe_defaults",
+            "passed": "allow_dirty_branch: bool = False" in loop_text and "use_llm: bool = False" in loop_text,
+        },
+        {
+            "name": "single_absorb_failure_isolated",
+            "passed": "_loop_failure_summary" in loop_text and "except Exception as exc" in loop_text,
+        },
+        {
+            "name": "max_rounds_is_enforced",
+            "passed": "round_index >= self.max_rounds" in evolution_text,
+        },
+        {
+            "name": "prompt_says_local_audit_has_no_score",
+            "passed": "能力吸收审计只提供风险信号" in paibi_text and "不得把本地能力吸收审计当作参考分" in paibi_text,
+        },
+    ]
+    failed = [str(item["name"]) for item in checks if not item["passed"]]
+    return {"checks": checks, "failed": failed}
+
+
+def _audit_risk_level(blockers: list[str]) -> str:
+    serious = {
+        "latest_absorption_report_or_registry_only",
+        "latest_absorption_missing_core_behavior_diff",
+        "latest_behavior_change_missing_tests",
+        "low_test_to_source_ratio",
+        "closed_loop_cross_validation",
+        "strict_absorption_stdout_json",
+        "similar_loop_saturation_reachable",
+        "github_search_failure_explicit",
+        "batch_absorption_safe_defaults",
+    }
+    if any(item in serious for item in blockers):
+        return "high"
+    if blockers:
+        return "medium"
+    return "low"
 
 
 def _tasks_from_assessment(source: str, external_path: Path | None = None) -> list[dict[str, str]]:
