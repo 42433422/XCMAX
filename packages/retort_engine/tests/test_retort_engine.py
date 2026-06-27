@@ -74,6 +74,7 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "use_llm: true" in app_text
     assert "require_deep_review: true" in app_text
     assert "/api/absorption-lights" in ui_server_text
+    assert "/api/codebase-graph-report" in ui_server_text
     assert blackhole_ui_detected(root.parents[1]) is True
     assert structure["missing_ids"] == []
     assert structure["missing_functions"] == []
