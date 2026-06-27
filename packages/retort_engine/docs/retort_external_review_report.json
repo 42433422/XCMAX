@@ -1,120 +1,40 @@
 {
   "absorbed_signals": [
     "review_pipeline",
-    "file_grouping",
     "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/OpenHands/software-agent-sdk",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/kamilstanuch/codebase-digest",
   "external_snapshot": {
-    "file_count": 1334,
-    "git_revision": "e6b56beca589f2c96bdb902dd01caa1e5b8a2551",
+    "file_count": 81,
+    "git_revision": "77efab57528cbc825129a94adc521492ac0e65fa",
     "suffix_counts": {
+      ".gif": 1,
       ".in": 1,
-      ".j2": 4,
-      ".js": 7,
-      ".json": 2,
-      ".lock": 1,
-      ".md": 19,
-      ".py": 547,
-      ".sh": 2,
-      ".spec": 1,
-      ".svg": 1,
-      ".toml": 4,
-      ".typed": 3,
-      ".yaml": 1,
-      "<none>": 7
+      ".md": 71,
+      ".py": 4,
+      ".txt": 2,
+      "<none>": 2
     }
   },
-  "generated_at": "2026-06-27T17:16:12Z",
+  "generated_at": "2026-06-27T17:16:46Z",
   "license_review": {
-    "detected_license": "MIT License",
-    "message": "Allowed license detected: MIT License",
-    "status": "passed"
+    "detected_license": "",
+    "message": "license-incompatible risk: no LICENSE file detected",
+    "status": "blocked"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/OpenHands/software-agent-sdk --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/kamilstanuch/codebase-digest --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 5,
-      "minimum_expected_behavior_tests": 10,
-      "prioritized_component_count": 5,
-      "task_dimension_count": 5
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 4,
+      "prioritized_component_count": 0,
+      "task_dimension_count": 4
     },
-    "component_gaps": [
-      {
-        "component": "workflow_ci",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 30287,
-        "own_files": 12,
-        "representative_external_files": [
-          ".pre-commit-config.yaml",
-          "pyproject.toml",
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md"
-        ]
-      },
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 11416,
-        "own_files": 12,
-        "representative_external_files": [
-          "README.md",
-          "AGENTS.md",
-          "openhands-agent-server/pyproject.toml",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/file_router.py"
-        ]
-      },
-      {
-        "component": "plugin_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 4794,
-        "own_files": 12,
-        "representative_external_files": [
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "openhands-agent-server/pyproject.toml",
-          "openhands-agent-server/openhands/agent_server/vscode_service.py"
-        ]
-      },
-      {
-        "component": "safety_policy",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 3527,
-        "own_files": 12,
-        "representative_external_files": [
-          "pyproject.toml",
-          "README.md",
-          "AGENTS.md",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/file_router.py"
-        ]
-      },
-      {
-        "component": "benchmark_eval",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 569,
-        "own_files": 12,
-        "representative_external_files": [
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/event_service.py"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -123,10 +43,10 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "README.md",
-            "AGENTS.md",
-            "openhands-agent-server/pyproject.toml",
-            "openhands-agent-server/AGENTS.md",
-            "openhands-agent-server/openhands/agent_server/file_router.py"
+            "prompt_library/architecture_layer_identification.md",
+            "prompt_library/business_model_canvas_analysis.md",
+            "prompt_library/kano_model_analysis.md",
+            "prompt_library/architecture_api_conformance_check.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -136,10 +56,8 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "README.md",
-            "CONTRIBUTING.md",
-            "AGENTS.md",
-            "openhands-agent-server/pyproject.toml",
-            "openhands-agent-server/openhands/agent_server/vscode_service.py"
+            "prompt_library/ansoff_matrix_analysis.md",
+            "codebase_digest/app.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -158,19 +76,6 @@
           "priority": "P0",
           "task_id": "retort-depth-review-pipeline",
           "title": "Deepen review_pipeline"
-        },
-        {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
         },
         {
           "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
@@ -254,50 +159,16 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 607,
-          "own_marker_hits": 1676,
+          "external_marker_hits": 74,
+          "own_marker_hits": 1730,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CONTRIBUTING.md",
-            "AGENTS.md",
-            "openhands-agent-server/AGENTS.md",
-            "openhands-tools/openhands/tools/file_editor/editor.py",
-            "openhands-tools/openhands/tools/workflow/definition.py"
-          ]
-        },
-        {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 4,
-          "own_marker_hits": 54,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "AGENTS.md",
-            "openhands-agent-server/pyproject.toml",
-            "openhands-sdk/openhands/sdk/git/git_changes.py",
-            ".github/workflows/assign-reviews.yml"
+            "README.md",
+            "prompt_library/learning_frontend_code_analysis.md",
+            "prompt_library/evolution_technical_debt_estimation.md",
+            "prompt_library/business_model_canvas_analysis.md",
+            "prompt_library/swot_analysis.md"
           ]
         },
         {
@@ -325,23 +196,19 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 7,
+          "external_marker_hits": 1,
           "own_marker_hits": 22,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
-            "tests/cross/test_remote_conversation_live_server.py",
-            "examples/02_remote_agent_server/12_settings_and_secrets_api.py",
-            "examples/02_remote_agent_server/13_workspace_get_llm.py",
-            "examples/01_standalone_sdk/45_parallel_tool_execution.py"
+            "prompt_library/quality_code_documentation_coverage_analysis.md"
           ]
         },
         {
           "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "component": "benchmark_eval",
-          "depth_gap": 569,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
             "dimension": "feedback_loop_closure",
@@ -362,23 +229,23 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 1167,
-          "own_marker_hits": 598,
+          "external_marker_hits": 58,
+          "own_marker_hits": 490,
           "priority": "P0",
-          "similarity_score": 92,
+          "similarity_score": 100,
           "source_files": [
             "README.md",
-            "CONTRIBUTING.md",
-            "AGENTS.md",
-            "openhands-agent-server/AGENTS.md",
-            "openhands-agent-server/openhands/agent_server/event_service.py"
+            "prompt_library/architecture_coupling_cohesion_analysis.md",
+            "prompt_library/swot_analysis.md",
+            "prompt_library/blue_ocean_strategy_analysis.md",
+            "prompt_library/performance_scalability_analysis.md"
           ]
         },
         {
           "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "component": "safety_policy",
-          "depth_gap": 3527,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -397,23 +264,23 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 3843,
-          "own_marker_hits": 316,
+          "external_marker_hits": 27,
+          "own_marker_hits": 331,
           "priority": "P0",
-          "similarity_score": 86,
+          "similarity_score": 100,
           "source_files": [
-            "pyproject.toml",
             "README.md",
-            "AGENTS.md",
-            "openhands-agent-server/AGENTS.md",
-            "openhands-agent-server/openhands/agent_server/file_router.py"
+            "setup.py",
+            "prompt_library/swot_analysis.md",
+            "prompt_library/security_vulnerability_analysis.md",
+            "prompt_library/learning_code_review_checklist.md"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 30287,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -432,16 +299,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 32406,
-          "own_marker_hits": 2119,
+          "external_marker_hits": 296,
+          "own_marker_hits": 2242,
           "priority": "P0",
-          "similarity_score": 85,
+          "similarity_score": 100,
           "source_files": [
-            ".pre-commit-config.yaml",
-            "pyproject.toml",
+            "update_package.py",
             "README.md",
-            "CONTRIBUTING.md",
-            "AGENTS.md"
+            "setup.py",
+            "prompt_library/learning_code_analogies_metaphors.md",
+            "prompt_library/learning_frontend_code_analysis.md"
           ]
         }
       ],
@@ -450,7 +317,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 6,
+        "focused_component_count": 5,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -461,26 +328,24 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 11609,
+          "external_marker_hits": 33,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "README.md",
-            "AGENTS.md",
-            "openhands-agent-server/pyproject.toml",
-            "openhands-agent-server/AGENTS.md",
-            "openhands-agent-server/openhands/agent_server/file_router.py"
+            "prompt_library/architecture_layer_identification.md",
+            "prompt_library/business_model_canvas_analysis.md",
+            "prompt_library/kano_model_analysis.md",
+            "prompt_library/architecture_api_conformance_check.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 5194,
+          "external_marker_hits": 10,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "README.md",
-            "CONTRIBUTING.md",
-            "AGENTS.md",
-            "openhands-agent-server/pyproject.toml",
-            "openhands-agent-server/openhands/agent_server/vscode_service.py"
+            "prompt_library/ansoff_matrix_analysis.md",
+            "codebase_digest/app.py"
           ]
         }
       ]
@@ -489,123 +354,92 @@
       "benchmark_eval": {
         "files": [
           "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/event_service.py",
-          "openhands-agent-server/openhands/agent_server/models.py",
-          "openhands-agent-server/openhands/agent_server/api.py",
-          "openhands-tools/openhands/tools/file_editor/exceptions.py",
-          "openhands-tools/openhands/tools/file_editor/editor.py",
-          "openhands-tools/openhands/tools/preset/subagents/web_researcher.md",
-          "openhands-tools/openhands/tools/workflow/impl.py",
-          "openhands-tools/openhands/tools/browser_use/server.py"
+          "prompt_library/architecture_coupling_cohesion_analysis.md",
+          "prompt_library/swot_analysis.md",
+          "prompt_library/blue_ocean_strategy_analysis.md",
+          "prompt_library/performance_scalability_analysis.md",
+          "prompt_library/okr_analysis.md",
+          "prompt_library/lean_canvas_analysis.md",
+          "prompt_library/learning_code_style_readability_analysis.md",
+          "prompt_library/ansoff_matrix_analysis.md",
+          "prompt_library/mckinsey_7s_analysis.md",
+          "prompt_library/porters_five_forces_analysis.md",
+          "prompt_library/value_chain_analysis.md"
         ],
-        "marker_hits": 1167
+        "marker_hits": 58
       },
       "diff_hunk_review": {
         "files": [
-          "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
-          "tests/cross/test_remote_conversation_live_server.py",
-          "examples/02_remote_agent_server/12_settings_and_secrets_api.py",
-          "examples/02_remote_agent_server/13_workspace_get_llm.py",
-          "examples/01_standalone_sdk/45_parallel_tool_execution.py"
+          "prompt_library/quality_code_documentation_coverage_analysis.md"
         ],
-        "marker_hits": 7
-      },
-      "file_grouping": {
-        "files": [
-          "AGENTS.md",
-          "openhands-agent-server/pyproject.toml",
-          "openhands-sdk/openhands/sdk/git/git_changes.py",
-          ".github/workflows/assign-reviews.yml"
-        ],
-        "marker_hits": 4
+        "marker_hits": 1
       },
       "plugin_surface": {
         "files": [
           "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "openhands-agent-server/pyproject.toml",
-          "openhands-agent-server/openhands/agent_server/vscode_service.py",
-          "openhands-agent-server/openhands/agent_server/event_service.py",
-          "openhands-agent-server/openhands/agent_server/conversation_service.py",
-          "openhands-agent-server/openhands/agent_server/llm_router.py",
-          "openhands-agent-server/openhands/agent_server/skills_service.py",
-          "openhands-agent-server/openhands/agent_server/api.py",
-          "openhands-agent-server/openhands/agent_server/plugins_service.py",
-          "openhands-agent-server/openhands/agent_server/plugins_router.py"
+          "prompt_library/ansoff_matrix_analysis.md",
+          "codebase_digest/app.py"
         ],
-        "marker_hits": 5194
+        "marker_hits": 10
       },
       "provider_surface": {
         "files": [
           "README.md",
-          "AGENTS.md",
-          "openhands-agent-server/pyproject.toml",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/file_router.py",
-          "openhands-agent-server/openhands/agent_server/conversation_router.py",
-          "openhands-agent-server/openhands/agent_server/vscode_router.py",
-          "openhands-agent-server/openhands/agent_server/event_service.py",
-          "openhands-agent-server/openhands/agent_server/event_router.py",
-          "openhands-agent-server/openhands/agent_server/conversation_service.py",
-          "openhands-agent-server/openhands/agent_server/settings_router.py",
-          "openhands-agent-server/openhands/agent_server/mcp_router.py"
+          "prompt_library/architecture_layer_identification.md",
+          "prompt_library/business_model_canvas_analysis.md",
+          "prompt_library/kano_model_analysis.md",
+          "prompt_library/architecture_api_conformance_check.md",
+          "prompt_library/lean_canvas_analysis.md",
+          "prompt_library/porters_five_forces_analysis.md",
+          "prompt_library/tech_adoption_lifecycle_analysis.md",
+          "prompt_library/architecture_api_client_code_generation.md"
         ],
-        "marker_hits": 11609
+        "marker_hits": 33
       },
       "review_pipeline": {
         "files": [
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-tools/openhands/tools/file_editor/editor.py",
-          "openhands-tools/openhands/tools/workflow/definition.py",
-          "openhands-sdk/openhands/sdk/settings/acp_providers.py",
-          "openhands-sdk/openhands/sdk/llm/llm.py",
-          "openhands-sdk/openhands/sdk/llm/mixins/fn_call_examples.py",
-          "openhands-sdk/openhands/sdk/llm/utils/verified_models.py",
-          "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
-          "openhands-sdk/openhands/sdk/security/risk.py",
-          "openhands-sdk/openhands/sdk/plugin/types.py"
+          "README.md",
+          "prompt_library/learning_frontend_code_analysis.md",
+          "prompt_library/evolution_technical_debt_estimation.md",
+          "prompt_library/business_model_canvas_analysis.md",
+          "prompt_library/swot_analysis.md",
+          "prompt_library/blue_ocean_strategy_analysis.md",
+          "prompt_library/kano_model_analysis.md",
+          "prompt_library/okr_analysis.md",
+          "prompt_library/learning_backend_code_analysis.md",
+          "prompt_library/lean_canvas_analysis.md",
+          "prompt_library/learning_code_style_readability_analysis.md",
+          "prompt_library/ansoff_matrix_analysis.md"
         ],
-        "marker_hits": 607
+        "marker_hits": 74
       },
       "safety_policy": {
         "files": [
-          "pyproject.toml",
           "README.md",
-          "AGENTS.md",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/file_router.py",
-          "openhands-agent-server/openhands/agent_server/conversation_router.py",
-          "openhands-agent-server/openhands/agent_server/event_service.py",
-          "openhands-agent-server/openhands/agent_server/conversation_service.py",
-          "openhands-agent-server/openhands/agent_server/settings_router.py",
-          "openhands-agent-server/openhands/agent_server/mcp_router.py",
-          "openhands-agent-server/openhands/agent_server/config.py",
-          "openhands-agent-server/openhands/agent_server/models.py"
+          "setup.py",
+          "prompt_library/swot_analysis.md",
+          "prompt_library/security_vulnerability_analysis.md",
+          "prompt_library/learning_code_review_checklist.md",
+          "codebase_digest/app.py"
         ],
-        "marker_hits": 3843
+        "marker_hits": 27
       },
       "workflow_ci": {
         "files": [
-          ".pre-commit-config.yaml",
-          "pyproject.toml",
+          "update_package.py",
           "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "DEVELOPMENT.md",
-          "openhands-agent-server/pyproject.toml",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/file_router.py",
-          "openhands-agent-server/openhands/agent_server/vscode_service.py",
-          "openhands-agent-server/openhands/agent_server/conversation_router.py",
-          "openhands-agent-server/openhands/agent_server/event_service.py"
+          "setup.py",
+          "prompt_library/learning_code_analogies_metaphors.md",
+          "prompt_library/learning_frontend_code_analysis.md",
+          "prompt_library/learning_mini_lesson_generation.md",
+          "prompt_library/architecture_database_schema_documentation.md",
+          "prompt_library/stakeholder_persona_generation.md",
+          "prompt_library/architecture_layer_identification.md",
+          "prompt_library/evolution_technical_debt_estimation.md",
+          "prompt_library/architecture_coupling_cohesion_analysis.md",
+          "prompt_library/business_model_canvas_analysis.md"
         ],
-        "marker_hits": 32406
+        "marker_hits": 296
       }
     },
     "own_file_groups": {
@@ -624,7 +458,7 @@
           "retort_engine/contracts.py",
           "retort_engine/self_evolution.py"
         ],
-        "marker_hits": 598
+        "marker_hits": 490
       },
       "diff_hunk_review": {
         "files": [
@@ -645,15 +479,15 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
+          "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md",
-          "docs/retort_external_review_report.json"
+          "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 54
+        "marker_hits": 61
       },
       "plugin_surface": {
         "files": [
@@ -670,7 +504,7 @@
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js"
         ],
-        "marker_hits": 400
+        "marker_hits": 424
       },
       "provider_surface": {
         "files": [
@@ -687,7 +521,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/runtime_adapter.py"
         ],
-        "marker_hits": 193
+        "marker_hits": 204
       },
       "review_pipeline": {
         "files": [
@@ -704,7 +538,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 1676
+        "marker_hits": 1730
       },
       "safety_policy": {
         "files": [
@@ -721,7 +555,7 @@
           "retort_engine/architecture_memory.py",
           "retort_engine/review_context_bias.py"
         ],
-        "marker_hits": 316
+        "marker_hits": 331
       },
       "workflow_ci": {
         "files": [
@@ -738,7 +572,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 2119
+        "marker_hits": 2242
       }
     },
     "pipeline_stages": [
@@ -750,144 +584,58 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
-        "component": "workflow_ci",
-        "priority": "P0",
-        "source_files": [
-          ".pre-commit-config.yaml",
-          "pyproject.toml",
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "README.md",
-          "AGENTS.md",
-          "openhands-agent-server/pyproject.toml",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/file_router.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
-        "component": "plugin_surface",
-        "priority": "P0",
-        "source_files": [
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "openhands-agent-server/pyproject.toml",
-          "openhands-agent-server/openhands/agent_server/vscode_service.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
-        "source_files": [
-          "pyproject.toml",
-          "README.md",
-          "AGENTS.md",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/file_router.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested benchmark_eval behavior, not only a recorded signal.",
-        "component": "benchmark_eval",
-        "priority": "P0",
-        "source_files": [
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "openhands-agent-server/AGENTS.md",
-          "openhands-agent-server/openhands/agent_server/event_service.py"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260627171611-61b3c3e350",
+  "run_id": "20260627171646-762694f28f",
   "semantic_review": {
     "external": {
-      "classes": 1765,
-      "cli_markers": 65,
-      "functions": 8367,
-      "source_files": 780,
-      "test_markers": 4152,
-      "workflow_markers": 491
+      "classes": 9,
+      "cli_markers": 0,
+      "functions": 33,
+      "source_files": 75,
+      "test_markers": 21,
+      "workflow_markers": 61
     },
-    "gaps": [
-      {
-        "external_advantage": 1719,
-        "metric": "classes"
-      },
-      {
-        "external_advantage": 36,
-        "metric": "cli_markers"
-      },
-      {
-        "external_advantage": 7616,
-        "metric": "functions"
-      },
-      {
-        "external_advantage": 694,
-        "metric": "source_files"
-      },
-      {
-        "external_advantage": 3909,
-        "metric": "test_markers"
-      }
-    ],
+    "gaps": [],
     "own": {
       "classes": 46,
       "cli_markers": 29,
       "functions": 751,
       "source_files": 86,
       "test_markers": 243,
-      "workflow_markers": 2140
+      "workflow_markers": 2220
     }
   },
   "signal_evidence": {
     "benchmarking": [
       "README.md",
-      "CONTRIBUTING.md",
-      "AGENTS.md",
-      "openhands-agent-server/AGENTS.md",
-      "openhands-agent-server/openhands/agent_server/event_service.py"
-    ],
-    "file_grouping": [
-      "AGENTS.md",
-      "openhands-sdk/openhands/sdk/git/git_changes.py"
+      "prompt_library/architecture_coupling_cohesion_analysis.md",
+      "prompt_library/swot_analysis.md",
+      "prompt_library/blue_ocean_strategy_analysis.md",
+      "prompt_library/performance_scalability_analysis.md"
     ],
     "multi_provider": [
       "README.md",
-      "AGENTS.md",
-      "openhands-agent-server/pyproject.toml",
-      "openhands-agent-server/AGENTS.md",
-      "openhands-agent-server/openhands/agent_server/file_router.py"
+      "prompt_library/architecture_layer_identification.md",
+      "prompt_library/business_model_canvas_analysis.md",
+      "prompt_library/kano_model_analysis.md",
+      "prompt_library/architecture_api_conformance_check.md"
     ],
     "plugin_surface": [
       "README.md",
-      "CONTRIBUTING.md",
-      "AGENTS.md",
-      "openhands-agent-server/AGENTS.md",
-      "openhands-agent-server/openhands/agent_server/conversation_router.py"
+      "prompt_library/architecture_layer_identification.md",
+      "prompt_library/architecture_api_client_code_generation.md",
+      "codebase_digest/app.py"
     ],
     "review_pipeline": [
-      "AGENTS.md",
-      "openhands-tools/openhands/tools/workflow/definition.py",
-      "openhands-sdk/openhands/sdk/subagent/AGENTS.md",
-      "openhands-sdk/openhands/sdk/subagent/load.py"
+      "README.md",
+      "prompt_library/evolution_technical_debt_estimation.md",
+      "prompt_library/quality_code_style_consistency_analysis.md",
+      "prompt_library/learning_socratic_dialogue_code_review.md",
+      "prompt_library/learning_code_review_checklist.md"
     ]
   },
-  "source": "https://github.com/OpenHands/software-agent-sdk",
+  "source": "https://github.com/kamilstanuch/codebase-digest",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -895,7 +643,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/OpenHands/software-agent-sdk."
+      "why": "Compare implementation patterns from https://github.com/kamilstanuch/codebase-digest."
     },
     {
       "dimension": "product_operability",
@@ -903,7 +651,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/OpenHands/software-agent-sdk."
+      "why": "Extract usable UX improvements from https://github.com/kamilstanuch/codebase-digest."
     },
     {
       "dimension": "operational_readiness",
@@ -911,7 +659,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/OpenHands/software-agent-sdk."
+      "why": "Adapt CI and release checks from https://github.com/kamilstanuch/codebase-digest."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -920,14 +668,6 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
     },
     {
       "dimension": "feedback_loop_closure",
