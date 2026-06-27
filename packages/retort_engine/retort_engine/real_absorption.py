@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from retort_engine.architecture_memory import build_architecture_record, update_architecture_memory
 from retort_engine.feedback_audit import audit_feedback_closure
 from retort_engine.license_gate import license_gate
 from retort_engine.review_pipeline import build_absorption_review_report
@@ -38,9 +39,20 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     capability_test_path = _capability_test_target(root)
     review_context_bias_path = _review_context_bias_target(root)
     review_context_bias_test_path = _review_context_bias_test_target(root)
+    architecture_memory_path = _architecture_memory_target(root)
     log_path = root / "docs" / "retort_absorption_log.md"
     report_path = root / "docs" / "retort_external_review_report.json"
-    tracked_paths = [absorption_quality_path, module_path, capability_path, capability_test_path, review_context_bias_path, review_context_bias_test_path, log_path, report_path]
+    tracked_paths = [
+        absorption_quality_path,
+        module_path,
+        capability_path,
+        capability_test_path,
+        review_context_bias_path,
+        review_context_bias_test_path,
+        architecture_memory_path,
+        log_path,
+        report_path,
+    ]
     before = _snapshot(tracked_paths)
     review_report = _review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review)
     _write_absorption_quality_helper(absorption_quality_path)
@@ -75,6 +87,20 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         )
     if payload.get("run_local_gates"):
         gates.extend(_local_gate_commands(root, payload))
+    changed_files = _changed_files(before, tracked_paths)
+    architecture_record = build_architecture_record(
+        run_id=run_id,
+        source=source,
+        external_path=external_path,
+        profile=external_profile,
+        review_report=review_report,
+        tasks=tasks,
+        changed_files=changed_files,
+        gates=gates,
+    )
+    architecture_memory = update_architecture_memory(architecture_memory_path, architecture_record)
+    gates.append(_run_command([_python(payload), "-c", "import json,pathlib,sys; data=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); assert data.get('summary')", str(architecture_memory_path)], root, timeout=60))
+    changed_files = _changed_files(before, tracked_paths)
     diff_summary = _git_diff_summary(root, changed_files)
     result = _execution_result(
         "applied" if changed_files else "noop",
@@ -91,6 +117,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["semantic_review"] = semantic_review
     result["capability_module_path"] = str(capability_path)
     result["capability_test_path"] = str(capability_test_path)
+    result["architecture_memory_path"] = str(architecture_memory_path)
+    result["architecture_memory_summary"] = architecture_memory.get("summary") or {}
     result["review_context_bias_path"] = str(review_context_bias_path) if writes_review_context_bias else ""
     result["review_context_bias_test_path"] = str(review_context_bias_test_path) if writes_review_context_bias else ""
     result["review_report_path"] = str(report_path)
@@ -143,6 +171,10 @@ def _capability_target(root: Path) -> Path:
 
 def _capability_test_target(root: Path) -> Path:
     return root / "tests" / "test_absorbed_capabilities.py"
+
+
+def _architecture_memory_target(root: Path) -> Path:
+    return root / "docs" / "retort_architecture_memory.json"
 
 
 def _review_context_bias_target(root: Path) -> Path:

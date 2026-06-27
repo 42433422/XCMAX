@@ -296,6 +296,50 @@ def test_absorption_branch_merge_runs_real_subprocess_and_rollback_rehearsal(tmp
     assert _blocking_git_status(own, own) == ""
 
 
+def test_absorption_merge_after_blocks_failed_gates(tmp_path: Path, monkeypatch) -> None:
+    own = tmp_path / "own"
+    external = tmp_path / "external"
+    init_repo(own)
+    external.mkdir()
+    (external / "README.md").write_text("review pipeline benchmark\n", encoding="utf-8")
+
+    def fake_absorption_cli(own_path: Path, *_args, **_kwargs) -> dict[str, object]:
+        target = own_path / "retort_engine" / "failed_architecture.py"
+        target.parent.mkdir()
+        target.write_text("VALUE = 1\n", encoding="utf-8")
+        return {
+            "status": "applied",
+            "summary": "applied but gates failed",
+            "changed_files": [str(target)],
+            "gates": [{"ok": False, "command": ["pytest"], "stdout_tail": "failed"}],
+            "gates_passed": False,
+            "git_diff_summary": ["failed_architecture.py | 1 +"],
+            "review_report_path": "",
+            "employee_results_path": "",
+        }
+
+    monkeypatch.setattr("retort_engine.core._run_real_absorption_cli", fake_absorption_cli)
+
+    result = absorb(
+        {
+            "own_project": str(own),
+            "external_path": str(external),
+            "branch_workflow": True,
+            "absorption_branch": "retort/absorb-failed-gates",
+            "merge_after": True,
+            "use_llm": False,
+        }
+    )
+
+    assert result["execution"]["gates_passed"] is False
+    assert result["execution"]["commit"]["status"] == "committed"
+    assert result["branch_workflow"]["status"] == "merge_blocked_by_gates"
+    assert result["branch_workflow"]["merged"] is False
+    assert result["branch_workflow"]["returned_to_base_branch"] is True
+    assert git(own, "branch", "--show-current") == "main"
+    assert not (own / "retort_engine" / "failed_architecture.py").exists()
+
+
 def test_assessment_ignores_retort_runtime_dirty_state(tmp_path: Path) -> None:
     own = tmp_path / "own"
     init_repo(own)
@@ -668,6 +712,12 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path:
     assert result["gates_passed"] is True
     assert str(project / "retort_engine" / "absorbed_capabilities.py") in result["changed_files"]
     assert str(project / "tests" / "test_absorbed_capabilities.py") in result["changed_files"]
+    assert str(project / "docs" / "retort_architecture_memory.json") in result["changed_files"]
+    assert Path(result["architecture_memory_path"]).is_file()
+    assert result["architecture_memory_summary"]["source_count"] == 1
+    memory = json.loads(Path(result["architecture_memory_path"]).read_text(encoding="utf-8"))
+    assert memory["runs"][0]["source"] == "unit-source"
+    assert memory["component_index"]
     assert str(project / "retort_engine" / "review_context_bias.py") in result["changed_files"]
     assert str(project / "tests" / "test_review_context_bias.py") in result["changed_files"]
     assert Path(result["review_context_bias_path"]).is_file()
