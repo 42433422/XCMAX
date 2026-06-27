@@ -15,6 +15,7 @@ from typing import Any
 
 from retort_engine.contracts import contract_names
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
+from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_review import review_diff
 
 
@@ -87,6 +88,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "pr_review_runtime": "review_diff" in text and "parse_unified_diff" in text and "review-diff" in text,
         "pr_review_api": "/api/review-diff" in text and "pr_review_result" in text,
         "incremental_pr_review": "previous_diff_text" in text and "skipped_existing_change_count" in text,
+        "pr_dry_run": "review-pr" in text and "review_pr_url" in text and "/api/review-pr" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
     }
     tracked = _tracking_state(root)
@@ -337,7 +339,12 @@ class RetortService:
         return record_closed_loop_proof(str(payload.get("project") or "."), payload)
 
     def review_diff(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return review_diff(str(payload.get("diff") or ""), max_comments=int(payload.get("max_comments") or 20))
+        previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")
+        return review_diff(str(payload.get("diff") or ""), max_comments=int(payload.get("max_comments") or 20), previous_diff_text=previous_diff)
+
+    def review_pr(self, payload: dict[str, Any]) -> dict[str, Any]:
+        previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")
+        return review_pr_url(str(payload.get("url") or payload.get("pr_url") or ""), max_comments=int(payload.get("max_comments") or 20), previous_diff_text=previous_diff, max_bytes=int(payload.get("max_bytes") or 500000))
 
     def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or payload.get("project_path") or ".")
@@ -732,6 +739,14 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"pr_review_incremental={pr_review.get('incremental')}")
     evidence.append(f"pr_review_incremental_skipped_count={pr_review.get('incremental_skipped_count')}")
     evidence.append(f"pr_review_incremental_new_count={pr_review.get('incremental_new_count')}")
+    evidence.append(f"pr_dry_run_runtime={pr_review.get('dry_run_runtime')}")
+    evidence.append(f"pr_dry_run_cli={pr_review.get('dry_run_cli')}")
+    evidence.append(f"pr_dry_run_api={pr_review.get('dry_run_api')}")
+    evidence.append(f"pr_dry_run_contract={pr_review.get('dry_run_contract')}")
+    evidence.append(f"pr_dry_run_report_status={pr_review.get('dry_run_report_status')}")
+    evidence.append(f"pr_dry_run_report_pr_url={pr_review.get('dry_run_report_pr_url')}")
+    evidence.append(f"pr_dry_run_report_comment_count={pr_review.get('dry_run_report_comment_count')}")
+    evidence.append(f"pr_dry_run_report_file_count={pr_review.get('dry_run_report_file_count')}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
@@ -749,7 +764,7 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
         evidence.append(f"component_gap_count={len(pipeline.get('component_gaps') or [])}")
         evidence.append(f"prioritized_absorption_count={len(pipeline.get('prioritized_absorptions') or [])}")
         evidence.append(f"minimum_expected_behavior_tests={(pipeline.get('benchmark') or {}).get('minimum_expected_behavior_tests', '')}")
-    employee_results = sorted((project / ".retort" / "employee_results").glob("*.json"))
+    employee_results = _employee_result_files(project)
     if employee_results:
         latest = employee_results[-1]
         evidence.append(f"employee_results_file={latest}")
@@ -867,12 +882,18 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
 
 def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     source = root / "retort_engine" / "pr_review.py"
+    dry_source = root / "retort_engine" / "pr_dry_run.py"
     test = root / "tests" / "test_pr_review.py"
+    dry_test = root / "tests" / "test_pr_dry_run.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
+    dry_report = root / "docs" / "retort_pr_dry_run_report.json"
     source_text = _read(source)
+    dry_source_text = _read(dry_source)
     test_text = _read(test)
+    dry_test_text = _read(dry_test)
+    dry_report_payload = _read_json(dry_report)
     sample_comment_count = 0
     incremental = False
     incremental_skipped_count = 0
@@ -901,8 +922,17 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "incremental": incremental,
         "incremental_skipped_count": incremental_skipped_count,
         "incremental_new_count": incremental_new_count,
-        "behavior_source_files": ["retort_engine/pr_review.py"] if source.is_file() else [],
-        "behavior_test_files": ["tests/test_pr_review.py"] if test.is_file() else [],
+        "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
+        "dry_run_cli": "review-pr" in _read(cli),
+        "dry_run_api": "/api/review-pr" in _read(ui_server),
+        "dry_run_contract": "pr_dry_run_result" in _read(contracts),
+        "dry_run_test_function_count": len(re.findall(r"^\s*def\s+test_", dry_test_text, re.M)),
+        "dry_run_report_status": str(dry_report_payload.get("status") or ""),
+        "dry_run_report_pr_url": str(dry_report_payload.get("pr_url") or ""),
+        "dry_run_report_comment_count": int(((dry_report_payload.get("summary") or {}) if isinstance(dry_report_payload.get("summary"), dict) else {}).get("comment_count") or 0),
+        "dry_run_report_file_count": int(((dry_report_payload.get("summary") or {}) if isinstance(dry_report_payload.get("summary"), dict) else {}).get("file_count") or 0),
+        "behavior_source_files": [item for item, exists in (("retort_engine/pr_review.py", source.is_file()), ("retort_engine/pr_dry_run.py", dry_source.is_file())) if exists],
+        "behavior_test_files": [item for item, exists in (("tests/test_pr_review.py", test.is_file()), ("tests/test_pr_dry_run.py", dry_test.is_file())) if exists],
     }
 
 
@@ -920,9 +950,7 @@ def _latest_absorption_run(root: Path) -> dict[str, Any]:
 
 
 def _latest_employee_execution_mode(root: Path) -> str:
-    result_dir = root / ".retort" / "employee_results"
-    results = sorted(result_dir.glob("*.json")) if result_dir.is_dir() else []
-    for path in reversed(results):
+    for path in reversed(_employee_result_files(root)):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -934,9 +962,7 @@ def _latest_employee_execution_mode(root: Path) -> str:
 
 
 def _latest_employee_worker_review(root: Path) -> dict[str, Any]:
-    result_dir = root / ".retort" / "employee_results"
-    results = sorted(result_dir.glob("*.json")) if result_dir.is_dir() else []
-    for path in reversed(results):
+    for path in reversed(_employee_result_files(root)):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -954,6 +980,13 @@ def _latest_employee_worker_review(root: Path) -> dict[str, Any]:
                 "artifact_exists": bool(artifact_text) and Path(artifact_text).is_file(),
             }
     return {}
+
+
+def _employee_result_files(root: Path) -> list[Path]:
+    result_dir = root / ".retort" / "employee_results"
+    if not result_dir.is_dir():
+        return []
+    return [path for path in sorted(result_dir.glob("*.json")) if not path.name.endswith(".worker_review.json")]
 
 
 def _absorption_external_project_count(root: Path) -> int:
@@ -1225,3 +1258,11 @@ def _read(path: Path) -> str:
         return path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
         return ""
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}

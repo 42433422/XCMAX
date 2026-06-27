@@ -1,0 +1,931 @@
+{
+  "diff_url": "https://github.com/villesau/ai-codereviewer/pull/138.diff",
+  "pr_url": "https://github.com/villesau/ai-codereviewer/pull/138",
+  "review": {
+    "comments": [
+      {
+        "capability": "review_pipeline",
+        "file": "README.md",
+        "line": 47,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "policy_and_contract_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "README.md",
+        "line": 55,
+        "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "severity": "low",
+        "strategy": "policy_and_contract_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "README.md",
+        "line": 73,
+        "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "severity": "low",
+        "strategy": "policy_and_contract_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "action.yml",
+        "line": 18,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "policy_and_contract_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "src/main.ts",
+        "line": 1,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "semantic_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "src/main.ts",
+        "line": 12,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "semantic_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "src/main.ts",
+        "line": 46,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "semantic_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "src/main.ts",
+        "line": 84,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "semantic_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "src/main.ts",
+        "line": 105,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "semantic_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "src/main.ts",
+        "line": 214,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "semantic_review"
+      },
+      {
+        "capability": "review_pipeline",
+        "file": "src/main.ts",
+        "line": 264,
+        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "severity": "info",
+        "strategy": "semantic_review"
+      }
+    ],
+    "files": [
+      {
+        "hunks": [
+          {
+            "changes": [
+              {
+                "line": 44,
+                "text": "          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
+                "type": "context"
+              },
+              {
+                "line": 45,
+                "text": "          OPENAI_API_MODEL: \"gpt-4\" # Optional: defaults to \"gpt-4\"",
+                "type": "context"
+              },
+              {
+                "line": 46,
+                "text": "          exclude: \"**/*.json, **/*.md\" # Optional: exclude patterns separated by commas",
+                "type": "context"
+              },
+              {
+                "line": 47,
+                "text": "          RULES_FILE: \".github/review-rules.txt\" # Optional: path to custom review rules file",
+                "type": "add"
+              },
+              {
+                "line": 48,
+                "text": "```",
+                "type": "context"
+              },
+              {
+                "line": 49,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 50,
+                "text": "4. Replace `your-username` with your GitHub username or organization name where the AI Code Reviewer repository is",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -44,6 +44,7 @@ jobs:"
+          },
+          {
+            "changes": [
+              {
+                "line": 52,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 53,
+                "text": "5. Customize the `exclude` input if you want to ignore certain file patterns from being reviewed.",
+                "type": "context"
+              },
+              {
+                "line": 54,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": null,
+                "text": "6. Commit the changes to your repository, and AI Code Reviewer will start working on your future pull requests.",
+                "type": "delete"
+              },
+              {
+                "line": 55,
+                "text": "6. Optionally, create a custom rules file (e.g., `.github/review-rules.txt`) to provide project-specific review guidelines:",
+                "type": "add"
+              },
+              {
+                "line": 56,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 57,
+                "text": "```txt",
+                "type": "add"
+              },
+              {
+                "line": 58,
+                "text": "- Focus on security vulnerabilities and potential bugs",
+                "type": "add"
+              },
+              {
+                "line": 59,
+                "text": "- Check for proper error handling",
+                "type": "add"
+              },
+              {
+                "line": 60,
+                "text": "- Ensure code follows our team's naming conventions",
+                "type": "add"
+              },
+              {
+                "line": 61,
+                "text": "- Verify that new functions have appropriate input validation",
+                "type": "add"
+              },
+              {
+                "line": 62,
+                "text": "```",
+                "type": "add"
+              },
+              {
+                "line": 63,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 64,
+                "text": "7. Commit the changes to your repository, and AI Code Reviewer will start working on your future pull requests.",
+                "type": "add"
+              },
+              {
+                "line": 65,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 66,
+                "text": "## How It Works",
+                "type": "context"
+              },
+              {
+                "line": 67,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 68,
+                "text": "The AI Code Reviewer GitHub Action retrieves the pull request diff, filters out excluded files, and sends code chunks to",
+                "type": "context"
+              },
+              {
+                "line": 69,
+                "text": "the OpenAI API. It then generates review comments based on the AI's response and adds them to the pull request.",
+                "type": "context"
+              },
+              {
+                "line": 70,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 71,
+                "text": "## Custom Review Rules",
+                "type": "add"
+              },
+              {
+                "line": 72,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 73,
+                "text": "You can provide custom review rules by creating a rules file in your repository and specifying its path with the `RULES_FILE` input parameter. This allows you to:",
+                "type": "add"
+              },
+              {
+                "line": 74,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 75,
+                "text": "- Define project-specific coding standards",
+                "type": "add"
+              },
+              {
+                "line": 76,
+                "text": "- Focus reviews on particular aspects (security, performance, etc.)",
+                "type": "add"
+              },
+              {
+                "line": 77,
+                "text": "- Enforce team conventions and best practices",
+                "type": "add"
+              },
+              {
+                "line": 78,
+                "text": "- Customize the review behavior for different repositories",
+                "type": "add"
+              },
+              {
+                "line": 79,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 80,
+                "text": "The custom rules will be injected into the AI prompt, guiding the review process according to your specifications.",
+                "type": "add"
+              },
+              {
+                "line": 81,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 82,
+                "text": "## Contributing",
+                "type": "context"
+              },
+              {
+                "line": 83,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 84,
+                "text": "Contributions are welcome! Please feel free to submit issues or pull requests to improve the AI Code Reviewer GitHub",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -51,13 +52,33 @@ jobs:"
+          }
+        ],
+        "path": "README.md"
+      },
+      {
+        "hunks": [
+          {
+            "changes": [
+              {
+                "line": 15,
+                "text": "    description: \"Glob patterns to exclude files from the diff analysis\"",
+                "type": "context"
+              },
+              {
+                "line": 16,
+                "text": "    required: false",
+                "type": "context"
+              },
+              {
+                "line": 17,
+                "text": "    default: \"\"",
+                "type": "context"
+              },
+              {
+                "line": 18,
+                "text": "  RULES_FILE:",
+                "type": "add"
+              },
+              {
+                "line": 19,
+                "text": "    description: \"Path to a file containing custom review rules (relative to repository root)\"",
+                "type": "add"
+              },
+              {
+                "line": 20,
+                "text": "    required: false",
+                "type": "add"
+              },
+              {
+                "line": 21,
+                "text": "    default: \"\"",
+                "type": "add"
+              },
+              {
+                "line": 22,
+                "text": "runs:",
+                "type": "context"
+              },
+              {
+                "line": 23,
+                "text": "  using: \"node16\"",
+                "type": "context"
+              },
+              {
+                "line": 24,
+                "text": "  main: \"dist/index.js\"",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -15,6 +15,10 @@ inputs:"
+          }
+        ],
+        "path": "action.yml"
+      },
+      {
+        "hunks": [
+          {
+            "changes": [
+              {
+                "line": null,
+                "text": "import { readFileSync } from \"fs\";",
+                "type": "delete"
+              },
+              {
+                "line": 1,
+                "text": "import { readFileSync, existsSync } from \"fs\";",
+                "type": "add"
+              },
+              {
+                "line": 2,
+                "text": "import { resolve } from \"path\";",
+                "type": "add"
+              },
+              {
+                "line": 3,
+                "text": "import * as core from \"@actions/core\";",
+                "type": "context"
+              },
+              {
+                "line": 4,
+                "text": "import OpenAI from \"openai\";",
+                "type": "context"
+              },
+              {
+                "line": 5,
+                "text": "import { Octokit } from \"@octokit/rest\";",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -1,4 +1,5 @@"
+          },
+          {
+            "changes": [
+              {
+                "line": 9,
+                "text": "const GITHUB_TOKEN: string = core.getInput(\"GITHUB_TOKEN\");",
+                "type": "context"
+              },
+              {
+                "line": 10,
+                "text": "const OPENAI_API_KEY: string = core.getInput(\"OPENAI_API_KEY\");",
+                "type": "context"
+              },
+              {
+                "line": 11,
+                "text": "const OPENAI_API_MODEL: string = core.getInput(\"OPENAI_API_MODEL\");",
+                "type": "context"
+              },
+              {
+                "line": 12,
+                "text": "const RULES_FILE: string = core.getInput(\"RULES_FILE\");",
+                "type": "add"
+              },
+              {
+                "line": 13,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 14,
+                "text": "const octokit = new Octokit({ auth: GITHUB_TOKEN });",
+                "type": "context"
+              },
+              {
+                "line": 15,
+                "text": "",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -8,6 +9,7 @@ import minimatch from \"minimatch\";"
+          },
+          {
+            "changes": [
+              {
+                "line": 43,
+                "text": "  };",
+                "type": "context"
+              },
+              {
+                "line": 44,
+                "text": "}",
+                "type": "context"
+              },
+              {
+                "line": 45,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 46,
+                "text": "function getCustomRules(): string | null {",
+                "type": "add"
+              },
+              {
+                "line": 47,
+                "text": "  if (!RULES_FILE) {",
+                "type": "add"
+              },
+              {
+                "line": 48,
+                "text": "    return null;",
+                "type": "add"
+              },
+              {
+                "line": 49,
+                "text": "  }",
+                "type": "add"
+              },
+              {
+                "line": 50,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 51,
+                "text": "  try {",
+                "type": "add"
+              },
+              {
+                "line": 52,
+                "text": "    const rulesPath = resolve(process.cwd(), RULES_FILE);",
+                "type": "add"
+              },
+              {
+                "line": 53,
+                "text": "    if (existsSync(rulesPath)) {",
+                "type": "add"
+              },
+              {
+                "line": 54,
+                "text": "      const rulesContent = readFileSync(rulesPath, \"utf8\");",
+                "type": "add"
+              },
+              {
+                "line": 55,
+                "text": "      core.info(`Loaded custom rules from: ${RULES_FILE}`);",
+                "type": "add"
+              },
+              {
+                "line": 56,
+                "text": "      return rulesContent.trim();",
+                "type": "add"
+              },
+              {
+                "line": 57,
+                "text": "    } else {",
+                "type": "add"
+              },
+              {
+                "line": 58,
+                "text": "      core.warning(`Rules file not found: ${RULES_FILE}`);",
+                "type": "add"
+              },
+              {
+                "line": 59,
+                "text": "      return null;",
+                "type": "add"
+              },
+              {
+                "line": 60,
+                "text": "    }",
+                "type": "add"
+              },
+              {
+                "line": 61,
+                "text": "  } catch (error) {",
+                "type": "add"
+              },
+              {
+                "line": 62,
+                "text": "    core.warning(`Error reading rules file: ${error}`);",
+                "type": "add"
+              },
+              {
+                "line": 63,
+                "text": "    return null;",
+                "type": "add"
+              },
+              {
+                "line": 64,
+                "text": "  }",
+                "type": "add"
+              },
+              {
+                "line": 65,
+                "text": "}",
+                "type": "add"
+              },
+              {
+                "line": 66,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 67,
+                "text": "async function getDiff(",
+                "type": "context"
+              },
+              {
+                "line": 68,
+                "text": "  owner: string,",
+                "type": "context"
+              },
+              {
+                "line": 69,
+                "text": "  repo: string,",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -41,6 +43,27 @@ async function getPRDetails(): Promise<PRDetails> {"
+          },
+          {
+            "changes": [
+              {
+                "line": 81,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 82,
+                "text": "async function analyzeCode(",
+                "type": "context"
+              },
+              {
+                "line": 83,
+                "text": "  parsedDiff: File[],",
+                "type": "context"
+              },
+              {
+                "line": null,
+                "text": "  prDetails: PRDetails",
+                "type": "delete"
+              },
+              {
+                "line": 84,
+                "text": "  prDetails: PRDetails,",
+                "type": "add"
+              },
+              {
+                "line": 85,
+                "text": "  customRules: string | null",
+                "type": "add"
+              },
+              {
+                "line": 86,
+                "text": "): Promise<Array<{ body: string; path: string; line: number }>> {",
+                "type": "context"
+              },
+              {
+                "line": 87,
+                "text": "  const comments: Array<{ body: string; path: string; line: number }> = [];",
+                "type": "context"
+              },
+              {
+                "line": 88,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 89,
+                "text": "  for (const file of parsedDiff) {",
+                "type": "context"
+              },
+              {
+                "line": 90,
+                "text": "    if (file.to === \"/dev/null\") continue; // Ignore deleted files",
+                "type": "context"
+              },
+              {
+                "line": 91,
+                "text": "    for (const chunk of file.chunks) {",
+                "type": "context"
+              },
+              {
+                "line": null,
+                "text": "      const prompt = createPrompt(file, chunk, prDetails);",
+                "type": "delete"
+              },
+              {
+                "line": 92,
+                "text": "      const prompt = createPrompt(file, chunk, prDetails, customRules);",
+                "type": "add"
+              },
+              {
+                "line": 93,
+                "text": "      const aiResponse = await getAIResponse(prompt);",
+                "type": "context"
+              },
+              {
+                "line": 94,
+                "text": "      if (aiResponse) {",
+                "type": "context"
+              },
+              {
+                "line": 95,
+                "text": "        const newComments = createComment(file, chunk, aiResponse);",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -58,14 +81,15 @@ async function getDiff("
+          },
+          {
+            "changes": [
+              {
+                "line": 102,
+                "text": "  return comments;",
+                "type": "context"
+              },
+              {
+                "line": 103,
+                "text": "}",
+                "type": "context"
+              },
+              {
+                "line": 104,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": null,
+                "text": "function createPrompt(file: File, chunk: Chunk, prDetails: PRDetails): string {",
+                "type": "delete"
+              },
+              {
+                "line": 105,
+                "text": "function createPrompt(file: File, chunk: Chunk, prDetails: PRDetails, customRules: string | null): string {",
+                "type": "add"
+              },
+              {
+                "line": 106,
+                "text": "  const customRulesSection = customRules",
+                "type": "add"
+              },
+              {
+                "line": 107,
+                "text": "    ? `\\n\\nCustom Review Rules:\\n---\\n${customRules}\\n---\\n`",
+                "type": "add"
+              },
+              {
+                "line": 108,
+                "text": "    : '';",
+                "type": "add"
+              },
+              {
+                "line": 109,
+                "text": "",
+                "type": "add"
+              },
+              {
+                "line": 110,
+                "text": "  return `Your task is to review pull requests. Instructions:",
+                "type": "context"
+              },
+              {
+                "line": 111,
+                "text": "- Provide the response in following JSON format:  {\"reviews\": [{\"lineNumber\":  <line_number>, \"reviewComment\": \"<review comment>\"}]}",
+                "type": "context"
+              },
+              {
+                "line": 112,
+                "text": "- Do not give positive comments or compliments.",
+                "type": "context"
+              },
+              {
+                "line": 113,
+                "text": "- Provide comments and suggestions ONLY if there is something to improve, otherwise \"reviews\" should be an empty array.",
+                "type": "context"
+              },
+              {
+                "line": 114,
+                "text": "- Write the comment in GitHub Markdown format.",
+                "type": "context"
+              },
+              {
+                "line": 115,
+                "text": "- Use the given description only for the overall context and only comment the code.",
+                "type": "context"
+              },
+              {
+                "line": null,
+                "text": "- IMPORTANT: NEVER suggest adding comments to the code.",
+                "type": "delete"
+              },
+              {
+                "line": 116,
+                "text": "- IMPORTANT: NEVER suggest adding comments to the code.${customRulesSection}",
+                "type": "add"
+              },
+              {
+                "line": 117,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 118,
+                "text": "Review the following code diff in the file \"${",
+                "type": "context"
+              },
+              {
+                "line": 119,
+                "text": "    file.to",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -78,14 +102,18 @@ async function analyzeCode("
+          },
+          {
+            "changes": [
+              {
+                "line": 211,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": 212,
+                "text": "async function main() {",
+                "type": "context"
+              },
+              {
+                "line": 213,
+                "text": "  const prDetails = await getPRDetails();",
+                "type": "context"
+              },
+              {
+                "line": 214,
+                "text": "  const customRules = getCustomRules();",
+                "type": "add"
+              },
+              {
+                "line": 215,
+                "text": "  let diff: string | null;",
+                "type": "context"
+              },
+              {
+                "line": 216,
+                "text": "  const eventData = JSON.parse(",
+                "type": "context"
+              },
+              {
+                "line": 217,
+                "text": "    readFileSync(process.env.GITHUB_EVENT_PATH ?? \"\", \"utf8\")",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -183,6 +211,7 @@ async function createReviewComment("
+          },
+          {
+            "changes": [
+              {
+                "line": 261,
+                "text": "    );",
+                "type": "context"
+              },
+              {
+                "line": 262,
+                "text": "  });",
+                "type": "context"
+              },
+              {
+                "line": 263,
+                "text": "",
+                "type": "context"
+              },
+              {
+                "line": null,
+                "text": "  const comments = await analyzeCode(filteredDiff, prDetails);",
+                "type": "delete"
+              },
+              {
+                "line": 264,
+                "text": "  const comments = await analyzeCode(filteredDiff, prDetails, customRules);",
+                "type": "add"
+              },
+              {
+                "line": 265,
+                "text": "  if (comments.length > 0) {",
+                "type": "context"
+              },
+              {
+                "line": 266,
+                "text": "    await createReviewComment(",
+                "type": "context"
+              },
+              {
+                "line": 267,
+                "text": "      prDetails.owner,",
+                "type": "context"
+              }
+            ],
+            "header": "@@ -232,7 +261,7 @@ async function main() {"
+          }
+        ],
+        "path": "src/main.ts"
+      }
+    ],
+    "incremental": {
+      "current_added_change_count": 61,
+      "enabled": false,
+      "previous_added_change_count": 0,
+      "previous_diff_supplied": false,
+      "reviewed_new_change_count": 61,
+      "skipped_existing_change_count": 0
+    },
+    "status": "reviewed",
+    "summary": {
+      "capabilities": [
+        "review_pipeline",
+        "plugin_surface",
+        "file_grouping",
+        "multi_provider",
+        "benchmarking"
+      ],
+      "comment_count": 11,
+      "file_count": 3,
+      "hunk_count": 10,
+      "incremental": false,
+      "ready_for_employee_tasking": true,
+      "reviewed_new_change_count": 61,
+      "skipped_existing_change_count": 0
+    },
+    "task_groups": [
+      {
+        "comment_count": 4,
+        "files": [
+          "README.md",
+          "action.yml"
+        ],
+        "strategy": "policy_and_contract_review"
+      },
+      {
+        "comment_count": 7,
+        "files": [
+          "src/main.ts"
+        ],
+        "strategy": "semantic_review"
+      }
+    ]
+  },
+  "status": "reviewed",
+  "summary": {
+    "comment_count": 11,
+    "fetched_bytes": 6455,
+    "file_count": 3,
+    "hunk_count": 10,
+    "incremental": false,
+    "review_status": "reviewed",
+    "task_group_count": 2,
+    "truncated": false
+  }
+}
