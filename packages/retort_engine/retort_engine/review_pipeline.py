@@ -25,8 +25,22 @@ COMPONENT_MARKERS = {
     "safety_policy": ("license", "security", "policy", "permission", "sandbox"),
     "workflow_ci": ("workflow", "pipeline", "ci", "gate", "test"),
     "codebase_graph": ("code graph", "codebase graph", "dependency graph", "call graph", "symbol graph", "imports", "hotspot"),
+    "static_analysis": ("static analysis", "security scan", "scanner", "taint", "rule engine", "ast rule", "vulnerability"),
+    "context_packaging": ("repo map", "repository context", "codebase context", "context pack", "prompt context", "code digest"),
+    "semantic_index": ("semantic index", "symbol index", "language server", "definition", "reference", "xref", "scip", "lsif"),
 }
-DEPTH_FOCUS_COMPONENTS = ("review_pipeline", "diff_hunk_review", "file_grouping", "benchmark_eval", "safety_policy", "workflow_ci", "codebase_graph")
+DEPTH_FOCUS_COMPONENTS = (
+    "review_pipeline",
+    "diff_hunk_review",
+    "file_grouping",
+    "benchmark_eval",
+    "safety_policy",
+    "workflow_ci",
+    "codebase_graph",
+    "static_analysis",
+    "context_packaging",
+    "semantic_index",
+)
 BREADTH_ONLY_COMPONENTS = {"provider_surface", "plugin_surface"}
 MARKETPLACE_CANDIDATES_ENABLED = False
 DIMENSION_COMPONENTS = {
@@ -35,7 +49,7 @@ DIMENSION_COMPONENTS = {
     "feedback_loop_closure": {"benchmark_eval", "workflow_ci"},
     "operational_readiness": {"workflow_ci", "safety_policy"},
     "product_operability": {"review_pipeline"},
-    "architecture_depth": {"codebase_graph", "workflow_ci", "safety_policy"},
+    "architecture_depth": {"codebase_graph", "workflow_ci", "safety_policy", "static_analysis", "context_packaging", "semantic_index"},
 }
 
 
@@ -229,6 +243,9 @@ def _absorption_goal(component: str) -> str:
         "safety_policy": "keep license, secret, permission, and rollback checks in the absorption path",
         "workflow_ci": "prove absorption with repeatable local gates and replay commands",
         "codebase_graph": "locate architecture hotspots and dependency impact before deciding what to absorb",
+        "static_analysis": "scan absorbed diffs for rule-based security and correctness risks before LLM review",
+        "context_packaging": "pack only the highest-value repository context for deep review and employee tasks",
+        "semantic_index": "resolve symbols, definitions, and references before deciding impact and absorption priority",
     }
     return goals.get(component, "deepen the overlapping implementation behavior")
 
@@ -243,6 +260,10 @@ def _evidence_for_component(component: str) -> list[str]:
         return common + ["review JSON with stages and comments"]
     if component == "benchmark_eval":
         return common + ["precision or false-positive benchmark counters"]
+    if component in {"static_analysis", "semantic_index"}:
+        return common + ["machine-readable findings"]
+    if component == "context_packaging":
+        return common + ["bounded context manifest"]
     return common
 
 
@@ -251,7 +272,7 @@ def _employee_task_for_component(component: str) -> dict[str, Any]:
         "task_id": f"retort-depth-{component.replace('_', '-')}",
         "title": f"Deepen {component}",
         "dimension": _dimension_for_component(component),
-        "priority": "P0" if component in {"review_pipeline", "diff_hunk_review", "file_grouping", "codebase_graph"} else "P1",
+        "priority": "P0" if component in {"review_pipeline", "diff_hunk_review", "file_grouping", "codebase_graph", "static_analysis", "context_packaging", "semantic_index"} else "P1",
         "acceptance": _acceptance_for_component(component),
         "evidence_required": _evidence_for_component(component),
         "owner_hint": "fhd-core-maintainer",

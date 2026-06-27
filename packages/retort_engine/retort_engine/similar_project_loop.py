@@ -19,6 +19,13 @@ DEPTH_TERMS = {
     "github action": 8,
     "quality": 8,
     "benchmark": 10,
+    "static analysis": 18,
+    "security scan": 16,
+    "dependency graph": 16,
+    "code graph": 16,
+    "semantic index": 18,
+    "codebase context": 16,
+    "repository context": 16,
 }
 BREADTH_TERMS = {
     "marketplace": 20,
@@ -31,6 +38,19 @@ BREADTH_TERMS = {
 }
 ALLOWED_LICENSES = {"mit", "apache-2.0", "bsd-2-clause", "bsd-3-clause", "isc"}
 DEFAULT_QUERY = "AI PR reviewer"
+CORE_DEPTH_SIGNALS = {
+    "review_pipeline",
+    "file_grouping",
+    "diff_hunk_review",
+    "benchmarking",
+    "benchmark_eval",
+    "safety_policy",
+    "workflow_ci",
+    "codebase_graph",
+    "static_analysis",
+    "context_packaging",
+    "semantic_index",
+}
 
 
 def build_similar_project_radar(
@@ -357,7 +377,7 @@ def _load_absorption_runs(root: Path) -> list[dict[str, Any]]:
 
 def _core_signals(run: dict[str, Any]) -> list[str]:
     signals = [str(item) for item in ((run.get("external_profile") or {}).get("signals") or [])]
-    return [signal for signal in signals if signal in {"review_pipeline", "file_grouping", "benchmarking"}]
+    return [signal for signal in signals if signal in CORE_DEPTH_SIGNALS]
 
 
 def _loop_run_summary(candidate: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:

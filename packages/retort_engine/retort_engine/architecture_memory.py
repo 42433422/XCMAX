@@ -12,6 +12,9 @@ ARCHITECTURE_SIGNAL_COMPONENTS = {
     "diff_hunk_review": ("diff_locality", "patch_reasoning"),
     "benchmarking": ("evaluation_loop", "regression_oracle"),
     "codebase_graph": ("codebase_graph", "context_localization"),
+    "static_analysis": ("static_analysis_gate", "risk_rule_engine"),
+    "context_packaging": ("repo_map_context", "context_budgeting"),
+    "semantic_index": ("semantic_index", "impact_tracing"),
     "plugin_surface": ("automation_surface", "command_contract"),
     "multi_provider": ("provider_boundary", "model_adapter"),
 }
@@ -127,6 +130,12 @@ def _source_specific_components(source: str) -> list[str]:
         components.extend(["issue_reproduction_loop", "patch_attempt_loop"])
     if "openhands" in lowered or "software-agent" in lowered:
         components.extend(["agent_runtime_boundary", "sandbox_execution_harness"])
+    if "semgrep" in lowered or "bandit" in lowered:
+        components.extend(["static_analysis_gate", "risk_rule_engine"])
+    if "repomix" in lowered or "codebase-digest" in lowered:
+        components.extend(["repo_map_context", "context_budgeting"])
+    if "sourcegraph" in lowered or "scip" in lowered or "lsif" in lowered:
+        components.extend(["semantic_index", "impact_tracing"])
     return components
 
 

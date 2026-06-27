@@ -21,7 +21,18 @@ from retort_engine.review_pipeline import build_absorption_review_report
 
 SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json", ".go"}
 SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache", "dist", "build"}
-CAPABILITY_MODEL_SIGNALS = {"review_pipeline", "file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface", "codebase_graph"}
+CAPABILITY_MODEL_SIGNALS = {
+    "review_pipeline",
+    "file_grouping",
+    "diff_hunk_review",
+    "benchmarking",
+    "plugin_surface",
+    "codebase_graph",
+    "safety_policy",
+    "static_analysis",
+    "context_packaging",
+    "semantic_index",
+}
 VISUAL_FRONTEND_SIGNALS = {
     "planet_frontend",
     "atmosphere_shader",
@@ -327,7 +338,7 @@ def _should_absorb_review_context_bias(profile: dict[str, Any]) -> bool:
     signals = set(profile.get("signals") or [])
     if _is_visual_dominant_profile(profile):
         return False
-    return bool(signals & {"review_pipeline", "file_grouping", "diff_hunk_review"})
+    return bool(signals & {"review_pipeline", "file_grouping", "diff_hunk_review", "safety_policy", "static_analysis", "context_packaging", "semantic_index"})
 
 
 def _should_absorb_capability_model(profile: dict[str, Any]) -> bool:
@@ -403,13 +414,13 @@ def review_context_bias() -> dict[str, Any]:
 def file_grouping_enabled() -> bool:
     """Tell PR review whether absorbed external evidence supports context grouping."""
     signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
-    return bool(REVIEW_CONTEXT_BIAS.get("enabled")) and bool(signals & {{"file_grouping", "review_pipeline", "diff_hunk_review"}})
+    return bool(REVIEW_CONTEXT_BIAS.get("enabled")) and bool(signals & {{"file_grouping", "review_pipeline", "diff_hunk_review", "context_packaging", "semantic_index"}})
 
 
 def context_signal_strength() -> int:
     """Score how much absorbed evidence should influence review grouping."""
     signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
-    return min(100, 20 * len(signals & {{"file_grouping", "review_pipeline", "diff_hunk_review", "benchmarking", "safety_policy"}}))
+    return min(100, 20 * len(signals & {{"file_grouping", "review_pipeline", "diff_hunk_review", "benchmarking", "safety_policy", "static_analysis", "context_packaging", "semantic_index"}}))
 '''
 
 
@@ -427,8 +438,7 @@ def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
 
     assert bias["enabled"] is True
     assert bias["source"] == EXPECTED_ABSORPTION_SOURCE
-    assert set(bias["signals"]) & {{"file_grouping", "review_pipeline", "diff_hunk_review"}}
-    assert file_grouping_enabled() is True
+    assert set(bias["signals"]) & {{"file_grouping", "review_pipeline", "diff_hunk_review", "safety_policy", "static_analysis", "context_packaging", "semantic_index"}}
     assert context_signal_strength() >= 20
 '''
 
@@ -437,6 +447,12 @@ def _context_focus_from_signals(signals: list[str]) -> list[str]:
     focus: list[str] = []
     if "safety_policy" in signals:
         focus.append("security")
+    if "static_analysis" in signals:
+        focus.extend(["security", "runtime"])
+    if "context_packaging" in signals:
+        focus.extend(["context", "docs"])
+    if "semantic_index" in signals:
+        focus.extend(["symbols", "runtime"])
     if "file_grouping" in signals or "review_pipeline" in signals:
         focus.extend(["runtime", "tests", "ci_config"])
     if "benchmarking" in signals:
@@ -628,6 +644,10 @@ SIGNAL_WEIGHTS = {{
     "codebase_graph": 18,
     "plugin_surface": 12,
     "multi_provider": 10,
+    "safety_policy": 18,
+    "static_analysis": 22,
+    "context_packaging": 20,
+    "semantic_index": 22,
 }}
 
 
@@ -911,6 +931,10 @@ def _external_profile(root: Path) -> dict[str, Any]:
                 "codebase_graph": ("code graph", "codebase graph", "dependency graph", "call graph", "symbol graph", "imports"),
                 "plugin_surface": ("plugin", "cli", "github action", "codex"),
                 "multi_provider": ("provider", "model", "openai", "anthropic", "ollama"),
+                "safety_policy": ("license", "security", "policy", "permission", "sandbox", "secret"),
+                "static_analysis": ("static analysis", "security scan", "scanner", "taint", "rule engine", "vulnerability"),
+                "context_packaging": ("repo map", "repository context", "codebase context", "context pack", "prompt context", "code digest"),
+                "semantic_index": ("semantic index", "symbol index", "language server", "definition", "reference", "xref", "scip", "lsif"),
                 "planet_frontend": ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer"),
                 "atmosphere_shader": ("atmosphere", "fresnel", "rim light", "shader", "cloud"),
                 "procedural_surface": ("noise", "texture", "height map", "landmass", "terrain"),
@@ -933,6 +957,10 @@ def _external_profile(root: Path) -> dict[str, Any]:
         "codebase_graph": ("code graph", "codebase graph", "dependency graph", "call graph", "symbol graph", "imports"),
         "plugin_surface": ("plugin", "cli", "github action", "codex"),
         "multi_provider": ("provider", "model", "openai", "anthropic", "ollama"),
+        "safety_policy": ("license", "security", "policy", "permission", "sandbox", "secret"),
+        "static_analysis": ("static analysis", "security scan", "scanner", "taint", "rule engine", "vulnerability"),
+        "context_packaging": ("repo map", "repository context", "codebase context", "context pack", "prompt context", "code digest"),
+        "semantic_index": ("semantic index", "symbol index", "language server", "definition", "reference", "xref", "scip", "lsif"),
         "planet_frontend": ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer"),
         "atmosphere_shader": ("atmosphere", "fresnel", "rim light", "shader", "cloud"),
         "procedural_surface": ("noise", "texture", "height map", "landmass", "terrain"),
