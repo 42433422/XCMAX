@@ -50,6 +50,9 @@ def test_external_profile_detects_signals_suffix_counts_and_git_revision(tmp_pat
     write(external / "graph" / "codebase.py", "codebase graph dependency graph call graph symbol graph imports hotspot\n")
     write(external / "plugins" / "action.yml", "plugin cli github action codex\n")
     write(external / "providers" / "models.py", "provider model openai anthropic ollama\n")
+    write(external / "security" / "rules.py", "static analysis security scan scanner taint rule engine vulnerability secret\n")
+    write(external / "context" / "pack.md", "repo map repository context codebase context context pack prompt context code digest\n")
+    write(external / "index" / "symbols.py", "semantic index symbol index language server definition reference xref scip lsif\n")
     git(external, "add", ".")
     git(external, "commit", "-m", "signals")
 
@@ -65,6 +68,10 @@ def test_external_profile_detects_signals_suffix_counts_and_git_revision(tmp_pat
         "codebase_graph",
         "plugin_surface",
         "multi_provider",
+        "safety_policy",
+        "static_analysis",
+        "context_packaging",
+        "semantic_index",
     }
     assert profile["signal_evidence"]["review_pipeline"] == ["review/pipeline.py"]
     assert profile["signal_evidence"]["file_grouping"] == ["review/grouping.ts"]
@@ -72,6 +79,10 @@ def test_external_profile_detects_signals_suffix_counts_and_git_revision(tmp_pat
     assert profile["signal_evidence"]["codebase_graph"] == ["graph/codebase.py"]
     assert profile["signal_evidence"]["plugin_surface"] == ["plugins/action.yml"]
     assert profile["signal_evidence"]["multi_provider"] == ["providers/models.py"]
+    assert profile["signal_evidence"]["safety_policy"] == ["security/rules.py"]
+    assert profile["signal_evidence"]["static_analysis"] == ["security/rules.py"]
+    assert profile["signal_evidence"]["context_packaging"] == ["context/pack.md"]
+    assert profile["signal_evidence"]["semantic_index"] == ["index/symbols.py"]
 
 
 def test_external_profile_ignores_runtime_and_dependency_directories(tmp_path: Path) -> None:
@@ -205,6 +216,9 @@ def test_review_context_bias_is_only_written_for_context_signals() -> None:
     assert real._should_absorb_review_context_bias({"signals": ["review_pipeline"]}) is True
     assert real._should_absorb_review_context_bias({"signals": ["file_grouping"]}) is True
     assert real._should_absorb_review_context_bias({"signals": ["diff_hunk_review"]}) is True
+    assert real._should_absorb_review_context_bias({"signals": ["static_analysis"]}) is True
+    assert real._should_absorb_review_context_bias({"signals": ["context_packaging"]}) is True
+    assert real._should_absorb_review_context_bias({"signals": ["semantic_index"]}) is True
 
 
 def test_capability_model_is_only_written_for_review_depth_signals() -> None:
@@ -214,6 +228,9 @@ def test_capability_model_is_only_written_for_review_depth_signals() -> None:
     assert real._should_absorb_capability_model({"signals": ["benchmarking"]}) is True
     assert real._should_absorb_capability_model({"signals": ["codebase_graph"]}) is True
     assert real._should_absorb_capability_model({"signals": ["plugin_surface"]}) is True
+    assert real._should_absorb_capability_model({"signals": ["static_analysis"]}) is True
+    assert real._should_absorb_capability_model({"signals": ["context_packaging"]}) is True
+    assert real._should_absorb_capability_model({"signals": ["semantic_index"]}) is True
 
 
 def test_visual_dominant_project_does_not_overwrite_review_capability_model() -> None:

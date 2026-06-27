@@ -168,6 +168,27 @@ def test_depth_workflow_rejects_non_same_direction_components_even_when_requeste
     assert workflow["quality_gate"]["passed"] is False
 
 
+def test_depth_workflow_keeps_frontier_depth_components_when_overlapping() -> None:
+    own_groups = {
+        "codebase_graph": {"files": ["own/graph.py"], "marker_hits": 5},
+        "static_analysis": {"files": ["own/rules.py"], "marker_hits": 4},
+        "context_packaging": {"files": ["own/context.py"], "marker_hits": 3},
+        "semantic_index": {"files": ["own/symbols.py"], "marker_hits": 3},
+    }
+    external_groups = {
+        "static_analysis": {"files": ["external/scan.py"], "marker_hits": 40},
+        "context_packaging": {"files": ["external/pack.py"], "marker_hits": 30},
+        "semantic_index": {"files": ["external/index.py"], "marker_hits": 28},
+    }
+
+    workflow = build_depth_absorption_workflow(own_groups, external_groups, [{"task_id": "architecture", "title": "frontier depth", "dimension": "architecture_depth"}])
+
+    focused = {item["component"]: item for item in workflow["focused_components"]}
+    assert {"static_analysis", "context_packaging", "semantic_index"} <= set(focused)
+    assert focused["static_analysis"]["priority"] == "P0"
+    assert workflow["quality_gate"]["passed"] is True
+
+
 def test_build_absorption_review_report_preserves_pipeline_contract(tmp_path: Path) -> None:
     own = tmp_path / "own"
     external = tmp_path / "external"
