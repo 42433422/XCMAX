@@ -31,7 +31,7 @@
       "<none>": 5
     }
   },
-  "generated_at": "2026-06-27T14:53:17Z",
+  "generated_at": "2026-06-27T14:55:42Z",
   "license_review": {
     "detected_license": "Apache License",
     "message": "Allowed license detected: Apache License",
@@ -52,7 +52,7 @@
         "component": "provider_surface",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 4144,
+        "marker_gap": 4135,
         "own_files": 12,
         "representative_external_files": [
           "CHANGELOG.md",
@@ -66,7 +66,7 @@
         "component": "workflow_ci",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 1517,
+        "marker_gap": 1506,
         "own_files": 12,
         "representative_external_files": [
           "CODE_OF_CONDUCT.md",
@@ -92,6 +92,34 @@
       }
     ],
     "depth_absorption_workflow": {
+      "deferred_breadth_components": [
+        {
+          "component": "provider_surface",
+          "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
+          "reason": "early_phase_retort_self_deepening_only",
+          "source_files": [
+            "CHANGELOG.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "AGENTS.md",
+            "SECURITY.md"
+          ],
+          "status": "closed_until_similarity_saturation"
+        },
+        {
+          "component": "plugin_surface",
+          "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
+          "reason": "early_phase_retort_self_deepening_only",
+          "source_files": [
+            "README.md",
+            "RELEASE_NOTES.md",
+            "AGENTS.md",
+            "SECURITY.md",
+            "docker/mosaico/README.md"
+          ],
+          "status": "closed_until_similarity_saturation"
+        }
+      ],
       "employee_tasks": [
         {
           "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
@@ -203,7 +231,7 @@
             "review JSON with stages and comments"
           ],
           "external_marker_hits": 1282,
-          "own_marker_hits": 1314,
+          "own_marker_hits": 1311,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
@@ -238,7 +266,7 @@
             "gate output"
           ],
           "external_marker_hits": 5,
-          "own_marker_hits": 48,
+          "own_marker_hits": 49,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
@@ -274,7 +302,7 @@
             "precision or false-positive benchmark counters"
           ],
           "external_marker_hits": 35,
-          "own_marker_hits": 337,
+          "own_marker_hits": 340,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
@@ -309,7 +337,7 @@
             "gate output"
           ],
           "external_marker_hits": 267,
-          "own_marker_hits": 286,
+          "own_marker_hits": 284,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
@@ -324,7 +352,7 @@
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 1517,
+          "depth_gap": 1506,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -344,7 +372,7 @@
             "gate output"
           ],
           "external_marker_hits": 3081,
-          "own_marker_hits": 1564,
+          "own_marker_hits": 1575,
           "priority": "P0",
           "similarity_score": 92,
           "source_files": [
@@ -393,53 +421,15 @@
           ]
         }
       ],
-      "marketplace_candidates": [
-        {
-          "acceptance": "provider_surface is packaged as an AI employee candidate instead of widening Retort core.",
-          "component": "provider_surface",
-          "core_absorption": "blocked_for_early_phase_depth_only",
-          "evidence_required": [
-            "external capability summary",
-            "target user workflow",
-            "sandboxed employee task",
-            "market listing acceptance test"
-          ],
-          "marketplace_employee_type": "model-provider-integration-employee",
-          "route": "ai_employee_marketplace",
-          "source_files": [
-            "CHANGELOG.md",
-            "README.md",
-            "RELEASE_NOTES.md",
-            "AGENTS.md",
-            "SECURITY.md"
-          ]
-        },
-        {
-          "acceptance": "plugin_surface is packaged as an AI employee candidate instead of widening Retort core.",
-          "component": "plugin_surface",
-          "core_absorption": "blocked_for_early_phase_depth_only",
-          "evidence_required": [
-            "external capability summary",
-            "target user workflow",
-            "sandboxed employee task",
-            "market listing acceptance test"
-          ],
-          "marketplace_employee_type": "plugin-packaging-employee",
-          "route": "ai_employee_marketplace",
-          "source_files": [
-            "README.md",
-            "RELEASE_NOTES.md",
-            "AGENTS.md",
-            "SECURITY.md",
-            "docker/mosaico/README.md"
-          ]
-        }
-      ],
+      "marketplace_candidates": [],
+      "marketplace_candidates_enabled": false,
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
+        "deferred_breadth_component_count": 2,
         "focused_component_count": 6,
         "kept_breadth_component_count": 0,
-        "marketplace_candidate_count": 2,
+        "marketplace_candidate_count": 0,
+        "marketplace_candidates_enabled": false,
         "minimum_focused_component_count": 3,
         "passed": true,
         "rejected_breadth_component_count": 2
@@ -617,7 +607,7 @@
           "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py"
         ],
-        "marker_hits": 337
+        "marker_hits": 340
       },
       "diff_hunk_review": {
         "files": [
@@ -643,7 +633,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 48
+        "marker_hits": 49
       },
       "plugin_surface": {
         "files": [
@@ -660,7 +650,7 @@
           "tests/test_review_pipeline.py",
           "tests/test_complex_pr_replay.py"
         ],
-        "marker_hits": 314
+        "marker_hits": 324
       },
       "provider_surface": {
         "files": [
@@ -677,7 +667,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 187
+        "marker_hits": 196
       },
       "review_pipeline": {
         "files": [
@@ -694,7 +684,7 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py"
         ],
-        "marker_hits": 1314
+        "marker_hits": 1311
       },
       "safety_policy": {
         "files": [
@@ -711,7 +701,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/ui_server.py"
         ],
-        "marker_hits": 286
+        "marker_hits": 284
       },
       "workflow_ci": {
         "files": [
@@ -728,7 +718,7 @@
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py"
         ],
-        "marker_hits": 1564
+        "marker_hits": 1575
       }
     },
     "pipeline_stages": [
@@ -779,7 +769,7 @@
       }
     ]
   },
-  "run_id": "20260627145316-dbc443423e",
+  "run_id": "20260627145542-dbc443423e",
   "semantic_review": {
     "external": {
       "classes": 518,
@@ -795,7 +785,7 @@
         "metric": "classes"
       },
       {
-        "external_advantage": 1696,
+        "external_advantage": 1692,
         "metric": "functions"
       },
       {
@@ -803,17 +793,17 @@
         "metric": "source_files"
       },
       {
-        "external_advantage": 871,
+        "external_advantage": 870,
         "metric": "test_markers"
       }
     ],
     "own": {
       "classes": 46,
       "cli_markers": 26,
-      "functions": 583,
+      "functions": 587,
       "source_files": 74,
-      "test_markers": 168,
-      "workflow_markers": 1646
+      "test_markers": 169,
+      "workflow_markers": 1651
     }
   },
   "signal_evidence": {
