@@ -902,7 +902,8 @@ def _git_root(path: Path) -> Path | None:
 
 
 def _blocking_git_status(root: Path, project: Path) -> str:
-    status = _git(root, "status", "--short")
+    rel = _project_status_path(root, project)
+    status = _git(root, "status", "--short", "--", rel)
     prefixes = _runtime_status_prefixes(root, project)
     blocking: list[str] = []
     for line in status.splitlines():
@@ -913,6 +914,14 @@ def _blocking_git_status(root: Path, project: Path) -> str:
             continue
         blocking.append(line)
     return "\n".join(blocking)
+
+
+def _project_status_path(root: Path, project: Path) -> str:
+    try:
+        rel = project.resolve().relative_to(root.resolve())
+    except ValueError:
+        return "."
+    return "." if str(rel) == "." else str(rel)
 
 
 def _runtime_status_prefixes(root: Path, project: Path) -> tuple[str, ...]:
