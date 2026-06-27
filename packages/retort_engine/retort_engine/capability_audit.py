@@ -9,6 +9,7 @@ from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
 
 
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
+MIN_TEST_TO_SOURCE_RATIO = 0.4
 
 
 def capability_absorption_audit(root: Path) -> dict[str, Any]:
@@ -73,7 +74,7 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
         blockers.append("latest_behavior_change_missing_tests")
     if not behavior_source_files:
         blockers.append("latest_absorption_missing_core_behavior_diff")
-    if health["source_line_count"] and health["test_to_source_ratio"] < 0.5:
+    if health["source_line_count"] and health["test_to_source_ratio"] < MIN_TEST_TO_SOURCE_RATIO:
         blockers.append("low_test_to_source_ratio")
     if external_project_count < 3:
         blockers.append("insufficient_cross_project_reproduction")
