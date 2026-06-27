@@ -147,6 +147,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     benchmark_status = ""
     benchmark_score = 0
     benchmark_delta = 0
+    benchmark_sample_count = 0
+    benchmark_baseline_score = 0
+    benchmark_publishable_comment_count = 0
     if source.is_file():
         try:
             from retort_engine.pr_review import review_diff
@@ -162,11 +165,14 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             incremental = bool((incremental_result.get("incremental") or {}).get("enabled"))
             incremental_skipped_count = int((incremental_result.get("summary") or {}).get("skipped_existing_change_count") or 0)
             incremental_new_count = int((incremental_result.get("summary") or {}).get("reviewed_new_change_count") or 0)
-            benchmark = build_review_quality_benchmark(root, sample_count=30, negative_sample_count=4)
+            benchmark = build_review_quality_benchmark(root, sample_count=80, negative_sample_count=4)
             benchmark_summary = benchmark.get("summary") if isinstance(benchmark.get("summary"), dict) else {}
             benchmark_status = str(benchmark.get("status") or "")
+            benchmark_sample_count = int(benchmark_summary.get("sample_count") or 0)
             benchmark_score = int(benchmark_summary.get("aggregate_score") or 0)
+            benchmark_baseline_score = int(benchmark_summary.get("baseline_aggregate_score") or 0)
             benchmark_delta = int(benchmark_summary.get("post_absorption_score_delta") or 0)
+            benchmark_publishable_comment_count = int(benchmark_summary.get("publishable_comment_count") or 0)
         except Exception:
             sample_comment_count = 0
     return {
@@ -182,8 +188,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "incremental_skipped_count": incremental_skipped_count,
         "incremental_new_count": incremental_new_count,
         "benchmark_status": benchmark_status,
+        "benchmark_sample_count": benchmark_sample_count,
         "benchmark_aggregate_score": benchmark_score,
+        "benchmark_baseline_aggregate_score": benchmark_baseline_score,
         "benchmark_post_absorption_delta": benchmark_delta,
+        "benchmark_publishable_comment_count": benchmark_publishable_comment_count,
         "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
         "dry_run_cli": "review-pr" in read_text(cli),
         "dry_run_api": "/api/review-pr" in read_text(ui_server),

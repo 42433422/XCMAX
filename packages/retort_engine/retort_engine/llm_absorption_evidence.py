@@ -46,6 +46,14 @@ def _capability_audit_evidence(audit: dict[str, Any], refactor_execution: dict[s
         f"behavior_test_file_count={len(audit.get('behavior_test_files') or [])}",
         f"test_to_source_ratio={audit.get('test_to_source_ratio', '')}",
     ]
+    hardening = audit.get("post_absorption_hardening") if isinstance(audit.get("post_absorption_hardening"), dict) else {}
+    evidence.extend(
+        [
+            f"post_absorption_hardening_file_count={hardening.get('file_count', '')}",
+            f"post_absorption_hardening_source_count={len(hardening.get('behavior_source_files') or [])}",
+            f"post_absorption_hardening_test_count={len(hardening.get('behavior_test_files') or [])}",
+        ]
+    )
     behavior_test = project / "tests" / "test_absorbed_capabilities.py"
     if behavior_test.is_file():
         behavior_test_count = len(re.findall(r"^\s*def\s+test_", read_text(behavior_test), re.M))
@@ -81,6 +89,8 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_contract={pr_review.get('contract')}",
         f"pr_review_test_function_count={pr_review.get('test_function_count')}",
         f"pr_review_sample_comment_count={pr_review.get('sample_comment_count')}",
+        f"pr_review_publishable_comment_count={pr_review.get('publishable_comment_count')}",
+        f"pr_review_comment_ranking_model={pr_review.get('comment_ranking_model')}",
         f"pr_review_incremental={pr_review.get('incremental')}",
         f"pr_review_incremental_skipped_count={pr_review.get('incremental_skipped_count')}",
         f"pr_review_incremental_new_count={pr_review.get('incremental_new_count')}",
@@ -92,6 +102,12 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_dry_run_report_pr_url={pr_review.get('dry_run_report_pr_url')}",
         f"pr_dry_run_report_comment_count={pr_review.get('dry_run_report_comment_count')}",
         f"pr_dry_run_report_file_count={pr_review.get('dry_run_report_file_count')}",
+        f"pr_review_benchmark_status={pr_review.get('benchmark_status')}",
+        f"pr_review_benchmark_sample_count={pr_review.get('benchmark_sample_count')}",
+        f"pr_review_benchmark_baseline_score={pr_review.get('benchmark_baseline_aggregate_score')}",
+        f"pr_review_benchmark_aggregate_score={pr_review.get('benchmark_aggregate_score')}",
+        f"pr_review_benchmark_post_absorption_delta={pr_review.get('benchmark_post_absorption_delta')}",
+        f"pr_review_benchmark_publishable_comment_count={pr_review.get('benchmark_publishable_comment_count')}",
     ]
 
 

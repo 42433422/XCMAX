@@ -31,3 +31,13 @@ def test_review_quality_benchmark_runs_curated_golden_set(tmp_path: Path) -> Non
     assert result["category_summary"]["fake_fixture_key_no_blocker"]["false_positive_count"] == 0
     assert all(sample["publishable_comment_count"] >= 1 for sample in result["samples"])
     assert validate_contract("review_quality_benchmark_result", result)["valid"] is True
+
+
+def test_review_quality_benchmark_defaults_to_eighty_sample_baseline(tmp_path: Path) -> None:
+    result = build_review_quality_benchmark(tmp_path, negative_sample_count=4)
+
+    assert result["summary"]["sample_count"] == 84
+    assert result["summary"]["target_positive_sample_count"] == 80
+    assert result["summary"]["baseline_aggregate_score"] < result["summary"]["aggregate_score"]
+    assert result["summary"]["post_absorption_score_delta"] > 0
+    assert result["evidence"]["minimum_expected_samples"] == 80
