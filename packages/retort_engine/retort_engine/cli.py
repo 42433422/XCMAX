@@ -7,9 +7,11 @@ from pathlib import Path
 
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
+from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import run_ui_server
@@ -110,6 +112,17 @@ def main(argv: list[str] | None = None) -> int:
     task_report.add_argument("--project", default=".")
     task_report.add_argument("--output", default="")
     task_report.add_argument("--json", action="store_true")
+    quality_benchmark = sub.add_parser("quality-benchmark-report")
+    quality_benchmark.add_argument("--project", default=".")
+    quality_benchmark.add_argument("--sample-count", type=int, default=30)
+    quality_benchmark.add_argument("--output", default="")
+    quality_benchmark.add_argument("--json", action="store_true")
+    scheduler_stress = sub.add_parser("employee-scheduler-stress")
+    scheduler_stress.add_argument("--project", default=".")
+    scheduler_stress.add_argument("--rounds", type=int, default=10)
+    scheduler_stress.add_argument("--tasks-per-round", type=int, default=3)
+    scheduler_stress.add_argument("--output", default="")
+    scheduler_stress.add_argument("--json", action="store_true")
     ui = sub.add_parser("ui")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8790)
@@ -243,6 +256,35 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort task prioritization status: {result['status']}")
             print(f"Prioritized dimensions: {result['summary']['prioritized_dimension_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "quality-benchmark-report":
+        result = build_review_quality_benchmark(args.project, sample_count=args.sample_count)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort quality benchmark status: {result['status']}")
+            print(f"Samples: {result['summary']['sample_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "employee-scheduler-stress":
+        result = run_employee_scheduler_stress(args.project, round_count=args.rounds, tasks_per_round=args.tasks_per_round)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort employee scheduler stress status: {result['status']}")
+            print(f"Rounds: {result['summary']['round_count']}")
+            print(f"Completed: {result['summary']['completed_result_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

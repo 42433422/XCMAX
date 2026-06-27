@@ -4,11 +4,13 @@ from typing import Any
 
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.core import RetortService as LLMRetortService
+from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
 
 
@@ -65,6 +67,16 @@ class RetortService:
     def task_prioritization_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_task_prioritization_report(str(payload.get("project") or payload.get("project_path") or "."))
 
+    def review_quality_benchmark(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_review_quality_benchmark(str(payload.get("project") or payload.get("project_path") or "."), sample_count=int(payload.get("sample_count") or 30))
+
+    def employee_scheduler_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_employee_scheduler_stress(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            round_count=int(payload.get("round_count") or payload.get("rounds") or 10),
+            tasks_per_round=int(payload.get("tasks_per_round") or 3),
+        )
+
 
 def create_app() -> Any:
     service = RetortService()
@@ -113,5 +125,13 @@ def create_app() -> Any:
     @app.post("/task-prioritization-report")
     def task_prioritization_report_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.task_prioritization_report(payload)
+
+    @app.post("/quality-benchmark-report")
+    def review_quality_benchmark_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.review_quality_benchmark(payload)
+
+    @app.post("/employee-scheduler-stress")
+    def employee_scheduler_stress_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.employee_scheduler_stress(payload)
 
     return app

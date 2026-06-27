@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from retort_engine.pr_review import review_diff
+
+
+def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 30) -> dict[str, Any]:
+    root = Path(project).expanduser().resolve()
+    samples = _golden_samples(max(1, sample_count))
+    sample_results = []
+    matched_findings = 0
+    expected_findings = 0
+    false_positive_count = 0
+    incremental_verified = 0
+    for sample in samples:
+        review = review_diff(str(sample["diff"]), max_comments=8, previous_diff_text=str(sample.get("previous_diff") or ""))
+        comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
+        expected = [item for item in sample.get("expected_findings") or [] if isinstance(item, dict)]
+        matches = [_finding_matched(comments, item) for item in expected]
+        expected_findings += len(expected)
+        matched_findings += sum(1 for item in matches if item)
+        incremental = review.get("incremental") if isinstance(review.get("incremental"), dict) else {}
+        if sample.get("requires_incremental_skip") and int(incremental.get("skipped_existing_change_count") or 0) > 0:
+            incremental_verified += 1
+        if sample.get("expected_severity") == "info":
+            false_positive_count += sum(1 for item in comments if str(item.get("severity") or "") in {"high", "medium"})
+        sample_results.append(
+            {
+                "sample_id": sample["sample_id"],
+                "category": sample["category"],
+                "expected": expected,
+                "matched": all(matches) if expected else True,
+                "observed_severities": [str(item.get("severity") or "") for item in comments],
+                "observed_comment_count": len(comments),
+                "incremental": {
+                    "enabled": bool(incremental.get("enabled")),
+                    "skipped_existing_change_count": int(incremental.get("skipped_existing_change_count") or 0),
+                    "reviewed_new_change_count": int(incremental.get("reviewed_new_change_count") or 0),
+                },
+            }
+        )
+    passed_samples = sum(1 for item in sample_results if item["matched"])
+    pass_rate = passed_samples / len(sample_results) if sample_results else 0.0
+    status = "ready" if len(sample_results) >= 30 and pass_rate >= 0.95 and false_positive_count == 0 and incremental_verified >= 5 else "needs_more_evidence"
+    return {
+        "status": status,
+        "project": str(root),
+        "summary": {
+            "sample_count": len(sample_results),
+            "curated_expected_conclusion_count": len(sample_results),
+            "expected_finding_count": expected_findings,
+            "matched_finding_count": matched_findings,
+            "missed_finding_count": expected_findings - matched_findings,
+            "passed_sample_count": passed_samples,
+            "failed_sample_count": len(sample_results) - passed_samples,
+            "pass_rate": round(pass_rate, 4),
+            "false_positive_count": false_positive_count,
+            "incremental_sample_count": sum(1 for item in samples if item.get("requires_incremental_skip")),
+            "incremental_skip_verified_count": incremental_verified,
+        },
+        "samples": sample_results,
+        "evidence": {
+            "engine": "retort_engine.pr_review.review_diff",
+            "golden_set": "repo_curated_pr_review_expectations",
+            "minimum_expected_samples": 30,
+        },
+    }
+
+
+def _finding_matched(comments: list[dict[str, Any]], expected: dict[str, Any]) -> bool:
+    severity = str(expected.get("severity") or "")
+    keywords = [str(item).lower() for item in expected.get("message_keywords") or []]
+    for comment in comments:
+        if severity and str(comment.get("severity") or "") != severity:
+            continue
+        message = str(comment.get("message") or "").lower()
+        if all(keyword.lower() in message for keyword in keywords):
+            return True
+    return False
+
+
+def _golden_samples(sample_count: int) -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    factories = (_secret_sample, _todo_sample, _print_sample, _long_line_sample, _clean_sample, _incremental_sample)
+    index = 0
+    while len(samples) < sample_count:
+        factory = factories[index % len(factories)]
+        samples.append(factory(index))
+        index += 1
+    return samples
+
+
+def _secret_sample(index: int) -> dict[str, Any]:
+    path = f"app/config_{index}.py"
+    return {
+        "sample_id": f"secret-{index:02d}",
+        "category": "secret_detection",
+        "expected_severity": "high",
+        "expected_findings": [{"severity": "high", "message_keywords": ["凭证", "密钥"]}],
+        "diff": _single_add_diff(path, f'API_TOKEN_{index} = "token-{index}"'),
+    }
+
+
+def _todo_sample(index: int) -> dict[str, Any]:
+    path = f"app/task_{index}.py"
+    return {
+        "sample_id": f"todo-{index:02d}",
+        "category": "placeholder_detection",
+        "expected_severity": "medium",
+        "expected_findings": [{"severity": "medium", "message_keywords": ["todo", "占位"]}],
+        "diff": _single_add_diff(path, f"# TODO: finish absorbed workflow {index}"),
+    }
+
+
+def _print_sample(index: int) -> dict[str, Any]:
+    path = f"app/debug_{index}.py"
+    return {
+        "sample_id": f"print-{index:02d}",
+        "category": "debug_output_detection",
+        "expected_severity": "low",
+        "expected_findings": [{"severity": "low", "message_keywords": ["print", "调试"]}],
+        "diff": _single_add_diff(path, f'print("debug absorption {index}")'),
+    }
+
+
+def _long_line_sample(index: int) -> dict[str, Any]:
+    path = f"app/long_{index}.py"
+    line = "review_payload = " + json.dumps({"payload": "x" * 160, "index": index}, sort_keys=True)
+    return {
+        "sample_id": f"long-{index:02d}",
+        "category": "long_line_detection",
+        "expected_severity": "low",
+        "expected_findings": [{"severity": "low", "message_keywords": ["过长"]}],
+        "diff": _single_add_diff(path, line),
+    }
+
+
+def _clean_sample(index: int) -> dict[str, Any]:
+    path = f"app/clean_{index}.py"
+    return {
+        "sample_id": f"clean-{index:02d}",
+        "category": "clean_change_confirmation",
+        "expected_severity": "info",
+        "expected_findings": [{"severity": "info", "message_keywords": ["未发现阻断"]}],
+        "diff": _single_add_diff(path, f"def absorbed_case_{index}(): return {index}"),
+    }
+
+
+def _incremental_sample(index: int) -> dict[str, Any]:
+    path = f"app/incremental_{index}.py"
+    previous = _multi_add_diff(path, [f"# TODO: old issue {index}"])
+    current = _multi_add_diff(path, [f"# TODO: old issue {index}", f'SERVICE_TOKEN_{index} = "token-{index}"'])
+    return {
+        "sample_id": f"incremental-{index:02d}",
+        "category": "incremental_review_detection",
+        "expected_severity": "high",
+        "expected_findings": [{"severity": "high", "message_keywords": ["凭证", "密钥"]}],
+        "requires_incremental_skip": True,
+        "previous_diff": previous,
+        "diff": current,
+    }
+
+
+def _single_add_diff(path: str, line: str) -> str:
+    return _multi_add_diff(path, [line])
+
+
+def _multi_add_diff(path: str, lines: list[str]) -> str:
+    body = "\n".join(f"+{line}" for line in lines)
+    return f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,{len(lines)} @@\n{body}\n"

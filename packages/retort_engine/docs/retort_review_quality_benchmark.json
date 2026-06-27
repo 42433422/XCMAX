@@ -1,0 +1,704 @@
+{
+  "evidence": {
+    "engine": "retort_engine.pr_review.review_diff",
+    "golden_set": "repo_curated_pr_review_expectations",
+    "minimum_expected_samples": 30
+  },
+  "project": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine",
+  "samples": [
+    {
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "secret-00"
+    },
+    {
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "sample_id": "todo-01"
+    },
+    {
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "print-02"
+    },
+    {
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "long-03"
+    },
+    {
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "sample_id": "clean-04"
+    },
+    {
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "incremental-05"
+    },
+    {
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "secret-06"
+    },
+    {
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "sample_id": "todo-07"
+    },
+    {
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "print-08"
+    },
+    {
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "long-09"
+    },
+    {
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "sample_id": "clean-10"
+    },
+    {
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "incremental-11"
+    },
+    {
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "secret-12"
+    },
+    {
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "sample_id": "todo-13"
+    },
+    {
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "print-14"
+    },
+    {
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "long-15"
+    },
+    {
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "sample_id": "clean-16"
+    },
+    {
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "incremental-17"
+    },
+    {
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "secret-18"
+    },
+    {
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "sample_id": "todo-19"
+    },
+    {
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "print-20"
+    },
+    {
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "long-21"
+    },
+    {
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "sample_id": "clean-22"
+    },
+    {
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "incremental-23"
+    },
+    {
+      "category": "secret_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "secret-24"
+    },
+    {
+      "category": "placeholder_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "todo",
+            "占位"
+          ],
+          "severity": "medium"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "medium"
+      ],
+      "sample_id": "todo-25"
+    },
+    {
+      "category": "debug_output_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "print",
+            "调试"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "print-26"
+    },
+    {
+      "category": "long_line_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "过长"
+          ],
+          "severity": "low"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "low"
+      ],
+      "sample_id": "long-27"
+    },
+    {
+      "category": "clean_change_confirmation",
+      "expected": [
+        {
+          "message_keywords": [
+            "未发现阻断"
+          ],
+          "severity": "info"
+        }
+      ],
+      "incremental": {
+        "enabled": false,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 0
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "info"
+      ],
+      "sample_id": "clean-28"
+    },
+    {
+      "category": "incremental_review_detection",
+      "expected": [
+        {
+          "message_keywords": [
+            "凭证",
+            "密钥"
+          ],
+          "severity": "high"
+        }
+      ],
+      "incremental": {
+        "enabled": true,
+        "reviewed_new_change_count": 1,
+        "skipped_existing_change_count": 1
+      },
+      "matched": true,
+      "observed_comment_count": 1,
+      "observed_severities": [
+        "high"
+      ],
+      "sample_id": "incremental-29"
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "curated_expected_conclusion_count": 30,
+    "expected_finding_count": 30,
+    "failed_sample_count": 0,
+    "false_positive_count": 0,
+    "incremental_sample_count": 5,
+    "incremental_skip_verified_count": 5,
+    "matched_finding_count": 30,
+    "missed_finding_count": 0,
+    "pass_rate": 1.0,
+    "passed_sample_count": 30,
+    "sample_count": 30
+  }
+}

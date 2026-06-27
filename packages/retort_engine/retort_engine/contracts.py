@@ -14,6 +14,8 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "pr_publish_sandbox_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts"),
     "cross_project_replay_result": ("status", "project", "summary", "projects", "checks"),
     "task_prioritization_result": ("status", "project", "summary", "priorities", "evidence"),
+    "review_quality_benchmark_result": ("status", "project", "summary", "samples", "evidence"),
+    "employee_scheduler_stress_result": ("status", "project", "summary", "rounds", "evidence"),
     "llm_score": ("dimension", "value", "reason"),
 }
 
