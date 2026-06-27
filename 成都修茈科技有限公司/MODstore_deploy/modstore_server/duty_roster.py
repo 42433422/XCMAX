@@ -415,10 +415,23 @@ def normalize_employee_pack_id(pkg_id: Optional[str]) -> str:
     return str(pkg_id or "").strip().lower()
 
 
-def employee_partition_meta() -> Dict[str, object]:
-    """员工分区元数据（供 employee_runtime / market_shared 使用）。"""
-    return {
+def employee_partition_meta(
+    pkg_id: Optional[str] = None,
+    artifact: Optional[str] = None,
+) -> Dict[str, object]:
+    """员工分区元数据（供 employee_runtime / market_shared 使用）。
+
+    ``pkg_id`` / ``artifact`` 为可选参数，调用方 historically 传入但函数体
+    不依赖它们——保留参数仅为兼容既有调用点（employee_api / employee_runtime /
+    duty_employee_registry / market_routes）。
+    """
+    meta: Dict[str, object] = {
         "planned_ids": all_planned_employee_ids(),
         "areas": dict(YUANGON_AREAS),
         "departments": dict(SIX_LINE_DEPARTMENTS),
     }
+    if pkg_id:
+        meta["pkg_id"] = str(pkg_id)
+    if artifact:
+        meta["artifact"] = str(artifact)
+    return meta
