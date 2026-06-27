@@ -18,6 +18,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "task_prioritization_result": ("status", "project", "summary", "priorities", "evidence"),
     "task_dispatch_plan_result": ("status", "project", "summary", "tasks", "evidence"),
     "review_quality_benchmark_result": ("status", "project", "summary", "samples", "evidence"),
+    "issue_patch_benchmark_result": ("status", "summary", "cases", "evidence"),
     "employee_scheduler_stress_result": ("status", "project", "summary", "rounds", "evidence"),
     "llm_score": ("dimension", "value", "reason"),
 }

@@ -22,8 +22,8 @@ CORE_COMPONENT_CONTRACTS = {
         "contract": "License, dirty-worktree, generated evidence, and rollback policies share one safety boundary.",
     },
     "evaluation_loop": {
-        "modules": ["retort_engine/absorption_quality.py", "retort_engine/review_quality_benchmark.py"],
-        "tests": ["tests/test_absorbed_capabilities.py", "tests/test_review_quality_benchmark.py"],
+        "modules": ["retort_engine/absorption_quality.py", "retort_engine/review_quality_benchmark.py", "retort_engine/swe_bench_oracle.py"],
+        "tests": ["tests/test_absorbed_capabilities.py", "tests/test_review_quality_benchmark.py", "tests/test_swe_bench_oracle.py"],
         "contract": "Every absorbed behavior has benchmark counters and regression gates.",
     },
     "regression_oracle": {
@@ -57,8 +57,8 @@ CORE_COMPONENT_CONTRACTS = {
         "contract": "Command results stay schema-checked and replayable.",
     },
     "benchmark_eval": {
-        "modules": ["retort_engine/review_quality_benchmark.py", "retort_engine/absorption_quality.py"],
-        "tests": ["tests/test_review_quality_benchmark.py", "tests/test_absorbed_capabilities.py"],
+        "modules": ["retort_engine/review_quality_benchmark.py", "retort_engine/absorption_quality.py", "retort_engine/swe_bench_oracle.py"],
+        "tests": ["tests/test_review_quality_benchmark.py", "tests/test_absorbed_capabilities.py", "tests/test_swe_bench_oracle.py"],
         "contract": "Review quality and absorption quality share benchmark evidence.",
     },
 }
