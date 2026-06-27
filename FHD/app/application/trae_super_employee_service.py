@@ -50,11 +50,9 @@ class TraeSuperEmployeeService(SuperEmployeeService):
         )
 
     def _conversation_mode_enabled(self) -> bool:
+        # Trae 不走 claude 式 --resume 持久会话，统一走 dev-loop（用 _trae_cli_command）。
         return False
 
-    def _cli_reply_body(self, text: str, context: dict) -> str:
-        # Trae CN CLI can open the app and manage MCP/extensions, but it does not
-        # provide a Cursor/Claude-style `agent --print` or `--print` interface.
-        # Returning empty keeps simple identity/help replies on the deterministic
-        # parent fallback and sends real work through trae.invoke relay/Para.
-        return ""
+    # 注：旧实现曾 hard-code `_cli_reply_body` 返回空——那是因为当时只有 trae-cn(IDE 启动器，
+    # 无无头 agent)。企业版 trae-cli 是真正的无头 coding agent(--print/stream-json)，因此移除该
+    # 短路，回到基类按 _trae_cli_command 真执行(闲聊→直答、工单→dev-loop 真改文件→推分支)。
