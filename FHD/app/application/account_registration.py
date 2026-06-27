@@ -56,3 +56,29 @@ def apply_account_profile_on_register(
             db.commit()
     except RECOVERABLE_ERRORS:
         logger.exception("apply_account_profile_on_register failed for %s", uname)
+
+
+def set_account_industry(username: str, industry_id: str) -> None:
+    """选行业/装行业种子后把所选行业持久化到账号(industry_id + entitled_industries)。
+
+    注册只定了初始行业(常为「通用」),用户后续在引导页选行业(install-industry-seed)
+    必须回填账号,否则账号行业与所选不一致(单一真相源破裂)。幂等:找不到用户/空行业则跳过。
+    """
+    uname = (username or "").strip()
+    iid = (industry_id or "").strip()
+    if not uname or not iid:
+        return
+    try:
+        from app.db.models.user import User
+        from app.db.session import get_db
+
+        with get_db() as db:
+            user = db.query(User).filter(User.username == uname).first()
+            if user is None:
+                return
+            user.industry_id = iid
+            tier = str(getattr(user, "tier", "") or "personal").strip().lower()
+            user.entitled_industries = init_entitled_industries_for_user(tier, iid)
+            db.commit()
+    except RECOVERABLE_ERRORS:
+        logger.exception("set_account_industry failed for %s", uname)

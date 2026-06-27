@@ -383,11 +383,13 @@ constructor(
             ) { mods, kind, timestamps, previews ->
                 val adminMode = isAdminAccountKind(kind)
                 val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
+                // 超级员工(Codex/Claude/Cursor/Trae)仅对管理端账号开放：
+                // 企业版 flavor 下的企业账号一律不显示，避免把运营者自用的中继 CLI 暴露给客户。
                 val fixedItems = fixedConversationItems(
-                        showCodex = isEnterprise || adminMode,
-                        showCursor = isEnterprise || adminMode,
-                        showClaude = isEnterprise || adminMode,
-                        showTrae = isEnterprise || adminMode,
+                        showCodex = adminMode,
+                        showCursor = adminMode,
+                        showClaude = adminMode,
+                        showTrae = adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                         timestamps = timestamps,
                         previews = previews,

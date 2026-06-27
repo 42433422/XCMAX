@@ -1462,8 +1462,8 @@ async def mobile_admin_codex_super_employee_messages(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的 Codex 超级员工对话记录。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    """移动端管理员信息页的 Codex 超级员工对话记录（仅管理端）。"""
+    _, err = _require_mobile_admin(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1489,8 +1489,8 @@ async def mobile_admin_codex_super_employee_invoke(
     body: CodexSuperEmployeeMobileMessageBody,
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的软件内 Codex 调用入口。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    """移动端管理员信息页的软件内 Codex 调用入口（仅管理端）。"""
+    _, err = _require_mobile_admin(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1504,7 +1504,7 @@ async def mobile_admin_codex_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
-    # 仅平台管理账号铸造工厂授权；企业(客户)账号一律产品域（此路由 admin/enterprise 共用）。
+    # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
     if (
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
         == "admin"
@@ -1537,8 +1537,8 @@ async def mobile_admin_claude_super_employee_messages(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的 Claude 超级员工对话记录。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    """移动端管理员信息页的 Claude 超级员工对话记录（仅管理端）。"""
+    _, err = _require_mobile_admin(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1564,8 +1564,8 @@ async def mobile_admin_claude_super_employee_invoke(
     body: ClaudeSuperEmployeeMobileMessageBody,
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的软件内 Claude 调用入口。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    """移动端管理员信息页的软件内 Claude 调用入口（仅管理端）。"""
+    _, err = _require_mobile_admin(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1579,7 +1579,7 @@ async def mobile_admin_claude_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
-    # 仅平台管理账号铸造工厂授权；企业(客户)账号一律产品域（此路由 admin/enterprise 共用）。
+    # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
     if (
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
         == "admin"
@@ -1612,8 +1612,8 @@ async def mobile_admin_cursor_super_employee_messages(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的 Cursor 超级员工对话记录。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    """移动端管理员信息页的 Cursor 超级员工对话记录（仅管理端）。"""
+    _, err = _require_mobile_admin(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1639,8 +1639,8 @@ async def mobile_admin_cursor_super_employee_invoke(
     body: CursorSuperEmployeeMobileMessageBody,
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的软件内 Cursor 调用入口。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    """移动端管理员信息页的软件内 Cursor 调用入口（仅管理端）。"""
+    _, err = _require_mobile_admin(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1680,8 +1680,8 @@ async def mobile_admin_trae_super_employee_messages(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的 Trae 超级员工对话记录。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    """移动端管理员信息页的 Trae 超级员工对话记录（仅管理端）。"""
+    _, err = _require_mobile_admin(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1707,8 +1707,8 @@ async def mobile_admin_trae_super_employee_invoke(
     body: TraeSuperEmployeeMobileMessageBody,
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的软件内 Trae 调用入口。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    """移动端管理员信息页的软件内 Trae 调用入口（仅管理端）。"""
+    _, err = _require_mobile_admin(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -2661,6 +2661,13 @@ async def mobile_install_industry_seed(body: dict[str, Any], user=Depends(get_mo
         from app.mod_sdk.industry_seed import install_industry_seed_with_fallback
 
         data = await install_industry_seed_with_fallback(raw)
+        if data.get("success"):
+            # 选行业即把所选行业持久化到账号(否则账号 industry_id 停留在注册默认「通用」)。
+            selected_industry = str(data.get("industry_id") or "").strip()
+            if selected_industry:
+                from app.application.account_registration import set_account_industry
+
+                set_account_industry(str(getattr(user, "username", "") or ""), selected_industry)
         return format_mobile_response(
             data=data,
             message=str(data.get("message") or ""),

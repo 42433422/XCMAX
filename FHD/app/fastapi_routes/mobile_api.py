@@ -47,13 +47,18 @@ class MobileRefreshRequest(BaseModel):
 
 
 def _user_public_dict(user) -> dict[str, Any]:
+    from app.utils.no_email import email_display, is_no_email_address
     from app.utils.user_avatar_storage import public_avatar_url
 
+    raw_email = str(getattr(user, "email", "") or "")
     return {
         "id": int(getattr(user, "id", 0) or 0),
         "username": str(getattr(user, "username", "") or ""),
         "display_name": str(getattr(user, "display_name", "") or ""),
-        "email": str(getattr(user, "email", "") or ""),
+        "email": raw_email,
+        # 无邮箱账号(占位邮箱 @auto.xiu-ci.com)前端显示「无邮箱」;raw email 仍保留兼容。
+        "email_display": email_display(raw_email),
+        "no_email": is_no_email_address(raw_email),
         "role": str(getattr(user, "role", "") or ""),
         "is_active": bool(getattr(user, "is_active", True)),
         "avatar_url": public_avatar_url(getattr(user, "wx_avatar_url", None)),

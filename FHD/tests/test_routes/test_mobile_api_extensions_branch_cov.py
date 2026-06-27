@@ -998,7 +998,7 @@ class TestMobileAdminCursorSuperEmployeeMessages:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_cursor_super_employee_messages(
@@ -1010,7 +1010,7 @@ class TestMobileAdminCursorSuperEmployeeMessages:
     async def test_uid_zero(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1026,7 +1026,7 @@ class TestMobileAdminCursorSuperEmployeeMessages:
     async def test_success(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1045,7 +1045,7 @@ class TestMobileAdminCursorSuperEmployeeMessages:
         err_class = _err_class(m)
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1078,7 +1078,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_cursor_super_employee_invoke(
@@ -1090,7 +1090,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
     async def test_uid_zero(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1106,7 +1106,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
     async def test_value_error(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1125,7 +1125,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
         err_class = _err_class(m)
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1143,7 +1143,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
     async def test_success(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(

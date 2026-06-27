@@ -738,7 +738,8 @@ class TestIndustryEntitledForClientMods:
                 return_value=("sz-qsm-pro",),
             ),
         ):
-            assert industry_entitled_for_client_mods("涂料", {"other-mod"}) is False
+            # 用非开放引导行业:开放引导行业(涂料/考勤)已恒为可选,故无匹配仍 False 需用非开放项验证
+            assert industry_entitled_for_client_mods("未开放客户行业", {"other-mod"}) is False
 
 
 # ---------------------------------------------------------------------------

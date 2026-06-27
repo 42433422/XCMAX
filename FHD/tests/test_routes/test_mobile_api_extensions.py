@@ -384,9 +384,9 @@ class TestUnauthorizedRoutes:
 
 class TestServiceBridgeRoutes:
     @pytest.mark.asyncio
-    async def test_codex_super_employee_messages_allows_enterprise_user(self, ext_mod):
+    async def test_codex_super_employee_messages_rejects_enterprise_user(self, ext_mod):
+        # 超级员工已收口为仅管理端可达：企业端账号一律 403，且不触达 Service。
         user = SimpleNamespace(id=901, role="enterprise")
-        result_data = [{"id": 1, "text": "ok"}]
         with (
             patch.object(
                 ext_mod,
@@ -395,21 +395,17 @@ class TestServiceBridgeRoutes:
             ),
             patch.object(ext_mod, "CodexSuperEmployeeService") as mock_service,
         ):
-            mock_service.return_value.list_messages.return_value = result_data
             result = await ext_mod.mobile_admin_codex_super_employee_messages(
                 request=_mock_pairing_request(),
                 limit=80,
                 user=user,
             )
-        payload = result if isinstance(result, dict) else __import__("json").loads(result.body)
-        assert payload["success"] is True
-        assert payload["data"]["messages"] == result_data
-        mock_service.return_value.list_messages.assert_called_once_with(user_id=901, limit=80)
+        assert result.status_code == 403
+        mock_service.return_value.list_messages.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_codex_super_employee_invoke_allows_enterprise_user(self, ext_mod):
+    async def test_codex_super_employee_invoke_rejects_enterprise_user(self, ext_mod):
         user = SimpleNamespace(id=901, role="enterprise")
-        expected = {"task_id": "t1", "request_id": "r1", "assistant_message": {"body": "done"}}
         with (
             patch.object(
                 ext_mod,
@@ -418,19 +414,13 @@ class TestServiceBridgeRoutes:
             ),
             patch.object(ext_mod, "CodexSuperEmployeeService") as mock_service,
         ):
-            mock_service.return_value.invoke.return_value = expected
             result = await ext_mod.mobile_admin_codex_super_employee_invoke(
                 request=_mock_pairing_request(),
                 body=ext_mod.CodexSuperEmployeeMobileMessageBody(message="帮我做点什么"),
                 user=user,
             )
-        payload = result if isinstance(result, dict) else __import__("json").loads(result.body)
-        assert payload["success"] is True
-        assert payload["data"] == expected
-        call_kwargs = mock_service.return_value.invoke.call_args.kwargs
-        assert call_kwargs["user_id"] == 901
-        assert call_kwargs["message"] == "帮我做点什么"
-        assert call_kwargs["context"]["source"] == "mobile_im"
+        assert result.status_code == 403
+        mock_service.return_value.invoke.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_codex_super_employee_messages_rejects_personal_user(self, ext_mod):
