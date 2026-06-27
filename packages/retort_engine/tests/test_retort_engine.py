@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from retort_engine.core import RetortSelfEvolutionRunner, RetortService, _attach_llm_scoring, _blocking_git_status, _extract_json_from_stdout, _maybe_request_llm_review, absorb, assess_project, record_closed_loop_proof
+from retort_engine.core import RetortSelfEvolutionRunner, RetortService, _attach_llm_scoring, _blocking_git_status, _extract_json_from_stdout, _llm_absorption_evidence, _maybe_request_llm_review, absorb, assess_project, record_closed_loop_proof
 from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import RetortUIServer
@@ -284,13 +284,37 @@ def test_capability_audit_does_not_count_registry_snapshot_as_core_behavior(tmp_
     audit = assess_project(str(project)).metadata["capability_absorption_audit"]
 
     assert audit["generated_only"] is True
-    assert audit["score"] == 76.0
-    assert audit["overall_cap"] == 82.0
+    assert audit["local_score_removed"] is True
+    assert "score" not in audit
+    assert "overall_cap" not in audit
+    assert "employee_execution_cap" not in audit
+    assert audit["status"] == "audit_only_no_local_score"
+    assert audit["risk_level"] == "high"
+    assert "latest_absorption_report_or_registry_only" in audit["blockers"]
     assert audit["reason"] == "latest_absorption_changed_only_reports_logs_or_capability_registry"
     assert audit["behavior_source_files"] == []
     assert audit["behavior_test_files"] == []
     assert "retort_engine/absorbed_capabilities.py" in audit["generated_evidence_files"]
     assert "tests/test_absorbed_capabilities.py" in audit["generated_evidence_files"]
+
+
+def test_llm_absorption_evidence_uses_risk_audit_not_local_score(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    run_dir = project / ".retort" / "real_absorption_runs"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text(
+        json.dumps({"source": "https://github.com/example/reviewer", "changed_files": [str(project / "retort_absorbed_patterns.py")]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    evidence = _llm_absorption_evidence(project)
+
+    assert not any(item.startswith("capability_absorption_score=") for item in evidence)
+    assert not any(item.startswith("capability_absorption_cap=") for item in evidence)
+    assert "capability_absorption_local_score_removed=True" in evidence
+    assert any(item.startswith("capability_absorption_risk_level=") for item in evidence)
+    assert any(item.startswith("capability_absorption_blockers=") for item in evidence)
 
 
 def test_external_assessment_counts_files_inside_retort_cache(tmp_path: Path) -> None:
@@ -480,9 +504,29 @@ def test_paibi_prompt_keeps_closed_loop_score_cap(tmp_path: Path) -> None:
     assert "证据闭环" in prompt
     assert "能力吸收" in prompt
     assert "本地不提供任何分数" in prompt
+    assert "不得把本地能力吸收审计当作参考分" in prompt
     assert "capability_absorption_score" in prompt
     assert "吸收 diff 只改报告/日志/absorbed_patterns 时" in prompt
     assert '"scores"' in prompt
+
+
+def test_paibi_prompt_strips_legacy_local_capability_scores(tmp_path: Path) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    (project / "README.md").write_text("# Own\n", encoding="utf-8")
+
+    prompt = build_retort_paibi_prompt(
+        project=project,
+        mode="manual",
+        scores=[],
+        tasks=[],
+        metadata={"capability_absorption_audit": {"score": 94.0, "overall_cap": 96.0, "employee_execution_cap": 97.0, "risk_level": "high"}},
+    )
+
+    assert '"score": 94.0' not in prompt
+    assert "overall_cap" not in prompt
+    assert "employee_execution_cap" not in prompt
+    assert '"local_score_removed": true' in prompt
 
 
 def test_service_llm_review_uses_paibi_provider(tmp_path: Path, monkeypatch) -> None:

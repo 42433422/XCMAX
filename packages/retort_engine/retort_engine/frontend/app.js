@@ -93,6 +93,11 @@ const statusText = {
   latest_absorption_changed_behavior_code_and_tests: "本次改了行为代码和测试",
   latest_absorption_changed_behavior_code_without_behavior_tests: "本次改了行为代码，缺测试",
   latest_absorption_has_no_clear_behavior_code_change: "未发现清晰行为改动",
+  audit_only_no_local_score: "只审计不打分",
+  needs_llm_project_level_review: "待 LLM 项目级评估",
+  high: "高",
+  medium: "中",
+  low: "低",
   branch_diff_verified: "分支差异",
   employee_execution_verified: "员工执行",
   post_absorption_tests_passed: "吸收后测试",
@@ -392,8 +397,10 @@ function capabilityAudit(assessment) {
     return;
   }
   const rows = [
-    ["能力分", Math.round(Number(audit.score || 0))],
-    ["总分上限", Math.round(Number(audit.overall_cap || 0))],
+    ["审计", labelOf(audit.status) || audit.status || "只审计不打分"],
+    ["风险", labelOf(audit.risk_level) || audit.risk_level || "未知"],
+    ["阻塞", (audit.blockers || []).length],
+    ["测/源", audit.test_to_source_ratio == null ? "未知" : String(audit.test_to_source_ratio)],
     ["外部项目", Number(audit.external_project_count || 0)],
     ["员工模式", audit.employee_execution_mode || "无"],
     ["原因", labelOf(audit.reason) || audit.reason || ""]
@@ -414,6 +421,16 @@ function capabilityAudit(assessment) {
       list.appendChild(item);
     }
     target.appendChild(list);
+  }
+  if ((audit.blockers || []).length) {
+    const blockers = document.createElement("div");
+    blockers.className = "filelist";
+    for (const blocker of (audit.blockers || []).slice(0, 5)) {
+      const item = document.createElement("code");
+      item.textContent = labelOf(blocker) || blocker;
+      blockers.appendChild(item);
+    }
+    target.appendChild(blockers);
   }
 }
 
@@ -618,7 +635,8 @@ function renderProofPanel(proof) {
     ["分数变化", proof.score_delta == null ? "待最终深评" : `${compactScore(proof.before_score)} -> ${compactScore(proof.after_score)} (+${proof.score_delta})`],
     ["改动文件", proof.changed_file_count || 0],
     ["门禁", `${proof.gate_passed_count || 0}/${proof.gate_count || 0}`],
-    ["能力分", proof.capability_absorption_score == null ? "待评估" : Math.round(Number(proof.capability_absorption_score))],
+    ["能力审计", labelOf(proof.capability_absorption_status) || "只审计不打分"],
+    ["风险", labelOf(proof.capability_absorption_risk_level) || proof.capability_absorption_risk_level || "未知"],
     ["原因", labelOf(proof.reason) || proof.reason || ""],
   ]);
   const flags = proof.closed_loop_flags || {};
