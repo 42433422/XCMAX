@@ -20,6 +20,18 @@ from retort_engine.review_pipeline import build_absorption_review_report
 SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json", ".go"}
 SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache", "dist", "build"}
 CAPABILITY_MODEL_SIGNALS = {"review_pipeline", "file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface"}
+VISUAL_FRONTEND_SIGNALS = {
+    "planet_frontend",
+    "atmosphere_shader",
+    "procedural_surface",
+    "webgl_scene",
+    "day_night_textures",
+    "cloud_texture_layer",
+    "fresnel_atmosphere",
+    "elevation_bump_map",
+    "specular_ocean",
+}
+VISUAL_FRONTEND_SUFFIXES = {".css", ".glsl", ".html", ".js", ".jsx", ".ts", ".tsx", ".wgsl"}
 
 
 def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
@@ -312,7 +324,25 @@ def _should_absorb_capability_model(profile: dict[str, Any]) -> bool:
 
 def _should_absorb_frontend_visual(profile: dict[str, Any]) -> bool:
     signals = set(profile.get("signals") or [])
-    return bool(signals & {"planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"})
+    visual_signals = signals & VISUAL_FRONTEND_SIGNALS
+    if not visual_signals:
+        return False
+    signal_evidence = profile.get("signal_evidence") or {}
+    frontend_evidence_count = sum(
+        1
+        for signal in visual_signals
+        if _has_frontend_visual_evidence(signal_evidence.get(signal) or [])
+    )
+    return frontend_evidence_count >= 1 and ("planet_frontend" in visual_signals or frontend_evidence_count >= 2)
+
+
+def _has_frontend_visual_evidence(paths: list[Any]) -> bool:
+    for path in paths:
+        rel = str(path).lower()
+        suffix = Path(rel).suffix
+        if suffix in VISUAL_FRONTEND_SUFFIXES:
+            return True
+    return False
 
 
 def _review_context_bias_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> str:
@@ -403,13 +433,19 @@ def _write_frontend_visual_profile(app_path: Path, run_id: str, source: str, ext
         "visual_family": "absorbed-procedural-planet",
         "run_id": run_id,
         "external_path": str(external_path),
-        "absorbed_signals": sorted(signals & {"planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"}),
+        "absorbed_signals": sorted(signals & VISUAL_FRONTEND_SIGNALS),
         "palette": _planet_palette(signals),
         "layers": {
             "atmospheric_rim": "atmosphere_shader" in signals or "planet_frontend" in signals,
             "procedural_landmasses": "procedural_surface" in signals or "planet_frontend" in signals,
             "translucent_clouds": "atmosphere_shader" in signals or "webgl_scene" in signals,
             "orbital_rings": "webgl_scene" in signals or "planet_frontend" in signals,
+            "day_night_terminator": "day_night_textures" in signals,
+            "cloud_shadow_layer": "cloud_texture_layer" in signals,
+            "fresnel_glow": "fresnel_atmosphere" in signals or "atmosphere_shader" in signals,
+            "terrain_relief": "elevation_bump_map" in signals or "procedural_surface" in signals,
+            "ocean_specular": "specular_ocean" in signals,
+            "city_lights": "day_night_textures" in signals,
             "terminator_shadow": True,
         },
         "license_boundary": "visual principles only; no external source or texture copied",
@@ -423,6 +459,19 @@ def _write_frontend_visual_profile(app_path: Path, run_id: str, source: str, ext
 
 
 def _planet_palette(signals: set[str]) -> dict[str, str]:
+    if {"day_night_textures", "fresnel_atmosphere", "cloud_texture_layer"} & signals:
+        return {
+            "ocean": "#071b3d",
+            "shallow": "#159ec7",
+            "land": "#5e9f62",
+            "highland": "#d8c58a",
+            "cloud": "#ffffff",
+            "rim": "#58c8ff",
+            "ring": "#86d9ff",
+            "night": "#010713",
+            "city": "#ffd36a",
+            "sun": "#fff0b8",
+        }
     if "atmosphere_shader" in signals and "procedural_surface" in signals:
         return {
             "ocean": "#102c5f",
@@ -433,6 +482,8 @@ def _planet_palette(signals: set[str]) -> dict[str, str]:
             "rim": "#95f4ff",
             "ring": "#f4ca78",
             "night": "#02050d",
+            "city": "#ffd36a",
+            "sun": "#fff0b8",
         }
     return {
         "ocean": "#17345c",
@@ -443,6 +494,8 @@ def _planet_palette(signals: set[str]) -> dict[str, str]:
         "rim": "#8ee8ff",
         "ring": "#d8c17a",
         "night": "#030711",
+        "city": "#ffd36a",
+        "sun": "#fff0b8",
     }
 
 
@@ -487,6 +540,9 @@ def test_planet_renderer_uses_absorbed_visual_layers() -> None:
     assert "translucent_clouds" in text
     assert "terminator_shadow" in text
     assert "atmospheric_rim" in text
+    assert "day_night_terminator" in text
+    assert "fresnel_glow" in text
+    assert "city_lights" in text
     assert "rgbaHex(palette.rim" in text
 '''
 
@@ -799,6 +855,11 @@ def _external_profile(root: Path) -> dict[str, Any]:
                 "atmosphere_shader": ("atmosphere", "fresnel", "rim light", "shader", "cloud"),
                 "procedural_surface": ("noise", "texture", "height map", "landmass", "terrain"),
                 "webgl_scene": ("webgl", "three.js", "threejs", "renderer", "scene", "camera", "orbit"),
+                "day_night_textures": ("daytexture", "nighttexture", "day texture", "night texture", "daymap", "nightmap", "day / night", "day + night"),
+                "cloud_texture_layer": ("cloudstexture", "clouds texture", "cloudsmap", "earth-clouds", "cloud layer", "clouds"),
+                "fresnel_atmosphere": ("fresnel", "reflectionfactor", "additiveblending", "atmosphere glow", "glowmesh"),
+                "elevation_bump_map": ("bump", "bump elevation", "bumpmap", "height map", "roughness"),
+                "specular_ocean": ("specular", "reflection", "roughness", "ocean", "sunorientation"),
             }.items():
                 if any(marker in lowered_file for marker in markers):
                     signal_evidence.setdefault(signal, [])
@@ -815,6 +876,11 @@ def _external_profile(root: Path) -> dict[str, Any]:
         "atmosphere_shader": ("atmosphere", "fresnel", "rim light", "shader", "cloud"),
         "procedural_surface": ("noise", "texture", "height map", "landmass", "terrain"),
         "webgl_scene": ("webgl", "three.js", "threejs", "renderer", "scene", "camera", "orbit"),
+        "day_night_textures": ("daytexture", "nighttexture", "day texture", "night texture", "daymap", "nightmap", "day / night", "day + night"),
+        "cloud_texture_layer": ("cloudstexture", "clouds texture", "cloudsmap", "earth-clouds", "cloud layer", "clouds"),
+        "fresnel_atmosphere": ("fresnel", "reflectionfactor", "additiveblending", "atmosphere glow", "glowmesh"),
+        "elevation_bump_map": ("bump", "bump elevation", "bumpmap", "height map", "roughness"),
+        "specular_ocean": ("specular", "reflection", "roughness", "ocean", "sunorientation"),
     }
     signals = [name for name, markers in signal_map.items() if any(marker in lowered for marker in markers)]
     return {"file_count": len(files), "suffix_counts": suffix_counts, "signals": signals, "signal_evidence": signal_evidence, "git_revision": _git_revision(root)}

@@ -29,11 +29,12 @@ const progressPlan = [
 const ABSORBED_PLANET_VISUAL_PROFILE = {
   "absorbed_signals": [
     "atmosphere_shader",
+    "planet_frontend",
     "procedural_surface",
     "webgl_scene"
   ],
   "enabled": true,
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/OpenHands/benchmarks",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/dgreenheck/threejs-procedural-planets",
   "layers": {
     "atmospheric_rim": true,
     "orbital_rings": true,
@@ -52,8 +53,8 @@ const ABSORBED_PLANET_VISUAL_PROFILE = {
     "ring": "#f4ca78",
     "shallow": "#37d6cf"
   },
-  "run_id": "20260627191156-142d39dda9",
-  "source": "https://github.com/OpenHands/benchmarks",
+  "run_id": "20260627185357-29365e9367",
+  "source": "https://github.com/dgreenheck/threejs-procedural-planets",
   "visual_family": "absorbed-procedural-planet"
 };
 
