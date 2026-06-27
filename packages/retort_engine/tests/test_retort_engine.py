@@ -352,6 +352,32 @@ def test_assessment_ignores_retort_runtime_dirty_state(tmp_path: Path) -> None:
     assert assessment.metadata["git_tracking_state"] == "tracked_clean"
 
 
+def test_capability_audit_counts_persisted_architecture_memory_sources(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    docs = project / "docs"
+    docs.mkdir()
+    (docs / "retort_architecture_memory.json").write_text(
+        json.dumps(
+            {
+                "summary": {"source_count": 3},
+                "component_index": {
+                    "evaluation_loop": {"sources": ["https://github.com/example/eval"]},
+                    "workflow_ci": {"sources": ["https://github.com/example/ci"]},
+                    "architecture_rules": {"sources": ["https://github.com/example/arch"]},
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    audit = assess_project(str(project)).metadata["capability_absorption_audit"]
+
+    assert audit["external_project_count"] == 3
+    assert "insufficient_cross_project_reproduction" not in audit["blockers"]
+
+
 def test_capability_audit_does_not_count_registry_snapshot_as_core_behavior(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

@@ -1169,19 +1169,22 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
     code_health = _test_code_health(root)
     static_risks = _self_assessment_risk_checks(root)
     latest = _latest_absorption_run(root)
+    external_project_count = _absorption_external_project_count(root)
     if not latest:
         blockers = ["no_real_absorption_run", *static_risks["failed"]]
+        if external_project_count < 3:
+            blockers.append("insufficient_cross_project_reproduction")
         return {
             "local_score_removed": True,
             "status": "needs_llm_project_level_review",
             "risk_level": _audit_risk_level(blockers),
-            "blockers": blockers,
+            "blockers": sorted(set(blockers)),
             "reason": "no_real_absorption_run",
             "changed_files": [],
             "behavior_source_files": [],
             "behavior_test_files": [],
             "generated_evidence_files": [],
-            "external_project_count": 0,
+            "external_project_count": external_project_count,
             **code_health,
             "self_assessment_risk_checks": static_risks,
         }
@@ -1204,7 +1207,6 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
     pr_review = _pr_review_runtime_evidence(root)
     support_behavior_source_files = [str(rel) for rel in pr_review.get("behavior_source_files") or []]
     support_behavior_test_files = [str(rel) for rel in pr_review.get("behavior_test_files") or []]
-    external_project_count = _absorption_external_project_count(root)
     employee_mode = _latest_employee_execution_mode(root)
     employee_worker_review = _latest_employee_worker_review(root)
     generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
@@ -1419,7 +1421,27 @@ def _absorption_external_project_count(root: Path) -> int:
         source = str(payload.get("source") or "").strip()
         if source:
             sources.add(source)
-    return len(sources)
+    return max(len(sources), _architecture_memory_external_project_count(root))
+
+
+def _architecture_memory_external_project_count(root: Path) -> int:
+    path = root / "docs" / "retort_architecture_memory.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    sources: set[str] = set()
+    component_index = payload.get("component_index") if isinstance(payload.get("component_index"), dict) else {}
+    for component in component_index.values():
+        if not isinstance(component, dict):
+            continue
+        for source in component.get("sources") or ():
+            source_text = str(source).strip()
+            if source_text:
+                sources.add(source_text)
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    source_count = int(summary.get("source_count") or 0)
+    return max(source_count, len(sources))
 
 
 def _project_relative(root: Path, path: Path) -> str:
