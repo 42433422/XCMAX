@@ -57,6 +57,7 @@ def test_blackhole_ui_assets_exist() -> None:
     index_text = (root / "index.html").read_text(encoding="utf-8")
     app_text = (root / "app.js").read_text(encoding="utf-8")
     style_text = (root / "styles.css").read_text(encoding="utf-8")
+    ui_server_text = (root.parents[0] / "ui_server.py").read_text(encoding="utf-8")
     assert 'class="rail flow-panel"' in index_text
     assert 'data-step="01"' in index_text
     assert 'data-step="09"' in index_text
@@ -72,9 +73,25 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "排比 LLM 自动同步" in app_text
     assert "use_llm: true" in app_text
     assert "require_deep_review: true" in app_text
+    assert "/api/absorption-lights" in ui_server_text
     assert blackhole_ui_detected(root.parents[1]) is True
     assert structure["missing_ids"] == []
     assert structure["missing_functions"] == []
+
+
+def test_absorption_lights_returns_real_absorbed_project_sources(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    runs = project / ".retort" / "real_absorption_runs"
+    runs.mkdir(parents=True)
+    (runs / "one.json").write_text(json.dumps({"source": "https://github.com/example/planet-ui"}), encoding="utf-8")
+    (runs / "two.json").write_text(json.dumps({"source": "https://github.com/example/review-ui"}), encoding="utf-8")
+
+    result = RetortService().absorption_lights({"project": str(project)})
+
+    assert result["status"] == "ready"
+    assert result["count"] == 2
+    assert result["sources"] == ["https://github.com/example/planet-ui", "https://github.com/example/review-ui"]
 
 
 def test_branch_absorption_blocks_dirty_and_creates_clean_branch(tmp_path: Path) -> None:
