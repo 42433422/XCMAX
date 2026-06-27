@@ -4,7 +4,7 @@ Retort is a blackhole-style external evolution engine.
 
 - Main project: local folder.
 - Absorption source: GitHub URL or local folder.
-- Workflow: assess overlap and depth, clone/read the external project, generate absorption tasks, apply an absorption shock, then keep scores capped until real closed-loop proof is recorded.
+- Workflow: assess overlap and depth, clone/read the external project, generate absorption tasks, run the real `retort apply-absorption` CLI to change project code, apply an absorption shock, then keep scores capped until full branch/test/merge proof is recorded.
 - UI: dependency-free local blackhole interface.
 
 Run:
@@ -25,6 +25,14 @@ PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli abso
 PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli self-evolve \
   --project packages/retort_engine \
   --run-local-gates
+```
+
+`absorb` is intentionally synchronous: the blackhole UI keeps running until the CLI has changed files and gates have returned. Use `--no-execute-absorption` only for dry task generation.
+
+```bash
+PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli apply-absorption \
+  --payload-file packages/retort_engine/.retort/execution_requests/example.json \
+  --json
 ```
 
 Retort does not treat self-questioning as completed absorption. Scores stay capped until all proof gates are recorded:
