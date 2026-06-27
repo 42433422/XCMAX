@@ -105,6 +105,38 @@ def get_app_data_dir() -> str:
     return app_data_dir
 
 
+def get_desktop_state_dir() -> str:
+    """获取桌面执行端的稳定状态目录（云中继配对凭证等）。
+
+    与 :func:`get_app_data_dir` 不同，本函数**永远不会回落到源码/仓库目录**。
+
+    桌面云中继的配对凭证（relay_id / desktop_token）必须落在唯一且稳定的位置，
+    无论运行时是 PyInstaller 打包版还是从源码直跑。否则源码运行时 ``get_app_data_dir``
+    会回落到仓库根，桌面会以与手机已配对 relay 不同的身份去注册/轮询，导致手机派的
+    任务一直卡在「排队中」永远没有执行端来认领（见 mobile_relay_desktop_client）。
+
+    路径与 :func:`get_app_data_dir` 的打包分支保持完全一致，因此对现有打包版用户零迁移。
+    """
+    explicit = os.environ.get("XCAGI_DESKTOP_DATA_DIR") or os.environ.get("XCAGI_DATA_DIR")
+    if explicit:
+        state_dir = explicit
+    elif sys.platform == "darwin":
+        state_dir = os.path.join(
+            os.path.expanduser("~"),
+            "Library",
+            "Application Support",
+            "XCAGI",
+        )
+    else:
+        base = (
+            os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        )
+        state_dir = os.path.join(base, "XCAGI")
+
+    os.makedirs(state_dir, exist_ok=True)
+    return state_dir
+
+
 def get_data_dir() -> str:
     """
     获取数据目录（用于存放数据库等数据文件）

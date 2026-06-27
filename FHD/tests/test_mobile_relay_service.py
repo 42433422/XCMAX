@@ -126,3 +126,89 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
         relay_id=registered["relay_id"],
     )
     assert hijack is None
+
+
+def test_poll_requeues_stale_running_orphans(monkeypatch, tmp_path):
+    """孤儿回收:claimed_at 超 TTL 的 running 在下次 poll 时被重入队并重新认领。"""
+    relay = _load_mobile_relay_service_module()
+    engine = create_engine(f"sqlite:///{tmp_path / 'relay-orphan.db'}")
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+
+    @contextmanager
+    def test_db():
+        db = session_factory()
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    monkeypatch.setattr(relay, "get_db", test_db)
+    service = relay.MobileRelayService()
+    reg = service.register_desktop(
+        label="pc", device_id="mac-1", relay_base_url="https://r.test/api"
+    )
+    service.confirm_mobile(
+        user_id=7, username="t", relay_id=reg["relay_id"], code=reg["pairing_code"]
+    )
+    task = service.create_task(
+        user_id=7, relay_id=reg["relay_id"], kind="codex.invoke", payload={"message": "x"}
+    )
+
+    # 第一次 poll → running
+    p1 = service.poll_desktop(relay_id=reg["relay_id"], desktop_token=reg["desktop_token"])
+    assert p1["tasks"][0]["status"] == "running"
+
+    # 把 claimed_at 倒退到很久以前(模拟执行端中途死)
+    with test_db() as db:
+        db.execute(
+            relay.text("UPDATE mobile_relay_tasks SET claimed_at = :old WHERE task_id = :t"),
+            {"old": "2020-01-01T00:00:00+00:00", "t": task["task_id"]},
+        )
+
+    # 第二次 poll → 孤儿被重入队并重新认领,任务回到这个 relay
+    p2 = service.poll_desktop(relay_id=reg["relay_id"], desktop_token=reg["desktop_token"])
+    assert any(t["task_id"] == task["task_id"] for t in p2["tasks"]), (
+        "stale running 应被重入队并重新认领"
+    )
+    assert p2["tasks"][0]["status"] == "running"
+
+
+def test_poll_does_not_requeue_fresh_running(monkeypatch, tmp_path):
+    """活着的 running(claimed_at 近期)绝不能被误重入队。"""
+    relay = _load_mobile_relay_service_module()
+    engine = create_engine(f"sqlite:///{tmp_path / 'relay-fresh.db'}")
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+
+    @contextmanager
+    def test_db():
+        db = session_factory()
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    monkeypatch.setattr(relay, "get_db", test_db)
+    service = relay.MobileRelayService()
+    reg = service.register_desktop(
+        label="pc", device_id="mac-1", relay_base_url="https://r.test/api"
+    )
+    service.confirm_mobile(
+        user_id=7, username="t", relay_id=reg["relay_id"], code=reg["pairing_code"]
+    )
+    service.create_task(
+        user_id=7, relay_id=reg["relay_id"], kind="codex.invoke", payload={"message": "x"}
+    )
+    service.poll_desktop(
+        relay_id=reg["relay_id"], desktop_token=reg["desktop_token"]
+    )  # → running, claimed now
+    # 立刻再 poll:无新 queued,且刚才的 running 不该被重入队
+    p2 = service.poll_desktop(relay_id=reg["relay_id"], desktop_token=reg["desktop_token"])
+    assert p2["tasks"] == []

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import time
 import uuid
@@ -483,6 +484,30 @@ class MobileRelayService:
                     """
                 ),
                 {"now": now, "relay_id": relay_id.strip()},
+            )
+            # 孤儿回收：执行端中途死会把任务永久卡在 running（poll 只发 queued，无人再认领）。
+            # 每次 poll 先把本 relay claimed_at 超 TTL 的 running 重置回 queued，活 relay 自动重认领，
+            # 根治『永久卡 running』。同一 relay 仍在跑的任务由执行端 _INFLIGHT 去重，不会重复执行；
+            # 真完成时 complete 覆盖 queued 态，无副作用。
+            try:
+                stale_ttl = max(60, int(os.environ.get("XCAGI_RELAY_RUNNING_TTL_SEC") or "900"))
+            except (TypeError, ValueError):
+                stale_ttl = 900
+            stale_before = (
+                (datetime.now(UTC) - timedelta(seconds=stale_ttl))
+                .replace(microsecond=0)
+                .isoformat()
+            )
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_tasks
+                    SET status = 'queued', claimed_at = NULL, updated_at = :now
+                    WHERE relay_id = :relay_id AND status = 'running'
+                      AND claimed_at IS NOT NULL AND claimed_at < :stale_before
+                    """
+                ),
+                {"relay_id": relay_id.strip(), "now": now, "stale_before": stale_before},
             )
             rows = (
                 db.execute(

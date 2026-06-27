@@ -11,7 +11,9 @@ import logging
 import os
 import platform
 import re
+import shutil
 import socket
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -20,18 +22,47 @@ from typing import Any
 import httpx
 
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_utils import get_app_data_dir, get_desktop_state_dir
 
 logger = logging.getLogger(__name__)
 
 ClaudeSuperEmployeeService: Any | None = None
 CodexSuperEmployeeService: Any | None = None
 CursorSuperEmployeeService: Any | None = None
+TraeSuperEmployeeService: Any | None = None
 
 _STATE_LOCK = threading.Lock()
 _WORKER_THREAD: threading.Thread | None = None
 _STOP_EVENT = threading.Event()
-_CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
+# 配对凭证落在稳定的桌面态目录，绝不随源码 cwd 漂移（见 get_desktop_state_dir 文档）。
+# 历史上 get_app_data_dir() 源码直跑会回落到仓库根，桌面便以与手机已配对 relay 不同
+# 的身份去轮询，任务永远卡在「排队中」。
+_CONFIG_FILE = Path(get_desktop_state_dir()) / "mobile_relay_desktop.json"
+_LEGACY_CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
+_LEGACY_MIGRATION_DONE = False
+
+
+def _migrate_legacy_config_once() -> None:
+    """旧版把配对凭证写到 get_app_data_dir()（可能回落仓库根）。
+
+    若稳定路径尚无配置、而旧路径存在，则一次性迁移过来，避免源码升级后丢失既有配对。
+    稳定路径已有配置时**绝不覆盖**（它才是当前权威绑定）。
+    """
+    global _LEGACY_MIGRATION_DONE
+    if _LEGACY_MIGRATION_DONE:
+        return
+    _LEGACY_MIGRATION_DONE = True
+    try:
+        if _CONFIG_FILE.is_file() or not _LEGACY_CONFIG_FILE.is_file():
+            return
+        if _CONFIG_FILE.resolve() == _LEGACY_CONFIG_FILE.resolve():
+            return
+        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CONFIG_FILE.write_text(_LEGACY_CONFIG_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+        logger.info("迁移历史云中继配对凭证 %s -> %s", _LEGACY_CONFIG_FILE, _CONFIG_FILE)
+    except OSError:
+        logger.warning("云中继配对凭证迁移失败", exc_info=True)
+
 
 # 并发执行：poll 循环只负责"认领+派发"，每个任务在独立线程里跑，
 # 避免单个长任务(开发任务可跑数分钟)堵死整条队列、导致新消息卡住。
@@ -159,10 +190,12 @@ _COMPLETED_STATUSES = {"completed", "done", "merged"}
 
 def _ensure_super_employee_service_classes() -> None:
     global ClaudeSuperEmployeeService, CodexSuperEmployeeService, CursorSuperEmployeeService
+    global TraeSuperEmployeeService
     if (
         ClaudeSuperEmployeeService is not None
         and CodexSuperEmployeeService is not None
         and CursorSuperEmployeeService is not None
+        and TraeSuperEmployeeService is not None
     ):
         return
     if ClaudeSuperEmployeeService is None:
@@ -183,6 +216,12 @@ def _ensure_super_employee_service_classes() -> None:
         )
 
         CursorSuperEmployeeService = _CursorSuperEmployeeService
+    if TraeSuperEmployeeService is None:
+        from app.application.trae_super_employee_service import (
+            TraeSuperEmployeeService as _TraeSuperEmployeeService,
+        )
+
+        TraeSuperEmployeeService = _TraeSuperEmployeeService
 
 
 def _max_concurrent() -> int:
@@ -315,11 +354,51 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
     return data
 
 
+def _gc_orphan_workspaces() -> int:
+    """回收崩溃残留的隔离工作区，避免磁盘缓慢膨胀（满足『无垃圾残留』）。
+
+    只清 age-based 超期（默认 6h）的**已知临时目录**：dev-loop 的 ``xcagi-wt-*``
+    与产品域 scratch 子目录；活跃任务都是近期的，绝不会误删。另对底座仓库跑
+    ``git worktree prune`` 清理目录已不存在的 worktree 元数据。返回清理的目录数。
+    """
+    try:
+        max_age = float(os.environ.get("XCAGI_RELAY_WORKSPACE_GC_MAX_AGE_SEC") or str(6 * 3600))
+    except (TypeError, ValueError):
+        max_age = 6 * 3600.0
+    now = time.time()
+    tmp = Path(tempfile.gettempdir())
+    targets: list[Path] = list(tmp.glob("xcagi-wt-*"))
+    scratch = tmp / "xcmax_product_scratch"
+    if scratch.is_dir():
+        targets += [p for p in scratch.iterdir() if p.is_dir()]
+    removed = 0
+    for path in targets:
+        try:
+            if now - path.stat().st_mtime < max_age:
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            removed += 1
+    if removed:
+        logger.info("relay 工作区 GC：清理 %d 个超期残留目录", removed)
+    return removed
+
+
 def start_desktop_relay_poller() -> bool:
     """Start the daemon poller if a relay config exists."""
     config = _read_config()
     if not config.get("relay_id") or not config.get("desktop_token"):
         return False
+    # 轮询每 4s 一次、长年累月运行；httpx 默认对每个请求打一行 INFO，会把
+    # poll 日志刷成噪音（~2 万行/天），白白撑大桌面端日志文件占满磁盘。降到 WARNING，
+    # 真正的失败仍由 _poll_loop 自己的 logger.warning 记录。
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    try:
+        _gc_orphan_workspaces()
+    except Exception:  # noqa: BLE001 - GC 永远不能阻断 relay 启动
+        logger.warning("relay 工作区 GC 失败", exc_info=True)
     global _WORKER_THREAD
     with _STATE_LOCK:
         if _WORKER_THREAD and _WORKER_THREAD.is_alive():
@@ -356,11 +435,17 @@ def _complete_relay_task(
 ) -> None:
     """在独立线程里执行单个任务并回写结果；不阻塞 poll 循环。"""
     task_id = str(task.get("task_id") or "")
+    started = time.monotonic()
     try:
         result = _execute_task(task)
         relay_status = str(result.pop("_relay_status", "") or "").strip()
         if not relay_status:
             relay_status = "failed" if result.get("error") else "completed"
+        # 结构化执行结果契约：体验层卡片/时长/精准报错的数据底座。
+        result["elapsed_seconds"] = round(max(0.0, time.monotonic() - started), 1)
+        if relay_status in _FAILED_STATUSES or relay_status in _BLOCKED_STATUSES:
+            result.setdefault("error_code", relay_status)
+            result.setdefault("error_message", str(result.get("error") or "").strip())
         timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
         with httpx.Client(timeout=timeout) as client:
             client.post(
@@ -442,7 +527,7 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     if parsed_git_op is not None:
         git_kind, git_payload = parsed_git_op
         return handle_git_op(git_kind, git_payload)
-    # 中继泛化：按 kind 前缀选择超级员工(codex.* / claude.* / cursor.*)，本地执行后回写。
+    # 中继泛化：按 kind 前缀选择超级员工(codex.* / claude.* / cursor.* / trae.*)，本地执行后回写。
     _ensure_super_employee_service_classes()
     if kind.startswith("claude"):
         service: Any = ClaudeSuperEmployeeService()
@@ -450,6 +535,9 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     elif kind.startswith("cursor"):
         service = CursorSuperEmployeeService()
         tool_label = "Cursor"
+    elif kind.startswith("trae"):
+        service = TraeSuperEmployeeService()
+        tool_label = "Trae"
     elif kind.startswith("codex"):
         service = CodexSuperEmployeeService()
         tool_label = "Codex"
@@ -458,26 +546,38 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     user_id = int(task.get("created_by_user_id") or payload.get("user_id") or 1)
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
     branch = str(payload.get("branch") or "").strip()
+    # 群派工(AI 交流圈/超级开发部群)是**明确工单**，带 work_order_id / assigned_task /
+    # client_surface=ai_group；自由聊天面没有这些信号。两者都经中继下发，但只有工单需要真执行。
+    orig_surface = str(context.get("client_surface") or "").strip().lower()
+    is_work_order = (
+        orig_surface == "ai_group"
+        or bool(str(context.get("work_order_id") or "").strip())
+        or bool(str(context.get("assigned_task") or "").strip())
+    )
     context = {
         **context,
         "source": "mobile_relay",
         "relay_task_id": str(task.get("task_id") or ""),
-        "client_surface": "mobile",
+        # 保留原始来源(工单是 ai_group)，自由聊天回落 mobile。
+        "client_surface": orig_surface or "mobile",
         "target_devices": ["all"],
+        # 中继即执行端：永远本地 CLI 执行，绝不把任务再转发给(不可用的)Para 多设备。
+        "force_cli_direct": True,
     }
     if branch and not str(context.get("branch") or "").strip():
         context["branch"] = branch
-    # 移动端聊天面固定下发 mode="code"，会把每条闲聊都强制派到 Para 多设备
-    # （"你好"/"在干嘛" 这类问候也被当成开发任务派工，回不到结果）。
-    # 这里清掉强制派工的 mode，交回内容分类器 _should_reply_with_cli：
-    # 闲聊 → 本地 CLI 直答；含"修复/测试/部署"等开发关键词 → Para 派工。
-    if str(context.get("mode") or "").strip().lower() in {
+    if is_work_order:
+        # 工单：保持 mode=code，让 _is_task_intent 判为开发任务 → 走 _cli_work_prompt 真改文件，
+        # 而不是当成"普通对话通道"回避执行(那正是任务以 blocked 收场的根因)。
+        context["mode"] = "code"
+    elif str(context.get("mode") or "").strip().lower() in {
         "code",
         "task",
         "dispatch",
         "dev",
         "develop",
     }:
+        # 自由聊天面固定下发 mode="code"，剥离交回内容分类器(避免"你好"被当开发任务)。
         context.pop("mode", None)
     try:
         result = service.invoke(
