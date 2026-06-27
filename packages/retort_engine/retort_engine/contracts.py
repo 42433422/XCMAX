@@ -9,6 +9,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "execution_result": ("status", "changed_files", "gates", "gates_passed", "review_report_path", "employee_results_path"),
     "review_report": ("run_id", "source", "external_snapshot", "license_review", "review_pipeline", "replay"),
     "pr_review_result": ("status", "summary", "files", "comments", "task_groups", "incremental"),
+    "pr_dry_run_result": ("status", "pr_url", "diff_url", "summary", "review"),
     "llm_score": ("dimension", "value", "reason"),
 }
 
