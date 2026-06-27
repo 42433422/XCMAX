@@ -1,98 +1,110 @@
 {
   "evidence": {
-    "employee_results_dir": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/employee_results",
-    "queue_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/employee_queue.jsonl"
+    "employee_results_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results",
+    "queue_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_queue.jsonl"
   },
   "priorities": [
     {
-      "acceptance": "Next absorption run improves or preserves comparative_analysis_depth with post-tests passing.",
-      "completed_evidence_count": 20,
-      "dimension": "comparative_analysis_depth",
+      "acceptance": "Next absorption run improves or preserves feedback_loop_closure with post-tests passing.",
+      "completed_evidence_count": 139,
+      "dimension": "feedback_loop_closure",
+      "employee_feedback_count": 31,
       "evidence_required": [
         "queued_task_id",
         "employee_result",
         "post_absorption_test",
         "replay_report"
       ],
-      "next_action": "replay_and_verify_comparative_analysis_depth",
-      "owner_hint": "absorption-review",
-      "priority": "P1",
-      "queued_count": 30,
+      "feedback_driven": true,
+      "next_action": "feedback_driven_replay_and_verify_feedback_loop_closure",
+      "owner_hint": "feedback-runtime",
+      "priority": "P0",
+      "queued_count": 20,
       "ready_for_employee": true
     },
     {
       "acceptance": "Next absorption run improves or preserves product_operability with post-tests passing.",
-      "completed_evidence_count": 20,
+      "completed_evidence_count": 53,
       "dimension": "product_operability",
+      "employee_feedback_count": 13,
       "evidence_required": [
         "queued_task_id",
         "employee_result",
         "post_absorption_test",
         "replay_report"
       ],
-      "next_action": "replay_and_verify_product_operability",
+      "feedback_driven": true,
+      "next_action": "feedback_driven_replay_and_verify_product_operability",
       "owner_hint": "product-runtime",
-      "priority": "P1",
-      "queued_count": 30,
+      "priority": "P0",
+      "queued_count": 65,
+      "ready_for_employee": true
+    },
+    {
+      "acceptance": "Next absorption run improves or preserves comparative_analysis_depth with post-tests passing.",
+      "completed_evidence_count": 37,
+      "dimension": "comparative_analysis_depth",
+      "employee_feedback_count": 10,
+      "evidence_required": [
+        "queued_task_id",
+        "employee_result",
+        "post_absorption_test",
+        "replay_report"
+      ],
+      "feedback_driven": true,
+      "next_action": "feedback_driven_replay_and_verify_comparative_analysis_depth",
+      "owner_hint": "absorption-review",
+      "priority": "P0",
+      "queued_count": 59,
       "ready_for_employee": true
     },
     {
       "acceptance": "Next absorption run improves or preserves operational_readiness with post-tests passing.",
-      "completed_evidence_count": 10,
+      "completed_evidence_count": 22,
       "dimension": "operational_readiness",
+      "employee_feedback_count": 6,
       "evidence_required": [
         "queued_task_id",
         "employee_result",
         "post_absorption_test",
         "replay_report"
       ],
-      "next_action": "replay_and_verify_operational_readiness",
+      "feedback_driven": true,
+      "next_action": "feedback_driven_replay_and_verify_operational_readiness",
       "owner_hint": "retort-maintainer",
-      "priority": "P1",
-      "queued_count": 15,
+      "priority": "P0",
+      "queued_count": 32,
       "ready_for_employee": true
     },
     {
       "acceptance": "Next absorption run improves or preserves external_ingestion with post-tests passing.",
-      "completed_evidence_count": 8,
+      "completed_evidence_count": 11,
       "dimension": "external_ingestion",
+      "employee_feedback_count": 1,
       "evidence_required": [
         "queued_task_id",
         "employee_result",
         "post_absorption_test",
         "replay_report"
       ],
-      "next_action": "replay_and_verify_external_ingestion",
+      "feedback_driven": true,
+      "next_action": "feedback_driven_replay_and_verify_external_ingestion",
       "owner_hint": "absorption-review",
-      "priority": "P1",
-      "queued_count": 12,
-      "ready_for_employee": true
-    },
-    {
-      "acceptance": "Next absorption run improves or preserves feedback_loop_closure with post-tests passing.",
-      "completed_evidence_count": 64,
-      "dimension": "feedback_loop_closure",
-      "evidence_required": [
-        "queued_task_id",
-        "employee_result",
-        "post_absorption_test",
-        "replay_report"
-      ],
-      "next_action": "replay_and_verify_feedback_loop_closure",
-      "owner_hint": "feedback-runtime",
-      "priority": "P1",
-      "queued_count": 10,
+      "priority": "P0",
+      "queued_count": 21,
       "ready_for_employee": true
     }
   ],
-  "project": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine",
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "status": "ready",
   "summary": {
     "all_tasks_have_acceptance": true,
-    "completed_result_count": 64,
-    "employee_result_count": 64,
+    "completed_result_count": 139,
+    "employee_feedback_applied": true,
+    "employee_result_count": 170,
+    "feedback_driven_priority_count": 5,
     "prioritized_dimension_count": 5,
-    "queued_task_count": 97,
+    "queued_task_count": 197,
     "ready_employee_task_count": 5
   }
 }

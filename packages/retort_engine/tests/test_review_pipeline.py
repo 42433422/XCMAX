@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from retort_engine.review_pipeline import build_absorption_review_report, build_depth_absorption_workflow, compare_component_gaps, group_review_files
+from retort_engine.contracts import validate_contract
+from retort_engine.review_pipeline import build_absorption_review_report, build_depth_absorption_workflow, build_diff_pipeline_replay, compare_component_gaps, group_review_files
 
 
 def write(path: Path, text: str) -> None:
@@ -234,3 +235,43 @@ def test_build_absorption_review_report_preserves_pipeline_contract(tmp_path: Pa
     assert workflow["quality_gate"]["passed"] is True
     assert {item["component"] for item in workflow["focused_components"]} >= {"review_pipeline", "diff_hunk_review", "file_grouping"}
     assert {item["component"] for item in workflow["deferred_breadth_components"]} == {"plugin_surface"}
+
+
+def test_diff_pipeline_replay_groups_real_diff_and_tasking() -> None:
+    diff = """diff --git a/app/auth.py b/app/auth.py
+--- a/app/auth.py
++++ b/app/auth.py
+@@ -1 +1,3 @@
+ def login():
++    api_key = "secret"
++    return True
+diff --git a/tests/test_auth.py b/tests/test_auth.py
+--- a/tests/test_auth.py
++++ b/tests/test_auth.py
+@@ -1 +1,2 @@
+ def test_login():
++    assert True
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -1 +1,2 @@
+ name: ci
++on: [push]
+"""
+
+    replay = build_diff_pipeline_replay(diff, issue_context="Fix login token handling", max_comments=10)
+
+    assert replay["status"] == "ready"
+    assert replay["pipeline_stages"] == [
+        "parse_unified_diff",
+        "group_related_files",
+        "map_diff_hunk_context",
+        "rank_publishable_comments",
+        "dispatch_employee_task",
+    ]
+    assert {item["context"] for item in replay["context_groups"]} >= {"security", "tests", "ci_config"}
+    assert replay["summary"]["diff_grouping_depth_score"] >= 80
+    assert replay["summary"]["publishable_comment_count"] >= 1
+    assert replay["summary"]["task_group_count"] >= 1
+    assert replay["evidence"]["core_behavior"] == "diff_grouping_to_publishable_review_and_employee_tasking"
+    assert validate_contract("review_pipeline_diff_replay_result", replay)["valid"] is True

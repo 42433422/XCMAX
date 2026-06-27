@@ -16,6 +16,7 @@ from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
@@ -62,6 +63,15 @@ class RetortService:
             previous_diff_text=previous_diff,
             issue_context=str(payload.get("issue_context") or ""),
             pr_body=str(payload.get("pr_body") or ""),
+        )
+
+    def review_pipeline_diff_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")
+        return build_diff_pipeline_replay(
+            str(payload.get("diff") or ""),
+            previous_diff_text=previous_diff,
+            issue_context=str(payload.get("issue_context") or ""),
+            max_comments=int(payload.get("max_comments") or 20),
         )
 
     def review_pr(self, payload: dict[str, Any]) -> dict[str, Any]:

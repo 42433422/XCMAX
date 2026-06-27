@@ -16,6 +16,7 @@ from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import write_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
@@ -96,6 +97,13 @@ def main(argv: list[str] | None = None) -> int:
     review.add_argument("--pr-body-file", default="")
     review.add_argument("--max-comments", type=int, default=20)
     review.add_argument("--json", action="store_true")
+    pipeline_replay = sub.add_parser("review-pipeline-diff-replay")
+    pipeline_replay.add_argument("--diff-file", required=True)
+    pipeline_replay.add_argument("--previous-diff-file", default="")
+    pipeline_replay.add_argument("--issue-context-file", default="")
+    pipeline_replay.add_argument("--max-comments", type=int, default=20)
+    pipeline_replay.add_argument("--output", default="")
+    pipeline_replay.add_argument("--json", action="store_true")
     review_pr = sub.add_parser("review-pr")
     review_pr.add_argument("--url", required=True)
     review_pr.add_argument("--previous-diff-file", default="")
@@ -267,6 +275,30 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Comments: {result['summary']['comment_count']}")
             print(f"Skipped existing changes: {result['summary']['skipped_existing_change_count']}")
         return 0 if result["status"] in {"reviewed", "no_new_changes"} else 1
+    if args.command == "review-pipeline-diff-replay":
+        with open(args.diff_file, encoding="utf-8") as handle:
+            diff_text = handle.read()
+        previous_diff_text = ""
+        if args.previous_diff_file:
+            with open(args.previous_diff_file, encoding="utf-8") as handle:
+                previous_diff_text = handle.read()
+        issue_context = ""
+        if args.issue_context_file:
+            with open(args.issue_context_file, encoding="utf-8") as handle:
+                issue_context = handle.read()
+        result = build_diff_pipeline_replay(diff_text, previous_diff_text=previous_diff_text, issue_context=issue_context, max_comments=args.max_comments)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort diff pipeline replay status: {result['status']}")
+            print(f"Depth score: {result['summary']['diff_grouping_depth_score']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] in {"ready", "no_new_changes", "empty_diff"} else 1
     if args.command == "review-pr":
         previous_diff_text = ""
         if args.previous_diff_file:

@@ -15,6 +15,13 @@ PIPELINE_STAGES = (
     "rank_absorption_tasks",
     "verify_feedback_loop",
 )
+DIFF_REPLAY_STAGES = (
+    "parse_unified_diff",
+    "group_related_files",
+    "map_diff_hunk_context",
+    "rank_publishable_comments",
+    "dispatch_employee_task",
+)
 COMPONENT_MARKERS = {
     "review_pipeline": ("review", "reflection", "localization", "diff hunk", "patch set", "code review"),
     "file_grouping": ("file group", "group files", "changed files", "related files", "pathspec"),
@@ -71,6 +78,54 @@ def build_absorption_review_report(own_project: str | Path, external_project: st
     }
 
 
+def build_diff_pipeline_replay(
+    diff_text: str,
+    *,
+    issue_context: str = "",
+    previous_diff_text: str = "",
+    max_comments: int = 20,
+) -> dict[str, Any]:
+    """Run the absorbed review pipeline against a real diff and return proof data."""
+    from retort_engine.pr_review import review_diff
+
+    review = review_diff(
+        diff_text,
+        issue_context=issue_context,
+        previous_diff_text=previous_diff_text,
+        max_comments=max_comments,
+    )
+    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
+    context_groups = [item for item in review.get("context_groups") or [] if isinstance(item, dict)]
+    comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
+    task_groups = [item for item in review.get("task_groups") or [] if isinstance(item, dict)]
+    publishable_comments = [item for item in comments if item.get("publishable") is not False]
+    replay_summary = {
+        "file_count": int(summary.get("file_count") or 0),
+        "hunk_count": int(summary.get("hunk_count") or 0),
+        "context_group_count": len(context_groups),
+        "comment_count": len(comments),
+        "publishable_comment_count": len(publishable_comments),
+        "task_group_count": len(task_groups),
+        "absorbed_context_signal_strength": int(summary.get("absorbed_context_signal_strength") or 0),
+        "diff_grouping_depth_score": _diff_grouping_depth_score(summary, context_groups, publishable_comments, task_groups),
+        "ready_for_employee_tasking": bool(summary.get("ready_for_employee_tasking")),
+    }
+    return {
+        "status": "ready" if review.get("status") == "reviewed" and replay_summary["context_group_count"] else str(review.get("status") or "empty"),
+        "pipeline_stages": list(DIFF_REPLAY_STAGES),
+        "summary": replay_summary,
+        "context_groups": context_groups,
+        "comments": [_comment_replay_payload(item) for item in publishable_comments[:max_comments]],
+        "task_groups": task_groups,
+        "evidence": {
+            "source": "retort_engine.pr_review.review_diff",
+            "issue_context_supplied": bool(issue_context.strip()),
+            "previous_diff_supplied": bool(previous_diff_text.strip()),
+            "core_behavior": "diff_grouping_to_publishable_review_and_employee_tasking",
+        },
+    }
+
+
 def group_review_files(root: str | Path) -> dict[str, dict[str, Any]]:
     base = Path(root)
     groups = {name: {"files": [], "marker_hits": 0} for name in COMPONENT_MARKERS}
@@ -88,6 +143,32 @@ def group_review_files(root: str | Path) -> dict[str, dict[str, Any]]:
             if len(group["files"]) < 12:
                 group["files"].append(rel)
     return {name: value for name, value in groups.items() if value["files"] or value["marker_hits"]}
+
+
+def _diff_grouping_depth_score(summary: dict[str, Any], context_groups: list[dict[str, Any]], publishable_comments: list[dict[str, Any]], task_groups: list[dict[str, Any]]) -> int:
+    score = 0
+    if int(summary.get("file_count") or 0) > 0:
+        score += 15
+    if int(summary.get("hunk_count") or 0) > 0:
+        score += 15
+    score += min(25, len(context_groups) * 8)
+    score += min(20, len(publishable_comments) * 5)
+    if task_groups:
+        score += 15
+    if int(summary.get("absorbed_context_signal_strength") or 0) >= 80:
+        score += 10
+    return min(100, score)
+
+
+def _comment_replay_payload(comment: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "file": str(comment.get("file") or ""),
+        "line": int(comment.get("line") or 0),
+        "severity": str(comment.get("severity") or ""),
+        "review_stage": str(comment.get("review_stage") or ""),
+        "review_context": str(comment.get("review_context") or ""),
+        "publishable": bool(comment.get("publishable", True)),
+    }
 
 
 def compare_component_gaps(own_groups: dict[str, dict[str, Any]], external_groups: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
