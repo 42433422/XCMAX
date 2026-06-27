@@ -189,9 +189,11 @@ report_only=true
 
 
 class PaibiLLMClient:
+    _token_cache = ""
+
     def __init__(self, api_url: str = "", token: str = "", timeout: float | None = None) -> None:
         self.api_url = (api_url or _env("RETORT_PAIBI_API_URL", "XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "MODSTORE_PARA_API_URL", "DEVFLEET_API_URL") or DEFAULT_PAIBI_API_URL).strip().rstrip("/")
-        self.token = (token or _env("RETORT_PAIBI_TOKEN", "XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", "MODSTORE_PARA_TOKEN", "DEVFLEET_TOKEN")).strip()
+        self.token = (token or _env("RETORT_PAIBI_TOKEN", "XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", "MODSTORE_PARA_TOKEN", "DEVFLEET_TOKEN") or self._token_cache).strip()
         self.timeout = timeout if timeout is not None else float(os.environ.get("RETORT_PAIBI_TIMEOUT_SEC") or "8")
 
     def dispatch(self, *, prompt: str, project: Path, title: str) -> dict[str, Any]:
@@ -241,6 +243,7 @@ class PaibiLLMClient:
         if not token:
             raise RuntimeError("Para guest 登录未返回 token")
         self.token = token
+        PaibiLLMClient._token_cache = token
         return token
 
     def _request(self, method: str, path: str, *, token: str = "", json_body: dict[str, Any] | None = None) -> dict[str, Any]:
