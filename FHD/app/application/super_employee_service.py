@@ -1289,10 +1289,14 @@ class SuperEmployeeService:
             return ""
         # 口袋 Claude Code：claude 生产路径走"持久会话续接 + 隔离工作区"——有上下文、能动手、
         # 体验接近直接和 Claude Code 交互。codex / 测试注入仍走原"闲聊 or dev-loop"逻辑。
+        # 但中继工单(force_cli_direct)要的是"真交付"：必须走 dev-loop(用各工具自己的命令
+        # 构造器 → 真改文件→提交→推分支)，绝不能落进 claude 式 --resume 会话(对 cursor/trae
+        # 命令不对、且不产出分支)。这是 Trae/Cursor 也能真执行的关键。
         if (
             self._p.cli_stream_json
             and self._cli_runner is subprocess.run
             and self._conversation_mode_enabled()
+            and not context.get("force_cli_direct")
         ):
             return self._run_conversation_turn(cli_path, text, context)
         base_cwd = self._cli_workspace(context)
