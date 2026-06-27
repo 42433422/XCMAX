@@ -5,6 +5,7 @@ import json
 import sys
 
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
+from retort_engine.pr_review import review_diff
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import run_ui_server
 
@@ -75,6 +76,10 @@ def main(argv: list[str] | None = None) -> int:
     proof.add_argument("--external-advantage-reassessed", action="store_true")
     proof.add_argument("--evidence", action="append", default=[])
     proof.add_argument("--json", action="store_true")
+    review = sub.add_parser("review-diff")
+    review.add_argument("--diff-file", required=True)
+    review.add_argument("--max-comments", type=int, default=20)
+    review.add_argument("--json", action="store_true")
     ui = sub.add_parser("ui")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8790)
@@ -122,6 +127,15 @@ def main(argv: list[str] | None = None) -> int:
         result = record_closed_loop_proof(args.project, {"branch_diff_verified": args.branch_diff_verified, "employee_execution_verified": args.employee_execution_verified, "post_absorption_tests_passed": args.post_absorption_tests_passed, "merge_verified": args.merge_verified, "external_advantage_reassessed": args.external_advantage_reassessed, "evidence": args.evidence})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort proof status: {result['status']}")
         return 0
+    if args.command == "review-diff":
+        with open(args.diff_file, encoding="utf-8") as handle:
+            result = review_diff(handle.read(), max_comments=args.max_comments)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort diff review status: {result['status']}")
+            print(f"Comments: {result['summary']['comment_count']}")
+        return 0 if result["status"] == "reviewed" else 1
     if args.command == "ui":
         run_ui_server(args.host, args.port)
         return 0

@@ -11,10 +11,13 @@ from retort_engine.models import EmployeeTaskResult
 
 def test_contract_schemas_validate_required_outputs() -> None:
     assert "assessment" in contract_names()
+    assert "pr_review_result" in contract_names()
     valid = validate_contract("execution_result", {"status": "applied", "changed_files": [], "gates": [], "gates_passed": True, "review_report_path": "report.json", "employee_results_path": "result.json"})
+    review_valid = validate_contract("pr_review_result", {"status": "reviewed", "summary": {}, "files": [], "comments": [], "task_groups": []})
     invalid = validate_contract("review_report", {"run_id": "run"})
 
     assert valid["valid"] is True
+    assert review_valid["valid"] is True
     assert invalid["valid"] is False
     assert "license_review" in invalid["missing"]
 
