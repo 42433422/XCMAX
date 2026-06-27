@@ -33,10 +33,10 @@
         "ci/trigger_action.py",
         "codebase_digest/app.py"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -46,10 +46,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -78,10 +80,10 @@
         "core/core.ts",
         "core/index.d.ts"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -91,10 +93,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -123,10 +127,10 @@
         "ci/trigger_action.py",
         "codebase_digest/app.py"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -136,10 +140,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -168,10 +174,10 @@
         "docker/mosaico/pr-agent-solution-agent.json",
         "docs/_pages/motivation.md"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -180,10 +186,12 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -207,19 +215,23 @@
         "pr_agent/git_providers/local_git_provider.py",
         "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
         "pr_agent/settings/pr_reviewer_prompts.toml",
+        "review/grouping.ts",
+        "review/pipeline.py",
         "tests/test_html.py"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/nedbat/coveragepy",
         "https://github.com/qodo-ai/pr-agent"
@@ -242,20 +254,22 @@
         "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
         "pr_agent/settings/pr_custom_labels.toml"
       ],
-      "gate_pass_count": 6,
+      "gate_pass_count": 7,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 6,
+      "run_count": 7,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627171646-762694f28f",
         "20260627172352-6e1352f61e",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 6,
+      "source_count": 7,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/continuedev/continue",
@@ -277,19 +291,23 @@
         "pr_agent/git_providers/local_git_provider.py",
         "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
         "pr_agent/settings/pr_reviewer_prompts.toml",
+        "review/grouping.ts",
+        "review/pipeline.py",
         "tests/test_html.py"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/nedbat/coveragepy",
         "https://github.com/qodo-ai/pr-agent"
@@ -328,10 +346,10 @@
         "core/nextEdit/NextEditProvider.ts",
         "core/nextEdit/constants.ts"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -341,10 +359,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -373,19 +393,21 @@
         "aider/website/docs/usage.md",
         "core/indexing/CodebaseIndexer.test.ts"
       ],
-      "gate_pass_count": 5,
+      "gate_pass_count": 6,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 5,
+      "run_count": 6,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
         "20260627172525-c3d6b79c6a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 5,
+      "source_count": 6,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
@@ -426,10 +448,10 @@
         "benchmark/over_time.py",
         "benchmark/problem_stats.py"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -439,10 +461,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -487,10 +511,10 @@
         "benchmark/over_time.py",
         "benchmark/problem_stats.py"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -500,10 +524,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -532,10 +558,10 @@
         "core/nextEdit/NextEditProvider.ts",
         "core/nextEdit/constants.ts"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -545,10 +571,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -593,10 +621,10 @@
         "aider/coders/base_coder.py",
         "aider/coders/context_coder.py"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -606,10 +634,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -638,10 +668,10 @@
         "aider/io.py",
         "benchmark/benchmark.py"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -651,10 +681,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -699,10 +731,10 @@
         "ci/update_rtfd.py",
         "docs/README.md"
       ],
-      "gate_pass_count": 9,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 9,
+      "run_count": 10,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -712,10 +744,12 @@
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
-        "20260627173253-72548897e8"
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f"
       ],
-      "source_count": 9,
+      "source_count": 10,
       "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
@@ -741,7 +775,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-automation-surface",
       "title": "Implement cumulative architecture pattern: automation_surface"
     },
@@ -757,7 +791,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-benchmark-eval",
       "title": "Implement cumulative architecture pattern: benchmark_eval"
     },
@@ -773,7 +807,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-command-contract",
       "title": "Implement cumulative architecture pattern: command_contract"
     },
@@ -789,7 +823,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-evaluation-loop",
       "title": "Implement cumulative architecture pattern: evaluation_loop"
     },
@@ -805,7 +839,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-model-adapter",
       "title": "Implement cumulative architecture pattern: model_adapter"
     },
@@ -821,7 +855,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-provider-boundary",
       "title": "Implement cumulative architecture pattern: provider_boundary"
     },
@@ -837,7 +871,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
     },
@@ -853,7 +887,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-review-pipeline",
       "title": "Implement cumulative architecture pattern: review_pipeline"
     },
@@ -869,7 +903,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-safety-policy",
       "title": "Implement cumulative architecture pattern: safety_policy"
     },
@@ -885,7 +919,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "task_id": "retort-architecture-workflow-ci",
       "title": "Implement cumulative architecture pattern: workflow_ci"
     },
@@ -901,7 +935,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-context-localization",
       "title": "Implement cumulative architecture pattern: context_localization"
     },
@@ -917,7 +951,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "task_id": "retort-architecture-diff-hunk-review",
       "title": "Implement cumulative architecture pattern: diff_hunk_review"
     },
@@ -933,7 +967,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 5,
+      "supporting_source_count": 6,
       "task_id": "retort-architecture-file-grouping",
       "title": "Implement cumulative architecture pattern: file_grouping"
     },
@@ -949,7 +983,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-context-partitioning",
       "title": "Implement cumulative architecture pattern: context_partitioning"
     },
@@ -965,7 +999,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-diff-locality",
       "title": "Implement cumulative architecture pattern: diff_locality"
     }
@@ -2910,12 +2944,205 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json"
+      ],
+      "components": [
+        {
+          "component": "workflow_ci",
+          "depth_score": 52,
+          "evidence_files": [
+            "eval/benchmark.md",
+            "ops/ci.yml",
+            "review/pipeline.py"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 49,
+          "evidence_files": [
+            "review/grouping.ts",
+            "review/pipeline.py"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "diff_locality",
+          "depth_score": 49,
+          "evidence_files": [
+            "review/grouping.ts",
+            "review/pipeline.py"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "diff_hunk_review",
+          "depth_score": 49,
+          "evidence_files": [
+            "review/grouping.ts",
+            "review/pipeline.py"
+          ],
+          "signals": [
+            "diff_hunk_review"
+          ]
+        },
+        {
+          "component": "context_partitioning",
+          "depth_score": 49,
+          "evidence_files": [
+            "review/grouping.ts",
+            "review/pipeline.py"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 46,
+          "evidence_files": [
+            "security/policy.py"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 46,
+          "evidence_files": [
+            "eval/benchmark.md"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 46,
+          "evidence_files": [
+            "plugins/action.yml"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 46,
+          "evidence_files": [
+            "plugins/action.yml"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "file_grouping",
+          "depth_score": 46,
+          "evidence_files": [
+            "review/grouping.ts"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 46,
+          "evidence_files": [
+            "eval/benchmark.md"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "context_localization",
+          "depth_score": 46,
+          "evidence_files": [
+            "review/pipeline.py"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 46,
+          "evidence_files": [
+            "plugins/action.yml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 46,
+          "evidence_files": [
+            "eval/benchmark.md"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 46,
+          "evidence_files": [
+            "plugins/action.yml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T18:27:08Z",
+      "external_file_count": 6,
+      "external_path": "/private/tmp/retort-depth-source-zULAcN",
+      "gate_count": 7,
+      "gates_passed": true,
+      "git_revision": "",
+      "run_id": "20260627182658-daf3bca93f",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "/private/tmp/retort-depth-source-zULAcN",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "external_ingestion",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 21,
-    "gate_passed_run_count": 9,
+    "gate_passed_run_count": 10,
     "ready_component_count": 15,
     "ready_components": [
       "workflow_ci",
@@ -2928,7 +3155,7 @@
       "evaluation_loop"
     ],
     "repeated_component_count": 15,
-    "run_count": 9,
-    "source_count": 9
+    "run_count": 10,
+    "source_count": 10
   }
 }
