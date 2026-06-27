@@ -1,15 +1,15 @@
 {
   "code_graph_summary": {
-    "call_edge_count": 1522,
-    "define_edge_count": 815,
+    "call_edge_count": 1543,
+    "define_edge_count": 827,
     "dependency_cycle_count": 0,
-    "edge_count": 3379,
+    "edge_count": 3414,
     "file_count": 112,
     "hotspot_count": 12,
-    "import_edge_count": 831,
+    "import_edge_count": 833,
     "include_tests": true,
     "local_dependency_edge_count": 211,
-    "node_count": 927,
+    "node_count": 939,
     "parse_error_count": 0
   },
   "gate": {
@@ -27,31 +27,31 @@
     "code_graph_hotspot_task_count": 7,
     "ready_component_count": 24,
     "ready_task_count": 12,
-    "source_count": 31,
+    "source_count": 32,
     "task_count": 12
   },
   "tasks": [
     {
       "architecture_depth_score": 100,
-      "code_graph_hotspot_score": 138,
+      "code_graph_hotspot_score": 145,
       "code_graph_hotspots": [
         {
-          "degree": 87,
+          "degree": 93,
           "id": "retort_engine/real_absorption.py",
           "kind": "file",
           "path": "retort_engine/real_absorption.py"
         },
         {
-          "degree": 51,
+          "degree": 52,
           "id": "retort_engine/real_absorption.py:apply_real_absorption",
           "kind": "function",
           "path": "retort_engine/real_absorption.py"
         }
       ],
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 15,
       "component": "workflow_ci",
       "contract": "Absorption, merge proof, rollback proof, and local gates must fail closed together.",
-      "gate_pass_rate": 0.882,
+      "gate_pass_rate": 0.886,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -66,7 +66,7 @@
         "wire_workflow_ci_runtime_gate",
         "prove_workflow_ci_with_tests"
       ],
-      "supporting_source_count": 31,
+      "supporting_source_count": 32,
       "tests": [
         "tests/test_retort_engine.py",
         "tests/test_branching_git_status.py"
@@ -95,7 +95,7 @@
           "path": "retort_engine/codebase_graph.py"
         }
       ],
-      "code_graph_proof_count": 9,
+      "code_graph_proof_count": 10,
       "component": "codebase_graph",
       "contract": "Architecture and absorption targeting use deterministic graph evidence plus import-boundary contracts.",
       "gate_pass_rate": 1.0,
@@ -114,7 +114,7 @@
         "wire_codebase_graph_runtime_gate",
         "prove_codebase_graph_with_tests"
       ],
-      "supporting_source_count": 9,
+      "supporting_source_count": 10,
       "tests": [
         "tests/test_codebase_graph.py",
         "tests/test_architecture_contracts.py",
@@ -178,10 +178,10 @@
           "path": "retort_engine/codebase_graph.py"
         }
       ],
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 15,
       "component": "context_localization",
       "contract": "Context grouping and deterministic code graphing feed review without leaking broad, irrelevant files.",
-      "gate_pass_rate": 0.897,
+      "gate_pass_rate": 0.9,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -196,7 +196,7 @@
         "wire_context_localization_runtime_gate",
         "prove_context_localization_with_tests"
       ],
-      "supporting_source_count": 26,
+      "supporting_source_count": 27,
       "tests": [
         "tests/test_review_context_bias.py",
         "tests/test_pr_review.py",
@@ -214,10 +214,10 @@
           "path": "retort_engine/pr_review.py"
         }
       ],
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 15,
       "component": "review_pipeline",
       "contract": "Review stages, context localization, and PR comments share one component contract.",
-      "gate_pass_rate": 0.879,
+      "gate_pass_rate": 0.882,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -231,7 +231,7 @@
         "wire_review_pipeline_runtime_gate",
         "prove_review_pipeline_with_tests"
       ],
-      "supporting_source_count": 30,
+      "supporting_source_count": 31,
       "tests": [
         "tests/test_review_pipeline.py",
         "tests/test_pr_review.py"
@@ -282,10 +282,10 @@
           "path": "retort_engine/service.py"
         }
       ],
-      "code_graph_proof_count": 13,
+      "code_graph_proof_count": 14,
       "component": "provider_boundary",
       "contract": "LLM providers stay behind one dispatch/status contract.",
-      "gate_pass_rate": 0.879,
+      "gate_pass_rate": 0.882,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -299,7 +299,7 @@
         "wire_provider_boundary_runtime_gate",
         "prove_provider_boundary_with_tests"
       ],
-      "supporting_source_count": 30,
+      "supporting_source_count": 31,
       "tests": [
         "tests/test_retort_engine.py"
       ]
@@ -308,10 +308,10 @@
       "architecture_depth_score": 100,
       "code_graph_hotspot_score": 0,
       "code_graph_hotspots": [],
-      "code_graph_proof_count": 13,
+      "code_graph_proof_count": 14,
       "component": "model_adapter",
       "contract": "Prompt construction and provider IO stay separable and testable.",
-      "gate_pass_rate": 0.879,
+      "gate_pass_rate": 0.882,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -325,7 +325,7 @@
         "wire_model_adapter_runtime_gate",
         "prove_model_adapter_with_tests"
       ],
-      "supporting_source_count": 30,
+      "supporting_source_count": 31,
       "tests": [
         "tests/test_retort_engine.py"
       ]
@@ -334,10 +334,10 @@
       "architecture_depth_score": 100,
       "code_graph_hotspot_score": 0,
       "code_graph_hotspots": [],
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 15,
       "component": "safety_policy",
       "contract": "License, dirty-worktree, generated evidence, and rollback policies share one safety boundary.",
-      "gate_pass_rate": 0.938,
+      "gate_pass_rate": 0.939,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -352,7 +352,7 @@
         "wire_safety_policy_runtime_gate",
         "prove_safety_policy_with_tests"
       ],
-      "supporting_source_count": 30,
+      "supporting_source_count": 31,
       "tests": [
         "tests/test_retort_engine.py",
         "tests/test_branching_git_status.py"
