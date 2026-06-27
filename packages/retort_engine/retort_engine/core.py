@@ -13,9 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.contracts import contract_names
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.pr_dry_run import review_pr_url
+from retort_engine.pr_publish import build_publish_dry_run
 from retort_engine.pr_review import review_diff
 
 
@@ -89,6 +91,8 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "pr_review_api": "/api/review-diff" in text and "pr_review_result" in text,
         "incremental_pr_review": "previous_diff_text" in text and "skipped_existing_change_count" in text,
         "pr_dry_run": "review-pr" in text and "review_pr_url" in text and "/api/review-pr" in text,
+        "pr_publish_dry_run": "publish-pr-dry-run" in text and "build_publish_dry_run" in text and "/api/publish-pr-dry-run" in text,
+        "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
     }
     tracked = _tracking_state(root)
@@ -345,6 +349,12 @@ class RetortService:
     def review_pr(self, payload: dict[str, Any]) -> dict[str, Any]:
         previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")
         return review_pr_url(str(payload.get("url") or payload.get("pr_url") or ""), max_comments=int(payload.get("max_comments") or 20), previous_diff_text=previous_diff, max_bytes=int(payload.get("max_bytes") or 500000))
+
+    def publish_pr_dry_run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_publish_dry_run(str(payload.get("review_file") or payload.get("review_report") or ""), max_comments=int(payload.get("max_comments") or 50))
+
+    def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_cross_project_replay(str(payload.get("project") or payload.get("project_path") or "."))
 
     def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or payload.get("project_path") or ".")
@@ -747,6 +757,19 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"pr_dry_run_report_pr_url={pr_review.get('dry_run_report_pr_url')}")
     evidence.append(f"pr_dry_run_report_comment_count={pr_review.get('dry_run_report_comment_count')}")
     evidence.append(f"pr_dry_run_report_file_count={pr_review.get('dry_run_report_file_count')}")
+    publish_report = _read_json(project / "docs" / "retort_pr_publish_dry_run.json")
+    publish_summary = publish_report.get("summary") if isinstance(publish_report.get("summary"), dict) else {}
+    evidence.append(f"pr_publish_dry_run_status={publish_report.get('status', '')}")
+    evidence.append(f"pr_publish_dry_run_comment_count={publish_summary.get('would_post_comment_count', '')}")
+    evidence.append(f"pr_publish_dry_run_permission={publish_summary.get('permission_required', '')}")
+    evidence.append(f"pr_publish_dry_run_rollback={(publish_report.get('rollback') or {}).get('strategy', '') if isinstance(publish_report.get('rollback'), dict) else ''}")
+    replay_report = _read_json(project / "docs" / "retort_cross_project_replay.json")
+    replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
+    replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
+    evidence.append(f"cross_project_replay_status={replay_report.get('status', '')}")
+    evidence.append(f"cross_project_replay_external_project_count={replay_summary.get('external_project_count', '')}")
+    evidence.append(f"cross_project_replay_distinct_signal_count={replay_summary.get('distinct_signal_count', '')}")
+    evidence.append(f"cross_project_replay_passed_checks={sum(1 for item in replay_checks if item.get('passed'))}/{len(replay_checks)}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
@@ -883,8 +906,12 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
 def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     source = root / "retort_engine" / "pr_review.py"
     dry_source = root / "retort_engine" / "pr_dry_run.py"
+    publish_source = root / "retort_engine" / "pr_publish.py"
+    replay_source = root / "retort_engine" / "comparative_replay.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
+    publish_test = root / "tests" / "test_pr_publish.py"
+    replay_test = root / "tests" / "test_comparative_replay.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -931,8 +958,26 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "dry_run_report_pr_url": str(dry_report_payload.get("pr_url") or ""),
         "dry_run_report_comment_count": int(((dry_report_payload.get("summary") or {}) if isinstance(dry_report_payload.get("summary"), dict) else {}).get("comment_count") or 0),
         "dry_run_report_file_count": int(((dry_report_payload.get("summary") or {}) if isinstance(dry_report_payload.get("summary"), dict) else {}).get("file_count") or 0),
-        "behavior_source_files": [item for item, exists in (("retort_engine/pr_review.py", source.is_file()), ("retort_engine/pr_dry_run.py", dry_source.is_file())) if exists],
-        "behavior_test_files": [item for item, exists in (("tests/test_pr_review.py", test.is_file()), ("tests/test_pr_dry_run.py", dry_test.is_file())) if exists],
+        "behavior_source_files": [
+            item
+            for item, exists in (
+                ("retort_engine/pr_review.py", source.is_file()),
+                ("retort_engine/pr_dry_run.py", dry_source.is_file()),
+                ("retort_engine/pr_publish.py", publish_source.is_file()),
+                ("retort_engine/comparative_replay.py", replay_source.is_file()),
+            )
+            if exists
+        ],
+        "behavior_test_files": [
+            item
+            for item, exists in (
+                ("tests/test_pr_review.py", test.is_file()),
+                ("tests/test_pr_dry_run.py", dry_test.is_file()),
+                ("tests/test_pr_publish.py", publish_test.is_file()),
+                ("tests/test_comparative_replay.py", replay_test.is_file()),
+            )
+            if exists
+        ],
     }
 
 

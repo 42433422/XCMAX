@@ -1,0 +1,113 @@
+{
+  "comments": [
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 47,
+      "path": "README.md",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "line": 55,
+      "path": "README.md",
+      "severity": "low",
+      "side": "RIGHT",
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "line": 73,
+      "path": "README.md",
+      "severity": "low",
+      "side": "RIGHT",
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 18,
+      "path": "action.yml",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 1,
+      "path": "src/main.ts",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "semantic_review"
+    },
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 12,
+      "path": "src/main.ts",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "semantic_review"
+    },
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 46,
+      "path": "src/main.ts",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "semantic_review"
+    },
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 84,
+      "path": "src/main.ts",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "semantic_review"
+    },
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 105,
+      "path": "src/main.ts",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "semantic_review"
+    },
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 214,
+      "path": "src/main.ts",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "semantic_review"
+    },
+    {
+      "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "line": 264,
+      "path": "src/main.ts",
+      "severity": "info",
+      "side": "RIGHT",
+      "strategy": "semantic_review"
+    }
+  ],
+  "diff_url": "https://github.com/villesau/ai-codereviewer/pull/138.diff",
+  "pr_url": "https://github.com/villesau/ai-codereviewer/pull/138",
+  "rollback": {
+    "receipt_fields": [
+      "comment_id",
+      "path",
+      "line",
+      "idempotency_key"
+    ],
+    "requires_receipts": true,
+    "strategy": "delete_created_review_comments"
+  },
+  "source_report": "packages/retort_engine/docs/retort_pr_dry_run_report.json",
+  "status": "dry_run_ready",
+  "summary": {
+    "dry_run": true,
+    "idempotency_key": "7b3c74e5a285432b",
+    "permission_required": "pull_request:write",
+    "source_comment_count": 11,
+    "would_post_comment_count": 11
+  }
+}

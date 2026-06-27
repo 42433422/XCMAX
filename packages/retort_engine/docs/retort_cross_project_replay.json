@@ -1,0 +1,85 @@
+{
+  "checks": [
+    {
+      "name": "at_least_three_external_sources",
+      "observed": 3,
+      "passed": true
+    },
+    {
+      "name": "behavior_code_absorbed",
+      "observed": 3,
+      "passed": true
+    },
+    {
+      "name": "real_pr_diff_reviewed",
+      "observed": 11,
+      "passed": true
+    },
+    {
+      "name": "publish_dry_run_ready",
+      "observed": 11,
+      "passed": true
+    }
+  ],
+  "project": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine",
+  "projects": [
+    {
+      "behavior_source_changed": true,
+      "behavior_test_changed": true,
+      "changed_file_count": 5,
+      "gates_passed": true,
+      "run_id": "20260627124029-5df07f797f",
+      "semantic_gap_count": 4,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/anc95/ChatGPT-CodeReview"
+    },
+    {
+      "behavior_source_changed": true,
+      "behavior_test_changed": true,
+      "changed_file_count": 5,
+      "gates_passed": true,
+      "run_id": "20260627123909-2dec2d00a6",
+      "semantic_gap_count": 0,
+      "signals": [
+        "review_pipeline",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/freeedcom/ai-codereviewer"
+    },
+    {
+      "behavior_source_changed": true,
+      "behavior_test_changed": false,
+      "changed_file_count": 4,
+      "gates_passed": true,
+      "run_id": "20260627131201-4307b75ba4",
+      "semantic_gap_count": 0,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/sourcefuse/ai-pr-reviewer"
+    }
+  ],
+  "residual_questions": [
+    "Which external signals became executable behavior rather than report-only evidence?",
+    "Which PR comments would be posted, skipped, or rolled back in a real GitHub run?",
+    "Which source still contributes unique signals not covered by the current Retort runtime?"
+  ],
+  "status": "ready",
+  "summary": {
+    "behavior_source_project_count": 3,
+    "distinct_signal_count": 5,
+    "external_project_count": 3,
+    "publish_dry_run_comment_count": 11,
+    "real_pr_comment_count": 11
+  }
+}
