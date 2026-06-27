@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from retort_engine.absorbed_capabilities import absorbed_capability_plan, capability_progress_from_execution, explain_missing_absorption_evidence, ranked_capabilities
 
-EXPECTED_ABSORPTION_SOURCE = 'https://github.com/villesau/ai-codereviewer'
+EXPECTED_ABSORPTION_SOURCE = 'https://github.com/go1com/openai-review'
 
 
 def test_absorbed_capability_plan_has_ranked_behavior_signals() -> None:
