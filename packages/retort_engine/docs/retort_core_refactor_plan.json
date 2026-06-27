@@ -1,0 +1,285 @@
+{
+  "gate": {
+    "missing": [],
+    "missing_modules": [],
+    "missing_tests": [],
+    "passed": true,
+    "ready_task_count": 11,
+    "status": "ready",
+    "task_count": 11
+  },
+  "schema_version": 1,
+  "summary": {
+    "blocked_task_count": 0,
+    "ready_component_count": 13,
+    "ready_task_count": 11,
+    "source_count": 4,
+    "task_count": 11
+  },
+  "tasks": [
+    {
+      "architecture_depth_score": 100,
+      "component": "automation_surface",
+      "contract": "CLI, API, and UI expose the same absorption/refactor workflow.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/cli.py",
+        "retort_engine/ui_server.py",
+        "retort_engine/service.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_automation_surface_contract",
+        "wire_automation_surface_runtime_gate",
+        "prove_automation_surface_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_retort_engine.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "benchmark_eval",
+      "contract": "Review quality and absorption quality share benchmark evidence.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/review_quality_benchmark.py",
+        "retort_engine/absorption_quality.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_benchmark_eval_contract",
+        "wire_benchmark_eval_runtime_gate",
+        "prove_benchmark_eval_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_review_quality_benchmark.py",
+        "tests/test_absorbed_capabilities.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "command_contract",
+      "contract": "Command results stay schema-checked and replayable.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/contracts.py",
+        "retort_engine/cli.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_command_contract_contract",
+        "wire_command_contract_runtime_gate",
+        "prove_command_contract_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_contracts_feedback.py",
+        "tests/test_retort_engine.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "context_localization",
+      "contract": "Context grouping feeds PR review without leaking broad, irrelevant files.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/review_context_bias.py",
+        "retort_engine/pr_review.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_context_localization_contract",
+        "wire_context_localization_runtime_gate",
+        "prove_context_localization_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_review_context_bias.py",
+        "tests/test_pr_review.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "evaluation_loop",
+      "contract": "Every absorbed behavior has benchmark counters and regression gates.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/absorption_quality.py",
+        "retort_engine/review_quality_benchmark.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_evaluation_loop_contract",
+        "wire_evaluation_loop_runtime_gate",
+        "prove_evaluation_loop_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_absorbed_capabilities.py",
+        "tests/test_review_quality_benchmark.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "model_adapter",
+      "contract": "Prompt construction and provider IO stay separable and testable.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/paibi_llm.py",
+        "retort_engine/prompts.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_model_adapter_contract",
+        "wire_model_adapter_runtime_gate",
+        "prove_model_adapter_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_retort_engine.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "provider_boundary",
+      "contract": "LLM providers stay behind one dispatch/status contract.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/paibi_llm.py",
+        "retort_engine/service.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_provider_boundary_contract",
+        "wire_provider_boundary_runtime_gate",
+        "prove_provider_boundary_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_retort_engine.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "regression_oracle",
+      "contract": "Architecture refactors need a pass/fail oracle before merge.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/absorption_quality.py",
+        "retort_engine/architecture_refactor.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_regression_oracle_contract",
+        "wire_regression_oracle_runtime_gate",
+        "prove_regression_oracle_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_absorbed_capabilities.py",
+        "tests/test_architecture_refactor.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "review_pipeline",
+      "contract": "Review stages, context localization, and PR comments share one component contract.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/review_pipeline.py",
+        "retort_engine/pr_review.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_review_pipeline_contract",
+        "wire_review_pipeline_runtime_gate",
+        "prove_review_pipeline_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_review_pipeline.py",
+        "tests/test_pr_review.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "safety_policy",
+      "contract": "License, dirty-worktree, generated evidence, and rollback policies share one safety boundary.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/license_gate.py",
+        "retort_engine/git_status.py",
+        "retort_engine/proof.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_safety_policy_contract",
+        "wire_safety_policy_runtime_gate",
+        "prove_safety_policy_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_retort_engine.py",
+        "tests/test_branching_git_status.py"
+      ]
+    },
+    {
+      "architecture_depth_score": 100,
+      "component": "workflow_ci",
+      "contract": "Absorption, merge proof, rollback proof, and local gates must fail closed together.",
+      "gate_pass_rate": 1.0,
+      "missing_modules": [],
+      "missing_tests": [],
+      "modules": [
+        "retort_engine/real_absorption.py",
+        "retort_engine/proof.py",
+        "retort_engine/git_status.py"
+      ],
+      "priority": "P0",
+      "ready_for_core_refactor": true,
+      "refactor_steps": [
+        "extract_workflow_ci_contract",
+        "wire_workflow_ci_runtime_gate",
+        "prove_workflow_ci_with_tests"
+      ],
+      "supporting_source_count": 4,
+      "tests": [
+        "tests/test_retort_engine.py",
+        "tests/test_branching_git_status.py"
+      ]
+    }
+  ]
+}

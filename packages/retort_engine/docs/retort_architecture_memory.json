@@ -24,28 +24,31 @@
         "CONTRIBUTING.md",
         "HISTORY.md",
         "README.md",
+        "RELEASE_NOTES.md",
+        "SECURITY.md",
         "aider/copypaste.py",
         "aider/io.py",
         "codebase_digest/app.py",
         "openhands-agent-server/AGENTS.md",
         "openhands-agent-server/openhands/agent_server/conversation_router.py",
-        "prompt_library/architecture_api_client_code_generation.md",
-        "prompt_library/architecture_layer_identification.md"
+        "prompt_library/architecture_api_client_code_generation.md"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "benchmark_eval": {
@@ -53,6 +56,7 @@
       "component": "benchmark_eval",
       "evidence_files": [
         "AGENTS.md",
+        "CHANGELOG.md",
         "CONTRIBUTING.md",
         "HISTORY.md",
         "README.md",
@@ -60,25 +64,26 @@
         "benchmark/over_time.py",
         "openhands-agent-server/AGENTS.md",
         "openhands-agent-server/openhands/agent_server/event_service.py",
-        "prompt_library/architecture_coupling_cohesion_analysis.md",
-        "prompt_library/blue_ocean_strategy_analysis.md",
-        "prompt_library/performance_scalability_analysis.md",
-        "prompt_library/swot_analysis.md"
+        "pr_agent/algo/token_handler.py",
+        "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+        "pr_agent/settings/pr_evaluate_prompt_response.toml"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "command_contract": {
@@ -89,34 +94,38 @@
         "CONTRIBUTING.md",
         "HISTORY.md",
         "README.md",
+        "RELEASE_NOTES.md",
+        "SECURITY.md",
         "aider/copypaste.py",
         "aider/io.py",
         "codebase_digest/app.py",
         "openhands-agent-server/AGENTS.md",
         "openhands-agent-server/openhands/agent_server/conversation_router.py",
-        "prompt_library/architecture_api_client_code_generation.md",
-        "prompt_library/architecture_layer_identification.md"
+        "prompt_library/architecture_api_client_code_generation.md"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "context_localization": {
       "architecture_depth_score": 100,
       "component": "context_localization",
       "evidence_files": [
+        ".pr_agent.toml",
         "AGENTS.md",
         "README.md",
         "aider/coders/base_coder.py",
@@ -124,57 +133,39 @@
         "aider/gui.py",
         "aider/website/_posts/2024-05-22-swe-bench-lite.md",
         "aider/website/_posts/2024-06-02-main-swe-bench.md",
+        "docker/mosaico/pr-agent-solution-agent.json",
         "openhands-sdk/openhands/sdk/subagent/AGENTS.md",
         "openhands-sdk/openhands/sdk/subagent/load.py",
-        "openhands-tools/openhands/tools/workflow/definition.py",
-        "prompt_library/evolution_technical_debt_estimation.md",
-        "prompt_library/learning_code_review_checklist.md"
+        "openhands-tools/openhands/tools/workflow/definition.py"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "context_partitioning": {
-      "architecture_depth_score": 49,
+      "architecture_depth_score": 77,
       "component": "context_partitioning",
       "evidence_files": [
         "AGENTS.md",
-        "openhands-sdk/openhands/sdk/git/git_changes.py"
-      ],
-      "gate_pass_count": 1,
-      "gate_pass_rate": 1.0,
-      "ready_for_deep_refactor": false,
-      "run_count": 1,
-      "run_ids": [
-        "20260627171611-61b3c3e350"
-      ],
-      "source_count": 1,
-      "sources": [
-        "https://github.com/OpenHands/software-agent-sdk"
-      ]
-    },
-    "diff_hunk_review": {
-      "architecture_depth_score": 77,
-      "component": "diff_hunk_review",
-      "evidence_files": [
-        "examples/01_standalone_sdk/45_parallel_tool_execution.py",
-        "examples/02_remote_agent_server/12_settings_and_secrets_api.py",
-        "examples/02_remote_agent_server/13_workspace_get_llm.py",
-        "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
-        "prompt_library/quality_code_documentation_coverage_analysis.md",
-        "tests/cross/test_remote_conversation_live_server.py"
+        "openhands-sdk/openhands/sdk/git/git_changes.py",
+        "pr_agent/git_providers/gerrit_provider.py",
+        "pr_agent/git_providers/local_git_provider.py",
+        "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+        "pr_agent/settings/pr_reviewer_prompts.toml"
       ],
       "gate_pass_count": 2,
       "gate_pass_rate": 1.0,
@@ -182,31 +173,69 @@
       "run_count": 2,
       "run_ids": [
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627172352-6e1352f61e"
       ],
       "source_count": 2,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/qodo-ai/pr-agent"
+      ]
+    },
+    "diff_hunk_review": {
+      "architecture_depth_score": 100,
+      "component": "diff_hunk_review",
+      "evidence_files": [
+        "CHANGELOG.md",
+        "examples/01_standalone_sdk/45_parallel_tool_execution.py",
+        "examples/02_remote_agent_server/12_settings_and_secrets_api.py",
+        "examples/02_remote_agent_server/13_workspace_get_llm.py",
+        "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
+        "pr_agent/settings/pr_custom_labels.toml",
+        "pr_agent/settings/pr_information_from_user_prompts.toml",
+        "pr_agent/settings/pr_line_questions_prompts.toml",
+        "pr_agent/settings/pr_reviewer_prompts.toml",
+        "prompt_library/quality_code_documentation_coverage_analysis.md",
+        "tests/cross/test_remote_conversation_live_server.py"
+      ],
+      "gate_pass_count": 3,
+      "gate_pass_rate": 1.0,
+      "ready_for_deep_refactor": true,
+      "run_count": 3,
+      "run_ids": [
+        "20260627171611-61b3c3e350",
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
+      ],
+      "source_count": 3,
+      "sources": [
+        "https://github.com/OpenHands/software-agent-sdk",
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "diff_locality": {
-      "architecture_depth_score": 49,
+      "architecture_depth_score": 77,
       "component": "diff_locality",
       "evidence_files": [
         "AGENTS.md",
-        "openhands-sdk/openhands/sdk/git/git_changes.py"
+        "openhands-sdk/openhands/sdk/git/git_changes.py",
+        "pr_agent/git_providers/gerrit_provider.py",
+        "pr_agent/git_providers/local_git_provider.py",
+        "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+        "pr_agent/settings/pr_reviewer_prompts.toml"
       ],
-      "gate_pass_count": 1,
+      "gate_pass_count": 2,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": false,
-      "run_count": 1,
+      "run_count": 2,
       "run_ids": [
-        "20260627171611-61b3c3e350"
+        "20260627171611-61b3c3e350",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 1,
+      "source_count": 2,
       "sources": [
-        "https://github.com/OpenHands/software-agent-sdk"
+        "https://github.com/OpenHands/software-agent-sdk",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "edit_planning_loop": {
@@ -230,6 +259,7 @@
       "component": "evaluation_loop",
       "evidence_files": [
         "AGENTS.md",
+        "CHANGELOG.md",
         "CONTRIBUTING.md",
         "HISTORY.md",
         "README.md",
@@ -237,29 +267,30 @@
         "benchmark/over_time.py",
         "openhands-agent-server/AGENTS.md",
         "openhands-agent-server/openhands/agent_server/event_service.py",
-        "prompt_library/architecture_coupling_cohesion_analysis.md",
-        "prompt_library/blue_ocean_strategy_analysis.md",
-        "prompt_library/performance_scalability_analysis.md",
-        "prompt_library/swot_analysis.md"
+        "pr_agent/algo/token_handler.py",
+        "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+        "pr_agent/settings/pr_evaluate_prompt_response.toml"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "file_grouping": {
-      "architecture_depth_score": 81,
+      "architecture_depth_score": 100,
       "component": "file_grouping",
       "evidence_files": [
         ".github/workflows/assign-reviews.yml",
@@ -269,20 +300,26 @@
         "aider/website/docs/usage.md",
         "openhands-agent-server/pyproject.toml",
         "openhands-sdk/openhands/sdk/git/git_changes.py",
+        "pr_agent/git_providers/gerrit_provider.py",
+        "pr_agent/git_providers/gitea_provider.py",
+        "pr_agent/git_providers/local_git_provider.py",
+        "pr_agent/settings/pr_reviewer_prompts.toml",
         "tests/fixtures/chat-history.md"
       ],
-      "gate_pass_count": 2,
+      "gate_pass_count": 3,
       "gate_pass_rate": 1.0,
-      "ready_for_deep_refactor": false,
-      "run_count": 2,
+      "ready_for_deep_refactor": true,
+      "run_count": 3,
       "run_ids": [
         "20260627171538-da950c021d",
-        "20260627171611-61b3c3e350"
+        "20260627171611-61b3c3e350",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 2,
+      "source_count": 3,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
-        "https://github.com/aider-ai/aider"
+        "https://github.com/aider-ai/aider",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "model_adapter": {
@@ -290,32 +327,34 @@
       "component": "model_adapter",
       "evidence_files": [
         "AGENTS.md",
+        "CHANGELOG.md",
         "HISTORY.md",
         "README.md",
+        "RELEASE_NOTES.md",
+        "SECURITY.md",
         "benchmark/benchmark.py",
         "benchmark/over_time.py",
         "benchmark/problem_stats.py",
         "openhands-agent-server/AGENTS.md",
         "openhands-agent-server/openhands/agent_server/file_router.py",
-        "openhands-agent-server/pyproject.toml",
-        "prompt_library/architecture_api_conformance_check.md",
-        "prompt_library/architecture_layer_identification.md",
-        "prompt_library/business_model_canvas_analysis.md"
+        "openhands-agent-server/pyproject.toml"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "provider_boundary": {
@@ -323,32 +362,34 @@
       "component": "provider_boundary",
       "evidence_files": [
         "AGENTS.md",
+        "CHANGELOG.md",
         "HISTORY.md",
         "README.md",
+        "RELEASE_NOTES.md",
+        "SECURITY.md",
         "benchmark/benchmark.py",
         "benchmark/over_time.py",
         "benchmark/problem_stats.py",
         "openhands-agent-server/AGENTS.md",
         "openhands-agent-server/openhands/agent_server/file_router.py",
-        "openhands-agent-server/pyproject.toml",
-        "prompt_library/architecture_api_conformance_check.md",
-        "prompt_library/architecture_layer_identification.md",
-        "prompt_library/business_model_canvas_analysis.md"
+        "openhands-agent-server/pyproject.toml"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "regression_oracle": {
@@ -356,6 +397,7 @@
       "component": "regression_oracle",
       "evidence_files": [
         "AGENTS.md",
+        "CHANGELOG.md",
         "CONTRIBUTING.md",
         "HISTORY.md",
         "README.md",
@@ -363,25 +405,26 @@
         "benchmark/over_time.py",
         "openhands-agent-server/AGENTS.md",
         "openhands-agent-server/openhands/agent_server/event_service.py",
-        "prompt_library/architecture_coupling_cohesion_analysis.md",
-        "prompt_library/blue_ocean_strategy_analysis.md",
-        "prompt_library/performance_scalability_analysis.md",
-        "prompt_library/swot_analysis.md"
+        "pr_agent/algo/token_handler.py",
+        "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+        "pr_agent/settings/pr_evaluate_prompt_response.toml"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "repo_map_context": {
@@ -404,33 +447,35 @@
       "architecture_depth_score": 100,
       "component": "review_pipeline",
       "evidence_files": [
+        ".pr_agent.toml",
         ".pre-commit-config.yaml",
         "AGENTS.md",
+        "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
         "HISTORY.md",
         "README.md",
+        "action.yaml",
         "aider/coders/base_coder.py",
         "aider/coders/context_coder.py",
         "aider/gui.py",
-        "aider/website/_posts/2024-05-22-swe-bench-lite.md",
-        "aider/website/_posts/2024-06-02-main-swe-bench.md",
-        "openhands-agent-server/AGENTS.md",
-        "openhands-sdk/openhands/sdk/subagent/AGENTS.md"
+        "aider/website/_posts/2024-05-22-swe-bench-lite.md"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "safety_policy": {
@@ -438,32 +483,34 @@
       "component": "safety_policy",
       "evidence_files": [
         "AGENTS.md",
+        "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
         "HISTORY.md",
         "README.md",
+        "SECURITY.md",
         "aider/io.py",
         "benchmark/benchmark.py",
         "openhands-agent-server/AGENTS.md",
         "openhands-agent-server/openhands/agent_server/file_router.py",
         "prompt_library/learning_code_review_checklist.md",
-        "prompt_library/security_vulnerability_analysis.md",
-        "prompt_library/swot_analysis.md",
-        "pyproject.toml"
+        "prompt_library/security_vulnerability_analysis.md"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     },
     "sandbox_execution_harness": {
@@ -488,6 +535,8 @@
       "evidence_files": [
         ".pre-commit-config.yaml",
         "AGENTS.md",
+        "CHANGELOG.md",
+        "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
         "HISTORY.md",
         "README.md",
@@ -497,20 +546,22 @@
         "setup.py",
         "update_package.py"
       ],
-      "gate_pass_count": 3,
+      "gate_pass_count": 4,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 3,
+      "run_count": 4,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f"
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e"
       ],
-      "source_count": 3,
+      "source_count": 4,
       "sources": [
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/aider-ai/aider",
-        "https://github.com/kamilstanuch/codebase-digest"
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/qodo-ai/pr-agent"
       ]
     }
   },
@@ -527,7 +578,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-automation-surface",
       "title": "Implement cumulative architecture pattern: automation_surface"
     },
@@ -543,7 +594,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-benchmark-eval",
       "title": "Implement cumulative architecture pattern: benchmark_eval"
     },
@@ -559,7 +610,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-command-contract",
       "title": "Implement cumulative architecture pattern: command_contract"
     },
@@ -575,7 +626,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-context-localization",
       "title": "Implement cumulative architecture pattern: context_localization"
     },
@@ -591,7 +642,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-evaluation-loop",
       "title": "Implement cumulative architecture pattern: evaluation_loop"
     },
@@ -607,7 +658,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-model-adapter",
       "title": "Implement cumulative architecture pattern: model_adapter"
     },
@@ -623,7 +674,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-provider-boundary",
       "title": "Implement cumulative architecture pattern: provider_boundary"
     },
@@ -639,7 +690,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
     },
@@ -655,7 +706,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-review-pipeline",
       "title": "Implement cumulative architecture pattern: review_pipeline"
     },
@@ -671,7 +722,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-safety-policy",
       "title": "Implement cumulative architecture pattern: safety_policy"
     },
@@ -687,7 +738,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 3,
+      "supporting_source_count": 4,
       "task_id": "retort-architecture-workflow-ci",
       "title": "Implement cumulative architecture pattern: workflow_ci"
     },
@@ -702,8 +753,8 @@
         "rollback rehearsal"
       ],
       "gate_pass_rate": 1.0,
-      "priority": "P1",
-      "supporting_source_count": 2,
+      "priority": "P0",
+      "supporting_source_count": 3,
       "task_id": "retort-architecture-diff-hunk-review",
       "title": "Implement cumulative architecture pattern: diff_hunk_review"
     },
@@ -718,10 +769,42 @@
         "rollback rehearsal"
       ],
       "gate_pass_rate": 1.0,
-      "priority": "P1",
-      "supporting_source_count": 2,
+      "priority": "P0",
+      "supporting_source_count": 3,
       "task_id": "retort-architecture-file-grouping",
       "title": "Implement cumulative architecture pattern: file_grouping"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 1.0,
+      "priority": "P1",
+      "supporting_source_count": 2,
+      "task_id": "retort-architecture-context-partitioning",
+      "title": "Implement cumulative architecture pattern: context_partitioning"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 1.0,
+      "priority": "P1",
+      "supporting_source_count": 2,
+      "task_id": "retort-architecture-diff-locality",
+      "title": "Implement cumulative architecture pattern: diff_locality"
     }
   ],
   "runs": [
@@ -1402,13 +1485,260 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/tests/test_absorbed_capabilities.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/tests/test_review_context_bias.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/docs/retort_external_review_report.json"
+      ],
+      "components": [
+        {
+          "component": "review_pipeline",
+          "depth_score": 67,
+          "evidence_files": [
+            ".pr_agent.toml",
+            "AGENTS.md",
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.md",
+            "README.md",
+            "action.yaml",
+            "docker/mosaico/pr-agent-solution-agent.json",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "CODE_OF_CONDUCT.md",
+            "README.md",
+            "pyproject.toml",
+            "setup.py"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CODE_OF_CONDUCT.md",
+            "README.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "diff_hunk_review",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/settings/pr_custom_labels.toml",
+            "pr_agent/settings/pr_information_from_user_prompts.toml",
+            "pr_agent/settings/pr_line_questions_prompts.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "diff_hunk_review"
+          ]
+        },
+        {
+          "component": "context_localization",
+          "depth_score": 58,
+          "evidence_files": [
+            ".pr_agent.toml",
+            "AGENTS.md",
+            "README.md",
+            "docker/mosaico/pr-agent-solution-agent.json",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "file_grouping",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/gitea_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "diff_locality",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "context_partitioning",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T17:24:02Z",
+      "external_file_count": 284,
+      "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+      "gate_count": 7,
+      "gates_passed": true,
+      "git_revision": "bd09b6cf89c6d6f3d16b159fa7603fa0e7768cf2",
+      "run_id": "20260627172352-6e1352f61e",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/qodo-ai/pr-agent",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "external_ingestion",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 19,
-    "gate_passed_run_count": 3,
-    "ready_component_count": 11,
+    "gate_passed_run_count": 4,
+    "ready_component_count": 13,
     "ready_components": [
       "workflow_ci",
       "safety_policy",
@@ -1416,11 +1746,11 @@
       "regression_oracle",
       "provider_boundary",
       "model_adapter",
-      "evaluation_loop",
-      "context_localization"
+      "file_grouping",
+      "evaluation_loop"
     ],
-    "repeated_component_count": 13,
-    "run_count": 3,
-    "source_count": 3
+    "repeated_component_count": 15,
+    "run_count": 4,
+    "source_count": 4
   }
 }
