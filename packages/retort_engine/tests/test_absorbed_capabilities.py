@@ -25,6 +25,13 @@ def test_depth_absorption_plan_keeps_depth_before_breadth() -> None:
     assert all(task["acceptance"] and task["evidence_required"] for task in depth_first_task_queue())
 
 
+def test_ranked_capabilities_include_depth_focus_components() -> None:
+    focused_components = {item["component"] for item in depth_absorption_plan()["focused_components"]}
+    ranked_signals = {item["signal"] for item in ranked_capabilities()}
+
+    assert focused_components <= ranked_signals
+
+
 def test_breadth_candidates_stay_closed_until_similarity_saturation() -> None:
     assert marketplace_candidate_queue() == []
     deferred = deferred_breadth_queue()

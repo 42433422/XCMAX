@@ -77,10 +77,21 @@ def ranked_capabilities() -> list[dict[str, Any]]:
     """Rank absorbed signals by behavior depth rather than keyword count."""
     state = ABSORBED_CAPABILITY_STATE
     rows: list[dict[str, Any]] = []
-    for signal in state.get("signals") or []:
+    signals = list(state.get("signals") or [])
+    workflow = state.get("depth_absorption_workflow") or {}
+    for component in workflow.get("focused_components") or []:
+        signal = str(component.get("component") or "")
+        if signal and signal not in signals:
+            signals.append(signal)
+    for signal in signals:
         evidence = list((state.get("signal_evidence") or {}).get(signal) or [])
+        focus = next((item for item in workflow.get("focused_components") or [] if str(item.get("component") or "") == signal), {})
+        if not evidence:
+            evidence = list(focus.get("source_files") or [])
         gap_hits = sum(1 for gap in state.get("component_gaps") or [] if str(gap.get("component") or "").replace("benchmark_eval", "benchmarking") == signal)
-        weight = SIGNAL_WEIGHTS.get(signal, 8) + min(12, len(evidence) * 2) + min(10, gap_hits * 5)
+        focus_score = int(focus.get("similarity_score") or 0)
+        focus_bonus = min(16, max(0, focus_score - 80) // 2)
+        weight = SIGNAL_WEIGHTS.get(signal, 8) + min(12, len(evidence) * 2) + min(10, gap_hits * 5) + focus_bonus
         rows.append({"signal": signal, "weight": weight, "evidence_files": evidence[:5], "gap_hits": gap_hits})
     return sorted(rows, key=lambda row: (int(row["weight"]), row["signal"]), reverse=True)
 

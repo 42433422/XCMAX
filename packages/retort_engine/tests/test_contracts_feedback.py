@@ -34,6 +34,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     task_valid = validate_contract("task_prioritization_result", {"status": "ready", "project": "p", "summary": {}, "priorities": [], "evidence": {}})
     dispatch_valid = validate_contract("task_dispatch_plan_result", {"status": "ready", "project": "p", "summary": {}, "tasks": [], "evidence": {}})
     benchmark_valid = validate_contract("review_quality_benchmark_result", {"status": "ready", "project": "p", "summary": {}, "samples": [], "evidence": {}})
+    issue_patch_valid = validate_contract("issue_patch_benchmark_result", {"status": "ready", "summary": {}, "cases": [], "evidence": {}})
     stress_valid = validate_contract("employee_scheduler_stress_result", {"status": "ready", "project": "p", "summary": {}, "rounds": [], "evidence": {}})
     invalid = validate_contract("review_report", {"run_id": "run"})
 
@@ -48,6 +49,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert task_valid["valid"] is True
     assert dispatch_valid["valid"] is True
     assert benchmark_valid["valid"] is True
+    assert issue_patch_valid["valid"] is True
     assert stress_valid["valid"] is True
     assert invalid["valid"] is False
     assert "license_review" in invalid["missing"]
