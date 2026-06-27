@@ -1,44 +1,36 @@
 {
   "absorbed_signals": [
     "review_pipeline",
-    "file_grouping",
     "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/vercel-labs/openreview",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/apideck-libraries/describer",
   "external_snapshot": {
-    "file_count": 180,
-    "git_revision": "672deb21e70e471e0536d5ad7a67c14b8359e97e",
+    "file_count": 12,
+    "git_revision": "3dfe1c5630022028b8d01cee4c1e8423ae29eac6",
     "suffix_counts": {
-      ".css": 1,
-      ".ico": 1,
-      ".json": 6,
-      ".jsonc": 1,
-      ".lock": 1,
-      ".md": 136,
-      ".mjs": 1,
-      ".png": 1,
-      ".ts": 28,
-      ".tsx": 3,
-      "<none>": 1
+      ".md": 3,
+      ".py": 6,
+      ".toml": 1,
+      "<none>": 2
     }
   },
-  "generated_at": "2026-06-27T17:04:35Z",
+  "generated_at": "2026-06-27T17:05:08Z",
   "license_review": {
-    "detected_license": "",
-    "message": "license-incompatible risk: no LICENSE file detected",
-    "status": "blocked"
+    "detected_license": "MIT License",
+    "message": "Allowed license detected: MIT License",
+    "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/vercel-labs/openreview --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/apideck-libraries/describer --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
       "component_gap_count": 0,
-      "minimum_expected_behavior_tests": 5,
+      "minimum_expected_behavior_tests": 4,
       "prioritized_component_count": 0,
-      "task_dimension_count": 5
+      "task_dimension_count": 4
     },
     "component_gaps": [],
     "depth_absorption_workflow": {
@@ -48,11 +40,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
+            "codebase-overview.md",
             "README.md",
-            ".agents/skills/next-best-practices/rsc-boundaries.md",
-            ".agents/skills/next-best-practices/debug-tricks.md",
-            ".agents/skills/vercel-react-best-practices/AGENTS.md",
-            ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
+            "describer/core.py",
+            "describer/cli.py",
+            "examples/virtual-webhook-usecases-analysis.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -61,11 +53,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "tsconfig.json",
-            "app/components/readme.tsx",
-            ".agents/skills/vercel-react-native-skills/README.md",
-            ".agents/skills/vercel-react-native-skills/SKILL.md",
-            ".agents/skills/vercel-react-native-skills/AGENTS.md"
+            "codebase-overview.md",
+            "README.md",
+            "describer/core.py",
+            "describer/cli.py",
+            "examples/virtual-webhook-usecases-analysis.md"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -84,33 +76,6 @@
           "priority": "P0",
           "task_id": "retort-depth-review-pipeline",
           "title": "Deepen review_pipeline"
-        },
-        {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
-        },
-        {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
         },
         {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
@@ -180,81 +145,12 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 90,
-          "own_marker_hits": 1647,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "README.md",
-            "package.json",
-            "app/layout.tsx",
-            ".agents/skills/web-design-guidelines/SKILL.md",
-            ".agents/skills/next-best-practices/functions.md"
-          ]
-        },
-        {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 1,
-          "own_marker_hits": 50,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "lib/agent.ts"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
           "external_marker_hits": 3,
-          "own_marker_hits": 22,
+          "own_marker_hits": 1666,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md",
-            "lib/agent.ts"
+            "README.md"
           ]
         },
         {
@@ -282,16 +178,12 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 54,
-          "own_marker_hits": 375,
+          "external_marker_hits": 2,
+          "own_marker_hits": 379,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            ".agents/skills/vercel-react-native-skills/AGENTS.md",
-            ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
-            ".agents/skills/next-best-practices/self-hosting.md",
-            ".agents/skills/next-best-practices/data-patterns.md",
-            ".agents/skills/vercel-react-best-practices/README.md"
+            "examples/virtual-webhook-usecases-analysis.md"
           ]
         },
         {
@@ -317,16 +209,13 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 210,
-          "own_marker_hits": 314,
+          "external_marker_hits": 5,
+          "own_marker_hits": 311,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md",
-            "package.json",
-            ".agents/skills/vercel-react-native-skills/SKILL.md",
-            ".agents/skills/vercel-react-native-skills/AGENTS.md",
-            ".agents/skills/vercel-react-native-skills/rules/ui-expo-image.md"
+            "codebase-overview.md",
+            "pyproject.toml"
           ]
         },
         {
@@ -352,16 +241,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 514,
-          "own_marker_hits": 1928,
+          "external_marker_hits": 174,
+          "own_marker_hits": 1952,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            ".oxlintrc.json",
+            "codebase-overview.md",
+            "pyproject.toml",
             "README.md",
-            "package.json",
-            "components.json",
-            "tsconfig.json"
+            "describer/core.py",
+            "describer/cli.py"
           ]
         }
       ],
@@ -370,7 +259,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 6,
+        "focused_component_count": 4,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -381,26 +270,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 153,
+          "external_marker_hits": 23,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
+            "codebase-overview.md",
             "README.md",
-            ".agents/skills/next-best-practices/rsc-boundaries.md",
-            ".agents/skills/next-best-practices/debug-tricks.md",
-            ".agents/skills/vercel-react-best-practices/AGENTS.md",
-            ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
+            "describer/core.py",
+            "describer/cli.py",
+            "examples/virtual-webhook-usecases-analysis.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 20,
+          "external_marker_hits": 7,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "tsconfig.json",
-            "app/components/readme.tsx",
-            ".agents/skills/vercel-react-native-skills/README.md",
-            ".agents/skills/vercel-react-native-skills/SKILL.md",
-            ".agents/skills/vercel-react-native-skills/AGENTS.md"
+            "codebase-overview.md",
+            "README.md",
+            "describer/core.py",
+            "describer/cli.py",
+            "examples/virtual-webhook-usecases-analysis.md"
           ]
         }
       ]
@@ -408,112 +297,56 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          ".agents/skills/vercel-react-native-skills/AGENTS.md",
-          ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
-          ".agents/skills/next-best-practices/self-hosting.md",
-          ".agents/skills/next-best-practices/data-patterns.md",
-          ".agents/skills/vercel-react-best-practices/README.md",
-          ".agents/skills/vercel-react-best-practices/SKILL.md",
-          ".agents/skills/vercel-react-best-practices/AGENTS.md",
-          ".agents/skills/vercel-react-best-practices/rules/client-swr-dedup.md",
-          ".agents/skills/vercel-react-best-practices/rules/rendering-svg-precision.md",
-          ".agents/skills/next-cache-components/SKILL.md",
-          ".claude/CLAUDE.md"
+          "examples/virtual-webhook-usecases-analysis.md"
         ],
-        "marker_hits": 54
-      },
-      "diff_hunk_review": {
-        "files": [
-          "README.md",
-          "lib/agent.ts"
-        ],
-        "marker_hits": 3
-      },
-      "file_grouping": {
-        "files": [
-          "lib/agent.ts"
-        ],
-        "marker_hits": 1
+        "marker_hits": 2
       },
       "plugin_surface": {
         "files": [
-          "tsconfig.json",
-          "app/components/readme.tsx",
-          ".agents/skills/vercel-react-native-skills/README.md",
-          ".agents/skills/vercel-react-native-skills/SKILL.md",
-          ".agents/skills/vercel-react-native-skills/AGENTS.md",
-          ".agents/skills/vercel-react-native-skills/rules/rendering-no-falsy-and.md",
-          ".agents/skills/vercel-react-native-skills/rules/fonts-config-plugin.md"
+          "codebase-overview.md",
+          "README.md",
+          "describer/core.py",
+          "describer/cli.py",
+          "examples/virtual-webhook-usecases-analysis.md"
         ],
-        "marker_hits": 20
+        "marker_hits": 7
       },
       "provider_surface": {
         "files": [
+          "codebase-overview.md",
           "README.md",
-          ".agents/skills/next-best-practices/rsc-boundaries.md",
-          ".agents/skills/next-best-practices/debug-tricks.md",
-          ".agents/skills/vercel-react-best-practices/AGENTS.md",
-          ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md",
-          ".agents/skills/vercel-react-best-practices/rules/rerender-move-effect-to-event.md",
-          ".agents/skills/vercel-react-best-practices/rules/js-tosorted-immutable.md",
-          ".agents/skills/vercel-composition-patterns/README.md",
-          ".agents/skills/vercel-composition-patterns/SKILL.md",
-          ".agents/skills/vercel-composition-patterns/AGENTS.md",
-          ".agents/skills/vercel-composition-patterns/rules/state-context-interface.md",
-          ".agents/skills/vercel-composition-patterns/rules/state-decouple-implementation.md"
+          "describer/core.py",
+          "describer/cli.py",
+          "examples/virtual-webhook-usecases-analysis.md"
         ],
-        "marker_hits": 153
+        "marker_hits": 23
       },
       "review_pipeline": {
         "files": [
-          "README.md",
-          "package.json",
-          "app/layout.tsx",
-          ".agents/skills/web-design-guidelines/SKILL.md",
-          ".agents/skills/next-best-practices/functions.md",
-          ".agents/skills/next-best-practices/SKILL.md",
-          ".agents/skills/next-upgrade/SKILL.md",
-          ".agents/skills/vercel-react-best-practices/SKILL.md",
-          ".agents/skills/vercel-composition-patterns/SKILL.md",
-          ".agents/skills/vercel-composition-patterns/AGENTS.md",
-          ".agents/skills/vercel-composition-patterns/rules/state-context-interface.md",
-          ".agents/skills/vercel-composition-patterns/rules/state-lift-state.md"
+          "README.md"
         ],
-        "marker_hits": 90
+        "marker_hits": 3
       },
       "safety_policy": {
         "files": [
-          "README.md",
-          "package.json",
-          ".agents/skills/vercel-react-native-skills/SKILL.md",
-          ".agents/skills/vercel-react-native-skills/AGENTS.md",
-          ".agents/skills/vercel-react-native-skills/rules/ui-expo-image.md",
-          ".agents/skills/vercel-react-best-practices/SKILL.md",
-          ".agents/skills/vercel-react-best-practices/AGENTS.md",
-          ".agents/skills/vercel-react-best-practices/rules/async-defer-await.md",
-          ".agents/skills/vercel-react-best-practices/rules/server-auth-actions.md",
-          ".agents/skills/vercel-composition-patterns/SKILL.md",
-          ".claude/CLAUDE.md",
-          "workflow/index.ts"
+          "codebase-overview.md",
+          "pyproject.toml"
         ],
-        "marker_hits": 210
+        "marker_hits": 5
       },
       "workflow_ci": {
         "files": [
-          ".oxlintrc.json",
+          "codebase-overview.md",
+          "pyproject.toml",
           "README.md",
-          "package.json",
-          "components.json",
-          "tsconfig.json",
-          "next.config.ts",
-          ".agents/skills/vercel-react-native-skills/README.md",
-          ".agents/skills/vercel-react-native-skills/SKILL.md",
-          ".agents/skills/vercel-react-native-skills/AGENTS.md",
-          ".agents/skills/vercel-react-native-skills/rules/ui-styling.md",
-          ".agents/skills/vercel-react-native-skills/rules/ui-pressable.md",
-          ".agents/skills/vercel-react-native-skills/rules/rendering-no-falsy-and.md"
+          "describer/core.py",
+          "describer/cli.py",
+          "tests/test_describer.py",
+          "tests/test_output_file.py",
+          "tests/__init__.py",
+          "examples/virtual-webhook-usecases-analysis.md"
         ],
-        "marker_hits": 514
+        "marker_hits": 174
       }
     },
     "own_file_groups": {
@@ -532,7 +365,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 375
+        "marker_hits": 379
       },
       "diff_hunk_review": {
         "files": [
@@ -553,13 +386,15 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
           "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 50
+        "marker_hits": 59
       },
       "plugin_surface": {
         "files": [
@@ -576,7 +411,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 364
+        "marker_hits": 369
       },
       "provider_surface": {
         "files": [
@@ -593,7 +428,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 186
+        "marker_hits": 164
       },
       "review_pipeline": {
         "files": [
@@ -610,7 +445,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 1647
+        "marker_hits": 1666
       },
       "safety_policy": {
         "files": [
@@ -627,7 +462,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 314
+        "marker_hits": 311
       },
       "workflow_ci": {
         "files": [
@@ -644,7 +479,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 1928
+        "marker_hits": 1952
       }
     },
     "pipeline_stages": [
@@ -658,67 +493,47 @@
     ],
     "prioritized_absorptions": []
   },
-  "run_id": "20260627170435-5782efe19c",
+  "run_id": "20260627170508-ed8f0685ab",
   "semantic_review": {
     "external": {
-      "classes": 67,
+      "classes": 3,
       "cli_markers": 0,
-      "functions": 668,
-      "source_files": 174,
-      "test_markers": 36,
-      "workflow_markers": 122
+      "functions": 23,
+      "source_files": 10,
+      "test_markers": 12,
+      "workflow_markers": 4
     },
-    "gaps": [
-      {
-        "external_advantage": 21,
-        "metric": "classes"
-      },
-      {
-        "external_advantage": 91,
-        "metric": "source_files"
-      }
-    ],
+    "gaps": [],
     "own": {
       "classes": 46,
       "cli_markers": 29,
       "functions": 735,
       "source_files": 83,
       "test_markers": 238,
-      "workflow_markers": 2048
+      "workflow_markers": 2071
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
-      ".agents/skills/next-best-practices/self-hosting.md",
-      ".agents/skills/next-best-practices/data-patterns.md",
-      ".agents/skills/vercel-react-best-practices/README.md",
-      ".agents/skills/vercel-react-best-practices/SKILL.md"
-    ],
-    "file_grouping": [
-      "lib/agent.ts"
+      "examples/virtual-webhook-usecases-analysis.md"
     ],
     "multi_provider": [
+      "codebase-overview.md",
       "README.md",
-      ".agents/skills/next-best-practices/rsc-boundaries.md",
-      ".agents/skills/next-best-practices/debug-tricks.md",
-      ".agents/skills/vercel-react-best-practices/AGENTS.md",
-      ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
+      "describer/core.py",
+      "describer/cli.py",
+      "examples/virtual-webhook-usecases-analysis.md"
     ],
     "plugin_surface": [
-      "README.md",
-      "tsconfig.json",
-      "app/components/readme.tsx",
-      ".agents/skills/vercel-react-native-skills/README.md",
-      ".agents/skills/vercel-react-native-skills/SKILL.md"
+      "codebase-overview.md",
+      "pyproject.toml",
+      "README.md"
     ],
     "review_pipeline": [
-      "README.md",
-      "app/layout.tsx",
-      "lib/agent.ts"
+      "README.md"
     ]
   },
-  "source": "https://github.com/vercel-labs/openreview",
+  "source": "https://github.com/apideck-libraries/describer",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -726,7 +541,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/vercel-labs/openreview."
+      "why": "Compare implementation patterns from https://github.com/apideck-libraries/describer."
     },
     {
       "dimension": "product_operability",
@@ -734,7 +549,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/vercel-labs/openreview."
+      "why": "Extract usable UX improvements from https://github.com/apideck-libraries/describer."
     },
     {
       "dimension": "operational_readiness",
@@ -742,7 +557,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/vercel-labs/openreview."
+      "why": "Adapt CI and release checks from https://github.com/apideck-libraries/describer."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -751,14 +566,6 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
     },
     {
       "dimension": "feedback_loop_closure",
