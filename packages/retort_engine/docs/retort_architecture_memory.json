@@ -33,10 +33,10 @@
         "ci/trigger_action.py",
         "codebase_digest/app.py"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -45,13 +45,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -76,10 +78,10 @@
         "core/core.ts",
         "core/index.d.ts"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -88,13 +90,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -119,10 +123,10 @@
         "ci/trigger_action.py",
         "codebase_digest/app.py"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -131,13 +135,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -160,12 +166,12 @@
         "aider/website/_posts/2024-06-02-main-swe-bench.md",
         "core/util/sanitization.ts",
         "docker/mosaico/pr-agent-solution-agent.json",
-        "hypothesis/tests/quality/test_discovery_ability.py"
+        "docs/_pages/motivation.md"
       ],
-      "gate_pass_count": 7,
+      "gate_pass_count": 8,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 7,
+      "run_count": 8,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -173,13 +179,15 @@
         "20260627172352-6e1352f61e",
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
-        "20260627173018-28c1843a1a"
+        "20260627173018-28c1843a1a",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 7,
+      "source_count": 8,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -320,10 +328,10 @@
         "core/nextEdit/NextEditProvider.ts",
         "core/nextEdit/constants.ts"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -332,13 +340,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -416,10 +426,10 @@
         "benchmark/over_time.py",
         "benchmark/problem_stats.py"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -428,13 +438,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -475,10 +487,10 @@
         "benchmark/over_time.py",
         "benchmark/problem_stats.py"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -487,13 +499,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -518,10 +532,10 @@
         "core/nextEdit/NextEditProvider.ts",
         "core/nextEdit/constants.ts"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -530,13 +544,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -577,10 +593,10 @@
         "aider/coders/base_coder.py",
         "aider/coders/context_coder.py"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -589,13 +605,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -620,10 +638,10 @@
         "aider/io.py",
         "benchmark/benchmark.py"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -632,13 +650,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -677,12 +697,12 @@
         "TESTING.md",
         "ci/trigger_action.py",
         "ci/update_rtfd.py",
-        "igor.py"
+        "docs/README.md"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -691,13 +711,15 @@
         "20260627172432-c09c7479ad",
         "20260627172525-c3d6b79c6a",
         "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1"
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -719,7 +741,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-automation-surface",
       "title": "Implement cumulative architecture pattern: automation_surface"
     },
@@ -735,7 +757,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-benchmark-eval",
       "title": "Implement cumulative architecture pattern: benchmark_eval"
     },
@@ -751,7 +773,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-command-contract",
       "title": "Implement cumulative architecture pattern: command_contract"
     },
@@ -767,7 +789,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-evaluation-loop",
       "title": "Implement cumulative architecture pattern: evaluation_loop"
     },
@@ -783,7 +805,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-model-adapter",
       "title": "Implement cumulative architecture pattern: model_adapter"
     },
@@ -799,7 +821,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-provider-boundary",
       "title": "Implement cumulative architecture pattern: provider_boundary"
     },
@@ -815,7 +837,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
     },
@@ -831,7 +853,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-review-pipeline",
       "title": "Implement cumulative architecture pattern: review_pipeline"
     },
@@ -847,7 +869,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-safety-policy",
       "title": "Implement cumulative architecture pattern: safety_policy"
     },
@@ -863,7 +885,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-workflow-ci",
       "title": "Implement cumulative architecture pattern: workflow_ci"
     },
@@ -879,7 +901,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 7,
+      "supporting_source_count": 8,
       "task_id": "retort-architecture-context-localization",
       "title": "Implement cumulative architecture pattern: context_localization"
     },
@@ -2713,12 +2735,187 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/tests/test_absorbed_capabilities.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/tests/test_review_context_bias.py",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/docs/retort_external_review_report.json"
+      ],
+      "components": [
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.md",
+            "README.md",
+            "docs/README.md",
+            "docs/_config-dev.yml",
+            "docs/_config.yml"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.md",
+            "docs/README.md",
+            "docs/_config-dev.yml",
+            "docs/_config.yml",
+            "docs/assets/js/main.min.js"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 58,
+          "evidence_files": [
+            "docs/_includes/comments.html",
+            "docs/_includes/page__hero_video.html",
+            "docs/_layouts/archive.html",
+            "docs/_layouts/single.html",
+            "docs/_layouts/splash.html"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 58,
+          "evidence_files": [
+            "docs/_includes/comments.html",
+            "docs/_includes/page__hero_video.html",
+            "docs/_layouts/archive.html",
+            "docs/_layouts/single.html",
+            "docs/_layouts/splash.html"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.md",
+            "README.md",
+            "docs/_config-dev.yml",
+            "docs/_config.yml",
+            "docs/_includes/tag-list.html"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.md",
+            "README.md",
+            "docs/_config-dev.yml",
+            "docs/_config.yml",
+            "docs/_includes/tag-list.html"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 52,
+          "evidence_files": [
+            "docs/_pages/motivation.md",
+            "docs/assets/js/main.min.js",
+            "docs/assets/js/vendor/jquery/jquery-3.2.1.min.js"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 52,
+          "evidence_files": [
+            "docs/_pages/motivation.md",
+            "docs/assets/js/main.min.js",
+            "docs/assets/js/vendor/jquery/jquery-3.2.1.min.js"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 52,
+          "evidence_files": [
+            "docs/_pages/motivation.md",
+            "docs/assets/js/main.min.js",
+            "docs/assets/js/vendor/jquery/jquery-3.2.1.min.js"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 46,
+          "evidence_files": [
+            "docs/_pages/motivation.md"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "context_localization",
+          "depth_score": 46,
+          "evidence_files": [
+            "docs/_pages/motivation.md"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T17:33:04Z",
+      "external_file_count": 1681,
+      "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/TNG/ArchUnit",
+      "gate_count": 7,
+      "gates_passed": true,
+      "git_revision": "2b9fb72ca352a9c7c5b1326f519860e206abc369",
+      "run_id": "20260627173253-72548897e8",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/TNG/ArchUnit",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 21,
-    "gate_passed_run_count": 8,
+    "gate_passed_run_count": 9,
     "ready_component_count": 15,
     "ready_components": [
       "workflow_ci",
@@ -2731,7 +2928,7 @@
       "evaluation_loop"
     ],
     "repeated_component_count": 15,
-    "run_count": 8,
-    "source_count": 8
+    "run_count": 9,
+    "source_count": 9
   }
 }

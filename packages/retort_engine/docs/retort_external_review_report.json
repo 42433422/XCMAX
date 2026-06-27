@@ -1,103 +1,70 @@
 {
   "absorbed_signals": [
-    "file_grouping",
+    "review_pipeline",
     "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/nedbat/coveragepy",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/TNG/ArchUnit",
   "external_snapshot": {
-    "file_count": 409,
-    "git_revision": "65979cc05b7f6b10c3e27c84408867fd9bc30846",
+    "file_count": 1681,
+    "git_revision": "2b9fb72ca352a9c7c5b1326f519860e206abc369",
     "suffix_counts": {
-      ".c": 4,
-      ".cff": 1,
-      ".css": 6,
-      ".dtd": 1,
-      ".h": 5,
-      ".html": 88,
-      ".in": 9,
-      ".ini": 2,
-      ".js": 5,
-      ".md": 5,
-      ".pip": 9,
-      ".png": 10,
-      ".py": 166,
-      ".py,cover": 13,
-      ".pyi": 1,
-      ".rst": 41,
-      ".scss": 1,
-      ".sh": 2,
-      ".tok": 2,
+      ".adoc": 11,
+      ".archunitextension": 1,
+      ".bat": 1,
+      ".class": 1,
+      ".cmd": 1,
+      ".css": 1,
+      ".eot": 1,
+      ".gif": 2,
+      ".gradle": 40,
+      ".html": 35,
+      ".ico": 1,
+      ".jar": 3,
+      ".java": 259,
+      ".js": 7,
+      ".license": 3,
+      ".lock": 1,
+      ".markdown": 56,
+      ".md": 10,
+      ".otf": 1,
+      ".pdf": 1,
+      ".png": 6,
+      ".pom": 6,
+      ".properties": 7,
+      ".scss": 82,
+      ".sh": 1,
+      ".svg": 23,
+      ".template": 2,
+      ".testengine": 1,
       ".toml": 2,
-      ".txt": 12,
-      ".typed": 1,
-      ".xml": 3,
-      ".yaml": 2,
-      ".yml": 12,
-      "<none>": 6
+      ".ttf": 1,
+      ".txt": 1,
+      ".woff": 1,
+      ".woff2": 1,
+      ".xml": 4,
+      ".yml": 9,
+      "<none>": 17
     }
   },
-  "generated_at": "2026-06-27T17:30:57Z",
+  "generated_at": "2026-06-27T17:32:54Z",
   "license_review": {
-    "detected_license": "",
-    "message": "license-incompatible risk: no LICENSE file detected",
-    "status": "blocked"
+    "detected_license": "Apache License",
+    "message": "Allowed license detected: Apache License",
+    "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/nedbat/coveragepy --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/TNG/ArchUnit --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 3,
-      "minimum_expected_behavior_tests": 8,
-      "prioritized_component_count": 3,
-      "task_dimension_count": 5
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 4,
+      "prioritized_component_count": 0,
+      "task_dimension_count": 4
     },
-    "component_gaps": [
-      {
-        "component": "workflow_ci",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 1332,
-        "own_files": 12,
-        "representative_external_files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "ci/trigger_action.py",
-          "ci/update_rtfd.py"
-        ]
-      },
-      {
-        "component": "plugin_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 496,
-        "own_files": 12,
-        "representative_external_files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "ci/trigger_action.py",
-          "lab/pick.py"
-        ]
-      },
-      {
-        "component": "safety_policy",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 294,
-        "own_files": 12,
-        "representative_external_files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "__main__.py",
-          ".readthedocs.yaml"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -105,9 +72,8 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "tests/test_concurrency.py",
-            "tests/test_cmdline.py",
-            "coverage/files.py"
+            "gradle/libs.versions.toml",
+            "gradle/example-libs.versions.toml"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -116,11 +82,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "pyproject.toml",
-            "igor.py",
-            "setup.py",
-            "ci/trigger_action.py",
-            "lab/pick.py"
+            "CONTRIBUTING.md",
+            "docs/_config-dev.yml",
+            "docs/_config.yml",
+            "docs/assets/js/_main.js",
+            "docs/assets/js/main.min.js"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -141,33 +107,6 @@
           "title": "Deepen review_pipeline"
         },
         {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
-        },
-        {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "dimension": "feedback_loop_closure",
           "evidence_required": [
@@ -182,19 +121,6 @@
           "title": "Deepen benchmark_eval"
         },
         {
-          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-workflow-ci",
-          "title": "Deepen workflow_ci"
-        },
-        {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "dimension": "operational_readiness",
           "evidence_required": [
@@ -206,6 +132,19 @@
           "priority": "P1",
           "task_id": "retort-depth-safety-policy",
           "title": "Deepen safety_policy"
+        },
+        {
+          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-workflow-ci",
+          "title": "Deepen workflow_ci"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -235,79 +174,12 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 9,
-          "own_marker_hits": 1865,
+          "external_marker_hits": 3,
+          "own_marker_hits": 1856,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            ".github/workflows/dependency-review.yml"
-          ]
-        },
-        {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 8,
-          "own_marker_hits": 54,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "tests/test_html.py",
-            ".github/workflows/coverage.yml",
-            ".github/workflows/quality.yml",
-            ".github/workflows/testsuite.yml"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 2,
-          "own_marker_hits": 22,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "tests/test_templite.py"
+            "docs/_pages/motivation.md"
           ]
         },
         {
@@ -335,58 +207,21 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 129,
-          "own_marker_hits": 583,
+          "external_marker_hits": 26,
+          "own_marker_hits": 593,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "igor.py",
-            "lab/goals.py",
-            "tests/test_parser.py",
-            "tests/test_results.py",
-            "tests/test_debug.py"
-          ]
-        },
-        {
-          "absorption_goal": "prove absorption with repeatable local gates and replay commands",
-          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-          "component": "workflow_ci",
-          "depth_gap": 1332,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-workflow-ci",
-            "title": "Deepen workflow_ci"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 4153,
-          "own_marker_hits": 2821,
-          "priority": "P0",
-          "similarity_score": 95,
-          "source_files": [
-            "pyproject.toml",
-            "igor.py",
-            "setup.py",
-            "ci/trigger_action.py",
-            "ci/update_rtfd.py"
+            "docs/_pages/motivation.md",
+            "docs/assets/js/main.min.js",
+            "docs/assets/js/vendor/jquery/jquery-3.2.1.min.js"
           ]
         },
         {
           "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "component": "safety_policy",
-          "depth_gap": 294,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -405,16 +240,51 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 655,
-          "own_marker_hits": 361,
+          "external_marker_hits": 25,
+          "own_marker_hits": 363,
           "priority": "P0",
-          "similarity_score": 93,
+          "similarity_score": 100,
           "source_files": [
-            "pyproject.toml",
-            "igor.py",
-            "setup.py",
-            "__main__.py",
-            ".readthedocs.yaml"
+            "README.md",
+            "docs/_config-dev.yml",
+            "docs/README.md",
+            "docs/_config.yml",
+            "docs/assets/js/main.min.js"
+          ]
+        },
+        {
+          "absorption_goal": "prove absorption with repeatable local gates and replay commands",
+          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+          "component": "workflow_ci",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-workflow-ci",
+            "title": "Deepen workflow_ci"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 405,
+          "own_marker_hits": 2899,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "README.md",
+            "CONTRIBUTING.md",
+            "docs/_config-dev.yml",
+            "docs/README.md",
+            "docs/_config.yml"
           ]
         }
       ],
@@ -423,7 +293,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 6,
+        "focused_component_count": 4,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -434,24 +304,23 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 5,
+          "external_marker_hits": 3,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "tests/test_concurrency.py",
-            "tests/test_cmdline.py",
-            "coverage/files.py"
+            "gradle/libs.versions.toml",
+            "gradle/example-libs.versions.toml"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 1005,
+          "external_marker_hits": 13,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "pyproject.toml",
-            "igor.py",
-            "setup.py",
-            "ci/trigger_action.py",
-            "lab/pick.py"
+            "CONTRIBUTING.md",
+            "docs/_config-dev.yml",
+            "docs/_config.yml",
+            "docs/assets/js/_main.js",
+            "docs/assets/js/main.min.js"
           ]
         }
       ]
@@ -459,100 +328,67 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "igor.py",
-          "lab/goals.py",
-          "tests/test_parser.py",
-          "tests/test_results.py",
-          "tests/test_debug.py",
-          "tests/test_plugins.py",
-          "tests/test_report.py",
-          "tests/test_templite.py",
-          "tests/test_cmdline.py",
-          "tests/test_process.py",
-          "tests/test_config.py",
-          "tests/test_oddball.py"
+          "docs/_pages/motivation.md",
+          "docs/assets/js/main.min.js",
+          "docs/assets/js/vendor/jquery/jquery-3.2.1.min.js"
         ],
-        "marker_hits": 129
-      },
-      "diff_hunk_review": {
-        "files": [
-          "tests/test_templite.py"
-        ],
-        "marker_hits": 2
-      },
-      "file_grouping": {
-        "files": [
-          "tests/test_html.py",
-          ".github/workflows/coverage.yml",
-          ".github/workflows/quality.yml",
-          ".github/workflows/testsuite.yml"
-        ],
-        "marker_hits": 8
+        "marker_hits": 26
       },
       "plugin_surface": {
         "files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "ci/trigger_action.py",
-          "lab/pick.py",
-          "tests/select_plugin.py",
-          "tests/conftest.py",
-          "tests/test_plugins.py",
-          "tests/plugin2.py",
-          "tests/test_venv.py",
-          "tests/testenv.py",
-          "tests/test_regions.py"
+          "CONTRIBUTING.md",
+          "docs/_config-dev.yml",
+          "docs/_config.yml",
+          "docs/assets/js/_main.js",
+          "docs/assets/js/main.min.js",
+          "docs/assets/js/plugins/jquery.magnific-popup.js",
+          "docs/assets/js/vendor/jquery/jquery-3.2.1.min.js"
         ],
-        "marker_hits": 1005
+        "marker_hits": 13
       },
       "provider_surface": {
         "files": [
-          "tests/test_concurrency.py",
-          "tests/test_cmdline.py",
-          "coverage/files.py"
+          "gradle/libs.versions.toml",
+          "gradle/example-libs.versions.toml"
         ],
-        "marker_hits": 5
+        "marker_hits": 3
       },
       "review_pipeline": {
         "files": [
-          ".github/workflows/dependency-review.yml"
+          "docs/_pages/motivation.md"
         ],
-        "marker_hits": 9
+        "marker_hits": 3
       },
       "safety_policy": {
         "files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "__main__.py",
-          ".readthedocs.yaml",
-          "ci/trigger_action.py",
-          "ci/session.py",
-          "ci/comment_on_fixes.py",
-          "lab/branches.py",
-          "lab/show_platform.py",
-          "lab/select_contexts.py",
-          "lab/goals.py"
+          "README.md",
+          "docs/_config-dev.yml",
+          "docs/README.md",
+          "docs/_config.yml",
+          "docs/assets/js/main.min.js",
+          "docs/assets/js/plugins/jquery.fitvids.js",
+          "docs/assets/js/plugins/jquery.greedy-navigation.js",
+          "docs/assets/js/plugins/jquery.smooth-scroll.min.js",
+          "docs/assets/js/vendor/jquery/jquery-3.2.1.min.js"
         ],
-        "marker_hits": 655
+        "marker_hits": 25
       },
       "workflow_ci": {
         "files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "ci/trigger_action.py",
-          "ci/update_rtfd.py",
-          "ci/comment_on_fixes.py",
-          "lab/branches.py",
-          "lab/select_contexts.py",
-          "lab/goals.py",
-          "lab/extract_code.py",
-          "lab/show_pyc.py",
-          "lab/hack_pyc.py"
+          "README.md",
+          "CONTRIBUTING.md",
+          "docs/_config-dev.yml",
+          "docs/README.md",
+          "docs/_config.yml",
+          "docs/docker-compose.yml",
+          "docs/_pages/imprint.md",
+          "docs/_pages/getting-started.md",
+          "docs/_pages/home.md",
+          "docs/_pages/motivation.md",
+          "docs/_pages/about.md",
+          "docs/_pages/use-cases.md"
         ],
-        "marker_hits": 4153
+        "marker_hits": 405
       }
     },
     "own_file_groups": {
@@ -571,7 +407,7 @@
           "retort_engine/cli.py",
           "retort_engine/contracts.py"
         ],
-        "marker_hits": 583
+        "marker_hits": 593
       },
       "diff_hunk_review": {
         "files": [
@@ -592,13 +428,15 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
           "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 54
+        "marker_hits": 63
       },
       "plugin_surface": {
         "files": [
@@ -615,7 +453,7 @@
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js"
         ],
-        "marker_hits": 509
+        "marker_hits": 526
       },
       "provider_surface": {
         "files": [
@@ -649,7 +487,7 @@
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py"
         ],
-        "marker_hits": 1865
+        "marker_hits": 1856
       },
       "safety_policy": {
         "files": [
@@ -666,7 +504,7 @@
           "retort_engine/core.py",
           "retort_engine/architecture_memory.py"
         ],
-        "marker_hits": 361
+        "marker_hits": 363
       },
       "workflow_ci": {
         "files": [
@@ -683,7 +521,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/architecture_refactor.py"
         ],
-        "marker_hits": 2821
+        "marker_hits": 2899
       }
     },
     "pipeline_stages": [
@@ -695,71 +533,22 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
-        "component": "workflow_ci",
-        "priority": "P0",
-        "source_files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "ci/trigger_action.py",
-          "ci/update_rtfd.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
-        "component": "plugin_surface",
-        "priority": "P0",
-        "source_files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "ci/trigger_action.py",
-          "lab/pick.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
-        "source_files": [
-          "pyproject.toml",
-          "igor.py",
-          "setup.py",
-          "__main__.py",
-          ".readthedocs.yaml"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260627173057-8f77226be1",
+  "run_id": "20260627173253-72548897e8",
   "semantic_review": {
     "external": {
-      "classes": 509,
+      "classes": 119,
       "cli_markers": 0,
-      "functions": 3033,
-      "source_files": 286,
-      "test_markers": 1361,
-      "workflow_markers": 52
+      "functions": 164,
+      "source_files": 64,
+      "test_markers": 29,
+      "workflow_markers": 6
     },
     "gaps": [
       {
-        "external_advantage": 463,
+        "external_advantage": 73,
         "metric": "classes"
-      },
-      {
-        "external_advantage": 2270,
-        "metric": "functions"
-      },
-      {
-        "external_advantage": 197,
-        "metric": "source_files"
-      },
-      {
-        "external_advantage": 1114,
-        "metric": "test_markers"
       }
     ],
     "own": {
@@ -768,37 +557,34 @@
       "functions": 763,
       "source_files": 89,
       "test_markers": 247,
-      "workflow_markers": 2404
+      "workflow_markers": 2433
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "igor.py",
-      "lab/goals.py",
-      "tests/test_results.py",
-      "tests/test_debug.py",
-      "tests/test_templite.py"
-    ],
-    "file_grouping": [
-      "tests/test_html.py",
-      ".github/workflows/coverage.yml",
-      ".github/workflows/quality.yml",
-      ".github/workflows/testsuite.yml"
+      "docs/_pages/motivation.md",
+      "docs/assets/js/main.min.js",
+      "docs/assets/js/vendor/jquery/jquery-3.2.1.min.js"
     ],
     "multi_provider": [
-      "tests/test_concurrency.py",
-      "tests/test_cmdline.py",
-      "coverage/files.py"
+      "docs/_includes/page__hero_video.html",
+      "docs/_includes/comments.html",
+      "docs/_layouts/single.html",
+      "docs/_layouts/splash.html",
+      "docs/_layouts/archive.html"
     ],
     "plugin_surface": [
-      "pyproject.toml",
-      "ci/trigger_action.py",
-      "lab/parser.py",
-      "lab/pick.py",
-      "tests/select_plugin.py"
+      "README.md",
+      "CONTRIBUTING.md",
+      "docs/_config-dev.yml",
+      "docs/_config.yml",
+      "docs/_includes/tag-list.html"
+    ],
+    "review_pipeline": [
+      "docs/_pages/motivation.md"
     ]
   },
-  "source": "https://github.com/nedbat/coveragepy",
+  "source": "https://github.com/TNG/ArchUnit",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -806,7 +592,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/nedbat/coveragepy."
+      "why": "Compare implementation patterns from https://github.com/TNG/ArchUnit."
     },
     {
       "dimension": "product_operability",
@@ -814,7 +600,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/nedbat/coveragepy."
+      "why": "Extract usable UX improvements from https://github.com/TNG/ArchUnit."
     },
     {
       "dimension": "operational_readiness",
@@ -822,15 +608,15 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/nedbat/coveragepy."
+      "why": "Adapt CI and release checks from https://github.com/TNG/ArchUnit."
     },
     {
-      "dimension": "external_ingestion",
+      "dimension": "comparative_analysis_depth",
       "owner_hint": "fhd-core-maintainer",
       "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+      "task_id": "retort-absorb-review-pipeline",
+      "title": "Adopt deterministic review pipeline stages",
+      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
     },
     {
       "dimension": "feedback_loop_closure",
