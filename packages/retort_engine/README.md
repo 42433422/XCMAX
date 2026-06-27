@@ -54,6 +54,16 @@ PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli revi
   --max-bytes 2000000 \
   --output packages/retort_engine/docs/retort_pr_dry_run_report.json \
   --json
+
+PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli publish-pr-dry-run \
+  --review-file packages/retort_engine/docs/retort_pr_dry_run_report.json \
+  --output packages/retort_engine/docs/retort_pr_publish_dry_run.json \
+  --json
+
+PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli cross-project-replay \
+  --project packages/retort_engine \
+  --output packages/retort_engine/docs/retort_cross_project_replay.json \
+  --json
 ```
 
 Retort does not treat self-questioning as completed absorption. Local code no longer produces scores; all scores must come from a completed PaiBi LLM deep review using the Retort prompt:
