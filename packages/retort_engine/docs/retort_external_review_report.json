@@ -31,7 +31,7 @@
       "<none>": 5
     }
   },
-  "generated_at": "2026-06-27T14:48:53Z",
+  "generated_at": "2026-06-27T14:53:17Z",
   "license_review": {
     "detected_license": "Apache License",
     "message": "Allowed license detected: Apache License",
@@ -42,9 +42,9 @@
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 5,
-      "minimum_expected_behavior_tests": 10,
-      "prioritized_component_count": 5,
+      "component_gap_count": 3,
+      "minimum_expected_behavior_tests": 8,
+      "prioritized_component_count": 3,
       "task_dimension_count": 5
     },
     "component_gaps": [
@@ -52,7 +52,7 @@
         "component": "provider_surface",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 4164,
+        "marker_gap": 4144,
         "own_files": 12,
         "representative_external_files": [
           "CHANGELOG.md",
@@ -66,7 +66,7 @@
         "component": "workflow_ci",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 1721,
+        "marker_gap": 1517,
         "own_files": 12,
         "representative_external_files": [
           "CODE_OF_CONDUCT.md",
@@ -74,20 +74,6 @@
           "pyproject.toml",
           "README.md",
           "setup.py"
-        ]
-      },
-      {
-        "component": "review_pipeline",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 62,
-        "own_files": 12,
-        "representative_external_files": [
-          "CODE_OF_CONDUCT.md",
-          "action.yaml",
-          "pyproject.toml",
-          "README.md",
-          "CONTRIBUTING.md"
         ]
       },
       {
@@ -103,24 +89,24 @@
           "pr_agent/settings/pr_reviewer_prompts.toml",
           "pr_agent/settings/pr_line_questions_prompts.toml"
         ]
-      },
-      {
-        "component": "safety_policy",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 4,
-        "own_files": 12,
-        "representative_external_files": [
-          "CODE_OF_CONDUCT.md",
-          "pyproject.toml",
-          "README.md",
-          "AGENTS.md",
-          "SECURITY.md"
-        ]
       }
     ],
     "depth_absorption_workflow": {
       "employee_tasks": [
+        {
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-review-pipeline",
+          "title": "Deepen review_pipeline"
+        },
         {
           "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
           "dimension": "comparative_analysis_depth",
@@ -147,20 +133,6 @@
           "priority": "P1",
           "task_id": "retort-depth-benchmark-eval",
           "title": "Deepen benchmark_eval"
-        },
-        {
-          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-review-pipeline",
-          "title": "Deepen review_pipeline"
         },
         {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
@@ -206,6 +178,43 @@
       "focus_mode": "similar_function_depth_only",
       "focused_components": [
         {
+          "absorption_goal": "turn external review stages into Retort discovery, localization, reflection, and task dispatch",
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+          "component": "review_pipeline",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "review JSON with stages and comments"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-review-pipeline",
+            "title": "Deepen review_pipeline"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "external_marker_hits": 1282,
+          "own_marker_hits": 1314,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "CODE_OF_CONDUCT.md",
+            "action.yaml",
+            "pyproject.toml",
+            "README.md",
+            "CONTRIBUTING.md"
+          ]
+        },
+        {
           "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
           "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
           "component": "file_grouping",
@@ -229,7 +238,7 @@
             "gate output"
           ],
           "external_marker_hits": 5,
-          "own_marker_hits": 45,
+          "own_marker_hits": 48,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
@@ -265,7 +274,7 @@
             "precision or false-positive benchmark counters"
           ],
           "external_marker_hits": 35,
-          "own_marker_hits": 287,
+          "own_marker_hits": 337,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
@@ -277,47 +286,10 @@
           ]
         },
         {
-          "absorption_goal": "turn external review stages into Retort discovery, localization, reflection, and task dispatch",
-          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-          "component": "review_pipeline",
-          "depth_gap": 62,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-review-pipeline",
-            "title": "Deepen review_pipeline"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 1282,
-          "own_marker_hits": 1220,
-          "priority": "P0",
-          "similarity_score": 99,
-          "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "action.yaml",
-            "pyproject.toml",
-            "README.md",
-            "CONTRIBUTING.md"
-          ]
-        },
-        {
           "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "component": "safety_policy",
-          "depth_gap": 4,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -337,9 +309,9 @@
             "gate output"
           ],
           "external_marker_hits": 267,
-          "own_marker_hits": 263,
+          "own_marker_hits": 286,
           "priority": "P0",
-          "similarity_score": 99,
+          "similarity_score": 100,
           "source_files": [
             "CODE_OF_CONDUCT.md",
             "pyproject.toml",
@@ -352,7 +324,7 @@
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 1721,
+          "depth_gap": 1517,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -372,9 +344,9 @@
             "gate output"
           ],
           "external_marker_hits": 3081,
-          "own_marker_hits": 1360,
+          "own_marker_hits": 1564,
           "priority": "P0",
-          "similarity_score": 91,
+          "similarity_score": 92,
           "source_files": [
             "CODE_OF_CONDUCT.md",
             "CHANGELOG.md",
@@ -421,10 +393,53 @@
           ]
         }
       ],
+      "marketplace_candidates": [
+        {
+          "acceptance": "provider_surface is packaged as an AI employee candidate instead of widening Retort core.",
+          "component": "provider_surface",
+          "core_absorption": "blocked_for_early_phase_depth_only",
+          "evidence_required": [
+            "external capability summary",
+            "target user workflow",
+            "sandboxed employee task",
+            "market listing acceptance test"
+          ],
+          "marketplace_employee_type": "model-provider-integration-employee",
+          "route": "ai_employee_marketplace",
+          "source_files": [
+            "CHANGELOG.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "AGENTS.md",
+            "SECURITY.md"
+          ]
+        },
+        {
+          "acceptance": "plugin_surface is packaged as an AI employee candidate instead of widening Retort core.",
+          "component": "plugin_surface",
+          "core_absorption": "blocked_for_early_phase_depth_only",
+          "evidence_required": [
+            "external capability summary",
+            "target user workflow",
+            "sandboxed employee task",
+            "market listing acceptance test"
+          ],
+          "marketplace_employee_type": "plugin-packaging-employee",
+          "route": "ai_employee_marketplace",
+          "source_files": [
+            "README.md",
+            "RELEASE_NOTES.md",
+            "AGENTS.md",
+            "SECURITY.md",
+            "docker/mosaico/README.md"
+          ]
+        }
+      ],
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "focused_component_count": 6,
         "kept_breadth_component_count": 0,
+        "marketplace_candidate_count": 2,
         "minimum_focused_component_count": 3,
         "passed": true,
         "rejected_breadth_component_count": 2
@@ -602,7 +617,7 @@
           "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py"
         ],
-        "marker_hits": 287
+        "marker_hits": 337
       },
       "diff_hunk_review": {
         "files": [
@@ -628,7 +643,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 45
+        "marker_hits": 48
       },
       "plugin_surface": {
         "files": [
@@ -641,11 +656,11 @@
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
+          "tests/test_absorbed_capabilities.py",
           "tests/test_review_pipeline.py",
-          "tests/test_complex_pr_replay.py",
-          "tests/test_absorption.py"
+          "tests/test_complex_pr_replay.py"
         ],
-        "marker_hits": 310
+        "marker_hits": 314
       },
       "provider_surface": {
         "files": [
@@ -662,7 +677,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 167
+        "marker_hits": 187
       },
       "review_pipeline": {
         "files": [
@@ -679,7 +694,7 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py"
         ],
-        "marker_hits": 1220
+        "marker_hits": 1314
       },
       "safety_policy": {
         "files": [
@@ -696,7 +711,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/ui_server.py"
         ],
-        "marker_hits": 263
+        "marker_hits": 286
       },
       "workflow_ci": {
         "files": [
@@ -713,7 +728,7 @@
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py"
         ],
-        "marker_hits": 1360
+        "marker_hits": 1564
       }
     },
     "pipeline_stages": [
@@ -751,18 +766,6 @@
         ]
       },
       {
-        "acceptance": "Retort has a tested review_pipeline behavior, not only a recorded signal.",
-        "component": "review_pipeline",
-        "priority": "P0",
-        "source_files": [
-          "CODE_OF_CONDUCT.md",
-          "action.yaml",
-          "pyproject.toml",
-          "README.md",
-          "CONTRIBUTING.md"
-        ]
-      },
-      {
         "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
         "component": "diff_hunk_review",
         "priority": "P0",
@@ -773,22 +776,10 @@
           "pr_agent/settings/pr_reviewer_prompts.toml",
           "pr_agent/settings/pr_line_questions_prompts.toml"
         ]
-      },
-      {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P1",
-        "source_files": [
-          "CODE_OF_CONDUCT.md",
-          "pyproject.toml",
-          "README.md",
-          "AGENTS.md",
-          "SECURITY.md"
-        ]
       }
     ]
   },
-  "run_id": "20260627144852-dbc443423e",
+  "run_id": "20260627145316-dbc443423e",
   "semantic_review": {
     "external": {
       "classes": 518,
@@ -804,7 +795,7 @@
         "metric": "classes"
       },
       {
-        "external_advantage": 1703,
+        "external_advantage": 1696,
         "metric": "functions"
       },
       {
@@ -812,17 +803,17 @@
         "metric": "source_files"
       },
       {
-        "external_advantage": 873,
+        "external_advantage": 871,
         "metric": "test_markers"
       }
     ],
     "own": {
       "classes": 46,
       "cli_markers": 26,
-      "functions": 576,
+      "functions": 583,
       "source_files": 74,
-      "test_markers": 166,
-      "workflow_markers": 1499
+      "test_markers": 168,
+      "workflow_markers": 1646
     }
   },
   "signal_evidence": {
