@@ -8,7 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,12 +22,18 @@ from retort_engine.absorption_workflow import is_complete_absorption_stdout_json
 from retort_engine.absorption_workflow import run_real_absorption_cli as _workflow_run_real_absorption_cli
 from retort_engine.absorption_workflow import truthy as _workflow_truthy
 from retort_engine.branching import BranchWorkflowState, begin_absorption_branch, merge_absorption_branch
+from retort_engine.capability_audit import capability_absorption_audit as _audit_capability_absorption_audit
+from retort_engine.capability_audit import employee_result_files as _audit_employee_result_files
+from retort_engine.capability_audit import latest_absorption_run as _audit_latest_absorption_run
+from retort_engine.capability_audit import pr_review_runtime_evidence as _audit_pr_review_runtime_evidence
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.contracts import contract_names
 from retort_engine.core_refactor_execution import verify_core_refactor_execution
+from retort_engine.devour_session import assessment_file_count as _devour_assessment_file_count
+from retort_engine.devour_session import assessment_score as _devour_assessment_score
+from retort_engine.devour_session import build_devour_session as _devour_build_devour_session
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
-from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
 from retort_engine.git_status import blocking_git_status as _blocking_git_status
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.pr_dry_run import review_pr_url
@@ -37,38 +43,13 @@ from retort_engine.pr_review import review_diff
 from retort_engine.proof import record_closed_loop_proof as _record_closed_loop_proof_impl
 from retort_engine.proof import record_execution_proof as _record_execution_proof_impl
 from retort_engine.proof import rollback_rehearsal as _rollback_rehearsal_impl
+from retort_engine.project_assessment import Assessment, AssessmentDependencies, Score
+from retort_engine.project_assessment import assess_project as _project_assess_project
+from retort_engine.project_assessment import project_files as _assessment_project_files
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
-from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_structure
-
-
-@dataclass(frozen=True)
-class Score:
-    dimension: str
-    value: float
-    reason: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"dimension": self.dimension, "value": self.value, "reason": self.reason}
-
-
-@dataclass(frozen=True)
-class Assessment:
-    project: str
-    scores: tuple[Score, ...]
-    evidence: tuple[str, ...] = ()
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    def score_map(self) -> dict[str, float]:
-        return {score.dimension: score.value for score in self.scores}
-
-    def all_scores_over(self, threshold: float) -> bool:
-        return bool(self.scores) and all(score.value > threshold for score in self.scores)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"project": self.project, "scores": [score.to_dict() for score in self.scores], "evidence": list(self.evidence), "metadata": self.metadata}
 
 
 @dataclass(frozen=True)
@@ -85,91 +66,24 @@ class Task:
 
 
 def assess_project(project: str, *, run_local_gates: bool = False, context_policy: str = "isolated") -> Assessment:
-    root = Path(project).expanduser().resolve()
-    files = _project_files(root, {".git", ".retort", "__pycache__"})
-    text = "\n".join(_read(path) for path in files if path.suffix.lower() in {".py", ".js", ".html", ".css", ".md", ".toml", ".yml", ".yaml"})
-    tests = [path for path in files if path.name.startswith("test_") and path.suffix == ".py"]
-    test_functions = sum(len(re.findall(r"^\s*def\s+test_", _read(path), re.M)) for path in tests)
-    lint_ok = test_ok = False
-    if run_local_gates:
-        lint_ok = _run([_python(), "-m", "ruff", "check", "."], root)
-        test_ok = _run([_python(), "-m", "pytest", "tests", "-q"], root) if (root / "tests").is_dir() else False
-    features = {
-        "blackhole_ui": blackhole_ui_detected(root),
-        "folder_project_picker": "ownProjectFolder" in text and "externalProjectFolder" in text,
-        "github_or_folder_source": "github_url" in text and "external_path" in text,
-        "branch_workflow": "begin_absorption_branch" in text and "merge_absorption_branch" in text,
-        "employee_queue": "employee_queue" in text and "RetortHistory" in text,
-        "license_gate": "license" in text.lower() and "incompatible" in text.lower(),
-        "license_boundary_tests": "DEFAULT_BLOCKED_LICENSES" in text and "AGPL" in text and "enforce=True" in text,
-        "service_api": "RetortService" in text and "RetortUIServer" in text,
-        "self_evolution": "RetortSelfEvolutionRunner" in text and "scores_repeated_without_convergence" in text,
-        "real_absorption_cli": "apply_real_absorption" in text and "apply-absorption" in text and "execution_requests" in text,
-        "execution_proof_recorder": "_record_execution_proof" in text and "closed_loop_proof" in text and "gates_passed" in text,
-        "component_review_pipeline": "build_absorption_review_report" in text and "compare_component_gaps" in text and "group_review_files" in text,
-        "api_contract_schemas": "RETORT_CONTRACT_SCHEMAS" in text and "validate_contract" in text,
-        "feedback_audit": "audit_feedback_closure" in text and "history_result_count" in text,
-        "diff_hunk_review": "diff hunk" in text.lower() and "patch set" in text.lower(),
-        "pr_review_runtime": "review_diff" in text and "parse_unified_diff" in text and "review-diff" in text,
-        "pr_review_api": "/api/review-diff" in text and "pr_review_result" in text,
-        "incremental_pr_review": "previous_diff_text" in text and "skipped_existing_change_count" in text,
-        "pr_dry_run": "review-pr" in text and "review_pr_url" in text and "/api/review-pr" in text,
-        "pr_publish_dry_run": "publish-pr-dry-run" in text and "build_publish_dry_run" in text and "/api/publish-pr-dry-run" in text,
-        "pr_publish_sandbox": "publish-pr-sandbox" in text and "run_publish_sandbox" in text and "/api/publish-pr-sandbox" in text,
-        "pr_live_publish_probe": "publish-pr-live-probe" in text and "run_live_pr_comment_probe" in text and "/api/publish-pr-live-probe" in text,
-        "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
-        "complex_pr_replay": "complex-pr-replay" in text and "build_complex_pr_replay_report" in text,
-        "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
-        "task_dispatch_plan": "task-dispatch-plan" in text and "build_task_dispatch_plan" in text,
-        "review_quality_benchmark": "quality-benchmark-report" in text and "build_review_quality_benchmark" in text,
-        "employee_scheduler_stress": "employee-scheduler-stress" in text and "run_employee_scheduler_stress" in text,
-        "real_github_case": "https://github.com/openai/codex" in text,
-    }
-    tracked = _tracking_state(root)
-    proof = _closed_loop_proof(root)
-    capability_audit = _capability_absorption_audit(root)
-    refactor_execution = verify_core_refactor_execution(root)
-    state = _public_absorption_state(root)
-    evidence = tuple(
-        [
-            f"source_files={len(files)}",
-            f"test_functions={test_functions}",
-            f"git_tracking_state={tracked}",
-            f"lint={lint_ok}",
-            f"test={test_ok}",
-            f"closed_loop_verified={proof['verified']}",
-            f"closed_loop_missing={','.join(proof['missing'])}",
-            f"absorption_active={state.get('active')}",
-            f"absorption_status={state.get('status')}",
-            f"core_refactor_execution_status={refactor_execution.get('status')}",
-            f"core_refactor_implemented_tasks={refactor_execution.get('implemented_task_count')}/{refactor_execution.get('task_count')}",
-        ]
-        + [f"{k}={v}" for k, v in features.items()]
+    return _project_assess_project(
+        project,
+        run_local_gates=run_local_gates,
+        context_policy=context_policy,
+        dependencies=AssessmentDependencies(
+            read_text=_read,
+            run_command=_run,
+            python_command=_python,
+            tracking_state=_tracking_state,
+            closed_loop_proof=_closed_loop_proof,
+            capability_absorption_audit=_capability_absorption_audit,
+            public_absorption_state=_public_absorption_state,
+        ),
     )
-    metadata = {
-        "features": features,
-        "git_tracking_state": tracked,
-        "absorption_state": state,
-        "closed_loop_proof": proof,
-        "capability_absorption_audit": capability_audit,
-        "core_refactor_execution": refactor_execution,
-        "blackhole_ui_structure": blackhole_ui_structure(root),
-        "score_authority": "paibi_llm_prompt_only",
-        "local_scores_removed": True,
-    }
-    return Assessment(str(root), (), evidence, metadata)
 
 
 def _project_files(root: Path, skip_parts: set[str]) -> list[Path]:
-    files: list[Path] = []
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        rel_parts = path.relative_to(root).parts
-        if any(part in skip_parts for part in rel_parts):
-            continue
-        files.append(path)
-    return files
+    return _assessment_project_files(root, skip_parts)
 
 
 class RetortSelfEvolutionRunner:
@@ -576,223 +490,27 @@ def _build_devour_session(
     absorption_state: dict[str, Any],
     llm_review: dict[str, Any],
 ) -> dict[str, Any]:
-    return {
-        "status": _devour_session_status(execution, own_assessment),
-        "source": source,
-        "stage_order": ["pre_dual_review", "overlap_comparison", "absorption_execution", "improvement_proof", "final_self_review"],
-        "pre_dual_review": {
-            "status": "ready",
-            "context_policy": "isolated_before_absorption",
-            "panels": [
-                _assessment_panel("own_before", "主项目吞噬前深评", pre_assessment, source=str(pre_assessment.get("project") or "")),
-                _assessment_panel("external", "外部项目深评", external_assessment, source=source),
-            ],
-        },
-        "overlap_comparison": _overlap_comparison(source, external_path, tasks),
-        "absorption_execution": {
-            "status": str(execution.get("status") or "not_run"),
-            "summary": str(execution.get("summary") or ""),
-            "changed_files": [str(item) for item in execution.get("changed_files") or []],
-            "gates": [item for item in execution.get("gates") or [] if isinstance(item, dict)],
-            "branch": branch_state,
-            "tasks": tasks,
-        },
-        "improvement_proof": _improvement_proof(pre_assessment, own_assessment, execution, absorption_state),
-        "final_self_review": _final_self_review(own_assessment, llm_review),
-    }
-
-
-def _devour_session_status(execution: dict[str, Any], own_assessment: dict[str, Any]) -> str:
-    if _assessment_score(own_assessment) is not None:
-        return "final_deep_review_scored"
-    if execution.get("status") in {"applied", "noop"}:
-        return "absorbed_awaiting_final_llm_score"
-    if execution.get("status") in {"failed", "timeout"}:
-        return "absorption_execution_failed"
-    return "pre_review_ready"
-
-
-def _assessment_panel(role: str, title: str, assessment: dict[str, Any], *, source: str) -> dict[str, Any]:
-    metadata = assessment.get("metadata") if isinstance(assessment.get("metadata"), dict) else {}
-    scores = [item for item in assessment.get("scores") or [] if isinstance(item, dict)]
-    return {
-        "role": role,
-        "title": title,
-        "source": source,
-        "project": str(assessment.get("project") or source),
-        "score": _assessment_score(assessment),
-        "score_status": _assessment_score_status(assessment),
-        "score_source": str(metadata.get("score_source") or metadata.get("score_authority") or "unknown"),
-        "score_count": len(scores),
-        "file_count": _assessment_file_count(assessment),
-        "evidence_highlights": _evidence_highlights(assessment),
-        "feature_highlights": _feature_highlights(metadata),
-        "llm_task_id": str(metadata.get("llm_task_id") or ((assessment.get("llm_review") or {}).get("dispatch") or {}).get("task_id") or ""),
-    }
-
-
-def _assessment_score_status(assessment: dict[str, Any]) -> str:
-    metadata = assessment.get("metadata") if isinstance(assessment.get("metadata"), dict) else {}
-    source = str(metadata.get("score_source") or "")
-    if _assessment_score(assessment) is not None and source == "paibi_llm":
-        return "paibi_llm_completed"
-    if _assessment_score(assessment) is not None:
-        return "score_available"
-    if source == "external_evidence_only":
-        return "external_evidence_collected_needs_llm"
-    if source == "unavailable_external_project":
-        return "external_project_unavailable"
-    return "paibi_llm_required_not_scored"
-
-
-def _evidence_highlights(assessment: dict[str, Any], *, limit: int = 8) -> list[str]:
-    evidence = [str(item) for item in assessment.get("evidence") or []]
-    priority_prefixes = (
-        "source_files=",
-        "test_functions=",
-        "git_tracking_state=",
-        "lint=",
-        "test=",
-        "closed_loop_verified=",
-        "closed_loop_missing=",
-        "capability_absorption_local_score_removed=",
-        "capability_absorption_risk_level=",
-        "capability_absorption_blockers=",
-        "behavior_source_file_count=",
-        "behavior_test_file_count=",
-        "test_to_source_ratio=",
-        "employee_execution_mode=",
+    return _devour_build_devour_session(
+        source=source,
+        external_path=external_path,
+        pre_assessment=pre_assessment,
+        external_assessment=external_assessment,
+        own_assessment=own_assessment,
+        tasks=tasks,
+        execution=execution,
+        branch_state=branch_state,
+        absorption_state=absorption_state,
+        llm_review=llm_review,
+        external_project_profile=_external_project_profile,
     )
-    picked: list[str] = []
-    for prefix in priority_prefixes:
-        picked.extend(item for item in evidence if item.startswith(prefix) and item not in picked)
-    picked.extend(item for item in evidence if item not in picked)
-    return picked[:limit]
-
-
-def _feature_highlights(metadata: dict[str, Any], *, limit: int = 6) -> list[str]:
-    features = metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
-    return [str(key) for key, value in features.items() if value][:limit]
-
-
-def _overlap_comparison(source: str, external_path: Path | None, tasks: list[dict[str, str]]) -> dict[str, Any]:
-    profile = _external_project_profile(external_path)
-    signals = [
-        label
-        for key, label in (
-            ("review_pipeline", "审查流水线"),
-            ("file_grouping", "文件/差异分组"),
-            ("benchmarking", "质量基准"),
-            ("plugin_surface", "CLI/插件入口"),
-        )
-        if profile.get(key)
-    ]
-    dimensions = sorted({str(task.get("dimension") or "") for task in tasks if task.get("dimension")})
-    return {
-        "status": "depth_overlap_found" if tasks else "no_overlap_depth_found",
-        "source": source,
-        "depth_policy": "只吸收与 Retort 当前吸收、评估、证据闭环重合的深度，不扩主线广度。",
-        "external_depth_signals": signals,
-        "overlap_dimensions": dimensions,
-        "absorb_targets": [
-            {
-                "title": str(task.get("title") or ""),
-                "dimension": str(task.get("dimension") or ""),
-                "priority": str(task.get("priority") or ""),
-                "why": str(task.get("why") or ""),
-            }
-            for task in tasks
-        ],
-        "deferred_breadth": ["非重合方向暂不进入 Retort 主线", "可上架为未来 AI 员工或市场候选"],
-    }
-
-
-def _improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str, Any], execution: dict[str, Any], absorption_state: dict[str, Any]) -> dict[str, Any]:
-    before_score = _assessment_score(pre_assessment)
-    after_score = _assessment_score(own_assessment)
-    changed_files = [str(item) for item in execution.get("changed_files") or []]
-    gates = [item for item in execution.get("gates") or [] if isinstance(item, dict)]
-    proof = absorption_state.get("closed_loop_proof") if isinstance(absorption_state.get("closed_loop_proof"), dict) else {}
-    flags = proof.get("flags") if isinstance(proof.get("flags"), dict) else {}
-    audit = (own_assessment.get("metadata") or {}).get("capability_absorption_audit") if isinstance(own_assessment.get("metadata"), dict) else {}
-    if not isinstance(audit, dict):
-        audit = {}
-    return {
-        "status": _improvement_proof_status(execution, flags),
-        "before_score": before_score,
-        "after_score": after_score,
-        "score_delta": round(after_score - before_score, 1) if before_score is not None and after_score is not None else None,
-        "changed_file_count": len(changed_files),
-        "changed_files": changed_files,
-        "gate_passed_count": sum(1 for gate in gates if gate.get("ok")),
-        "gate_count": len(gates),
-        "closed_loop_flags": flags,
-        "missing_closed_loop": [str(item) for item in proof.get("missing") or []],
-        "behavior_source_files": [str(item) for item in audit.get("behavior_source_files") or []],
-        "behavior_test_files": [str(item) for item in audit.get("behavior_test_files") or []],
-        "support_behavior_source_files": [str(item) for item in audit.get("support_behavior_source_files") or []],
-        "support_behavior_test_files": [str(item) for item in audit.get("support_behavior_test_files") or []],
-        "generated_evidence_files": [str(item) for item in audit.get("generated_evidence_files") or []],
-        "generated_only": bool(audit.get("generated_only")),
-        "capability_absorption_local_score_removed": bool(audit.get("local_score_removed", True)),
-        "capability_absorption_status": audit.get("status"),
-        "capability_absorption_risk_level": audit.get("risk_level"),
-        "capability_absorption_blockers": [str(item) for item in audit.get("blockers") or []],
-        "test_to_source_ratio": audit.get("test_to_source_ratio"),
-        "reason": str(audit.get("reason") or ""),
-    }
-
-
-def _improvement_proof_status(execution: dict[str, Any], flags: dict[str, Any]) -> str:
-    if execution.get("status") in {"failed", "timeout"}:
-        return "failed"
-    if flags and all(bool(value) for value in flags.values()):
-        return "five_proofs_verified"
-    if execution.get("status") in {"applied", "noop"} and bool(execution.get("gates_passed")):
-        return "execution_and_gates_verified"
-    if execution.get("status") in {"applied", "noop"}:
-        return "execution_verified_needs_gates_or_merge"
-    return "pending_execution"
-
-
-def _final_self_review(own_assessment: dict[str, Any], llm_review: dict[str, Any]) -> dict[str, Any]:
-    metadata = own_assessment.get("metadata") if isinstance(own_assessment.get("metadata"), dict) else {}
-    dispatch = llm_review.get("dispatch") if isinstance(llm_review.get("dispatch"), dict) else {}
-    return {
-        "status": _assessment_score_status(own_assessment),
-        "score": _assessment_score(own_assessment),
-        "score_source": str(metadata.get("score_source") or "paibi_llm_pending"),
-        "scores": [item for item in own_assessment.get("scores") or [] if isinstance(item, dict)],
-        "llm_task_id": str(metadata.get("llm_task_id") or dispatch.get("task_id") or ""),
-        "llm_dispatch_status": str(dispatch.get("status") or llm_review.get("status") or ""),
-        "record_policy": "只有排比 LLM 返回结构化分数时，最终评分才保留。",
-    }
 
 
 def _assessment_score(assessment: dict[str, Any]) -> float | None:
-    scores = assessment.get("scores") if isinstance(assessment, dict) else []
-    if not isinstance(scores, list):
-        return None
-    preferred = ("calibrated_overall", "product_level", "retort_product_maturity")
-    for dimension in preferred:
-        for score in scores:
-            if isinstance(score, dict) and score.get("dimension") == dimension:
-                try:
-                    return round(float(score.get("value")), 1)
-                except (TypeError, ValueError):
-                    return None
-    return None
+    return _devour_assessment_score(assessment)
 
 
 def _assessment_file_count(assessment: dict[str, Any]) -> int:
-    evidence = assessment.get("evidence") if isinstance(assessment, dict) else []
-    if not isinstance(evidence, list):
-        return 0
-    for item in evidence:
-        match = re.match(r"source_files=(\d+)", str(item))
-        if match:
-            return int(match.group(1))
-    return 0
+    return _devour_assessment_file_count(assessment)
 
 
 def record_closed_loop_proof(project: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1070,419 +788,20 @@ def _llm_disabled_review(*, require_deep: bool = False) -> dict[str, Any]:
     }
 
 
-BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
-
-
 def _capability_absorption_audit(root: Path) -> dict[str, Any]:
-    code_health = _test_code_health(root)
-    static_risks = _self_assessment_risk_checks(root)
-    latest = _latest_absorption_run(root)
-    external_project_count = _absorption_external_project_count(root)
-    if not latest:
-        blockers = ["no_real_absorption_run", *static_risks["failed"]]
-        if external_project_count < 3:
-            blockers.append("insufficient_cross_project_reproduction")
-        return {
-            "local_score_removed": True,
-            "status": "needs_llm_project_level_review",
-            "risk_level": _audit_risk_level(blockers),
-            "blockers": sorted(set(blockers)),
-            "reason": "no_real_absorption_run",
-            "changed_files": [],
-            "behavior_source_files": [],
-            "behavior_test_files": [],
-            "generated_evidence_files": [],
-            "external_project_count": external_project_count,
-            **code_health,
-            "self_assessment_risk_checks": static_risks,
-        }
-    changed_files = [str(item) for item in latest.get("changed_files") or []]
-    behavior_source_files: list[str] = []
-    behavior_test_files: list[str] = []
-    generated_evidence_files: list[str] = []
-    other_files: list[str] = []
-    for item in changed_files:
-        path = Path(item)
-        rel = _project_relative(root, path)
-        if _is_generated_absorption_file(rel):
-            generated_evidence_files.append(rel)
-        elif _is_behavior_test_file(rel):
-            behavior_test_files.append(rel)
-        elif path.suffix.lower() in BEHAVIOR_SUFFIXES:
-            behavior_source_files.append(rel)
-        else:
-            other_files.append(rel)
-    pr_review = _pr_review_runtime_evidence(root)
-    support_behavior_source_files = [str(rel) for rel in pr_review.get("behavior_source_files") or []]
-    support_behavior_test_files = [str(rel) for rel in pr_review.get("behavior_test_files") or []]
-    employee_mode = _latest_employee_execution_mode(root)
-    employee_worker_review = _latest_employee_worker_review(root)
-    generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
-    if generated_only:
-        reason = "latest_absorption_changed_only_reports_logs_or_capability_registry"
-    elif behavior_source_files and behavior_test_files:
-        reason = "latest_absorption_changed_behavior_code_and_tests"
-    elif behavior_source_files:
-        reason = "latest_absorption_changed_behavior_code_without_behavior_tests"
-    else:
-        reason = "latest_absorption_has_no_clear_behavior_code_change"
-    blockers: list[str] = []
-    if generated_only:
-        blockers.append("latest_absorption_report_or_registry_only")
-    if behavior_source_files and not behavior_test_files:
-        blockers.append("latest_behavior_change_missing_tests")
-    if not behavior_source_files:
-        blockers.append("latest_absorption_missing_core_behavior_diff")
-    if code_health["source_line_count"] and code_health["test_to_source_ratio"] < 0.5:
-        blockers.append("low_test_to_source_ratio")
-    if external_project_count < 3:
-        blockers.append("insufficient_cross_project_reproduction")
-    if employee_mode in {"", "retort_apply_absorption_cli"}:
-        blockers.append("employee_execution_not_independent_runtime")
-    blockers.extend(static_risks["failed"])
-    return {
-        "local_score_removed": True,
-        "status": "audit_only_no_local_score",
-        "risk_level": _audit_risk_level(blockers),
-        "blockers": sorted(set(blockers)),
-        "reason": reason,
-        "changed_files": changed_files,
-        "behavior_source_files": behavior_source_files,
-        "behavior_test_files": behavior_test_files,
-        "support_behavior_source_files": support_behavior_source_files,
-        "support_behavior_test_files": support_behavior_test_files,
-        "generated_evidence_files": generated_evidence_files,
-        "other_files": other_files,
-        "generated_only": generated_only,
-        "external_project_count": external_project_count,
-        "employee_execution_mode": employee_mode,
-        "employee_worker_review": employee_worker_review,
-        "pr_review_runtime": pr_review,
-        **code_health,
-        "self_assessment_risk_checks": static_risks,
-    }
+    return _audit_capability_absorption_audit(root)
 
 
 def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
-    source = root / "retort_engine" / "pr_review.py"
-    dry_source = root / "retort_engine" / "pr_dry_run.py"
-    publish_source = root / "retort_engine" / "pr_publish.py"
-    live_probe_source = root / "retort_engine" / "pr_live_probe.py"
-    replay_source = root / "retort_engine" / "comparative_replay.py"
-    complex_pr_source = root / "retort_engine" / "complex_pr_replay.py"
-    task_source = root / "retort_engine" / "task_prioritization.py"
-    dispatch_source = root / "retort_engine" / "task_dispatch_plan.py"
-    benchmark_source = root / "retort_engine" / "review_quality_benchmark.py"
-    stress_source = root / "retort_engine" / "employee_scheduler_stress.py"
-    test = root / "tests" / "test_pr_review.py"
-    dry_test = root / "tests" / "test_pr_dry_run.py"
-    publish_test = root / "tests" / "test_pr_publish.py"
-    live_probe_test = root / "tests" / "test_pr_live_probe.py"
-    replay_test = root / "tests" / "test_comparative_replay.py"
-    complex_pr_test = root / "tests" / "test_complex_pr_replay.py"
-    task_test = root / "tests" / "test_task_prioritization.py"
-    dispatch_test = root / "tests" / "test_task_dispatch_plan.py"
-    benchmark_test = root / "tests" / "test_review_quality_benchmark.py"
-    stress_test = root / "tests" / "test_employee_scheduler_stress.py"
-    cli = root / "retort_engine" / "cli.py"
-    ui_server = root / "retort_engine" / "ui_server.py"
-    contracts = root / "retort_engine" / "contracts.py"
-    dry_report = root / "docs" / "retort_pr_dry_run_report.json"
-    source_text = _read(source)
-    dry_source_text = _read(dry_source)
-    test_text = _read(test)
-    dry_test_text = _read(dry_test)
-    dry_report_payload = _read_json(dry_report)
-    sample_comment_count = 0
-    incremental = False
-    incremental_skipped_count = 0
-    incremental_new_count = 0
-    if source.is_file():
-        try:
-            from retort_engine.pr_review import review_diff
-
-            result = review_diff("diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    token = \"secret\"\n")
-            sample_comment_count = len(result.get("comments") or [])
-            previous_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    # TODO: old issue\n"
-            current_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,3 @@\n def f():\n+    # TODO: old issue\n+    token = \"secret\"\n"
-            incremental_result = review_diff(current_diff, previous_diff_text=previous_diff)
-            incremental = bool((incremental_result.get("incremental") or {}).get("enabled"))
-            incremental_skipped_count = int((incremental_result.get("summary") or {}).get("skipped_existing_change_count") or 0)
-            incremental_new_count = int((incremental_result.get("summary") or {}).get("reviewed_new_change_count") or 0)
-        except Exception:
-            sample_comment_count = 0
-    return {
-        "runtime": source.is_file() and "parse_unified_diff" in source_text and "task_groups" in source_text,
-        "cli": "review-diff" in _read(cli),
-        "api": "/api/review-diff" in _read(ui_server),
-        "contract": "pr_review_result" in _read(contracts),
-        "test_function_count": len(re.findall(r"^\s*def\s+test_", test_text, re.M)),
-        "sample_comment_count": sample_comment_count,
-        "incremental": incremental,
-        "incremental_skipped_count": incremental_skipped_count,
-        "incremental_new_count": incremental_new_count,
-        "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
-        "dry_run_cli": "review-pr" in _read(cli),
-        "dry_run_api": "/api/review-pr" in _read(ui_server),
-        "dry_run_contract": "pr_dry_run_result" in _read(contracts),
-        "dry_run_test_function_count": len(re.findall(r"^\s*def\s+test_", dry_test_text, re.M)),
-        "dry_run_report_status": str(dry_report_payload.get("status") or ""),
-        "dry_run_report_pr_url": str(dry_report_payload.get("pr_url") or ""),
-        "dry_run_report_comment_count": int(((dry_report_payload.get("summary") or {}) if isinstance(dry_report_payload.get("summary"), dict) else {}).get("comment_count") or 0),
-        "dry_run_report_file_count": int(((dry_report_payload.get("summary") or {}) if isinstance(dry_report_payload.get("summary"), dict) else {}).get("file_count") or 0),
-        "behavior_source_files": [
-            item
-            for item, exists in (
-                ("retort_engine/pr_review.py", source.is_file()),
-                ("retort_engine/pr_dry_run.py", dry_source.is_file()),
-                ("retort_engine/pr_publish.py", publish_source.is_file()),
-                ("retort_engine/pr_live_probe.py", live_probe_source.is_file()),
-                ("retort_engine/comparative_replay.py", replay_source.is_file()),
-                ("retort_engine/complex_pr_replay.py", complex_pr_source.is_file()),
-                ("retort_engine/task_prioritization.py", task_source.is_file()),
-                ("retort_engine/task_dispatch_plan.py", dispatch_source.is_file()),
-                ("retort_engine/review_quality_benchmark.py", benchmark_source.is_file()),
-                ("retort_engine/employee_scheduler_stress.py", stress_source.is_file()),
-            )
-            if exists
-        ],
-        "behavior_test_files": [
-            item
-            for item, exists in (
-                ("tests/test_pr_review.py", test.is_file()),
-                ("tests/test_pr_dry_run.py", dry_test.is_file()),
-                ("tests/test_pr_publish.py", publish_test.is_file()),
-                ("tests/test_pr_live_probe.py", live_probe_test.is_file()),
-                ("tests/test_comparative_replay.py", replay_test.is_file()),
-                ("tests/test_complex_pr_replay.py", complex_pr_test.is_file()),
-                ("tests/test_task_prioritization.py", task_test.is_file()),
-                ("tests/test_task_dispatch_plan.py", dispatch_test.is_file()),
-                ("tests/test_review_quality_benchmark.py", benchmark_test.is_file()),
-                ("tests/test_employee_scheduler_stress.py", stress_test.is_file()),
-            )
-            if exists
-        ],
-    }
+    return _audit_pr_review_runtime_evidence(root)
 
 
 def _latest_absorption_run(root: Path) -> dict[str, Any]:
-    run_dir = root / ".retort" / "real_absorption_runs"
-    runs = sorted(run_dir.glob("*.json")) if run_dir.is_dir() else []
-    for path in reversed(runs):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(payload, dict):
-            return payload
-    return {}
-
-
-def _latest_employee_execution_mode(root: Path) -> str:
-    for path in reversed(_employee_result_files(root)):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        mode = str(payload.get("execution_mode") or "")
-        if mode:
-            return mode
-    return ""
-
-
-def _latest_employee_worker_review(root: Path) -> dict[str, Any]:
-    for path in reversed(_employee_result_files(root)):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
-        review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
-        if review:
-            artifact_text = str(review.get("artifact") or "")
-            return {
-                "status": str(review.get("status") or ""),
-                "comment_count": int(review.get("comment_count") or 0),
-                "file_count": int(review.get("file_count") or 0),
-                "task_group_count": int(review.get("task_group_count") or 0),
-                "artifact": artifact_text,
-                "artifact_exists": bool(artifact_text) and Path(artifact_text).is_file(),
-            }
-    return {}
+    return _audit_latest_absorption_run(root)
 
 
 def _employee_result_files(root: Path) -> list[Path]:
-    result_dir = root / ".retort" / "employee_results"
-    if not result_dir.is_dir():
-        return []
-    return [path for path in sorted(result_dir.glob("*.json")) if not path.name.endswith(".worker_review.json")]
-
-
-def _absorption_external_project_count(root: Path) -> int:
-    sources: set[str] = set()
-    run_dir = root / ".retort" / "real_absorption_runs"
-    for path in sorted(run_dir.glob("*.json")) if run_dir.is_dir() else []:
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        source = str(payload.get("source") or "").strip()
-        if source:
-            sources.add(source)
-    return max(len(sources), _architecture_memory_external_project_count(root))
-
-
-def _architecture_memory_external_project_count(root: Path) -> int:
-    path = root / "docs" / "retort_architecture_memory.json"
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return 0
-    sources: set[str] = set()
-    component_index = payload.get("component_index") if isinstance(payload.get("component_index"), dict) else {}
-    for component in component_index.values():
-        if not isinstance(component, dict):
-            continue
-        for source in component.get("sources") or ():
-            source_text = str(source).strip()
-            if source_text:
-                sources.add(source_text)
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    source_count = int(summary.get("source_count") or 0)
-    return max(source_count, len(sources))
-
-
-def _project_relative(root: Path, path: Path) -> str:
-    try:
-        return str(path.expanduser().resolve().relative_to(root.expanduser().resolve()))
-    except (OSError, ValueError):
-        return str(path)
-
-
-def _is_generated_absorption_file(rel: str) -> bool:
-    return Path(rel).name in GENERATED_ABSORPTION_NAMES or rel.startswith(".retort/")
-
-
-def _is_behavior_test_file(rel: str) -> bool:
-    path = Path(rel)
-    return path.suffix.lower() in BEHAVIOR_SUFFIXES and ("tests" in path.parts or path.name.startswith("test_"))
-
-
-def _is_project_behavior_source_file(rel: str) -> bool:
-    path = Path(rel)
-    return path.suffix.lower() in BEHAVIOR_SUFFIXES and not _is_generated_absorption_file(rel) and not _is_behavior_test_file(rel)
-
-
-def _test_code_health(root: Path) -> dict[str, Any]:
-    files = _project_files(root, {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"})
-    source_lines = 0
-    test_lines = 0
-    source_files = 0
-    test_files = 0
-    for path in files:
-        rel = _project_relative(root, path)
-        if _is_generated_absorption_file(rel):
-            continue
-        if _is_behavior_test_file(rel):
-            test_files += 1
-            test_lines += _code_line_count(path)
-        elif _is_project_behavior_source_file(rel):
-            source_files += 1
-            source_lines += _code_line_count(path)
-    ratio = round(test_lines / source_lines, 3) if source_lines else 0.0
-    return {
-        "source_file_count": source_files,
-        "test_file_count": test_files,
-        "source_line_count": source_lines,
-        "test_line_count": test_lines,
-        "test_to_source_ratio": ratio,
-    }
-
-
-def _code_line_count(path: Path) -> int:
-    lines = 0
-    for line in _read(path).splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and not stripped.startswith("//"):
-            lines += 1
-    return lines
-
-
-def _self_assessment_risk_checks(root: Path) -> dict[str, Any]:
-    core = root / "retort_engine" / "core.py"
-    workflow = root / "retort_engine" / "absorption_workflow.py"
-    loop = root / "retort_engine" / "similar_project_loop.py"
-    paibi = root / "retort_engine" / "paibi_llm.py"
-    prompting = root / "retort_engine" / "paibi_prompting.py"
-    evolution = root / "retort_engine" / "self_evolution.py"
-    proof = root / "retort_engine" / "proof.py"
-    if not any(path.is_file() for path in (core, workflow, loop, paibi, prompting, evolution, proof)):
-        return {"checks": [], "failed": []}
-    workflow_text = _read(workflow)
-    loop_text = _read(loop)
-    prompting_text = _read(prompting)
-    evolution_text = _read(evolution)
-    proof_text = _read(proof)
-    checks = [
-        {
-            "name": "strict_absorption_stdout_json",
-            "passed": "is_complete_absorption_stdout_json" in workflow_text and "required.issubset" in workflow_text and "candidates[-1]" in workflow_text,
-        },
-        {
-            "name": "closed_loop_cross_validation",
-            "passed": "_closed_loop_cross_validation" in proof_text and "merge_commit_verified" in proof_text and "pytest_gates_verified" in proof_text,
-        },
-        {
-            "name": "rollback_rehearsal_executes_git_revert",
-            "passed": '"revert", "--no-commit", "-m", "1"' in proof_text,
-        },
-        {
-            "name": "similar_loop_saturation_reachable",
-            "passed": "remaining_strong_depth_candidate_count" in loop_text and "consecutive_no_new_core_depth_count" in loop_text,
-        },
-        {
-            "name": "github_search_failure_explicit",
-            "passed": "search_failed" in loop_text and "search_stderr_tail" in loop_text,
-        },
-        {
-            "name": "batch_absorption_safe_defaults",
-            "passed": "allow_dirty_branch: bool = False" in loop_text and "use_llm: bool = False" in loop_text,
-        },
-        {
-            "name": "single_absorb_failure_isolated",
-            "passed": "_loop_failure_summary" in loop_text and "except Exception as exc" in loop_text,
-        },
-        {
-            "name": "max_rounds_is_enforced",
-            "passed": "round_index >= self.max_rounds" in evolution_text,
-        },
-        {
-            "name": "prompt_says_local_audit_has_no_score",
-            "passed": "能力吸收审计只提供风险信号" in prompting_text and "不得把本地能力吸收审计当作参考分" in prompting_text,
-        },
-    ]
-    failed = [str(item["name"]) for item in checks if not item["passed"]]
-    return {"checks": checks, "failed": failed}
-
-
-def _audit_risk_level(blockers: list[str]) -> str:
-    serious = {
-        "latest_absorption_report_or_registry_only",
-        "latest_absorption_missing_core_behavior_diff",
-        "latest_behavior_change_missing_tests",
-        "low_test_to_source_ratio",
-        "closed_loop_cross_validation",
-        "rollback_rehearsal_executes_git_revert",
-        "strict_absorption_stdout_json",
-        "similar_loop_saturation_reachable",
-        "github_search_failure_explicit",
-        "batch_absorption_safe_defaults",
-    }
-    if any(item in serious for item in blockers):
-        return "high"
-    if blockers:
-        return "medium"
-    return "low"
+    return _audit_employee_result_files(root)
 
 
 def _tasks_from_assessment(source: str, external_path: Path | None = None) -> list[dict[str, str]]:
