@@ -177,6 +177,14 @@ def test_review_context_bias_is_only_written_for_context_signals() -> None:
     assert real._should_absorb_review_context_bias({"signals": ["diff_hunk_review"]}) is True
 
 
+def test_capability_model_is_only_written_for_review_depth_signals() -> None:
+    assert real._should_absorb_capability_model({"signals": ["planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"]}) is False
+    assert real._should_absorb_capability_model({"signals": ["multi_provider", "planet_frontend"]}) is False
+    assert real._should_absorb_capability_model({"signals": ["review_pipeline"]}) is True
+    assert real._should_absorb_capability_model({"signals": ["benchmarking"]}) is True
+    assert real._should_absorb_capability_model({"signals": ["plugin_surface"]}) is True
+
+
 def test_frontend_visual_profile_rewrite_and_generated_test_are_executable(tmp_path: Path) -> None:
     app = tmp_path / "retort_engine" / "frontend" / "app.js"
     write(
@@ -221,6 +229,57 @@ function projectPlanet() {
     assert payload["layers"]["translucent_clouds"] is True
     assert payload["license_boundary"] == "visual principles only; no external source or texture copied"
     assert result["ok"] is True, result["stderr_tail"] + result["stdout_tail"]
+
+
+def test_visual_absorption_preserves_core_capability_model(tmp_path: Path) -> None:
+    project = tmp_path / "own"
+    external = tmp_path / "external"
+    write(
+        project / "retort_engine" / "frontend" / "app.js",
+        """
+const ABSORBED_PLANET_VISUAL_PROFILE = {
+  source: "",
+  enabled: false,
+  palette: {rim: "#8ff3ff"},
+  layers: {atmospheric_rim: true}
+};
+function planetVisualProfile() { return ABSORBED_PLANET_VISUAL_PROFILE; }
+function projectPlanet() {
+  const profile = planetVisualProfile();
+  const layers = profile.layers;
+  const palette = profile.palette;
+  if (layers.procedural_landmasses) {}
+  if (layers.translucent_clouds) {}
+  if (layers.terminator_shadow) {}
+  if (layers.atmospheric_rim) {}
+  return "rgbaHex(palette.rim";
+}
+""",
+    )
+    write(project / "retort_engine" / "__init__.py", "")
+    write(external / "scripts" / "planet.js", "three.js WebGL scene procedural planet atmosphere shader cloud terrain noise\n")
+
+    result = real.apply_real_absorption(
+        {
+            "own_project": str(project),
+            "external_path": str(external),
+            "source": "https://github.com/example/procedural-planets",
+            "tasks": [{"task_id": "retort-absorb-planet-visual", "title": "Planet visual", "dimension": "product_operability", "priority": "P1"}],
+            "python": sys.executable,
+        }
+    )
+
+    changed = {Path(path).relative_to(project).as_posix() for path in result["changed_files"]}
+    assert result["status"] == "applied"
+    assert result["gates_passed"] is True
+    assert result["capability_model_preserved"] is True
+    assert result["capability_module_path"] == ""
+    assert "retort_engine/frontend/app.js" in changed
+    assert "tests/test_frontend_visual_absorption.py" in changed
+    assert "retort_engine/absorbed_capabilities.py" not in changed
+    assert "tests/test_absorbed_capabilities.py" not in changed
+    assert not (project / "retort_engine" / "absorbed_capabilities.py").exists()
+    assert not (project / "tests" / "test_absorbed_capabilities.py").exists()
 
 
 def test_module_content_round_trips_absorbed_external_patterns(tmp_path: Path) -> None:
