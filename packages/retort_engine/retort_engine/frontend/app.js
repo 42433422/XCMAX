@@ -155,7 +155,8 @@ const statusText = {
   external_advantage_reassessed: "外部优势复评",
   proved_by_closed_loop_evidence: "闭环证据证明",
   not_available: "暂无证据",
-  code_graph_focus_not_proved: "未命中代码图定位"
+  code_graph_focus_not_proved: "未命中代码图定位",
+  missing_per_run_code_graph_proof: "缺少本次代码图证明"
 };
 const taskText = {
   "Absorb stronger implementation depth": "吸收更强实现深度",

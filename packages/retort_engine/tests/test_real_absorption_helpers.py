@@ -577,9 +577,23 @@ def test_git_diff_summary_falls_back_to_line_counts_for_unstaged_new_file(tmp_pa
 
 
 def test_record_execution_writes_replayable_json(tmp_path: Path) -> None:
-    result = {"run_id": "run-5", "status": "applied", "changed_files": ["feature.py"]}
+    result = {
+        "run_id": "run-5",
+        "status": "applied",
+        "changed_files": ["feature.py"],
+        "code_graph_proof": {
+            "run_id": "run-5",
+            "per_run_required": True,
+            "summary": {"graph_status": "ready", "changed_file_count": 1},
+            "evidence": {"style": "deterministic_post_absorption_code_graph", "scope": "per_real_absorption_run"},
+        },
+    }
 
     real._record_execution(tmp_path, result)
 
     path = tmp_path / ".retort" / "real_absorption_runs" / "run-5.json"
-    assert json.loads(path.read_text(encoding="utf-8")) == result
+    recorded = json.loads(path.read_text(encoding="utf-8"))
+    assert recorded["run_id"] == "run-5"
+    assert recorded["code_graph_proof"]["run_id"] == "run-5"
+    assert recorded["code_graph_proof"]["per_run_required"] is True
+    assert recorded["run_record_path"] == str(path)

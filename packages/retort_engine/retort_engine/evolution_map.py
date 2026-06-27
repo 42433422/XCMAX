@@ -16,6 +16,7 @@ def build_evolution_map(project: str | Path, *, max_files: int = 140) -> dict[st
     refactor_plan = build_core_refactor_plan(memory, project_root=root, max_tasks=8)
     state = _read_json(root / ".retort" / "absorption_state.json")
     latest_run = _latest_real_absorption_run(root)
+    latest_code_graph_proof = latest_run.get("code_graph_proof") if isinstance(latest_run.get("code_graph_proof"), dict) else {}
     return {
         "status": "ready" if code_graph.get("status") != "empty" else "empty",
         "project": str(root),
@@ -31,7 +32,7 @@ def build_evolution_map(project: str | Path, *, max_files: int = 140) -> dict[st
             "closed_loop_status": str(state.get("status") or ""),
             "closed_loop_evidence": list(((state.get("closed_loop_proof") or {}).get("evidence") or []))[-10:],
             "pre_absorption_focus": latest_run.get("pre_absorption_focus") or {},
-            "code_graph_proof": latest_run.get("code_graph_proof") or _proof_from_state_evidence(state),
+            "code_graph_proof": latest_code_graph_proof or _missing_per_run_proof(latest_run, state),
         },
         "core_refactor_plan": {
             "summary": refactor_plan.get("summary") or {},
@@ -58,18 +59,18 @@ def _latest_real_absorption_run(root: Path) -> dict[str, Any]:
     return {}
 
 
-def _proof_from_state_evidence(state: dict[str, Any]) -> dict[str, Any]:
+def _missing_per_run_proof(latest_run: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     evidence = [str(item) for item in ((state.get("closed_loop_proof") or {}).get("evidence") or [])]
     graph_smoke = next((item for item in evidence if item.startswith("codebase_graph_smoke=")), "")
     return {
-        "passed": bool(graph_smoke),
-        "status": "proved_by_closed_loop_evidence" if graph_smoke else "not_available",
+        "passed": False,
+        "status": "missing_per_run_code_graph_proof" if latest_run else "not_available",
         "changed_hotspots": [],
         "changed_focus_files": [],
         "hotspot_files": [],
         "focus_files": [],
-        "summary": {"graph_smoke": graph_smoke},
-        "evidence": {"style": "closed_loop_state_code_graph_evidence", "items": evidence[-10:]},
+        "summary": {"graph_smoke": graph_smoke, "run_id": str(latest_run.get("run_id") or "")},
+        "evidence": {"style": "missing_per_run_code_graph_proof", "items": evidence[-10:]},
     }
 
 

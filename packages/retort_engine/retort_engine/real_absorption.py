@@ -12,9 +12,10 @@ from typing import Any
 
 from retort_engine.architecture_memory import build_architecture_record, update_architecture_memory
 from retort_engine.architecture_refactor import build_core_refactor_plan, write_core_refactor_plan
-from retort_engine.codebase_graph import build_absorption_focus_map, code_graph_absorption_proof
+from retort_engine.codebase_graph import build_absorption_focus_map
 from retort_engine.feedback_audit import audit_feedback_closure
 from retort_engine.license_gate import license_gate
+from retort_engine.real_absorption_run_proof import build_per_run_code_graph_proof, code_graph_proof_gate, record_real_absorption_run
 from retort_engine.review_pipeline import build_absorption_review_report
 
 
@@ -132,7 +133,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("run_local_gates"):
         gates.extend(_local_gate_commands(root, payload))
     changed_files = _changed_files(before, tracked_paths)
-    code_graph_proof = code_graph_absorption_proof(root, changed_files, pre_absorption_focus)
+    code_graph_proof = build_per_run_code_graph_proof(root, run_id=run_id, changed_files=changed_files, pre_absorption_focus=pre_absorption_focus)
+    gates.append(code_graph_proof_gate(code_graph_proof, run_id=run_id))
     review_report["code_graph_proof"] = code_graph_proof
     report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     architecture_record = build_architecture_record(
@@ -196,7 +198,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     employee_results_path = _write_employee_results(root, run_id, source, tasks, result, payload)
     result["employee_results_path"] = str(employee_results_path)
     result["feedback_audit"] = audit_feedback_closure(queue_path=str(payload.get("employee_queue") or ""), history_store=str(payload.get("history_store") or ""), employee_results_dir=employee_results_path.parent)
-    _record_execution(root, result)
+    record_path = record_real_absorption_run(root, result)
+    result["run_record_path"] = str(record_path)
     return result
 
 
@@ -847,6 +850,18 @@ def test_absorption_quality_gate_passes_with_behavior_depth() -> None:
     assert gate["passed"] is True
 
 
+def test_absorption_quality_gate_forwards_code_graph_proof() -> None:
+    gate = absorption_quality_gate(
+        ["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
+        [{{"ok": True, "command": ["pytest", "tests/test_codebase_graph.py"], "stdout_tail": "6 passed"}}],
+        minimum_behavior_tests=1,
+        code_graph_proof={{"passed": False}},
+    )
+
+    assert gate["passed"] is False
+    assert "code_graph_focus_not_proved" in gate["missing"]
+
+
 def test_review_strategy_for_source_file_uses_absorbed_capabilities() -> None:
     strategy = review_strategy_for_file("src/review.ts")
     assert strategy["strategy"] in {{"diff_hunk_review", "semantic_review"}}
@@ -1098,9 +1113,7 @@ def _git_root(path: Path) -> Path | None:
 
 
 def _record_execution(root: Path, result: dict[str, Any]) -> None:
-    path = root / ".retort" / "real_absorption_runs" / f"{result.get('run_id', 'run')}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    record_real_absorption_run(root, result)
 
 
 def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[dict[str, Any]], result: dict[str, Any], payload: dict[str, Any]) -> Path:
