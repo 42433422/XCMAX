@@ -10,9 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.feedback_audit import audit_feedback_closure
-from retort_engine.history import RetortHistoryStore
 from retort_engine.license_gate import license_gate
-from retort_engine.models import EmployeeTaskResult
 from retort_engine.review_pipeline import build_absorption_review_report
 
 
@@ -253,6 +251,51 @@ def explain_missing_absorption_evidence(changed_files: list[str], gates: list[di
     elif progress["passed_gates"] != progress["gate_count"]:
         missing.append("post_absorption_gate_failed")
     return missing
+
+
+def advantage_diff_map(changed_files: list[str]) -> list[dict[str, Any]]:
+    """Map external advantages to concrete project-local behavior diffs."""
+    plan = absorbed_capability_plan()
+    rows: list[dict[str, Any]] = []
+    for capability in plan.get("ranked_capabilities") or []:
+        signal = str(capability.get("signal") or "")
+        matched = [path for path in changed_files if signal.replace("_", "-") in path or "absorbed_capabilities" in path or "test_absorbed_capabilities" in path]
+        rows.append({{"signal": signal, "weight": capability.get("weight", 0), "changed_files": matched, "has_behavior_diff": bool(matched)}})
+    return rows
+
+
+def absorption_quality_gate(changed_files: list[str], gates: list[dict[str, Any]], *, minimum_behavior_tests: int | None = None) -> dict[str, Any]:
+    """Turn weak absorption evidence into a blocking product gate."""
+    plan = absorbed_capability_plan()
+    minimum = int(minimum_behavior_tests or plan.get("minimum_behavior_tests") or 3)
+    missing = explain_missing_absorption_evidence(changed_files, gates)
+    test_gate = next((gate for gate in gates if "test_absorbed_capabilities.py" in " ".join(str(part) for part in gate.get("command") or [])), {{}})
+    stdout = str(test_gate.get("stdout_tail") or "")
+    passed_count = 0
+    for token in stdout.split():
+        if token.isdigit():
+            passed_count = max(passed_count, int(token))
+    if passed_count < minimum:
+        missing.append("insufficient_behavior_test_count")
+    return {{"passed": not missing, "missing": missing, "minimum_behavior_tests": minimum, "observed_behavior_tests": passed_count}}
+
+
+def review_strategy_for_file(path: str) -> dict[str, Any]:
+    """Pick a review strategy from absorbed external signals and file shape."""
+    suffix = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    capabilities = [item["signal"] for item in ranked_capabilities()]
+    strategy = "semantic_review"
+    if suffix in {{"ts", "tsx", "js", "jsx", "go", "py"}} and "diff_hunk_review" in capabilities:
+        strategy = "diff_hunk_review"
+    elif suffix in {{"md", "json", "yml", "yaml"}}:
+        strategy = "policy_and_contract_review"
+    return {{"path": path, "strategy": strategy, "capabilities": capabilities[:5]}}
+
+
+def multi_project_reproduction_index(sources: list[str]) -> dict[str, Any]:
+    """Score whether the same absorption behavior has been reproduced across projects."""
+    unique = sorted({{source for source in sources if source}})
+    return {{"unique_source_count": len(unique), "ready_for_product_score": len(unique) >= 3, "sources": unique[:5]}}
 '''
 
 
@@ -260,7 +303,7 @@ def _capability_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
     return f'''from __future__ import annotations
 
-from {import_name} import absorbed_capability_plan, capability_progress_from_execution, explain_missing_absorption_evidence, ranked_capabilities
+from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, explain_missing_absorption_evidence, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
 
 EXPECTED_ABSORPTION_SOURCE = {source_text}
 
@@ -286,6 +329,43 @@ def test_missing_absorption_evidence_blocks_report_only_runs() -> None:
     missing = explain_missing_absorption_evidence(["docs/retort_absorption_log.md"], [{{"ok": True}}])
     assert "missing_behavior_source_diff" in missing
     assert "missing_behavior_test_diff" in missing
+
+
+def test_advantage_diff_map_points_to_behavior_files() -> None:
+    rows = advantage_diff_map(["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"])
+    assert rows
+    assert any(row["has_behavior_diff"] for row in rows)
+
+
+def test_absorption_quality_gate_blocks_too_few_behavior_tests() -> None:
+    gate = absorption_quality_gate(
+        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
+        [{{"ok": True, "command": ["pytest", "tests/test_absorbed_capabilities.py"], "stdout_tail": "3 passed"}}],
+        minimum_behavior_tests=5,
+    )
+    assert gate["passed"] is False
+    assert "insufficient_behavior_test_count" in gate["missing"]
+
+
+def test_absorption_quality_gate_passes_with_behavior_depth() -> None:
+    gate = absorption_quality_gate(
+        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
+        [{{"ok": True, "command": ["pytest", "tests/test_absorbed_capabilities.py"], "stdout_tail": "8 passed"}}],
+        minimum_behavior_tests=5,
+    )
+    assert gate["passed"] is True
+
+
+def test_review_strategy_for_source_file_uses_absorbed_capabilities() -> None:
+    strategy = review_strategy_for_file("src/review.ts")
+    assert strategy["strategy"] in {{"diff_hunk_review", "semantic_review"}}
+    assert strategy["capabilities"]
+
+
+def test_multi_project_reproduction_index_requires_three_sources() -> None:
+    index = multi_project_reproduction_index(["a", "b", "a", "c"])
+    assert index["unique_source_count"] == 3
+    assert index["ready_for_product_score"] is True
 '''
 
 
@@ -478,47 +558,32 @@ def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[di
     path.parent.mkdir(parents=True, exist_ok=True)
     queue_path = str(payload.get("employee_queue") or "")
     history_store = str(payload.get("history_store") or "")
-    execution_mode = "employee_runtime_adapter" if queue_path and history_store else "retort_apply_absorption_cli"
-    task_results = []
-    for task in tasks:
-        task_result = {
-            "task_id": str(task.get("task_id") or ""),
-            "status": "completed" if result.get("gates_passed") else "failed",
-            "summary": f"Retort apply-absorption executed task for {task.get('dimension', 'unknown')}.",
-            "evidence": [
-                f"source={source}",
-                f"review_report={result.get('review_report_path')}",
-                f"changed_files={','.join(result.get('changed_files') or [])}",
-                f"gates_passed={result.get('gates_passed')}",
-            ],
-            "score_after": {"employee_execution_integration": 92.0 if result.get("gates_passed") else 70.0, "feedback_loop_closure": 92.0 if result.get("gates_passed") else 70.0},
-        }
-        task_results.append(task_result)
-    payload_out = {
+    worker_payload_path = root / ".retort" / "employee_runtime_requests" / f"{run_id}.json"
+    worker_payload_path.parent.mkdir(parents=True, exist_ok=True)
+    worker_payload = {
         "run_id": run_id,
         "source": source,
-        "execution_mode": execution_mode,
-        "runtime_evidence": {
-            "queue_path": queue_path,
-            "history_store": history_store,
-            "result_path": str(path),
-            "task_result_count": len(task_results),
-        },
-        "results": task_results,
+        "tasks": tasks,
+        "gates_passed": bool(result.get("gates_passed")),
+        "changed_files": result.get("changed_files") or [],
+        "review_report_path": result.get("review_report_path"),
+        "queue_path": queue_path,
+        "history_store": history_store,
+        "output_path": str(path),
     }
-    path.write_text(json.dumps(payload_out, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    if history_store:
-        store = RetortHistoryStore(history_store)
-        for item in task_results:
-            store.record_task_result(
-                EmployeeTaskResult(
-                    task_id=str(item.get("task_id") or ""),
-                    status=str(item.get("status") or ""),
-                    summary=str(item.get("summary") or ""),
-                    evidence=tuple(str(row) for row in item.get("evidence") or []),
-                    score_after={str(k): float(v) for k, v in (item.get("score_after") or {}).items()},
-                )
-            )
+    worker_payload_path.write_text(json.dumps(worker_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    package_root = str(Path(__file__).resolve().parents[1])
+    worker_code = f"import sys; sys.path.insert(0, {package_root!r}); from retort_engine.employee_runtime_worker import main; raise SystemExit(main())"
+    worker = _run_command([_python(payload), "-c", worker_code, "--payload-file", str(worker_payload_path)], root, timeout=120)
+    if not path.is_file():
+        fallback = {
+            "run_id": run_id,
+            "source": source,
+            "execution_mode": "employee_runtime_worker_failed",
+            "runtime_evidence": {"worker": worker, "worker_payload": str(worker_payload_path), "result_path": str(path)},
+            "results": [],
+        }
+        path.write_text(json.dumps(fallback, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     return path
 
 
