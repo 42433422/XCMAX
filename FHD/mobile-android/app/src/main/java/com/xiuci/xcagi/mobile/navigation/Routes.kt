@@ -26,6 +26,8 @@ object Routes {
     const val CONVERSATION_CHAT = "conversation_chat"
     /** 专属客服对话 */
     const val CS_CHAT = "cs_chat"
+    /** 管理端客服收件箱(运营者:企业客户↔企业专属客服) */
+    const val ADMIN_CS_CONSOLE = "admin_cs_console"
     const val FIXED_PARTNER_PROFILE = "fixed_partner/{partnerKind}"
 
     fun conversationChat(conversationId: String): String = "$CONVERSATION_CHAT/$conversationId"

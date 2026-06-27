@@ -50,12 +50,10 @@ from app.fastapi_routes.mobile_extensions.constants import (
     ADMIN_MOBILE_FEATURES,
 )
 from app.fastapi_routes.mobile_extensions.cs_helpers import (
-    _coerce_user_cs_reply,
     _mobile_cs_source_id,
     _mobile_cs_source_name,
     _safe_user_id,
     _safe_user_text,
-    _service_request_to_cs_messages,
 )
 
 # ── 子模块导入 ──
@@ -1433,6 +1431,109 @@ async def mobile_admin_features(request: Request, user=Depends(get_mobile_user))
     return format_mobile_response(
         data={"items": ADMIN_MOBILE_FEATURES, "count": len(ADMIN_MOBILE_FEATURES)}
     )
+
+
+# ── 管理端客服收件箱(企业客户↔企业专属客服,手机 Bearer + admin 守卫)──
+
+
+@extension_router.get("/im/cs/inbox")
+async def mobile_im_cs_inbox(request: Request, user=Depends(get_mobile_user)):
+    """运营者手机:列出所有企业客户的专属客服会话。"""
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    from app.application.im_app_service import ImApplicationService
+    from app.db.session import get_db
+
+    try:
+        with get_db() as db:
+            items = ImApplicationService(db).list_cs_inbox()
+        conversations = [
+            {
+                "conversationId": c.get("id"),
+                "customerName": c.get("customer_name") or f"用户{c.get('customer_user_id')}",
+                "lastMessageAt": str(c.get("last_message_at") or ""),
+                "unreadCount": int(c.get("unread_count") or 0),
+            }
+            for c in items
+        ]
+        return format_mobile_response(data={"conversations": conversations})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile cs inbox failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.get("/im/cs/inbox/{conversation_id}/messages")
+async def mobile_im_cs_inbox_messages(
+    conversation_id: int, request: Request, user=Depends(get_mobile_user)
+):
+    """运营者手机:读某客服会话历史(fromCustomer 区分客户/客服)。"""
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    from app.application.im_app_service import ImApplicationService
+    from app.db.session import get_db
+
+    try:
+        with get_db() as db:
+            svc = ImApplicationService(db)
+            cs_id = int(svc.enterprise_cs_user_id() or 0)
+            raw = svc.cs_inbox_messages(conversation_id)
+        messages = [
+            {
+                "messageId": str(m.get("id") or ""),
+                "fromCustomer": int(m.get("sender_user_id") or 0) != cs_id,
+                "senderName": str(m.get("sender_display_name") or ""),
+                "body": str(m.get("body") or ""),
+                "timestamp": str(m.get("created_at") or ""),
+            }
+            for m in raw
+        ]
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile cs inbox messages failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
+
+
+@extension_router.post("/im/cs/inbox/{conversation_id}/reply")
+async def mobile_im_cs_inbox_reply(
+    conversation_id: int, body: dict, request: Request, user=Depends(get_mobile_user)
+):
+    """运营者手机:以「企业专属客服」身份回复客户。"""
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    text = str(body.get("body") or "").strip()
+    if not text:
+        return JSONResponse(
+            format_mobile_response(None, "消息不能为空", success=False, code=400), status_code=400
+        )
+    from app.application.im_app_service import ImApplicationService
+    from app.db.session import get_db
+
+    try:
+        with get_db() as db:
+            result = ImApplicationService(db).cs_reply(conversation_id, text)
+        sent = result.get("message") or {}
+        return format_mobile_response(
+            data={
+                "messageId": str(sent.get("id") or ""),
+                "timestamp": str(sent.get("created_at") or ""),
+            }
+        )
+    except (ValueError, PermissionError) as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile cs inbox reply failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+        )
 
 
 @extension_router.get("/admin/home")
@@ -3270,15 +3371,13 @@ async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    from app.application.facades.user_cs_employee_facade import EMPLOYEE_MOD_ID
-
     return format_mobile_response(
         data={
             "cs_available": True,
-            "cs_name": dedicated_cs_label(),
+            "cs_name": "企业专属客服",
             "cs_avatar": None,
             "cs_online": True,
-            "backend": EMPLOYEE_MOD_ID,
+            "backend": "enterprise-cs",
         }
     )
 
@@ -3296,55 +3395,43 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
             format_mobile_response(None, "消息不能为空", success=False, code=400),
             status_code=400,
         )
-    from app.application.facades.user_cs_employee_facade import (
-        EMPLOYEE_MOD_ID,
-        run_user_cs_employee,
-    )
+    # 专属客服 = 企业客户↔运营者管理端的真实 IM 通道(与桌面端同源 enterprise-cs),不再复用小C LLM。
+    # 客户消息写入 IM,运营者在管理端「客服收件箱」收到并以「企业专属客服」身份回复。
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.application.im_app_service import ImApplicationService
+    from app.db.session import get_db
 
-    message_id = f"cs_{uuid.uuid4().hex[:12]}"
-    username = _safe_user_text(user, "username")
-    display = _safe_user_text(user, "display_name") or username
-    fallback_reply = (
-        "我已收到，会同步到企业智能客服工作台继续跟进。"
-        "你也可以补充业务背景、目标客户、期望交付时间，我会一起整理给客服侧。"
-    )
-    employee_result = await run_user_cs_employee(
-        {
-            "handler": "llm_md",
-            "action": "mobile_ai_customer_service",
-            "channel": "mobile",
-            "client_name": display,
-            "market_user_id": _safe_user_id(user),
-            "form_url": "https://xiu-ci.com/market/about",
-            "message": msg_body,
-            "brief": (
-                f"手机端用户正在和{dedicated_cs_label()}对话。请以 XCAGI 企业智能客服身份直接回复："
-                "先回答用户当前问题；如果需要进一步采集需求，再给出2-3个追问和需求提交链接。"
-                f"\n\n用户消息：{msg_body}"
-            ),
-        }
-    )
-    reply = _coerce_user_cs_reply(employee_result, fallback_reply)
-    now = datetime.utcnow().isoformat()
-    request_id, persisted, persist_error = _persist_mobile_cs_request(
-        user,
-        message_id=message_id,
-        msg_body=msg_body,
-        reply=reply,
-        backend=EMPLOYEE_MOD_ID,
-        employee_result=employee_result,
-    )
-    return format_mobile_response(
-        data={
-            "message_id": message_id,
-            "request_id": request_id,
-            "reply": reply,
-            "backend": EMPLOYEE_MOD_ID,
-            "persisted": persisted,
-            "persist_error": persist_error,
-            "timestamp": now,
-        }
-    )
+    try:
+        with get_db() as db:
+            svc = ImApplicationService(db)
+            cs = svc._ensure_enterprise_dedicated_cs_user()
+            if cs is None or int(cs.id) == uid:
+                return JSONResponse(
+                    format_mobile_response(None, "客服通道不可用", success=False, code=500),
+                    status_code=500,
+                )
+            conv = svc.get_or_create_direct(uid, int(cs.id))
+            result = svc.send_message(int(conv["id"]), uid, msg_body)
+        sent = result.get("message") or {}
+        return format_mobile_response(
+            data={
+                "message_id": str(sent.get("id") or ""),
+                # 真实客服:无 LLM 自动回复;客户端见空 reply 即 loadMessages 刷新等运营者回复。
+                "reply": "",
+                "backend": "enterprise-cs",
+                "timestamp": str(sent.get("created_at") or ""),
+            }
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile cs send via IM failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
 
 
 @extension_router.get("/cs/messages")
@@ -3356,26 +3443,36 @@ async def get_cs_messages(
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    from app.db.models.service_request import ServiceRequest
+    # 从 enterprise-cs 真实 IM 会话拉取消息(客户发的 + 运营者以「企业专属客服」回复的)。
+    from app.application.im_app_service import ImApplicationService
     from app.db.session import get_db
 
-    source_id = _mobile_cs_source_id(user)
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    error = ""
+    messages: list[dict[str, Any]] = []
     try:
         with get_db() as db:
-            ServiceRequest.__table__.create(db.get_bind(), checkfirst=True)
-            rows = (
-                db.query(ServiceRequest)
-                .filter(ServiceRequest.source_instance_id == source_id)
-                .filter(ServiceRequest.request_type == "mobile_ai_customer_service")
-                .order_by(ServiceRequest.created_at.asc(), ServiceRequest.id.asc())
-                .limit(100)
-                .all()
-            )
-            messages = [msg for row in rows for msg in _service_request_to_cs_messages(row)]
-        error = ""
+            svc = ImApplicationService(db)
+            cs = svc._ensure_enterprise_dedicated_cs_user()
+            if cs is not None and int(cs.id) != uid:
+                conv = svc.get_or_create_direct(uid, int(cs.id))
+                raw = svc.list_messages(int(conv["id"]), uid, limit=100)
+                messages = [
+                    {
+                        "messageId": str(m.get("id") or ""),
+                        # 发送者是自己=user,否则=客服(运营者以 enterprise-cs 身份回复)。
+                        "sender": "user" if int(m.get("sender_user_id") or 0) == uid else "cs",
+                        "body": str(m.get("body") or ""),
+                        "timestamp": str(m.get("created_at") or ""),
+                    }
+                    for m in raw
+                ]
     except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile cs message history unavailable: %s", exc)
-        messages = []
+        logger.warning("mobile cs message history (IM) unavailable: %s", exc)
         error = str(exc)[:300]
     if since:
         messages = [m for m in messages if str(m.get("timestamp") or "") > since]

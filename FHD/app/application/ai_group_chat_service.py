@@ -830,6 +830,9 @@ class AiGroupChatService:
         判定标志：部门群（``department_key`` 非空）且 ``members_seeded`` 未置 True。
         补员后写 ``members_seeded=True`` 并持久化；用户手动移人后不会再次自动加回。
         """
+        if self._mode != "admin":
+            # 企业端 4 部门初始只保留必备小C助理，不自动铺员工（按需/装 mod 后由生态同步进入）。
+            return
         targets = [
             g
             for g in groups
@@ -3609,9 +3612,10 @@ class AiGroupChatService:
                 else _FALLBACK_DEPARTMENTS
             )
         # 按 department_key 预分桶员工，种子群直接带入编制成员（微信式"部门群天然有人"）。
+        # 企业端 4 部门初始只保留必备小C助理，员工不预铺；仅管理端按编制预铺。
         members_by_dept: dict[str, list[dict[str, Any]]] = {}
         try:
-            for emp in self._employee_loader() or []:
+            for emp in (self._employee_loader() or []) if self._mode == "admin" else []:
                 if not isinstance(emp, dict):
                     continue
                 dk = str(emp.get("department_key") or "").strip()
