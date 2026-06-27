@@ -14,19 +14,25 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "pr_review_result" in contract_names()
     assert "pr_dry_run_result" in contract_names()
     assert "pr_publish_dry_run_result" in contract_names()
+    assert "pr_publish_sandbox_result" in contract_names()
     assert "cross_project_replay_result" in contract_names()
+    assert "task_prioritization_result" in contract_names()
     valid = validate_contract("execution_result", {"status": "applied", "changed_files": [], "gates": [], "gates_passed": True, "review_report_path": "report.json", "employee_results_path": "result.json"})
     review_valid = validate_contract("pr_review_result", {"status": "reviewed", "summary": {}, "files": [], "comments": [], "task_groups": [], "incremental": {}})
     dry_run_valid = validate_contract("pr_dry_run_result", {"status": "reviewed", "pr_url": "u", "diff_url": "d", "summary": {}, "review": {}})
     publish_valid = validate_contract("pr_publish_dry_run_result", {"status": "dry_run_ready", "pr_url": "u", "summary": {}, "comments": [], "rollback": {}})
+    sandbox_valid = validate_contract("pr_publish_sandbox_result", {"status": "sandbox_rolled_back", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": []})
     replay_valid = validate_contract("cross_project_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []})
+    task_valid = validate_contract("task_prioritization_result", {"status": "ready", "project": "p", "summary": {}, "priorities": [], "evidence": {}})
     invalid = validate_contract("review_report", {"run_id": "run"})
 
     assert valid["valid"] is True
     assert review_valid["valid"] is True
     assert dry_run_valid["valid"] is True
     assert publish_valid["valid"] is True
+    assert sandbox_valid["valid"] is True
     assert replay_valid["valid"] is True
+    assert task_valid["valid"] is True
     assert invalid["valid"] is False
     assert "license_review" in invalid["missing"]
 

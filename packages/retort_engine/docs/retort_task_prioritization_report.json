@@ -1,0 +1,51 @@
+{
+  "evidence": {
+    "employee_results_dir": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/employee_results",
+    "queue_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/employee_queue.jsonl"
+  },
+  "priorities": [
+    {
+      "completed_evidence_count": 20,
+      "dimension": "comparative_analysis_depth",
+      "next_action": "replay_and_verify_comparative_analysis_depth",
+      "priority": "P1",
+      "queued_count": 30
+    },
+    {
+      "completed_evidence_count": 20,
+      "dimension": "product_operability",
+      "next_action": "replay_and_verify_product_operability",
+      "priority": "P1",
+      "queued_count": 30
+    },
+    {
+      "completed_evidence_count": 10,
+      "dimension": "operational_readiness",
+      "next_action": "replay_and_verify_operational_readiness",
+      "priority": "P1",
+      "queued_count": 15
+    },
+    {
+      "completed_evidence_count": 8,
+      "dimension": "external_ingestion",
+      "next_action": "replay_and_verify_external_ingestion",
+      "priority": "P1",
+      "queued_count": 12
+    },
+    {
+      "completed_evidence_count": 64,
+      "dimension": "feedback_loop_closure",
+      "next_action": "replay_and_verify_feedback_loop_closure",
+      "priority": "P1",
+      "queued_count": 10
+    }
+  ],
+  "project": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "completed_result_count": 64,
+    "employee_result_count": 64,
+    "prioritized_dimension_count": 5,
+    "queued_task_count": 97
+  }
+}

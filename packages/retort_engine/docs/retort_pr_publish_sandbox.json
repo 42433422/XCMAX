@@ -1,0 +1,180 @@
+{
+  "created_receipts": [
+    {
+      "comment_id": "80462e7092ca",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 47,
+      "path": "README.md"
+    },
+    {
+      "comment_id": "176ea7b41bab",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 55,
+      "path": "README.md"
+    },
+    {
+      "comment_id": "a955e8715009",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 73,
+      "path": "README.md"
+    },
+    {
+      "comment_id": "d2becc809442",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 18,
+      "path": "action.yml"
+    },
+    {
+      "comment_id": "15ef2b6bd5aa",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 1,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "2c53345c31e9",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 12,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "b45c34cdcfc2",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 46,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "98fb902febec",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 84,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "b020362cdd3a",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 105,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "76d152647c38",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 214,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "e9826acee9f9",
+      "created": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 264,
+      "path": "src/main.ts"
+    }
+  ],
+  "pr_url": "https://github.com/villesau/ai-codereviewer/pull/138",
+  "rollback_receipts": [
+    {
+      "comment_id": "80462e7092ca",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 47,
+      "path": "README.md"
+    },
+    {
+      "comment_id": "176ea7b41bab",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 55,
+      "path": "README.md"
+    },
+    {
+      "comment_id": "a955e8715009",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 73,
+      "path": "README.md"
+    },
+    {
+      "comment_id": "d2becc809442",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 18,
+      "path": "action.yml"
+    },
+    {
+      "comment_id": "15ef2b6bd5aa",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 1,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "2c53345c31e9",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 12,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "b45c34cdcfc2",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 46,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "98fb902febec",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 84,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "b020362cdd3a",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 105,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "76d152647c38",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 214,
+      "path": "src/main.ts"
+    },
+    {
+      "comment_id": "e9826acee9f9",
+      "created": true,
+      "deleted": true,
+      "idempotency_key": "7b3c74e5a285432b",
+      "line": 264,
+      "path": "src/main.ts"
+    }
+  ],
+  "source_dry_run": "packages/retort_engine/docs/retort_pr_publish_dry_run.json",
+  "status": "sandbox_rolled_back",
+  "summary": {
+    "created_comment_count": 11,
+    "idempotency_key": "7b3c74e5a285432b",
+    "rollback_verified": true,
+    "rolled_back_comment_count": 11
+  }
+}
