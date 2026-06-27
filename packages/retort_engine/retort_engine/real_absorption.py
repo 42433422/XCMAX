@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -118,8 +119,12 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         capability_test_path.write_text(_capability_test_content(_capability_import_name(root, capability_path), source), encoding="utf-8")
     writes_review_context_bias = _should_absorb_review_context_bias(external_profile)
     if writes_review_context_bias:
+        existing_review_context_bias = _existing_review_context_bias(review_context_bias_path)
         review_context_bias_path.parent.mkdir(parents=True, exist_ok=True)
-        review_context_bias_path.write_text(_review_context_bias_content(run_id, source, external_path, external_profile), encoding="utf-8")
+        review_context_bias_path.write_text(
+            _review_context_bias_content(run_id, source, external_path, external_profile, existing=existing_review_context_bias),
+            encoding="utf-8",
+        )
         review_context_bias_test_path.parent.mkdir(parents=True, exist_ok=True)
         review_context_bias_test_path.write_text(_review_context_bias_test_content(_capability_import_name(root, review_context_bias_path), source), encoding="utf-8")
     if writes_frontend_visual:
@@ -407,20 +412,8 @@ def _is_visual_dominant_profile(profile: dict[str, Any]) -> bool:
     return non_visual_signals <= {"review_pipeline"}
 
 
-def _review_context_bias_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> str:
-    signals = list(profile.get("signals") or [])
-    signal_evidence = dict(profile.get("signal_evidence") or {})
-    focus = _context_focus_from_signals(signals)
-    payload = {
-        "run_id": run_id,
-        "enabled": bool(signals),
-        "source": source,
-        "external_path": str(external_path),
-        "signals": signals,
-        "signal_evidence": signal_evidence,
-        "context_focus": focus,
-        "reason": "absorbed external file grouping and review pipeline signals",
-    }
+def _review_context_bias_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any], *, existing: dict[str, Any] | None = None) -> str:
+    payload = _merged_review_context_bias_payload(run_id, source, external_path, profile, existing=existing or {})
     payload_text = repr(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
     return f'''from __future__ import annotations
 
@@ -447,6 +440,102 @@ def context_signal_strength() -> int:
     signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
     return min(100, 20 * len(signals & {{"file_grouping", "review_pipeline", "diff_hunk_review", "benchmarking", "safety_policy", "static_analysis", "context_packaging", "semantic_index"}}))
 '''
+
+
+def _merged_review_context_bias_payload(
+    run_id: str,
+    source: str,
+    external_path: Path,
+    profile: dict[str, Any],
+    *,
+    existing: dict[str, Any],
+) -> dict[str, Any]:
+    signals = _ordered_union(existing.get("signals") or [], profile.get("signals") or [])
+    signal_evidence = _merge_signal_evidence(existing.get("signal_evidence"), profile.get("signal_evidence"))
+    focus = _context_focus_from_signals(signals)
+    sources = _ordered_union(existing.get("sources") or [existing.get("source")], [source])
+    external_paths = _ordered_union(existing.get("external_paths") or [existing.get("external_path")], [str(external_path)])
+    run_ids = _ordered_union(existing.get("run_ids") or [existing.get("run_id")], [run_id])
+    payload = {
+        "run_id": run_id,
+        "run_ids": run_ids,
+        "enabled": bool(signals),
+        "source": source,
+        "sources": sources,
+        "external_path": str(external_path),
+        "external_paths": external_paths,
+        "signals": signals,
+        "signal_evidence": signal_evidence,
+        "context_focus": focus,
+        "reason": "merged external file grouping and review pipeline signals",
+    }
+    return payload
+
+
+def _existing_review_context_bias(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return {}
+    for node in tree.body:
+        target_name = ""
+        value: ast.AST | None = None
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target_name = node.target.id
+            value = node.value
+        elif isinstance(node, ast.Assign) and node.targets and isinstance(node.targets[0], ast.Name):
+            target_name = node.targets[0].id
+            value = node.value
+        if target_name != "REVIEW_CONTEXT_BIAS" or not isinstance(value, ast.Call) or not value.args:
+            continue
+        if not _is_json_loads_call(value):
+            continue
+        first_arg = value.args[0]
+        if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+            try:
+                parsed = json.loads(first_arg.value)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _is_json_loads_call(value: ast.Call) -> bool:
+    func = value.func
+    return isinstance(func, ast.Attribute) and func.attr == "loads" and isinstance(func.value, ast.Name) and func.value.id == "json"
+
+
+def _merge_signal_evidence(existing: Any, current: Any) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {}
+    for evidence in (existing, current):
+        if not isinstance(evidence, dict):
+            continue
+        for signal, paths in evidence.items():
+            if not signal:
+                continue
+            values = paths if isinstance(paths, list) else [paths]
+            merged[str(signal)] = _ordered_union(merged.get(str(signal)) or [], values)[:8]
+    return merged
+
+
+def _ordered_union(*groups: Any) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        if group is None:
+            continue
+        iterable = group if isinstance(group, (list, tuple, set)) else [group]
+        for item in iterable:
+            if item is None:
+                continue
+            text = str(item)
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            values.append(text)
+    return values
 
 
 def _review_context_bias_test_content(import_name: str, source: str) -> str:
