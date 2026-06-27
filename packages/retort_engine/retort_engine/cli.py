@@ -159,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     loop.add_argument("--branch-workflow", action="store_true")
     loop.add_argument("--merge-after", action="store_true")
     loop.add_argument("--allow-dirty-branch", action="store_true")
+    loop.add_argument("--use-llm", action="store_true")
     loop.add_argument("--dry-run", action="store_true")
     loop.add_argument("--json", action="store_true")
     saturation = sub.add_parser("absorption-saturation")
@@ -387,6 +388,7 @@ def main(argv: list[str] | None = None) -> int:
             branch_workflow=args.branch_workflow,
             merge_after=args.merge_after,
             allow_dirty_branch=args.allow_dirty_branch,
+            use_llm=args.use_llm,
             dry_run=args.dry_run,
         )
         if args.json:

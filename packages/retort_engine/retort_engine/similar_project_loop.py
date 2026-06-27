@@ -42,21 +42,31 @@ def build_similar_project_radar(
     min_score: int = 55,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
-    raw_candidates = candidates if candidates is not None else _search_github_repos(query=query, limit=max(limit * 3, 20))
+    search_result: dict[str, Any] = {"status": "provided", "items": [], "returncode": 0, "stderr_tail": ""}
+    if candidates is None:
+        search_result = _search_github_repos(query=query, limit=max(limit * 3, 20))
+        raw_candidates = list(search_result.get("items") or [])
+    else:
+        raw_candidates = candidates
     absorbed = _absorbed_sources(root)
     scored = [_score_candidate(item, absorbed) for item in raw_candidates]
     accepted = [item for item in scored if item["similarity_depth_score"] >= min_score and not item["already_absorbed"] and item["license_allowed"]]
     accepted = sorted(accepted, key=lambda item: (item["similarity_depth_score"], item["stars"]), reverse=True)[:limit]
     rejected = [item for item in scored if item not in accepted]
+    status = "search_failed" if search_result.get("status") == "search_failed" else ("ready" if accepted else "no_candidates")
     return {
-        "status": "ready",
+        "status": status,
         "project": str(root),
         "query": query,
         "summary": {
             "candidate_count": len(scored),
             "accepted_count": len(accepted),
+            "rejected_count": len(rejected),
             "already_absorbed_count": sum(1 for item in scored if item["already_absorbed"]),
             "min_score": min_score,
+            "search_status": search_result.get("status", "provided"),
+            "search_returncode": search_result.get("returncode", 0),
+            "search_stderr_tail": search_result.get("stderr_tail", ""),
         },
         "candidates": accepted,
         "rejected": sorted(rejected, key=lambda item: item["similarity_depth_score"], reverse=True)[: min(20, len(rejected))],
@@ -72,7 +82,8 @@ def run_similar_project_loop(
     run_local_gates: bool = True,
     branch_workflow: bool = True,
     merge_after: bool = True,
-    allow_dirty_branch: bool = True,
+    allow_dirty_branch: bool = False,
+    use_llm: bool = False,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
@@ -85,34 +96,53 @@ def run_similar_project_loop(
 
         for candidate in selected:
             source = str(candidate["url"])
-            result = absorb(
-                {
-                    "own_project": str(root),
-                    "github_url": source,
-                    "run_local_gates": run_local_gates,
-                    "branch_workflow": branch_workflow,
-                    "merge_after": merge_after,
-                    "allow_dirty_branch": allow_dirty_branch,
-                    "refresh": True,
-                    "use_llm": True,
-                    "employee_queue": str(root / ".retort" / "employee_queue.jsonl"),
-                    "history_store": str(root / ".retort" / "retort_history.sqlite"),
-                }
-            )
-            runs.append(_loop_run_summary(candidate, result))
+            try:
+                result = absorb(
+                    {
+                        "own_project": str(root),
+                        "github_url": source,
+                        "run_local_gates": run_local_gates,
+                        "branch_workflow": branch_workflow,
+                        "merge_after": merge_after,
+                        "allow_dirty_branch": allow_dirty_branch,
+                        "refresh": True,
+                        "use_llm": use_llm,
+                        "employee_queue": str(root / ".retort" / "employee_queue.jsonl"),
+                        "history_store": str(root / ".retort" / "retort_history.sqlite"),
+                    }
+                )
+                runs.append(_loop_run_summary(candidate, result))
+            except Exception as exc:
+                runs.append(_loop_failure_summary(candidate, exc))
     else:
         runs = [{"candidate": candidate, "status": "dry_run"} for candidate in selected]
     remaining = [item for item in radar["candidates"] if item not in selected]
-    saturation = build_absorption_saturation_report(root, remaining_candidates=remaining)
-    status = "ready" if dry_run or all(run.get("gates_passed") for run in runs) else "needs_attention"
+    saturation_candidates = remaining + list(radar.get("rejected") or [])
+    saturation = build_absorption_saturation_report(
+        root,
+        remaining_candidates=saturation_candidates,
+        min_score=min_score,
+        radar_status=radar.get("status", ""),
+        search_error=radar.get("summary", {}).get("search_stderr_tail", ""),
+    )
+    if radar.get("status") == "search_failed":
+        status = "search_failed"
+    elif not selected:
+        status = "no_candidates"
+    elif dry_run:
+        status = "ready"
+    else:
+        status = "ready" if all(run.get("gates_passed") for run in runs) else "needs_attention"
     return {
         "status": status,
         "project": str(root),
         "summary": {
             "selected_count": len(selected),
             "completed_count": sum(1 for run in runs if run.get("status") in {"absorption_execution_applied", "dry_run"}),
+            "failed_count": sum(1 for run in runs if run.get("status") == "absorption_failed"),
             "gates_passed_count": sum(1 for run in runs if run.get("gates_passed")),
             "remaining_candidate_count": len(remaining),
+            "search_status": radar.get("summary", {}).get("search_status", ""),
         },
         "radar": radar,
         "runs": runs,
@@ -125,13 +155,18 @@ def build_absorption_saturation_report(
     *,
     recent_limit: int = 3,
     remaining_candidates: list[dict[str, Any]] | None = None,
+    min_score: int = 55,
+    radar_status: str = "",
+    search_error: str = "",
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     radar_summary: dict[str, Any] = {}
     if remaining_candidates is None:
-        radar = build_similar_project_radar(root, limit=10)
-        remaining_candidates = list(radar.get("candidates") or [])
+        radar = build_similar_project_radar(root, limit=10, min_score=min_score)
+        remaining_candidates = list(radar.get("candidates") or []) + list(radar.get("rejected") or [])
         radar_summary = dict(radar.get("summary") or {})
+        radar_status = str(radar.get("status") or radar_status)
+        search_error = str(radar_summary.get("search_stderr_tail") or search_error)
     runs = _load_absorption_runs(root)
     seen: set[str] = set()
     enriched: list[dict[str, Any]] = []
@@ -152,14 +187,22 @@ def build_absorption_saturation_report(
     recent = enriched[-recent_limit:]
     consecutive_no_new = sum(1 for item in reversed(enriched) if item["new_core_signal_count"] == 0)
     remaining_count = 0 if remaining_candidates is None else len(remaining_candidates)
-    saturated = bool(
-        len(recent) >= recent_limit
-        and all(item["gates_passed"] for item in recent)
-        and consecutive_no_new >= recent_limit
-        and remaining_count == 0
-    )
+    strong_remaining = [item for item in remaining_candidates or [] if _is_open_depth_candidate(item, min_score=min_score)]
+    strong_remaining_count = len(strong_remaining)
+    recent_green = len(recent) >= recent_limit and all(item["gates_passed"] for item in recent)
+    no_new_depth = consecutive_no_new >= recent_limit
+    no_strong_remaining = remaining_candidates is not None and strong_remaining_count == 0
+    search_failed = radar_status == "search_failed" or str(radar_summary.get("search_status") or "") == "search_failed"
+    saturated = bool(recent_green and not search_failed and (no_new_depth or no_strong_remaining))
+    saturation_basis = "not_saturated"
+    if search_failed:
+        saturation_basis = "search_failed"
+    elif saturated and no_new_depth:
+        saturation_basis = "recent_absorptions_add_no_new_core_depth"
+    elif saturated and no_strong_remaining:
+        saturation_basis = "remaining_candidates_below_min_score"
     return {
-        "status": "saturated" if saturated else "not_saturated",
+        "status": "search_failed" if search_failed else ("saturated" if saturated else "not_saturated"),
         "project": str(root),
         "summary": {
             "absorption_run_count": len(enriched),
@@ -167,30 +210,41 @@ def build_absorption_saturation_report(
             "recent_gate_green_count": sum(1 for item in recent if item["gates_passed"]),
             "consecutive_no_new_core_depth_count": consecutive_no_new,
             "remaining_candidate_count": remaining_count,
+            "remaining_strong_depth_candidate_count": strong_remaining_count,
+            "remaining_low_depth_candidate_count": max(0, remaining_count - strong_remaining_count),
+            "min_score": min_score,
             "radar_candidate_count": radar_summary.get("candidate_count", ""),
             "radar_accepted_count": radar_summary.get("accepted_count", ""),
+            "radar_status": radar_status,
+            "search_error": search_error,
             "saturated": saturated,
+            "saturation_basis": saturation_basis,
         },
         "recent_runs": recent,
         "requirements": [
             "latest similar-project absorptions keep gates green",
-            "recent projects add no new core-depth signal",
-            "radar has no remaining same-direction candidate above threshold",
+            "recent projects add no new core-depth signal OR remaining candidates are below the depth threshold",
+            "GitHub search failure is never treated as saturation",
             "marketplace candidates remain closed until saturation",
         ],
     }
 
 
-def _search_github_repos(*, query: str, limit: int) -> list[dict[str, Any]]:
+def _search_github_repos(*, query: str, limit: int) -> dict[str, Any]:
     cmd = ["gh", "search", "repos", query, "--limit", str(limit), "--json", "fullName,description,stargazersCount,updatedAt,url,license"]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60, check=False)
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60, check=False)
+    except subprocess.TimeoutExpired as exc:
+        return {"status": "search_failed", "items": [], "returncode": -1, "stderr_tail": _tail(exc.stderr or "gh search timed out")}
+    except OSError as exc:
+        return {"status": "search_failed", "items": [], "returncode": -1, "stderr_tail": _tail(str(exc))}
     if result.returncode != 0:
-        return []
+        return {"status": "search_failed", "items": [], "returncode": result.returncode, "stderr_tail": _tail(result.stderr)}
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError:
-        return []
-    return [item for item in payload if isinstance(item, dict)]
+        return {"status": "search_failed", "items": [], "returncode": result.returncode, "stderr_tail": _tail(result.stderr or result.stdout)}
+    return {"status": "ready", "items": [item for item in payload if isinstance(item, dict)], "returncode": result.returncode, "stderr_tail": _tail(result.stderr)}
 
 
 def _score_candidate(item: dict[str, Any], absorbed: set[str]) -> dict[str, Any]:
@@ -198,13 +252,13 @@ def _score_candidate(item: dict[str, Any], absorbed: set[str]) -> dict[str, Any]
     full_name = str(item.get("fullName") or _full_name_from_url(url))
     description = str(item.get("description") or "")
     license_key = str(((item.get("license") or {}) if isinstance(item.get("license"), dict) else {}).get("key") or "").lower()
-    text = f"{full_name} {description}".lower().replace("-", " ")
-    depth_score = sum(weight for term, weight in DEPTH_TERMS.items() if term in text)
-    breadth_penalty = sum(weight for term, weight in BREADTH_TERMS.items() if term in text)
+    text = _candidate_text(full_name, description)
+    depth_score = sum(weight for term, weight in DEPTH_TERMS.items() if _term_present(text, term))
+    breadth_penalty = sum(weight for term, weight in BREADTH_TERMS.items() if _term_present(text, term))
     license_allowed = not license_key or license_key in ALLOWED_LICENSES
     if license_allowed:
         depth_score += 8
-    if "pr" in full_name.lower() or "pull" in text:
+    if _term_present(text, "pr") or _term_present(text, "pull"):
         depth_score += 10
     score = max(0, min(100, depth_score - breadth_penalty))
     source_url = url or f"https://github.com/{full_name}"
@@ -234,7 +288,41 @@ def _score_reason(score: int, breadth_penalty: int, license_allowed: bool) -> st
 
 
 def _candidate_from_url(source: str) -> dict[str, Any]:
-    return {"url": source, "fullName": _full_name_from_url(source), "description": "AI PR reviewer", "stargazersCount": 0, "license": {"key": "mit"}}
+    return {
+        "url": source,
+        "fullName": _full_name_from_url(source),
+        "description": "AI PR reviewer for pull request code review",
+        "stargazersCount": 0,
+        "license": {"key": "mit"},
+    }
+
+
+def _candidate_text(full_name: str, description: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", f"{full_name} {description}".lower()).strip()
+
+
+def _term_present(text: str, term: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", term.lower()).strip()
+    if not normalized:
+        return False
+    if normalized == "review":
+        return re.search(r"(?<![a-z0-9])review(?:s|er|ing)?(?![a-z0-9])", text) is not None
+    pattern = r"(?<![a-z0-9])" + r"\s+".join(re.escape(part) for part in normalized.split()) + r"(?![a-z0-9])"
+    return re.search(pattern, text) is not None
+
+
+def _is_open_depth_candidate(item: dict[str, Any], *, min_score: int) -> bool:
+    if "similarity_depth_score" not in item:
+        return True
+    score = int(item.get("similarity_depth_score") or 0)
+    license_allowed = bool(item.get("license_allowed", True))
+    already_absorbed = bool(item.get("already_absorbed", False))
+    return score >= min_score and license_allowed and not already_absorbed
+
+
+def _tail(value: object, limit: int = 500) -> str:
+    text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value or "")
+    return text.strip()[-limit:]
 
 
 def _full_name_from_url(url: str) -> str:
@@ -282,4 +370,17 @@ def _loop_run_summary(candidate: dict[str, Any], result: dict[str, Any]) -> dict
         "changed_file_count": len(execution.get("changed_files") or []),
         "branch_status": (result.get("branch_workflow") or {}).get("status") if isinstance(result.get("branch_workflow"), dict) else "",
         "task_count": len(result.get("tasks") or []),
+    }
+
+
+def _loop_failure_summary(candidate: dict[str, Any], exc: Exception) -> dict[str, Any]:
+    return {
+        "candidate": candidate,
+        "status": "absorption_failed",
+        "execution_status": "failed",
+        "gates_passed": False,
+        "changed_file_count": 0,
+        "branch_status": "",
+        "task_count": 0,
+        "error": str(exc),
     }
