@@ -18,12 +18,17 @@ def build_task_prioritization_report(project: str | Path) -> dict[str, Any]:
         priorities.append(
             {
                 "dimension": dimension,
+                "owner_hint": _owner_for_dimension(dimension),
                 "queued_count": count,
                 "completed_evidence_count": completed_count,
                 "priority": "P1" if count >= 3 else "P2",
                 "next_action": f"replay_and_verify_{dimension}",
+                "acceptance": f"Next absorption run improves or preserves {dimension} with post-tests passing.",
+                "evidence_required": ["queued_task_id", "employee_result", "post_absorption_test", "replay_report"],
+                "ready_for_employee": True,
             }
         )
+    ready_count = sum(1 for item in priorities if item.get("ready_for_employee") and item.get("acceptance") and item.get("evidence_required"))
     return {
         "status": "ready" if priorities and completed else "needs_history",
         "project": str(root),
@@ -32,6 +37,8 @@ def build_task_prioritization_report(project: str | Path) -> dict[str, Any]:
             "employee_result_count": len(employee_results),
             "completed_result_count": len(completed),
             "prioritized_dimension_count": len(priorities),
+            "ready_employee_task_count": ready_count,
+            "all_tasks_have_acceptance": bool(priorities) and ready_count == len(priorities),
         },
         "priorities": priorities,
         "evidence": {
@@ -71,3 +78,13 @@ def _employee_results(root: Path) -> list[dict[str, Any]]:
             continue
         rows.extend(item for item in payload.get("results") or [] if isinstance(item, dict))
     return rows
+
+
+def _owner_for_dimension(dimension: str) -> str:
+    if "operability" in dimension:
+        return "product-runtime"
+    if "comparative" in dimension or "external" in dimension:
+        return "absorption-review"
+    if "feedback" in dimension:
+        return "feedback-runtime"
+    return "retort-maintainer"

@@ -34,5 +34,9 @@ def test_build_task_prioritization_report_uses_queue_and_results(tmp_path: Path)
     assert result["status"] == "ready"
     assert result["summary"]["queued_task_count"] == 3
     assert result["summary"]["completed_result_count"] == 1
+    assert result["summary"]["all_tasks_have_acceptance"] is True
+    assert result["summary"]["ready_employee_task_count"] == 2
     assert result["priorities"][0]["dimension"] == "comparative_analysis_depth"
+    assert result["priorities"][0]["acceptance"]
+    assert result["priorities"][0]["evidence_required"]
     assert validate_contract("task_prioritization_result", result)["valid"] is True
