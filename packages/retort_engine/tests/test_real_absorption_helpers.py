@@ -212,6 +212,39 @@ def test_capability_model_is_only_written_for_review_depth_signals() -> None:
     assert real._should_absorb_capability_model({"signals": ["plugin_surface"]}) is True
 
 
+def test_visual_dominant_project_does_not_overwrite_review_capability_model() -> None:
+    profile = {
+        "signals": [
+            "review_pipeline",
+            "multi_provider",
+            "planet_frontend",
+            "atmosphere_shader",
+            "procedural_surface",
+            "webgl_scene",
+            "day_night_textures",
+            "cloud_texture_layer",
+            "fresnel_atmosphere",
+            "elevation_bump_map",
+            "specular_ocean",
+        ],
+        "signal_evidence": {
+            "planet_frontend": ["src/getEarthMat.js"],
+            "atmosphere_shader": ["src/getFresnelMat.js"],
+            "procedural_surface": ["src/getEarthMat.js"],
+            "webgl_scene": ["src/App.jsx"],
+            "day_night_textures": ["src/getEarthMat.js"],
+            "cloud_texture_layer": ["src/getEarthMat.js"],
+            "fresnel_atmosphere": ["src/getFresnelMat.js"],
+            "elevation_bump_map": ["src/getEarthMat.js"],
+            "specular_ocean": ["src/getEarthMat.js"],
+        },
+    }
+
+    assert real._should_absorb_frontend_visual(profile) is True
+    assert real._should_absorb_review_context_bias(profile) is False
+    assert real._should_absorb_capability_model(profile) is False
+
+
 def test_frontend_visual_absorption_requires_frontend_visual_evidence() -> None:
     benchmark_profile = {
         "signals": ["benchmarking", "atmosphere_shader", "procedural_surface", "webgl_scene"],
