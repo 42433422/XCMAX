@@ -1,103 +1,117 @@
 {
   "absorbed_signals": [
     "review_pipeline",
+    "file_grouping",
     "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/aider-ai/aider",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/OpenHands/software-agent-sdk",
   "external_snapshot": {
-    "file_count": 691,
-    "git_revision": "5dc9490bb35f9729ef2c95d00a19ccd30c26339c",
+    "file_count": 1334,
+    "git_revision": "e6b56beca589f2c96bdb902dd01caa1e5b8a2551",
     "suffix_counts": {
-      ".css": 3,
-      ".env": 1,
-      ".html": 7,
-      ".ico": 1,
       ".in": 1,
-      ".ini": 1,
-      ".jpg": 37,
-      ".js": 10,
-      ".json": 5,
-      ".jsonl": 1,
-      ".lisp": 1,
-      ".md": 149,
-      ".mp3": 111,
-      ".mp4": 6,
-      ".png": 12,
-      ".ps1": 1,
-      ".py": 128,
-      ".scm": 58,
-      ".scss": 1,
-      ".sh": 9,
-      ".svg": 23,
-      ".toml": 1,
-      ".ttf": 1,
-      ".txt": 5,
-      ".webmanifest": 1,
-      ".xml": 1,
+      ".j2": 4,
+      ".js": 7,
+      ".json": 2,
+      ".lock": 1,
+      ".md": 19,
+      ".py": 547,
+      ".sh": 2,
+      ".spec": 1,
+      ".svg": 1,
+      ".toml": 4,
+      ".typed": 3,
       ".yaml": 1,
-      ".yml": 17,
       "<none>": 7
     }
   },
-  "generated_at": "2026-06-27T17:15:38Z",
+  "generated_at": "2026-06-27T17:16:12Z",
   "license_review": {
-    "detected_license": "",
-    "message": "license-incompatible risk: no LICENSE file detected",
-    "status": "blocked"
+    "detected_license": "MIT License",
+    "message": "Allowed license detected: MIT License",
+    "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/aider-ai/aider --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/OpenHands/software-agent-sdk --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 3,
-      "minimum_expected_behavior_tests": 7,
-      "prioritized_component_count": 3,
-      "task_dimension_count": 4
+      "component_gap_count": 5,
+      "minimum_expected_behavior_tests": 10,
+      "prioritized_component_count": 5,
+      "task_dimension_count": 5
     },
     "component_gaps": [
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 14402,
-        "own_files": 12,
-        "representative_external_files": [
-          "HISTORY.md",
-          "README.md",
-          "benchmark/over_time.py",
-          "benchmark/benchmark.py",
-          "benchmark/problem_stats.py"
-        ]
-      },
       {
         "component": "workflow_ci",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 10892,
+        "marker_gap": 30287,
         "own_files": 12,
         "representative_external_files": [
           ".pre-commit-config.yaml",
-          "HISTORY.md",
           "pyproject.toml",
           "README.md",
-          "CONTRIBUTING.md"
+          "CONTRIBUTING.md",
+          "AGENTS.md"
+        ]
+      },
+      {
+        "component": "provider_surface",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 11416,
+        "own_files": 12,
+        "representative_external_files": [
+          "README.md",
+          "AGENTS.md",
+          "openhands-agent-server/pyproject.toml",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/file_router.py"
+        ]
+      },
+      {
+        "component": "plugin_surface",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 4794,
+        "own_files": 12,
+        "representative_external_files": [
+          "README.md",
+          "CONTRIBUTING.md",
+          "AGENTS.md",
+          "openhands-agent-server/pyproject.toml",
+          "openhands-agent-server/openhands/agent_server/vscode_service.py"
+        ]
+      },
+      {
+        "component": "safety_policy",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 3527,
+        "own_files": 12,
+        "representative_external_files": [
+          "pyproject.toml",
+          "README.md",
+          "AGENTS.md",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/file_router.py"
         ]
       },
       {
         "component": "benchmark_eval",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 960,
+        "marker_gap": 569,
         "own_files": 12,
         "representative_external_files": [
-          "HISTORY.md",
           "README.md",
           "CONTRIBUTING.md",
-          "benchmark/over_time.py",
-          "benchmark/benchmark.py"
+          "AGENTS.md",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/event_service.py"
         ]
       }
     ],
@@ -108,11 +122,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "HISTORY.md",
             "README.md",
-            "benchmark/over_time.py",
-            "benchmark/benchmark.py",
-            "benchmark/problem_stats.py"
+            "AGENTS.md",
+            "openhands-agent-server/pyproject.toml",
+            "openhands-agent-server/AGENTS.md",
+            "openhands-agent-server/openhands/agent_server/file_router.py"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -121,11 +135,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "HISTORY.md",
+            "README.md",
             "CONTRIBUTING.md",
-            "benchmark/benchmark.py",
-            "aider/repomap.py",
-            "aider/utils.py"
+            "AGENTS.md",
+            "openhands-agent-server/pyproject.toml",
+            "openhands-agent-server/openhands/agent_server/vscode_service.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -159,17 +173,18 @@
           "title": "Deepen file_grouping"
         },
         {
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "review JSON with stages and comments"
           ],
           "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-safety-policy",
-          "title": "Deepen safety_policy"
+          "priority": "P0",
+          "task_id": "retort-depth-diff-hunk-review",
+          "title": "Deepen diff_hunk_review"
         },
         {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
@@ -184,6 +199,19 @@
           "priority": "P1",
           "task_id": "retort-depth-benchmark-eval",
           "title": "Deepen benchmark_eval"
+        },
+        {
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-safety-policy",
+          "title": "Deepen safety_policy"
         },
         {
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
@@ -226,16 +254,16 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 602,
-          "own_marker_hits": 1693,
+          "external_marker_hits": 607,
+          "own_marker_hits": 1676,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            ".pre-commit-config.yaml",
-            "HISTORY.md",
             "CONTRIBUTING.md",
-            "benchmark/over_time.py",
-            "benchmark/README.md"
+            "AGENTS.md",
+            "openhands-agent-server/AGENTS.md",
+            "openhands-tools/openhands/tools/file_editor/editor.py",
+            "openhands-tools/openhands/tools/workflow/definition.py"
           ]
         },
         {
@@ -261,57 +289,59 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 16,
-          "own_marker_hits": 60,
+          "external_marker_hits": 4,
+          "own_marker_hits": 54,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "aider/repo.py",
-            "aider/watch.py",
-            "aider/website/docs/usage.md",
-            "tests/fixtures/chat-history.md"
+            "AGENTS.md",
+            "openhands-agent-server/pyproject.toml",
+            "openhands-sdk/openhands/sdk/git/git_changes.py",
+            ".github/workflows/assign-reviews.yml"
           ]
         },
         {
-          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "component": "safety_policy",
+          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "component": "diff_hunk_review",
           "depth_gap": 0,
           "employee_task": {
-            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
+            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
             "evidence_required": [
               "source diff",
               "behavior test",
-              "gate output"
+              "gate output",
+              "review JSON with stages and comments"
             ],
             "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-safety-policy",
-            "title": "Deepen safety_policy"
+            "priority": "P0",
+            "task_id": "retort-depth-diff-hunk-review",
+            "title": "Deepen diff_hunk_review"
           },
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "review JSON with stages and comments"
           ],
-          "external_marker_hits": 198,
-          "own_marker_hits": 320,
+          "external_marker_hits": 7,
+          "own_marker_hits": 22,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "HISTORY.md",
-            "pyproject.toml",
-            "CONTRIBUTING.md",
-            "benchmark/benchmark.py",
-            "aider/io.py"
+            "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
+            "tests/cross/test_remote_conversation_live_server.py",
+            "examples/02_remote_agent_server/12_settings_and_secrets_api.py",
+            "examples/02_remote_agent_server/13_workspace_get_llm.py",
+            "examples/01_standalone_sdk/45_parallel_tool_execution.py"
           ]
         },
         {
           "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "component": "benchmark_eval",
-          "depth_gap": 960,
+          "depth_gap": 569,
           "employee_task": {
             "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
             "dimension": "feedback_loop_closure",
@@ -332,23 +362,58 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 1372,
-          "own_marker_hits": 412,
+          "external_marker_hits": 1167,
+          "own_marker_hits": 598,
           "priority": "P0",
-          "similarity_score": 89,
+          "similarity_score": 92,
           "source_files": [
-            "HISTORY.md",
             "README.md",
             "CONTRIBUTING.md",
-            "benchmark/over_time.py",
-            "benchmark/benchmark.py"
+            "AGENTS.md",
+            "openhands-agent-server/AGENTS.md",
+            "openhands-agent-server/openhands/agent_server/event_service.py"
+          ]
+        },
+        {
+          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "component": "safety_policy",
+          "depth_gap": 3527,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-safety-policy",
+            "title": "Deepen safety_policy"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 3843,
+          "own_marker_hits": 316,
+          "priority": "P0",
+          "similarity_score": 86,
+          "source_files": [
+            "pyproject.toml",
+            "README.md",
+            "AGENTS.md",
+            "openhands-agent-server/AGENTS.md",
+            "openhands-agent-server/openhands/agent_server/file_router.py"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 10892,
+          "depth_gap": 30287,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -367,16 +432,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 12990,
-          "own_marker_hits": 2098,
+          "external_marker_hits": 32406,
+          "own_marker_hits": 2119,
           "priority": "P0",
-          "similarity_score": 87,
+          "similarity_score": 85,
           "source_files": [
             ".pre-commit-config.yaml",
-            "HISTORY.md",
             "pyproject.toml",
             "README.md",
-            "CONTRIBUTING.md"
+            "CONTRIBUTING.md",
+            "AGENTS.md"
           ]
         }
       ],
@@ -385,7 +450,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 5,
+        "focused_component_count": 6,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -396,26 +461,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 14586,
+          "external_marker_hits": 11609,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "HISTORY.md",
             "README.md",
-            "benchmark/over_time.py",
-            "benchmark/benchmark.py",
-            "benchmark/problem_stats.py"
+            "AGENTS.md",
+            "openhands-agent-server/pyproject.toml",
+            "openhands-agent-server/AGENTS.md",
+            "openhands-agent-server/openhands/agent_server/file_router.py"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 219,
+          "external_marker_hits": 5194,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "HISTORY.md",
+            "README.md",
             "CONTRIBUTING.md",
-            "benchmark/benchmark.py",
-            "aider/repomap.py",
-            "aider/utils.py"
+            "AGENTS.md",
+            "openhands-agent-server/pyproject.toml",
+            "openhands-agent-server/openhands/agent_server/vscode_service.py"
           ]
         }
       ]
@@ -423,114 +488,124 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "HISTORY.md",
           "README.md",
           "CONTRIBUTING.md",
-          "benchmark/over_time.py",
-          "benchmark/benchmark.py",
-          "benchmark/problem_stats.py",
-          "benchmark/refactor_tools.py",
-          "benchmark/rungrid.py",
-          "benchmark/README.md",
-          "benchmark/plots.py",
-          "benchmark/test_benchmark.py",
-          "aider/help_pats.py"
+          "AGENTS.md",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/event_service.py",
+          "openhands-agent-server/openhands/agent_server/models.py",
+          "openhands-agent-server/openhands/agent_server/api.py",
+          "openhands-tools/openhands/tools/file_editor/exceptions.py",
+          "openhands-tools/openhands/tools/file_editor/editor.py",
+          "openhands-tools/openhands/tools/preset/subagents/web_researcher.md",
+          "openhands-tools/openhands/tools/workflow/impl.py",
+          "openhands-tools/openhands/tools/browser_use/server.py"
         ],
-        "marker_hits": 1372
+        "marker_hits": 1167
+      },
+      "diff_hunk_review": {
+        "files": [
+          "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
+          "tests/cross/test_remote_conversation_live_server.py",
+          "examples/02_remote_agent_server/12_settings_and_secrets_api.py",
+          "examples/02_remote_agent_server/13_workspace_get_llm.py",
+          "examples/01_standalone_sdk/45_parallel_tool_execution.py"
+        ],
+        "marker_hits": 7
       },
       "file_grouping": {
         "files": [
-          "aider/repo.py",
-          "aider/watch.py",
-          "aider/website/docs/usage.md",
-          "tests/fixtures/chat-history.md"
+          "AGENTS.md",
+          "openhands-agent-server/pyproject.toml",
+          "openhands-sdk/openhands/sdk/git/git_changes.py",
+          ".github/workflows/assign-reviews.yml"
         ],
-        "marker_hits": 16
+        "marker_hits": 4
       },
       "plugin_surface": {
         "files": [
-          "HISTORY.md",
+          "README.md",
           "CONTRIBUTING.md",
-          "benchmark/benchmark.py",
-          "aider/repomap.py",
-          "aider/utils.py",
-          "aider/editor.py",
-          "aider/help.py",
-          "aider/special.py",
-          "aider/coders/editblock_coder.py",
-          "aider/resources/model-settings.yml",
-          "aider/website/HISTORY.md",
-          "aider/website/_config.yml"
+          "AGENTS.md",
+          "openhands-agent-server/pyproject.toml",
+          "openhands-agent-server/openhands/agent_server/vscode_service.py",
+          "openhands-agent-server/openhands/agent_server/event_service.py",
+          "openhands-agent-server/openhands/agent_server/conversation_service.py",
+          "openhands-agent-server/openhands/agent_server/llm_router.py",
+          "openhands-agent-server/openhands/agent_server/skills_service.py",
+          "openhands-agent-server/openhands/agent_server/api.py",
+          "openhands-agent-server/openhands/agent_server/plugins_service.py",
+          "openhands-agent-server/openhands/agent_server/plugins_router.py"
         ],
-        "marker_hits": 219
+        "marker_hits": 5194
       },
       "provider_surface": {
         "files": [
-          "HISTORY.md",
           "README.md",
-          "benchmark/over_time.py",
-          "benchmark/benchmark.py",
-          "benchmark/problem_stats.py",
-          "benchmark/swe_bench.py",
-          "benchmark/rungrid.py",
-          "benchmark/README.md",
-          "benchmark/plots.py",
-          "aider/repomap.py",
-          "aider/format_settings.py",
-          "aider/models.py"
+          "AGENTS.md",
+          "openhands-agent-server/pyproject.toml",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/file_router.py",
+          "openhands-agent-server/openhands/agent_server/conversation_router.py",
+          "openhands-agent-server/openhands/agent_server/vscode_router.py",
+          "openhands-agent-server/openhands/agent_server/event_service.py",
+          "openhands-agent-server/openhands/agent_server/event_router.py",
+          "openhands-agent-server/openhands/agent_server/conversation_service.py",
+          "openhands-agent-server/openhands/agent_server/settings_router.py",
+          "openhands-agent-server/openhands/agent_server/mcp_router.py"
         ],
-        "marker_hits": 14586
+        "marker_hits": 11609
       },
       "review_pipeline": {
         "files": [
-          ".pre-commit-config.yaml",
-          "HISTORY.md",
           "CONTRIBUTING.md",
-          "benchmark/over_time.py",
-          "benchmark/README.md",
-          "benchmark/plots.py",
-          "aider/models.py",
-          "aider/openrouter.py",
-          "aider/deprecated.py",
-          "aider/io.py",
-          "aider/prompts.py",
-          "aider/commands.py"
+          "AGENTS.md",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-tools/openhands/tools/file_editor/editor.py",
+          "openhands-tools/openhands/tools/workflow/definition.py",
+          "openhands-sdk/openhands/sdk/settings/acp_providers.py",
+          "openhands-sdk/openhands/sdk/llm/llm.py",
+          "openhands-sdk/openhands/sdk/llm/mixins/fn_call_examples.py",
+          "openhands-sdk/openhands/sdk/llm/utils/verified_models.py",
+          "openhands-sdk/openhands/sdk/context/prompts/sections/static.py",
+          "openhands-sdk/openhands/sdk/security/risk.py",
+          "openhands-sdk/openhands/sdk/plugin/types.py"
         ],
-        "marker_hits": 602
+        "marker_hits": 607
       },
       "safety_policy": {
         "files": [
-          "HISTORY.md",
           "pyproject.toml",
-          "CONTRIBUTING.md",
-          "benchmark/benchmark.py",
-          "aider/io.py",
-          "aider/utils.py",
-          "aider/exceptions.py",
-          "aider/watch.py",
-          "aider/editor.py",
-          "aider/main.py",
-          "aider/special.py",
-          "aider/website/HISTORY.md"
+          "README.md",
+          "AGENTS.md",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/file_router.py",
+          "openhands-agent-server/openhands/agent_server/conversation_router.py",
+          "openhands-agent-server/openhands/agent_server/event_service.py",
+          "openhands-agent-server/openhands/agent_server/conversation_service.py",
+          "openhands-agent-server/openhands/agent_server/settings_router.py",
+          "openhands-agent-server/openhands/agent_server/mcp_router.py",
+          "openhands-agent-server/openhands/agent_server/config.py",
+          "openhands-agent-server/openhands/agent_server/models.py"
         ],
-        "marker_hits": 198
+        "marker_hits": 3843
       },
       "workflow_ci": {
         "files": [
           ".pre-commit-config.yaml",
-          "HISTORY.md",
           "pyproject.toml",
           "README.md",
           "CONTRIBUTING.md",
-          "benchmark/benchmark.py",
-          "benchmark/problem_stats.py",
-          "benchmark/refactor_tools.py",
-          "benchmark/prompts.py",
-          "benchmark/README.md",
-          "benchmark/plots.py",
-          "benchmark/test_benchmark.py"
+          "AGENTS.md",
+          "DEVELOPMENT.md",
+          "openhands-agent-server/pyproject.toml",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/file_router.py",
+          "openhands-agent-server/openhands/agent_server/vscode_service.py",
+          "openhands-agent-server/openhands/agent_server/conversation_router.py",
+          "openhands-agent-server/openhands/agent_server/event_service.py"
         ],
-        "marker_hits": 12990
+        "marker_hits": 32406
       }
     },
     "own_file_groups": {
@@ -549,7 +624,7 @@
           "retort_engine/contracts.py",
           "retort_engine/self_evolution.py"
         ],
-        "marker_hits": 412
+        "marker_hits": 598
       },
       "diff_hunk_review": {
         "files": [
@@ -570,15 +645,15 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
-          "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md"
+          "docs/retort_absorption_log.md",
+          "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 60
+        "marker_hits": 54
       },
       "plugin_surface": {
         "files": [
@@ -595,7 +670,7 @@
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js"
         ],
-        "marker_hits": 394
+        "marker_hits": 400
       },
       "provider_surface": {
         "files": [
@@ -612,7 +687,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/runtime_adapter.py"
         ],
-        "marker_hits": 184
+        "marker_hits": 193
       },
       "review_pipeline": {
         "files": [
@@ -629,7 +704,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 1693
+        "marker_hits": 1676
       },
       "safety_policy": {
         "files": [
@@ -646,7 +721,7 @@
           "retort_engine/architecture_memory.py",
           "retort_engine/review_context_bias.py"
         ],
-        "marker_hits": 320
+        "marker_hits": 316
       },
       "workflow_ci": {
         "files": [
@@ -663,7 +738,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 2098
+        "marker_hits": 2119
       }
     },
     "pipeline_stages": [
@@ -677,27 +752,51 @@
     ],
     "prioritized_absorptions": [
       {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "HISTORY.md",
-          "README.md",
-          "benchmark/over_time.py",
-          "benchmark/benchmark.py",
-          "benchmark/problem_stats.py"
-        ]
-      },
-      {
         "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
         "component": "workflow_ci",
         "priority": "P0",
         "source_files": [
           ".pre-commit-config.yaml",
-          "HISTORY.md",
           "pyproject.toml",
           "README.md",
-          "CONTRIBUTING.md"
+          "CONTRIBUTING.md",
+          "AGENTS.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
+        "component": "provider_surface",
+        "priority": "P0",
+        "source_files": [
+          "README.md",
+          "AGENTS.md",
+          "openhands-agent-server/pyproject.toml",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/file_router.py"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
+        "component": "plugin_surface",
+        "priority": "P0",
+        "source_files": [
+          "README.md",
+          "CONTRIBUTING.md",
+          "AGENTS.md",
+          "openhands-agent-server/pyproject.toml",
+          "openhands-agent-server/openhands/agent_server/vscode_service.py"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
+        "component": "safety_policy",
+        "priority": "P0",
+        "source_files": [
+          "pyproject.toml",
+          "README.md",
+          "AGENTS.md",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/file_router.py"
         ]
       },
       {
@@ -705,40 +804,44 @@
         "component": "benchmark_eval",
         "priority": "P0",
         "source_files": [
-          "HISTORY.md",
           "README.md",
           "CONTRIBUTING.md",
-          "benchmark/over_time.py",
-          "benchmark/benchmark.py"
+          "AGENTS.md",
+          "openhands-agent-server/AGENTS.md",
+          "openhands-agent-server/openhands/agent_server/event_service.py"
         ]
       }
     ]
   },
-  "run_id": "20260627171538-da950c021d",
+  "run_id": "20260627171611-61b3c3e350",
   "semantic_review": {
     "external": {
-      "classes": 1163,
-      "cli_markers": 14,
-      "functions": 5523,
-      "source_files": 356,
-      "test_markers": 1417,
-      "workflow_markers": 723
+      "classes": 1765,
+      "cli_markers": 65,
+      "functions": 8367,
+      "source_files": 780,
+      "test_markers": 4152,
+      "workflow_markers": 491
     },
     "gaps": [
       {
-        "external_advantage": 1117,
+        "external_advantage": 1719,
         "metric": "classes"
       },
       {
-        "external_advantage": 4772,
+        "external_advantage": 36,
+        "metric": "cli_markers"
+      },
+      {
+        "external_advantage": 7616,
         "metric": "functions"
       },
       {
-        "external_advantage": 271,
+        "external_advantage": 694,
         "metric": "source_files"
       },
       {
-        "external_advantage": 1174,
+        "external_advantage": 3909,
         "metric": "test_markers"
       }
     ],
@@ -746,42 +849,45 @@
       "classes": 46,
       "cli_markers": 29,
       "functions": 751,
-      "source_files": 85,
+      "source_files": 86,
       "test_markers": 243,
-      "workflow_markers": 2158
+      "workflow_markers": 2140
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "HISTORY.md",
       "README.md",
       "CONTRIBUTING.md",
-      "benchmark/over_time.py",
-      "benchmark/benchmark.py"
+      "AGENTS.md",
+      "openhands-agent-server/AGENTS.md",
+      "openhands-agent-server/openhands/agent_server/event_service.py"
+    ],
+    "file_grouping": [
+      "AGENTS.md",
+      "openhands-sdk/openhands/sdk/git/git_changes.py"
     ],
     "multi_provider": [
-      "HISTORY.md",
       "README.md",
-      "benchmark/over_time.py",
-      "benchmark/benchmark.py",
-      "benchmark/problem_stats.py"
+      "AGENTS.md",
+      "openhands-agent-server/pyproject.toml",
+      "openhands-agent-server/AGENTS.md",
+      "openhands-agent-server/openhands/agent_server/file_router.py"
     ],
     "plugin_surface": [
-      "HISTORY.md",
       "README.md",
       "CONTRIBUTING.md",
-      "aider/io.py",
-      "aider/copypaste.py"
+      "AGENTS.md",
+      "openhands-agent-server/AGENTS.md",
+      "openhands-agent-server/openhands/agent_server/conversation_router.py"
     ],
     "review_pipeline": [
-      "aider/gui.py",
-      "aider/coders/base_coder.py",
-      "aider/coders/context_coder.py",
-      "aider/website/_posts/2024-06-02-main-swe-bench.md",
-      "aider/website/_posts/2024-05-22-swe-bench-lite.md"
+      "AGENTS.md",
+      "openhands-tools/openhands/tools/workflow/definition.py",
+      "openhands-sdk/openhands/sdk/subagent/AGENTS.md",
+      "openhands-sdk/openhands/sdk/subagent/load.py"
     ]
   },
-  "source": "https://github.com/aider-ai/aider",
+  "source": "https://github.com/OpenHands/software-agent-sdk",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -789,7 +895,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/aider-ai/aider."
+      "why": "Compare implementation patterns from https://github.com/OpenHands/software-agent-sdk."
     },
     {
       "dimension": "product_operability",
@@ -797,7 +903,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/aider-ai/aider."
+      "why": "Extract usable UX improvements from https://github.com/OpenHands/software-agent-sdk."
     },
     {
       "dimension": "operational_readiness",
@@ -805,7 +911,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/aider-ai/aider."
+      "why": "Adapt CI and release checks from https://github.com/OpenHands/software-agent-sdk."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -814,6 +920,14 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "external_ingestion",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-file-grouping",
+      "title": "Add external file grouping before deep comparison",
+      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
     },
     {
       "dimension": "feedback_loop_closure",
