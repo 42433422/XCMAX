@@ -708,7 +708,7 @@ def advantage_diff_map(changed_files: list[str]) -> list[dict[str, Any]]:
     return _advantage_diff_map(changed_files, ranked_capabilities())
 
 
-def absorption_quality_gate(changed_files: list[str], gates: list[dict[str, Any]], *, minimum_behavior_tests: int | None = None) -> dict[str, Any]:
+def absorption_quality_gate(changed_files: list[str], gates: list[dict[str, Any]], *, minimum_behavior_tests: int | None = None, code_graph_proof: dict[str, Any] | None = None) -> dict[str, Any]:
     """Turn weak absorption evidence into a blocking product gate."""
     plan = absorbed_capability_plan()
     minimum = int(minimum_behavior_tests or plan.get("minimum_behavior_tests") or 3)
@@ -718,6 +718,7 @@ def absorption_quality_gate(changed_files: list[str], gates: list[dict[str, Any]
         minimum_behavior_tests=minimum,
         depth_gate=depth_absorption_plan().get("quality_gate") or {{}},
         ranked_capabilities=ranked_capabilities(),
+        code_graph_proof=code_graph_proof,
     )
 
 

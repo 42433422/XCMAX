@@ -4,24 +4,39 @@
     "branch_diff_verified": true,
     "employee_execution_verified": true,
     "evidence": [
-      "retort_cli_status=applied",
-      "duration_sec=13.402",
-      "changed_files=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py",
-      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  13 + |  .../docs/retort_architecture_memory.json           | 340 ++++++++++++---- |  .../docs/retort_core_refactor_plan.json            |  50 +-- |  .../docs/retort_external_review_report.json        | 428 ++++++++++----------- |  .../retort_engine/absorbed_capabilities.py         |   2 +- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../tests/test_absorbed_capabilities.py            |   2 +- |  7 files changed, 495 insertions(+), 342 deletions(-)",
-      "gates_passed=True",
-      "review_report=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
-      "employee_results=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627195932-112b065375.json",
-      "commit=f6c2a06b0",
+      "source=https://github.com/seddonym/import-linter",
+      "absorption_run=20260627195932-f6c460a5a6",
       "merge_commit=ca6b28e9f",
-      "rollback_rehearsal=True",
-      "feedback_audit_closed=False",
-      "history_result_count=0",
-      "queue_records_written=0",
-      "result_tasks_have_queue_records=False"
+      "architecture_contract_commit=054f1fa4c",
+      "code_graph_gate_commit=fedd96a59",
+      "architecture_memory_test_commit=bc1f9cf2e",
+      "absorbed_focus=architecture_contracts,code_graph_proof,import_boundary_gate",
+      "behavior_module=retort_engine/architecture_contracts.py",
+      "behavior_module=retort_engine/codebase_graph.py",
+      "behavior_tests=tests/test_architecture_contracts.py,tests/test_codebase_graph.py,tests/test_absorption_quality.py,tests/test_architecture_memory.py",
+      "contract=architecture_contract_result",
+      "cli=architecture-contract-report",
+      "api=/api/architecture-contract-report",
+      "tests=216_passed",
+      "ruff=passed",
+      "node_check=passed",
+      "architecture_contract_smoke=passed_2_contracts_0_violations",
+      "codebase_graph_smoke=ready_56_files_548_nodes_1894_edges",
+      "merge_cross_check=True; merge_commit=ca6b28e9f",
+      "pytest_gate_cross_check=True"
     ],
     "external_advantage_reassessed": true,
     "merge_verified": true,
-    "post_absorption_tests_passed": true
+    "post_absorption_tests_passed": true,
+    "validation": {
+      "evidence": [
+        "merge_cross_check=True; merge_commit=ca6b28e9f",
+        "pytest_gate_cross_check=True"
+      ],
+      "merge_commit": "ca6b28e9f",
+      "merge_commit_verified": true,
+      "pytest_gates_verified": true
+    }
   },
   "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/seddonym/import-linter",
   "pending_dimensions": [

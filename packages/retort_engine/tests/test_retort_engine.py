@@ -267,6 +267,10 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     report = json.loads(Path(execution["review_report_path"]).read_text(encoding="utf-8"))
     assert report["absorbed_signals"]
     assert report["semantic_review"]["external"]["source_files"] >= 1
+    assert report["pre_absorption_focus"]["evidence"]["style"] == "deterministic_pre_absorption_code_graph"
+    assert report["code_graph_proof"]["evidence"]["style"] == "deterministic_post_absorption_code_graph"
+    assert execution["pre_absorption_focus"]["status"] in {"ready", "empty"}
+    assert "code_graph_proof" in execution
     assert report["review_pipeline"]["pipeline_stages"]
     assert report["review_pipeline"]["benchmark"]["minimum_expected_behavior_tests"] >= 3
     assert report["license_review"]["status"] in {"passed", "blocked"}

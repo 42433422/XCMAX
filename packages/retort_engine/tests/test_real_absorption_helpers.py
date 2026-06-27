@@ -47,6 +47,7 @@ def test_external_profile_detects_signals_suffix_counts_and_git_revision(tmp_pat
     write(external / "review" / "pipeline.py", "code review pipeline reviewer reflection localization\n")
     write(external / "review" / "grouping.ts", "file group group files changed files diff hunk patch set\n")
     write(external / "eval" / "bench.md", "benchmark precision recall evaluation eval\n")
+    write(external / "graph" / "codebase.py", "codebase graph dependency graph call graph symbol graph imports hotspot\n")
     write(external / "plugins" / "action.yml", "plugin cli github action codex\n")
     write(external / "providers" / "models.py", "provider model openai anthropic ollama\n")
     git(external, "add", ".")
@@ -61,12 +62,14 @@ def test_external_profile_detects_signals_suffix_counts_and_git_revision(tmp_pat
         "review_pipeline",
         "file_grouping",
         "benchmarking",
+        "codebase_graph",
         "plugin_surface",
         "multi_provider",
     }
     assert profile["signal_evidence"]["review_pipeline"] == ["review/pipeline.py"]
     assert profile["signal_evidence"]["file_grouping"] == ["review/grouping.ts"]
     assert profile["signal_evidence"]["benchmarking"] == ["eval/bench.md"]
+    assert profile["signal_evidence"]["codebase_graph"] == ["graph/codebase.py"]
     assert profile["signal_evidence"]["plugin_surface"] == ["plugins/action.yml"]
     assert profile["signal_evidence"]["multi_provider"] == ["providers/models.py"]
 
@@ -209,6 +212,7 @@ def test_capability_model_is_only_written_for_review_depth_signals() -> None:
     assert real._should_absorb_capability_model({"signals": ["multi_provider", "planet_frontend"]}) is False
     assert real._should_absorb_capability_model({"signals": ["review_pipeline"]}) is True
     assert real._should_absorb_capability_model({"signals": ["benchmarking"]}) is True
+    assert real._should_absorb_capability_model({"signals": ["codebase_graph"]}) is True
     assert real._should_absorb_capability_model({"signals": ["plugin_surface"]}) is True
 
 
