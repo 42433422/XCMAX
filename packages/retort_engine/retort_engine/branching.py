@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from retort_engine.git_status import blocking_git_status
+
 
 @dataclass(frozen=True)
 class BranchWorkflowState:
@@ -30,16 +32,30 @@ class BranchWorkflowState:
             "message": self.message,
         }
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "BranchWorkflowState":
+        return cls(
+            bool(payload.get("enabled")),
+            str(payload.get("project_root") or ""),
+            str(payload.get("base_branch") or ""),
+            str(payload.get("absorption_branch") or ""),
+            bool(payload.get("created")),
+            bool(payload.get("merged")),
+            str(payload.get("status") or "disabled"),
+            str(payload.get("message") or ""),
+        )
+
 
 class BranchWorkflowError(RuntimeError):
     pass
 
 
 def begin_absorption_branch(project_path: str | Path, *, source: str, branch_name: str = "", allow_dirty: bool = False) -> BranchWorkflowState:
-    root = _git_root(Path(project_path).expanduser().resolve())
+    project = Path(project_path).expanduser().resolve()
+    root = _git_root(project)
     if root is None:
         raise BranchWorkflowError("Main project folder is not inside a Git repository")
-    if not allow_dirty and _git_status(root):
+    if not allow_dirty and blocking_git_status(root, project):
         raise BranchWorkflowError("Main project has uncommitted changes; commit or enable dirty branch workflow first")
     base = _git(["branch", "--show-current"], root).strip()
     if not base:
@@ -52,10 +68,11 @@ def begin_absorption_branch(project_path: str | Path, *, source: str, branch_nam
 def merge_absorption_branch(project_path: str | Path, state: BranchWorkflowState) -> BranchWorkflowState:
     if not state.enabled or not state.absorption_branch:
         return state
+    project = Path(project_path).expanduser().resolve()
     root = Path(state.project_root or project_path).resolve()
     if _git(["branch", "--show-current"], root).strip() != state.absorption_branch:
         _git(["checkout", state.absorption_branch], root)
-    if _git_status(root):
+    if blocking_git_status(root, project):
         raise BranchWorkflowError("Absorption branch has uncommitted changes; commit before merge")
     _git(["checkout", state.base_branch], root)
     _git(["merge", "--no-ff", state.absorption_branch, "-m", f"Merge {state.absorption_branch}"], root)
@@ -68,10 +85,6 @@ def _git_root(path: Path) -> Path | None:
     except (OSError, subprocess.TimeoutExpired):
         return None
     return Path(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
-
-
-def _git_status(root: Path) -> str:
-    return _git(["status", "--short"], root)
 
 
 def _git(args: list[str], cwd: Path) -> str:
