@@ -61,6 +61,10 @@ def external_project_profile(path: Path | None) -> dict[str, bool]:
         "file_grouping": any(marker in lowered for marker in ("file group", "group files", "changed files", "diff hunk", "patch set")),
         "benchmarking": any(marker in lowered for marker in ("benchmark", "precision", "recall", "eval", "evaluation")),
         "plugin_surface": any(marker in lowered for marker in ("plugin", "cli", "github action", "codex")),
+        "planet_frontend": any(marker in lowered for marker in ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer")),
+        "atmosphere_shader": any(marker in lowered for marker in ("atmosphere", "fresnel", "rim light", "shader", "cloud")),
+        "procedural_surface": any(marker in lowered for marker in ("noise", "texture", "height map", "landmass", "terrain")),
+        "webgl_scene": any(marker in lowered for marker in ("webgl", "three.js", "threejs", "renderer", "scene", "camera", "orbit")),
     }
 
 

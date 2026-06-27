@@ -21,6 +21,28 @@ const progressPlan = [
   {key: "scoring", title: "校准评分", detail: "要求返回结构化分数"},
   {key: "record", title: "保留记录", detail: "只保存完成的深评结果"}
 ];
+const ABSORBED_PLANET_VISUAL_PROFILE = {
+  source: "",
+  enabled: false,
+  visual_family: "retort-default",
+  palette: {
+    ocean: "#0e2f4d",
+    shallow: "#37c9c7",
+    land: "#d6b36a",
+    highland: "#fff2bd",
+    cloud: "#f7fbff",
+    rim: "#8ff3ff",
+    ring: "#f3c772",
+    night: "#02050b"
+  },
+  layers: {
+    atmospheric_rim: true,
+    procedural_landmasses: true,
+    translucent_clouds: true,
+    orbital_rings: true,
+    terminator_shadow: true
+  }
+};
 
 const dimensionText = {
   product_level: "项目水平",
@@ -111,13 +133,32 @@ const taskText = {
   "Adopt deterministic review pipeline stages": "接入确定性审查流水线",
   "Add external file grouping before deep comparison": "深度对比前增加外部文件分组",
   "Add absorption quality benchmark counters": "增加吸收质量基准计数",
-  "Expose Retort absorption through plugin friendly commands": "提供适合插件调用的吸收命令"
+  "Expose Retort absorption through plugin friendly commands": "提供适合插件调用的吸收命令",
+  "Absorb better blackhole planet visual system": "吸收更好的黑洞星球视觉"
 };
 const ownerText = {"fhd-core-maintainer": "核心维护", "market-frontend-dev": "前端体验", "deploy-release-officer": "发布运维", "test-qa-runner": "测试门禁"};
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const ease = v => v < .5 ? 2 * v * v : 1 - Math.pow(-2 * v + 2, 2) / 2;
+function hexRgb(hex) {
+  const raw = String(hex || "").replace("#", "").trim();
+  const value = raw.length === 3 ? raw.split("").map(ch => ch + ch).join("") : raw;
+  const parsed = Number.parseInt(value || "ffffff", 16);
+  return {r: (parsed >> 16) & 255, g: (parsed >> 8) & 255, b: parsed & 255};
+}
+function rgbaHex(hex, alpha) {
+  const c = hexRgb(hex);
+  return `rgba(${c.r},${c.g},${c.b},${alpha})`;
+}
+function planetVisualProfile() {
+  const profile = ABSORBED_PLANET_VISUAL_PROFILE || {};
+  return {
+    ...profile,
+    palette: {...ABSORBED_PLANET_VISUAL_PROFILE.palette, ...(profile.palette || {})},
+    layers: {...ABSORBED_PLANET_VISUAL_PROFILE.layers, ...(profile.layers || {})}
+  };
+}
 const labelOf = v => dimensionText[v] || statusText[v] || taskText[v] || String(v || "");
 const shortPath = value => String(value || "").replace(/^.*\/packages\/retort_engine\//, "").replace(/^.*\/XCMAX\//, "");
 const titleOf = v => {
@@ -1021,21 +1062,42 @@ function disk(cx, cy, w, h, t, dpr, scale, boost) {
 
 function projectPlanet(x, y, radius, t, dpr, alpha) {
   if (radius <= 0 || alpha <= 0) return;
+  const profile = planetVisualProfile();
+  const palette = profile.palette;
+  const layers = profile.layers || {};
   const pulse = .5 + .5 * Math.sin(t * 2.1);
   const shear = Math.sin(t * .7) * .08;
+
+  if (layers.atmospheric_rim) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.translate(x, y);
+    const glow = ctx.createRadialGradient(-radius * .18, -radius * .18, radius * .52, 0, 0, radius * 1.72);
+    glow.addColorStop(0, "rgba(0,0,0,0)");
+    glow.addColorStop(.54, rgbaHex(palette.rim, .05 * alpha));
+    glow.addColorStop(.74, rgbaHex(palette.rim, .22 * alpha));
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 1.74, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   ctx.translate(x, y);
   ctx.rotate(-.34 + shear);
-  for (let i = 0; i < 18; i++) {
+  const orbitalCount = layers.orbital_rings ? 30 : 14;
+  for (let i = 0; i < orbitalCount; i++) {
     const a = i * .83 + t * (.58 + i * .012);
-    const sx = Math.cos(a) * radius * (1.05 + (i % 5) * .08);
-    const sy = Math.sin(a) * radius * (.42 + (i % 4) * .035);
-    const len = radius * (.18 + (i % 4) * .055);
+    const sx = Math.cos(a) * radius * (1.08 + (i % 5) * .095);
+    const sy = Math.sin(a) * radius * (.39 + (i % 4) * .04);
+    const len = radius * (.16 + (i % 4) * .06);
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.lineTo(sx - Math.sin(a) * len, sy + Math.cos(a) * len * .32);
-    ctx.strokeStyle = i % 3 ? `rgba(255,203,112,${.2 * alpha})` : `rgba(93,232,219,${.22 * alpha})`;
+    ctx.strokeStyle = i % 3 ? rgbaHex(palette.ring, .2 * alpha) : rgbaHex(palette.rim, .22 * alpha);
     ctx.lineWidth = (.7 + (i % 3) * .25) * dpr;
     ctx.stroke();
   }
@@ -1046,13 +1108,13 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
   ctx.translate(x, y);
   ctx.rotate(-.18 + shear);
   const core = ctx.createRadialGradient(-radius * .38, -radius * .42, radius * .05, 0, 0, radius);
-  core.addColorStop(0, `rgba(255,244,206,${alpha})`);
-  core.addColorStop(.18, `rgba(93,232,219,${.94 * alpha})`);
-  core.addColorStop(.5, `rgba(28,73,88,${.96 * alpha})`);
-  core.addColorStop(.78, `rgba(10,20,28,${alpha})`);
-  core.addColorStop(1, `rgba(3,7,10,${alpha})`);
-  ctx.shadowColor = `rgba(255,203,112,${.42 * alpha})`;
-  ctx.shadowBlur = (16 + pulse * 10) * dpr * alpha;
+  core.addColorStop(0, rgbaHex(palette.highland, alpha));
+  core.addColorStop(.17, rgbaHex(palette.shallow, .94 * alpha));
+  core.addColorStop(.48, rgbaHex(palette.ocean, .98 * alpha));
+  core.addColorStop(.82, rgbaHex(palette.night, alpha));
+  core.addColorStop(1, "rgba(1,3,7,1)");
+  ctx.shadowColor = rgbaHex(palette.rim, .46 * alpha);
+  ctx.shadowBlur = (18 + pulse * 12) * dpr * alpha;
   ctx.beginPath();
   ctx.ellipse(0, 0, radius * 1.02, radius * .92, 0, 0, Math.PI * 2);
   ctx.fillStyle = core;
@@ -1062,13 +1124,36 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
   ctx.save();
   ctx.clip();
   ctx.globalCompositeOperation = "lighter";
+  if (layers.procedural_landmasses) {
+    ctx.globalCompositeOperation = "source-over";
+    for (let i = 0; i < 18; i++) {
+      const a = i * 1.31 + Math.sin(i * 2.17) * .32 + t * .055;
+      const px = Math.cos(a) * radius * (.12 + (i % 5) * .15);
+      const py = Math.sin(a * 1.7) * radius * (.1 + (i % 4) * .12);
+      const rw = radius * (.16 + (i % 4) * .06);
+      const rh = radius * (.045 + (i % 5) * .022);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(a * .36);
+      const land = ctx.createRadialGradient(-rw * .2, -rh * .3, 0, 0, 0, rw);
+      land.addColorStop(0, rgbaHex(palette.highland, .42 * alpha));
+      land.addColorStop(.44, rgbaHex(palette.land, .34 * alpha));
+      land.addColorStop(1, rgbaHex(palette.land, 0));
+      ctx.fillStyle = land;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rw, rh, Math.sin(i) * .7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalCompositeOperation = "lighter";
+  }
   for (let i = -3; i <= 3; i++) {
     const yy = i * radius * .21 + Math.sin(t * 1.4 + i) * radius * .025;
     const grad = ctx.createLinearGradient(-radius, yy, radius, yy);
-    grad.addColorStop(0, `rgba(93,232,219,0)`);
-    grad.addColorStop(.35, `rgba(93,232,219,${.08 * alpha})`);
-    grad.addColorStop(.58, `rgba(255,203,112,${.18 * alpha})`);
-    grad.addColorStop(1, `rgba(255,203,112,0)`);
+    grad.addColorStop(0, rgbaHex(palette.rim, 0));
+    grad.addColorStop(.35, rgbaHex(palette.rim, .08 * alpha));
+    grad.addColorStop(.58, rgbaHex(palette.ring, .18 * alpha));
+    grad.addColorStop(1, rgbaHex(palette.ring, 0));
     ctx.beginPath();
     ctx.moveTo(-radius * 1.1, yy - radius * .18);
     ctx.bezierCurveTo(-radius * .35, yy + radius * .08, radius * .38, yy - radius * .08, radius * 1.1, yy + radius * .18);
@@ -1076,38 +1161,61 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
     ctx.lineWidth = (1.1 + Math.abs(i) * .14) * dpr;
     ctx.stroke();
   }
+  if (layers.translucent_clouds) {
+    for (let i = 0; i < 10; i++) {
+      const yy = -radius * .55 + i * radius * .12 + Math.sin(t * .9 + i * .8) * radius * .018;
+      ctx.beginPath();
+      ctx.moveTo(-radius * .98, yy);
+      ctx.bezierCurveTo(-radius * .42, yy - radius * .07, radius * .08, yy + radius * .08, radius * .98, yy - radius * .02);
+      ctx.strokeStyle = rgbaHex(palette.cloud, (.045 + (i % 3) * .014) * alpha);
+      ctx.lineWidth = (1.6 + (i % 4) * .22) * dpr;
+      ctx.stroke();
+    }
+  }
   for (let i = 0; i < 7; i++) {
     const xx = -radius * .78 + i * radius * .26 + Math.sin(t + i) * radius * .025;
     ctx.beginPath();
     ctx.moveTo(xx, -radius * .68);
     ctx.lineTo(xx + radius * .38, radius * .66);
-    ctx.strokeStyle = `rgba(255,255,255,${.035 * alpha})`;
+    ctx.strokeStyle = rgbaHex(palette.cloud, .035 * alpha);
     ctx.lineWidth = .8 * dpr;
     ctx.stroke();
+  }
+  if (layers.terminator_shadow) {
+    ctx.globalCompositeOperation = "multiply";
+    const night = ctx.createLinearGradient(-radius * .25, -radius, radius * 1.05, radius);
+    night.addColorStop(0, "rgba(255,255,255,.98)");
+    night.addColorStop(.48, "rgba(180,190,200,.82)");
+    night.addColorStop(.7, "rgba(45,55,75,.72)");
+    night.addColorStop(1, "rgba(4,8,16,.94)");
+    ctx.fillStyle = night;
+    ctx.fillRect(-radius * 1.05, -radius, radius * 2.1, radius * 2);
+    ctx.globalCompositeOperation = "lighter";
   }
   ctx.restore();
 
   ctx.globalCompositeOperation = "lighter";
   ctx.beginPath();
-  ctx.strokeStyle = `rgba(255,211,122,${.64 * alpha})`;
+  ctx.strokeStyle = rgbaHex(palette.ring, .64 * alpha);
   ctx.lineWidth = 2.2 * dpr;
   ctx.ellipse(0, 0, radius * 1.08, radius * .97, 0, -.25, Math.PI * 1.36);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.strokeStyle = `rgba(93,232,219,${.52 * alpha})`;
+  ctx.strokeStyle = rgbaHex(palette.rim, .52 * alpha);
   ctx.lineWidth = 1.5 * dpr;
   ctx.ellipse(0, 0, radius * 1.19, radius * .48, .2, t * .85, t * .85 + Math.PI * 1.55);
   ctx.stroke();
 
-  for (let i = 0; i < 9; i++) {
+  const satelliteCount = layers.orbital_rings ? 13 : 7;
+  for (let i = 0; i < satelliteCount; i++) {
     const a = t * (.52 + i * .016) + i * .72;
     const px = Math.cos(a) * radius * (1.18 + (i % 3) * .11);
     const py = Math.sin(a) * radius * (.58 + (i % 4) * .04);
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(a + .8);
-    ctx.fillStyle = i % 2 ? `rgba(255,203,112,${.28 * alpha})` : `rgba(93,232,219,${.3 * alpha})`;
+    ctx.fillStyle = i % 2 ? rgbaHex(palette.ring, .28 * alpha) : rgbaHex(palette.rim, .3 * alpha);
     ctx.fillRect(-radius * .035, -radius * .012, radius * (.08 + (i % 3) * .018), radius * .024);
     ctx.restore();
   }

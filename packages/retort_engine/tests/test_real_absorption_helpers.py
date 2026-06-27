@@ -85,6 +85,23 @@ def test_external_profile_ignores_runtime_and_dependency_directories(tmp_path: P
     assert profile["signal_evidence"] == {"review_pipeline": ["src/tool.py"]}
 
 
+def test_external_profile_detects_planet_frontend_visual_signals(tmp_path: Path) -> None:
+    external = tmp_path / "external"
+    write(
+        external / "scripts" / "planet.js",
+        "three.js WebGL renderer scene camera orbit controls sphereGeometry procedural planet atmosphere shader cloud noise terrain texture\n",
+    )
+
+    profile = real._external_profile(external)
+
+    assert set(profile["signals"]) >= {"planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"}
+    assert profile["signal_evidence"]["planet_frontend"] == ["scripts/planet.js"]
+    assert profile["signal_evidence"]["atmosphere_shader"] == ["scripts/planet.js"]
+    assert profile["signal_evidence"]["procedural_surface"] == ["scripts/planet.js"]
+    assert profile["signal_evidence"]["webgl_scene"] == ["scripts/planet.js"]
+    assert real._should_absorb_frontend_visual(profile) is True
+
+
 def test_semantic_review_reports_external_advantages(tmp_path: Path) -> None:
     own = tmp_path / "own"
     external = tmp_path / "external"
@@ -158,6 +175,52 @@ def test_review_context_bias_is_only_written_for_context_signals() -> None:
     assert real._should_absorb_review_context_bias({"signals": ["review_pipeline"]}) is True
     assert real._should_absorb_review_context_bias({"signals": ["file_grouping"]}) is True
     assert real._should_absorb_review_context_bias({"signals": ["diff_hunk_review"]}) is True
+
+
+def test_frontend_visual_profile_rewrite_and_generated_test_are_executable(tmp_path: Path) -> None:
+    app = tmp_path / "retort_engine" / "frontend" / "app.js"
+    write(
+        app,
+        """
+const ABSORBED_PLANET_VISUAL_PROFILE = {
+  source: "",
+  enabled: false,
+  palette: {rim: "#8ff3ff"},
+  layers: {atmospheric_rim: true}
+};
+function planetVisualProfile() { return ABSORBED_PLANET_VISUAL_PROFILE; }
+function projectPlanet() {
+  const profile = planetVisualProfile();
+  const layers = profile.layers;
+  if (layers.procedural_landmasses) {}
+  if (layers.translucent_clouds) {}
+  if (layers.terminator_shadow) {}
+  if (layers.atmospheric_rim) {}
+  return "rgbaHex(palette.rim";
+}
+""",
+    )
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tmp_path / "retort_engine").mkdir(exist_ok=True)
+    profile = {"signals": ["planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"]}
+
+    real._write_frontend_visual_profile(app, "run-planet", "https://github.com/example/planet", tmp_path / "external", profile)
+    test_path = tests / "test_frontend_visual_absorption.py"
+    test_path.write_text(real._frontend_visual_test_content("https://github.com/example/planet"), encoding="utf-8")
+
+    text = app.read_text(encoding="utf-8")
+    payload = json.loads(text.split("const ABSORBED_PLANET_VISUAL_PROFILE = ", 1)[1].split(";\nfunction", 1)[0])
+    result = real._run_command([sys.executable, "-m", "pytest", str(test_path), "-q"], tmp_path, timeout=60)
+
+    assert payload["enabled"] is True
+    assert payload["source"] == "https://github.com/example/planet"
+    assert payload["visual_family"] == "absorbed-procedural-planet"
+    assert set(payload["absorbed_signals"]) == {"planet_frontend", "atmosphere_shader", "procedural_surface", "webgl_scene"}
+    assert payload["layers"]["procedural_landmasses"] is True
+    assert payload["layers"]["translucent_clouds"] is True
+    assert payload["license_boundary"] == "visual principles only; no external source or texture copied"
+    assert result["ok"] is True, result["stderr_tail"] + result["stdout_tail"]
 
 
 def test_module_content_round_trips_absorbed_external_patterns(tmp_path: Path) -> None:

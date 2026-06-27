@@ -662,6 +662,8 @@ def _tasks_from_assessment(source: str, external_path: Path | None = None) -> li
         tasks.append({"task_id": "retort-absorb-benchmarking", "title": "Add absorption quality benchmark counters", "dimension": "feedback_loop_closure", "owner_hint": "test-qa-runner", "priority": "P2", "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."})
     if profile.get("plugin_surface"):
         tasks.append({"task_id": "retort-absorb-plugin-surface", "title": "Expose Retort absorption through plugin friendly commands", "dimension": "product_operability", "owner_hint": "market-frontend-dev", "priority": "P2", "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."})
+    if profile.get("planet_frontend") or profile.get("atmosphere_shader") or profile.get("procedural_surface") or profile.get("webgl_scene"):
+        tasks.append({"task_id": "retort-absorb-planet-visual", "title": "Absorb better blackhole planet visual system", "dimension": "product_operability", "owner_hint": "market-frontend-dev", "priority": "P1", "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."})
     return tasks
 
 

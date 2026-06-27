@@ -64,6 +64,10 @@ def test_external_project_profile_detects_depth_signals(tmp_path: Path) -> None:
         "file_grouping": True,
         "benchmarking": True,
         "plugin_surface": True,
+        "planet_frontend": False,
+        "atmosphere_shader": False,
+        "procedural_surface": False,
+        "webgl_scene": False,
     }
 
 
