@@ -1,3 +1,5 @@
+# CI SSOT: generated from MODstore_deploy/.github/workflows/prod-deploy.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Deploy MODstore Production
 
 on:
