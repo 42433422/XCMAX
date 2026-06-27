@@ -666,6 +666,10 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"capability_absorption_reason={audit.get('reason')}")
     evidence.append(f"behavior_source_file_count={len(audit.get('behavior_source_files') or [])}")
     evidence.append(f"behavior_test_file_count={len(audit.get('behavior_test_files') or [])}")
+    behavior_test = project / "tests" / "test_absorbed_capabilities.py"
+    if behavior_test.is_file():
+        behavior_test_count = len(re.findall(r"^\s*def\s+test_", _read(behavior_test), re.M))
+        evidence.append(f"behavior_test_function_count={behavior_test_count}")
     evidence.append(f"generated_evidence_file_count={len(audit.get('generated_evidence_files') or [])}")
     evidence.append(f"employee_execution_mode={audit.get('employee_execution_mode', '')}")
     evidence.append(f"external_project_count={audit.get('external_project_count', '')}")
