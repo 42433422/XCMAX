@@ -33,7 +33,7 @@
       "<none>": 7
     }
   },
-  "generated_at": "2026-06-27T08:15:30Z",
+  "generated_at": "2026-06-27T08:22:31Z",
   "license_review": {
     "detected_license": "Apache License",
     "message": "Allowed license detected: Apache License",
@@ -44,9 +44,9 @@
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 6,
-      "minimum_expected_behavior_tests": 11,
-      "prioritized_component_count": 6,
+      "component_gap_count": 7,
+      "minimum_expected_behavior_tests": 12,
+      "prioritized_component_count": 7,
       "task_dimension_count": 5
     },
     "component_gaps": [
@@ -54,7 +54,7 @@
         "component": "provider_surface",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 6142,
+        "marker_gap": 6140,
         "own_files": 12,
         "representative_external_files": [
           "CODE_OF_CONDUCT.md",
@@ -68,7 +68,7 @@
         "component": "workflow_ci",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 3603,
+        "marker_gap": 3588,
         "own_files": 12,
         "representative_external_files": [
           "CODE_OF_CONDUCT.md",
@@ -82,7 +82,7 @@
         "component": "review_pipeline",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 2807,
+        "marker_gap": 2786,
         "own_files": 12,
         "representative_external_files": [
           "CODE_OF_CONDUCT.md",
@@ -96,7 +96,7 @@
         "component": "plugin_surface",
         "external_files": 12,
         "file_gap": 1,
-        "marker_gap": 280,
+        "marker_gap": 277,
         "own_files": 11,
         "representative_external_files": [
           "README.ru-RU.md",
@@ -110,7 +110,7 @@
         "component": "benchmark_eval",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 83,
+        "marker_gap": 80,
         "own_files": 12,
         "representative_external_files": [
           "README.ru-RU.md",
@@ -121,10 +121,24 @@
         ]
       },
       {
+        "component": "diff_hunk_review",
+        "external_files": 11,
+        "file_gap": 7,
+        "marker_gap": 15,
+        "own_files": 4,
+        "representative_external_files": [
+          "plugins/open-code-review/skills/open-code-review/SKILL.md",
+          "internal/config/toolsconfig/tools.json",
+          "internal/diff/resolver_test.go",
+          "internal/diff/resolver.go",
+          "internal/diff/hunk.go"
+        ]
+      },
+      {
         "component": "safety_policy",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 8,
+        "marker_gap": 1,
         "own_files": 12,
         "representative_external_files": [
           "CODE_OF_CONDUCT.md",
@@ -152,6 +166,22 @@
           "internal/config/rules/rule_docs/mapper_dao_xml.md"
         ],
         "marker_hits": 230
+      },
+      "diff_hunk_review": {
+        "files": [
+          "plugins/open-code-review/skills/open-code-review/SKILL.md",
+          "internal/config/toolsconfig/tools.json",
+          "internal/diff/resolver_test.go",
+          "internal/diff/resolver.go",
+          "internal/diff/hunk.go",
+          "examples/github_actions/ocr-review.yml",
+          "examples/github_actions/README.md",
+          "examples/gitlab_ci/README.md",
+          "examples/gitlab_ci/.gitlab-ci.yml",
+          ".github/workflows/ocr-review.yml",
+          "skills/open-code-review/SKILL.md"
+        ],
+        "marker_hits": 31
       },
       "file_grouping": {
         "files": [
@@ -270,7 +300,16 @@
           "tests/test_retort_engine.py",
           "tests/test_self_evolution.py"
         ],
-        "marker_hits": 147
+        "marker_hits": 150
+      },
+      "diff_hunk_review": {
+        "files": [
+          "retort_engine/review_pipeline.py",
+          "retort_engine/core.py",
+          "retort_engine/real_absorption.py",
+          "tests/test_review_pipeline.py"
+        ],
+        "marker_hits": 16
       },
       "file_grouping": {
         "files": [
@@ -285,7 +324,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 29
+        "marker_hits": 30
       },
       "plugin_surface": {
         "files": [
@@ -301,7 +340,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 90
+        "marker_hits": 93
       },
       "provider_surface": {
         "files": [
@@ -318,7 +357,7 @@
           "retort_engine/absorbed_external_patterns.py",
           "retort_engine/real_absorption.py"
         ],
-        "marker_hits": 78
+        "marker_hits": 80
       },
       "review_pipeline": {
         "files": [
@@ -328,14 +367,14 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
           "retort_engine/cli.py",
+          "retort_engine/contracts.py",
           "retort_engine/ui_server.py",
           "retort_engine/absorbed_external_patterns.py",
           "retort_engine/real_absorption.py",
           "retort_engine/evaluators.py",
-          "retort_engine/frontend/app.js",
-          "tests/test_retort_engine.py"
+          "retort_engine/frontend/app.js"
         ],
-        "marker_hits": 266
+        "marker_hits": 287
       },
       "safety_policy": {
         "files": [
@@ -344,15 +383,15 @@
           "retort_engine/review_pipeline.py",
           "retort_engine/paibi_llm.py",
           "retort_engine/core.py",
+          "retort_engine/contracts.py",
           "retort_engine/self_evolution.py",
           "retort_engine/absorbed_external_patterns.py",
           "retort_engine/real_absorption.py",
           "retort_engine/license_gate.py",
           "retort_engine/evaluators.py",
-          "retort_engine/frontend/app.js",
-          "tests/test_retort_engine.py"
+          "retort_engine/frontend/app.js"
         ],
-        "marker_hits": 154
+        "marker_hits": 161
       },
       "workflow_ci": {
         "files": [
@@ -366,15 +405,16 @@
           "retort_engine/core.py",
           "retort_engine/runtime_adapter.py",
           "retort_engine/cli.py",
-          "retort_engine/branching.py",
-          "retort_engine/self_evolution.py"
+          "retort_engine/contracts.py",
+          "retort_engine/branching.py"
         ],
-        "marker_hits": 734
+        "marker_hits": 749
       }
     },
     "pipeline_stages": [
       "materialize_external_snapshot",
       "group_related_files",
+      "map_diff_hunk_context",
       "extract_review_signals",
       "compare_component_gaps",
       "rank_absorption_tasks",
@@ -442,6 +482,18 @@
         ]
       },
       {
+        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
+        "component": "diff_hunk_review",
+        "priority": "P1",
+        "source_files": [
+          "plugins/open-code-review/skills/open-code-review/SKILL.md",
+          "internal/config/toolsconfig/tools.json",
+          "internal/diff/resolver_test.go",
+          "internal/diff/resolver.go",
+          "internal/diff/hunk.go"
+        ]
+      },
+      {
         "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
         "component": "safety_policy",
         "priority": "P1",
@@ -455,7 +507,7 @@
       }
     ]
   },
-  "run_id": "20260627081530-f7cfdfd7bc",
+  "run_id": "20260627082231-f7cfdfd7bc",
   "semantic_review": {
     "external": {
       "classes": 218,
@@ -471,29 +523,29 @@
         "metric": "classes"
       },
       {
-        "external_advantage": 1467,
+        "external_advantage": 1459,
         "metric": "functions"
       },
       {
-        "external_advantage": 298,
+        "external_advantage": 295,
         "metric": "source_files"
       },
       {
-        "external_advantage": 143,
+        "external_advantage": 141,
         "metric": "test_markers"
       },
       {
-        "external_advantage": 2602,
+        "external_advantage": 2579,
         "metric": "workflow_markers"
       }
     ],
     "own": {
       "classes": 48,
       "cli_markers": 13,
-      "functions": 332,
-      "source_files": 38,
-      "test_markers": 90,
-      "workflow_markers": 432
+      "functions": 340,
+      "source_files": 41,
+      "test_markers": 92,
+      "workflow_markers": 455
     }
   },
   "signal_evidence": {
