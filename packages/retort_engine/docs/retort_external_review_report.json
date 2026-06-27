@@ -1,38 +1,87 @@
 {
   "absorbed_signals": [
     "review_pipeline",
+    "file_grouping",
+    "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/auth0/auth0-ai-pr-analyzer-gh-action",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
   "external_snapshot": {
-    "file_count": 18,
-    "git_revision": "068575ff8b60e5dcd0e7447fedfed5d4f2092c30",
+    "file_count": 65,
+    "git_revision": "21626acb6797bdd3d7e1017fcdb7022feaf84884",
     "suffix_counts": {
-      ".md": 4,
-      ".sh": 4,
-      ".tmpl": 1,
-      ".yml": 5,
-      "<none>": 4
+      ".example": 1,
+      ".js": 1,
+      ".json": 7,
+      ".md": 3,
+      ".mjs": 1,
+      ".svg": 2,
+      ".ts": 24,
+      ".yml": 19,
+      "<none>": 7
     }
   },
-  "generated_at": "2026-06-27T15:04:33Z",
+  "generated_at": "2026-06-27T15:05:17Z",
   "license_review": {
-    "detected_license": "Apache License",
-    "message": "Allowed license detected: Apache License",
+    "detected_license": "MIT License",
+    "message": "Allowed license detected: MIT License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/auth0/auth0-ai-pr-analyzer-gh-action --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 0,
-      "minimum_expected_behavior_tests": 3,
-      "prioritized_component_count": 0,
-      "task_dimension_count": 3
+      "component_gap_count": 3,
+      "minimum_expected_behavior_tests": 8,
+      "prioritized_component_count": 3,
+      "task_dimension_count": 5
     },
-    "component_gaps": [],
+    "component_gaps": [
+      {
+        "component": "safety_policy",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 615,
+        "own_files": 12,
+        "representative_external_files": [
+          "README.md",
+          ".licensed.yml",
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md"
+        ]
+      },
+      {
+        "component": "provider_surface",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 219,
+        "own_files": 12,
+        "representative_external_files": [
+          "README.md",
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md",
+          "action.yml"
+        ]
+      },
+      {
+        "component": "diff_hunk_review",
+        "external_files": 6,
+        "file_gap": 1,
+        "marker_gap": -10,
+        "own_files": 5,
+        "representative_external_files": [
+          "README.md",
+          "action.yml",
+          "__tests__/reviewer.test.ts",
+          "__tests__/prompts.test.ts",
+          "src/prompts.ts"
+        ]
+      }
+    ],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -41,6 +90,9 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "README.md",
+            "package-lock.json",
+            "package.json",
+            "AGENTS.md",
             "action.yml"
           ],
           "status": "closed_until_similarity_saturation"
@@ -50,9 +102,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
+            "rollup.config.ts",
+            "jest.config.js",
             "README.md",
-            "CONTRIBUTING.md",
-            ".github/copilot-instructions.md"
+            ".licensed.yml",
+            "package-lock.json"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -73,6 +127,19 @@
           "title": "Deepen review_pipeline"
         },
         {
+          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-file-grouping",
+          "title": "Deepen file_grouping"
+        },
+        {
           "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
           "dimension": "comparative_analysis_depth",
           "evidence_required": [
@@ -87,17 +154,18 @@
           "title": "Deepen diff_hunk_review"
         },
         {
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "dimension": "feedback_loop_closure",
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "precision or false-positive benchmark counters"
           ],
           "owner_hint": "fhd-core-maintainer",
           "priority": "P1",
-          "task_id": "retort-depth-safety-policy",
-          "title": "Deepen safety_policy"
+          "task_id": "retort-depth-benchmark-eval",
+          "title": "Deepen benchmark_eval"
         },
         {
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
@@ -111,6 +179,19 @@
           "priority": "P1",
           "task_id": "retort-depth-workflow-ci",
           "title": "Deepen workflow_ci"
+        },
+        {
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-safety-policy",
+          "title": "Deepen safety_policy"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -140,16 +221,48 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 126,
-          "own_marker_hits": 1314,
+          "external_marker_hits": 392,
+          "own_marker_hits": 1302,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            "action.yml",
-            ".github/copilot-instructions.md",
-            ".github/workflows/claude-code-review-dev.yml",
-            ".github/workflows/claude-code-review-example.yml"
+            "package-lock.json",
+            "package.json",
+            "AGENTS.md",
+            "action.yml"
+          ]
+        },
+        {
+          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
+          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "component": "file_grouping",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-file-grouping",
+            "title": "Deepen file_grouping"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 3,
+          "own_marker_hits": 42,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "src/main.ts",
+            "src/commenter.ts"
           ]
         },
         {
@@ -177,48 +290,52 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 3,
+          "external_marker_hits": 8,
           "own_marker_hits": 18,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            ".github/copilot-instructions.md"
+            "action.yml",
+            "__tests__/reviewer.test.ts",
+            "__tests__/prompts.test.ts",
+            "src/prompts.ts"
           ]
         },
         {
-          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "component": "safety_policy",
+          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "component": "benchmark_eval",
           "depth_gap": 0,
           "employee_task": {
-            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
+            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+            "dimension": "feedback_loop_closure",
             "evidence_required": [
               "source diff",
               "behavior test",
-              "gate output"
+              "gate output",
+              "precision or false-positive benchmark counters"
             ],
             "owner_hint": "fhd-core-maintainer",
             "priority": "P1",
-            "task_id": "retort-depth-safety-policy",
-            "title": "Deepen safety_policy"
+            "task_id": "retort-depth-benchmark-eval",
+            "title": "Deepen benchmark_eval"
           },
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 13,
-          "own_marker_hits": 280,
+          "external_marker_hits": 35,
+          "own_marker_hits": 268,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md",
-            "action.yml",
-            ".github/copilot-instructions.md",
-            ".github/workflows/claude-code-review-dev.yml",
-            ".github/workflows/claude-code-review-example.yml"
+            "__tests__/reviewer.test.ts",
+            "__tests__/prompts.test.ts",
+            "src/prompts.ts",
+            "src/option.ts"
           ]
         },
         {
@@ -244,16 +361,51 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 70,
-          "own_marker_hits": 1578,
+          "external_marker_hits": 998,
+          "own_marker_hits": 1529,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
+            "tsconfig.base.json",
+            "jest.config.js",
             "README.md",
-            "CONTRIBUTING.md",
-            "action.yml",
-            ".github/copilot-instructions.md",
-            ".github/workflows/claude-code-review-dev.yml"
+            "tsconfig.eslint.json",
+            ".prettierrc.yml"
+          ]
+        },
+        {
+          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "component": "safety_policy",
+          "depth_gap": 615,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-safety-policy",
+            "title": "Deepen safety_policy"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 870,
+          "own_marker_hits": 255,
+          "priority": "P0",
+          "similarity_score": 89,
+          "source_files": [
+            "README.md",
+            ".licensed.yml",
+            "package-lock.json",
+            "package.json",
+            "AGENTS.md"
           ]
         }
       ],
@@ -262,7 +414,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 4,
+        "focused_component_count": 6,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -273,83 +425,142 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 11,
+          "external_marker_hits": 362,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "README.md",
+            "package-lock.json",
+            "package.json",
+            "AGENTS.md",
             "action.yml"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 5,
+          "external_marker_hits": 238,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
+            "rollup.config.ts",
+            "jest.config.js",
             "README.md",
-            "CONTRIBUTING.md",
-            ".github/copilot-instructions.md"
+            ".licensed.yml",
+            "package-lock.json"
           ]
         }
       ]
     },
     "external_file_groups": {
+      "benchmark_eval": {
+        "files": [
+          "__tests__/reviewer.test.ts",
+          "__tests__/prompts.test.ts",
+          "src/prompts.ts",
+          "src/option.ts"
+        ],
+        "marker_hits": 35
+      },
       "diff_hunk_review": {
         "files": [
           "README.md",
-          ".github/copilot-instructions.md"
+          "action.yml",
+          "__tests__/reviewer.test.ts",
+          "__tests__/prompts.test.ts",
+          "src/prompts.ts",
+          "src/commenter.ts"
+        ],
+        "marker_hits": 8
+      },
+      "file_grouping": {
+        "files": [
+          "src/main.ts",
+          "src/commenter.ts"
         ],
         "marker_hits": 3
       },
       "plugin_surface": {
         "files": [
+          "rollup.config.ts",
+          "jest.config.js",
           "README.md",
-          "CONTRIBUTING.md",
-          ".github/copilot-instructions.md"
+          ".licensed.yml",
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md",
+          ".devcontainer/devcontainer.json",
+          "__tests__/option.test.ts",
+          ".github/workflows/ci.yml",
+          "src/main.ts",
+          "src/option.ts"
         ],
-        "marker_hits": 5
+        "marker_hits": 238
       },
       "provider_surface": {
         "files": [
           "README.md",
-          "action.yml"
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md",
+          "action.yml",
+          "__tests__/chatbot.test.ts",
+          "__tests__/prompts.test.ts",
+          "__tests__/patchParser.test.ts",
+          "__tests__/option.test.ts",
+          "__tests__/chatbot/index.test.ts",
+          ".github/workflows/ai-review.yml",
+          ".github/workflows/ci.yml"
         ],
-        "marker_hits": 11
+        "marker_hits": 362
       },
       "review_pipeline": {
         "files": [
           "README.md",
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md",
           "action.yml",
-          ".github/copilot-instructions.md",
-          ".github/workflows/claude-code-review-dev.yml",
-          ".github/workflows/claude-code-review-example.yml",
-          ".github/workflows/claude-code-review.yml",
-          "templates/README.md"
+          ".devcontainer/devcontainer.json",
+          "__tests__/reviewer.test.ts",
+          "__tests__/commenter.test.ts",
+          "__tests__/prompts.test.ts",
+          "__tests__/patchParser.test.ts",
+          "__tests__/option.test.ts",
+          "__tests__/chatbot/index.test.ts"
         ],
-        "marker_hits": 126
+        "marker_hits": 392
       },
       "safety_policy": {
         "files": [
           "README.md",
+          ".licensed.yml",
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md",
+          ".yaml-lint.yml",
           "action.yml",
-          ".github/copilot-instructions.md",
-          ".github/workflows/claude-code-review-dev.yml",
-          ".github/workflows/claude-code-review-example.yml",
-          ".github/workflows/claude-code-review.yml"
+          ".licenses/npm/tunnel.dep.yml",
+          ".licenses/npm/undici.dep.yml",
+          ".licenses/npm/@actions/exec.dep.yml",
+          ".licenses/npm/@actions/core.dep.yml",
+          ".licenses/npm/@actions/http-client.dep.yml"
         ],
-        "marker_hits": 13
+        "marker_hits": 870
       },
       "workflow_ci": {
         "files": [
+          "tsconfig.base.json",
+          "jest.config.js",
           "README.md",
-          "CONTRIBUTING.md",
+          "tsconfig.eslint.json",
+          ".prettierrc.yml",
+          "package-lock.json",
+          "package.json",
+          "tsconfig.json",
+          "AGENTS.md",
+          "biome.json",
           "action.yml",
-          ".github/copilot-instructions.md",
-          ".github/workflows/claude-code-review-dev.yml",
-          ".github/workflows/claude-code-review-example.yml",
-          ".github/workflows/sca_scan.yml",
-          ".github/workflows/claude-code-review.yml"
+          ".licenses/npm/tunnel.dep.yml"
         ],
-        "marker_hits": 70
+        "marker_hits": 998
       }
     },
     "own_file_groups": {
@@ -365,10 +576,10 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py",
           "retort_engine/ui_server.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py"
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/review_quality_benchmark.py"
         ],
-        "marker_hits": 343
+        "marker_hits": 268
       },
       "diff_hunk_review": {
         "files": [
@@ -385,16 +596,13 @@
           "README.md",
           "retort_engine/review_pipeline.py",
           "retort_engine/core.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md",
-          "docs/retort_external_review_report.json"
+          "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 50
+        "marker_hits": 42
       },
       "plugin_surface": {
         "files": [
@@ -411,7 +619,7 @@
           "tests/test_review_pipeline.py",
           "tests/test_complex_pr_replay.py"
         ],
-        "marker_hits": 324
+        "marker_hits": 326
       },
       "provider_surface": {
         "files": [
@@ -428,7 +636,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 191
+        "marker_hits": 143
       },
       "review_pipeline": {
         "files": [
@@ -445,7 +653,7 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py"
         ],
-        "marker_hits": 1314
+        "marker_hits": 1302
       },
       "safety_policy": {
         "files": [
@@ -462,7 +670,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/ui_server.py"
         ],
-        "marker_hits": 280
+        "marker_hits": 255
       },
       "workflow_ci": {
         "files": [
@@ -479,7 +687,7 @@
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py"
         ],
-        "marker_hits": 1578
+        "marker_hits": 1529
       }
     },
     "pipeline_stages": [
@@ -491,45 +699,107 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": []
+    "prioritized_absorptions": [
+      {
+        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
+        "component": "safety_policy",
+        "priority": "P0",
+        "source_files": [
+          "README.md",
+          ".licensed.yml",
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
+        "component": "provider_surface",
+        "priority": "P0",
+        "source_files": [
+          "README.md",
+          "package-lock.json",
+          "package.json",
+          "AGENTS.md",
+          "action.yml"
+        ]
+      },
+      {
+        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
+        "component": "diff_hunk_review",
+        "priority": "P1",
+        "source_files": [
+          "README.md",
+          "action.yml",
+          "__tests__/reviewer.test.ts",
+          "__tests__/prompts.test.ts",
+          "src/prompts.ts"
+        ]
+      }
+    ]
   },
-  "run_id": "20260627150433-47fc1855bc",
+  "run_id": "20260627150517-fe4938a18b",
   "semantic_review": {
     "external": {
-      "classes": 0,
-      "cli_markers": 0,
-      "functions": 0,
-      "source_files": 9,
-      "test_markers": 0,
-      "workflow_markers": 148
+      "classes": 133,
+      "cli_markers": 4,
+      "functions": 44,
+      "source_files": 54,
+      "test_markers": 132,
+      "workflow_markers": 397
     },
-    "gaps": [],
+    "gaps": [
+      {
+        "external_advantage": 87,
+        "metric": "classes"
+      }
+    ],
     "own": {
       "classes": 46,
       "cli_markers": 26,
       "functions": 588,
       "source_files": 74,
       "test_markers": 169,
-      "workflow_markers": 1656
+      "workflow_markers": 1664
     }
   },
   "signal_evidence": {
+    "benchmarking": [
+      "__tests__/reviewer.test.ts",
+      "__tests__/prompts.test.ts",
+      "src/prompts.ts",
+      "src/option.ts"
+    ],
+    "file_grouping": [
+      "README.md",
+      "action.yml",
+      "__tests__/prompts.test.ts",
+      "src/main.ts",
+      "src/commenter.ts"
+    ],
     "multi_provider": [
       "README.md",
+      "package-lock.json",
+      "package.json",
+      "AGENTS.md",
       "action.yml"
     ],
     "plugin_surface": [
+      "rollup.config.ts",
       "README.md",
-      "CONTRIBUTING.md",
-      ".github/copilot-instructions.md",
-      ".github/workflows/sca_scan.yml"
+      ".licensed.yml",
+      "package-lock.json",
+      "package.json"
     ],
     "review_pipeline": [
       "README.md",
-      ".github/copilot-instructions.md"
+      "package-lock.json",
+      "package.json",
+      "AGENTS.md",
+      "action.yml"
     ]
   },
-  "source": "https://github.com/auth0/auth0-ai-pr-analyzer-gh-action",
+  "source": "https://github.com/mopemope/pr-ai-review-bot",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -537,7 +807,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/auth0/auth0-ai-pr-analyzer-gh-action."
+      "why": "Compare implementation patterns from https://github.com/mopemope/pr-ai-review-bot."
     },
     {
       "dimension": "product_operability",
@@ -545,7 +815,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/auth0/auth0-ai-pr-analyzer-gh-action."
+      "why": "Extract usable UX improvements from https://github.com/mopemope/pr-ai-review-bot."
     },
     {
       "dimension": "operational_readiness",
@@ -553,7 +823,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/auth0/auth0-ai-pr-analyzer-gh-action."
+      "why": "Adapt CI and release checks from https://github.com/mopemope/pr-ai-review-bot."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -562,6 +832,22 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "external_ingestion",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-file-grouping",
+      "title": "Add external file grouping before deep comparison",
+      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+    },
+    {
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
     },
     {
       "dimension": "product_operability",
