@@ -15,12 +15,14 @@ def main(argv: list[str] | None = None) -> int:
     assess.add_argument("--project", default=".")
     assess.add_argument("--run-local-gates", action="store_true")
     assess.add_argument("--use-llm", action="store_true")
+    assess.add_argument("--wait-llm-sec", type=float, default=0)
     assess.add_argument("--json", action="store_true")
     evolve = sub.add_parser("self-evolve")
     evolve.add_argument("--project", default=".")
     evolve.add_argument("--run-local-gates", action="store_true")
     evolve.add_argument("--max-rounds", type=int, default=8)
     evolve.add_argument("--use-llm", action="store_true")
+    evolve.add_argument("--wait-llm-sec", type=float, default=0)
     evolve.add_argument("--json", action="store_true")
     absorb_cmd = sub.add_parser("absorb")
     absorb_cmd.add_argument("--own-project", default=".")
@@ -62,14 +64,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "project-assess":
         if args.use_llm:
-            result = RetortService().assess({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": True})
+            result = RetortService().assess({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": True, "wait_llm_sec": args.wait_llm_sec})
         else:
             result = assess_project(args.project, run_local_gates=args.run_local_gates).to_dict()
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else _format_scores("Retort assessment", result["scores"]))
         return 0
     if args.command == "self-evolve":
         if args.use_llm:
-            result = RetortService().self_evolve({"project": args.project, "run_local_gates": args.run_local_gates, "max_rounds": args.max_rounds, "use_llm": True})
+            result = RetortService().self_evolve({"project": args.project, "run_local_gates": args.run_local_gates, "max_rounds": args.max_rounds, "use_llm": True, "wait_llm_sec": args.wait_llm_sec})
         else:
             result = RetortSelfEvolutionRunner(max_rounds=args.max_rounds).run(args.project, run_local_gates=args.run_local_gates)
         if args.json:

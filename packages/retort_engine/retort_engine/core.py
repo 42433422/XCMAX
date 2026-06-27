@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from retort_engine.paibi_llm import fetch_paibi_llm_review_status, request_paibi_llm_review
+from retort_engine.paibi_llm import fetch_paibi_llm_review_status, request_paibi_llm_review, wait_for_paibi_llm_review
 
 
 @dataclass(frozen=True)
@@ -144,7 +144,17 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
     tasks = _tasks_from_assessment(str(external), external_path)
     absorption_state = _record_absorption_shock(own, str(external), external_path, tasks)
     own_assessment = assess_project(str(own), run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
-    llm_review = _maybe_request_llm_review(payload, own, "absorb", str(external), "" if external_path is None else str(external_path), own_assessment.get("scores", []), tasks)
+    llm_review = _maybe_request_llm_review(
+        payload,
+        own,
+        "absorb",
+        str(external),
+        "" if external_path is None else str(external_path),
+        own_assessment.get("scores", []),
+        tasks,
+        evidence=own_assessment.get("evidence", []),
+        metadata=own_assessment.get("metadata", {}),
+    )
     result = {
         "status": "tasks_generated",
         "summary": f"Generated {len(tasks)} absorption task(s). Score intentionally dropped until Retort self-evolution internalizes the external advantages.",
@@ -217,8 +227,7 @@ class RetortService:
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or payload.get("project_path") or ".")
         assessment = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
-        assessment["llm_review"] = _maybe_request_llm_review(payload, Path(project).expanduser().resolve(), "assess", "", "", assessment.get("scores", []), [])
-        return assessment
+        return _attach_llm_scoring(payload, assessment, Path(project).expanduser().resolve(), "assess", "", "", [])
 
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
         return absorb(payload)
@@ -226,7 +235,7 @@ class RetortService:
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or ".")
         result = RetortSelfEvolutionRunner(max_rounds=int(payload.get("max_rounds") or 8)).run(project, run_local_gates=bool(payload.get("run_local_gates")))
-        result["llm_review"] = _maybe_request_llm_review(payload, Path(project).expanduser().resolve(), "self_evolve", "", "", result.get("final_assessment", {}).get("scores", []), result.get("tasks", []))
+        result["final_assessment"] = _attach_llm_scoring(payload, result.get("final_assessment", {}), Path(project).expanduser().resolve(), "self_evolve", "", "", result.get("tasks", []))
         return result
 
     def record_proof(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -241,6 +250,8 @@ class RetortService:
             external_source=str(payload.get("external_source") or payload.get("github_url") or ""),
             external_path=str(payload.get("external_path") or ""),
             scores=assessment.get("scores", []),
+            evidence=assessment.get("evidence", []),
+            metadata=assessment.get("metadata", {}),
             tasks=[],
         )
 
@@ -273,10 +284,57 @@ def record_closed_loop_proof(project: str, payload: dict[str, Any]) -> dict[str,
     return _public_absorption_state(root)
 
 
-def _maybe_request_llm_review(payload: dict[str, Any], project: Path, mode: str, external_source: str, external_path: str, scores: list[dict[str, Any]], tasks: list[dict[str, Any]]) -> dict[str, Any]:
+def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], project: Path, mode: str, external_source: str, external_path: str, tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    if not bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review")):
+        metadata = assessment.setdefault("metadata", {})
+        metadata["score_source"] = "local_fallback_rules"
+        return assessment
+    review = _maybe_request_llm_review(
+        payload,
+        project,
+        mode,
+        external_source,
+        external_path,
+        assessment.get("scores", []),
+        tasks,
+        evidence=assessment.get("evidence", []),
+        metadata=assessment.get("metadata", {}),
+    )
+    assessment["llm_review"] = review
+    metadata = assessment.setdefault("metadata", {})
+    metadata["score_source"] = "local_fallback_pending_llm"
+    metadata["fallback_rule_scores"] = list(assessment.get("scores", []))
+    wait_sec = float(payload.get("wait_llm_sec") or payload.get("wait_llm_seconds") or 0)
+    task_id = str((review.get("dispatch") or {}).get("task_id") or "")
+    status: dict[str, Any] = {}
+    if wait_sec > 0 and task_id:
+        status = wait_for_paibi_llm_review(task_id, timeout_sec=wait_sec)
+    elif payload.get("llm_task_id"):
+        status = fetch_paibi_llm_review_status(str(payload.get("llm_task_id")))
+    if status:
+        assessment["llm_review_status"] = status
+        if status.get("scores"):
+            assessment["scores"] = status["scores"]
+            metadata["score_source"] = "paibi_llm"
+            metadata["llm_task_id"] = status.get("task_id")
+    return assessment
+
+
+def _maybe_request_llm_review(
+    payload: dict[str, Any],
+    project: Path,
+    mode: str,
+    external_source: str,
+    external_path: str,
+    scores: list[dict[str, Any]],
+    tasks: list[dict[str, Any]],
+    *,
+    evidence: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review")):
         return {"enabled": False, "provider": "paibi"}
-    review = request_paibi_llm_review(project=str(project), mode=mode, external_source=external_source, external_path=external_path, scores=scores, tasks=tasks)
+    review = request_paibi_llm_review(project=str(project), mode=mode, external_source=external_source, external_path=external_path, scores=scores, tasks=tasks, evidence=evidence or [], metadata=metadata or {})
     review["enabled"] = True
     return review
 
