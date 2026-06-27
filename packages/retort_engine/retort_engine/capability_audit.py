@@ -167,6 +167,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     core_large_diff_chunking = False
     core_large_diff_chunk_count = 0
     core_large_diff_context_balancing = False
+    employee_feedback_changes_ranking = False
+    employee_feedback_rank_context = ""
     if source.is_file():
         try:
             from retort_engine.pr_review import review_diff
@@ -218,6 +220,12 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             core_large_diff_chunking = bool(large_review_summary.get("large_diff_chunking"))
             core_large_diff_chunk_count = int(large_review_summary.get("large_diff_chunk_count") or 0)
             core_large_diff_context_balancing = bool(large_review_summary.get("large_diff_context_balancing"))
+            feedback_before = review_diff(_audit_feedback_diff_sample(), max_comments=1)
+            feedback_after = review_diff(_audit_feedback_diff_sample(), max_comments=1, employee_feedback=[{"dimension": "test_gate_evidence", "status": "failed"}])
+            before_context = str(((feedback_before.get("comments") or [{}])[0] or {}).get("review_context") or "")
+            after_context = str(((feedback_after.get("comments") or [{}])[0] or {}).get("review_context") or "")
+            employee_feedback_changes_ranking = bool(before_context and after_context and before_context != after_context)
+            employee_feedback_rank_context = after_context
         except Exception:
             sample_comment_count = 0
     return {
@@ -253,6 +261,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "core_large_diff_chunking": core_large_diff_chunking,
         "core_large_diff_chunk_count": core_large_diff_chunk_count,
         "core_large_diff_context_balancing": core_large_diff_context_balancing,
+        "employee_feedback_changes_ranking": employee_feedback_changes_ranking,
+        "employee_feedback_rank_context": employee_feedback_rank_context,
         "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
         "dry_run_cli": "review-pr" in read_text(cli),
         "dry_run_api": "/api/review-pr" in read_text(ui_server),
@@ -310,6 +320,14 @@ def _audit_large_diff_sample() -> str:
         ("app/runtime_3.py", "# TODO: runtime follow-up 3"),
         ("app/runtime_4.py", "# TODO: runtime follow-up 4"),
         ("docs/release.md", "# TODO: document release"),
+    ]
+    return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
+
+
+def _audit_feedback_diff_sample() -> str:
+    rows = [
+        ("app/runtime.py", "# TODO: finish runtime behavior"),
+        ("tests/test_runtime.py", "# TODO: assert runtime behavior"),
     ]
     return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
 

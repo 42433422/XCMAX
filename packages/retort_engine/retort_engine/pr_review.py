@@ -27,6 +27,7 @@ def review_diff(
     previous_diff_text: str = "",
     issue_context: str = "",
     pr_body: str = "",
+    employee_feedback: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Review a unified diff with absorbed external review capabilities."""
     raw_files = parse_unified_diff(diff_text)
@@ -49,6 +50,7 @@ def review_diff(
     context_by_file = {path: str(group["context"]) for group in context_groups for path in group["files"]}
     static_analysis = scan_static_analysis_findings(files)
     intent_alignment = assess_change_intent_alignment(files, issue_context=issue_context, pr_body=pr_body)
+    feedback_context_weights = _feedback_context_weights(employee_feedback or [])
     static_findings_by_location = {
         (str(finding.get("file") or ""), int(finding.get("line") or 0)): finding
         for finding in static_analysis.get("findings") or []
@@ -69,7 +71,13 @@ def review_diff(
             candidate_comments.extend(hunk_comments)
     if intent_alignment.get("status") == "misaligned" and files:
         candidate_comments.append(_intent_alignment_comment(files, capabilities, context_by_file, intent_alignment))
-    comments = _rank_review_comments(candidate_comments, max_comments=max_comments, context_groups=context_groups, large_diff_chunking=large_diff_chunking)
+    comments = _rank_review_comments(
+        candidate_comments,
+        max_comments=max_comments,
+        context_groups=context_groups,
+        large_diff_chunking=large_diff_chunking,
+        feedback_context_weights=feedback_context_weights,
+    )
     risk_counts = _risk_counts(comments)
     file_summaries = [
         _file_summary(
@@ -97,6 +105,8 @@ def review_diff(
         "absorbed_file_grouping": file_grouping_enabled(),
         "absorbed_context_signal_strength": context_signal_strength(),
         "absorbed_context_rank_weights": context_rank_weights(),
+        "employee_feedback_context_weights": feedback_context_weights,
+        "employee_feedback_ranked": bool(feedback_context_weights),
         "absorbed_review_source": str(context_bias.get("source") or ""),
         "risk_counts": risk_counts,
         "static_analysis": static_analysis["summary"],
@@ -351,6 +361,7 @@ def _rank_review_comments(
     max_comments: int,
     context_groups: list[dict[str, Any]] | None = None,
     large_diff_chunking: bool = False,
+    feedback_context_weights: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
     deduped: list[dict[str, Any]] = []
     seen: set[tuple[str, int, str, str]] = set()
@@ -367,6 +378,7 @@ def _rank_review_comments(
         scored = dict(comment)
         scored["_original_order"] = index
         scored["absorbed_context_rank_weight"] = context_rank_weight(str(scored.get("review_context") or "other"))
+        scored["feedback_rank_weight"] = int((feedback_context_weights or {}).get(str(scored.get("review_context") or "other"), 0))
         scored["rank_score"] = _comment_rank_score(scored)
         scored["rank_reason"] = _rank_reason(scored)
         deduped.append(scored)
@@ -408,6 +420,31 @@ def _large_diff_review_needed(files: list[dict[str, Any]], diff_text: str) -> bo
     return len(files) > LARGE_DIFF_FILE_THRESHOLD or hunk_count > LARGE_DIFF_HUNK_THRESHOLD or len(diff_text) > LARGE_DIFF_CHAR_THRESHOLD
 
 
+def _feedback_context_weights(feedback: list[dict[str, Any]]) -> dict[str, int]:
+    weights: dict[str, int] = {}
+    for item in feedback:
+        task = item.get("task") if isinstance(item.get("task"), dict) else {}
+        dimension = str(item.get("dimension") or task.get("dimension") or "")
+        status = str(item.get("status") or item.get("result") or "").lower()
+        if status and status not in {"failed", "blocked", "needs_replay", "needs_attention", "missed"}:
+            continue
+        for context, weight in _feedback_context_map(dimension).items():
+            weights[context] = max(weights.get(context, 0), weight)
+    return dict(sorted(weights.items()))
+
+
+def _feedback_context_map(dimension: str) -> dict[str, int]:
+    return {
+        "test_gate_evidence": {"tests": 120},
+        "operational_readiness": {"ci_config": 100, "config": 70},
+        "safety_license_gate": {"security": 110},
+        "product_operability": {"frontend": 90, "docs": 60},
+        "feedback_loop_closure": {"runtime": 80, "tests": 60},
+        "comparative_analysis_depth": {"runtime": 70, "security": 50},
+        "architecture_depth": {"runtime": 70, "ci_config": 50},
+    }.get(dimension, {})
+
+
 def _comment_rank_score(comment: dict[str, Any]) -> int:
     severity_weight = {"high": 400, "medium": 300, "low": 200, "info": 100}.get(str(comment.get("severity") or ""), 0)
     context_weight = {
@@ -422,13 +459,14 @@ def _comment_rank_score(comment: dict[str, Any]) -> int:
     }.get(str(comment.get("review_context") or "other"), 10)
     capability_weight = {"static_analysis": 45, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
     absorbed_context_weight = int(comment.get("absorbed_context_rank_weight") or 0)
+    feedback_weight = int(comment.get("feedback_rank_weight") or 0)
     action_weight = 20 if comment.get("employee_actionable") else 0
     publish_weight = 5 if comment.get("publishable") else -20
-    return severity_weight + context_weight + capability_weight + absorbed_context_weight + action_weight + publish_weight
+    return severity_weight + context_weight + capability_weight + absorbed_context_weight + feedback_weight + action_weight + publish_weight
 
 
 def _rank_reason(comment: dict[str, Any]) -> str:
-    return f"{comment.get('severity')}:{comment.get('review_context')}:{comment.get('capability')}:bias={comment.get('absorbed_context_rank_weight', 0)}"
+    return f"{comment.get('severity')}:{comment.get('review_context')}:{comment.get('capability')}:bias={comment.get('absorbed_context_rank_weight', 0)}:feedback={comment.get('feedback_rank_weight', 0)}"
 
 
 def _risk_counts(comments: list[dict[str, Any]]) -> dict[str, int]:
