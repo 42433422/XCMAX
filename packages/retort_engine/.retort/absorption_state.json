@@ -4,17 +4,19 @@
     "branch_diff_verified": true,
     "employee_execution_verified": true,
     "evidence": [
-      "source=https://github.com/openautocoder/agentless",
-      "absorption_run=20260627194531-f1634167bd",
-      "merge_commit=7909a3e73",
-      "absorbed_focus=review_pipeline,benchmarking,plugin_surface,multi_provider",
+      "source=https://github.com/sunerpy/codegraph-rust",
+      "absorption_run=20260627195002-b40d2378d6",
+      "absorbed_focus=file_grouping,benchmark_eval,safety_policy,workflow_ci,codebase_graph",
+      "behavior_touch=retort_engine/codebase_graph.py",
       "behavior_touch=retort_engine/review_context_bias.py",
+      "behavior_touch=retort_engine/absorbed_capabilities.py",
+      "behavior_test=tests/test_codebase_graph.py",
       "behavior_test=tests/test_review_context_bias.py",
-      "tests=200_passed",
+      "behavior_test=tests/test_absorbed_capabilities.py",
+      "tests=206_passed",
       "ruff=passed",
-      "node_check=passed",
-      "swe_bench_oracle_smoke=ready_1_1",
-      "merge_cross_check=True; merge_commit=7909a3e73",
+      "merge_commit=0b37edb89",
+      "merge_cross_check=True; merge_commit=0b37edb89",
       "pytest_gate_cross_check=True"
     ],
     "external_advantage_reassessed": true,
@@ -22,22 +24,23 @@
     "post_absorption_tests_passed": true,
     "validation": {
       "evidence": [
-        "merge_cross_check=True; merge_commit=7909a3e73",
+        "merge_cross_check=True; merge_commit=0b37edb89",
         "pytest_gate_cross_check=True"
       ],
-      "merge_commit": "7909a3e73",
+      "merge_commit": "0b37edb89",
       "merge_commit_verified": true,
       "pytest_gates_verified": true
     }
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/openautocoder/agentless",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/sunerpy/codegraph-rust",
   "pending_dimensions": [
     "comparative_analysis_depth",
+    "external_ingestion",
     "feedback_loop_closure",
     "operational_readiness",
     "product_operability"
   ],
-  "source": "https://github.com/openautocoder/agentless",
+  "source": "https://github.com/sunerpy/codegraph-rust",
   "status": "closed_loop_verified",
   "tasks": [
     {
@@ -46,7 +49,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/openautocoder/agentless."
+      "why": "Compare implementation patterns from https://github.com/sunerpy/codegraph-rust."
     },
     {
       "dimension": "product_operability",
@@ -54,7 +57,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/openautocoder/agentless."
+      "why": "Extract usable UX improvements from https://github.com/sunerpy/codegraph-rust."
     },
     {
       "dimension": "operational_readiness",
@@ -62,15 +65,15 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/openautocoder/agentless."
+      "why": "Adapt CI and release checks from https://github.com/sunerpy/codegraph-rust."
     },
     {
-      "dimension": "comparative_analysis_depth",
+      "dimension": "external_ingestion",
       "owner_hint": "fhd-core-maintainer",
       "priority": "P1",
-      "task_id": "retort-absorb-review-pipeline",
-      "title": "Adopt deterministic review pipeline stages",
-      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+      "task_id": "retort-absorb-file-grouping",
+      "title": "Add external file grouping before deep comparison",
+      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
     },
     {
       "dimension": "feedback_loop_closure",
@@ -87,6 +90,14 @@
       "task_id": "retort-absorb-plugin-surface",
       "title": "Expose Retort absorption through plugin friendly commands",
       "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P1",
+      "task_id": "retort-absorb-planet-visual",
+      "title": "Absorb better blackhole planet visual system",
+      "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
     }
   ]
 }

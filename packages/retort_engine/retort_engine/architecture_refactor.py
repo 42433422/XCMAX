@@ -42,9 +42,14 @@ CORE_COMPONENT_CONTRACTS = {
         "contract": "Prompt construction and provider IO stay separable and testable.",
     },
     "context_localization": {
-        "modules": ["retort_engine/review_context_bias.py", "retort_engine/pr_review.py"],
-        "tests": ["tests/test_review_context_bias.py", "tests/test_pr_review.py"],
-        "contract": "Context grouping feeds PR review without leaking broad, irrelevant files.",
+        "modules": ["retort_engine/review_context_bias.py", "retort_engine/pr_review.py", "retort_engine/codebase_graph.py"],
+        "tests": ["tests/test_review_context_bias.py", "tests/test_pr_review.py", "tests/test_codebase_graph.py"],
+        "contract": "Context grouping and deterministic code graphing feed review without leaking broad, irrelevant files.",
+    },
+    "codebase_graph": {
+        "modules": ["retort_engine/codebase_graph.py", "retort_engine/service.py", "retort_engine/cli.py"],
+        "tests": ["tests/test_codebase_graph.py", "tests/test_contracts_feedback.py"],
+        "contract": "Architecture and absorption targeting use deterministic file, symbol, import, and call graph evidence.",
     },
     "automation_surface": {
         "modules": ["retort_engine/cli.py", "retort_engine/ui_server.py", "retort_engine/service.py"],

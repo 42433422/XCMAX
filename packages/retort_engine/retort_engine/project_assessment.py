@@ -135,6 +135,7 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
         "task_dispatch_plan": "task-dispatch-plan" in text and "build_task_dispatch_plan" in text,
         "review_quality_benchmark": "quality-benchmark-report" in text and "build_review_quality_benchmark" in text,
+        "codebase_graph": "codebase-graph-report" in text and "build_codebase_graph" in text and "codebase_graph_result" in text,
         "employee_scheduler_stress": "employee-scheduler-stress" in text and "run_employee_scheduler_stress" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
     }

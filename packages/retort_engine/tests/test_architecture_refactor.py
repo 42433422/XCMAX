@@ -67,6 +67,30 @@ def test_core_refactor_plan_blocks_missing_core_tests(tmp_path: Path) -> None:
     assert plan["tasks"][0]["ready_for_core_refactor"] is False
 
 
+def test_core_refactor_plan_maps_codebase_graph_component(tmp_path: Path) -> None:
+    for rel in [
+        "retort_engine/codebase_graph.py",
+        "retort_engine/service.py",
+        "retort_engine/cli.py",
+        "tests/test_codebase_graph.py",
+        "tests/test_contracts_feedback.py",
+    ]:
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("def test_ok():\n    assert True\n" if rel.startswith("tests/") else "# ok\n", encoding="utf-8")
+    memory = {
+        "summary": {"source_count": 3, "ready_component_count": 1},
+        "deep_architecture_tasks": [{"task_id": "retort-architecture-codebase-graph", "priority": "P0"}],
+        "component_index": {"codebase_graph": {"source_count": 3, "gate_pass_rate": 1.0, "architecture_depth_score": 90, "ready_for_deep_refactor": True}},
+    }
+
+    plan = build_core_refactor_plan(memory, project_root=tmp_path)
+
+    assert plan["gate"]["passed"] is True
+    assert plan["tasks"][0]["component"] == "codebase_graph"
+    assert "retort_engine/codebase_graph.py" in plan["tasks"][0]["modules"]
+
+
 def test_write_core_refactor_plan_persists_gate(tmp_path: Path) -> None:
     path = tmp_path / "docs" / "retort_core_refactor_plan.json"
     plan = {"summary": {"task_count": 1}, "gate": {"passed": True}, "tasks": [{"component": "review_pipeline"}]}
