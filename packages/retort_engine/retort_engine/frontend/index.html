@@ -26,7 +26,21 @@
         <button id="saturationBtn">饱和判定</button>
       </section>
       <section class="stage"><canvas id="blackholeCanvas" data-visual="blackhole-accretion-field"></canvas><div class="readout"><span id="statusText">待命</span><strong id="coreScore">--</strong><small>核心分</small><div id="deepProgress" class="deep-progress idle" aria-live="polite"><div class="progress-head"><b id="progressTitle">等待深评</b><strong id="progressPercent">0%</strong></div><div class="progress-track"><i id="progressFill"></i></div><div id="progressSteps" class="progress-steps"><span data-step="evidence">证据</span><span data-step="dispatch">派发</span><span data-step="reasoning">推理</span><span data-step="scoring">评分</span><span data-step="record">记录</span></div><div class="progress-meta"><span id="progressElapsed">耗时 0s</span><span id="progressEta">点击深评后开始</span></div></div></div><div id="eventList" class="timeline"></div></section>
-      <section class="rail"><article><h2>主项目评分</h2><div id="scoreGrid"></div></article><article><h2>能力审计</h2><div id="capabilityState" class="evidence">未运行</div></article><article><h2>外部项目评分</h2><div id="externalScoreGrid"><div class="empty">未运行</div></div></article><article><h2>真实吸收</h2><div id="executionState" class="evidence">未运行</div></article><article><h2>吸收证据</h2><div id="evidenceState" class="evidence">未运行</div></article><article><h2>排比 LLM</h2><div id="llmState" class="evidence">未请求</div></article><article><h2>分支</h2><div id="branchState" class="evidence">未运行</div></article><article><h2>吸收任务</h2><div id="taskList"></div></article></section>
+      <section class="rail">
+        <article class="devour-card"><h2>吞噬会话</h2><div id="sessionState" class="devour-session">等待吸收</div></article>
+        <article><h2>吞噬前双深评</h2><div id="dualReviewPanel" class="dual-review"><div class="empty">未运行</div></div></article>
+        <article><h2>专项对比</h2><div id="comparisonPanel" class="evidence">未运行</div></article>
+        <article><h2>提升证明</h2><div id="proofPanel" class="evidence">未运行</div></article>
+        <article><h2>最终深评</h2><div id="finalReviewPanel" class="evidence">未运行</div></article>
+        <article><h2>主项目评分</h2><div id="scoreGrid"></div></article>
+        <article><h2>能力审计</h2><div id="capabilityState" class="evidence">未运行</div></article>
+        <article><h2>外部项目评分</h2><div id="externalScoreGrid"><div class="empty">未运行</div></div></article>
+        <article><h2>真实吸收</h2><div id="executionState" class="evidence">未运行</div></article>
+        <article><h2>吸收证据</h2><div id="evidenceState" class="evidence">未运行</div></article>
+        <article><h2>排比 LLM</h2><div id="llmState" class="evidence">未请求</div></article>
+        <article><h2>分支</h2><div id="branchState" class="evidence">未运行</div></article>
+        <article><h2>吸收任务</h2><div id="taskList"></div></article>
+      </section>
     </main>
     <script src="/app.js"></script>
   </body>
