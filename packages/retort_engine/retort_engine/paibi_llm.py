@@ -152,22 +152,22 @@ report_only=true
   "level": "prototype|usable|product",
   "score_suggestion": 0-100,
   "scores": [
-    {{"dimension": "product_level", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "architecture_depth", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "test_gate_evidence", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "api_contract_quality", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "operational_readiness", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "evolution_readiness", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "external_ingestion", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "comparative_analysis_depth", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "absorption_tasking", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "employee_execution_integration", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "feedback_loop_closure", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "product_operability", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "safety_license_gate", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "branch_absorption_workflow", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "retort_product_maturity", "value": 0-100, "reason": "...", "evidence": ["..."]}},
-    {{"dimension": "calibrated_overall", "value": 0-100, "reason": "...", "evidence": ["..."]}}
+    {{"dimension": "product_level", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "architecture_depth", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "test_gate_evidence", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "api_contract_quality", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "operational_readiness", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "evolution_readiness", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "external_ingestion", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "comparative_analysis_depth", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "absorption_tasking", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "employee_execution_integration", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "feedback_loop_closure", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "product_operability", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "safety_license_gate", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "branch_absorption_workflow", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "retort_product_maturity", "value": 0-100, "reason": "≤18字"}},
+    {{"dimension": "calibrated_overall", "value": 0-100, "reason": "≤18字"}}
   ],
   "do_not_raise_score_without_proof": true,
   "architecture_gaps": ["..."],
@@ -181,6 +181,7 @@ report_only=true
 要求：
 - 这是只读评分任务，不要修改任何文件。
 - 直接在最终输出里打印严格 JSON，不要 markdown 代码块。
+- 输出必须少于 3200 字符，不能输出逐条长证据。
 - 不允许因为已有按钮、关键词或 UI 就给 90+。
 - 没有 branch diff、员工执行结果、post-absorption tests、merge、外部优势复评五类证据时，总分建议不得超过 82。
 - 重点评估深度，不评估广度。
@@ -390,6 +391,8 @@ def _extract_last_json_object(text: str) -> dict[str, Any] | None:
         except json.JSONDecodeError:
             continue
         if isinstance(value, dict):
+            if isinstance(value.get("scores"), list) or "score_suggestion" in value:
+                return value
             best = value
     return best
 
