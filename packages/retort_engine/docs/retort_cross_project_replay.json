@@ -2,12 +2,12 @@
   "checks": [
     {
       "name": "at_least_three_external_sources",
-      "observed": 3,
+      "observed": 8,
       "passed": true
     },
     {
       "name": "behavior_code_absorbed",
-      "observed": 3,
+      "observed": 8,
       "passed": true
     },
     {
@@ -28,6 +28,35 @@
       "behavior_test_changed": true,
       "changed_file_count": 5,
       "gates_passed": true,
+      "run_id": "20260627134030-3968ff6d7e",
+      "semantic_gap_count": 0,
+      "signals": [
+        "review_pipeline",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/DevShaid/pr-reviewer-ai"
+    },
+    {
+      "behavior_source_changed": true,
+      "behavior_test_changed": true,
+      "changed_file_count": 5,
+      "gates_passed": true,
+      "run_id": "20260627134000-d6e4f888ff",
+      "semantic_gap_count": 0,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/SnakeEye-sudo/codeflow-ai-reviewer"
+    },
+    {
+      "behavior_source_changed": true,
+      "behavior_test_changed": true,
+      "changed_file_count": 5,
+      "gates_passed": true,
       "run_id": "20260627124029-5df07f797f",
       "semantic_gap_count": 4,
       "signals": [
@@ -43,6 +72,22 @@
       "behavior_test_changed": true,
       "changed_file_count": 5,
       "gates_passed": true,
+      "run_id": "20260627133857-0dc2a6fa81",
+      "semantic_gap_count": 0,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/aryanbrite/openrabbit"
+    },
+    {
+      "behavior_source_changed": true,
+      "behavior_test_changed": true,
+      "changed_file_count": 5,
+      "gates_passed": true,
       "run_id": "20260627123909-2dec2d00a6",
       "semantic_gap_count": 0,
       "signals": [
@@ -51,6 +96,37 @@
         "multi_provider"
       ],
       "source": "https://github.com/freeedcom/ai-codereviewer"
+    },
+    {
+      "behavior_source_changed": true,
+      "behavior_test_changed": true,
+      "changed_file_count": 5,
+      "gates_passed": true,
+      "run_id": "20260627134100-02cbea1e01",
+      "semantic_gap_count": 0,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/hevinbryant/ai-pr-reviewer"
+    },
+    {
+      "behavior_source_changed": true,
+      "behavior_test_changed": true,
+      "changed_file_count": 5,
+      "gates_passed": true,
+      "run_id": "20260627133929-a549578d78",
+      "semantic_gap_count": 5,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/misospace/pr-reviewer-action"
     },
     {
       "behavior_source_changed": true,
@@ -76,9 +152,9 @@
   ],
   "status": "ready",
   "summary": {
-    "behavior_source_project_count": 3,
+    "behavior_source_project_count": 8,
     "distinct_signal_count": 5,
-    "external_project_count": 3,
+    "external_project_count": 8,
     "publish_dry_run_comment_count": 11,
     "real_pr_comment_count": 11
   }
