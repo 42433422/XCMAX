@@ -54,7 +54,7 @@ def blackhole_ui_structure(project_path: Path) -> dict[str, Any]:
         "required_ids_present": sorted(required_ids & parser.ids),
         "missing_ids": sorted(required_ids - parser.ids),
         "canvas_visual": parser.blackhole_canvas_data,
-        "has_app_script": "/app.js" in parser.scripts,
+        "has_app_script": any(script.split("?", 1)[0] == "/app.js" for script in parser.scripts),
         "has_canvas_context": 'getContext("2d")' in app_text or "getContext('2d')" in app_text,
         "required_functions_present": sorted(name for name in required_functions if f"function {name}" in app_text),
         "missing_functions": sorted(name for name in required_functions if f"function {name}" not in app_text),
