@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.core import RetortService as LLMRetortService
@@ -99,6 +100,13 @@ class RetortService:
             tasks_per_round=int(payload.get("tasks_per_round") or 3),
         )
 
+    def codebase_graph_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_codebase_graph(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            include_tests=bool(payload.get("include_tests")),
+            max_files=int(payload.get("max_files") or 400),
+        )
+
 
 def create_app() -> Any:
     service = RetortService()
@@ -167,5 +175,9 @@ def create_app() -> Any:
     @app.post("/employee-scheduler-stress")
     def employee_scheduler_stress_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.employee_scheduler_stress(payload)
+
+    @app.post("/codebase-graph-report")
+    def codebase_graph_report_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.codebase_graph_report(payload)
 
     return app

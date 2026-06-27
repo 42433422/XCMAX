@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from retort_engine.core import RetortService as CoreRetortService
 from retort_engine.employee_queue import RetortEmployeeQueue
 from retort_engine.feedback import feedback_ingest
 from retort_engine.history import RetortHistoryStore
@@ -78,3 +79,17 @@ def test_product_service_and_blackhole_ui_surface(tmp_path: Path) -> None:
     ui_root = RetortUIServer().static_root
     assert "blackhole" in (ui_root / "app.js").read_text(encoding="utf-8").lower()
     assert "ownProjectFolder" in (ui_root / "index.html").read_text(encoding="utf-8")
+
+
+def test_service_exposes_codebase_graph_report(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    package = project / "retort_engine"
+    package.mkdir(parents=True)
+    write_file(package / "flow.py", "def target():\n    return 1\n\ndef caller():\n    return target()\n")
+
+    report = RetortService().codebase_graph_report({"project": str(project)})
+
+    assert report["status"] == "ready"
+    assert report["summary"]["call_edge_count"] == 1
+    assert any(edge["kind"] == "calls" and edge["to"].endswith(":target") for edge in report["edges"])
+    assert CoreRetortService().codebase_graph_report({"project": str(project)})["status"] == "ready"
