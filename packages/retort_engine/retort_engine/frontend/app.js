@@ -384,21 +384,38 @@ function hashText(text) {
   return hash >>> 0;
 }
 
+function syncAbsorbedProjects(count, sources, latestSource = "") {
+  const safeCount = Math.max(0, Math.floor(Number(count) || 0));
+  const sourceList = Array.isArray(sources) ? sources.map(String).filter(Boolean) : [];
+  const filledSources = sourceList.slice(0, Math.max(sourceList.length, safeCount));
+  while (filledSources.length < safeCount) filledSources.push(`absorbed-project-${filledSources.length + 1}`);
+  state.absorbedProjects = {
+    count: safeCount,
+    sources: filledSources,
+    latestSource: latestSource || state.absorbedProjects.latestSource || filledSources[filledSources.length - 1] || "",
+    updatedAt: performance.now()
+  };
+  canvas.dataset.absorbedProjectCount = String(safeCount);
+  canvas.dataset.absorbedProjectSources = filledSources.slice(0, 24).join("|");
+}
+
 function syncAbsorbedProjectsFromAssessment(assessment, latestSource = "") {
   const audit = assessment?.metadata?.capability_absorption_audit;
   if (!audit) return;
   const sources = Array.isArray(audit.external_projects) ? audit.external_projects.map(String).filter(Boolean) : [];
   const count = Math.max(0, Number(audit.external_project_count || sources.length) || 0);
-  const filledSources = sources.slice(0, Math.max(sources.length, count));
-  while (filledSources.length < count) filledSources.push(`absorbed-project-${filledSources.length + 1}`);
-  state.absorbedProjects = {
-    count,
-    sources: filledSources,
-    latestSource: latestSource || state.absorbedProjects.latestSource || filledSources[filledSources.length - 1] || "",
-    updatedAt: performance.now()
-  };
-  canvas.dataset.absorbedProjectCount = String(count);
-  canvas.dataset.absorbedProjectSources = filledSources.slice(0, 24).join("|");
+  syncAbsorbedProjects(count, sources, latestSource);
+}
+
+async function refreshAbsorptionLights() {
+  const project = $("ownProjectFolder").value.trim();
+  if (!project) return;
+  try {
+    const r = await api("/api/absorption-lights", {project});
+    syncAbsorbedProjects(r.count, r.sources);
+  } catch (_) {
+    return;
+  }
 }
 
 function beginAbsorption(payload) {
@@ -1470,6 +1487,7 @@ async function loadDefaultProject() {
     const r = await fetch("/api/default-project");
     const j = await r.json();
     if (j.project) $("ownProjectFolder").value = j.project;
+    await refreshAbsorptionLights();
   } catch (_) {
     return;
   }
