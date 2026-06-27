@@ -23,26 +23,35 @@ const progressPlan = [
   {key: "record", title: "保留记录", detail: "只保存完成的深评结果"}
 ];
 const ABSORBED_PLANET_VISUAL_PROFILE = {
-  source: "",
-  enabled: false,
-  visual_family: "retort-default",
-  palette: {
-    ocean: "#0e2f4d",
-    shallow: "#37c9c7",
-    land: "#d6b36a",
-    highland: "#fff2bd",
-    cloud: "#f7fbff",
-    rim: "#8ff3ff",
-    ring: "#f3c772",
-    night: "#02050b"
+  "absorbed_signals": [
+    "atmosphere_shader",
+    "planet_frontend",
+    "procedural_surface",
+    "webgl_scene"
+  ],
+  "enabled": true,
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/dgreenheck/threejs-procedural-planets",
+  "layers": {
+    "atmospheric_rim": true,
+    "orbital_rings": true,
+    "procedural_landmasses": true,
+    "terminator_shadow": true,
+    "translucent_clouds": true
   },
-  layers: {
-    atmospheric_rim: true,
-    procedural_landmasses: true,
-    translucent_clouds: true,
-    orbital_rings: true,
-    terminator_shadow: true
-  }
+  "license_boundary": "visual principles only; no external source or texture copied",
+  "palette": {
+    "cloud": "#f7fbff",
+    "highland": "#fff0bd",
+    "land": "#cda96b",
+    "night": "#02050d",
+    "ocean": "#102c5f",
+    "rim": "#95f4ff",
+    "ring": "#f4ca78",
+    "shallow": "#37d6cf"
+  },
+  "run_id": "20260627185357-29365e9367",
+  "source": "https://github.com/dgreenheck/threejs-procedural-planets",
+  "visual_family": "absorbed-procedural-planet"
 };
 
 const dimensionText = {

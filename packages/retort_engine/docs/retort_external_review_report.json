@@ -1,111 +1,46 @@
 {
   "absorbed_signals": [
-    "review_pipeline",
-    "file_grouping",
-    "benchmarking",
-    "plugin_surface",
-    "multi_provider"
+    "multi_provider",
+    "planet_frontend",
+    "atmosphere_shader",
+    "procedural_surface",
+    "webgl_scene"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/dgreenheck/threejs-procedural-planets",
   "external_snapshot": {
-    "file_count": 284,
-    "git_revision": "bd09b6cf89c6d6f3d16b159fa7603fa0e7768cf2",
+    "file_count": 21,
+    "git_revision": "23457d4f8e6bedf22aa266e12c92f850822ff3a4",
     "suffix_counts": {
       ".css": 1,
-      ".github_action": 1,
-      ".github_action_dockerhub": 1,
-      ".html": 3,
-      ".ico": 1,
-      ".in": 1,
-      ".json": 3,
-      ".lambda": 1,
-      ".md": 47,
-      ".png": 2,
-      ".py": 168,
-      ".sh": 1,
-      ".svg": 2,
-      ".toml": 23,
-      ".txt": 2,
-      ".yaml": 9,
-      ".yml": 13,
-      "<none>": 5
+      ".html": 1,
+      ".js": 4,
+      ".json": 2,
+      ".md": 2,
+      ".png": 7,
+      ".svg": 1,
+      ".yml": 1,
+      "<none>": 2
     }
   },
-  "generated_at": "2026-06-27T18:36:21Z",
+  "generated_at": "2026-06-27T18:53:57Z",
   "license_review": {
-    "detected_license": "Apache License",
-    "message": "Allowed license detected: Apache License",
+    "detected_license": "MIT License",
+    "message": "Allowed license detected: MIT License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/dgreenheck/threejs-procedural-planets --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 2,
-      "minimum_expected_behavior_tests": 7,
-      "prioritized_component_count": 2,
-      "task_dimension_count": 5
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 3,
+      "prioritized_component_count": 0,
+      "task_dimension_count": 3
     },
-    "component_gaps": [
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 3992,
-        "own_files": 12,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "AGENTS.md",
-          "SECURITY.md"
-        ]
-      },
-      {
-        "component": "diff_hunk_review",
-        "external_files": 12,
-        "file_gap": 2,
-        "marker_gap": 14,
-        "own_files": 10,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "pr_agent/settings/pr_custom_labels.toml",
-          "pr_agent/settings/pr_information_from_user_prompts.toml",
-          "pr_agent/settings/pr_reviewer_prompts.toml",
-          "pr_agent/settings/pr_line_questions_prompts.toml"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
-      "deferred_breadth_components": [
-        {
-          "component": "provider_surface",
-          "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
-          "reason": "early_phase_retort_self_deepening_only",
-          "source_files": [
-            "CHANGELOG.md",
-            "README.md",
-            "RELEASE_NOTES.md",
-            "AGENTS.md",
-            "SECURITY.md"
-          ],
-          "status": "closed_until_similarity_saturation"
-        },
-        {
-          "component": "plugin_surface",
-          "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
-          "reason": "early_phase_retort_self_deepening_only",
-          "source_files": [
-            "README.md",
-            "RELEASE_NOTES.md",
-            "AGENTS.md",
-            "SECURITY.md",
-            "docker/mosaico/README.md"
-          ],
-          "status": "closed_until_similarity_saturation"
-        }
-      ],
+      "deferred_breadth_components": [],
       "employee_tasks": [
         {
           "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
@@ -120,33 +55,6 @@
           "priority": "P0",
           "task_id": "retort-depth-review-pipeline",
           "title": "Deepen review_pipeline"
-        },
-        {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
-        },
-        {
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "dimension": "feedback_loop_closure",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-benchmark-eval",
-          "title": "Deepen benchmark_eval"
         },
         {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
@@ -173,20 +81,6 @@
           "priority": "P1",
           "task_id": "retort-depth-workflow-ci",
           "title": "Deepen workflow_ci"
-        },
-        {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -216,87 +110,12 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 1282,
-          "own_marker_hits": 2240,
+          "external_marker_hits": 2,
+          "own_marker_hits": 2250,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "action.yaml",
-            "pyproject.toml",
-            "README.md",
-            "CONTRIBUTING.md"
-          ]
-        },
-        {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 5,
-          "own_marker_hits": 79,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "pr_agent/settings/pr_reviewer_prompts.toml",
-            "pr_agent/git_providers/gitea_provider.py",
-            "pr_agent/git_providers/local_git_provider.py",
-            "pr_agent/git_providers/gerrit_provider.py"
-          ]
-        },
-        {
-          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "component": "benchmark_eval",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-            "dimension": "feedback_loop_closure",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "precision or false-positive benchmark counters"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-benchmark-eval",
-            "title": "Deepen benchmark_eval"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "external_marker_hits": 35,
-          "own_marker_hits": 700,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "CHANGELOG.md",
-            "pr_agent/settings/pr_evaluate_prompt_response.toml",
-            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
-            "pr_agent/tools/pr_help_message.py",
-            "pr_agent/algo/token_handler.py"
+            "package.json"
           ]
         },
         {
@@ -322,16 +141,12 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 267,
-          "own_marker_hits": 426,
+          "external_marker_hits": 2,
+          "own_marker_hits": 435,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "pyproject.toml",
-            "README.md",
-            "AGENTS.md",
-            "SECURITY.md"
+            ".github/workflows/static.yml"
           ]
         },
         {
@@ -357,53 +172,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 3081,
-          "own_marker_hits": 3444,
+          "external_marker_hits": 27,
+          "own_marker_hits": 3462,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "CHANGELOG.md",
-            "pyproject.toml",
-            "README.md",
-            "setup.py"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 14,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 44,
-          "own_marker_hits": 30,
-          "priority": "P0",
-          "similarity_score": 95,
-          "source_files": [
-            "CHANGELOG.md",
-            "pr_agent/settings/pr_custom_labels.toml",
-            "pr_agent/settings/pr_information_from_user_prompts.toml",
-            "pr_agent/settings/pr_reviewer_prompts.toml",
-            "pr_agent/settings/pr_line_questions_prompts.toml"
+            "package-lock.json",
+            "package.json",
+            "scripts/ui.js",
+            "scripts/main.js",
+            ".github/workflows/static.yml"
           ]
         }
       ],
@@ -411,170 +189,39 @@
       "marketplace_candidates_enabled": false,
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
-        "deferred_breadth_component_count": 2,
-        "focused_component_count": 6,
+        "deferred_breadth_component_count": 0,
+        "focused_component_count": 3,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
         "minimum_focused_component_count": 3,
         "passed": true,
-        "rejected_breadth_component_count": 2
+        "rejected_breadth_component_count": 0
       },
-      "rejected_breadth_components": [
-        {
-          "component": "provider_surface",
-          "external_marker_hits": 4331,
-          "reason": "breadth_only_for_current_phase",
-          "source_files": [
-            "CHANGELOG.md",
-            "README.md",
-            "RELEASE_NOTES.md",
-            "AGENTS.md",
-            "SECURITY.md"
-          ]
-        },
-        {
-          "component": "plugin_surface",
-          "external_marker_hits": 296,
-          "reason": "breadth_only_for_current_phase",
-          "source_files": [
-            "README.md",
-            "RELEASE_NOTES.md",
-            "AGENTS.md",
-            "SECURITY.md",
-            "docker/mosaico/README.md"
-          ]
-        }
-      ]
+      "rejected_breadth_components": []
     },
     "external_file_groups": {
-      "benchmark_eval": {
-        "files": [
-          "CHANGELOG.md",
-          "pr_agent/settings/pr_evaluate_prompt_response.toml",
-          "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
-          "pr_agent/tools/pr_help_message.py",
-          "pr_agent/algo/token_handler.py",
-          "pr_agent/servers/bitbucket_server_webhook.py",
-          "tests/unittest/test_pr_update_changelog.py",
-          "tests/unittest/test_litellm_imds.py",
-          "tests/unittest/test_fetching_sub_issues.py",
-          "docs/mkdocs.yml",
-          "docs/docs/tools/similar_issues.md",
-          "docs/docs/faq/index.md"
-        ],
-        "marker_hits": 35
-      },
-      "diff_hunk_review": {
-        "files": [
-          "CHANGELOG.md",
-          "pr_agent/settings/pr_custom_labels.toml",
-          "pr_agent/settings/pr_information_from_user_prompts.toml",
-          "pr_agent/settings/pr_reviewer_prompts.toml",
-          "pr_agent/settings/pr_line_questions_prompts.toml",
-          "pr_agent/settings/pr_description_prompts.toml",
-          "pr_agent/settings/pr_questions_prompts.toml",
-          "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
-          "pr_agent/mosaico/diff_provider.py",
-          "pr_agent/git_providers/codecommit_provider.py",
-          "pr_agent/git_providers/github_provider.py",
-          "pr_agent/git_providers/gitea_provider.py"
-        ],
-        "marker_hits": 44
-      },
-      "file_grouping": {
-        "files": [
-          "pr_agent/settings/pr_reviewer_prompts.toml",
-          "pr_agent/git_providers/gitea_provider.py",
-          "pr_agent/git_providers/local_git_provider.py",
-          "pr_agent/git_providers/gerrit_provider.py"
-        ],
-        "marker_hits": 5
-      },
-      "plugin_surface": {
-        "files": [
-          "README.md",
-          "RELEASE_NOTES.md",
-          "AGENTS.md",
-          "SECURITY.md",
-          "docker/mosaico/README.md",
-          "pr_agent/config_loader.py",
-          "pr_agent/settings/configuration.toml",
-          "pr_agent/settings/language_extensions.toml",
-          "pr_agent/mosaico/dispatch.py",
-          "pr_agent/mosaico/observability.py",
-          "pr_agent/mosaico/card.py",
-          "pr_agent/tools/pr_code_suggestions.py"
-        ],
-        "marker_hits": 296
-      },
-      "provider_surface": {
-        "files": [
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "AGENTS.md",
-          "SECURITY.md",
-          "docker/mosaico/docker-compose.pr-agent.yml",
-          "docker/mosaico/README.md",
-          "pr_agent/config_loader.py",
-          "pr_agent/cli_pip.py",
-          "pr_agent/secret_providers/aws_secrets_manager_provider.py",
-          "pr_agent/secret_providers/google_cloud_storage_secret_provider.py",
-          "pr_agent/secret_providers/secret_provider.py"
-        ],
-        "marker_hits": 4331
-      },
       "review_pipeline": {
         "files": [
-          "CODE_OF_CONDUCT.md",
-          "action.yaml",
-          "pyproject.toml",
-          "README.md",
-          "CONTRIBUTING.md",
-          "RELEASE_NOTES.md",
-          ".pr_agent.toml",
-          "AGENTS.md",
-          "SECURITY.md",
-          "docker/mosaico/pr-agent-solution-agent.json",
-          "docker/mosaico/README.md",
-          "pr_agent/config_loader.py"
+          "package.json"
         ],
-        "marker_hits": 1282
+        "marker_hits": 2
       },
       "safety_policy": {
         "files": [
-          "CODE_OF_CONDUCT.md",
-          "pyproject.toml",
-          "README.md",
-          "AGENTS.md",
-          "SECURITY.md",
-          "docker/mosaico/pr-agent-solution-agent.json",
-          "pr_agent/config_loader.py",
-          "pr_agent/custom_merge_loader.py",
-          "pr_agent/settings/configuration.toml",
-          "pr_agent/settings/language_extensions.toml",
-          "pr_agent/settings/pr_reviewer_prompts.toml",
-          "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml"
+          ".github/workflows/static.yml"
         ],
-        "marker_hits": 267
+        "marker_hits": 2
       },
       "workflow_ci": {
         "files": [
-          "CODE_OF_CONDUCT.md",
-          "CHANGELOG.md",
-          "pyproject.toml",
-          "README.md",
-          "setup.py",
-          "CONTRIBUTING.md",
-          "RELEASE_NOTES.md",
-          "AGENTS.md",
-          "pr_compliance_checklist.yaml",
-          "SECURITY.md",
-          "docker/mosaico/docker-compose.pr-agent.yml",
-          "docker/mosaico/pr-agent-solution-agent.json"
+          "package-lock.json",
+          "package.json",
+          "scripts/ui.js",
+          "scripts/main.js",
+          ".github/workflows/static.yml"
         ],
-        "marker_hits": 3081
+        "marker_hits": 27
       }
     },
     "own_file_groups": {
@@ -593,7 +240,7 @@
           "retort_engine/architecture_memory.py",
           "retort_engine/review_context_bias.py"
         ],
-        "marker_hits": 700
+        "marker_hits": 724
       },
       "diff_hunk_review": {
         "files": [
@@ -625,7 +272,7 @@
           "tests/test_retort_engine.py",
           "tests/test_external_sources.py"
         ],
-        "marker_hits": 79
+        "marker_hits": 80
       },
       "plugin_surface": {
         "files": [
@@ -642,7 +289,7 @@
           "retort_engine/external_sources.py",
           "retort_engine/devour_session.py"
         ],
-        "marker_hits": 576
+        "marker_hits": 586
       },
       "provider_surface": {
         "files": [
@@ -659,7 +306,7 @@
           "retort_engine/project_assessment.py",
           "retort_engine/core.py"
         ],
-        "marker_hits": 339
+        "marker_hits": 427
       },
       "review_pipeline": {
         "files": [
@@ -676,7 +323,7 @@
           "retort_engine/complex_pr_replay.py",
           "retort_engine/employee_scheduler_stress.py"
         ],
-        "marker_hits": 2240
+        "marker_hits": 2250
       },
       "safety_policy": {
         "files": [
@@ -693,7 +340,7 @@
           "retort_engine/project_assessment.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 426
+        "marker_hits": 435
       },
       "workflow_ci": {
         "files": [
@@ -710,7 +357,7 @@
           "retort_engine/pr_publish.py",
           "retort_engine/llm_absorption_evidence.py"
         ],
-        "marker_hits": 3444
+        "marker_hits": 3462
       }
     },
     "pipeline_stages": [
@@ -722,107 +369,62 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "AGENTS.md",
-          "SECURITY.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
-        "component": "diff_hunk_review",
-        "priority": "P1",
-        "source_files": [
-          "CHANGELOG.md",
-          "pr_agent/settings/pr_custom_labels.toml",
-          "pr_agent/settings/pr_information_from_user_prompts.toml",
-          "pr_agent/settings/pr_reviewer_prompts.toml",
-          "pr_agent/settings/pr_line_questions_prompts.toml"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260627183621-6e1352f61e",
+  "run_id": "20260627185357-29365e9367",
   "semantic_review": {
     "external": {
-      "classes": 518,
+      "classes": 6,
       "cli_markers": 0,
-      "functions": 2279,
-      "source_files": 267,
-      "test_markers": 1039,
-      "workflow_markers": 1304
+      "functions": 3,
+      "source_files": 11,
+      "test_markers": 0,
+      "workflow_markers": 5
     },
-    "gaps": [
-      {
-        "external_advantage": 468,
-        "metric": "classes"
-      },
-      {
-        "external_advantage": 1382,
-        "metric": "functions"
-      },
-      {
-        "external_advantage": 158,
-        "metric": "source_files"
-      },
-      {
-        "external_advantage": 715,
-        "metric": "test_markers"
-      }
-    ],
+    "gaps": [],
     "own": {
       "classes": 50,
       "cli_markers": 29,
-      "functions": 897,
-      "source_files": 109,
-      "test_markers": 324,
-      "workflow_markers": 2969
+      "functions": 928,
+      "source_files": 110,
+      "test_markers": 335,
+      "workflow_markers": 2986
     }
   },
   "signal_evidence": {
-    "benchmarking": [
-      "CHANGELOG.md",
-      "pr_agent/settings/pr_evaluate_prompt_response.toml",
-      "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
-      "pr_agent/tools/pr_help_message.py",
-      "pr_agent/algo/token_handler.py"
-    ],
-    "file_grouping": [
-      "pr_agent/settings/pr_reviewer_prompts.toml",
-      "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
-      "pr_agent/git_providers/local_git_provider.py",
-      "pr_agent/git_providers/gerrit_provider.py"
+    "atmosphere_shader": [
+      "index.html",
+      "TODO.md",
+      "README.md",
+      "scripts/ui.js",
+      "scripts/main.js"
     ],
     "multi_provider": [
-      "CHANGELOG.md",
-      "README.md",
-      "RELEASE_NOTES.md",
-      "AGENTS.md",
-      "SECURITY.md"
+      "index.html"
     ],
-    "plugin_surface": [
-      "pyproject.toml",
+    "planet_frontend": [
+      "index.html",
+      "vite.config.js",
       "README.md",
-      "RELEASE_NOTES.md",
-      "AGENTS.md",
-      "SECURITY.md"
+      "package-lock.json",
+      "package.json"
     ],
-    "review_pipeline": [
-      "pyproject.toml",
+    "procedural_surface": [
+      "index.html",
+      "TODO.md",
       "README.md",
-      ".pr_agent.toml",
-      "AGENTS.md",
-      "docker/mosaico/pr-agent-solution-agent.json"
+      "scripts/ui.js",
+      "scripts/main.js"
+    ],
+    "webgl_scene": [
+      "index.html",
+      "vite.config.js",
+      "README.md",
+      "package-lock.json",
+      "package.json"
     ]
   },
-  "source": "https://github.com/qodo-ai/pr-agent",
+  "source": "https://github.com/dgreenheck/threejs-procedural-planets",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -830,7 +432,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/qodo-ai/pr-agent."
+      "why": "Compare implementation patterns from https://github.com/dgreenheck/threejs-procedural-planets."
     },
     {
       "dimension": "product_operability",
@@ -838,7 +440,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/qodo-ai/pr-agent."
+      "why": "Extract usable UX improvements from https://github.com/dgreenheck/threejs-procedural-planets."
     },
     {
       "dimension": "operational_readiness",
@@ -846,39 +448,15 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/qodo-ai/pr-agent."
-    },
-    {
-      "dimension": "comparative_analysis_depth",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-review-pipeline",
-      "title": "Adopt deterministic review pipeline stages",
-      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
-    },
-    {
-      "dimension": "feedback_loop_closure",
-      "owner_hint": "test-qa-runner",
-      "priority": "P2",
-      "task_id": "retort-absorb-benchmarking",
-      "title": "Add absorption quality benchmark counters",
-      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
+      "why": "Adapt CI and release checks from https://github.com/dgreenheck/threejs-procedural-planets."
     },
     {
       "dimension": "product_operability",
       "owner_hint": "market-frontend-dev",
-      "priority": "P2",
-      "task_id": "retort-absorb-plugin-surface",
-      "title": "Expose Retort absorption through plugin friendly commands",
-      "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
+      "priority": "P1",
+      "task_id": "retort-absorb-planet-visual",
+      "title": "Absorb better blackhole planet visual system",
+      "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
     }
   ]
 }
