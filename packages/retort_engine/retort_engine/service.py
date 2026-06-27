@@ -8,6 +8,7 @@ from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
+from retort_engine.evolution_map import build_evolution_map
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.pr_dry_run import review_pr_url
@@ -108,6 +109,12 @@ class RetortService:
             max_files=int(payload.get("max_files") or 400),
         )
 
+    def evolution_map(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_evolution_map(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            max_files=int(payload.get("max_files") or 140),
+        )
+
     def architecture_contract_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         contracts = payload.get("contracts")
         return evaluate_architecture_contracts(
@@ -189,6 +196,10 @@ def create_app() -> Any:
     @app.post("/codebase-graph-report")
     def codebase_graph_report_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.codebase_graph_report(payload)
+
+    @app.post("/evolution-map")
+    def evolution_map_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.evolution_map(payload)
 
     @app.post("/architecture-contract-report")
     def architecture_contract_report_route(payload: dict[str, Any]) -> dict[str, Any]:
