@@ -20,6 +20,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "cross_project_replay_result" in contract_names()
     assert "complex_pr_replay_result" in contract_names()
     assert "task_prioritization_result" in contract_names()
+    assert "task_dispatch_plan_result" in contract_names()
     assert "review_quality_benchmark_result" in contract_names()
     assert "employee_scheduler_stress_result" in contract_names()
     valid = validate_contract("execution_result", {"status": "applied", "changed_files": [], "gates": [], "gates_passed": True, "review_report_path": "report.json", "employee_results_path": "result.json"})
@@ -31,6 +32,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     replay_valid = validate_contract("cross_project_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []})
     complex_replay_valid = validate_contract("complex_pr_replay_result", {"status": "ready", "project": "p", "summary": {}, "pull_requests": [], "evidence": {}})
     task_valid = validate_contract("task_prioritization_result", {"status": "ready", "project": "p", "summary": {}, "priorities": [], "evidence": {}})
+    dispatch_valid = validate_contract("task_dispatch_plan_result", {"status": "ready", "project": "p", "summary": {}, "tasks": [], "evidence": {}})
     benchmark_valid = validate_contract("review_quality_benchmark_result", {"status": "ready", "project": "p", "summary": {}, "samples": [], "evidence": {}})
     stress_valid = validate_contract("employee_scheduler_stress_result", {"status": "ready", "project": "p", "summary": {}, "rounds": [], "evidence": {}})
     invalid = validate_contract("review_report", {"run_id": "run"})
@@ -44,6 +46,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert replay_valid["valid"] is True
     assert complex_replay_valid["valid"] is True
     assert task_valid["valid"] is True
+    assert dispatch_valid["valid"] is True
     assert benchmark_valid["valid"] is True
     assert stress_valid["valid"] is True
     assert invalid["valid"] is False
