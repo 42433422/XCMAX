@@ -302,7 +302,14 @@ class PaibiLLMClient:
 def _project_digest(root: Path) -> str:
     if not root.is_dir():
         return "project folder not found"
-    files = [path for path in root.rglob("*") if path.is_file() and not (set(path.parts) & SKIP_PARTS)]
+    files = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel_parts = set(path.relative_to(root).parts)
+        if rel_parts & SKIP_PARTS:
+            continue
+        files.append(path)
     suffix_counts: dict[str, int] = {}
     snippets: list[str] = []
     for path in files[:400]:

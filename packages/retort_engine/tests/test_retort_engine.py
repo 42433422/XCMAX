@@ -77,6 +77,11 @@ def test_absorption_shock_drops_score_then_self_evolution_recovers(tmp_path: Pat
     before_scores = before.score_map()
 
     assert result["absorption_state"]["active"] is True
+    assert result["external_assessment"]["project"] == str(external.resolve())
+    assert result["external_assessment"]["scores"]
+    assert result["absorption_visual"]["external"]["file_count"] == 1
+    assert result["absorption_visual"]["external"]["score"] is not None
+    assert result["absorption_visual"]["own"]["pre_score"] == before_scores["calibrated_overall"]
     assert after_scores["calibrated_overall"] < before_scores["calibrated_overall"]
     assert after_scores["calibrated_overall"] <= 90
 
@@ -87,6 +92,20 @@ def test_absorption_shock_drops_score_then_self_evolution_recovers(tmp_path: Pat
     assert final_scores["calibrated_overall"] <= 82
     assert evolved["final_assessment"]["metadata"]["absorption_state"]["active"] is True
     assert evolved["final_assessment"]["metadata"]["absorption_state"]["status"] == "awaiting_execution_evidence"
+
+
+def test_external_assessment_counts_files_inside_retort_cache(tmp_path: Path) -> None:
+    own = tmp_path / "own"
+    external = own / ".retort" / "cache" / "github" / "owner" / "repo"
+    own.mkdir()
+    external.mkdir(parents=True)
+    (own / "README.md").write_text("# Own\n", encoding="utf-8")
+    (external / "README.md").write_text("# External\ncode review benchmark plugin\n", encoding="utf-8")
+
+    result = absorb({"own_project": str(own), "external_path": str(external)})
+
+    assert result["external_assessment"]["evidence"][0] == "source_files=1"
+    assert result["absorption_visual"]["external"]["file_count"] == 1
 
 
 def test_record_closed_loop_proof_is_required_for_verified_state(tmp_path: Path) -> None:
