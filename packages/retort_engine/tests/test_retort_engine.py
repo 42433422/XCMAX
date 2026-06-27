@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -165,11 +166,29 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     assert execution["gates_passed"] is True
     assert str(own / "retort_absorbed_patterns.py") in execution["changed_files"]
     assert str(own / "docs" / "retort_absorption_log.md") in execution["changed_files"]
+    assert str(own / "docs" / "retort_external_review_report.json") in execution["changed_files"]
+    assert execution["review_report_path"] == str(own / "docs" / "retort_external_review_report.json")
+    assert Path(execution["employee_results_path"]).is_file()
+    report = json.loads(Path(execution["review_report_path"]).read_text(encoding="utf-8"))
+    assert report["absorbed_signals"]
+    assert report["semantic_review"]["external"]["source_files"] >= 1
     proof = result["absorption_state"]["closed_loop_proof"]["flags"]
     assert proof["branch_diff_verified"] is True
     assert proof["employee_execution_verified"] is True
     assert proof["post_absorption_tests_passed"] is True
     assert proof["merge_verified"] is False
+
+
+def test_assessment_ignores_retort_runtime_dirty_state(tmp_path: Path) -> None:
+    own = tmp_path / "own"
+    init_repo(own)
+    runtime = own / ".retort" / "absorption_state.json"
+    runtime.parent.mkdir()
+    runtime.write_text("{}", encoding="utf-8")
+
+    assessment = assess_project(str(own))
+
+    assert assessment.metadata["git_tracking_state"] == "tracked_clean"
 
 
 def test_external_assessment_counts_files_inside_retort_cache(tmp_path: Path) -> None:
