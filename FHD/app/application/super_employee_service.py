@@ -367,6 +367,10 @@ class SuperEmployeeService:
         # 解析执行授权（deny-by-default：缺/错平台令牌即产品域），随后立即把令牌抹出 context，
         # 确保它绝不流入 dispatch 请求 / messages.jsonl / Para 载荷 / 日志。
         self._grant = CapabilityGrant.resolve(ctx)
+        # 中继工单(force_cli_direct)是操作者自己桌面派给超级员工的开发任务 → 本地全权限,
+        # CLI 不该被产品域限制(否则 Claude 的 --disallowedTools 把 prompt 也吞了、还禁写,
+        # 根本干不了活)。这与"在真实仓库交付"配套。仅影响 CLI 工具面,不动工作区/派工的安全分流。
+        self._relay_cli_trusted = ctx.get("force_cli_direct") is True
         token_attempt = bool(str(ctx.get(CONTEXT_TOKEN_KEY) or "").strip())
         ctx.pop(CONTEXT_TOKEN_KEY, None)
         # 审计留痕（信任决策咽喉点）：工厂派工记 who/which-workspace；带令牌却被降级=可疑越权。
@@ -1404,7 +1408,11 @@ class SuperEmployeeService:
         会话即便被诱导喊 git/shell，那些工具也压根没注册 → 硬失败而非软拒绝。工厂域不动；
         codex 命令构造默认已是 ``--sandbox read-only``，此处不改。
         """
-        if self._grant.is_factory or self._p.cli_binary != "claude" or not cmd:
+        if not cmd:
+            return cmd
+        if self._grant.is_factory or getattr(self, "_relay_cli_trusted", False):
+            return self._elevate_factory_cmd(cmd)
+        if self._p.cli_binary != "claude":
             return cmd
         out: list[str] = []
         i = 0
@@ -1661,7 +1669,7 @@ class SuperEmployeeService:
         工厂域且无代理：返回 None（继承当前环境，与历史行为一致，零回归）。
         """
         proxy = str(os.environ.get("XCMAX_CLI_PROXY") or "").strip()
-        product = not self._grant.is_factory
+        product = not (self._grant.is_factory or getattr(self, "_relay_cli_trusted", False))
         if not proxy and not product:
             return None
         env = os.environ.copy()
