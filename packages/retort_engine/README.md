@@ -35,6 +35,14 @@ PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli appl
   --json
 ```
 
+Run a structured PR diff review from absorbed capabilities:
+
+```bash
+PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli review-diff \
+  --diff-file /path/to/change.diff \
+  --json
+```
+
 Retort does not treat self-questioning as completed absorption. Local code no longer produces scores; all scores must come from a completed PaiBi LLM deep review using the Retort prompt:
 
 ```bash

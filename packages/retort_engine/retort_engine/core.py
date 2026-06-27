@@ -15,6 +15,7 @@ from typing import Any
 
 from retort_engine.contracts import contract_names
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
+from retort_engine.pr_review import review_diff
 
 
 @dataclass(frozen=True)
@@ -331,6 +332,9 @@ class RetortService:
 
     def record_proof(self, payload: dict[str, Any]) -> dict[str, Any]:
         return record_closed_loop_proof(str(payload.get("project") or "."), payload)
+
+    def review_diff(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return review_diff(str(payload.get("diff") or ""), max_comments=int(payload.get("max_comments") or 20))
 
     def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or payload.get("project_path") or ".")
