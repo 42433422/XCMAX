@@ -15,7 +15,8 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
     health = code_health(root)
     static_risks = self_assessment_risk_checks(root)
     latest = latest_absorption_run(root)
-    external_project_count = absorption_external_project_count(root)
+    external_projects = absorption_external_projects(root)
+    external_project_count = len(external_projects)
     if not latest:
         blockers = ["no_real_absorption_run", *static_risks["failed"]]
         if external_project_count < 3:
@@ -31,6 +32,7 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
             "behavior_test_files": [],
             "generated_evidence_files": [],
             "external_project_count": external_project_count,
+            "external_projects": external_projects,
             **health,
             "self_assessment_risk_checks": static_risks,
         }
@@ -93,6 +95,7 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
         "other_files": other_files,
         "generated_only": generated_only,
         "external_project_count": external_project_count,
+        "external_projects": external_projects,
         "employee_execution_mode": employee_mode,
         "employee_worker_review": employee_worker_review,
         "pr_review_runtime": pr_review,
@@ -257,6 +260,10 @@ def employee_result_files(root: Path) -> list[Path]:
 
 
 def absorption_external_project_count(root: Path) -> int:
+    return len(absorption_external_projects(root))
+
+
+def absorption_external_projects(root: Path) -> list[str]:
     sources: set[str] = set()
     run_dir = root / ".retort" / "real_absorption_runs"
     for path in sorted(run_dir.glob("*.json")) if run_dir.is_dir() else []:
@@ -267,7 +274,13 @@ def absorption_external_project_count(root: Path) -> int:
         source = str(payload.get("source") or "").strip()
         if source:
             sources.add(source)
-    return max(len(sources), architecture_memory_external_project_count(root))
+    architecture_sources = architecture_memory_external_projects(root)
+    sources.update(architecture_sources)
+    expected_count = architecture_memory_external_project_count(root)
+    if expected_count > len(sources):
+        for index in range(len(sources) + 1, expected_count + 1):
+            sources.add(f"architecture-memory-source-{index}")
+    return sorted(sources)
 
 
 def architecture_memory_external_project_count(root: Path) -> int:
@@ -276,6 +289,17 @@ def architecture_memory_external_project_count(root: Path) -> int:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return 0
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    source_count = int(summary.get("source_count") or 0)
+    return max(source_count, len(architecture_memory_external_projects(root)))
+
+
+def architecture_memory_external_projects(root: Path) -> list[str]:
+    path = root / "docs" / "retort_architecture_memory.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
     sources: set[str] = set()
     component_index = payload.get("component_index") if isinstance(payload.get("component_index"), dict) else {}
     for component in component_index.values():
@@ -285,9 +309,7 @@ def architecture_memory_external_project_count(root: Path) -> int:
             source_text = str(source).strip()
             if source_text:
                 sources.add(source_text)
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    source_count = int(summary.get("source_count") or 0)
-    return max(source_count, len(sources))
+    return sorted(sources)
 
 
 def project_relative(root: Path, path: Path) -> str:

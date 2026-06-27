@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from retort_engine.capability_audit import capability_absorption_audit, code_health, pr_review_runtime_evidence
+from retort_engine.capability_audit import absorption_external_projects, capability_absorption_audit, code_health, pr_review_runtime_evidence
 
 
 def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Path) -> None:
@@ -37,7 +37,35 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa
     assert audit["behavior_source_files"] == ["retort_engine/feature.py"]
     assert audit["behavior_test_files"] == ["tests/test_feature.py"]
     assert audit["external_project_count"] == 3
+    assert "https://github.com/example/repo" in audit["external_projects"]
+    assert len(audit["external_projects"]) == 3
     assert "employee_execution_not_independent_runtime" not in audit["blockers"]
+
+
+def test_absorption_external_projects_combines_run_sources_and_architecture_memory(tmp_path: Path) -> None:
+    run_dir = tmp_path / ".retort" / "real_absorption_runs"
+    run_dir.mkdir(parents=True)
+    (run_dir / "one.json").write_text(json.dumps({"source": "https://github.com/a/one"}), encoding="utf-8")
+    (run_dir / "duplicate.json").write_text(json.dumps({"source": "https://github.com/a/one"}), encoding="utf-8")
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "retort_architecture_memory.json").write_text(
+        json.dumps(
+            {
+                "summary": {"source_count": 3},
+                "component_index": {
+                    "ui": {"sources": ["https://github.com/b/two"]},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    projects = absorption_external_projects(tmp_path)
+
+    assert "https://github.com/a/one" in projects
+    assert "https://github.com/b/two" in projects
+    assert len(projects) == 3
 
 
 def test_test_code_health_ignores_generated_absorption_files(tmp_path: Path) -> None:

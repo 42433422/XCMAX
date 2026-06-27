@@ -10,6 +10,7 @@ const state = {
   llmSyncTimer: 0,
   llmSyncAttempts: 0,
   absorption: null,
+  absorbedProjects: {count: 0, sources: [], latestSource: "", updatedAt: 0},
   events: [],
   progress: {timer: 0, active: false, started: 0, duration: 0, percent: 0, phase: "evidence", title: "等待深评"}
 };
@@ -365,6 +366,32 @@ function sourceName(source) {
   return text.split("/").filter(Boolean).slice(-2).join("/") || "外部项目";
 }
 
+function hashText(text) {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function syncAbsorbedProjectsFromAssessment(assessment, latestSource = "") {
+  const audit = assessment?.metadata?.capability_absorption_audit;
+  if (!audit) return;
+  const sources = Array.isArray(audit.external_projects) ? audit.external_projects.map(String).filter(Boolean) : [];
+  const count = Math.max(0, Number(audit.external_project_count || sources.length) || 0);
+  const filledSources = sources.slice(0, Math.max(sources.length, count));
+  while (filledSources.length < count) filledSources.push(`absorbed-project-${filledSources.length + 1}`);
+  state.absorbedProjects = {
+    count,
+    sources: filledSources,
+    latestSource: latestSource || state.absorbedProjects.latestSource || filledSources[filledSources.length - 1] || "",
+    updatedAt: performance.now()
+  };
+  canvas.dataset.absorbedProjectCount = String(count);
+  canvas.dataset.absorbedProjectSources = filledSources.slice(0, 24).join("|");
+}
+
 function beginAbsorption(payload) {
   const source = payload.github_url || payload.external_path || "";
   const volume = clamp((source.length + (payload.own_project || "").length * .35) / 120, .35, 1.65);
@@ -379,6 +406,7 @@ function beginAbsorption(payload) {
     externalFiles: 0,
     finishStarted: 0
   };
+  state.absorbedProjects.latestSource = source;
 }
 
 function updateAbsorption(result) {
@@ -395,6 +423,7 @@ function updateAbsorption(result) {
   state.absorption.externalFiles = externalFiles;
   state.absorption.volume = clamp(.55 + Math.log10(externalFiles + 1) * .42 + (state.absorption.externalScore || 70) / 280, .6, 2.25);
   state.absorption.absorb = clamp(.68 + tasks * .09 + ((state.absorption.externalScore || 70) - (state.absorption.ownScore || 70)) * .012, .75, 1.9);
+  syncAbsorbedProjectsFromAssessment(result.own_assessment, state.absorption.source);
 }
 
 function finishAbsorption() {
@@ -437,12 +466,13 @@ function capabilityAudit(assessment) {
     target.textContent = "未评估";
     return;
   }
+  syncAbsorbedProjectsFromAssessment(assessment);
   const rows = [
     ["审计", labelOf(audit.status) || audit.status || "只审计不打分"],
     ["风险", labelOf(audit.risk_level) || audit.risk_level || "未知"],
     ["阻塞", (audit.blockers || []).length],
     ["测/源", audit.test_to_source_ratio == null ? "未知" : String(audit.test_to_source_ratio)],
-    ["外部项目", Number(audit.external_project_count || 0)],
+    ["吸收光点", `${state.absorbedProjects.count} 个`],
     ["员工模式", audit.employee_execution_mode || "无"],
     ["原因", labelOf(audit.reason) || audit.reason || ""]
   ];
@@ -1273,9 +1303,61 @@ function drawAbsorptionPlanet(scene, cy, r, h, t, dpr) {
   drawSceneLabel(scene.cx, scene.cy + r * .19 * scene.scale, `主项目 ${scene.ownScore == null ? "" : Math.round(scene.ownScore)}`, dpr, scene.pull);
 }
 
+function drawAbsorbedProjectLights(scene, r, t, dpr) {
+  const absorbed = state.absorbedProjects || {};
+  const count = Math.max(0, Math.floor(Number(absorbed.count) || 0));
+  if (!count) return;
+  const sources = absorbed.sources?.length ? absorbed.sources : Array.from({length: count}, (_, i) => `absorbed-project-${i + 1}`);
+  const visibleCount = Math.min(count, 80);
+  const latest = String(absorbed.latestSource || "");
+  const appear = absorbed.updatedAt ? ease(clamp((performance.now() - absorbed.updatedAt) / 1200, 0, 1)) : 1;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < visibleCount; i++) {
+    const source = sources[i] || `absorbed-project-${i + 1}`;
+    const hash = hashText(source);
+    const bucket = hash / 4294967295;
+    const band = (hash >>> 5) % 4;
+    const baseAngle = i * 2.399963 + bucket * .55;
+    const a = baseAngle - t * (.17 + band * .035);
+    const rr = r * (.235 + band * .038 + ((hash >>> 11) % 17) * .0025 + scene.boost * .016) * scene.scale;
+    const x = scene.cx + Math.cos(a) * rr * 1.72;
+    const y = scene.cy + Math.sin(a) * rr * .52;
+    const isLatest = latest && source === latest;
+    const pulse = .55 + .45 * Math.sin(t * (1.6 + band * .22) + bucket * 11);
+    const size = (isLatest ? 3.2 : 1.6 + (hash % 4) * .32) * dpr;
+    const alpha = (.34 + pulse * .42 + scene.boost * .08) * appear;
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, size * (isLatest ? 5.2 : 3.7));
+    glow.addColorStop(0, `rgba(255,255,255,${Math.min(.96, alpha + .22)})`);
+    glow.addColorStop(.22, `rgba(235,247,255,${alpha * .62})`);
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, size * (isLatest ? 5.2 : 3.7), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.fillStyle = isLatest ? `rgba(255,255,255,${Math.min(1, alpha + .25)})` : `rgba(245,250,255,${Math.min(.92, alpha)})`;
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+    if (isLatest) {
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(255,255,255,${.48 * appear})`;
+      ctx.lineWidth = 1.2 * dpr;
+      ctx.arc(x, y, size * 3.1, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  if (count > visibleCount) {
+    drawSceneLabel(scene.cx + r * .34, scene.cy - r * .19, `+${count - visibleCount}`, dpr, .86 * appear);
+  }
+  drawSceneLabel(scene.cx - r * .38, scene.cy - r * .24, `已吸收 ${count} 项目`, dpr, .84 * appear);
+  ctx.restore();
+}
+
 function drawSceneLabel(x, y, text, dpr, alpha) {
   if (alpha <= .04) return;
   ctx.save();
+  ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = alpha;
   ctx.font = `${12 * dpr}px system-ui, sans-serif`;
   ctx.textAlign = "center";
@@ -1337,6 +1419,7 @@ function draw() {
 
   disk(scene.cx, scene.cy, w, h, t, dpr, scene.scale, scene.boost);
   drawAbsorptionPlanet(scene, baseCy, r, h, t, dpr);
+  drawAbsorbedProjectLights(scene, r, t, dpr);
   ctx.save();
   ctx.translate(scene.cx, scene.cy);
   ctx.globalCompositeOperation = "source-over";
@@ -1360,20 +1443,6 @@ function draw() {
   ctx.fillStyle = "#000";
   ctx.arc(0, 0, r * (.128 * scene.scale + scene.boost * .022), 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
-  for (let i = 0; i < 42; i++) {
-    const a = i * .63 - t * (state.running ? 1.6 : .7);
-    const rr = r * (.2 + (i % 11) * .018 + scene.boost * .018) * scene.scale;
-    const x = scene.cx + Math.cos(a) * rr * 1.58;
-    const y = scene.cy + Math.sin(a) * rr * .45;
-    ctx.beginPath();
-    ctx.strokeStyle = `rgba(105,224,255,${.06 + (i % 5) * .025 + scene.boost * .025})`;
-    ctx.lineWidth = (.8 + (i % 4) * .35) * dpr;
-    ctx.arc(x, y, r * (.003 + (i % 3) * .001), 0, Math.PI * 2);
-    ctx.stroke();
-  }
   ctx.restore();
   requestAnimationFrame(draw);
 }
