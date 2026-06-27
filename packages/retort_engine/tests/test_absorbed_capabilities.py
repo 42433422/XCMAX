@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from retort_engine.absorbed_capabilities import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, explain_missing_absorption_evidence, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
+from retort_engine.absorbed_capabilities import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
 
 EXPECTED_ABSORPTION_SOURCE = 'https://github.com/The-PR-Agent/pr-agent'
 
@@ -12,6 +12,17 @@ def test_absorbed_capability_plan_has_ranked_behavior_signals() -> None:
     assert isinstance(plan["tasks"], list)
     assert plan["minimum_behavior_tests"] >= 3
     assert ranked_capabilities()
+    assert plan["depth_absorption_plan"]["focus_mode"] == "similar_function_depth_only"
+
+
+def test_depth_absorption_plan_keeps_depth_before_breadth() -> None:
+    workflow = depth_absorption_plan()
+    focused_components = {item["component"] for item in workflow["focused_components"]}
+    assert workflow["quality_gate"]["passed"] is True
+    assert focused_components
+    assert not (focused_components & {"provider_surface", "plugin_surface"})
+    assert workflow["breadth_rejected"]
+    assert all(task["acceptance"] and task["evidence_required"] for task in depth_first_task_queue())
 
 
 def test_capability_progress_requires_behavior_code_tests_and_gates() -> None:
