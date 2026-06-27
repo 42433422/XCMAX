@@ -56,12 +56,18 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["review_context_group_count"] == 1
     assert result["summary"]["absorbed_file_grouping"] is True
     assert result["summary"]["risk_counts"]["high"] >= 1
+    assert result["summary"]["comment_ranking_model"] == "severity_context_publishability_v1"
+    assert result["summary"]["publishable_comment_count"] == len(result["comments"])
+    assert result["comments"][0]["rank_score"] >= result["comments"][1]["rank_score"]
+    assert result["comments"][0]["publish_payload"]["side"] == "RIGHT"
+    assert result["comments"][0]["comment_anchor"]["line"] == result["comments"][0]["line"]
     assert result["file_summaries"][0]["stages"]
     assert result["file_summaries"][0]["review_context"] == "runtime"
     assert result["comments"][0]["review_stage"]
     assert result["comments"][0]["review_context"] == "runtime"
     assert result["comments"][0]["employee_actionable"] is True
     assert result["task_groups"][0]["risk_counts"]
+    assert result["task_groups"][0]["publishable_comment_count"] >= 1
     assert result["context_groups"][0]["review_focus"] == "core_execution_path"
     assert result["incremental"]["enabled"] is False
     assert validate_contract("pr_review_result", result)["valid"] is True
@@ -77,6 +83,57 @@ def test_review_diff_can_review_only_new_changes() -> None:
     assert [comment["severity"] for comment in result["comments"]] == ["high"]
     assert result["comments"][0]["line"] == 3
     assert validate_contract("pr_review_result", result)["valid"] is True
+
+
+def test_review_diff_ranks_high_risk_later_files_before_low_noise() -> None:
+    diff = """diff --git a/app/debug.py b/app/debug.py
+--- a/app/debug.py
++++ b/app/debug.py
+@@ -0,0 +1,2 @@
++print("debug")
++def ok(): return True
+diff --git a/app/security.py b/app/security.py
+--- a/app/security.py
++++ b/app/security.py
+@@ -0,0 +1,1 @@
++SERVICE_TOKEN = "live-secret-value"
+"""
+
+    result = review_diff(diff, max_comments=1)
+
+    assert result["summary"]["candidate_comment_count"] > result["summary"]["comment_count"]
+    assert result["summary"]["suppressed_comment_count"] >= 1
+    assert result["comments"][0]["severity"] == "high"
+    assert result["comments"][0]["file"] == "app/security.py"
+    assert result["comments"][0]["rank_position"] == 1
+    assert result["comments"][0]["publish_payload"] == {
+        "path": "app/security.py",
+        "line": 1,
+        "side": "RIGHT",
+        "body": result["comments"][0]["message"],
+    }
+
+
+def test_review_diff_keeps_publishable_anchors_for_multiple_languages() -> None:
+    diff = """diff --git a/src/main.go b/src/main.go
+--- a/src/main.go
++++ b/src/main.go
+@@ -0,0 +1,2 @@
++func main() {}
++// TODO: replace generated worker
+diff --git a/src/App.tsx b/src/App.tsx
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -0,0 +1,1 @@
++const token = "live-secret-value"
+"""
+
+    result = review_diff(diff)
+
+    assert {comment["file"] for comment in result["comments"]} >= {"src/main.go", "src/App.tsx"}
+    assert all(comment["publishable"] is True for comment in result["comments"])
+    assert all(comment["comment_anchor"]["side"] == "RIGHT" for comment in result["comments"])
+    assert {comment["review_context"] for comment in result["comments"]} >= {"runtime", "frontend"}
 
 
 def test_review_diff_ignores_documented_or_fake_secret_terms() -> None:

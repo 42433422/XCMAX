@@ -1043,7 +1043,7 @@ def _review_report(
         "external_path": str(external_path),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "external_snapshot": {"git_revision": profile.get("git_revision"), "file_count": profile.get("file_count"), "suffix_counts": profile.get("suffix_counts")},
-        "license_review": license_gate(external_path, enforce=True).to_dict(),
+        "license_review": _absorption_license_review(external_path),
         "absorbed_signals": profile.get("signals", []),
         "signal_evidence": profile.get("signal_evidence", {}),
         "semantic_review": semantic_review,
@@ -1051,6 +1051,25 @@ def _review_report(
         "review_pipeline": pipeline_report,
         "tasks": tasks,
         "replay": {"command": f"retort absorb --own-project <main-project> --external-path {external_path} --run-local-gates --branch-workflow --merge-after"},
+    }
+
+
+def _absorption_license_review(external_path: Path) -> dict[str, Any]:
+    result = license_gate(external_path, enforce=True).to_dict()
+    if result["status"] == "blocked" and not result.get("detected_license"):
+        return {
+            **result,
+            "status": "isolated",
+            "source_code_copy_allowed": False,
+            "pattern_absorption_allowed": True,
+            "isolation_policy": "no_license_detected_source_copy_blocked_patterns_only",
+            "message": "No license detected; external source copy is blocked, but pattern-only absorption is allowed with independent implementation.",
+        }
+    return {
+        **result,
+        "source_code_copy_allowed": result["status"] == "passed",
+        "pattern_absorption_allowed": result["status"] in {"passed", "warning"},
+        "isolation_policy": "license_gate_standard",
     }
 
 
