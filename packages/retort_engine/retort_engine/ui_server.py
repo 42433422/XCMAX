@@ -76,6 +76,8 @@ class RetortUIServer:
                         self._json(outer.service.employee_scheduler_stress(payload))
                     elif self.path == "/api/codebase-graph-report":
                         self._json(outer.service.codebase_graph_report(payload))
+                    elif self.path == "/api/architecture-contract-report":
+                        self._json(outer.service.architecture_contract_report(payload))
                     elif self.path == "/api/similar-project-radar":
                         self._json(outer.service.similar_project_radar(payload))
                     elif self.path == "/api/similar-project-loop":

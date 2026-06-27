@@ -25,6 +25,7 @@ from retort_engine.absorption_state import load_absorption_state as _state_load_
 from retort_engine.absorption_state import public_absorption_state as _state_public_absorption_state
 from retort_engine.absorption_state import record_absorption_shock as _state_record_absorption_shock
 from retort_engine.absorption_state import save_absorption_state as _state_save_absorption_state
+from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.branching import BranchWorkflowState, begin_absorption_branch, merge_absorption_branch
 from retort_engine.capability_audit import capability_absorption_audit as _audit_capability_absorption_audit
 from retort_engine.capability_audit import employee_result_files as _audit_employee_result_files
@@ -342,6 +343,15 @@ class RetortService:
     def codebase_graph_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_codebase_graph(
             str(payload.get("project") or payload.get("project_path") or "."),
+            include_tests=bool(payload.get("include_tests")),
+            max_files=int(payload.get("max_files") or 400),
+        )
+
+    def architecture_contract_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        contracts = payload.get("contracts")
+        return evaluate_architecture_contracts(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            contracts=[dict(item) for item in contracts] if isinstance(contracts, list) else None,
             include_tests=bool(payload.get("include_tests")),
             max_files=int(payload.get("max_files") or 400),
         )

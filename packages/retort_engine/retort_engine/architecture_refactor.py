@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from retort_engine.codebase_graph import build_codebase_graph
+
 
 CORE_COMPONENT_CONTRACTS = {
     "review_pipeline": {
@@ -47,9 +49,14 @@ CORE_COMPONENT_CONTRACTS = {
         "contract": "Context grouping and deterministic code graphing feed review without leaking broad, irrelevant files.",
     },
     "codebase_graph": {
-        "modules": ["retort_engine/codebase_graph.py", "retort_engine/service.py", "retort_engine/cli.py"],
-        "tests": ["tests/test_codebase_graph.py", "tests/test_contracts_feedback.py"],
-        "contract": "Architecture and absorption targeting use deterministic file, symbol, import, and call graph evidence.",
+        "modules": ["retort_engine/codebase_graph.py", "retort_engine/architecture_contracts.py", "retort_engine/service.py", "retort_engine/cli.py"],
+        "tests": ["tests/test_codebase_graph.py", "tests/test_architecture_contracts.py", "tests/test_contracts_feedback.py"],
+        "contract": "Architecture and absorption targeting use deterministic graph evidence plus import-boundary contracts.",
+    },
+    "architecture_contracts": {
+        "modules": ["retort_engine/architecture_contracts.py", "retort_engine/codebase_graph.py", "retort_engine/contracts.py"],
+        "tests": ["tests/test_architecture_contracts.py", "tests/test_contracts_feedback.py"],
+        "contract": "Import and dependency boundaries are executable gates before architecture changes are accepted.",
     },
     "automation_surface": {
         "modules": ["retort_engine/cli.py", "retort_engine/ui_server.py", "retort_engine/service.py"],
@@ -71,6 +78,7 @@ CORE_COMPONENT_CONTRACTS = {
 
 def build_core_refactor_plan(memory: dict[str, Any], *, project_root: str | Path = ".", max_tasks: int = 12) -> dict[str, Any]:
     root = Path(project_root)
+    code_graph = _safe_code_graph(root)
     component_index = memory.get("component_index") if isinstance(memory.get("component_index"), dict) else {}
     architecture_tasks = [task for task in memory.get("deep_architecture_tasks") or [] if isinstance(task, dict)]
     task_components = [_component_from_task(task) for task in architecture_tasks]
@@ -86,6 +94,7 @@ def build_core_refactor_plan(memory: dict[str, Any], *, project_root: str | Path
         tests = [str(item) for item in contract["tests"]]
         missing_modules = [item for item in modules if not (root / item).is_file()]
         missing_tests = [item for item in tests if not (root / item).is_file()]
+        graph_signal = _component_code_graph_signal(modules, code_graph)
         items.append(
             {
                 "component": component,
@@ -98,11 +107,14 @@ def build_core_refactor_plan(memory: dict[str, Any], *, project_root: str | Path
                 "supporting_source_count": int(index_row.get("source_count") or 0),
                 "gate_pass_rate": float(index_row.get("gate_pass_rate") or 0),
                 "architecture_depth_score": int(index_row.get("architecture_depth_score") or 0),
+                "code_graph_hotspot_score": graph_signal["score"],
+                "code_graph_hotspots": graph_signal["hotspots"],
+                "code_graph_proof_count": int(index_row.get("code_graph_proof_count") or 0),
                 "ready_for_core_refactor": not missing_modules and not missing_tests and int(index_row.get("source_count") or 0) >= 2,
                 "refactor_steps": _refactor_steps(component),
             }
         )
-    items = sorted(items, key=lambda item: (str(item["priority"]), -int(item["supporting_source_count"]), str(item["component"])))[:max_tasks]
+    items = sorted(items, key=lambda item: (str(item["priority"]), -int(item["code_graph_hotspot_score"]), -int(item["supporting_source_count"]), str(item["component"])))[:max_tasks]
     gate = core_refactor_gate(items)
     return {
         "schema_version": 1,
@@ -112,7 +124,9 @@ def build_core_refactor_plan(memory: dict[str, Any], *, project_root: str | Path
             "blocked_task_count": sum(1 for item in items if not item["ready_for_core_refactor"]),
             "source_count": int((memory.get("summary") or {}).get("source_count") or 0),
             "ready_component_count": int((memory.get("summary") or {}).get("ready_component_count") or 0),
+            "code_graph_hotspot_task_count": sum(1 for item in items if int(item.get("code_graph_hotspot_score") or 0) > 0),
         },
+        "code_graph_summary": code_graph.get("summary") or {},
         "tasks": items,
         "gate": gate,
     }
@@ -174,6 +188,36 @@ def _refactor_steps(component: str) -> list[str]:
         f"wire_{component}_runtime_gate",
         f"prove_{component}_with_tests",
     ]
+
+
+def _safe_code_graph(root: Path) -> dict[str, Any]:
+    try:
+        return build_codebase_graph(root, include_tests=True, max_files=400)
+    except Exception as exc:
+        return {"status": "error", "summary": {"error": type(exc).__name__}, "hotspots": []}
+
+
+def _component_code_graph_signal(modules: list[str], code_graph: dict[str, Any]) -> dict[str, Any]:
+    module_set = {item.replace("\\", "/") for item in modules}
+    hotspots = []
+    score = 0
+    for item in code_graph.get("hotspots") or []:
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("id") or "").split(":", 1)[0]
+        if path not in module_set:
+            continue
+        degree = int(item.get("degree") or 0)
+        score += degree
+        hotspots.append(
+            {
+                "id": str(item.get("id") or ""),
+                "path": path,
+                "kind": str(item.get("kind") or ""),
+                "degree": degree,
+            }
+        )
+    return {"score": score, "hotspots": hotspots[:8]}
 
 
 def _ordered_unique(values: list[str]) -> list[str]:

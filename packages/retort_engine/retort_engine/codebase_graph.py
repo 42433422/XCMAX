@@ -7,6 +7,16 @@ from typing import Any
 
 DEFAULT_SUFFIXES = (".py",)
 SKIP_DIRS = {".git", ".hg", ".mypy_cache", ".pytest_cache", ".retort", "__pycache__", "node_modules", "dist", "build"}
+SIGNAL_FOCUS_TERMS = {
+    "review_pipeline": ("review", "pipeline", "comment", "localization", "reflection"),
+    "file_grouping": ("group", "context", "related", "changed", "files"),
+    "diff_hunk_review": ("diff", "hunk", "patch", "line", "comment"),
+    "benchmarking": ("benchmark", "eval", "precision", "oracle", "regression"),
+    "benchmark_eval": ("benchmark", "eval", "precision", "oracle", "regression"),
+    "workflow_ci": ("gate", "pytest", "workflow", "merge", "proof"),
+    "safety_policy": ("license", "policy", "permission", "rollback", "secret"),
+    "codebase_graph": ("codebase", "graph", "dependency", "import", "call", "hotspot", "architecture"),
+}
 
 
 def build_codebase_graph(project: str | Path, *, include_tests: bool = False, max_files: int = 400) -> dict[str, Any]:
@@ -54,6 +64,75 @@ def build_codebase_graph(project: str | Path, *, include_tests: bool = False, ma
     }
 
 
+def build_absorption_focus_map(
+    own_project: str | Path,
+    external_project: str | Path,
+    *,
+    tasks: list[dict[str, Any]] | None = None,
+    signals: list[str] | None = None,
+    max_files: int = 400,
+) -> dict[str, Any]:
+    """Use code graphs to decide where deep absorption should spend attention."""
+    own_root = Path(own_project).resolve()
+    external_root = Path(external_project).resolve()
+    own_graph = build_codebase_graph(own_root, include_tests=True, max_files=max_files)
+    external_graph = build_codebase_graph(external_root, include_tests=True, max_files=max_files)
+    terms = _focus_terms(tasks or [], signals or [])
+    own_focus = _rank_focus_files(own_root, own_graph, terms)
+    external_focus = _rank_focus_files(external_root, external_graph, terms)
+    own_hotspots = _hotspot_rows(own_graph)
+    external_hotspots = _hotspot_rows(external_graph)
+    return {
+        "status": "ready" if own_graph["status"] != "empty" and external_graph["status"] != "empty" else "empty",
+        "focus_terms": terms,
+        "own_summary": own_graph["summary"],
+        "external_summary": external_graph["summary"],
+        "own_focus_files": [row["path"] for row in own_focus],
+        "external_focus_files": [row["path"] for row in external_focus],
+        "own_focus": own_focus,
+        "external_focus": external_focus,
+        "own_hotspots": own_hotspots,
+        "external_hotspots": external_hotspots,
+        "evidence": {
+            "style": "deterministic_pre_absorption_code_graph",
+            "own_project": str(own_root),
+            "external_project": str(external_root),
+            "max_files": max_files,
+        },
+    }
+
+
+def code_graph_absorption_proof(project: str | Path, changed_files: list[str], pre_absorption_focus: dict[str, Any] | None = None, *, max_files: int = 400) -> dict[str, Any]:
+    """Prove whether an absorption changed code graph hotspots or preselected focus files."""
+    root = Path(project).resolve()
+    graph = build_codebase_graph(root, include_tests=True, max_files=max_files)
+    changed = _relative_changed_files(root, changed_files)
+    hotspot_files = {row["path"] for row in _hotspot_rows(graph, limit=24)}
+    focus_files = {str(item) for item in (pre_absorption_focus or {}).get("own_focus_files") or []}
+    behavior_changed = [path for path in changed if _is_behavior_change(path)]
+    changed_hotspots = sorted(path for path in behavior_changed if path in hotspot_files)
+    changed_focus_files = sorted(path for path in behavior_changed if path in focus_files)
+    proof_ready = bool(behavior_changed and (changed_hotspots or changed_focus_files))
+    return {
+        "passed": proof_ready,
+        "status": "proved" if proof_ready else "not_proved",
+        "changed_behavior_files": behavior_changed,
+        "changed_hotspots": changed_hotspots,
+        "changed_focus_files": changed_focus_files,
+        "hotspot_files": sorted(hotspot_files)[:24],
+        "focus_files": sorted(focus_files)[:24],
+        "summary": {
+            "changed_behavior_file_count": len(behavior_changed),
+            "changed_hotspot_count": len(changed_hotspots),
+            "changed_focus_file_count": len(changed_focus_files),
+            "graph_status": graph["status"],
+        },
+        "evidence": {
+            "style": "deterministic_post_absorption_code_graph",
+            "project": str(root),
+            "max_files": max_files,
+        },
+    }
 def _source_files(root: Path, *, include_tests: bool, max_files: int) -> list[Path]:
     files: list[Path] = []
     for path in sorted(root.rglob("*")):
@@ -68,6 +147,100 @@ def _source_files(root: Path, *, include_tests: bool, max_files: int) -> list[Pa
             continue
         files.append(path)
     return files
+
+
+def _focus_terms(tasks: list[dict[str, Any]], signals: list[str]) -> list[str]:
+    terms: list[str] = []
+    for signal in signals:
+        terms.extend(SIGNAL_FOCUS_TERMS.get(str(signal), (str(signal), str(signal).replace("_", " "))))
+    task_text = " ".join(
+        " ".join(str(task.get(key) or "") for key in ("task_id", "title", "dimension", "why"))
+        for task in tasks
+        if isinstance(task, dict)
+    ).lower()
+    for signal, signal_terms in SIGNAL_FOCUS_TERMS.items():
+        if signal in task_text or signal.replace("_", " ") in task_text:
+            terms.extend(signal_terms)
+    for token in task_text.replace("-", " ").replace("_", " ").split():
+        if len(token) >= 5 and token.isascii():
+            terms.append(token)
+    result: list[str] = []
+    for term in terms:
+        normalized = str(term).lower().strip()
+        if normalized and normalized not in result:
+            result.append(normalized)
+    return result[:32]
+
+
+def _rank_focus_files(root: Path, graph: dict[str, Any], terms: list[str], *, limit: int = 10) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    hotspot_degree = {row["path"]: int(row["degree"]) for row in _hotspot_rows(graph, limit=64)}
+    for path in _graph_file_paths(graph):
+        full = root / path
+        try:
+            text = full.read_text(encoding="utf-8").lower()[:40000]
+        except (OSError, UnicodeDecodeError):
+            text = ""
+        term_hits = sum(text.count(term) for term in terms)
+        degree = hotspot_degree.get(path, 0)
+        score = term_hits * 10 + degree
+        if score <= 0:
+            continue
+        rows.append({"path": path, "score": score, "term_hits": term_hits, "graph_degree": degree})
+    if not rows:
+        rows = [{"path": row["path"], "score": int(row["degree"]), "term_hits": 0, "graph_degree": int(row["degree"])} for row in _hotspot_rows(graph, limit=limit)]
+    return sorted(rows, key=lambda row: (-int(row["score"]), row["path"]))[:limit]
+
+
+def _hotspot_rows(graph: dict[str, Any], *, limit: int = 12) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in graph.get("hotspots") or []:
+        if not isinstance(item, dict):
+            continue
+        path = _node_path(str(item.get("id") or ""))
+        if not path:
+            continue
+        rows.append(
+            {
+                "id": str(item.get("id") or ""),
+                "path": path,
+                "kind": str(item.get("kind") or ""),
+                "degree": int(item.get("degree") or 0),
+                "incoming": int(item.get("incoming") or 0),
+                "outgoing": int(item.get("outgoing") or 0),
+            }
+        )
+    return rows[:limit]
+
+
+def _graph_file_paths(graph: dict[str, Any]) -> list[str]:
+    return [str(node.get("id") or "") for node in graph.get("nodes") or [] if isinstance(node, dict) and node.get("kind") == "file" and node.get("id")]
+
+
+def _relative_changed_files(root: Path, changed_files: list[str]) -> list[str]:
+    rows: list[str] = []
+    for item in changed_files:
+        text = str(item).replace("\\", "/")
+        path = Path(text)
+        if path.is_absolute():
+            try:
+                text = path.resolve().relative_to(root).as_posix()
+            except ValueError:
+                text = path.name
+        rows.append(text)
+    return sorted(dict.fromkeys(rows))
+
+
+def _is_behavior_change(path: str) -> bool:
+    normalized = path.replace("\\", "/")
+    name = Path(normalized).name
+    if "/tests/" in f"/{normalized}" or name.startswith("test_"):
+        return False
+    return normalized.endswith(DEFAULT_SUFFIXES)
+
+
+def _node_path(node_id: str) -> str:
+    return node_id.split(":", 1)[0]
 
 
 def _symbols_for_file(rel: str, tree: ast.AST) -> dict[str, list[dict[str, Any]]]:

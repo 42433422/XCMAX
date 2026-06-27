@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
@@ -107,6 +108,15 @@ class RetortService:
             max_files=int(payload.get("max_files") or 400),
         )
 
+    def architecture_contract_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        contracts = payload.get("contracts")
+        return evaluate_architecture_contracts(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            contracts=[dict(item) for item in contracts] if isinstance(contracts, list) else None,
+            include_tests=bool(payload.get("include_tests")),
+            max_files=int(payload.get("max_files") or 400),
+        )
+
 
 def create_app() -> Any:
     service = RetortService()
@@ -179,5 +189,9 @@ def create_app() -> Any:
     @app.post("/codebase-graph-report")
     def codebase_graph_report_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.codebase_graph_report(payload)
+
+    @app.post("/architecture-contract-report")
+    def architecture_contract_report_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.architecture_contract_report(payload)
 
     return app
