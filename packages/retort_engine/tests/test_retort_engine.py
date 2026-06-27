@@ -22,8 +22,12 @@ def init_repo(root: Path) -> None:
     git(root, "commit", "-m", "init")
 
 
-def test_self_evolution_stays_blocked_without_closed_loop_proof() -> None:
-    result = RetortSelfEvolutionRunner(max_rounds=3).run("packages/retort_engine")
+def test_self_evolution_stays_blocked_without_closed_loop_proof(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("# project\n", encoding="utf-8")
+
+    result = RetortSelfEvolutionRunner(max_rounds=3).run(str(project))
     scores = {s["dimension"]: s["value"] for s in result["final_assessment"]["scores"]}
     assert result["status"] == "blocked"
     assert scores["calibrated_overall"] <= 82
@@ -53,11 +57,62 @@ def test_branch_absorption_blocks_dirty_and_creates_clean_branch(tmp_path: Path)
     assert git(own, "branch", "--show-current") == "retort/absorb-test"
 
 
-def test_assessment_cannot_exceed_90_without_closed_loop_proof() -> None:
-    assessment = assess_project("packages/retort_engine")
+def test_assessment_cannot_exceed_90_without_closed_loop_proof(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("# project\n", encoding="utf-8")
+
+    assessment = assess_project(str(project))
     scores = assessment.score_map()
     assert not assessment.all_scores_over(90)
     assert scores["calibrated_overall"] <= 82
+
+
+def test_real_executor_features_can_converge_after_closed_loop_proof(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "engine.py").write_text(
+        '"""'
+        + "\n".join(
+            [
+                "RetortService RetortUIServer",
+                "RetortSelfEvolutionRunner scores_repeated_without_convergence",
+                "begin_absorption_branch merge_absorption_branch branch_workflow",
+                "employee_queue RetortHistory",
+                "github_url external_path ownProjectFolder externalProjectFolder",
+                "license incompatible",
+                "blackhole accretion canvas",
+                "apply_real_absorption apply-absorption execution_requests",
+                "_record_execution_proof closed_loop_proof gates_passed",
+                "https://github.com/openai/codex",
+            ]
+        )
+        + '"""\n',
+        encoding="utf-8",
+    )
+    tests = project / "tests"
+    tests.mkdir()
+    (tests / "test_engine.py").write_text("\n".join(f"def test_ok_{index}():\n    assert True\n" for index in range(25)), encoding="utf-8")
+    workflow = project / ".github" / "workflows"
+    workflow.mkdir(parents=True)
+    (workflow / "retort-engine.yml").write_text("name: retort\n", encoding="utf-8")
+    record_closed_loop_proof(
+        str(project),
+        {
+            "branch_diff_verified": True,
+            "employee_execution_verified": True,
+            "post_absorption_tests_passed": True,
+            "merge_verified": True,
+            "external_advantage_reassessed": True,
+            "evidence": ["unit proof"],
+        },
+    )
+
+    result = RetortSelfEvolutionRunner(max_rounds=3).run(str(project), run_local_gates=True)
+    scores = {s["dimension"]: s["value"] for s in result["final_assessment"]["scores"]}
+    assert result["status"] == "converged"
+    assert scores["architecture_depth"] > 90
+    assert scores["employee_execution_integration"] > 90
 
 
 def test_absorption_shock_drops_score_then_self_evolution_recovers(tmp_path: Path) -> None:

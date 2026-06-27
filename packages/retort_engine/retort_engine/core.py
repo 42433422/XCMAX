@@ -74,6 +74,8 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "license_gate": "license" in text.lower() and "incompatible" in text.lower(),
         "service_api": "RetortService" in text and "RetortUIServer" in text,
         "self_evolution": "RetortSelfEvolutionRunner" in text and "scores_repeated_without_convergence" in text,
+        "real_absorption_cli": "apply_real_absorption" in text and "apply-absorption" in text and "execution_requests" in text,
+        "execution_proof_recorder": "_record_execution_proof" in text and "closed_loop_proof" in text and "gates_passed" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
         "conservative_scoring": "calibrated_overall" in text and "not_automatic_100" in text,
     }
@@ -574,7 +576,7 @@ def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok:
     verified = bool(proof["verified"])
     scores = {
         "product_level": 72 + 3 * features["blackhole_ui"] + 3 * features["service_api"] + 2 * features["branch_workflow"] + 2 * features["github_or_folder_source"] + 2 * test_ok + 12 * verified,
-        "architecture_depth": 78 + 3 * features["branch_workflow"] + 3 * features["self_evolution"] + 2 * features["license_gate"] + 2 * features["employee_queue"] + 2 * test_ok,
+        "architecture_depth": 78 + 3 * features["branch_workflow"] + 3 * features["self_evolution"] + 2 * features["license_gate"] + 2 * features["employee_queue"] + 2 * features["real_absorption_cli"] + 2 * test_ok,
         "test_gate_evidence": 70 + min(8, test_functions * 0.4) + 8 * test_ok + 6 * lint_ok + 3 * has_ci,
         "api_contract_quality": 76 + 4 * features["service_api"] + 3 * features["github_or_folder_source"] + 3 * features["branch_workflow"] + 2 * features["folder_project_picker"] + 8 * verified,
         "operational_readiness": 72 + 6 * lint_ok + 6 * test_ok + 4 * has_ci + 2 * features["branch_workflow"] + 8 * verified,
@@ -582,7 +584,7 @@ def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok:
         "external_ingestion": 70 + 5 * features["github_or_folder_source"] + 4 * features["folder_project_picker"] + 4 * features["real_github_case"] + 10 * verified,
         "comparative_analysis_depth": 68 + 4 * features["real_github_case"] + 4 * features["github_or_folder_source"] + 4 * features["branch_workflow"] + 12 * verified,
         "absorption_tasking": 72 + 5 * features["employee_queue"] + 4 * features["github_or_folder_source"] + 3 * features["branch_workflow"] + 9 * verified,
-        "employee_execution_integration": 66 + 6 * features["employee_queue"] + 16 * verified,
+        "employee_execution_integration": 66 + 6 * features["employee_queue"] + 16 * verified + 5 * (features["real_absorption_cli"] and verified) + 4 * (features["execution_proof_recorder"] and verified),
         "feedback_loop_closure": 68 + 5 * features["self_evolution"] + 4 * features["employee_queue"] + 15 * verified,
         "product_operability": 74 + 4 * features["blackhole_ui"] + 4 * features["service_api"] + 3 * features["folder_project_picker"] + 3 * features["branch_workflow"] + 8 * verified,
         "safety_license_gate": 76 + 6 * features["license_gate"] + 3 * (context_policy == "isolated") + 6 * verified,
