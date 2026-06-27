@@ -13,15 +13,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from retort_engine.branching import BranchWorkflowState, begin_absorption_branch, merge_absorption_branch
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.contracts import contract_names
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
+from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
+from retort_engine.git_status import blocking_git_status as _blocking_git_status
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.proof import record_closed_loop_proof as _record_closed_loop_proof_impl
+from retort_engine.proof import record_execution_proof as _record_execution_proof_impl
+from retort_engine.proof import rollback_rehearsal as _rollback_rehearsal_impl
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
@@ -215,7 +221,7 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
     branch_state = {"enabled": bool(payload.get("branch_workflow")), "status": "disabled"}
     if payload.get("branch_workflow"):
         try:
-            branch_state = begin_absorption_branch(own, str(external), payload.get("absorption_branch") or "", bool(payload.get("allow_dirty_branch"))).to_dict()
+            branch_state = begin_absorption_branch(own, source=str(external), branch_name=payload.get("absorption_branch") or "", allow_dirty=bool(payload.get("allow_dirty_branch"))).to_dict()
         except RuntimeError as exc:
             return {"status": "blocked_by_branch_workflow", "error": str(exc), "branch_workflow": branch_state, "tasks": []}
     pre_assessment = assess_project(str(own), run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
@@ -293,45 +299,6 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         for task in tasks:
             store.record("employee_tasks", task)
     return result
-
-
-@dataclass(frozen=True)
-class BranchWorkflowState:
-    enabled: bool
-    project_root: str
-    base_branch: str = ""
-    absorption_branch: str = ""
-    created: bool = False
-    merged: bool = False
-    status: str = "disabled"
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.__dict__.copy()
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "BranchWorkflowState":
-        return cls(bool(payload.get("enabled")), str(payload.get("project_root") or ""), str(payload.get("base_branch") or ""), str(payload.get("absorption_branch") or ""), bool(payload.get("created")), bool(payload.get("merged")), str(payload.get("status") or "disabled"))
-
-
-def begin_absorption_branch(project: Path, source: str, branch_name: str = "", allow_dirty: bool = False) -> BranchWorkflowState:
-    root = _git_root(project)
-    if root is None:
-        raise RuntimeError("Main project folder is not inside a Git repository")
-    if not allow_dirty and _blocking_git_status(root, project):
-        raise RuntimeError("Main project has uncommitted changes")
-    base = _git(root, "branch", "--show-current").strip()
-    branch = branch_name or "retort/absorb-" + re.sub(r"[^a-zA-Z0-9]+", "-", source).strip("-").lower()[:40]
-    _git(root, "checkout", "-b", branch)
-    return BranchWorkflowState(True, str(root), base, branch, True, False, "branch_created")
-
-
-def merge_absorption_branch(project: Path, state: BranchWorkflowState) -> BranchWorkflowState:
-    root = Path(state.project_root or project)
-    if _blocking_git_status(root, project):
-        raise RuntimeError("Absorption branch has uncommitted changes; commit before merge")
-    _git(root, "checkout", state.base_branch)
-    _git(root, "merge", "--no-ff", state.absorption_branch, "-m", f"Merge {state.absorption_branch}")
-    return BranchWorkflowState(True, str(root), state.base_branch, state.absorption_branch, state.created, True, "merged")
 
 
 class RetortService:
@@ -594,39 +561,7 @@ def _is_complete_absorption_stdout_json(value: dict[str, Any]) -> bool:
 
 
 def _record_execution_proof(own: Path, execution: dict[str, Any], branch_state: dict[str, Any]) -> None:
-    changed_files = [str(path) for path in execution.get("changed_files") or []]
-    proof = {
-        "branch_diff_verified": bool(changed_files),
-        "employee_execution_verified": execution.get("status") in {"applied", "noop"},
-        "post_absorption_tests_passed": bool(execution.get("gates_passed")),
-        "merge_verified": bool(branch_state.get("merged")),
-        "external_advantage_reassessed": True,
-        "evidence": [
-            f"retort_cli_status={execution.get('status')}",
-            f"duration_sec={execution.get('duration_sec')}",
-            f"changed_files={','.join(changed_files)}",
-            f"git_diff_summary={' | '.join(str(item) for item in execution.get('git_diff_summary') or [])}",
-            f"gates_passed={execution.get('gates_passed')}",
-            f"review_report={execution.get('review_report_path', '')}",
-            f"employee_results={execution.get('employee_results_path', '')}",
-            f"commit={((execution.get('commit') or {}) if isinstance(execution.get('commit'), dict) else {}).get('commit', '')}",
-            f"merge_commit={execution.get('merge_commit', '')}",
-            f"rollback_rehearsal={bool((execution.get('rollback_rehearsal') or {}).get('verified'))}",
-            f"feedback_audit_closed={bool((execution.get('feedback_audit') or {}).get('closed'))}",
-            f"history_result_count={(execution.get('feedback_audit') or {}).get('history_result_count', '')}",
-            f"queue_records_written={execution.get('queue_records_written', '')}",
-            f"result_tasks_have_queue_records={(execution.get('feedback_audit') or {}).get('result_tasks_have_queue_records', '')}",
-        ],
-    }
-    state = _load_absorption_state(own)
-    state["closed_loop_proof"] = proof
-    if all(value for key, value in proof.items() if key != "evidence"):
-        state["active"] = False
-        state["status"] = "closed_loop_verified"
-    else:
-        state["active"] = True
-        state["status"] = "execution_applied_awaiting_merge"
-    _save_absorption_state(own, state)
+    _record_execution_proof_impl(own, execution, branch_state, load_state=_load_absorption_state, save_state=_save_absorption_state)
 
 
 def _commit_absorption_execution(own: Path, source: str, execution: dict[str, Any]) -> dict[str, Any]:
@@ -647,13 +582,7 @@ def _commit_absorption_execution(own: Path, source: str, execution: dict[str, An
 
 
 def _rollback_rehearsal(root: Path, merge_commit: str) -> dict[str, Any]:
-    parents = _git(root, "show", "--no-patch", "--format=%P", merge_commit).strip().split()
-    return {
-        "verified": len(parents) >= 2,
-        "merge_commit": merge_commit,
-        "parent_count": len(parents),
-        "rollback_command": f"git revert -m 1 {merge_commit}",
-    }
+    return _rollback_rehearsal_impl(root, merge_commit)
 
 
 def _absorption_status(tasks: list[dict[str, str]], execution: dict[str, Any]) -> str:
@@ -941,107 +870,17 @@ def _assessment_file_count(assessment: dict[str, Any]) -> int:
 
 
 def record_closed_loop_proof(project: str, payload: dict[str, Any]) -> dict[str, Any]:
-    root = Path(project).expanduser().resolve()
-    state = _load_absorption_state(root)
-    validation = _closed_loop_cross_validation(root, payload)
-    evidence = [str(item) for item in payload.get("evidence") or []]
-    evidence.extend(validation["evidence"])
-    proof = {
-        "branch_diff_verified": bool(payload.get("branch_diff_verified")),
-        "employee_execution_verified": bool(payload.get("employee_execution_verified")),
-        "post_absorption_tests_passed": bool(payload.get("post_absorption_tests_passed")) and bool(validation["pytest_gates_verified"]),
-        "merge_verified": bool(payload.get("merge_verified")) and bool(validation["merge_commit_verified"]),
-        "external_advantage_reassessed": bool(payload.get("external_advantage_reassessed")),
-        "evidence": evidence,
-        "validation": validation,
-    }
-    state["closed_loop_proof"] = proof
-    if all(value for key, value in proof.items() if key != "evidence"):
-        state["active"] = False
-        state["status"] = "closed_loop_verified"
-    else:
-        state["active"] = True
-        state["status"] = "awaiting_execution_evidence"
-    _save_absorption_state(root, state)
-    return _public_absorption_state(root)
-
-
-def _closed_loop_cross_validation(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    merge_commit = _proof_merge_commit(root, payload)
-    merge_verified = _is_merge_commit(root, merge_commit) if merge_commit else False
-    pytest_verified = _proof_pytest_gates_verified(root, payload)
-    return {
-        "merge_commit": merge_commit,
-        "merge_commit_verified": merge_verified,
-        "pytest_gates_verified": pytest_verified,
-        "evidence": [
-            f"merge_cross_check={merge_verified}; merge_commit={merge_commit}",
-            f"pytest_gate_cross_check={pytest_verified}",
-        ],
-    }
-
-
-def _proof_merge_commit(root: Path, payload: dict[str, Any]) -> str:
-    explicit = str(payload.get("merge_commit") or "").strip()
-    if explicit:
-        return explicit
-    evidence_commit = _evidence_value(payload.get("evidence") or [], "merge_commit")
-    if evidence_commit:
-        return evidence_commit
-    if not payload.get("merge_verified"):
-        return ""
-    git_root = _git_root(root)
-    if git_root is None:
-        return ""
-    try:
-        return _git(git_root, "rev-parse", "--short", "HEAD").strip()
-    except RuntimeError:
-        return ""
-
-
-def _is_merge_commit(root: Path, commit: str) -> bool:
-    git_root = _git_root(root)
-    if git_root is None or not commit:
-        return False
-    try:
-        parents = _git(git_root, "show", "--no-patch", "--format=%P", commit).strip().split()
-    except RuntimeError:
-        return False
-    return len(parents) >= 2
-
-
-def _proof_pytest_gates_verified(root: Path, payload: dict[str, Any]) -> bool:
-    if _gates_have_passing_pytest(payload.get("gates") or []):
-        return True
-    latest = _latest_absorption_run(root)
-    if _gates_have_passing_pytest(latest.get("gates") or []):
-        return True
-    command = payload.get("pytest_command") or payload.get("test_command")
-    if isinstance(command, str) and command.strip():
-        return _run(command.split(), root)
-    if isinstance(command, list) and all(isinstance(item, str) for item in command):
-        return _run(command, root)
-    return False
-
-
-def _gates_have_passing_pytest(gates: Any) -> bool:
-    if not isinstance(gates, list):
-        return False
-    for gate in gates:
-        if not isinstance(gate, dict) or not gate.get("ok"):
-            continue
-        command = " ".join(str(part) for part in gate.get("command") or [])
-        if "pytest" in command:
-            return True
-    return False
-
-
-def _evidence_value(evidence: Any, key: str) -> str:
-    for item in evidence if isinstance(evidence, list) else []:
-        text = str(item)
-        if text.startswith(f"{key}="):
-            return text.split("=", 1)[1].strip()
-    return ""
+    return _record_closed_loop_proof_impl(
+        project,
+        payload,
+        load_state=_load_absorption_state,
+        save_state=_save_absorption_state,
+        public_state=_public_absorption_state,
+        latest_absorption_run=_latest_absorption_run,
+        run_command=_run,
+        git_root=_git_root,
+        git_command=_git,
+    )
 
 
 def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], project: Path, mode: str, external_source: str, external_path: str, tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1301,14 +1140,6 @@ def _llm_disabled_review(*, require_deep: bool = False) -> dict[str, Any]:
     }
 
 
-GENERATED_ABSORPTION_NAMES = {
-    "retort_absorption_log.md",
-    "retort_external_review_report.json",
-    "absorbed_external_patterns.py",
-    "retort_absorbed_patterns.py",
-    "absorbed_capabilities.py",
-    "test_absorbed_capabilities.py",
-}
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 
 
@@ -1630,12 +1461,14 @@ def _self_assessment_risk_checks(root: Path) -> dict[str, Any]:
     loop = root / "retort_engine" / "similar_project_loop.py"
     paibi = root / "retort_engine" / "paibi_llm.py"
     evolution = root / "retort_engine" / "self_evolution.py"
-    if not any(path.is_file() for path in (core, loop, paibi, evolution)):
+    proof = root / "retort_engine" / "proof.py"
+    if not any(path.is_file() for path in (core, loop, paibi, evolution, proof)):
         return {"checks": [], "failed": []}
     core_text = _read(core)
     loop_text = _read(loop)
     paibi_text = _read(paibi)
     evolution_text = _read(evolution)
+    proof_text = _read(proof)
     checks = [
         {
             "name": "strict_absorption_stdout_json",
@@ -1643,7 +1476,11 @@ def _self_assessment_risk_checks(root: Path) -> dict[str, Any]:
         },
         {
             "name": "closed_loop_cross_validation",
-            "passed": "_closed_loop_cross_validation" in core_text and "merge_commit_verified" in core_text and "pytest_gates_verified" in core_text,
+            "passed": "_closed_loop_cross_validation" in proof_text and "merge_commit_verified" in proof_text and "pytest_gates_verified" in proof_text,
+        },
+        {
+            "name": "rollback_rehearsal_executes_git_revert",
+            "passed": '"revert", "--no-commit", "-m", "1"' in proof_text,
         },
         {
             "name": "similar_loop_saturation_reachable",
@@ -1681,6 +1518,7 @@ def _audit_risk_level(blockers: list[str]) -> str:
         "latest_behavior_change_missing_tests",
         "low_test_to_source_ratio",
         "closed_loop_cross_validation",
+        "rollback_rehearsal_executes_git_revert",
         "strict_absorption_stdout_json",
         "similar_loop_saturation_reachable",
         "github_search_failure_explicit",
@@ -1865,78 +1703,11 @@ def _git_root(path: Path) -> Path | None:
     return Path(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
 
 
-def _blocking_git_status(root: Path, project: Path) -> str:
-    rel = _project_status_path(root, project)
-    status = _git(root, "status", "--short", "--", rel)
-    prefixes = _runtime_status_prefixes(root, project)
-    blocking: list[str] = []
-    for line in status.splitlines():
-        path = line[3:].strip().strip('"')
-        if " -> " in path:
-            path = path.split(" -> ", 1)[1].strip().strip('"')
-        if _is_exempt_git_status_path(path, prefixes):
-            continue
-        blocking.append(line)
-    return "\n".join(blocking)
-
-
-def _project_status_path(root: Path, project: Path) -> str:
-    try:
-        rel = project.resolve().relative_to(root.resolve())
-    except ValueError:
-        return "."
-    return "." if str(rel) == "." else str(rel)
-
-
-def _runtime_status_prefixes(root: Path, project: Path) -> tuple[str, ...]:
-    try:
-        rel = project.resolve().relative_to(root.resolve())
-    except ValueError:
-        return (".retort/",)
-    rel_text = "" if str(rel) == "." else str(rel).rstrip("/") + "/"
-    return (f"{rel_text}.retort/",)
-
-
-def _is_exempt_git_status_path(path: str, prefixes: tuple[str, ...]) -> bool:
-    normalized = path.replace("\\", "/")
-    if any(normalized == prefix.removesuffix("/") or normalized.startswith(prefix) for prefix in prefixes):
-        return True
-    project_prefix = _project_prefix_from_runtime_prefixes(prefixes)
-    if project_prefix and not normalized.startswith(project_prefix):
-        return False
-    project_rel = normalized[len(project_prefix) :] if project_prefix else normalized
-    rel_path = Path(project_rel)
-    if rel_path.name in GENERATED_ABSORPTION_NAMES:
-        return True
-    return len(rel_path.parts) >= 2 and rel_path.parts[0] == "docs" and rel_path.name.startswith("retort_") and rel_path.suffix == ".json"
-
-
-def _project_prefix_from_runtime_prefixes(prefixes: tuple[str, ...]) -> str:
-    for prefix in prefixes:
-        if prefix.endswith(".retort/"):
-            return prefix[: -len(".retort/")]
-    return ""
-
-
 def _tracking_state(path: Path) -> str:
     root = _git_root(path)
     if root is None:
         return "outside_git"
-    try:
-        rel = str(path.relative_to(root))
-    except ValueError:
-        rel = "."
-    status = subprocess.run(["git", "status", "--short", "--", rel], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=5, check=False).stdout
-    runtime_prefixes = _runtime_status_prefixes(root, path)
-    blocking_lines = []
-    for line in status.splitlines():
-        changed_path = line[3:].strip().strip('"')
-        if " -> " in changed_path:
-            changed_path = changed_path.split(" -> ", 1)[1].strip().strip('"')
-        if any(changed_path == prefix.removesuffix("/") or changed_path.startswith(prefix) for prefix in runtime_prefixes):
-            continue
-        blocking_lines.append(line)
-    blocking_status = "\n".join(blocking_lines)
+    blocking_status = _blocking_git_status(root, path)
     if "??" in blocking_status:
         return "untracked"
     return "dirty" if blocking_status.strip() else "tracked_clean"

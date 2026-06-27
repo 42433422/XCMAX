@@ -9,6 +9,7 @@ import pytest
 
 from retort_engine.core import RetortSelfEvolutionRunner, RetortService, _attach_llm_scoring, _blocking_git_status, _extract_json_from_stdout, _llm_absorption_evidence, _maybe_request_llm_review, absorb, assess_project, record_closed_loop_proof
 from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review
+from retort_engine.proof import rollback_rehearsal
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import RetortUIServer
 from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_structure
@@ -259,6 +260,42 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     assert proof["merge_verified"] is False
 
 
+def test_absorption_branch_merge_runs_real_subprocess_and_rollback_rehearsal(tmp_path: Path) -> None:
+    own = tmp_path / "own"
+    external = tmp_path / "external"
+    init_repo(own)
+    external.mkdir()
+    (external / "README.md").write_text("pull request review pipeline with diff hunk benchmark and github action\n", encoding="utf-8")
+    queue_path = own / ".retort" / "employee_queue.jsonl"
+    history_path = own / ".retort" / "retort_history.sqlite"
+
+    result = absorb(
+        {
+            "own_project": str(own),
+            "external_path": str(external),
+            "employee_queue": str(queue_path),
+            "history_store": str(history_path),
+            "branch_workflow": True,
+            "absorption_branch": "retort/absorb-real-subprocess",
+            "merge_after": True,
+            "execution_timeout_sec": 60,
+        }
+    )
+
+    execution = result["execution"]
+    rehearsal = execution["rollback_rehearsal"]
+    assert result["status"] == "absorption_execution_applied"
+    assert execution["status"] == "applied"
+    assert execution["commit"]["status"] == "committed"
+    assert result["branch_workflow"]["status"] == "merged"
+    assert result["branch_workflow"]["merge_commit"] == execution["merge_commit"]
+    assert rehearsal["verified"] is True
+    assert rehearsal["revert_executed"] is True
+    assert rehearsal["revert_exit_code"] == 0
+    assert rehearsal["changed_file_count"] >= 1
+    assert _blocking_git_status(own, own) == ""
+
+
 def test_assessment_ignores_retort_runtime_dirty_state(tmp_path: Path) -> None:
     own = tmp_path / "own"
     init_repo(own)
@@ -400,6 +437,13 @@ def test_blocking_git_status_exempts_generated_absorption_outputs(tmp_path: Path
     (own / "docs" / "retort_new_gate.json").write_text("{}", encoding="utf-8")
     (own / ".retort" / "absorption_state.json").parent.mkdir(parents=True, exist_ok=True)
     (own / ".retort" / "absorption_state.json").write_text("{}", encoding="utf-8")
+    (own / "__pycache__").mkdir()
+    (own / "__pycache__" / "core.cpython-312.pyc").write_bytes(b"cache")
+    (own / ".pytest_cache").mkdir()
+    (own / ".pytest_cache" / "README.md").write_text("cache\n", encoding="utf-8")
+    (own / "tests").mkdir(exist_ok=True)
+    (own / "tests" / "__pycache__").mkdir()
+    (own / "tests" / "__pycache__" / "test_ok.cpython-312.pyc").write_bytes(b"cache")
 
     assert _blocking_git_status(repo, own) == ""
 
@@ -470,6 +514,28 @@ def test_record_closed_loop_proof_cross_validates_merge_and_pytest_gate(tmp_path
     assert full["closed_loop_proof"]["verified"] is True
     assert any("merge_cross_check=True" in item for item in full["closed_loop_proof"]["evidence"])
     assert any("pytest_gate_cross_check=True" in item for item in full["closed_loop_proof"]["evidence"])
+
+
+def test_rollback_rehearsal_executes_git_revert_in_temporary_worktree(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    git(repo, "checkout", "-b", "retort/absorb-feature")
+    (repo / "feature.py").write_text("VALUE = 1\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "feature")
+    git(repo, "checkout", "main")
+    git(repo, "merge", "--no-ff", "retort/absorb-feature", "-m", "Merge feature")
+    merge_commit = git(repo, "rev-parse", "--short", "HEAD")
+
+    result = rollback_rehearsal(repo, merge_commit)
+
+    assert result["verified"] is True
+    assert result["parent_count"] == 2
+    assert result["revert_executed"] is True
+    assert result["revert_exit_code"] == 0
+    assert "feature.py" in result["changed_files"]
+    assert result["reason"] == "revert_rehearsed"
+    assert git(repo, "status", "--porcelain") == ""
 
 
 def test_paibi_llm_review_writes_outbox_when_disabled(tmp_path: Path, monkeypatch) -> None:
