@@ -585,14 +585,50 @@ class TestAuthRegister:
         assert result.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_enterprise_missing_email(self):
+    async def test_enterprise_missing_email_uses_synth_and_registers_market(self):
+        # 新契约:无邮箱企业注册不再被拒,而是用占位邮箱 {username}@auto.xiu-ci.com
+        # 统一走市场注册(单一鉴权源 → market-first 登录认得 = 注册=登录账号打通)。
         from app.fastapi_routes.domains.auth.routes import auth_register
 
+        captured: dict = {}
+
+        async def fake_register(username, password, email, verification_code=""):
+            captured["email"] = email
+            return {
+                "success": True,
+                "raw": {"user": {"email": email}},
+                "token": "tok",
+                "refresh_token": "r",
+            }
+
         request = MagicMock()
-        with patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"):
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch("app.fastapi_routes.market_account.register_market_user", new=fake_register),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                return_value=True,
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.fastapi_routes.market_account.save_session_market_token"),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                side_effect=lambda **kw: kw["result"],
+            ),
+            patch("app.application.account_registration.apply_account_profile_on_register"),
+        ):
+            mock_service = MagicMock()
+            mock_service.login.return_value = {
+                "success": True,
+                "session_id": "s1",
+                "user": {"username": "u"},
+            }
+            mock_get.return_value = mock_service
             result = await auth_register(request, {"username": "u", "password": "pass123"})
+        # 无邮箱 → 占位邮箱进市场,不再 400
+        assert captured["email"] == "u@auto.xiu-ci.com"
         assert isinstance(result, JSONResponse)
-        assert result.status_code == 400
+        assert result.status_code == 200
 
     @pytest.mark.asyncio
     async def test_enterprise_market_register_failure(self):

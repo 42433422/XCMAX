@@ -115,6 +115,16 @@ def bundled_industry_seeds_dir() -> Path | None:
         staged = parent / "build" / "staged-industry-seeds-enterprise"
         if staged.is_dir():
             return staged
+    # 最后兜底：随产品分发的 bundled mods 根目录(含 coating-industry / attendance-industry
+    # 等开放行业包)。打包环境下 mods_root 指向 userData，没有独立种子池时仍可由此取行业包。
+    try:
+        from app.infrastructure.mods.mod_manager import _default_mods_root
+
+        bundled = Path(_default_mods_root()).resolve()
+        if bundled.is_dir():
+            return bundled
+    except Exception:  # noqa: BLE001 - 兜底路径解析失败不应阻断安装
+        logger.debug("bundled mods root fallback for industry seeds skipped", exc_info=True)
     return None
 
 

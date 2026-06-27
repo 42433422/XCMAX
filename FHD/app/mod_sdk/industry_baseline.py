@@ -210,6 +210,19 @@ def industry_entitled_for_client_mods(industry_id: str, entitled_mod_ids: set[st
     iid = str(industry_id or "").strip()
     if not iid:
         return False
+    # 开放引导行业(涂料/考勤等中性行业包随产品分发)在引导期始终可选，
+    # 不受"市场客户 Mod 权益"限制——否则新注册企业账号选不到自己注册的行业。
+    try:
+        doc = load_industry_baseline_document()
+        open_ids = {
+            str(x).strip()
+            for x in (doc.get("onboarding_open_industry_ids") or [])
+            if str(x or "").strip()
+        }
+        if iid in open_ids:
+            return True
+    except RECOVERABLE_ERRORS:
+        pass
     canonical = canonical_mod_id_for_industry(iid)
     if not canonical:
         return False
@@ -278,6 +291,28 @@ def filter_onboarding_catalog_for_entitlements(
         if isinstance(p, dict) and str(p.get("industry_id") or "").strip()
     ]
     return out
+
+
+def _ensure_industries_selectable(
+    catalog: dict[str, Any], industry_ids: set[str]
+) -> dict[str, Any]:
+    """把指定行业(账号注册行业 / 工作区已选行业)提升为可选 open 项。
+
+    解决"注册了某行业，却在选择行业里看不到对应行业包"——即使该行业不在写死的
+    onboarding_open 列表或被企业权益降级，也保证账号自己的行业始终可选。
+    """
+    wanted = {str(x).strip() for x in industry_ids if str(x or "").strip()}
+    if not wanted:
+        return catalog
+
+    open_pkgs = [dict(p) for p in (catalog.get("open_packages") or []) if isinstance(p, dict)]
+    open_by_id = {
+        str(p.get("industry_id") or "").strip()
+        for p in open_pkgs
+        if str(p.get("industry_id") or "").strip()
+    }
+
+    presets_doc: dict[str, Any] = {}
     try:
         from app.mod_sdk.host_profile import load_industry_presets_document
 
@@ -286,55 +321,39 @@ def filter_onboarding_catalog_for_entitlements(
         presets_doc = {}
     presets = presets_doc.get("presets") if isinstance(presets_doc.get("presets"), dict) else {}
 
-    doc = load_industry_baseline_document()
-    package_ids = [
-        str(iid or "").strip()
-        for iid in (doc.get("industry_packages") or {}).keys()
-        if str(iid or "").strip()
-    ]
-    for iid in _dedupe(package_ids):
-        if iid in open_by_id:
-            continue
-        if not industry_entitled_for_client_mods(iid, entitled):
-            continue
-        moved = False
-        next_preview: list[dict[str, Any]] = []
-        for pkg in preview_pkgs:
-            if isinstance(pkg, dict) and str(pkg.get("industry_id") or "").strip() == iid:
-                row = dict(pkg)
-                row["selectable"] = True
-                open_pkgs.append(row)
-                open_by_id.add(iid)
-                moved = True
-            else:
-                next_preview.append(pkg)
-        preview_pkgs = next_preview
-        if not moved:
+    preview_pkgs: list[Any] = []
+    for pkg in catalog.get("preview_packages") or []:
+        iid = str(pkg.get("industry_id") or "").strip() if isinstance(pkg, dict) else ""
+        if iid and iid in wanted and iid not in open_by_id:
+            row = dict(pkg)
+            row["selectable"] = True
+            open_pkgs.append(row)
+            open_by_id.add(iid)
+        else:
+            preview_pkgs.append(pkg)
+
+    for iid in wanted:
+        if iid not in open_by_id:
             open_pkgs.append(_onboarding_package_row(iid, selectable=True, presets=presets))
             open_by_id.add(iid)
 
-    preview_ids = {
-        str(p.get("industry_id") or "").strip()
-        for p in preview_pkgs
-        if isinstance(p, dict) and str(p.get("industry_id") or "").strip()
-    }
-    for pkg in demoted:
-        iid = str(pkg.get("industry_id") or "").strip()
-        if iid and iid not in preview_ids:
-            preview_pkgs.append(pkg)
-            preview_ids.add(iid)
-
-    open_ids = [
+    out = dict(catalog)
+    out["open_packages"] = open_pkgs
+    out["preview_packages"] = preview_pkgs
+    out["open_industry_ids"] = [
         str(p.get("industry_id") or "").strip()
         for p in open_pkgs
-        if str(p.get("industry_id") or "").strip()
+        if isinstance(p, dict) and str(p.get("industry_id") or "").strip()
     ]
-    return {
-        **catalog,
-        "open_industry_ids": open_ids,
-        "open_packages": open_pkgs,
-        "preview_packages": preview_pkgs,
-    }
+    return out
+
+
+def _user_industry_id(user: Any) -> str:
+    if user is None:
+        return ""
+    if isinstance(user, dict):
+        return str(user.get("industry_id") or "").strip()
+    return str(getattr(user, "industry_id", "") or "").strip()
 
 
 async def build_onboarding_industry_catalog_for_request(request) -> dict[str, Any]:
@@ -358,8 +377,12 @@ async def build_onboarding_industry_catalog_for_request(request) -> dict[str, An
         "selected_industry_id": None,
     }
 
+    forced_ids: set[str] = set()
     user = resolve_session_user(request)
     if user is not None:
+        uid_industry = _user_industry_id(user)
+        if uid_industry:
+            forced_ids.add(uid_industry)
         owner_id = resolve_workspace_owner_id(request, user)
         if owner_id:
             meta["owner_id"] = owner_id
@@ -367,23 +390,27 @@ async def build_onboarding_industry_catalog_for_request(request) -> dict[str, An
             selected = str(prefs.get("selected_industry_id") or "").strip()
             if selected:
                 meta["selected_industry_id"] = selected
+                forced_ids.add(selected)
+
+    def _finish(cat: dict[str, Any]) -> dict[str, Any]:
+        return {**_ensure_industries_selectable(cat, forced_ids), **meta}
 
     if not enterprise_mod_filter_active():
-        return {**catalog, **meta}
+        return _finish(catalog)
 
     sid = session_id_from_request(request)
     if not sid:
-        return {**catalog, **meta}
+        return _finish(catalog)
 
     await sync_entitlements_from_request(request)
     meta["enterprise_filter_applied"] = True
 
     if is_admin_account_session():
-        return {**catalog, **meta}
+        return _finish(catalog)
 
     entitled = get_cached_entitled_client_mod_ids() or set()
     filtered = filter_onboarding_catalog_for_entitlements(catalog, entitled)
-    return {**filtered, **meta}
+    return _finish(filtered)
 
 
 def build_onboarding_industry_catalog() -> dict[str, Any]:
