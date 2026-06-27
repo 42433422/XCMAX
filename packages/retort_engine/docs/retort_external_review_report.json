@@ -5,107 +5,36 @@
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/evalops/diffscope",
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/kamilstanuch/codebase-digest",
   "external_snapshot": {
-    "file_count": 599,
-    "git_revision": "468a288967c46eae9ab201458f4892327acfc8f3",
+    "file_count": 81,
+    "git_revision": "77efab57528cbc825129a94adc521492ac0e65fa",
     "suffix_counts": {
-      ".css": 1,
-      ".example": 1,
-      ".html": 1,
-      ".js": 1,
-      ".json": 17,
-      ".lock": 1,
-      ".md": 13,
-      ".ps1": 1,
-      ".py": 6,
-      ".rs": 419,
-      ".sh": 6,
-      ".sql": 7,
-      ".svg": 1,
-      ".toml": 5,
-      ".tpl": 1,
-      ".ts": 16,
-      ".tsx": 28,
-      ".yaml": 27,
-      ".yml": 38,
-      "<none>": 9
+      ".gif": 1,
+      ".in": 1,
+      ".md": 71,
+      ".py": 4,
+      ".txt": 2,
+      "<none>": 2
     }
   },
-  "generated_at": "2026-06-27T16:07:56Z",
+  "generated_at": "2026-06-27T17:04:00Z",
   "license_review": {
-    "detected_license": "Apache License",
-    "message": "Allowed license detected: Apache License",
-    "status": "passed"
+    "detected_license": "",
+    "message": "license-incompatible risk: no LICENSE file detected",
+    "status": "blocked"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/evalops/diffscope --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/kamilstanuch/codebase-digest --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 4,
-      "minimum_expected_behavior_tests": 8,
-      "prioritized_component_count": 4,
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 4,
+      "prioritized_component_count": 0,
       "task_dimension_count": 4
     },
-    "component_gaps": [
-      {
-        "component": "benchmark_eval",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 1160,
-        "own_files": 12,
-        "representative_external_files": [
-          "Cargo.toml",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "CLAUDE.md",
-          "action.yml"
-        ]
-      },
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 1138,
-        "own_files": 12,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "docker-compose.yml",
-          "FEATURES.md"
-        ]
-      },
-      {
-        "component": "review_pipeline",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 722,
-        "own_files": 12,
-        "representative_external_files": [
-          "Cargo.toml",
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "docker-compose.yml"
-        ]
-      },
-      {
-        "component": "safety_policy",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 515,
-        "own_files": 12,
-        "representative_external_files": [
-          "Cargo.toml",
-          "deny.toml",
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -113,11 +42,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "CHANGELOG.md",
             "README.md",
-            "RELEASE_NOTES.md",
-            "docker-compose.yml",
-            "FEATURES.md"
+            "prompt_library/architecture_layer_identification.md",
+            "prompt_library/business_model_canvas_analysis.md",
+            "prompt_library/kano_model_analysis.md",
+            "prompt_library/architecture_api_conformance_check.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -126,28 +55,27 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "CHANGELOG.md",
             "README.md",
-            "FEATURES.md",
-            "web/tsconfig.node.json",
-            "web/tsconfig.app.json"
+            "prompt_library/ansoff_matrix_analysis.md",
+            "codebase_digest/app.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
       ],
       "employee_tasks": [
         {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
           "dimension": "comparative_analysis_depth",
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "review JSON with stages and comments"
           ],
           "owner_hint": "fhd-core-maintainer",
           "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
+          "task_id": "retort-depth-review-pipeline",
+          "title": "Deepen review_pipeline"
         },
         {
           "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
@@ -164,31 +92,18 @@
           "title": "Deepen diff_hunk_review"
         },
         {
-          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-workflow-ci",
-          "title": "Deepen workflow_ci"
-        },
-        {
-          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "dimension": "feedback_loop_closure",
           "evidence_required": [
             "source diff",
             "behavior test",
             "gate output",
-            "review JSON with stages and comments"
+            "precision or false-positive benchmark counters"
           ],
           "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-review-pipeline",
-          "title": "Deepen review_pipeline"
+          "priority": "P1",
+          "task_id": "retort-depth-benchmark-eval",
+          "title": "Deepen benchmark_eval"
         },
         {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
@@ -204,51 +119,56 @@
           "title": "Deepen safety_policy"
         },
         {
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "dimension": "feedback_loop_closure",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-benchmark-eval",
-          "title": "Deepen benchmark_eval"
-        }
-      ],
-      "focus_mode": "similar_function_depth_only",
-      "focused_components": [
-        {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
-          },
+          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
           "evidence_required": [
             "source diff",
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 1,
-          "own_marker_hits": 58,
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-workflow-ci",
+          "title": "Deepen workflow_ci"
+        }
+      ],
+      "focus_mode": "similar_function_depth_only",
+      "focused_components": [
+        {
+          "absorption_goal": "turn external review stages into Retort discovery, localization, reflection, and task dispatch",
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+          "component": "review_pipeline",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "review JSON with stages and comments"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-review-pipeline",
+            "title": "Deepen review_pipeline"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "external_marker_hits": 74,
+          "own_marker_hits": 1644,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "web/src/pages/Settings.tsx"
+            "README.md",
+            "prompt_library/learning_frontend_code_analysis.md",
+            "prompt_library/evolution_technical_debt_estimation.md",
+            "prompt_library/business_model_canvas_analysis.md",
+            "prompt_library/swot_analysis.md"
           ]
         },
         {
@@ -276,13 +196,84 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 2,
-          "own_marker_hits": 21,
+          "external_marker_hits": 1,
+          "own_marker_hits": 22,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "prompt_library/quality_code_documentation_coverage_analysis.md"
+          ]
+        },
+        {
+          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "component": "benchmark_eval",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+            "dimension": "feedback_loop_closure",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "precision or false-positive benchmark counters"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-benchmark-eval",
+            "title": "Deepen benchmark_eval"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "precision or false-positive benchmark counters"
+          ],
+          "external_marker_hits": 58,
+          "own_marker_hits": 404,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            "web/src/pages/Repos.tsx"
+            "prompt_library/architecture_coupling_cohesion_analysis.md",
+            "prompt_library/swot_analysis.md",
+            "prompt_library/blue_ocean_strategy_analysis.md",
+            "prompt_library/performance_scalability_analysis.md"
+          ]
+        },
+        {
+          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "component": "safety_policy",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-safety-policy",
+            "title": "Deepen safety_policy"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 27,
+          "own_marker_hits": 318,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "README.md",
+            "setup.py",
+            "prompt_library/swot_analysis.md",
+            "prompt_library/security_vulnerability_analysis.md",
+            "prompt_library/learning_code_review_checklist.md"
           ]
         },
         {
@@ -308,125 +299,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 1809,
-          "own_marker_hits": 1854,
+          "external_marker_hits": 296,
+          "own_marker_hits": 1963,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "Cargo.toml",
-            "deny.toml",
-            "CHANGELOG.md",
+            "update_package.py",
             "README.md",
-            "RELEASE_NOTES.md"
-          ]
-        },
-        {
-          "absorption_goal": "turn external review stages into Retort discovery, localization, reflection, and task dispatch",
-          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-          "component": "review_pipeline",
-          "depth_gap": 722,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-review-pipeline",
-            "title": "Deepen review_pipeline"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 2415,
-          "own_marker_hits": 1693,
-          "priority": "P0",
-          "similarity_score": 95,
-          "source_files": [
-            "Cargo.toml",
-            "CHANGELOG.md",
-            "README.md",
-            "RELEASE_NOTES.md",
-            "docker-compose.yml"
-          ]
-        },
-        {
-          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "component": "safety_policy",
-          "depth_gap": 515,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-safety-policy",
-            "title": "Deepen safety_policy"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 827,
-          "own_marker_hits": 312,
-          "priority": "P0",
-          "similarity_score": 90,
-          "source_files": [
-            "Cargo.toml",
-            "deny.toml",
-            "CHANGELOG.md",
-            "README.md",
-            "RELEASE_NOTES.md"
-          ]
-        },
-        {
-          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "component": "benchmark_eval",
-          "depth_gap": 1160,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-            "dimension": "feedback_loop_closure",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "precision or false-positive benchmark counters"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-benchmark-eval",
-            "title": "Deepen benchmark_eval"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "external_marker_hits": 1525,
-          "own_marker_hits": 365,
-          "priority": "P0",
-          "similarity_score": 88,
-          "source_files": [
-            "Cargo.toml",
-            "README.md",
-            "RELEASE_NOTES.md",
-            "CLAUDE.md",
-            "action.yml"
+            "setup.py",
+            "prompt_library/learning_code_analogies_metaphors.md",
+            "prompt_library/learning_frontend_code_analysis.md"
           ]
         }
       ],
@@ -435,7 +317,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 6,
+        "focused_component_count": 5,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -446,26 +328,24 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 1305,
+          "external_marker_hits": 33,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "CHANGELOG.md",
             "README.md",
-            "RELEASE_NOTES.md",
-            "docker-compose.yml",
-            "FEATURES.md"
+            "prompt_library/architecture_layer_identification.md",
+            "prompt_library/business_model_canvas_analysis.md",
+            "prompt_library/kano_model_analysis.md",
+            "prompt_library/architecture_api_conformance_check.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 168,
+          "external_marker_hits": 10,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "CHANGELOG.md",
             "README.md",
-            "FEATURES.md",
-            "web/tsconfig.node.json",
-            "web/tsconfig.app.json"
+            "prompt_library/ansoff_matrix_analysis.md",
+            "codebase_digest/app.py"
           ]
         }
       ]
@@ -473,118 +353,93 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "Cargo.toml",
           "README.md",
-          "RELEASE_NOTES.md",
-          "CLAUDE.md",
-          "action.yml",
-          "web/package-lock.json",
-          "web/src/lib/cost.ts",
-          "web/src/lib/analytics.ts",
-          "web/src/lib/__tests__/cost.test.ts",
-          "web/src/api/types.ts",
-          "web/src/pages/Settings.tsx",
-          "web/src/pages/Doctor.tsx"
+          "prompt_library/architecture_coupling_cohesion_analysis.md",
+          "prompt_library/swot_analysis.md",
+          "prompt_library/blue_ocean_strategy_analysis.md",
+          "prompt_library/performance_scalability_analysis.md",
+          "prompt_library/okr_analysis.md",
+          "prompt_library/lean_canvas_analysis.md",
+          "prompt_library/learning_code_style_readability_analysis.md",
+          "prompt_library/ansoff_matrix_analysis.md",
+          "prompt_library/mckinsey_7s_analysis.md",
+          "prompt_library/porters_five_forces_analysis.md",
+          "prompt_library/value_chain_analysis.md"
         ],
-        "marker_hits": 1525
+        "marker_hits": 58
       },
       "diff_hunk_review": {
         "files": [
-          "README.md",
-          "web/src/pages/Repos.tsx"
-        ],
-        "marker_hits": 2
-      },
-      "file_grouping": {
-        "files": [
-          "web/src/pages/Settings.tsx"
+          "prompt_library/quality_code_documentation_coverage_analysis.md"
         ],
         "marker_hits": 1
       },
       "plugin_surface": {
         "files": [
-          "CHANGELOG.md",
           "README.md",
-          "FEATURES.md",
-          "web/tsconfig.node.json",
-          "web/tsconfig.app.json",
-          "web/package-lock.json",
-          "web/package.json",
-          "web/eslint.config.js",
-          "web/vite.config.ts",
-          "web/vitest.config.ts",
-          "web/src/lib/parseDiff.ts",
-          "web/src/lib/models.ts"
+          "prompt_library/ansoff_matrix_analysis.md",
+          "codebase_digest/app.py"
         ],
-        "marker_hits": 168
+        "marker_hits": 10
       },
       "provider_surface": {
         "files": [
-          "CHANGELOG.md",
           "README.md",
-          "RELEASE_NOTES.md",
-          "docker-compose.yml",
-          "FEATURES.md",
-          "CLAUDE.md",
-          "action.yml",
-          "web/src/App.tsx",
-          "web/src/components/Layout.tsx",
-          "web/src/lib/cost.ts",
-          "web/src/lib/analytics.ts",
-          "web/src/lib/models.ts"
+          "prompt_library/architecture_layer_identification.md",
+          "prompt_library/business_model_canvas_analysis.md",
+          "prompt_library/kano_model_analysis.md",
+          "prompt_library/architecture_api_conformance_check.md",
+          "prompt_library/lean_canvas_analysis.md",
+          "prompt_library/porters_five_forces_analysis.md",
+          "prompt_library/tech_adoption_lifecycle_analysis.md",
+          "prompt_library/architecture_api_client_code_generation.md"
         ],
-        "marker_hits": 1305
+        "marker_hits": 33
       },
       "review_pipeline": {
         "files": [
-          "Cargo.toml",
-          "CHANGELOG.md",
           "README.md",
-          "RELEASE_NOTES.md",
-          "docker-compose.yml",
-          "FEATURES.md",
-          "CLAUDE.md",
-          "action.yml",
-          "web/package-lock.json",
-          "web/package.json",
-          "web/src/App.tsx",
-          "web/src/components/CommentCard.tsx"
+          "prompt_library/learning_frontend_code_analysis.md",
+          "prompt_library/evolution_technical_debt_estimation.md",
+          "prompt_library/business_model_canvas_analysis.md",
+          "prompt_library/swot_analysis.md",
+          "prompt_library/blue_ocean_strategy_analysis.md",
+          "prompt_library/kano_model_analysis.md",
+          "prompt_library/okr_analysis.md",
+          "prompt_library/learning_backend_code_analysis.md",
+          "prompt_library/lean_canvas_analysis.md",
+          "prompt_library/learning_code_style_readability_analysis.md",
+          "prompt_library/ansoff_matrix_analysis.md"
         ],
-        "marker_hits": 2415
+        "marker_hits": 74
       },
       "safety_policy": {
         "files": [
-          "Cargo.toml",
-          "deny.toml",
-          "CHANGELOG.md",
           "README.md",
-          "RELEASE_NOTES.md",
-          "FEATURES.md",
-          "web/package-lock.json",
-          "web/src/components/__tests__/CommentCard.test.tsx",
-          "web/src/api/types.ts",
-          "web/src/pages/Settings.tsx",
-          "web/src/pages/Repos.tsx",
-          "web/src/pages/Admin.tsx"
+          "setup.py",
+          "prompt_library/swot_analysis.md",
+          "prompt_library/security_vulnerability_analysis.md",
+          "prompt_library/learning_code_review_checklist.md",
+          "codebase_digest/app.py"
         ],
-        "marker_hits": 827
+        "marker_hits": 27
       },
       "workflow_ci": {
         "files": [
-          "Cargo.toml",
-          "deny.toml",
-          "CHANGELOG.md",
+          "update_package.py",
           "README.md",
-          "RELEASE_NOTES.md",
-          "docker-compose.yml",
-          "FEATURES.md",
-          "CLAUDE.md",
-          "action.yml",
-          "web/package-lock.json",
-          "web/package.json",
-          "web/vitest.config.ts"
+          "setup.py",
+          "prompt_library/learning_code_analogies_metaphors.md",
+          "prompt_library/learning_frontend_code_analysis.md",
+          "prompt_library/learning_mini_lesson_generation.md",
+          "prompt_library/architecture_database_schema_documentation.md",
+          "prompt_library/stakeholder_persona_generation.md",
+          "prompt_library/architecture_layer_identification.md",
+          "prompt_library/evolution_technical_debt_estimation.md",
+          "prompt_library/architecture_coupling_cohesion_analysis.md",
+          "prompt_library/business_model_canvas_analysis.md"
         ],
-        "marker_hits": 1809
+        "marker_hits": 296
       }
     },
     "own_file_groups": {
@@ -603,7 +458,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 365
+        "marker_hits": 404
       },
       "diff_hunk_review": {
         "files": [
@@ -615,7 +470,7 @@
           "tests/test_similar_project_loop.py",
           "tests/test_review_pipeline.py"
         ],
-        "marker_hits": 21
+        "marker_hits": 22
       },
       "file_grouping": {
         "files": [
@@ -624,15 +479,15 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
-          "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md"
+          "docs/retort_absorption_log.md",
+          "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 58
+        "marker_hits": 52
       },
       "plugin_surface": {
         "files": [
@@ -649,7 +504,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 355
+        "marker_hits": 360
       },
       "provider_surface": {
         "files": [
@@ -666,7 +521,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 167
+        "marker_hits": 170
       },
       "review_pipeline": {
         "files": [
@@ -683,7 +538,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 1693
+        "marker_hits": 1644
       },
       "safety_policy": {
         "files": [
@@ -700,7 +555,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 312
+        "marker_hits": 318
       },
       "workflow_ci": {
         "files": [
@@ -717,7 +572,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 1854
+        "marker_hits": 1963
       }
     },
     "pipeline_stages": [
@@ -729,121 +584,58 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested benchmark_eval behavior, not only a recorded signal.",
-        "component": "benchmark_eval",
-        "priority": "P0",
-        "source_files": [
-          "Cargo.toml",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "CLAUDE.md",
-          "action.yml"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "docker-compose.yml",
-          "FEATURES.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested review_pipeline behavior, not only a recorded signal.",
-        "component": "review_pipeline",
-        "priority": "P0",
-        "source_files": [
-          "Cargo.toml",
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md",
-          "docker-compose.yml"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
-        "source_files": [
-          "Cargo.toml",
-          "deny.toml",
-          "CHANGELOG.md",
-          "README.md",
-          "RELEASE_NOTES.md"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260627160755-f8e6a7af99",
+  "run_id": "20260627170400-762694f28f",
   "semantic_review": {
     "external": {
-      "classes": 119,
+      "classes": 9,
       "cli_markers": 0,
-      "functions": 268,
-      "source_files": 153,
-      "test_markers": 116,
-      "workflow_markers": 2573
+      "functions": 33,
+      "source_files": 75,
+      "test_markers": 21,
+      "workflow_markers": 61
     },
-    "gaps": [
-      {
-        "external_advantage": 72,
-        "metric": "classes"
-      },
-      {
-        "external_advantage": 73,
-        "metric": "source_files"
-      },
-      {
-        "external_advantage": 486,
-        "metric": "workflow_markers"
-      }
-    ],
+    "gaps": [],
     "own": {
-      "classes": 47,
+      "classes": 46,
       "cli_markers": 29,
-      "functions": 697,
-      "source_files": 80,
-      "test_markers": 202,
-      "workflow_markers": 2087
+      "functions": 735,
+      "source_files": 83,
+      "test_markers": 238,
+      "workflow_markers": 2049
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "Cargo.toml",
       "README.md",
-      "RELEASE_NOTES.md",
-      "CLAUDE.md",
-      "action.yml"
+      "prompt_library/architecture_coupling_cohesion_analysis.md",
+      "prompt_library/swot_analysis.md",
+      "prompt_library/blue_ocean_strategy_analysis.md",
+      "prompt_library/performance_scalability_analysis.md"
     ],
     "multi_provider": [
-      "CHANGELOG.md",
       "README.md",
-      "RELEASE_NOTES.md",
-      "docker-compose.yml",
-      "FEATURES.md"
+      "prompt_library/architecture_layer_identification.md",
+      "prompt_library/business_model_canvas_analysis.md",
+      "prompt_library/kano_model_analysis.md",
+      "prompt_library/architecture_api_conformance_check.md"
     ],
     "plugin_surface": [
-      "Cargo.toml",
-      "CHANGELOG.md",
       "README.md",
-      "rust-toolchain.toml",
-      "CLAUDE.md"
+      "prompt_library/architecture_layer_identification.md",
+      "prompt_library/architecture_api_client_code_generation.md",
+      "codebase_digest/app.py"
     ],
     "review_pipeline": [
-      "Cargo.toml",
-      "CHANGELOG.md",
       "README.md",
-      "RELEASE_NOTES.md",
-      "FEATURES.md"
+      "prompt_library/evolution_technical_debt_estimation.md",
+      "prompt_library/quality_code_style_consistency_analysis.md",
+      "prompt_library/learning_socratic_dialogue_code_review.md",
+      "prompt_library/learning_code_review_checklist.md"
     ]
   },
-  "source": "https://github.com/evalops/diffscope",
+  "source": "https://github.com/kamilstanuch/codebase-digest",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -851,7 +643,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/evalops/diffscope."
+      "why": "Compare implementation patterns from https://github.com/kamilstanuch/codebase-digest."
     },
     {
       "dimension": "product_operability",
@@ -859,7 +651,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/evalops/diffscope."
+      "why": "Extract usable UX improvements from https://github.com/kamilstanuch/codebase-digest."
     },
     {
       "dimension": "operational_readiness",
@@ -867,7 +659,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/evalops/diffscope."
+      "why": "Adapt CI and release checks from https://github.com/kamilstanuch/codebase-digest."
     },
     {
       "dimension": "comparative_analysis_depth",
