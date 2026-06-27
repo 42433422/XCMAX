@@ -26,6 +26,7 @@ SIGNAL_WEIGHTS = {
     "file_grouping": 20,
     "diff_hunk_review": 18,
     "benchmarking": 16,
+    "codebase_graph": 18,
     "plugin_surface": 12,
     "multi_provider": 10,
 }

@@ -91,6 +91,53 @@ def test_core_refactor_plan_maps_codebase_graph_component(tmp_path: Path) -> Non
     assert plan["gate"]["passed"] is True
     assert plan["tasks"][0]["component"] == "codebase_graph"
     assert "retort_engine/codebase_graph.py" in plan["tasks"][0]["modules"]
+    assert plan["tasks"][0]["code_graph_hotspot_score"] >= 0
+
+
+def test_core_refactor_plan_uses_code_graph_hotspots_to_order_equal_priority_tasks(tmp_path: Path) -> None:
+    for rel in [
+        "retort_engine/codebase_graph.py",
+        "retort_engine/service.py",
+        "retort_engine/cli.py",
+        "retort_engine/review_pipeline.py",
+        "retort_engine/pr_review.py",
+        "tests/test_codebase_graph.py",
+        "tests/test_contracts_feedback.py",
+        "tests/test_review_pipeline.py",
+        "tests/test_pr_review.py",
+    ]:
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# ok\n", encoding="utf-8")
+    (tmp_path / "retort_engine" / "codebase_graph.py").write_text(
+        "\n".join(
+            [
+                "def a(): return 1",
+                "def b(): return a()",
+                "def c(): return a() + b()",
+                "def d(): return a() + b() + c()",
+                "def e(): return a() + b() + c() + d()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    memory = {
+        "summary": {"source_count": 3, "ready_component_count": 2},
+        "deep_architecture_tasks": [
+            {"task_id": "retort-architecture-review-pipeline", "priority": "P0"},
+            {"task_id": "retort-architecture-codebase-graph", "priority": "P0"},
+        ],
+        "component_index": {
+            "review_pipeline": {"source_count": 3, "gate_pass_rate": 1.0, "architecture_depth_score": 90, "ready_for_deep_refactor": True},
+            "codebase_graph": {"source_count": 3, "gate_pass_rate": 1.0, "architecture_depth_score": 90, "ready_for_deep_refactor": True},
+        },
+    }
+
+    plan = build_core_refactor_plan(memory, project_root=tmp_path)
+
+    assert plan["tasks"][0]["component"] == "codebase_graph"
+    assert plan["tasks"][0]["code_graph_hotspot_score"] > 0
+    assert plan["summary"]["code_graph_hotspot_task_count"] >= 1
 
 
 def test_write_core_refactor_plan_persists_gate(tmp_path: Path) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from retort_engine.codebase_graph import build_codebase_graph
+from retort_engine.codebase_graph import build_absorption_focus_map, build_codebase_graph, code_graph_absorption_proof
 
 
 def test_codebase_graph_tracks_imports_definitions_and_calls(tmp_path: Path) -> None:
@@ -72,3 +72,52 @@ def test_codebase_graph_reports_parse_errors_without_crashing(tmp_path: Path) ->
     assert graph["status"] == "partial"
     assert graph["summary"]["parse_error_count"] == 1
     assert graph["evidence"]["parse_errors"][0]["path"] == "broken.py"
+
+
+def test_absorption_focus_map_ranks_matching_graph_files(tmp_path: Path) -> None:
+    own = tmp_path / "own"
+    external = tmp_path / "external"
+    (own / "retort_engine").mkdir(parents=True)
+    (external / "src").mkdir(parents=True)
+    (own / "retort_engine" / "codebase_graph.py").write_text(
+        "def build_codebase_graph():\n    return 'dependency graph import call hotspot architecture'\n",
+        encoding="utf-8",
+    )
+    (own / "retort_engine" / "other.py").write_text("def other():\n    return 1\n", encoding="utf-8")
+    (external / "src" / "graph.py").write_text(
+        "def extract():\n    return 'codebase graph dependency graph call graph imports hotspot'\n",
+        encoding="utf-8",
+    )
+
+    focus = build_absorption_focus_map(
+        own,
+        external,
+        tasks=[{"task_id": "retort-depth-codebase-graph", "title": "Deepen codebase graph"}],
+        signals=["codebase_graph"],
+    )
+
+    assert focus["status"] == "ready"
+    assert "graph" in focus["focus_terms"]
+    assert focus["own_focus_files"][0] == "retort_engine/codebase_graph.py"
+    assert focus["external_focus_files"][0] == "src/graph.py"
+
+
+def test_code_graph_absorption_proof_requires_focus_or_hotspot_hit(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    (project / "retort_engine").mkdir(parents=True)
+    graph_file = project / "retort_engine" / "codebase_graph.py"
+    graph_file.write_text(
+        "def target():\n    return 1\n\ndef caller():\n    return target()\n",
+        encoding="utf-8",
+    )
+
+    proof = code_graph_absorption_proof(
+        project,
+        [str(graph_file)],
+        {"own_focus_files": ["retort_engine/codebase_graph.py"]},
+    )
+    missed = code_graph_absorption_proof(project, [str(project / "tests" / "test_codebase_graph.py")], {"own_focus_files": ["retort_engine/codebase_graph.py"]})
+
+    assert proof["passed"] is True
+    assert proof["changed_focus_files"] == ["retort_engine/codebase_graph.py"]
+    assert missed["passed"] is False

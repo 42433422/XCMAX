@@ -179,6 +179,22 @@ def test_advantage_diff_map_treats_swe_bench_oracle_as_benchmark_eval_behavior()
     ]
 
 
+def test_advantage_diff_map_treats_codebase_graph_as_architecture_behavior() -> None:
+    rows = advantage_diff_map(
+        ["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
+        [{"signal": "codebase_graph", "weight": 30}],
+    )
+
+    assert rows == [
+        {
+            "signal": "codebase_graph",
+            "weight": 30,
+            "changed_files": ["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
+            "has_behavior_diff": True,
+        }
+    ]
+
+
 def test_advantage_diff_map_ignores_generated_registry_and_reports() -> None:
     rows = advantage_diff_map(
         [
@@ -278,3 +294,17 @@ def test_absorption_quality_gate_fails_closed_for_report_only_with_passing_pytes
     assert "missing_behavior_source_diff" in gate["missing"]
     assert "missing_behavior_test_diff" in gate["missing"]
     assert "missing_advantage_to_behavior_mapping" in gate["missing"]
+
+
+def test_absorption_quality_gate_requires_code_graph_proof_when_present() -> None:
+    gate = absorption_quality_gate(
+        ["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
+        [{"ok": True, "command": ["pytest", "tests/test_codebase_graph.py"], "stdout_tail": "6 passed"}],
+        minimum_behavior_tests=1,
+        depth_gate={"passed": True},
+        ranked_capabilities=[{"signal": "codebase_graph", "weight": 30}],
+        code_graph_proof={"passed": False},
+    )
+
+    assert gate["passed"] is False
+    assert "code_graph_focus_not_proved" in gate["missing"]

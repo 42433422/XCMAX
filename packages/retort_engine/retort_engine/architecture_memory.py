@@ -11,6 +11,7 @@ ARCHITECTURE_SIGNAL_COMPONENTS = {
     "file_grouping": ("context_partitioning", "diff_locality"),
     "diff_hunk_review": ("diff_locality", "patch_reasoning"),
     "benchmarking": ("evaluation_loop", "regression_oracle"),
+    "codebase_graph": ("codebase_graph", "context_localization"),
     "plugin_surface": ("automation_surface", "command_contract"),
     "multi_provider": ("provider_boundary", "model_adapter"),
 }
@@ -26,6 +27,7 @@ def build_architecture_record(
     tasks: list[dict[str, Any]],
     changed_files: list[str],
     gates: list[dict[str, Any]],
+    code_graph_proof: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     signals = [str(item) for item in profile.get("signals") or []]
     pipeline = review_report.get("review_pipeline") if isinstance(review_report.get("review_pipeline"), dict) else {}
@@ -46,6 +48,8 @@ def build_architecture_record(
         "gates_passed": bool(gates) and all(bool(gate.get("ok")) for gate in gates),
         "gate_count": len(gates),
         "external_file_count": int(profile.get("file_count") or 0),
+        "code_graph_proof": code_graph_proof or {},
+        "code_graph_proved": bool((code_graph_proof or {}).get("passed")),
     }
 
 
@@ -136,12 +140,13 @@ def _component_index(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             if not isinstance(component, dict) or not component.get("component"):
                 continue
             name = str(component.get("component"))
-            row = index.setdefault(name, {"component": name, "sources": [], "run_ids": [], "evidence_files": [], "gate_pass_count": 0, "run_count": 0})
+            row = index.setdefault(name, {"component": name, "sources": [], "run_ids": [], "evidence_files": [], "gate_pass_count": 0, "run_count": 0, "code_graph_proof_count": 0})
             row["sources"].append(source)
             row["run_ids"].append(run_id)
             row["evidence_files"].extend(str(item) for item in component.get("evidence_files") or [])
             row["gate_pass_count"] += 1 if gates_passed else 0
             row["run_count"] += 1
+            row["code_graph_proof_count"] += 1 if run.get("code_graph_proved") else 0
     for row in index.values():
         sources = sorted({item for item in row["sources"] if item})
         evidence_files = sorted({item for item in row["evidence_files"] if item})[:12]
@@ -150,7 +155,7 @@ def _component_index(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         row["run_ids"] = sorted({item for item in row["run_ids"] if item})
         row["evidence_files"] = evidence_files
         row["gate_pass_rate"] = round(row["gate_pass_count"] / row["run_count"], 3) if row["run_count"] else 0.0
-        row["architecture_depth_score"] = min(100, 25 + 15 * row["source_count"] + 5 * row["gate_pass_count"] + min(20, len(evidence_files) * 2))
+        row["architecture_depth_score"] = min(100, 25 + 15 * row["source_count"] + 5 * row["gate_pass_count"] + 6 * row["code_graph_proof_count"] + min(20, len(evidence_files) * 2))
         row["ready_for_deep_refactor"] = row["source_count"] >= 3 and row["gate_pass_rate"] >= 0.66
     return dict(sorted(index.items(), key=lambda item: (int(item[1]["architecture_depth_score"]), item[0]), reverse=True))
 
