@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.comparative_replay import build_cross_project_replay
+from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.contracts import contract_names
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
@@ -99,6 +100,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "pr_publish_sandbox": "publish-pr-sandbox" in text and "run_publish_sandbox" in text and "/api/publish-pr-sandbox" in text,
         "pr_live_publish_probe": "publish-pr-live-probe" in text and "run_live_pr_comment_probe" in text and "/api/publish-pr-live-probe" in text,
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
+        "complex_pr_replay": "complex-pr-replay" in text and "build_complex_pr_replay_report" in text,
         "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
         "review_quality_benchmark": "quality-benchmark-report" in text and "build_review_quality_benchmark" in text,
         "employee_scheduler_stress": "employee-scheduler-stress" in text and "run_employee_scheduler_stress" in text,
@@ -371,11 +373,24 @@ class RetortService:
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_project_replay(str(payload.get("project") or payload.get("project_path") or "."))
 
+    def complex_pr_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
+        return build_complex_pr_replay_report(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            pr_urls=urls or None,
+            max_comments=int(payload.get("max_comments") or 20),
+            max_bytes=int(payload.get("max_bytes") or 800000),
+        )
+
     def task_prioritization_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_task_prioritization_report(str(payload.get("project") or payload.get("project_path") or "."))
 
     def review_quality_benchmark(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_review_quality_benchmark(str(payload.get("project") or payload.get("project_path") or "."), sample_count=int(payload.get("sample_count") or 30))
+        return build_review_quality_benchmark(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            sample_count=int(payload.get("sample_count") or 30),
+            negative_sample_count=int(payload.get("negative_sample_count") or 0),
+        )
 
     def employee_scheduler_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_employee_scheduler_stress(
@@ -814,6 +829,17 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"cross_project_replay_external_project_count={replay_summary.get('external_project_count', '')}")
     evidence.append(f"cross_project_replay_distinct_signal_count={replay_summary.get('distinct_signal_count', '')}")
     evidence.append(f"cross_project_replay_passed_checks={sum(1 for item in replay_checks if item.get('passed'))}/{len(replay_checks)}")
+    complex_pr_report = _read_json(project / "docs" / "retort_complex_pr_replay.json")
+    complex_pr_summary = complex_pr_report.get("summary") if isinstance(complex_pr_report.get("summary"), dict) else {}
+    evidence.append(f"complex_pr_replay_status={complex_pr_report.get('status', '')}")
+    evidence.append(f"complex_pr_replay_pr_count={complex_pr_summary.get('pr_count', '')}")
+    evidence.append(f"complex_pr_replay_reviewed_pr_count={complex_pr_summary.get('reviewed_pr_count', '')}")
+    evidence.append(f"complex_pr_replay_complex_pr_count={complex_pr_summary.get('complex_pr_count', '')}")
+    evidence.append(f"complex_pr_replay_total_file_count={complex_pr_summary.get('total_file_count', '')}")
+    evidence.append(f"complex_pr_replay_total_hunk_count={complex_pr_summary.get('total_hunk_count', '')}")
+    evidence.append(f"complex_pr_replay_total_comment_count={complex_pr_summary.get('total_comment_count', '')}")
+    evidence.append(f"complex_pr_replay_total_reviewed_change_count={complex_pr_summary.get('total_reviewed_new_change_count', '')}")
+    evidence.append(f"complex_pr_replay_truncated_pr_count={complex_pr_summary.get('truncated_pr_count', '')}")
     task_report = _read_json(project / "docs" / "retort_task_prioritization_report.json")
     task_summary = task_report.get("summary") if isinstance(task_report.get("summary"), dict) else {}
     evidence.append(f"task_prioritization_status={task_report.get('status', '')}")
@@ -826,10 +852,13 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     benchmark_summary = benchmark_report.get("summary") if isinstance(benchmark_report.get("summary"), dict) else {}
     evidence.append(f"review_quality_benchmark_status={benchmark_report.get('status', '')}")
     evidence.append(f"review_quality_benchmark_sample_count={benchmark_summary.get('sample_count', '')}")
+    evidence.append(f"review_quality_benchmark_positive_sample_count={benchmark_summary.get('positive_sample_count', '')}")
+    evidence.append(f"review_quality_benchmark_negative_sample_count={benchmark_summary.get('negative_sample_count', '')}")
     evidence.append(f"review_quality_benchmark_expected_conclusions={benchmark_summary.get('curated_expected_conclusion_count', '')}")
     evidence.append(f"review_quality_benchmark_pass_rate={benchmark_summary.get('pass_rate', '')}")
     evidence.append(f"review_quality_benchmark_missed_count={benchmark_summary.get('missed_finding_count', '')}")
     evidence.append(f"review_quality_benchmark_false_positive_count={benchmark_summary.get('false_positive_count', '')}")
+    evidence.append(f"review_quality_benchmark_negative_false_positive_count={benchmark_summary.get('negative_blocker_false_positive_count', '')}")
     evidence.append(f"review_quality_benchmark_incremental_verified={benchmark_summary.get('incremental_skip_verified_count', '')}")
     stress_report = _read_json(project / "docs" / "retort_employee_scheduler_stress.json")
     stress_summary = stress_report.get("summary") if isinstance(stress_report.get("summary"), dict) else {}
@@ -982,6 +1011,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     publish_source = root / "retort_engine" / "pr_publish.py"
     live_probe_source = root / "retort_engine" / "pr_live_probe.py"
     replay_source = root / "retort_engine" / "comparative_replay.py"
+    complex_pr_source = root / "retort_engine" / "complex_pr_replay.py"
     task_source = root / "retort_engine" / "task_prioritization.py"
     benchmark_source = root / "retort_engine" / "review_quality_benchmark.py"
     stress_source = root / "retort_engine" / "employee_scheduler_stress.py"
@@ -990,6 +1020,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     publish_test = root / "tests" / "test_pr_publish.py"
     live_probe_test = root / "tests" / "test_pr_live_probe.py"
     replay_test = root / "tests" / "test_comparative_replay.py"
+    complex_pr_test = root / "tests" / "test_complex_pr_replay.py"
     task_test = root / "tests" / "test_task_prioritization.py"
     benchmark_test = root / "tests" / "test_review_quality_benchmark.py"
     stress_test = root / "tests" / "test_employee_scheduler_stress.py"
@@ -1047,6 +1078,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/pr_publish.py", publish_source.is_file()),
                 ("retort_engine/pr_live_probe.py", live_probe_source.is_file()),
                 ("retort_engine/comparative_replay.py", replay_source.is_file()),
+                ("retort_engine/complex_pr_replay.py", complex_pr_source.is_file()),
                 ("retort_engine/task_prioritization.py", task_source.is_file()),
                 ("retort_engine/review_quality_benchmark.py", benchmark_source.is_file()),
                 ("retort_engine/employee_scheduler_stress.py", stress_source.is_file()),
@@ -1061,6 +1093,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_pr_publish.py", publish_test.is_file()),
                 ("tests/test_pr_live_probe.py", live_probe_test.is_file()),
                 ("tests/test_comparative_replay.py", replay_test.is_file()),
+                ("tests/test_complex_pr_replay.py", complex_pr_test.is_file()),
                 ("tests/test_task_prioritization.py", task_test.is_file()),
                 ("tests/test_review_quality_benchmark.py", benchmark_test.is_file()),
                 ("tests/test_employee_scheduler_stress.py", stress_test.is_file()),
