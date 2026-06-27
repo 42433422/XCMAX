@@ -22,3 +22,25 @@ def context_signal_strength() -> int:
     """Score how much absorbed evidence should influence review grouping."""
     signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
     return min(100, 20 * len(signals & {"file_grouping", "review_pipeline", "diff_hunk_review", "benchmarking", "safety_policy", "static_analysis", "context_packaging", "semantic_index"}))
+
+
+def context_rank_weight(review_context: str) -> int:
+    """Return absorbed context weight used by the main PR review ranking path."""
+    signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
+    focus = set(REVIEW_CONTEXT_BIAS.get("context_focus") or [])
+    context = str(review_context or "other")
+    weight = 20 if context in focus else 0
+    if context == "security" and signals & {"safety_policy", "static_analysis"}:
+        weight += 30
+    if context in {"runtime", "tests", "ci_config"} and signals & {"review_pipeline", "file_grouping", "diff_hunk_review"}:
+        weight += 20
+    if context == "runtime" and signals & {"semantic_index", "codebase_graph"}:
+        weight += 15
+    if context == "docs" and signals & {"context_packaging"}:
+        weight += 10
+    return min(70, weight)
+
+
+def context_rank_weights() -> dict[str, int]:
+    """Expose the absorbed ranking model for audit and LLM evidence."""
+    return {context: context_rank_weight(context) for context in ("security", "runtime", "tests", "ci_config", "config", "frontend", "docs", "other")}

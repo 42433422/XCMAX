@@ -143,6 +143,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     sample_comment_count = 0
     publishable_comment_count = 0
     comment_ranking_model = ""
+    absorbed_context_rank_weight_count = 0
+    absorbed_context_rank_weight_max = 0
     incremental = False
     incremental_skipped_count = 0
     incremental_new_count = 0
@@ -169,6 +171,10 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             sample_comment_count = len(result.get("comments") or [])
             publishable_comment_count = int((result.get("summary") or {}).get("publishable_comment_count") or 0)
             comment_ranking_model = str((result.get("summary") or {}).get("comment_ranking_model") or "")
+            rank_weights = (result.get("summary") or {}).get("absorbed_context_rank_weights") if isinstance(result.get("summary"), dict) else {}
+            if isinstance(rank_weights, dict):
+                absorbed_context_rank_weight_count = sum(1 for value in rank_weights.values() if int(value or 0) > 0)
+                absorbed_context_rank_weight_max = max([int(value or 0) for value in rank_weights.values()] or [0])
             previous_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    # TODO: old issue\n"
             current_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,3 @@\n def f():\n+    # TODO: old issue\n+    token = \"secret\"\n"
             incremental_result = review_diff(current_diff, previous_diff_text=previous_diff)
@@ -209,6 +215,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "sample_comment_count": sample_comment_count,
         "publishable_comment_count": publishable_comment_count,
         "comment_ranking_model": comment_ranking_model,
+        "absorbed_context_rank_weight_count": absorbed_context_rank_weight_count,
+        "absorbed_context_rank_weight_max": absorbed_context_rank_weight_max,
         "incremental": incremental,
         "incremental_skipped_count": incremental_skipped_count,
         "incremental_new_count": incremental_new_count,

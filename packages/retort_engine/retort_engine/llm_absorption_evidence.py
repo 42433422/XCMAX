@@ -91,6 +91,8 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_sample_comment_count={pr_review.get('sample_comment_count')}",
         f"pr_review_publishable_comment_count={pr_review.get('publishable_comment_count')}",
         f"pr_review_comment_ranking_model={pr_review.get('comment_ranking_model')}",
+        f"pr_review_absorbed_context_rank_weight_count={pr_review.get('absorbed_context_rank_weight_count')}",
+        f"pr_review_absorbed_context_rank_weight_max={pr_review.get('absorbed_context_rank_weight_max')}",
         f"pr_review_incremental={pr_review.get('incremental')}",
         f"pr_review_incremental_skipped_count={pr_review.get('incremental_skipped_count')}",
         f"pr_review_incremental_new_count={pr_review.get('incremental_new_count')}",

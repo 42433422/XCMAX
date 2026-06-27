@@ -439,6 +439,28 @@ def context_signal_strength() -> int:
     """Score how much absorbed evidence should influence review grouping."""
     signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
     return min(100, 20 * len(signals & {{"file_grouping", "review_pipeline", "diff_hunk_review", "benchmarking", "safety_policy", "static_analysis", "context_packaging", "semantic_index"}}))
+
+
+def context_rank_weight(review_context: str) -> int:
+    """Return absorbed context weight used by the main PR review ranking path."""
+    signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
+    focus = set(REVIEW_CONTEXT_BIAS.get("context_focus") or [])
+    context = str(review_context or "other")
+    weight = 20 if context in focus else 0
+    if context == "security" and signals & {{"safety_policy", "static_analysis"}}:
+        weight += 30
+    if context in {{"runtime", "tests", "ci_config"}} and signals & {{"review_pipeline", "file_grouping", "diff_hunk_review"}}:
+        weight += 20
+    if context == "runtime" and signals & {{"semantic_index", "codebase_graph"}}:
+        weight += 15
+    if context == "docs" and signals & {{"context_packaging"}}:
+        weight += 10
+    return min(70, weight)
+
+
+def context_rank_weights() -> dict[str, int]:
+    """Expose the absorbed ranking model for audit and LLM evidence."""
+    return {{context: context_rank_weight(context) for context in ("security", "runtime", "tests", "ci_config", "config", "frontend", "docs", "other")}}
 '''
 
 
@@ -542,7 +564,7 @@ def _review_context_bias_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
     return f'''from __future__ import annotations
 
-from {import_name} import context_signal_strength, review_context_bias
+from {import_name} import context_rank_weight, context_rank_weights, context_signal_strength, review_context_bias
 
 EXPECTED_ABSORPTION_SOURCE = {source_text}
 
@@ -554,6 +576,8 @@ def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
     assert bias["source"] == EXPECTED_ABSORPTION_SOURCE
     assert set(bias["signals"]) & {{"file_grouping", "review_pipeline", "diff_hunk_review", "safety_policy", "static_analysis", "context_packaging", "semantic_index"}}
     assert context_signal_strength() >= 20
+    assert max(context_rank_weights().values()) >= 20
+    assert context_rank_weights()["runtime"] >= 20
 '''
 
 
