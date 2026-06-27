@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from retort_engine.feedback_audit import audit_feedback_closure
 from retort_engine.history import RetortHistoryStore
 from retort_engine.license_gate import license_gate
 from retort_engine.models import EmployeeTaskResult
@@ -63,6 +64,7 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["reproducibility"] = {"command": f"retort absorb --own-project {root} --external-path {external_path} --run-local-gates --branch-workflow --merge-after"}
     employee_results_path = _write_employee_results(root, run_id, source, tasks, result, payload)
     result["employee_results_path"] = str(employee_results_path)
+    result["feedback_audit"] = audit_feedback_closure(queue_path=str(payload.get("employee_queue") or ""), history_store=str(payload.get("history_store") or ""), employee_results_dir=employee_results_path.parent)
     _record_execution(root, result)
     return result
 
