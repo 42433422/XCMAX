@@ -6,12 +6,14 @@
     "evidence": [
       "source=https://github.com/openautocoder/agentless",
       "absorption_run=20260627194531-f1634167bd",
-      "behavior_module=retort_engine/review_context_bias.py",
-      "behavior_tests=tests/test_review_context_bias.py",
-      "absorbed_capability=deterministic_review_pipeline_stages",
+      "merge_commit=7909a3e73",
+      "absorbed_focus=review_pipeline,benchmarking,plugin_surface,multi_provider",
+      "behavior_touch=retort_engine/review_context_bias.py",
+      "behavior_test=tests/test_review_context_bias.py",
       "tests=200_passed",
       "ruff=passed",
-      "merge_commit=7909a3e73",
+      "node_check=passed",
+      "swe_bench_oracle_smoke=ready_1_1",
       "merge_cross_check=True; merge_commit=7909a3e73",
       "pytest_gate_cross_check=True"
     ],
