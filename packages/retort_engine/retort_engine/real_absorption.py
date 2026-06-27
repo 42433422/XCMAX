@@ -314,11 +314,15 @@ def absorbed_external_patterns() -> dict[str, Any]:
 
 def _should_absorb_review_context_bias(profile: dict[str, Any]) -> bool:
     signals = set(profile.get("signals") or [])
+    if _is_visual_dominant_profile(profile):
+        return False
     return bool(signals & {"review_pipeline", "file_grouping", "diff_hunk_review"})
 
 
 def _should_absorb_capability_model(profile: dict[str, Any]) -> bool:
     signals = set(profile.get("signals") or [])
+    if _is_visual_dominant_profile(profile):
+        return False
     return bool(signals & CAPABILITY_MODEL_SIGNALS)
 
 
@@ -343,6 +347,17 @@ def _has_frontend_visual_evidence(paths: list[Any]) -> bool:
         if suffix in VISUAL_FRONTEND_SUFFIXES:
             return True
     return False
+
+
+def _is_visual_dominant_profile(profile: dict[str, Any]) -> bool:
+    signals = set(profile.get("signals") or [])
+    if not _should_absorb_frontend_visual(profile):
+        return False
+    depth_signals = signals & {"file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface"}
+    if depth_signals:
+        return False
+    non_visual_signals = signals - VISUAL_FRONTEND_SIGNALS - {"multi_provider"}
+    return non_visual_signals <= {"review_pipeline"}
 
 
 def _review_context_bias_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> str:
