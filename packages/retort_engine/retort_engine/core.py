@@ -30,6 +30,7 @@ from retort_engine.capability_audit import capability_absorption_audit as _audit
 from retort_engine.capability_audit import employee_result_files as _audit_employee_result_files
 from retort_engine.capability_audit import latest_absorption_run as _audit_latest_absorption_run
 from retort_engine.capability_audit import pr_review_runtime_evidence as _audit_pr_review_runtime_evidence
+from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.devour_session import assessment_file_count as _devour_assessment_file_count
@@ -336,6 +337,13 @@ class RetortService:
             str(payload.get("project") or payload.get("project_path") or "."),
             round_count=int(payload.get("round_count") or payload.get("rounds") or 10),
             tasks_per_round=int(payload.get("tasks_per_round") or 3),
+        )
+
+    def codebase_graph_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_codebase_graph(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            include_tests=bool(payload.get("include_tests")),
+            max_files=int(payload.get("max_files") or 400),
         )
 
     def similar_project_radar(self, payload: dict[str, Any]) -> dict[str, Any]:
