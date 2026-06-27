@@ -1,0 +1,43 @@
+{
+  "created_receipts": [
+    {
+      "body_marker": "retort-live-probe:3713faf929c7",
+      "comment_id": "4818319191",
+      "created": true,
+      "html_url": "https://github.com/42433422/XCMAX/pull/97#issuecomment-4818319191",
+      "target": "pull_request_conversation"
+    }
+  ],
+  "evidence": {
+    "api": "GitHub REST issues comments",
+    "base_ref": "main",
+    "head_ref": "claude/nifty-lovelace-4c1566",
+    "target_is_pull_request": true,
+    "token_redacted": true
+  },
+  "pr_url": "https://github.com/42433422/XCMAX/pull/97",
+  "rollback_receipts": [
+    {
+      "comment_id": "4818319191",
+      "deleted": true,
+      "response": {},
+      "status_code": 204
+    }
+  ],
+  "status": "live_rolled_back",
+  "summary": {
+    "created_comment_count": 1,
+    "duration_sec": 6.252,
+    "live_github_write": true,
+    "permission_admin": true,
+    "permission_maintain": true,
+    "permission_push": true,
+    "pull_number": 97,
+    "pull_status": 200,
+    "repo_status": 200,
+    "rollback_verified": true,
+    "rolled_back_comment_count": 1,
+    "target_repo": "42433422/XCMAX",
+    "token_present": true
+  }
+}
