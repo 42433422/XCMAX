@@ -4,46 +4,33 @@
     "branch_diff_verified": true,
     "employee_execution_verified": true,
     "evidence": [
-      "source=https://github.com/sunerpy/codegraph-rust",
-      "absorption_run=20260627195002-b40d2378d6",
-      "merge_commit=0b37edb89",
-      "architecture_commit=be072ae16",
-      "api_route_commit=bc0c2e6fa",
-      "absorbed_focus=deterministic_codebase_graph,file_grouping,architecture_targeting",
-      "behavior_module=retort_engine/codebase_graph.py",
-      "behavior_tests=tests/test_codebase_graph.py,tests/test_runtime_integrations.py",
-      "contract=codebase_graph_result",
-      "cli=codebase-graph-report",
-      "api=/api/codebase-graph-report",
-      "tests=206_passed",
-      "ruff=passed",
-      "node_check=passed",
-      "codebase_graph_smoke=ready_55_files_529_nodes_1830_edges",
-      "merge_cross_check=True; merge_commit=0b37edb89",
-      "pytest_gate_cross_check=True"
+      "retort_cli_status=applied",
+      "duration_sec=13.402",
+      "changed_files=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py",
+      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  13 + |  .../docs/retort_architecture_memory.json           | 340 ++++++++++++---- |  .../docs/retort_core_refactor_plan.json            |  50 +-- |  .../docs/retort_external_review_report.json        | 428 ++++++++++----------- |  .../retort_engine/absorbed_capabilities.py         |   2 +- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../tests/test_absorbed_capabilities.py            |   2 +- |  7 files changed, 495 insertions(+), 342 deletions(-)",
+      "gates_passed=True",
+      "review_report=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+      "employee_results=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627195932-112b065375.json",
+      "commit=f6c2a06b0",
+      "merge_commit=ca6b28e9f",
+      "rollback_rehearsal=True",
+      "feedback_audit_closed=False",
+      "history_result_count=0",
+      "queue_records_written=0",
+      "result_tasks_have_queue_records=False"
     ],
     "external_advantage_reassessed": true,
     "merge_verified": true,
-    "post_absorption_tests_passed": true,
-    "validation": {
-      "evidence": [
-        "merge_cross_check=True; merge_commit=0b37edb89",
-        "pytest_gate_cross_check=True"
-      ],
-      "merge_commit": "0b37edb89",
-      "merge_commit_verified": true,
-      "pytest_gates_verified": true
-    }
+    "post_absorption_tests_passed": true
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/sunerpy/codegraph-rust",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/seddonym/import-linter",
   "pending_dimensions": [
     "comparative_analysis_depth",
-    "external_ingestion",
     "feedback_loop_closure",
     "operational_readiness",
     "product_operability"
   ],
-  "source": "https://github.com/sunerpy/codegraph-rust",
+  "source": "https://github.com/seddonym/import-linter",
   "status": "closed_loop_verified",
   "tasks": [
     {
@@ -52,7 +39,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/sunerpy/codegraph-rust."
+      "why": "Compare implementation patterns from https://github.com/seddonym/import-linter."
     },
     {
       "dimension": "product_operability",
@@ -60,7 +47,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/sunerpy/codegraph-rust."
+      "why": "Extract usable UX improvements from https://github.com/seddonym/import-linter."
     },
     {
       "dimension": "operational_readiness",
@@ -68,15 +55,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/sunerpy/codegraph-rust."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+      "why": "Adapt CI and release checks from https://github.com/seddonym/import-linter."
     },
     {
       "dimension": "feedback_loop_closure",
@@ -93,14 +72,6 @@
       "task_id": "retort-absorb-plugin-surface",
       "title": "Expose Retort absorption through plugin friendly commands",
       "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
-    },
-    {
-      "dimension": "product_operability",
-      "owner_hint": "market-frontend-dev",
-      "priority": "P1",
-      "task_id": "retort-absorb-planet-visual",
-      "title": "Absorb better blackhole planet visual system",
-      "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
     }
   ]
 }

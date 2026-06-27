@@ -20,6 +20,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "review_quality_benchmark_result": ("status", "project", "summary", "samples", "evidence"),
     "issue_patch_benchmark_result": ("status", "summary", "cases", "evidence"),
     "codebase_graph_result": ("status", "project", "summary", "nodes", "edges", "hotspots", "evidence"),
+    "architecture_contract_result": ("status", "project", "summary", "contracts", "violations", "evidence"),
     "employee_scheduler_stress_result": ("status", "project", "summary", "rounds", "evidence"),
     "llm_score": ("dimension", "value", "reason"),
 }

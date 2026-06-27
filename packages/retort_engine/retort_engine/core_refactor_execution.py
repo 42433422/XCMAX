@@ -8,9 +8,10 @@ from typing import Any
 
 EXTRACTED_BOUNDARY_MODULES = {
     "automation_surface": ("retort_engine/project_assessment.py", "retort_engine/external_sources.py", "retort_engine/service.py", "retort_engine/ui_server.py", "retort_engine/cli.py"),
+    "architecture_contracts": ("retort_engine/architecture_contracts.py", "retort_engine/codebase_graph.py", "retort_engine/contracts.py"),
     "benchmark_eval": ("retort_engine/review_quality_benchmark.py", "retort_engine/absorption_quality.py", "retort_engine/swe_bench_oracle.py"),
     "command_contract": ("retort_engine/contracts.py", "retort_engine/absorption_workflow.py"),
-    "codebase_graph": ("retort_engine/codebase_graph.py", "retort_engine/service.py", "retort_engine/cli.py"),
+    "codebase_graph": ("retort_engine/codebase_graph.py", "retort_engine/architecture_contracts.py", "retort_engine/service.py", "retort_engine/cli.py"),
     "evaluation_loop": ("retort_engine/absorption_quality.py", "retort_engine/review_quality_benchmark.py", "retort_engine/swe_bench_oracle.py"),
     "model_adapter": ("retort_engine/paibi_llm.py", "retort_engine/paibi_prompting.py", "retort_engine/llm_absorption_evidence.py", "retort_engine/prompts.py"),
     "provider_boundary": ("retort_engine/paibi_llm.py", "retort_engine/service.py"),

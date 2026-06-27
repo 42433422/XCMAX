@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from retort_engine.architecture_contracts import evaluate_architecture_contracts, load_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
@@ -151,6 +152,13 @@ def main(argv: list[str] | None = None) -> int:
     codebase_graph.add_argument("--max-files", type=int, default=400)
     codebase_graph.add_argument("--output", default="")
     codebase_graph.add_argument("--json", action="store_true")
+    architecture_contract = sub.add_parser("architecture-contract-report")
+    architecture_contract.add_argument("--project", default=".")
+    architecture_contract.add_argument("--contract-file", default="")
+    architecture_contract.add_argument("--include-tests", action="store_true")
+    architecture_contract.add_argument("--max-files", type=int, default=400)
+    architecture_contract.add_argument("--output", default="")
+    architecture_contract.add_argument("--json", action="store_true")
     radar = sub.add_parser("similar-project-radar")
     radar.add_argument("--project", default=".")
     radar.add_argument("--query", default="AI PR reviewer")
@@ -392,6 +400,21 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] in {"ready", "partial"} else 1
+    if args.command == "architecture-contract-report":
+        contracts = load_architecture_contracts(args.contract_file) if args.contract_file else None
+        result = evaluate_architecture_contracts(args.project, contracts=contracts, include_tests=args.include_tests, max_files=args.max_files)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort architecture contract status: {result['status']}")
+            print(f"Violations: {result['summary']['violation_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "passed" else 1
     if args.command == "similar-project-radar":
         result = build_similar_project_radar(args.project, query=args.query, limit=args.limit, min_score=args.min_score)
         if args.json:

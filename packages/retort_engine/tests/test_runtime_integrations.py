@@ -93,3 +93,17 @@ def test_service_exposes_codebase_graph_report(tmp_path: Path) -> None:
     assert report["summary"]["call_edge_count"] == 1
     assert any(edge["kind"] == "calls" and edge["to"].endswith(":target") for edge in report["edges"])
     assert CoreRetortService().codebase_graph_report({"project": str(project)})["status"] == "ready"
+
+
+def test_service_exposes_architecture_contract_report(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    package = project / "retort_engine"
+    package.mkdir(parents=True)
+    write_file(package / "codebase_graph.py", "import ast\n")
+
+    report = RetortService().architecture_contract_report({"project": str(project)})
+    core_report = CoreRetortService().architecture_contract_report({"project": str(project)})
+
+    assert report["status"] == "passed"
+    assert report["summary"]["violation_count"] == 0
+    assert core_report["status"] == "passed"

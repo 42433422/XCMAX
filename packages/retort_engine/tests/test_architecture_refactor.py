@@ -70,9 +70,11 @@ def test_core_refactor_plan_blocks_missing_core_tests(tmp_path: Path) -> None:
 def test_core_refactor_plan_maps_codebase_graph_component(tmp_path: Path) -> None:
     for rel in [
         "retort_engine/codebase_graph.py",
+        "retort_engine/architecture_contracts.py",
         "retort_engine/service.py",
         "retort_engine/cli.py",
         "tests/test_codebase_graph.py",
+        "tests/test_architecture_contracts.py",
         "tests/test_contracts_feedback.py",
     ]:
         path = tmp_path / rel
