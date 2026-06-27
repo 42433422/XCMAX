@@ -12,8 +12,8 @@ def test_current_core_refactor_plan_is_backed_by_real_modules_and_tests() -> Non
     result = verify_core_refactor_execution(project)
 
     assert result["status"] == "implemented"
-    assert result["task_count"] == 11
-    assert result["implemented_task_count"] == 11
+    assert result["task_count"] >= 11
+    assert result["implemented_task_count"] == result["task_count"]
     assert result["missing"] == []
     assert set(EXTRACTED_BOUNDARY_MODULES) >= {item["component"] for item in result["components"]}
     assert all(item["test_function_count"] > 0 for item in result["components"])
@@ -53,5 +53,6 @@ def test_assessment_reports_core_refactor_execution_status() -> None:
     assessment = assess_project(str(project))
 
     assert "core_refactor_execution_status=implemented" in assessment.evidence
-    assert "core_refactor_implemented_tasks=11/11" in assessment.evidence
-    assert assessment.metadata["core_refactor_execution"]["implemented_task_count"] == 11
+    execution = assessment.metadata["core_refactor_execution"]
+    assert f"core_refactor_implemented_tasks={execution['implemented_task_count']}/{execution['task_count']}" in assessment.evidence
+    assert execution["implemented_task_count"] == execution["task_count"]
