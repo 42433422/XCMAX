@@ -1,0 +1,177 @@
+{
+  "absorbed_signals": [
+    "review_pipeline",
+    "file_grouping",
+    "benchmarking",
+    "plugin_surface",
+    "multi_provider"
+  ],
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/alibaba/open-code-review",
+  "external_snapshot": {
+    "file_count": 363,
+    "git_revision": "9a11fc1302a3b1ef48db4ab95e65bc9c04df565f",
+    "suffix_counts": {
+      ".css": 3,
+      ".example": 1,
+      ".go": 148,
+      ".html": 5,
+      ".jpg": 1,
+      ".js": 11,
+      ".json": 28,
+      ".lock": 1,
+      ".md": 56,
+      ".mod": 1,
+      ".png": 4,
+      ".sh": 4,
+      ".sum": 1,
+      ".svg": 5,
+      ".tiktoken": 1,
+      ".ts": 39,
+      ".tsx": 34,
+      ".vsix": 1,
+      ".yml": 12,
+      "<none>": 7
+    }
+  },
+  "generated_at": "2026-06-27T08:04:15Z",
+  "replay": {
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/alibaba/open-code-review --run-local-gates --branch-workflow --merge-after"
+  },
+  "run_id": "20260627080415-f7cfdfd7bc",
+  "semantic_review": {
+    "external": {
+      "classes": 218,
+      "cli_markers": 0,
+      "functions": 1799,
+      "source_files": 336,
+      "test_markers": 233,
+      "workflow_markers": 3034
+    },
+    "gaps": [
+      {
+        "external_advantage": 170,
+        "metric": "classes"
+      },
+      {
+        "external_advantage": 1481,
+        "metric": "functions"
+      },
+      {
+        "external_advantage": 301,
+        "metric": "source_files"
+      },
+      {
+        "external_advantage": 150,
+        "metric": "test_markers"
+      },
+      {
+        "external_advantage": 2760,
+        "metric": "workflow_markers"
+      }
+    ],
+    "own": {
+      "classes": 48,
+      "cli_markers": 13,
+      "functions": 318,
+      "source_files": 35,
+      "test_markers": 83,
+      "workflow_markers": 274
+    }
+  },
+  "signal_evidence": {
+    "benchmarking": [
+      "README.ru-RU.md",
+      "README.ja-JP.md",
+      "README.md",
+      "ROADMAP.md",
+      "README.zh-CN.md"
+    ],
+    "file_grouping": [
+      "README.md",
+      "internal/config/toolsconfig/tools.json",
+      "internal/diff/resolver_test.go",
+      "internal/diff/resolver.go",
+      "internal/diff/hunk.go"
+    ],
+    "multi_provider": [
+      "CODE_OF_CONDUCT.md",
+      "README.ru-RU.md",
+      "CONTRIBUTING.ja-JP.md",
+      "CONTRIBUTING.ru-RU.md",
+      "README.ja-JP.md"
+    ],
+    "plugin_surface": [
+      "README.ru-RU.md",
+      "CONTRIBUTING.ja-JP.md",
+      "CONTRIBUTING.ru-RU.md",
+      "README.ja-JP.md",
+      "GOVERNANCE.md"
+    ],
+    "review_pipeline": [
+      "README.ru-RU.md",
+      "README.ja-JP.md",
+      "GOVERNANCE.md",
+      "README.md",
+      "ROADMAP.md"
+    ]
+  },
+  "source": "https://github.com/alibaba/open-code-review",
+  "tasks": [
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-depth",
+      "title": "Absorb stronger implementation depth",
+      "why": "Compare implementation patterns from https://github.com/alibaba/open-code-review."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P1",
+      "task_id": "retort-absorb-ux",
+      "title": "Absorb better user experience",
+      "why": "Extract usable UX improvements from https://github.com/alibaba/open-code-review."
+    },
+    {
+      "dimension": "operational_readiness",
+      "owner_hint": "deploy-release-officer",
+      "priority": "P2",
+      "task_id": "retort-absorb-ops",
+      "title": "Absorb better operational gates",
+      "why": "Adapt CI and release checks from https://github.com/alibaba/open-code-review."
+    },
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-review-pipeline",
+      "title": "Adopt deterministic review pipeline stages",
+      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "external_ingestion",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-file-grouping",
+      "title": "Add external file grouping before deep comparison",
+      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+    },
+    {
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P2",
+      "task_id": "retort-absorb-plugin-surface",
+      "title": "Expose Retort absorption through plugin friendly commands",
+      "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
+    }
+  ]
+}
