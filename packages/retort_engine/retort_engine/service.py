@@ -72,6 +72,8 @@ class RetortService:
             previous_diff_text=previous_diff,
             issue_context=str(payload.get("issue_context") or ""),
             max_comments=int(payload.get("max_comments") or 20),
+            max_files_per_chunk=int(payload.get("max_files_per_chunk") or 8),
+            max_chars_per_chunk=int(payload.get("max_chars_per_chunk") or 30000),
         )
 
     def review_pr(self, payload: dict[str, Any]) -> dict[str, Any]:
