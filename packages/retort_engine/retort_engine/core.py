@@ -24,6 +24,7 @@ from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
+from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
         "complex_pr_replay": "complex-pr-replay" in text and "build_complex_pr_replay_report" in text,
         "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
+        "task_dispatch_plan": "task-dispatch-plan" in text and "build_task_dispatch_plan" in text,
         "review_quality_benchmark": "quality-benchmark-report" in text and "build_review_quality_benchmark" in text,
         "employee_scheduler_stress": "employee-scheduler-stress" in text and "run_employee_scheduler_stress" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
@@ -384,6 +386,9 @@ class RetortService:
 
     def task_prioritization_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_task_prioritization_report(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def task_dispatch_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_task_dispatch_plan(str(payload.get("project") or payload.get("project_path") or "."), enqueue=bool(payload.get("enqueue")))
 
     def review_quality_benchmark(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_review_quality_benchmark(
@@ -848,6 +853,16 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"task_prioritization_dimension_count={task_summary.get('prioritized_dimension_count', '')}")
     evidence.append(f"task_prioritization_ready_employee_task_count={task_summary.get('ready_employee_task_count', '')}")
     evidence.append(f"task_prioritization_all_tasks_have_acceptance={task_summary.get('all_tasks_have_acceptance', '')}")
+    dispatch_report = _read_json(project / "docs" / "retort_employee_task_dispatch_plan.json")
+    dispatch_summary = dispatch_report.get("summary") if isinstance(dispatch_report.get("summary"), dict) else {}
+    evidence.append(f"task_dispatch_plan_status={dispatch_report.get('status', '')}")
+    evidence.append(f"task_dispatch_plan_source_llm_task_count={dispatch_summary.get('source_llm_task_count', '')}")
+    evidence.append(f"task_dispatch_plan_ready_task_count={dispatch_summary.get('ready_task_count', '')}")
+    evidence.append(f"task_dispatch_plan_dispatch_task_count={dispatch_summary.get('dispatch_task_count', '')}")
+    evidence.append(f"task_dispatch_plan_queued_dispatch_count={dispatch_summary.get('queued_dispatch_count', '')}")
+    evidence.append(f"task_dispatch_plan_all_tasks_have_owner={dispatch_summary.get('all_tasks_have_owner', '')}")
+    evidence.append(f"task_dispatch_plan_all_tasks_have_acceptance={dispatch_summary.get('all_tasks_have_acceptance', '')}")
+    evidence.append(f"task_dispatch_plan_all_tasks_have_evidence_required={dispatch_summary.get('all_tasks_have_evidence_required', '')}")
     benchmark_report = _read_json(project / "docs" / "retort_review_quality_benchmark.json")
     benchmark_summary = benchmark_report.get("summary") if isinstance(benchmark_report.get("summary"), dict) else {}
     evidence.append(f"review_quality_benchmark_status={benchmark_report.get('status', '')}")
@@ -1013,6 +1028,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     replay_source = root / "retort_engine" / "comparative_replay.py"
     complex_pr_source = root / "retort_engine" / "complex_pr_replay.py"
     task_source = root / "retort_engine" / "task_prioritization.py"
+    dispatch_source = root / "retort_engine" / "task_dispatch_plan.py"
     benchmark_source = root / "retort_engine" / "review_quality_benchmark.py"
     stress_source = root / "retort_engine" / "employee_scheduler_stress.py"
     test = root / "tests" / "test_pr_review.py"
@@ -1022,6 +1038,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     replay_test = root / "tests" / "test_comparative_replay.py"
     complex_pr_test = root / "tests" / "test_complex_pr_replay.py"
     task_test = root / "tests" / "test_task_prioritization.py"
+    dispatch_test = root / "tests" / "test_task_dispatch_plan.py"
     benchmark_test = root / "tests" / "test_review_quality_benchmark.py"
     stress_test = root / "tests" / "test_employee_scheduler_stress.py"
     cli = root / "retort_engine" / "cli.py"
@@ -1080,6 +1097,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/comparative_replay.py", replay_source.is_file()),
                 ("retort_engine/complex_pr_replay.py", complex_pr_source.is_file()),
                 ("retort_engine/task_prioritization.py", task_source.is_file()),
+                ("retort_engine/task_dispatch_plan.py", dispatch_source.is_file()),
                 ("retort_engine/review_quality_benchmark.py", benchmark_source.is_file()),
                 ("retort_engine/employee_scheduler_stress.py", stress_source.is_file()),
             )
@@ -1095,6 +1113,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_comparative_replay.py", replay_test.is_file()),
                 ("tests/test_complex_pr_replay.py", complex_pr_test.is_file()),
                 ("tests/test_task_prioritization.py", task_test.is_file()),
+                ("tests/test_task_dispatch_plan.py", dispatch_test.is_file()),
                 ("tests/test_review_quality_benchmark.py", benchmark_test.is_file()),
                 ("tests/test_employee_scheduler_stress.py", stress_test.is_file()),
             )

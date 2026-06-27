@@ -1,0 +1,66 @@
+{
+  "evidence": {
+    "history_store": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/retort_history.sqlite",
+    "queue_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/employee_queue.jsonl",
+    "source": "latest_llm_employee_tasks"
+  },
+  "project": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_tasks_have_acceptance": true,
+    "all_tasks_have_evidence_required": true,
+    "all_tasks_have_owner": true,
+    "dispatch_task_count": 3,
+    "enqueue": true,
+    "queued_dispatch_count": 3,
+    "ready_task_count": 3,
+    "source_llm_task_count": 3
+  },
+  "tasks": [
+    {
+      "acceptance": "空缓存机器完成吸收到复评",
+      "action": "Execute and verify: 新环境重放闭环",
+      "dimension": "external_ingestion",
+      "evidence_required": [
+        "命令日志、产物、测试、commit"
+      ],
+      "owner_hint": "runtime员工",
+      "priority": "P1",
+      "queue_id": "de512dde-be48-42b8-a4fd-3c1d10859c7a",
+      "ready_for_employee": true,
+      "task_id": "retort-dispatch-01-a7314377",
+      "title": "新环境重放闭环",
+      "why": "LLM self-evolution requested this follow-up after deep review."
+    },
+    {
+      "acceptance": "新增未知PR样本仍低误报",
+      "action": "Execute and verify: 盲测质量基准",
+      "dimension": "comparative_analysis_depth",
+      "evidence_required": [
+        "样本集、结论、误报统计"
+      ],
+      "owner_hint": "review员工",
+      "priority": "P1",
+      "queue_id": "163734f3-604d-4780-8eae-1370bc0d49bf",
+      "ready_for_employee": true,
+      "task_id": "retort-dispatch-02-9a37b73d",
+      "title": "盲测质量基准",
+      "why": "LLM self-evolution requested this follow-up after deep review."
+    },
+    {
+      "acceptance": "无admin仅write时安全发布回滚",
+      "action": "Execute and verify: 权限降级发布探针",
+      "dimension": "product_operability",
+      "evidence_required": [
+        "权限截图/接口响应/删除证明"
+      ],
+      "owner_hint": "安全员工",
+      "priority": "P1",
+      "queue_id": "3c3e6c5b-c2f3-4e6b-a857-87ecb1706846",
+      "ready_for_employee": true,
+      "task_id": "retort-dispatch-03-8667d587",
+      "title": "权限降级发布探针",
+      "why": "LLM self-evolution requested this follow-up after deep review."
+    }
+  ]
+}
