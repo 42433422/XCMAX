@@ -23,11 +23,17 @@ const dimensionText = {
 };
 const statusText = {
   tasks_generated: "已生成吸收任务",
+  absorption_execution_applied: "已执行真实吸收",
+  absorption_execution_failed: "真实吸收失败",
+  applied: "CLI 已改代码",
+  noop: "CLI 无新增改动",
+  failed: "CLI 执行失败",
+  timeout: "CLI 执行超时",
+  disabled: "未启用",
   no_external_advantage_found: "未发现外部优势",
   blocked_by_branch_workflow: "分支流程阻断",
   branch_created: "已创建吸收分支",
   merged: "已合并",
-  disabled: "未启用",
   converged: "已收敛",
   blocked: "已阻断",
   max_rounds: "达到轮次上限",
@@ -76,6 +82,8 @@ function body() {
     merge_after: $("mergeAfter").checked,
     run_local_gates: $("runGates").checked,
     use_llm: $("useLlm").checked,
+    execute_absorption: true,
+    execution_timeout_sec: 1800,
     employee_queue: `${own}/.retort/employee_queue.jsonl`,
     history_store: `${own}/.retort/retort_history.sqlite`
   };
@@ -209,6 +217,19 @@ function llm(review) {
   $("llmState").textContent = d.status === "accepted" ? `已派发排比任务：${d.task_id || "等待任务 ID"}` : `已写入排比待发箱：${d.reason || d.status || "等待调度"}`;
 }
 
+function executionState(execution) {
+  const target = $("executionState");
+  if (!target) return;
+  if (!execution) {
+    target.textContent = "等待 CLI 执行";
+    return;
+  }
+  const files = execution.changed_files || [];
+  const gates = execution.gates || [];
+  const gateText = gates.length ? `${gates.filter(gate => gate.ok).length}/${gates.length}` : "未运行";
+  target.innerHTML = `<b>${labelOf(execution.status) || execution.status}</b><div>耗时 ${execution.duration_sec || 0}s · 改动 ${files.length} 个文件 · 门禁 ${gateText}</div>`;
+}
+
 async function assess() {
   state.running = true;
   $("statusText").textContent = "评估中";
@@ -235,6 +256,7 @@ async function absorb() {
     updateAbsorption(r);
     scores(r.own_assessment.scores);
     externalScores(r.external_assessment, r.absorption_visual);
+    executionState(r.execution);
     tasks(r.tasks || []);
     llm(r.llm_review);
     $("branchState").textContent = labelOf(r.branch_workflow?.status) || "尚未运行分支流程";

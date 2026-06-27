@@ -94,6 +94,29 @@ def test_absorption_shock_drops_score_then_self_evolution_recovers(tmp_path: Pat
     assert evolved["final_assessment"]["metadata"]["absorption_state"]["status"] == "awaiting_execution_evidence"
 
 
+def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None:
+    own = tmp_path / "own"
+    external = tmp_path / "external"
+    own.mkdir()
+    external.mkdir()
+    (own / "README.md").write_text("# Own\n", encoding="utf-8")
+    (external / "README.md").write_text("code review pipeline changed files benchmark plugin cli\n", encoding="utf-8")
+
+    result = absorb({"own_project": str(own), "external_path": str(external), "execution_timeout_sec": 30})
+
+    execution = result["execution"]
+    assert result["status"] == "absorption_execution_applied"
+    assert execution["status"] == "applied"
+    assert execution["gates_passed"] is True
+    assert str(own / "retort_absorbed_patterns.py") in execution["changed_files"]
+    assert str(own / "docs" / "retort_absorption_log.md") in execution["changed_files"]
+    proof = result["absorption_state"]["closed_loop_proof"]["flags"]
+    assert proof["branch_diff_verified"] is True
+    assert proof["employee_execution_verified"] is True
+    assert proof["post_absorption_tests_passed"] is True
+    assert proof["merge_verified"] is False
+
+
 def test_external_assessment_counts_files_inside_retort_cache(tmp_path: Path) -> None:
     own = tmp_path / "own"
     external = own / ".retort" / "cache" / "github" / "owner" / "repo"
