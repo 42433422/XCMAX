@@ -977,6 +977,9 @@ async function absorb() {
   beginAbsorption(payload);
   try {
     const r = await api("/api/absorb", payload);
+    if (!r.own_assessment) {
+      throw new Error(r.error || labelOf(r.status) || "吸收未返回深评结构");
+    }
     updateAbsorption(r);
     renderDevourSession(r.devour_session);
     scores(r.own_assessment.scores);

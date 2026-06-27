@@ -35,6 +35,8 @@ class RetortUIServer:
                 data = target.read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", mimetypes.guess_type(str(target))[0] or "application/octet-stream")
+                self.send_header("Cache-Control", "no-store, max-age=0")
+                self.send_header("Pragma", "no-cache")
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)

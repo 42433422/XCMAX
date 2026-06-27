@@ -38,3 +38,13 @@ def test_absorbed_project_light_points_are_clickable() -> None:
     assert 'canvas.addEventListener("click", handleAbsorbedProjectClick)' in text
     assert 'canvas.style.cursor = hit ? "pointer" : ""' in text
     assert "function drawSelectedAbsorbedProject" in text
+
+
+def test_absorb_ui_reports_branch_block_before_reading_scores() -> None:
+    app = Path(__file__).resolve().parents[1] / "retort_engine" / "frontend" / "app.js"
+    text = app.read_text(encoding="utf-8")
+
+    guard = 'if (!r.own_assessment) {'
+    assert guard in text
+    assert 'throw new Error(r.error || labelOf(r.status) || "吸收未返回深评结构")' in text
+    assert text.index(guard) < text.index("scores(r.own_assessment.scores)")
