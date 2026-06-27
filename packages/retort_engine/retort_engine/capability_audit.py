@@ -157,6 +157,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     diff_pipeline_context_group_count = 0
     diff_pipeline_task_group_count = 0
     diff_pipeline_publishable_comment_count = 0
+    diff_pipeline_chunk_count = 0
+    diff_pipeline_large_chunking = False
     if source.is_file():
         try:
             from retort_engine.pr_review import review_diff
@@ -194,6 +196,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             diff_pipeline_context_group_count = int(diff_pipeline_summary.get("context_group_count") or 0)
             diff_pipeline_task_group_count = int(diff_pipeline_summary.get("task_group_count") or 0)
             diff_pipeline_publishable_comment_count = int(diff_pipeline_summary.get("publishable_comment_count") or 0)
+            diff_pipeline_chunk_count = int(diff_pipeline_summary.get("chunk_count") or 0)
+            diff_pipeline_large_chunking = bool(diff_pipeline_summary.get("large_diff_chunking"))
         except Exception:
             sample_comment_count = 0
     return {
@@ -219,6 +223,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "diff_pipeline_context_group_count": diff_pipeline_context_group_count,
         "diff_pipeline_task_group_count": diff_pipeline_task_group_count,
         "diff_pipeline_publishable_comment_count": diff_pipeline_publishable_comment_count,
+        "diff_pipeline_chunk_count": diff_pipeline_chunk_count,
+        "diff_pipeline_large_chunking": diff_pipeline_large_chunking,
         "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
         "dry_run_cli": "review-pr" in read_text(cli),
         "dry_run_api": "/api/review-pr" in read_text(ui_server),

@@ -102,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
     pipeline_replay.add_argument("--previous-diff-file", default="")
     pipeline_replay.add_argument("--issue-context-file", default="")
     pipeline_replay.add_argument("--max-comments", type=int, default=20)
+    pipeline_replay.add_argument("--max-files-per-chunk", type=int, default=8)
+    pipeline_replay.add_argument("--max-chars-per-chunk", type=int, default=30000)
     pipeline_replay.add_argument("--output", default="")
     pipeline_replay.add_argument("--json", action="store_true")
     review_pr = sub.add_parser("review-pr")
@@ -286,7 +288,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.issue_context_file:
             with open(args.issue_context_file, encoding="utf-8") as handle:
                 issue_context = handle.read()
-        result = build_diff_pipeline_replay(diff_text, previous_diff_text=previous_diff_text, issue_context=issue_context, max_comments=args.max_comments)
+        result = build_diff_pipeline_replay(
+            diff_text,
+            previous_diff_text=previous_diff_text,
+            issue_context=issue_context,
+            max_comments=args.max_comments,
+            max_files_per_chunk=args.max_files_per_chunk,
+            max_chars_per_chunk=args.max_chars_per_chunk,
+        )
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)

@@ -113,6 +113,8 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"review_pipeline_diff_replay_context_groups={pr_review.get('diff_pipeline_context_group_count')}",
         f"review_pipeline_diff_replay_task_groups={pr_review.get('diff_pipeline_task_group_count')}",
         f"review_pipeline_diff_replay_publishable_comments={pr_review.get('diff_pipeline_publishable_comment_count')}",
+        f"review_pipeline_diff_replay_chunk_count={pr_review.get('diff_pipeline_chunk_count')}",
+        f"review_pipeline_diff_replay_large_chunking={pr_review.get('diff_pipeline_large_chunking')}",
     ]
 
 
@@ -172,6 +174,8 @@ def _report_evidence(project: Path) -> list[str]:
         f"review_pipeline_diff_replay_report_depth_score={pipeline_replay_summary.get('diff_grouping_depth_score', '')}",
         f"review_pipeline_diff_replay_report_context_groups={pipeline_replay_summary.get('context_group_count', '')}",
         f"review_pipeline_diff_replay_report_task_groups={pipeline_replay_summary.get('task_group_count', '')}",
+        f"review_pipeline_diff_replay_report_chunk_count={pipeline_replay_summary.get('chunk_count', '')}",
+        f"review_pipeline_diff_replay_report_large_chunking={pipeline_replay_summary.get('large_diff_chunking', '')}",
         f"task_prioritization_status={task_report.get('status', '')}",
         f"task_prioritization_queued_count={task_summary.get('queued_task_count', '')}",
         f"task_prioritization_completed_count={task_summary.get('completed_result_count', '')}",

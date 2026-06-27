@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from retort_engine.contracts import validate_contract
-from retort_engine.review_pipeline import build_absorption_review_report, build_depth_absorption_workflow, build_diff_pipeline_replay, compare_component_gaps, group_review_files
+from retort_engine.review_pipeline import build_absorption_review_report, build_depth_absorption_workflow, build_diff_pipeline_replay, chunk_unified_diff_by_review_context, compare_component_gaps, group_review_files
 
 
 def write(path: Path, text: str) -> None:
@@ -271,7 +271,42 @@ diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
     ]
     assert {item["context"] for item in replay["context_groups"]} >= {"security", "tests", "ci_config"}
     assert replay["summary"]["diff_grouping_depth_score"] >= 80
+    assert replay["summary"]["chunk_count"] == 3
     assert replay["summary"]["publishable_comment_count"] >= 1
     assert replay["summary"]["task_group_count"] >= 1
     assert replay["evidence"]["core_behavior"] == "diff_grouping_to_publishable_review_and_employee_tasking"
     assert validate_contract("review_pipeline_diff_replay_result", replay)["valid"] is True
+
+
+def test_diff_pipeline_replay_chunks_large_diff_by_context() -> None:
+    sections = []
+    for index in range(4):
+        sections.append(_diff_section(f"app/auth_{index}.py", f"def login_{index}():", '+    token = "secret"'))
+    for index in range(4):
+        sections.append(_diff_section(f"tests/test_auth_{index}.py", f"def test_login_{index}():", "+    assert True"))
+    for index in range(4):
+        sections.append(_diff_section(f"docs/change_{index}.md", "# Change", "+Documented rollout"))
+    diff = "".join(sections)
+
+    chunks = chunk_unified_diff_by_review_context(diff, max_files_per_chunk=2)
+    replay = build_diff_pipeline_replay(diff, issue_context="Fix login token handling", max_files_per_chunk=2, max_comments=20)
+
+    assert len(chunks) == 6
+    assert chunks[0]["context"] == "security"
+    assert all(chunk["file_count"] <= 2 for chunk in chunks)
+    assert replay["status"] == "ready"
+    assert replay["summary"]["large_diff_chunking"] is True
+    assert replay["summary"]["chunk_count"] == 6
+    assert replay["summary"]["largest_chunk_file_count"] == 2
+    assert replay["summary"]["diff_grouping_depth_score"] == 100
+    assert {chunk["context"] for chunk in replay["chunks"]} >= {"security", "tests", "docs"}
+
+
+def _diff_section(path: str, context_line: str, added_line: str) -> str:
+    return f"""diff --git a/{path} b/{path}
+--- a/{path}
++++ b/{path}
+@@ -1 +1,2 @@
+ {context_line}
+{added_line}
+"""
