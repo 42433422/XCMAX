@@ -276,3 +276,46 @@ def test_absorption_saturation_recognizes_new_frontier_depth_signals(tmp_path: P
 
     assert report["status"] == "not_saturated"
     assert report["summary"]["consecutive_no_new_core_depth_count"] == 0
+
+
+def test_absorption_saturation_consecutive_no_new_stops_at_latest_new_signal(tmp_path: Path) -> None:
+    project = tmp_path / "retort"
+    runs = project / ".retort" / "real_absorption_runs"
+    runs.mkdir(parents=True)
+    for index in range(4):
+        (runs / f"run-{index}.json").write_text(
+            json.dumps(
+                {
+                    "source": f"https://github.com/example/reviewer-repeat-{index}",
+                    "status": "applied",
+                    "gates_passed": True,
+                    "changed_files": ["retort_engine/absorbed_capabilities.py"],
+                    "external_profile": {"signals": ["review_pipeline"]},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    (runs / "run-4.json").write_text(
+        json.dumps(
+            {
+                "source": "https://github.com/example/semgrep-like",
+                "status": "applied",
+                "gates_passed": True,
+                "changed_files": ["retort_engine/review_context_bias.py"],
+                "external_profile": {"signals": ["static_analysis"]},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    report = build_absorption_saturation_report(
+        project,
+        remaining_candidates=[
+            {"url": "https://github.com/next/static-analysis", "similarity_depth_score": 90, "license_allowed": True, "already_absorbed": False}
+        ],
+    )
+
+    assert report["status"] == "not_saturated"
+    assert report["summary"]["consecutive_no_new_core_depth_count"] == 0

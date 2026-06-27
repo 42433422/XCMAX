@@ -98,6 +98,22 @@ def test_review_diff_ignores_documented_or_fake_secret_terms() -> None:
     assert high_comments[0]["line"] == 5
 
 
+def test_review_diff_surfaces_static_analysis_findings() -> None:
+    diff = """diff --git a/app/runner.py b/app/runner.py
+--- a/app/runner.py
++++ b/app/runner.py
+@@ -0,0 +1,2 @@
++subprocess.run(command, shell=True)
++yaml.load(payload)
+"""
+
+    result = review_diff(diff)
+
+    assert result["summary"]["static_analysis"]["high_count"] == 2
+    assert {comment["capability"] for comment in result["comments"]} >= {"static_analysis"}
+    assert {comment["line"] for comment in result["comments"] if comment["capability"] == "static_analysis"} == {1, 2}
+
+
 def test_review_diff_groups_related_files_by_review_context() -> None:
     diff = """diff --git a/app/auth.py b/app/auth.py
 --- a/app/auth.py

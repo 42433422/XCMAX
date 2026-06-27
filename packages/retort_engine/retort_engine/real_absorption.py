@@ -428,7 +428,7 @@ def _review_context_bias_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
     return f'''from __future__ import annotations
 
-from {import_name} import context_signal_strength, file_grouping_enabled, review_context_bias
+from {import_name} import context_signal_strength, review_context_bias
 
 EXPECTED_ABSORPTION_SOURCE = {source_text}
 
