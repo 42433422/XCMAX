@@ -88,10 +88,11 @@ def fetch_paibi_llm_review_status(task_id: str) -> dict[str, Any]:
 
 def wait_for_paibi_llm_review(task_id: str, *, timeout_sec: float = 90.0, interval_sec: float = 5.0) -> dict[str, Any]:
     deadline = time.monotonic() + max(0.0, timeout_sec)
-    status = fetch_paibi_llm_review_status(task_id)
+    client = PaibiLLMClient()
+    status = _summarize_task(client.fetch_task(task_id))
     while time.monotonic() < deadline and not status.get("json_result") and status.get("status") not in {"completed", "failed"}:
         time.sleep(max(0.25, interval_sec))
-        status = fetch_paibi_llm_review_status(task_id)
+        status = _summarize_task(client.fetch_task(task_id))
     return status
 
 
@@ -239,6 +240,7 @@ class PaibiLLMClient:
         token = str(body.get("token") or body.get("access_token") or "").strip()
         if not token:
             raise RuntimeError("Para guest 登录未返回 token")
+        self.token = token
         return token
 
     def _request(self, method: str, path: str, *, token: str = "", json_body: dict[str, Any] | None = None) -> dict[str, Any]:
