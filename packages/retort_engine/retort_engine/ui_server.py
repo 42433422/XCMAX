@@ -62,6 +62,8 @@ class RetortUIServer:
                         self._json(outer.service.publish_pr_live_probe(payload))
                     elif self.path == "/api/cross-project-replay":
                         self._json(outer.service.cross_project_replay(payload))
+                    elif self.path == "/api/complex-pr-replay":
+                        self._json(outer.service.complex_pr_replay(payload))
                     elif self.path == "/api/task-prioritization-report":
                         self._json(outer.service.task_prioritization_report(payload))
                     elif self.path == "/api/quality-benchmark-report":

@@ -67,6 +67,25 @@ def test_review_diff_can_review_only_new_changes() -> None:
     assert validate_contract("pr_review_result", result)["valid"] is True
 
 
+def test_review_diff_ignores_documented_or_fake_secret_terms() -> None:
+    diff = '''diff --git a/tests/test_keys.py b/tests/test_keys.py
+--- a/tests/test_keys.py
++++ b/tests/test_keys.py
+@@ -0,0 +1,5 @@
++# resolve_api_key uses platform-key in tests only.
++"""Documented SERVICE_TOKEN fallback is redacted."""
++monkeypatch.setattr(resolver, "resolve_api_key", lambda *a: ("platform-key", "platform"))
++TOKEN_EXAMPLE = "redacted"
++REAL_TOKEN = "live-secret-value"
+'''
+
+    result = review_diff(diff)
+
+    high_comments = [item for item in result["comments"] if item["severity"] == "high"]
+    assert len(high_comments) == 1
+    assert high_comments[0]["line"] == 5
+
+
 def test_parse_unified_diff_keeps_new_line_numbers() -> None:
     files = parse_unified_diff(SAMPLE_DIFF)
     added = [change for change in files[0]["hunks"][0]["changes"] if change["type"] == "add"]

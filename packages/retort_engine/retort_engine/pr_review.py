@@ -109,7 +109,7 @@ def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any],
         text = str(change.get("text") or "")
         lowered = text.lower()
         line = int(change.get("line") or 0)
-        if any(marker in lowered for marker in SECRET_MARKERS):
+        if _looks_like_secret_leak(text, lowered):
             comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities))
         elif "todo" in lowered or "fixme" in lowered:
             comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities))
@@ -124,6 +124,31 @@ def _info_comment(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any]
     first_add = next((change for change in hunk.get("changes") or [] if change.get("type") == "add"), {})
     line = int(first_add.get("line") or 1)
     return _comment(file_path, line, "info", "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。", strategy, capabilities)
+
+
+def _looks_like_secret_leak(text: str, lowered: str) -> bool:
+    if not any(marker in lowered for marker in SECRET_MARKERS):
+        return False
+    stripped = text.strip()
+    documentation_markers = ("#", '"""', "'''", "* ", "- ", "``")
+    if stripped.startswith(documentation_markers) or "``" in stripped:
+        return False
+    safe_markers = (
+        "resolve_api_key",
+        "platform-key",
+        "fake",
+        "mock",
+        "dummy",
+        "redacted",
+        "example",
+        "token_redacted",
+        "monkeypatch",
+    )
+    if any(marker in lowered for marker in safe_markers):
+        return False
+    assignment = re.search(r"(?i)\b[A-Z0-9_]*(api[_-]?key|apikey|secret|password|token|private_key)[A-Z0-9_]*\b[^=\n:]{0,40}[:=]\s*['\"][^'\"]{6,}", text)
+    authorization = re.search(r"(?i)\b(authorization|bearer)\b.{0,20}['\"]?[A-Za-z0-9_\-]{16,}", text)
+    return bool(assignment or authorization)
 
 
 def _comment(file_path: str, line: int, severity: str, message: str, strategy: dict[str, Any], capabilities: list[str]) -> dict[str, Any]:

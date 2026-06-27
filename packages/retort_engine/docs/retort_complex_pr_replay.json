@@ -1,0 +1,86 @@
+{
+  "evidence": {
+    "reviewer": "retort_engine.pr_dry_run.review_pr_url",
+    "stores_summaries_only": true,
+    "urls": [
+      "https://github.com/42433422/XCMAX/pull/92",
+      "https://github.com/42433422/XCMAX/pull/97",
+      "https://github.com/42433422/XCMAX/pull/83"
+    ]
+  },
+  "project": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine",
+  "pull_requests": [
+    {
+      "comment_count": 7,
+      "complex_enough": true,
+      "fetched_bytes": 10147,
+      "file_count": 3,
+      "hunk_count": 7,
+      "language_extensions": [
+        "py"
+      ],
+      "pr_url": "https://github.com/42433422/XCMAX/pull/92",
+      "reviewed_new_change_count": 128,
+      "severity_counts": {
+        "high": 0,
+        "info": 7,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 6,
+      "complex_enough": true,
+      "fetched_bytes": 3952,
+      "file_count": 3,
+      "hunk_count": 6,
+      "language_extensions": [
+        "py"
+      ],
+      "pr_url": "https://github.com/42433422/XCMAX/pull/97",
+      "reviewed_new_change_count": 6,
+      "severity_counts": {
+        "high": 0,
+        "info": 6,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 2,
+      "complex_enough": true,
+      "fetched_bytes": 800000,
+      "file_count": 2,
+      "hunk_count": 2,
+      "language_extensions": [
+        "json"
+      ],
+      "pr_url": "https://github.com/42433422/XCMAX/pull/83",
+      "reviewed_new_change_count": 3,
+      "severity_counts": {
+        "high": 0,
+        "info": 2,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": true
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "complex_pr_count": 3,
+    "distinct_extension_count": 2,
+    "pr_count": 3,
+    "reviewed_pr_count": 3,
+    "total_comment_count": 15,
+    "total_file_count": 8,
+    "total_hunk_count": 15,
+    "total_reviewed_new_change_count": 137,
+    "truncated_pr_count": 1
+  }
+}

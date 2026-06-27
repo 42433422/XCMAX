@@ -7,13 +7,14 @@ from typing import Any
 from retort_engine.pr_review import review_diff
 
 
-def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 30) -> dict[str, Any]:
+def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 30, negative_sample_count: int = 0) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
-    samples = _golden_samples(max(1, sample_count))
+    samples = _golden_samples(max(1, sample_count)) + _negative_samples(max(0, negative_sample_count))
     sample_results = []
     matched_findings = 0
     expected_findings = 0
     false_positive_count = 0
+    negative_false_positive_count = 0
     incremental_verified = 0
     for sample in samples:
         review = review_diff(str(sample["diff"]), max_comments=8, previous_diff_text=str(sample.get("previous_diff") or ""))
@@ -26,11 +27,15 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
         if sample.get("requires_incremental_skip") and int(incremental.get("skipped_existing_change_count") or 0) > 0:
             incremental_verified += 1
         if sample.get("expected_severity") == "info":
-            false_positive_count += sum(1 for item in comments if str(item.get("severity") or "") in {"high", "medium"})
+            sample_false_positives = sum(1 for item in comments if str(item.get("severity") or "") in {"high", "medium"})
+            false_positive_count += sample_false_positives
+            if sample.get("negative"):
+                negative_false_positive_count += sample_false_positives
         sample_results.append(
             {
                 "sample_id": sample["sample_id"],
                 "category": sample["category"],
+                "negative": bool(sample.get("negative")),
                 "expected": expected,
                 "matched": all(matches) if expected else True,
                 "observed_severities": [str(item.get("severity") or "") for item in comments],
@@ -50,6 +55,8 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
         "project": str(root),
         "summary": {
             "sample_count": len(sample_results),
+            "positive_sample_count": sample_count,
+            "negative_sample_count": negative_sample_count,
             "curated_expected_conclusion_count": len(sample_results),
             "expected_finding_count": expected_findings,
             "matched_finding_count": matched_findings,
@@ -58,6 +65,7 @@ def build_review_quality_benchmark(project: str | Path, *, sample_count: int = 3
             "failed_sample_count": len(sample_results) - passed_samples,
             "pass_rate": round(pass_rate, 4),
             "false_positive_count": false_positive_count,
+            "negative_blocker_false_positive_count": negative_false_positive_count,
             "incremental_sample_count": sum(1 for item in samples if item.get("requires_incremental_skip")),
             "incremental_skip_verified_count": incremental_verified,
         },
@@ -85,6 +93,17 @@ def _finding_matched(comments: list[dict[str, Any]], expected: dict[str, Any]) -
 def _golden_samples(sample_count: int) -> list[dict[str, Any]]:
     samples: list[dict[str, Any]] = []
     factories = (_secret_sample, _todo_sample, _print_sample, _long_line_sample, _clean_sample, _incremental_sample)
+    index = 0
+    while len(samples) < sample_count:
+        factory = factories[index % len(factories)]
+        samples.append(factory(index))
+        index += 1
+    return samples
+
+
+def _negative_samples(sample_count: int) -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    factories = (_documented_key_sample, _fake_fixture_key_sample)
     index = 0
     while len(samples) < sample_count:
         factory = factories[index % len(factories)]
@@ -161,6 +180,30 @@ def _incremental_sample(index: int) -> dict[str, Any]:
         "requires_incremental_skip": True,
         "previous_diff": previous,
         "diff": current,
+    }
+
+
+def _documented_key_sample(index: int) -> dict[str, Any]:
+    path = f"docs/key_context_{index}.py"
+    return {
+        "sample_id": f"negative-doc-{index:02d}",
+        "category": "documented_secret_term_no_blocker",
+        "negative": True,
+        "expected_severity": "info",
+        "expected_findings": [{"severity": "info", "message_keywords": ["未发现阻断"]}],
+        "diff": _single_add_diff(path, f"# resolve_api_key documents redacted SERVICE_TOKEN fallback {index}"),
+    }
+
+
+def _fake_fixture_key_sample(index: int) -> dict[str, Any]:
+    path = f"tests/test_key_fixture_{index}.py"
+    return {
+        "sample_id": f"negative-fixture-{index:02d}",
+        "category": "fake_fixture_key_no_blocker",
+        "negative": True,
+        "expected_severity": "info",
+        "expected_findings": [{"severity": "info", "message_keywords": ["未发现阻断"]}],
+        "diff": _single_add_diff(path, f'monkeypatch.setattr(resolver, "resolve_api_key", lambda *a: ("platform-key-{index}", "platform"))'),
     }
 
 
