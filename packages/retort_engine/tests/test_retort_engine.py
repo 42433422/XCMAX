@@ -427,6 +427,10 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path:
     assert result["gates_passed"] is True
     assert str(project / "retort_engine" / "absorbed_capabilities.py") in result["changed_files"]
     assert str(project / "tests" / "test_absorbed_capabilities.py") in result["changed_files"]
+    assert str(project / "retort_engine" / "review_context_bias.py") in result["changed_files"]
+    assert str(project / "tests" / "test_review_context_bias.py") in result["changed_files"]
+    assert Path(result["review_context_bias_path"]).is_file()
+    assert Path(result["review_context_bias_test_path"]).is_file()
     employee_result = json.loads(Path(result["employee_results_path"]).read_text(encoding="utf-8"))
     assert employee_result["execution_mode"] == "employee_runtime_worker"
     assert employee_result["runtime_evidence"]["independent_process"] is True
