@@ -139,6 +139,7 @@ def test_advantage_diff_map_matches_each_signal_to_behavior_surface() -> None:
         "retort_engine/pr_review.py",
         "retort_engine/review_context_bias.py",
         "retort_engine/review_quality_benchmark.py",
+        "retort_engine/swe_bench_oracle.py",
         "retort_engine/cli.py",
         "retort_engine/paibi_llm.py",
         "retort_engine/license_gate.py",
@@ -159,7 +160,23 @@ def test_advantage_diff_map_matches_each_signal_to_behavior_surface() -> None:
     assert by_signal["review_pipeline"]["changed_files"] == ["retort_engine/pr_review.py", "tests/test_pr_review.py"]
     assert "retort_engine/review_context_bias.py" in by_signal["file_grouping"]["changed_files"]
     assert "tests/test_review_context_bias.py" in by_signal["file_grouping"]["changed_files"]
-    assert by_signal["benchmarking"]["changed_files"] == ["retort_engine/review_quality_benchmark.py"]
+    assert by_signal["benchmarking"]["changed_files"] == ["retort_engine/review_quality_benchmark.py", "retort_engine/swe_bench_oracle.py"]
+
+
+def test_advantage_diff_map_treats_swe_bench_oracle_as_benchmark_eval_behavior() -> None:
+    rows = advantage_diff_map(
+        ["retort_engine/swe_bench_oracle.py", "tests/test_swe_bench_oracle.py"],
+        [{"signal": "benchmark_eval", "weight": 30}],
+    )
+
+    assert rows == [
+        {
+            "signal": "benchmark_eval",
+            "weight": 30,
+            "changed_files": ["retort_engine/swe_bench_oracle.py", "tests/test_swe_bench_oracle.py"],
+            "has_behavior_diff": True,
+        }
+    ]
 
 
 def test_advantage_diff_map_ignores_generated_registry_and_reports() -> None:
