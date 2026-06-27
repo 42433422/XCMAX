@@ -4,17 +4,15 @@
     "branch_diff_verified": true,
     "employee_execution_verified": true,
     "evidence": [
-      "source=https://github.com/swe-bench/SWE-bench",
-      "absorption_run=20260627193421-af1df6ee7c",
-      "initial_cli_branch_blocked_report_only_absorption=true",
-      "behavior_module=retort_engine/swe_bench_oracle.py",
-      "behavior_tests=tests/test_swe_bench_oracle.py",
-      "contract=issue_patch_benchmark_result",
+      "source=https://github.com/openautocoder/agentless",
+      "absorption_run=20260627194531-f1634167bd",
+      "behavior_module=retort_engine/review_context_bias.py",
+      "behavior_tests=tests/test_review_context_bias.py",
+      "absorbed_capability=deterministic_review_pipeline_stages",
       "tests=200_passed",
       "ruff=passed",
-      "node_check=passed",
-      "merge_commit=f707fe7cc",
-      "merge_cross_check=True; merge_commit=f707fe7cc",
+      "merge_commit=7909a3e73",
+      "merge_cross_check=True; merge_commit=7909a3e73",
       "pytest_gate_cross_check=True"
     ],
     "external_advantage_reassessed": true,
@@ -22,22 +20,22 @@
     "post_absorption_tests_passed": true,
     "validation": {
       "evidence": [
-        "merge_cross_check=True; merge_commit=f707fe7cc",
+        "merge_cross_check=True; merge_commit=7909a3e73",
         "pytest_gate_cross_check=True"
       ],
-      "merge_commit": "f707fe7cc",
+      "merge_commit": "7909a3e73",
       "merge_commit_verified": true,
       "pytest_gates_verified": true
     }
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/swe-bench/SWE-bench",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/openautocoder/agentless",
   "pending_dimensions": [
     "comparative_analysis_depth",
     "feedback_loop_closure",
     "operational_readiness",
     "product_operability"
   ],
-  "source": "https://github.com/swe-bench/SWE-bench",
+  "source": "https://github.com/openautocoder/agentless",
   "status": "closed_loop_verified",
   "tasks": [
     {
@@ -46,7 +44,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/swe-bench/SWE-bench."
+      "why": "Compare implementation patterns from https://github.com/openautocoder/agentless."
     },
     {
       "dimension": "product_operability",
@@ -54,7 +52,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/swe-bench/SWE-bench."
+      "why": "Extract usable UX improvements from https://github.com/openautocoder/agentless."
     },
     {
       "dimension": "operational_readiness",
@@ -62,7 +60,15 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/swe-bench/SWE-bench."
+      "why": "Adapt CI and release checks from https://github.com/openautocoder/agentless."
+    },
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-review-pipeline",
+      "title": "Adopt deterministic review pipeline stages",
+      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
     },
     {
       "dimension": "feedback_loop_closure",
@@ -79,14 +85,6 @@
       "task_id": "retort-absorb-plugin-surface",
       "title": "Expose Retort absorption through plugin friendly commands",
       "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
-    },
-    {
-      "dimension": "product_operability",
-      "owner_hint": "market-frontend-dev",
-      "priority": "P1",
-      "task_id": "retort-absorb-planet-visual",
-      "title": "Absorb better blackhole planet visual system",
-      "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
     }
   ]
 }
