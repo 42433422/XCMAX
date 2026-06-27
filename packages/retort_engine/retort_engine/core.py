@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.contracts import contract_names
-from retort_engine.paibi_llm import fetch_paibi_llm_review_status, request_paibi_llm_review, wait_for_paibi_llm_review
+from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 
 
 @dataclass(frozen=True)
@@ -321,6 +321,36 @@ class RetortService:
         if not task_id:
             raise ValueError("task_id is required")
         return fetch_paibi_llm_review_status(task_id)
+
+    def llm_parallel_review(self, payload: dict[str, Any]) -> dict[str, Any]:
+        project = str(payload.get("project") or payload.get("project_path") or ".")
+        project_path = Path(project).expanduser().resolve()
+        assessment = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
+        metadata = assessment.get("metadata", {}) if isinstance(assessment.get("metadata"), dict) else {}
+        external_source, external_path = _llm_external_reference(
+            metadata,
+            str(payload.get("external_source") or payload.get("github_url") or ""),
+            str(payload.get("external_path") or ""),
+        )
+        evidence = list(assessment.get("evidence", []))
+        evidence.extend(_llm_absorption_evidence(project_path))
+        return request_paibi_parallel_review(
+            project=project,
+            mode=str(payload.get("mode") or "parallel_assess"),
+            external_source=external_source,
+            external_path=external_path,
+            tasks=list(payload.get("tasks") or []),
+            evidence=evidence,
+            metadata=metadata,
+            panels=list(payload.get("panels") or []) or None,
+            max_parallel=int(payload.get("max_parallel") or 3),
+        )
+
+    def llm_parallel_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        task_id = str(payload.get("task_id") or "").strip()
+        if not task_id:
+            raise ValueError("task_id is required")
+        return fetch_paibi_parallel_review_status(task_id)
 
 
 def _run_real_absorption_cli(own: Path, source: str, external_path: Path | None, tasks: list[dict[str, str]], external_assessment: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:

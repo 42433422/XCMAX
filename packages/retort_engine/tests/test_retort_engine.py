@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from retort_engine.core import RetortSelfEvolutionRunner, RetortService, absorb, assess_project, record_closed_loop_proof
-from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, request_paibi_llm_review
+from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review
+from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import RetortUIServer
 
 
@@ -42,6 +44,7 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "externalProjectFolder" in (root / "index.html").read_text(encoding="utf-8")
     assert "useLlm" in (root / "index.html").read_text(encoding="utf-8")
     assert "llmReviewBtn" in (root / "index.html").read_text(encoding="utf-8")
+    assert "llmParallelBtn" in (root / "index.html").read_text(encoding="utf-8")
     assert "llmStatusBtn" in (root / "index.html").read_text(encoding="utf-8")
 
 
@@ -346,6 +349,156 @@ def test_service_llm_review_status_parses_paibi_logs(monkeypatch) -> None:
     assert result["json_result"]["score_suggestion"] == 81
     assert result["scores"][0]["dimension"] == "calibrated_overall"
     assert result["subtasks"][0]["status"] == "completed"
+
+
+def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path: Path) -> None:
+    project = tmp_path / "own"
+    external = tmp_path / "external"
+    (project / "retort_engine").mkdir(parents=True)
+    (project / "retort_engine" / "__init__.py").write_text("", encoding="utf-8")
+    (external / "internal").mkdir(parents=True)
+    (external / "internal" / "review.ts").write_text("review pipeline changed files diff hunk patch set benchmark provider plugin", encoding="utf-8")
+    queue = project / ".retort" / "employee_queue.jsonl"
+    history = project / ".retort" / "retort_history.sqlite"
+
+    result = apply_real_absorption(
+        {
+            "own_project": str(project),
+            "external_path": str(external),
+            "source": "unit-source",
+            "tasks": [{"task_id": "retort-absorb-review", "title": "Review pipeline", "dimension": "comparative_analysis_depth", "priority": "P1"}],
+            "employee_queue": str(queue),
+            "history_store": str(history),
+            "python": sys.executable,
+        }
+    )
+
+    assert result["status"] == "applied"
+    assert result["gates_passed"] is True
+    assert str(project / "retort_engine" / "absorbed_capabilities.py") in result["changed_files"]
+    assert str(project / "tests" / "test_absorbed_capabilities.py") in result["changed_files"]
+    employee_result = json.loads(Path(result["employee_results_path"]).read_text(encoding="utf-8"))
+    assert employee_result["execution_mode"] == "employee_runtime_adapter"
+
+
+def test_paibi_parallel_review_dispatches_independent_subtasks(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    (project / "README.md").write_text("# Own\n", encoding="utf-8")
+    calls: list[dict[str, object]] = []
+
+    def fake_request(self: PaibiLLMClient, method: str, path: str, *, token: str = "", json_body: dict[str, object] | None = None) -> dict[str, object]:
+        if path == "/api/health":
+            return {"success": True}
+        if path == "/api/auth/guest":
+            return {"token": "token-1"}
+        if path == "/api/devices":
+            return {
+                "devices": [
+                    {"id": "primary", "name": "Primary", "status": "online", "devTool": "codex", "isPrimary": True, "tools": [{"toolName": "codex", "status": "idle"}]},
+                    {"id": "worker-a", "name": "Worker A", "status": "online", "devTool": "cursor", "tools": [{"toolName": "cursor", "status": "idle"}]},
+                    {"id": "worker-b", "name": "Worker B", "status": "online", "devTool": "trae", "tools": [{"toolName": "trae", "status": "idle"}]},
+                ]
+            }
+        if path.startswith("/api/devices/"):
+            raise AssertionError("parallel review should not force devices to codex")
+        if path == "/api/tasks":
+            assert json_body is not None
+            calls.append(json_body)
+            task_id = str(json_body.get("task_id") or "task-1")
+            return {"task": {"id": task_id, "status": "running"}, "subtask": {"id": f"sub-{len(calls)}"}}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(PaibiLLMClient, "_request", fake_request)
+
+    result = request_paibi_parallel_review(project=str(project), max_parallel=3)
+
+    assert result["status"] == "accepted"
+    assert result["dispatch"]["task_id"] == "task-1"
+    assert len(calls) == 3
+    assert calls[0]["device_id"] == "worker-a"
+    assert calls[1]["device_id"] == "worker-b"
+    assert calls[2]["device_id"] == "worker-a"
+    assert calls[0]["tool_name"] == "cursor"
+    assert calls[1]["tool_name"] == "trae"
+    assert calls[2]["tool_name"] == "cursor"
+    assert "task_id" not in calls[0]
+    assert calls[1]["task_id"] == "task-1"
+    assert "depends_on" not in calls[0]
+    assert "depends_on" not in calls[1]
+
+
+def test_paibi_parallel_review_uses_same_device_multi_tool_slots(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    (project / "README.md").write_text("# Own\n", encoding="utf-8")
+    calls: list[dict[str, object]] = []
+
+    def fake_request(self: PaibiLLMClient, method: str, path: str, *, token: str = "", json_body: dict[str, object] | None = None) -> dict[str, object]:
+        if path == "/api/health":
+            return {"success": True}
+        if path == "/api/auth/guest":
+            return {"token": "token-1"}
+        if path == "/api/devices":
+            return {
+                "devices": [
+                    {
+                        "id": "worker-a",
+                        "name": "Worker A",
+                        "status": "online",
+                        "devTool": "cursor",
+                        "tools": [
+                            {"toolName": "cursor", "status": "idle"},
+                            {"toolName": "trae", "status": "idle"},
+                            {"toolName": "claude_code", "status": "idle"},
+                            {"toolName": "codex", "status": "not_installed"},
+                        ],
+                    }
+                ]
+            }
+        if path == "/api/tasks":
+            assert json_body is not None
+            calls.append(json_body)
+            task_id = str(json_body.get("task_id") or "task-1")
+            return {"task": {"id": task_id, "status": "running"}, "subtask": {"id": f"sub-{len(calls)}"}}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(PaibiLLMClient, "_request", fake_request)
+
+    result = request_paibi_parallel_review(project=str(project), max_parallel=3)
+
+    assert result["status"] == "accepted"
+    assert result["dispatch"]["device_count"] == 1
+    assert result["dispatch"]["parallelism"] == 3
+    assert result["dispatch"]["degraded_reason"] == ""
+    assert [call["tool_name"] for call in calls] == ["cursor", "trae", "claude_code"]
+    assert len({call["device_id"] for call in calls}) == 1
+
+
+def test_paibi_parallel_status_reports_unblock_tasks(monkeypatch) -> None:
+    def fake_fetch_task(self: PaibiLLMClient, task_id: str) -> dict[str, object]:
+        return {
+            "task": {
+                "id": task_id,
+                "status": "running",
+                "subTasks": [
+                    {"id": "sub-ok", "title": "ok", "status": "completed", "progress": 100, "logs": [{"content": '{"panel_id":"ok","score_suggestion":82}'}]},
+                    {"id": "sub-pending", "title": "pending", "status": "pending", "progress": 0, "depends_on": [], "logs": [{"content": "子任务未派发：设备 dev 当前不可用（离线或执行器忙）"}]},
+                    {"id": "sub-bad", "title": "blocked", "status": "failed", "blocked": True, "last_error": "工作设备 Worker 缺少自动改码执行器：Codex CLI", "logs": []},
+                ],
+            }
+        }
+
+    monkeypatch.setattr(PaibiLLMClient, "fetch_task", fake_fetch_task)
+
+    result = fetch_paibi_parallel_review_status("task-1")
+
+    assert result["parallel"] is True
+    assert result["parallel_summary"]["has_blockers"] is True
+    kinds = {item["kind"] for item in result["blockers"]}
+    assert "executor_missing" in kinds
+    assert "worker_capacity_limit" in kinds
+    assert {item["owner_hint"] for item in result["unblock_tasks"]} == {"runtime"}
 
 
 def test_service_assess_uses_llm_scores_when_wait_returns_json(tmp_path: Path, monkeypatch) -> None:
