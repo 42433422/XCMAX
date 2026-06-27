@@ -107,6 +107,42 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_employee_patch_closure.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "case_count": 2,
+                    "patch_generated_count": 2,
+                    "patch_applied_count": 2,
+                    "gate_passed_count": 1,
+                    "rollback_verified_count": 1,
+                    "success_case_verified": True,
+                    "failure_case_rolled_back": True,
+                },
+                "cases": [],
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_review_adjudication_calibration.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "human_label_count": 50,
+                    "pass_rate": 0.98,
+                    "false_positive_count": 1,
+                    "false_negative_count": 0,
+                    "context_count": 5,
+                },
+                "cases": [],
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     result_dir = tmp_path / ".retort" / "employee_results"
     result_dir.mkdir(parents=True)
     (result_dir / "result.json").write_text(
@@ -114,7 +150,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
             {
                 "execution_mode": "employee_runtime_worker",
                 "results": [{"task_id": "one"}],
-                "runtime_evidence": {"worker_review": {"status": "reviewed", "comment_count": 2, "artifact": "review.json"}},
+                "runtime_evidence": {
+                    "worker_review": {"status": "reviewed", "comment_count": 2, "artifact": "review.json"},
+                    "employee_patch_closure": {
+                        "status": "ready",
+                        "summary": {"success_case_verified": True, "failure_case_rolled_back": True},
+                    },
+                },
             }
         ),
         encoding="utf-8",
@@ -135,6 +177,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "component_gap_count=1" in evidence
     assert "employee_result_count=1; execution_mode=employee_runtime_worker" in evidence
     assert "employee_runtime_worker_review=reviewed; comments=2; artifact=review.json" in evidence
+    assert "employee_runtime_patch_closure=ready; success_case=True; rollback_case=True" in evidence
+    assert "employee_patch_closure_status=ready" in evidence
+    assert "employee_patch_closure_success_case_verified=True" in evidence
+    assert "employee_patch_closure_failure_case_rolled_back=True" in evidence
+    assert "review_adjudication_calibration_status=ready" in evidence
+    assert "review_adjudication_human_label_count=50" in evidence
+    assert "review_adjudication_pass_rate=0.98" in evidence
     assert "merge_cross_check=True" in evidence
     assert "pr_live_publish_probe_status=permission_denied_degraded" in evidence
     assert "pr_live_publish_probe_permission_denied=True" in evidence

@@ -18,11 +18,13 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "task_prioritization_result": ("status", "project", "summary", "priorities", "evidence"),
     "task_dispatch_plan_result": ("status", "project", "summary", "tasks", "evidence"),
     "review_quality_benchmark_result": ("status", "project", "summary", "samples", "evidence"),
+    "review_adjudication_calibration_result": ("status", "project", "summary", "cases", "evidence"),
     "review_pipeline_diff_replay_result": ("status", "pipeline_stages", "summary", "context_groups", "comments", "task_groups", "evidence"),
     "issue_patch_benchmark_result": ("status", "summary", "cases", "evidence"),
     "codebase_graph_result": ("status", "project", "summary", "nodes", "edges", "hotspots", "evidence"),
     "architecture_contract_result": ("status", "project", "summary", "contracts", "violations", "evidence"),
     "employee_scheduler_stress_result": ("status", "project", "summary", "rounds", "evidence"),
+    "employee_patch_closure_result": ("status", "project", "summary", "cases", "evidence"),
     "llm_score": ("dimension", "value", "reason"),
 }
 

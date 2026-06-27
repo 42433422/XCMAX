@@ -1319,6 +1319,8 @@ def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[di
         "queue_path": queue_path,
         "history_store": history_store,
         "output_path": str(path),
+        "project": str(root),
+        "patch_closure": {"enabled": True, "project": str(root)},
     }
     worker_payload_path.write_text(json.dumps(worker_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     package_root = str(Path(__file__).resolve().parents[1])

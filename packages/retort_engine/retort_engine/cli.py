@@ -11,11 +11,13 @@ from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
+from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import write_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
@@ -153,6 +155,10 @@ def main(argv: list[str] | None = None) -> int:
     quality_benchmark.add_argument("--negative-sample-count", type=int, default=0)
     quality_benchmark.add_argument("--output", default="")
     quality_benchmark.add_argument("--json", action="store_true")
+    adjudication = sub.add_parser("review-adjudication-calibration")
+    adjudication.add_argument("--project", default=".")
+    adjudication.add_argument("--output", default="")
+    adjudication.add_argument("--json", action="store_true")
     scheduler_stress = sub.add_parser("employee-scheduler-stress")
     scheduler_stress.add_argument("--project", default=".")
     scheduler_stress.add_argument("--rounds", type=int, default=10)
@@ -160,6 +166,10 @@ def main(argv: list[str] | None = None) -> int:
     scheduler_stress.add_argument("--workers-per-round", type=int, default=1)
     scheduler_stress.add_argument("--output", default="")
     scheduler_stress.add_argument("--json", action="store_true")
+    patch_closure = sub.add_parser("employee-patch-closure")
+    patch_closure.add_argument("--project", default=".")
+    patch_closure.add_argument("--output", default="")
+    patch_closure.add_argument("--json", action="store_true")
     codebase_graph = sub.add_parser("codebase-graph-report")
     codebase_graph.add_argument("--project", default=".")
     codebase_graph.add_argument("--include-tests", action="store_true")
@@ -436,6 +446,17 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
+    if args.command == "review-adjudication-calibration":
+        result = build_review_adjudication_calibration(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort review adjudication calibration status: {result['status']}")
+            print(f"Human labels: {result['summary']['human_label_count']}")
+            print(f"Pass rate: {result['summary']['pass_rate']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "employee-scheduler-stress":
         result = run_employee_scheduler_stress(args.project, round_count=args.rounds, tasks_per_round=args.tasks_per_round, workers_per_round=args.workers_per_round)
         if args.output:
@@ -448,6 +469,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Retort employee scheduler stress status: {result['status']}")
             print(f"Rounds: {result['summary']['round_count']}")
             print(f"Completed: {result['summary']['completed_result_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "employee-patch-closure":
+        result = run_employee_patch_closure_suite(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort employee patch closure status: {result['status']}")
+            print(f"Patch cases: {result['summary']['case_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskResult
 from retort_engine.pr_review import review_diff
@@ -17,12 +18,15 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
     tasks = [item for item in payload.get("tasks") or [] if isinstance(item, dict)]
     gates_passed = bool(payload.get("gates_passed"))
     worker_review = _write_worker_review_artifact(payload, output_path)
+    patch_closure = _run_patch_closure(payload, output_path)
+    patch_closure_ready = not patch_closure or patch_closure.get("status") == "ready"
     task_results = []
     for task in tasks:
+        completed = gates_passed and patch_closure_ready
         task_results.append(
             {
                 "task_id": str(task.get("task_id") or ""),
-                "status": "completed" if gates_passed else "failed",
+                "status": "completed" if completed else "failed",
                 "summary": f"Independent employee runtime completed absorption task for {task.get('dimension', 'unknown')}.",
                 "evidence": [
                     f"source={payload.get('source')}",
@@ -33,8 +37,11 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     f"worker_review_status={worker_review.get('status')}",
                     f"worker_review_artifact={worker_review.get('artifact', '')}",
                     f"worker_review_comment_count={worker_review.get('comment_count', 0)}",
+                    f"employee_patch_closure_status={patch_closure.get('status', '') if patch_closure else 'not_requested'}",
+                    f"employee_patch_closure_success_case={((patch_closure.get('summary') or {}).get('success_case_verified') if patch_closure else '')}",
+                    f"employee_patch_closure_rollback_case={((patch_closure.get('summary') or {}).get('failure_case_rolled_back') if patch_closure else '')}",
                 ],
-                "score_after": {"employee_execution_integration": 94.0 if gates_passed else 70.0, "feedback_loop_closure": 94.0 if gates_passed else 70.0},
+                "score_after": {"employee_execution_integration": 95.0 if completed else 70.0, "feedback_loop_closure": 95.0 if completed else 70.0},
             }
         )
     result = {
@@ -49,6 +56,7 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
             "result_path": str(output_path),
             "task_result_count": len(task_results),
             "worker_review": worker_review,
+            "employee_patch_closure": patch_closure,
         },
         "results": task_results,
     }
@@ -67,6 +75,22 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                 )
             )
     return result
+
+
+def _run_patch_closure(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:
+    request = payload.get("patch_closure")
+    if not isinstance(request, dict) or not request.get("enabled"):
+        return {}
+    project = _patch_closure_project(payload, request, output_path)
+    output = output_path.with_suffix(".patch_closure.json")
+    return run_employee_patch_closure_suite(project, output=output, run_id=str(payload.get("run_id") or "employee-runtime"))
+
+
+def _patch_closure_project(payload: dict[str, Any], request: dict[str, Any], output_path: Path) -> Path:
+    project = request.get("project") or payload.get("project")
+    if project:
+        return Path(str(project)).expanduser().resolve()
+    return (output_path.parents[2] if len(output_path.parents) > 2 else output_path.parent).expanduser().resolve()
 
 
 def _write_worker_review_artifact(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:
