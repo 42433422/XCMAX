@@ -56,7 +56,7 @@ class Task:
 
 def assess_project(project: str, *, run_local_gates: bool = False, context_policy: str = "isolated") -> Assessment:
     root = Path(project).expanduser().resolve()
-    files = [path for path in root.rglob("*") if path.is_file() and ".git" not in path.parts and ".retort" not in path.parts and "__pycache__" not in path.parts]
+    files = _project_files(root, {".git", ".retort", "__pycache__"})
     text = "\n".join(_read(path) for path in files if path.suffix.lower() in {".py", ".js", ".html", ".css", ".md", ".toml", ".yml", ".yaml"})
     tests = [path for path in files if path.name.startswith("test_") and path.suffix == ".py"]
     test_functions = sum(len(re.findall(r"^\s*def\s+test_", _read(path), re.M)) for path in tests)
@@ -83,6 +83,18 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
     evidence = tuple([f"source_files={len(files)}", f"test_functions={test_functions}", f"git_tracking_state={tracked}", f"lint={lint_ok}", f"test={test_ok}", f"closed_loop_verified={proof['verified']}", f"closed_loop_missing={','.join(proof['missing'])}"] + shock_evidence + [f"{k}={v}" for k, v in features.items()])
     metadata = {"features": features, "git_tracking_state": tracked, "absorption_state": _public_absorption_state(root), "closed_loop_proof": proof}
     return Assessment(str(root), tuple(Score(key, round(value, 1), _score_reason(key, proof)) for key, value in capped.items()), evidence, metadata)
+
+
+def _project_files(root: Path, skip_parts: set[str]) -> list[Path]:
+    files: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel_parts = path.relative_to(root).parts
+        if any(part in skip_parts for part in rel_parts):
+            continue
+        files.append(path)
+    return files
 
 
 class RetortSelfEvolutionRunner:
@@ -141,6 +153,7 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         except RuntimeError as exc:
             return {"status": "blocked_by_branch_workflow", "error": str(exc), "branch_workflow": branch_state, "tasks": []}
     pre_assessment = assess_project(str(own), run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
+    external_assessment = _assess_external_project(external_path, str(external))
     tasks = _tasks_from_assessment(str(external), external_path)
     absorption_state = _record_absorption_shock(own, str(external), external_path, tasks)
     own_assessment = assess_project(str(own), run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
@@ -160,7 +173,9 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         "summary": f"Generated {len(tasks)} absorption task(s). Score intentionally dropped until Retort self-evolution internalizes the external advantages.",
         "pre_absorption_assessment": pre_assessment,
         "own_assessment": own_assessment,
-        "external_ref": {"source": str(external), "local_path": str(external_path)},
+        "external_assessment": external_assessment,
+        "external_ref": {"source": str(external), "local_path": "" if external_path is None else str(external_path)},
+        "absorption_visual": _absorption_visual(pre_assessment, own_assessment, external_assessment, str(external)),
         "absorption_state": absorption_state,
         "tasks": tasks,
         "llm_review": llm_review,
@@ -260,6 +275,62 @@ class RetortService:
         if not task_id:
             raise ValueError("task_id is required")
         return fetch_paibi_llm_review_status(task_id)
+
+
+def _assess_external_project(external_path: Path | None, source: str) -> dict[str, Any]:
+    if external_path is None or not external_path.is_dir():
+        return {
+            "project": source,
+            "scores": [],
+            "evidence": ["source_files=0", "external_project_materialized=False"],
+            "metadata": {"score_source": "unavailable_external_project"},
+        }
+    assessment = assess_project(str(external_path), run_local_gates=False).to_dict()
+    assessment.setdefault("metadata", {})["score_source"] = "external_static_rules"
+    return assessment
+
+
+def _absorption_visual(pre_assessment: dict[str, Any], own_assessment: dict[str, Any], external_assessment: dict[str, Any], source: str) -> dict[str, Any]:
+    own_score = _assessment_score(own_assessment)
+    external_score = _assessment_score(external_assessment)
+    return {
+        "source": source,
+        "own": {
+            "score": own_score,
+            "pre_score": _assessment_score(pre_assessment),
+            "file_count": _assessment_file_count(own_assessment),
+        },
+        "external": {
+            "score": external_score,
+            "file_count": _assessment_file_count(external_assessment),
+        },
+    }
+
+
+def _assessment_score(assessment: dict[str, Any]) -> float | None:
+    scores = assessment.get("scores") if isinstance(assessment, dict) else []
+    if not isinstance(scores, list):
+        return None
+    preferred = ("calibrated_overall", "product_level", "retort_product_maturity")
+    for dimension in preferred:
+        for score in scores:
+            if isinstance(score, dict) and score.get("dimension") == dimension:
+                try:
+                    return round(float(score.get("value")), 1)
+                except (TypeError, ValueError):
+                    return None
+    return None
+
+
+def _assessment_file_count(assessment: dict[str, Any]) -> int:
+    evidence = assessment.get("evidence") if isinstance(assessment, dict) else []
+    if not isinstance(evidence, list):
+        return 0
+    for item in evidence:
+        match = re.match(r"source_files=(\d+)", str(item))
+        if match:
+            return int(match.group(1))
+    return 0
 
 
 def record_closed_loop_proof(project: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -460,7 +531,7 @@ def _run_git_clone(url: str, target: Path) -> None:
 def _external_project_profile(path: Path | None) -> dict[str, bool]:
     if path is None or not path.is_dir():
         return {}
-    files = [p for p in path.rglob("*") if p.is_file() and ".git" not in p.parts and "__pycache__" not in p.parts and "node_modules" not in p.parts]
+    files = _project_files(path, {".git", "__pycache__", "node_modules"})
     text = "\n".join(_read(p)[:20000] for p in files[:250] if p.suffix.lower() in {".py", ".ts", ".tsx", ".js", ".jsx", ".md", ".yaml", ".yml", ".json", ".toml"})
     lowered = text.lower()
     return {
